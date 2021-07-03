@@ -365,7 +365,7 @@ func (ht *HashTable) FullBuild(input colexecop.Operator) {
 		if batch.Length() == 0 {
 			break
 		}
-		ht.allocator.PerformAppend(ht.Vals.ColVecs(), func() {
+		ht.allocator.PerformAppend(ht.Vals, func() {
 			ht.Vals.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 		})
 	}
@@ -483,7 +483,7 @@ func (ht *HashTable) RemoveDuplicates(
 // NOTE: batch must be of non-zero length.
 func (ht *HashTable) AppendAllDistinct(batch coldata.Batch) {
 	numBuffered := uint64(ht.Vals.Length())
-	ht.allocator.PerformAppend(ht.Vals.ColVecs(), func() {
+	ht.allocator.PerformAppend(ht.Vals, func() {
 		ht.Vals.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 	})
 	ht.BuildScratch.Next = append(ht.BuildScratch.Next, ht.ProbeScratch.HashBuffer[:batch.Length()]...)

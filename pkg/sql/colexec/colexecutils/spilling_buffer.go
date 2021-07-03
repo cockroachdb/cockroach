@@ -166,7 +166,7 @@ func (b *SpillingBuffer) AppendTuples(
 	maxInMemTuplesLimitReached := b.testingKnobs.maxTuplesStoredInMemory > 0 &&
 		b.bufferedTuples.Length() >= b.testingKnobs.maxTuplesStoredInMemory
 	if !memLimitReached && b.diskQueue == nil && !maxInMemTuplesLimitReached {
-		b.unlimitedAllocator.PerformAppend(b.bufferedTuples.ColVecs(), func() {
+		b.unlimitedAllocator.PerformAppend(b.bufferedTuples, func() {
 			b.bufferedTuples.AppendTuples(b.scratch, 0 /* startIdx */, b.scratch.Length())
 		})
 		return
