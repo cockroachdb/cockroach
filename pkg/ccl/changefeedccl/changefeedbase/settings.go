@@ -53,3 +53,12 @@ var SlowSpanLogThreshold = settings.RegisterDurationSetting(
 	0,
 	settings.NonNegativeDuration,
 )
+
+// ScanRequestLimit is the number of Scan requests that can run at once.
+// Scan requests are issued when changefeed performs the backfill.
+// If set to 0, a reasonable default will be chosen.
+var ScanRequestLimit = settings.RegisterIntSetting(
+	"changefeed.backfill.concurrent_scan_requests",
+	"number of concurrent scan requests per node issued during a backfill",
+	0,
+)
