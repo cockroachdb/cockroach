@@ -472,6 +472,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 				continue
 			}
 
+			if colToDrop.IsInaccessible() {
+				return pgerror.Newf(
+					pgcode.InvalidColumnReference,
+					"cannot drop inaccessible column %q",
+					t.Column,
+				)
+			}
+
 			// If the dropped column uses a sequence, remove references to it from that sequence.
 			if colToDrop.NumUsesSequences() > 0 {
 				if err := params.p.removeSequenceDependencies(params.ctx, n.tableDesc, colToDrop); err != nil {
