@@ -13,14 +13,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -64,17 +65,7 @@ func (p *scanRequestScanner) Scan(
 		return err
 	}
 
-	// Export requests for the various watched spans are executed in parallel,
-	// with a semaphore-enforced limit based on a cluster setting.
-	// The spans here generally correspond with range boundaries.
-	approxNodeCount, err := clusterNodeCount(p.gossip)
-	if err != nil {
-		// can't count nodes in tenants
-		approxNodeCount = 1
-	}
-
-	maxConcurrentExports := approxNodeCount *
-		int(kvserver.ExportRequestsLimit.Get(&p.settings.SV))
+	maxConcurrentExports := maxConcurrentExportRequests(p.gossip, &p.settings.SV)
 	exportLim := limit.MakeConcurrentRequestLimiter("changefeedExportRequestLimiter", maxConcurrentExports)
 	g := ctxgroup.WithContext(ctx)
 	// atomicFinished is used only to enhance debugging messages.
@@ -267,15 +258,37 @@ func allRangeSpans(
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
-func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
+func clusterNodeCount(gw gossip.OptionalGossip) int {
 	g, err := gw.OptionalErr(47971)
 	if err != nil {
-		return 0, err
+		// can't count nodes in tenants
+		return 1
 	}
 	var nodes int
 	_ = g.IterateInfos(gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
 		nodes++
 		return nil
 	})
-	return nodes, nil
+	return nodes
+}
+
+// maxConcurrentExportRequests returns the number of concurrent scan requests.
+func maxConcurrentExportRequests(gw gossip.OptionalGossip, sv *settings.Values) int {
+	// If the user specified ScanRequestLimit -- use that value.
+	if max := changefeedbase.ScanRequestLimit.Get(sv); max > 0 {
+		return int(max)
+	}
+
+	// TODO(yevgeniy): Currently, issuing multiple concurrent updates scaled to the size of
+	//  the cluster only make sense for the core change feeds.  This configuration shoould
+	//  be specified explicitly when creating scanner.
+	nodes := clusterNodeCount(gw)
+	// This is all hand-wavy: 3 per node used to be the default for a very long time.
+	// However, this could get out of hand if the clusters are large.
+	// So cap the max to an arbitrary value of a 100.
+	max := 3 * nodes
+	if max > 100 {
+		max = 100
+	}
+	return max
 }
