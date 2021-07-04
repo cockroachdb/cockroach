@@ -317,6 +317,29 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 	return fileList, nil
 }
 
+func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
+	dest := JoinPathPreservingTrailingSlash(g.prefix, prefix)
+
+	it := g.bucket.Objects(ctx, &gcs.Query{Prefix: dest, Delimiter: delim})
+
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			return nil
+		}
+		if err != nil {
+			return errors.Wrap(err, "unable to list files in gcs bucket")
+		}
+		name := attrs.Name
+		if name == "" {
+			name = attrs.Prefix
+		}
+		if err := fn(strings.TrimPrefix(name, dest)); err != nil {
+			return err
+		}
+	}
+}
+
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 	return contextutil.RunWithTimeout(ctx, "delete gcs file",
 		timeoutSetting.Get(&g.settings.SV),

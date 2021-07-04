@@ -273,6 +273,12 @@ func (es *generatorExternalStorage) ListFiles(ctx context.Context, _ string) ([]
 	return nil, errors.New("unsupported")
 }
 
+func (es *generatorExternalStorage) List(
+	ctx context.Context, _, _ string, _ cloud.ListingFn,
+) error {
+	return errors.New("unsupported")
+}
+
 func (es *generatorExternalStorage) Delete(ctx context.Context, basename string) error {
 	return errors.New("unsupported")
 }
