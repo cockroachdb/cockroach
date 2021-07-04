@@ -84,6 +84,10 @@ func (n *nullSinkStorage) ListFiles(_ context.Context, _ string) ([]string, erro
 	return nil, nil
 }
 
+func (n *nullSinkStorage) List(_ context.Context, _, _ string, _ cloud.ListingFn) error {
+	return nil
+}
+
 func (n *nullSinkStorage) Delete(_ context.Context, _ string) error {
 	return nil
 }
