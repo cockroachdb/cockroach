@@ -366,7 +366,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	incPaths, err := backupccl.FindPriorBackupLocations(ctx, store)
+	incPaths, err := backupccl.FindPriorBackups(ctx, store, backupccl.OmitManifest)
 	if err != nil {
 		return err
 	}
