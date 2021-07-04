@@ -80,6 +80,16 @@ func TestPutGoogleCloud(t *testing.T) {
 		}
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
 			cloud.AuthParam, cloud.AuthParamImplicit), false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t,
+			fmt.Sprintf("gs://%s/%s/%s?%s=%s",
+				bucket,
+				"backup-test-implicit",
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamImplicit,
+			),
+			security.RootUserName(), nil, nil, testSettings,
+		)
 	})
 }
 
