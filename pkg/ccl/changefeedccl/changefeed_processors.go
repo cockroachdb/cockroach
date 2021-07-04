@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -311,6 +312,12 @@ func (e errorWrapperEventBuffer) AddResolved(
 
 var _ kvfeed.EventBuffer = (*errorWrapperEventBuffer)(nil)
 
+var pushbackEnabled = settings.RegisterBoolSetting(
+	"changefeed.mem.pushback_enabled",
+	"enable changefeed pushback mechanism",
+	false,
+)
+
 func makeKVFeedCfg(
 	cfg *execinfra.ServerConfig,
 	leaseMgr *lease.Manager,
@@ -327,9 +334,13 @@ func makeKVFeedCfg(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
 	initialHighWater, needsInitialScan := getKVFeedInitialParameters(spec)
 	bf := func() kvfeed.EventBuffer {
-		return &errorWrapperEventBuffer{
-			EventBuffer: kvfeed.MakeMemBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics),
+		var kvbuf kvfeed.EventBuffer
+		if pushbackEnabled.Get(&cfg.Settings.SV) {
+			kvbuf = kvfeed.NewBlockingBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics)
+		} else {
+			kvbuf = kvfeed.MakeMemBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics)
 		}
+		return &errorWrapperEventBuffer{EventBuffer: kvbuf}
 	}
 	kvfeedCfg := kvfeed.Config{
 		Sink:               buf,
