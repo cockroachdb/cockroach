@@ -591,33 +591,37 @@ func getLocalityInfo(
 	return info, nil
 }
 
-const incBackupSubdirGlob = "[0-9]*/[0-9]*.[0-9][0-9]/"
+const incBackupSubdirGlob = "/[0-9]*/[0-9]*.[0-9][0-9]/"
 
 // FindPriorBackups finds "appended" incremental backups by searching
 // for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
 // If includeManifest is true the returned paths are to the manifests for the
 // prior backup, otherwise it is just to the backup path.
-func FindPriorBackups(ctx context.Context, store cloud.ExternalStorage, includeManifest bool) ([]string, error) {
-	backupManifestSuffix := backupManifestName
-	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
-	if err != nil {
+func FindPriorBackups(
+	ctx context.Context, store cloud.ExternalStorage, includeManifest bool,
+) ([]string, error) {
+	var prev []string
+	if err := store.List(ctx, "", "data/", func(p string) error {
+		if ok, err := path.Match(incBackupSubdirGlob+backupManifestName, p); err != nil {
+			return err
+		} else if ok {
+			if !includeManifest {
+				p = strings.TrimSuffix(p, "/"+backupManifestName)
+			}
+			prev = append(prev, p)
+			return nil
+		}
+		if ok, err := path.Match(incBackupSubdirGlob+backupOldManifestName, p); err != nil {
+			return err
+		} else if ok {
+			if !includeManifest {
+				p = strings.TrimSuffix(p, "/"+backupOldManifestName)
+			}
+			prev = append(prev, p)
+		}
+		return nil
+	}); err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
-	}
-
-	if len(prev) == 0 {
-		// 20.1 nodes and earlier will have an oldBackupManifestName so we check for
-		// that too.
-		backupManifestSuffix = backupOldManifestName
-		prev, err = store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
-		if err != nil {
-			return nil, errors.Wrap(err, "reading previous backup layers")
-		}
-	}
-
-	if !includeManifest {
-		for i := range prev {
-			prev[i] = strings.TrimSuffix(prev[i], "/"+backupManifestSuffix)
-		}
 	}
 	sort.Strings(prev)
 	return prev, nil
@@ -1005,8 +1009,15 @@ func tempCheckpointFileNameForJob(jobID jobspb.JobID) string {
 func ListFullBackupsInCollection(
 	ctx context.Context, store cloud.ExternalStorage,
 ) ([]string, error) {
-	backupPaths, err := store.ListFiles(ctx, "/*/*/*/"+backupManifestName)
-	if err != nil {
+	var backupPaths []string
+	if err := store.List(ctx, "", "data/", func(f string) error {
+		if ok, err := path.Match("/*/*/*/"+backupManifestName, f); err != nil {
+			return err
+		} else if ok {
+			backupPaths = append(backupPaths, f)
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 	for i, backupPath := range backupPaths {
