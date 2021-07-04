@@ -59,10 +59,14 @@ func (l *LocalStorage) prependExternalIODir(path string) (string, error) {
 		return "", errors.Errorf("local file access is disabled")
 	}
 	localBase := filepath.Join(l.externalIODir, path)
-	if !strings.HasPrefix(localBase, l.externalIODir) {
-		return "", errors.Errorf("local file access to paths outside of external-io-dir is not allowed: %s", path)
+	return localBase, l.ensureContained(localBase)
+}
+
+func (l *LocalStorage) ensureContained(path string) error {
+	if !strings.HasPrefix(path, l.externalIODir) {
+		return errors.Errorf("local file access to paths outside of external-io-dir is not allowed: %s", path)
 	}
-	return localBase, nil
+	return nil
 }
 
 type localWriter struct {
@@ -169,6 +173,45 @@ func (l *LocalStorage) List(pattern string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// If we are not given a glob pattern, we should recursively list this prefix
+	// just like a cloud storage provider, using filepath.Walk, because absent a
+	// wildcard in a pattenn filepath.Glob matches at most one path.
+	// TODO(dt): make this this only case -- never pass a pattern and always just
+	// walk the prefix like a cloud storage listing API.
+	if !strings.ContainsAny(pattern, "*?[") {
+		var matches []string
+		walkRoot := fullPath
+		listingParent := false
+		if f, err := os.Stat(fullPath); err != nil || !f.IsDir() {
+			listingParent = true
+			walkRoot = filepath.Dir(fullPath)
+			if err := l.ensureContained(walkRoot); err != nil {
+				return nil, err
+			}
+		}
+
+		if err := filepath.Walk(walkRoot, func(p string, f os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if f.IsDir() {
+				return nil
+			}
+			if listingParent && !strings.HasPrefix(p, fullPath) {
+				return nil
+			}
+			matches = append(matches, strings.TrimPrefix(p, l.externalIODir))
+			return nil
+		}); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return matches, nil
+	}
+
 	matches, err := filepath.Glob(fullPath)
 	if err != nil {
 		return nil, err

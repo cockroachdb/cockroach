@@ -80,3 +80,17 @@ func RedactKMSURI(kmsURI string) (string, error) {
 	uri.Path = "/redacted"
 	return uri.String(), nil
 }
+
+// JoinPath is a wrapper for path.Join that preserves a trailing slash if one is
+// on the last piece passed in.
+func JoinPath(pieces ...string) string {
+	// Join the pieces and clean the path (see path.Join which calls path.Clean).
+	out := path.Join(pieces...)
+
+	// Restore it if clear removed a trailing slash from the last non-empty piece.
+	if len(pieces) > 0 && strings.HasSuffix(pieces[len(pieces)-1], "/") {
+		out += "/"
+	}
+
+	return out
+}
