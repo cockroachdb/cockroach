@@ -546,6 +546,42 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 	return fileList, nil
 }
 
+func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
+	ctx, sp := tracing.ChildSpan(ctx, "s3.List")
+	defer sp.Finish()
+
+	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.List: %s", dest)})
+
+	client, err := s.getClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	var fnErr error
+	pageFn := func(page *s3.ListObjectsOutput, lastPage bool) bool {
+		for _, x := range page.CommonPrefixes {
+			if fnErr = fn(strings.TrimPrefix(*x.Prefix, dest)); fnErr != nil {
+				return false
+			}
+		}
+		for _, fileObject := range page.Contents {
+			if fnErr = fn(strings.TrimPrefix(*fileObject.Key, dest)); fnErr != nil {
+				return false
+			}
+		}
+		return true
+	}
+
+	if err := client.ListObjectsPagesWithContext(
+		ctx, &s3.ListObjectsInput{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim)}, pageFn,
+	); err != nil {
+		return errors.Wrap(err, `failed to list s3 bucket`)
+	}
+
+	return fnErr
+}
+
 func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 	client, err := s.getClient(ctx)
 	if err != nil {

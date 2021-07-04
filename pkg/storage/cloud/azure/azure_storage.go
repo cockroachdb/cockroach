@@ -236,6 +236,34 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 	return fileList, nil
 }
 
+func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
+	ctx, sp := tracing.ChildSpan(ctx, "azure.List")
+	defer sp.Finish()
+
+	dest := s.prefix
+	if prefix != "" {
+		dest = path.Join(dest, prefix)
+	}
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.List: %s", dest)})
+
+	var marker azblob.Marker
+	for marker.NotDone() {
+		response, err := s.container.ListBlobsHierarchySegment(
+			ctx, marker, delim, azblob.ListBlobsSegmentOptions{Prefix: s.prefix},
+		)
+		if err != nil {
+			return errors.Wrap(err, "unable to list files for specified blob")
+		}
+		for _, blob := range response.Segment.BlobItems {
+			if err := fn(strings.TrimPrefix(blob.Name, s.prefix)); err != nil {
+				return err
+			}
+		}
+		marker = response.NextMarker
+	}
+	return nil
+}
+
 func (s *azureStorage) Delete(ctx context.Context, basename string) error {
 	err := contextutil.RunWithTimeout(ctx, "delete azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
