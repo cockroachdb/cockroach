@@ -497,6 +497,16 @@ func TestPutGoogleCloud(t *testing.T) {
 		}
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
 			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit), false, user, nil, nil)
+		testListFiles(t,
+			fmt.Sprintf("gs://%s/%s/%s?%s=%s",
+				bucket,
+				"backup-test-implicit",
+				"listing-test",
+				cloudimpl.AuthParam,
+				cloudimpl.AuthParamImplicit,
+			),
+			security.RootUser, nil, nil,
+		)
 	})
 }
 
