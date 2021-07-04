@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/url"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -344,6 +345,39 @@ func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) 
 	}
 
 	return fileList, nil
+}
+
+// List implements the ExternalStorage interface.
+func (f *fileTableStorage) List(
+	ctx context.Context, prefix, delim string, fn cloud.ListingFn,
+) error {
+	dest := cloud.JoinPathPreservingTrailingSlash(f.prefix, prefix)
+
+	res, err := f.fs.ListFiles(ctx, dest)
+	if err != nil {
+		return errors.Wrap(err, "fail to list destination")
+	}
+
+	sort.Strings(res)
+	var prevPrefix string
+
+	for _, f := range res {
+		f = strings.TrimPrefix(f, dest)
+		if delim != "" {
+			if i := strings.Index(f, delim); i >= 0 {
+				f = f[:i+len(delim)]
+			}
+			if f == prevPrefix {
+				continue
+			}
+			prevPrefix = f
+		}
+		if err := fn(f); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Delete implements the ExternalStorage interface and deletes the file from the

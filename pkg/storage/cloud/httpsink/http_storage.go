@@ -183,6 +183,10 @@ func (h *httpStorage) ListFiles(_ context.Context, _ string) ([]string, error) {
 	return nil, errors.Mark(errors.New("http storage does not support listing"), cloud.ErrListingUnsupported)
 }
 
+func (h *httpStorage) List(_ context.Context, _, _ string, _ cloud.ListingFn) error {
+	return errors.Mark(errors.New("http storage does not support listing"), cloud.ErrListingUnsupported)
+}
+
 func (h *httpStorage) Delete(ctx context.Context, basename string) error {
 	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("DELETE %s", basename),
 		cloud.Timeout.Get(&h.settings.SV), func(ctx context.Context) error {
