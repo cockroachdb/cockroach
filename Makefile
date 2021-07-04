@@ -375,8 +375,11 @@ pkg/ui/yarn.cluster-ui.installed: pkg/ui/cluster-ui/package.json pkg/ui/cluster-
 	$(NODE_RUN) -C pkg/ui/cluster-ui yarn install --offline
 	# This ensures that any update to the protobuf will be picked up by cluster-ui.
 	$(NODE_RUN) -C pkg/ui/cluster-ui yarn upgrade file:pkg/ui/src/js
-	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
 	touch $@
+
+.SECONDARY: pkg/ui/cluster-ui/dist/main.js
+pkg/ui/cluster-ui/dist/main.js: $(shell find pkg/ui/cluster-ui/src -type f | sed 's/ /\\ /g') pkg/ui/yarn.cluster-ui.installed | bin/.bootstrap
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
 
 .SECONDARY: pkg/ui/yarn.protobuf.installed
 pkg/ui/yarn.protobuf.installed: pkg/ui/src/js/package.json pkg/ui/src/js/yarn.lock pkg/ui/yarn.protobufjs-cli.lock | bin/.submodules-initialized
@@ -385,7 +388,7 @@ pkg/ui/yarn.protobuf.installed: pkg/ui/src/js/package.json pkg/ui/src/js/yarn.lo
 	touch $@
 
 .SECONDARY: pkg/ui/yarn.installed
-pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.cluster-ui.installed | bin/.submodules-initialized
+pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/cluster-ui/dist/main.js | bin/.submodules-initialized
 	$(NODE_RUN) -C pkg/ui yarn install --offline
 	$(MAKE) protobufjs-cli-fix-deps
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
@@ -1418,12 +1421,11 @@ ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
 
 pkg/ui/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/ccl -type f)
 pkg/ui/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
-pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/styl -type f) | bin/.bootstrap
+pkg/ui/dist%/bindata.go: pkg/ui/yarn.installed pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/styl -type f) | bin/.bootstrap
 	find pkg/ui/dist$* -mindepth 1 -not -name dist$*.go -delete
 	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
 	  ln -s ../dist/$$dll pkg/ui/dist$*/$${dll/@(.ccl|.oss)}; \
 	done
-	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
 	$(NODE_RUN) -C pkg/ui $(WEBPACK) --config webpack.app.js --env.dist=$*
 	go-bindata -pkg dist$* -o $@ -prefix pkg/ui/dist$* pkg/ui/dist$*/...
 	echo 'func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }' >> $@
