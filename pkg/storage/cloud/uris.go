@@ -80,3 +80,13 @@ func RedactKMSURI(kmsURI string) (string, error) {
 	uri.Path = "/redacted"
 	return uri.String(), nil
 }
+
+// JoinPath wraps path.Join but preserves a trailing slash in the suffix.
+func JoinPath(prefix, suffix string) string {
+	out := path.Join(prefix, suffix)
+	// path.Clean removes trailing slashes, so put it back if needed.
+	if strings.HasSuffix(suffix, "/") {
+		out += "/"
+	}
+	return out
+}
