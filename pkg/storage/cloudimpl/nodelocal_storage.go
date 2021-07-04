@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -157,6 +158,37 @@ func (l *localFileStorage) ListFiles(ctx context.Context, patternSuffix string) 
 	}
 
 	return fileList, nil
+}
+
+func (l *localFileStorage) List(
+	ctx context.Context, prefix, delim string, fn cloud.ListingFn,
+) error {
+	dest := JoinPathPreservingTrailingSlash(l.base, prefix)
+
+	res, err := l.blobClient.List(ctx, dest)
+	if err != nil {
+		return errors.Wrap(err, "unable to match pattern provided")
+	}
+
+	// Sort results so that we can group as we go.
+	sort.Strings(res)
+	var prevPrefix string
+	for _, f := range res {
+		f = strings.TrimPrefix(f, dest)
+		if delim != "" {
+			if i := strings.Index(f, delim); i >= 0 {
+				f = f[:i+len(delim)]
+			}
+			if f == prevPrefix {
+				continue
+			}
+			prevPrefix = f
+		}
+		if err := fn(f); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (l *localFileStorage) Delete(ctx context.Context, basename string) error {

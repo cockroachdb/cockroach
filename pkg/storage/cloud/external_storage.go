@@ -61,6 +61,15 @@ type ExternalStorage interface {
 	// WriteFile should write the content to requested name.
 	WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error
 
+	// List enumerates files within the supplied prefix, calling the passed
+	// function with the name of each file found, relative to the external storage
+	// destination's configured prefix. If the passed function returns a non-nil
+	// error, iteration is stopped it is returned. If delimiter is non-empty names
+	// which have the same prefix, prior to the delimiter, are grouped into a
+	// single result which is that prefix. The order that results are passed to
+	// the callback is undefined.
+	List(ctx context.Context, prefix, delimiter string, fn ListingFn) error
+
 	// ListFiles returns files that match a globs-style pattern. The returned
 	// results are usually relative to the base path, meaning an ExternalStorage
 	// instance can be initialized with some base path, used to query for files,
@@ -80,6 +89,9 @@ type ExternalStorage interface {
 	// Size returns the length of the named file in bytes.
 	Size(ctx context.Context, basename string) (int64, error)
 }
+
+// ListingFn describes functions passed to ExternalStorage.ListFiles.
+type ListingFn func(string) error
 
 // ExternalStorageFactory describes a factory function for ExternalStorage.
 type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage) (ExternalStorage, error)
