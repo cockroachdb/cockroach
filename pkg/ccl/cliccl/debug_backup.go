@@ -340,8 +340,7 @@ func runListBackupsCmd(cmd *cobra.Command, args []string) error {
 	cols := []string{"path"}
 	rows := make([][]string, 0)
 	for _, backupPath := range backupPaths {
-		newRow := []string{"./" + backupPath}
-		rows = append(rows, newRow)
+		rows = append(rows, []string{"." + backupPath})
 	}
 	rowSliceIter := cli.NewRowSliceIter(rows, "l" /*align*/)
 	return cli.PrintQueryOutput(os.Stdout, cols, rowSliceIter)
