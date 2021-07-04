@@ -32,6 +32,7 @@ module.exports = (env) => ({
       {
         test: /\.js$/,
         use: ["cache-loader", "thread-loader", "babel-loader"],
+        exclude: [/node_modules/, /src\/js/, /ccl\/src\/js/],
       },
     ],
   },

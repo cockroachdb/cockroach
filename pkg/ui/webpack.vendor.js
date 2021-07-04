@@ -23,7 +23,7 @@ module.exports = {
     vendor: prodDependencies,
   },
 
-  mode: "none",
+  mode: "production",
 
   output: {
     filename: "vendor.oss.dll.js",
@@ -43,7 +43,12 @@ module.exports = {
         // of 8/25/2017 there appears to be no better way to run babel only on
         // the specific packages in node_modules that actually use ES6.
         // https://github.com/babel/babel-loader/issues/171
-        exclude: /node_modules\/(?!analytics-node)/,
+        exclude: [
+          /node_modules\/(?!analytics-node)/,
+          /src\/js/,
+          /ccl\/src\/js/,
+          /cluster-ui\/dist/,
+        ],
         use: ["cache-loader", "thread-loader", "babel-loader"],
       },
     ],

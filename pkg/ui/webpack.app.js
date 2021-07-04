@@ -121,12 +121,18 @@ module.exports = (env, argv) => {
         {
           test: /\.js$/,
           include: localRoots,
+          exclude: [
+            /node_modules/,
+            /src\/js/,
+            /ccl\/src\/js/,
+            /cluster-ui\/dist/,
+          ],
           use: ["cache-loader", "babel-loader"],
         },
         {
           test: /\.(ts|tsx)?$/,
           include: localRoots,
-          exclude: /\/node_modules/,
+          exclude: /node_modules/,
           use: [
             "cache-loader",
             "babel-loader",
@@ -140,7 +146,12 @@ module.exports = (env, argv) => {
           test: /\.js$/,
           loader: "source-map-loader",
           include: localRoots,
-          exclude: /\/node_modules/,
+          exclude: [
+            /node_modules/,
+            /src\/js/,
+            /ccl\/src\/js/,
+            /cluster-ui\/dist/,
+          ],
         },
       ],
     },
