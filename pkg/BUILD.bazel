@@ -12,6 +12,7 @@ ALL_TESTS = [
     "//pkg/ccl/baseccl:baseccl_test",
     "//pkg/ccl/benchccl/rttanalysisccl:rttanalysisccl_test",
     "//pkg/ccl/changefeedccl/cdctest:cdctest_test",
+    "//pkg/ccl/changefeedccl/kvevent:kvevent_test",
     "//pkg/ccl/changefeedccl/kvfeed:kvfeed_test",
     "//pkg/ccl/changefeedccl/schemafeed:schemafeed_test",
     "//pkg/ccl/changefeedccl:changefeedccl_test",

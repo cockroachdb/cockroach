@@ -41,7 +41,7 @@ type blockingBuffer struct {
 // account, an error will be returned when attempting to buffer it.
 func NewMemBuffer(acc mon.BoundAccount, metrics *Metrics) Buffer {
 	bb := &blockingBuffer{
-		signalCh: make(chan struct{}),
+		signalCh: make(chan struct{}, 1),
 	}
 	bb.acc = acc
 	bb.metrics = metrics
