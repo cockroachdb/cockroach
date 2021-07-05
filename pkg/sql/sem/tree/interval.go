@@ -512,6 +512,17 @@ func parseDuration(
 		return d, pgerror.Newf(
 			pgcode.InvalidDatetimeFormat, "interval: invalid input syntax: %q", l.str)
 	}
+
+	// If we have strictly one negative at the beginning belonging to a
+	// in SQL Standard parsing, treat everything as negative.
+	isSQLStandardNegative :=
+		style == duration.IntervalStyle_SQL_STANDARD &&
+			(l.offset+1) < len(l.str) && l.str[l.offset] == '-' &&
+			!strings.ContainsAny(l.str[l.offset+1:], "+-")
+	if isSQLStandardNegative {
+		l.offset++
+	}
+
 	for l.offset != len(l.str) {
 		// To support -00:XX:XX we record the sign here since -0 doesn't exist
 		// as an int64.
@@ -555,6 +566,13 @@ func parseDuration(
 		}
 		return d, pgerror.Newf(
 			pgcode.InvalidDatetimeFormat, "interval: missing unit at position %d: %q", l.offset, s)
+	}
+	if isSQLStandardNegative {
+		return duration.MakeDuration(
+			-d.Nanos(),
+			-d.Days,
+			-d.Months,
+		), l.err
 	}
 	return d, l.err
 }
