@@ -46,7 +46,10 @@ go_library(
 go_test(
     name = "kvfeed_test",
     size = "small",
-    srcs = ["kv_feed_test.go"],
+    srcs = [
+        "blocking_buffer_test.go",
+        "kv_feed_test.go",
+    ],
     embed = [":kvfeed"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",

@@ -386,7 +386,7 @@ type blockingBuffer struct {
 // account, an error will be returned when attempting to buffer it.
 func NewBlockingBuffer(acc mon.BoundAccount, metrics *Metrics) EventBuffer {
 	bb := &blockingBuffer{
-		signalCh: make(chan struct{}),
+		signalCh: make(chan struct{}, 1),
 	}
 	bb.acc = acc
 	bb.metrics = metrics
