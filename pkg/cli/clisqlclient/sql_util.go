@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clisqlclient
 
 import (
 	"context"
@@ -23,14 +23,12 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -48,7 +46,11 @@ type sqlConnI interface {
 	//lint:ignore SA1019 TODO(mjibson): clean this up to use go1.8 APIs
 	driver.Execer
 	//lint:ignore SA1019 TODO(mjibson): clean this up to use go1.8 APIs
+	driver.ExecerContext
+	//lint:ignore SA1019 TODO(mjibson): clean this up to use go1.8 APIs
 	driver.Queryer
+	//lint:ignore SA1019 TODO(mjibson): clean this up to use go1.8 APIs
+	driver.QueryerContext
 }
 
 type sqlConn struct {
@@ -80,6 +82,35 @@ type sqlConn struct {
 	// (re)connects.
 	clusterID           string
 	clusterOrganization string
+
+	// isInteractive indicates whether the input is interactive.
+	isInteractive bool
+
+	// enableServerExecutionTimings indicates whether to measure query
+	// latency server-side.
+	// This is implemented as a pointer for now until we properly
+	// support connection reconfiguration in the SQL shell.
+	enableServerExecutionTimings *bool
+
+	// embeddedMode indicates whether to print informational
+	// messages.
+	embeddedMode bool
+
+	// echo indicates whether to print out executed SQL statements.
+	// This is implemented as a pointer for now until we properly
+	// support connection reconfiguration in the SQL shell.
+	echo *bool
+
+	// showTimes indicates whether to print out connection latency.
+	// This is implemented as a pointer for now until we properly
+	// support connection reconfiguration in the SQL shell.
+	showTimes *bool
+
+	// verboseTimings indicates whether to display detailed latency
+	// details on SQL statements.
+	// This is implemented as a pointer for now until we properly
+	// support connection reconfiguration in the SQL shell.
+	verboseTimings *bool
 }
 
 // initialSQLConnectionError signals to the error decorator in
@@ -121,7 +152,7 @@ func wrapConnError(err error) error {
 
 func (c *sqlConn) flushNotices() {
 	for _, notice := range c.pendingNotices {
-		cliOutputError(stderr, notice, true /*showSeverity*/, false /*verbose*/)
+		clierror.OutputError(stderr, notice, true /*showSeverity*/, false /*verbose*/)
 	}
 	c.pendingNotices = nil
 	c.delayNotices = false
@@ -134,9 +165,10 @@ func (c *sqlConn) handleNotice(notice *pq.Error) {
 	}
 }
 
-func (c *sqlConn) ensureConn() error {
+// EnsureConn (re-)establishes the connection to the server.
+func (c *sqlConn) EnsureConn() error {
 	if c.conn == nil {
-		if c.reconnecting && cliCtx.isInteractive {
+		if c.reconnecting && c.isInteractive {
 			fmt.Fprintf(stderr, "warning: connection lost!\n"+
 				"opening new connection: all session settings will be lost\n")
 		}
@@ -170,7 +202,7 @@ func (c *sqlConn) ensureConn() error {
 				// The recursion only occurs once because fillPassword()
 				// resets c.passwordMissing, so we cannot get into this
 				// conditional a second time.
-				return c.ensureConn()
+				return c.EnsureConn()
 			}
 			// Not a password auth error, or password already set. Simply fail.
 			return wrapConnError(err)
@@ -200,13 +232,13 @@ func (c *sqlConn) tryEnableServerExecutionTimings() {
 	_, _, _, _, _, _, err := c.getLastQueryStatistics()
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: cannot show server execution timings: unexpected column found\n")
-		sqlCtx.enableServerExecutionTimings = false
+		*c.enableServerExecutionTimings = false
 	} else {
-		sqlCtx.enableServerExecutionTimings = true
+		*c.enableServerExecutionTimings = true
 	}
 }
 
-func (c *sqlConn) getServerMetadata() (
+func (c *sqlConn) GetServerMetadata() (
 	nodeID roachpb.NodeID,
 	version, clusterID string,
 	err error,
@@ -274,18 +306,18 @@ func (c *sqlConn) getServerMetadata() (
 // the last connection, based on the last known values in the sqlConn
 // struct.
 func (c *sqlConn) checkServerMetadata() error {
-	if !cliCtx.isInteractive {
+	if !c.isInteractive {
 		// Version reporting is just noise if the user is not present to
 		// change their mind upon seeing the information.
 		return nil
 	}
-	if sqlCtx.embeddedMode {
+	if c.embeddedMode {
 		// Version reporting is non-actionable if the user does
 		// not have control over how the server and client are run.
 		return nil
 	}
 
-	_, newServerVersion, newClusterID, err := c.getServerMetadata()
+	_, newServerVersion, newClusterID, err := c.GetServerMetadata()
 	if errors.Is(err, driver.ErrBadConn) {
 		return err
 	}
@@ -347,10 +379,10 @@ func (c *sqlConn) checkServerMetadata() error {
 	return nil
 }
 
-// getServerValue retrieves the first driverValue returned by the
+// GetServerValue retrieves the first driverValue returned by the
 // given sql query. If the query fails or does not return a single
 // column, `false` is returned in the second result.
-func (c *sqlConn) getServerValue(what, sql string) (driver.Value, string, bool) {
+func (c *sqlConn) GetServerValue(what, sql string) (driver.Value, string, bool) {
 	rows, err := c.Query(sql, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: error retrieving the %s: %v\n", what, err)
@@ -427,12 +459,12 @@ func (c *sqlConn) getLastQueryStatistics() (
 			return 0, 0, 0, 0, 0, containsJobLat, err
 		}
 
-		parseLatencyRaw = clisqlclient.FormatVal(row[0], iter.colTypes[0], false, false)
-		planLatencyRaw = clisqlclient.FormatVal(row[1], iter.colTypes[1], false, false)
-		execLatencyRaw = clisqlclient.FormatVal(row[2], iter.colTypes[2], false, false)
-		serviceLatencyRaw = clisqlclient.FormatVal(row[3], iter.colTypes[3], false, false)
+		parseLatencyRaw = FormatVal(row[0], iter.colTypes[0], false, false)
+		planLatencyRaw = FormatVal(row[1], iter.colTypes[1], false, false)
+		execLatencyRaw = FormatVal(row[2], iter.colTypes[2], false, false)
+		serviceLatencyRaw = FormatVal(row[3], iter.colTypes[3], false, false)
 		if containsJobLat {
-			jobsLatencyRaw = clisqlclient.FormatVal(row[4], iter.colTypes[4], false, false)
+			jobsLatencyRaw = FormatVal(row[4], iter.colTypes[4], false, false)
 		}
 
 		nRows++
@@ -507,10 +539,10 @@ func (c *sqlConn) ExecTxn(fn func(*sqlConn) error) (err error) {
 }
 
 func (c *sqlConn) Exec(query string, args []driver.Value) error {
-	if err := c.ensureConn(); err != nil {
+	if err := c.EnsureConn(); err != nil {
 		return err
 	}
-	if sqlCtx.echo {
+	if *c.echo {
 		fmt.Fprintln(stderr, ">", query)
 	}
 	_, err := c.conn.Exec(query, args)
@@ -523,10 +555,10 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 }
 
 func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
-	if err := c.ensureConn(); err != nil {
+	if err := c.EnsureConn(); err != nil {
 		return nil, err
 	}
-	if sqlCtx.echo {
+	if *c.echo {
 		fmt.Fprintln(stderr, ">", query)
 	}
 	rows, err := c.conn.Query(query, args)
@@ -541,7 +573,7 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 }
 
 func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, error) {
-	rows, _, err := makeQuery(query, args...)(c)
+	rows, _, err := MakeQuery(query, args...)(c)
 	if err != nil {
 		return nil, err
 	}
@@ -659,97 +691,31 @@ func (r *sqlRows) getColTypes() []string {
 	return colTypes
 }
 
-func makeSQLConn(url string) *sqlConn {
+// MakeSQLConn creates a connection object from a connection URL.
+// The booleans passed by reference are parameters that
+// can be changed in the SQL interactive shell after the connection
+// has been created.
+// TODO(knz): This should evolve to become methods on the connection
+// object.
+func MakeSQLConn(
+	url string,
+	isInteractive bool,
+	enableServerExecutionTimings *bool,
+	embeddedMode bool,
+	echo *bool,
+	showTimes *bool,
+	verboseTimings *bool,
+) *Conn {
 	return &sqlConn{
 		url: url,
+
+		isInteractive:                isInteractive,
+		enableServerExecutionTimings: enableServerExecutionTimings,
+		embeddedMode:                 embeddedMode,
+		echo:                         echo,
+		showTimes:                    showTimes,
+		verboseTimings:               verboseTimings,
 	}
-}
-
-// sqlConnTimeout is the default SQL connect timeout. This can also be
-// set using `connect_timeout` in the connection URL. The default of
-// 15 seconds is chosen to exceed the default password retrieval
-// timeout (system.user_login.timeout).
-var sqlConnTimeout = envutil.EnvOrDefaultString("COCKROACH_CONNECT_TIMEOUT", "15")
-
-// defaultSQLDb describes how a missing database part in the SQL
-// connection string is processed when creating a client connection.
-type defaultSQLDb int
-
-const (
-	// useSystemDb means that a missing database will be overridden with
-	// "system".
-	useSystemDb defaultSQLDb = iota
-	// useDefaultDb means that a missing database will be left as-is so
-	// that the server can default to "defaultdb".
-	useDefaultDb
-)
-
-// makeSQLClient connects to the database using the connection
-// settings set by the command-line flags.
-// If a password is needed, it also prompts for the password.
-//
-// If forceSystemDB is set, it also connects it to the `system`
-// database. The --database flag or database part in the URL is then
-// ignored.
-//
-// The appName given as argument is added to the URL even if --url is
-// specified, but only if the URL didn't already specify
-// application_name. It is prefixed with '$ ' to mark it as internal.
-func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
-	baseURL, err := cliCtx.makeClientConnURL()
-	if err != nil {
-		return nil, err
-	}
-
-	if defaultMode == useSystemDb {
-		// Override the target database. This is because the current
-		// database can influence the output of CLI commands, and in the
-		// case where the database is missing it will default server-wise to
-		// `defaultdb` which may not exist.
-		baseURL.WithDefaultDatabase("system")
-	}
-
-	// If there is no user in the URL already, fill in the default user.
-	baseURL.WithDefaultUsername(security.RootUser)
-
-	// How we're going to authenticate.
-	usePw, pwdSet, _ := baseURL.GetAuthnPassword()
-	if usePw {
-		// There's a password already configured.
-
-		// In insecure mode, we don't want the user to get the mistaken
-		// idea that a password is worth anything.
-		if cliCtx.Insecure {
-			return nil, errors.Errorf("password authentication not enabled in insecure mode")
-		}
-	}
-
-	// Load the application name. It's not a command-line flag, so
-	// anything already in the URL should take priority.
-	if prevAppName := baseURL.GetOption("application_name"); prevAppName == "" && appName != "" {
-		_ = baseURL.SetOption("application_name", catconstants.ReportableAppNamePrefix+appName)
-	}
-
-	// Set a connection timeout if none is provided already. This
-	// ensures that if the server was not initialized or there is some
-	// network issue, the client will not be left to hang forever.
-	//
-	// This is a lib/pq feature.
-	if baseURL.GetOption("connect_timeout") == "" {
-		_ = baseURL.SetOption("connect_timeout", sqlConnTimeout)
-	}
-
-	sqlURL := baseURL.ToPQ().String()
-
-	if log.V(2) {
-		log.Infof(context.Background(), "connecting with URL: %s", sqlURL)
-	}
-
-	conn := makeSQLConn(sqlURL)
-
-	conn.passwordMissing = !usePw || !pwdSet
-
-	return conn, nil
 }
 
 // fillPassword is called the first time the server complains that the
@@ -776,7 +742,9 @@ func (c *sqlConn) fillPassword() error {
 
 type queryFunc func(conn *sqlConn) (rows *sqlRows, isMultiStatementQuery bool, err error)
 
-func makeQuery(query string, parameters ...driver.Value) queryFunc {
+// MakeQuery encapsulates a SQL query and its parameter into a
+// function that can be applied to a connection object.
+func MakeQuery(query string, parameters ...driver.Value) QueryFn {
 	return func(conn *sqlConn) (*sqlRows, bool, error) {
 		isMultiStatementQuery := parser.HasMultipleStatements(query)
 		// driver.Value is an alias for interface{}, but must adhere to a restricted
@@ -797,9 +765,9 @@ func makeQuery(query string, parameters ...driver.Value) queryFunc {
 	}
 }
 
-// runQuery takes a 'query' with optional 'parameters'.
+// RunQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
-func runQuery(conn *sqlConn, fn queryFunc, showMoreChars bool) ([]string, [][]string, error) {
+func RunQuery(conn *Conn, fn QueryFn, showMoreChars bool) ([]string, [][]string, error) {
 	rows, _, err := fn(conn)
 	if err != nil {
 		return nil, nil, err
@@ -836,9 +804,11 @@ var tagsWithRowsAffected = map[string]struct{}{
 	"SELECT": {},
 }
 
-// runQueryAndFormatResults takes a 'query' with optional 'parameters'.
+// RunQueryAndFormatResults takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes output to 'w'.
-func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) (err error) {
+func RunQueryAndFormatResults(
+	conn *Conn, w io.Writer, fn QueryFn, tableDisplayFormat TableDisplayFormat, tableBorderMode int,
+) (err error) {
 	startTime := timeutil.Now()
 	rows, isMultiStatementQuery, err := fn(conn)
 	if err != nil {
@@ -914,7 +884,7 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) (err err
 		}
 
 		cols := getColumnStrings(rows, true)
-		reporter, cleanup, err := makeReporter(w)
+		reporter, cleanup, err := makeReporter(w, tableDisplayFormat, tableBorderMode)
 		if err != nil {
 			return err
 		}
@@ -946,14 +916,14 @@ func maybeShowTimes(
 	conn *sqlConn, w io.Writer, isMultiStatementQuery bool, startTime,
 	queryCompleteTime time.Time,
 ) {
-	if !sqlCtx.showTimes {
+	if !*conn.showTimes {
 		return
 	}
 
 	defer func() {
 		// If there was noticeable overhead, let the user know.
 		renderDelay := timeutil.Now().Sub(queryCompleteTime)
-		if renderDelay >= 1*time.Second && sqlCtx.isInteractive {
+		if renderDelay >= 1*time.Second && conn.isInteractive {
 			fmt.Fprintf(stderr,
 				"\nNote: an additional delay of %s was spent formatting the results.\n"+
 					"You can use \\set display_format to change the formatting.\n",
@@ -968,7 +938,7 @@ func maybeShowTimes(
 	// accurate way to measure them currently. See #48180.
 	if isMultiStatementQuery {
 		// No need to print if no one's watching.
-		if sqlCtx.isInteractive {
+		if conn.isInteractive {
 			fmt.Fprintf(stderr, "\nNote: timings for multiple statements on a single line are not supported. See %s.\n",
 				build.MakeIssueURL(48180))
 		}
@@ -1000,7 +970,7 @@ func maybeShowTimes(
 		precision = 0
 	}
 
-	if sqlCtx.verboseTimings {
+	if *conn.verboseTimings {
 		fmt.Fprintf(&stats, "Time: %s", clientSideQueryLatency)
 	} else {
 		// Simplified displays: human users typically can't
@@ -1008,7 +978,7 @@ func maybeShowTimes(
 		fmt.Fprintf(&stats, "Time: %.*f%s", precision, clientSideQueryLatency.Seconds()*multiplier, unit)
 	}
 
-	if !sqlCtx.enableServerExecutionTimings {
+	if !*conn.enableServerExecutionTimings {
 		fmt.Fprintln(w, stats.String())
 		return
 	}
@@ -1031,7 +1001,7 @@ func maybeShowTimes(
 		networkLat = clientSideQueryLatency
 	}
 	otherLat := serviceLat - parseLat - planLat - execLat
-	if sqlCtx.verboseTimings {
+	if *conn.verboseTimings {
 		// Only display schema change latency if the server provided that
 		// information to not confuse users.
 		// TODO(arul): this can be removed in 22.1.
@@ -1080,7 +1050,7 @@ func getColumnStrings(rows *sqlRows, showMoreChars bool) []string {
 	srcCols := rows.Columns()
 	cols := make([]string, len(srcCols))
 	for i, c := range srcCols {
-		cols[i] = clisqlclient.FormatVal(c, "NAME", showMoreChars, showMoreChars)
+		cols[i] = FormatVal(c, "NAME", showMoreChars, showMoreChars)
 	}
 	return cols
 }
@@ -1119,13 +1089,14 @@ func getNextRowStrings(rows *sqlRows, colTypes []string, showMoreChars bool) ([]
 
 	rowStrings := make([]string, len(cols))
 	for i, v := range vals {
-		rowStrings[i] = clisqlclient.FormatVal(v, colTypes[i], showMoreChars, showMoreChars)
+		rowStrings[i] = FormatVal(v, colTypes[i], showMoreChars, showMoreChars)
 	}
 	return rowStrings, nil
 }
 
-// parseBool parses a boolean string for use in slash commands.
-func parseBool(s string) (bool, error) {
+// ParseBool parses a boolean string for use in CLI SQL commands.
+// It recognizes booleans in a similar way as 'psql'.
+func ParseBool(s string) (bool, error) {
 	switch strings.TrimSpace(strings.ToLower(s)) {
 	case "true", "on", "yes", "1":
 		return true, nil

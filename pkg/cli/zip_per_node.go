@@ -202,8 +202,8 @@ func (zc *debugZipContext) collectPerNodeData(
 	// used anyway so that anything that does *not* need it will
 	// still happen.
 	sqlAddr := node.Desc.CheckedSQLAddress()
-	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.url, sqlAddr.AddressField)
-	nodePrinter.info("using SQL connection URL: %s", curSQLConn.url)
+	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.GetURL(), sqlAddr.AddressField)
+	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())
 
 	for _, table := range debugZipTablesPerNode {
 		query := fmt.Sprintf(`SELECT * FROM %s`, table)

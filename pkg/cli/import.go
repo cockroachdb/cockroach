@@ -12,7 +12,6 @@ package cli
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"net/url"
 	"strings"
@@ -107,11 +106,11 @@ func runDumpFileImport(cmd *cobra.Command, args []string) error {
 func runImport(
 	ctx context.Context, conn *sqlConn, importFormat, source, tableName string, mode importMode,
 ) error {
-	if err := conn.ensureConn(); err != nil {
+	if err := conn.EnsureConn(); err != nil {
 		return err
 	}
 
-	connURL, err := url.Parse(conn.url)
+	connURL, err := url.Parse(conn.GetURL())
 	if err != nil {
 		return err
 	}
@@ -146,7 +145,7 @@ func runImport(
 		<-importCLIKnobs.pauseAfterUpload
 	}
 
-	ex := conn.conn.(driver.ExecerContext)
+	ex := conn.GetDriverConn()
 	importCompletedMesssage := func() {
 		switch mode {
 		case singleTable:
@@ -201,7 +200,7 @@ func runImport(
 		return errors.New("unsupported import format")
 	}
 
-	purl, err := pgurl.Parse(conn.url)
+	purl, err := pgurl.Parse(conn.GetURL())
 	if err != nil {
 		return err
 	}

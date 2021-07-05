@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clisqlclient
 
 import (
 	"bytes"
@@ -38,17 +38,17 @@ type rowStrIter interface {
 	Align() []int
 }
 
-// RowSliceIter is an implementation of the rowStrIter interface and it is used
+// rowSliceIter is an implementation of the rowStrIter interface and it is used
 // to wrap a slice of rows that have already been completely buffered into
 // memory.
-type RowSliceIter struct {
+type rowSliceIter struct {
 	allRows [][]string
 	index   int
 	align   []int
 }
 
-// Next returns next row of RowSliceIter.
-func (iter *RowSliceIter) Next() (row []string, err error) {
+// Next returns next row of rowSliceIter.
+func (iter *rowSliceIter) Next() (row []string, err error) {
 	if iter.index >= len(iter.allRows) {
 		return nil, io.EOF
 	}
@@ -57,13 +57,13 @@ func (iter *RowSliceIter) Next() (row []string, err error) {
 	return row, nil
 }
 
-// ToSlice returns all rows of RowSliceIter.
-func (iter *RowSliceIter) ToSlice() ([][]string, error) {
+// ToSlice returns all rows of rowSliceIter.
+func (iter *rowSliceIter) ToSlice() ([][]string, error) {
 	return iter.allRows, nil
 }
 
-// Align returns alignment setting of RowSliceIter.
-func (iter *RowSliceIter) Align() []int {
+// Align returns alignment setting of rowSliceIter.
+func (iter *rowSliceIter) Align() []int {
 	return iter.align
 }
 
@@ -87,8 +87,8 @@ func convertAlign(align string) []int {
 // NewRowSliceIter is an implementation of the rowStrIter interface and it is
 // used when the rows have not been buffered into memory yet and we want to
 // stream them to the row formatters as they arrive over the network.
-func NewRowSliceIter(allRows [][]string, align string) *RowSliceIter {
-	return &RowSliceIter{
+func NewRowSliceIter(allRows [][]string, align string) RowStrIter {
+	return &rowSliceIter{
 		allRows: allRows,
 		index:   0,
 		align:   convertAlign(align),
@@ -250,10 +250,12 @@ type asciiTableReporter struct {
 	table *tablewriter.Table
 	buf   bytes.Buffer
 	w     *tabwriter.Writer
+
+	tableBorderMode int
 }
 
-func newASCIITableReporter() *asciiTableReporter {
-	n := &asciiTableReporter{}
+func newASCIITableReporter(tableBorderMode int) *asciiTableReporter {
+	n := &asciiTableReporter{tableBorderMode: tableBorderMode}
 	// 4-wide columns, 1 character minimum width.
 	n.w = tabwriter.NewWriter(&n.buf, 4, 0, 1, ' ', 0)
 	return n
@@ -278,7 +280,7 @@ func (p *asciiTableReporter) describe(w io.Writer, cols []string) error {
 		var outsideBorders, insideLines bool
 		// The following table border modes are taken from psql.
 		// https://www.postgresql.org/docs/12/app-psql.html
-		switch cliCtx.tableBorderMode {
+		switch p.tableBorderMode {
 		case 0:
 			outsideBorders, insideLines = false, false
 		case 1:
@@ -370,10 +372,10 @@ type csvReporter struct {
 // buffered CSV/TSV data.
 const csvFlushInterval = 5 * time.Second
 
-func makeCSVReporter(w io.Writer, format tableDisplayFormat) (*csvReporter, func()) {
+func makeCSVReporter(w io.Writer, format TableDisplayFormat) (*csvReporter, func()) {
 	r := &csvReporter{}
 	r.mu.csvWriter = csv.NewWriter(w)
-	if format == tableDisplayTSV {
+	if format == TableDisplayTSV {
 		r.mu.csvWriter.Comma = '\t'
 	}
 
@@ -628,41 +630,49 @@ func (p *sqlReporter) doneRows(w io.Writer, seenRows int) error {
 // makeReporter instantiates a table formatter. It returns the
 // formatter and a cleanup function that must be called in all cases
 // when the formatting completes.
-func makeReporter(w io.Writer) (rowReporter, func(), error) {
-	switch cliCtx.tableDisplayFormat {
-	case tableDisplayTable:
-		return newASCIITableReporter(), nil, nil
+func makeReporter(
+	w io.Writer, tableDisplayFormat TableDisplayFormat, tableBorderMode int,
+) (rowReporter, func(), error) {
+	switch tableDisplayFormat {
+	case TableDisplayTable:
+		return newASCIITableReporter(tableBorderMode), nil, nil
 
-	case tableDisplayTSV:
+	case TableDisplayTSV:
 		fallthrough
-	case tableDisplayCSV:
-		reporter, cleanup := makeCSVReporter(w, cliCtx.tableDisplayFormat)
+	case TableDisplayCSV:
+		reporter, cleanup := makeCSVReporter(w, tableDisplayFormat)
 		return reporter, cleanup, nil
 
-	case tableDisplayRaw:
+	case TableDisplayRaw:
 		return &rawReporter{}, nil, nil
 
-	case tableDisplayHTML:
+	case TableDisplayHTML:
 		return &htmlReporter{escape: true, rowStats: true}, nil, nil
 
-	case tableDisplayRawHTML:
+	case TableDisplayRawHTML:
 		return &htmlReporter{escape: false, rowStats: false}, nil, nil
 
-	case tableDisplayRecords:
+	case TableDisplayRecords:
 		return &recordReporter{}, nil, nil
 
-	case tableDisplaySQL:
+	case TableDisplaySQL:
 		return &sqlReporter{}, nil, nil
 
 	default:
-		return nil, nil, errors.Errorf("unhandled display format: %d", cliCtx.tableDisplayFormat)
+		return nil, nil, errors.Errorf("unhandled display format: %d", tableDisplayFormat)
 	}
 }
 
 // PrintQueryOutput takes a list of column names and a list of row
 // contents writes a formatted table to 'w'.
-func PrintQueryOutput(w io.Writer, cols []string, allRows rowStrIter) error {
-	reporter, cleanup, err := makeReporter(w)
+func PrintQueryOutput(
+	w io.Writer,
+	cols []string,
+	allRows RowStrIter,
+	tableDisplayFormat TableDisplayFormat,
+	tableBorderMode int,
+) error {
+	reporter, cleanup, err := makeReporter(w, tableDisplayFormat, tableBorderMode)
 	if err != nil {
 		return err
 	}

@@ -8,16 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clisqlclient_test
 
 import (
 	"bytes"
 	"database/sql/driver"
 	"fmt"
+	"io"
 	"net/url"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -27,11 +30,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Temporary binding to simplify during code migration.
+// TODO(knz): Remove this and replace all calls to MakeQuery().
+var makeQuery = clisqlclient.MakeQuery
+
+func makeSQLConn(url string) *clisqlclient.Conn {
+	bf := false
+	return clisqlclient.MakeSQLConn(url,
+		false, /* isInteractive */
+		&bf,   /* enableServerExecutionTimings */
+		false, /* embeddedMode */
+		&bf,   /* echo */
+		&bf,   /* showTimes */
+		&bf,   /* verboseTimings */
+	)
+}
+
+func runQueryAndFormatResults(
+	conn *clisqlclient.Conn, w io.Writer, fn clisqlclient.QueryFn,
+) (err error) {
+	return clisqlclient.RunQueryAndFormatResults(conn, w, fn,
+		clisqlclient.TableDisplayTable,
+		0, /* tableBorderMode */
+	)
+}
+
 func TestConnRecover(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	p := TestCLIParams{T: t}
-	c := NewCLITest(p)
+	p := cli.TestCLIParams{T: t}
+	c := cli.NewCLITest(p)
 	defer c.Cleanup()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
@@ -50,7 +78,7 @@ func TestConnRecover(t *testing.T) {
 	}
 
 	// Check that Query detects a connection close.
-	defer simulateServerRestart(&c, p, conn)()
+	defer simulateServerRestart(t, &c, p, conn)()
 
 	// When the server restarts, the next Query() attempt may encounter a
 	// TCP reset error before the SQL driver realizes there is a problem
@@ -77,7 +105,7 @@ func TestConnRecover(t *testing.T) {
 	}
 
 	// Check that Exec detects a connection close.
-	defer simulateServerRestart(&c, p, conn)()
+	defer simulateServerRestart(t, &c, p, conn)()
 
 	// Ditto from Query().
 	testutils.SucceedsSoon(t, func() error {
@@ -96,17 +124,19 @@ func TestConnRecover(t *testing.T) {
 // simulateServerRestart restarts the test server and reconfigures the connection
 // to use the new test server's port number. This is necessary because the port
 // number is selected randomly.
-func simulateServerRestart(c *TestCLI, p TestCLIParams, conn *sqlConn) func() {
-	c.restartServer(p)
-	url2, cleanup2 := sqlutils.PGUrl(c.t, c.ServingSQLAddr(), c.t.Name(), url.User(security.RootUser))
-	conn.url = url2.String()
+func simulateServerRestart(
+	t *testing.T, c *cli.TestCLI, p cli.TestCLIParams, conn *clisqlclient.Conn,
+) func() {
+	c.RestartServer(p)
+	url2, cleanup2 := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	conn.SetURL(url2.String())
 	return cleanup2
 }
 
 func TestRunQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := NewCLITest(TestCLIParams{T: t})
+	c := cli.NewCLITest(cli.TestCLIParams{T: t})
 	defer c.Cleanup()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
@@ -115,12 +145,11 @@ func TestRunQuery(t *testing.T) {
 	conn := makeSQLConn(url.String())
 	defer conn.Close()
 
-	setCLIDefaultsForTests()
-
 	var b bytes.Buffer
 
 	// Non-query statement.
-	if err := runQueryAndFormatResults(conn, &b, makeQuery(`SET DATABASE=system`)); err != nil {
+	if err := runQueryAndFormatResults(conn, &b,
+		clisqlclient.MakeQuery(`SET DATABASE=system`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -133,7 +162,7 @@ SET
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
-	cols, rows, err := runQuery(conn, makeQuery(`SHOW COLUMNS FROM system.namespace`), false)
+	cols, rows, err := clisqlclient.RunQuery(conn, makeQuery(`SHOW COLUMNS FROM system.namespace`), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +257,7 @@ SET
 func TestUtfName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := NewCLITest(TestCLIParams{T: t})
+	c := cli.NewCLITest(cli.TestCLIParams{T: t})
 	defer c.Cleanup()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
@@ -236,8 +265,6 @@ func TestUtfName(t *testing.T) {
 
 	conn := makeSQLConn(url.String())
 	defer conn.Close()
-
-	setCLIDefaultsForTests()
 
 	var b bytes.Buffer
 
@@ -284,8 +311,8 @@ ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
 func TestTransactionRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	p := TestCLIParams{T: t}
-	c := NewCLITest(p)
+	p := cli.TestCLIParams{T: t}
+	c := cli.NewCLITest(p)
 	defer c.Cleanup()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
@@ -295,7 +322,7 @@ func TestTransactionRetry(t *testing.T) {
 	defer conn.Close()
 
 	var tries int
-	err := conn.ExecTxn(func(conn *sqlConn) error {
+	err := conn.ExecTxn(func(conn *clisqlclient.Conn) error {
 		tries++
 		if tries > 2 {
 			return nil
@@ -350,7 +377,7 @@ func TestParseBool(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.input, func(t *testing.T) {
-			b, err := parseBool(tc.input)
+			b, err := clisqlclient.ParseBool(tc.input)
 			if tc.expectErr {
 				require.Error(t, err)
 			} else {

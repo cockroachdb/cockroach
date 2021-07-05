@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -198,7 +199,7 @@ Output the list of cluster settings known to this binary.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wrapCode := func(s string) string {
-			if cliCtx.tableDisplayFormat == tableDisplayRawHTML {
+			if cliCtx.tableDisplayFormat == clisqlclient.TableDisplayRawHTML {
 				return fmt.Sprintf("<code>%s</code>", s)
 			}
 			return s
