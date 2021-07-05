@@ -160,6 +160,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/cgroups",
         "//pkg/util/contextutil",
+        "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/encoding/csv",
         "//pkg/util/envutil",
