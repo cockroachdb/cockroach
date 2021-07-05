@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -53,7 +55,7 @@ var (
 	errNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
 )
 
-// createdatabase takes Database descriptor and creates it if needed,
+// createDatabase takes Database descriptor and creates it if needed,
 // incrementing the descriptor counter. Returns true if the descriptor
 // is actually created, false if it already existed, or an error if one was
 // encountered. The ifNotExists flag is used to declare if the "already existed"
@@ -261,6 +263,17 @@ var InitializeMultiRegionMetadataCCL = func(
 	)
 }
 
+// DefaultPrimaryRegionClusterSettingName is the name of the cluster setting that returns
+const DefaultPrimaryRegionClusterSettingName = "sql.defaults.primary_region"
+
+// DefaultPrimaryRegion is a cluster setting that contains the default primary region.
+var DefaultPrimaryRegion = settings.RegisterStringSetting(
+	DefaultPrimaryRegionClusterSettingName,
+	`if not empty, all databases created without a PRIMARY REGION will `+
+		`implicitly have the given PRIMARY REGION`,
+	"",
+).WithPublic()
+
 // maybeInitializeMultiRegionMetadata initializes multi-region metadata if a
 // primary region is supplied and works as a pass-through otherwise. It creates
 // a new region config from the given parameters and reserves an ID for the
@@ -269,7 +282,15 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 	ctx context.Context, survivalGoal tree.SurvivalGoal, primaryRegion tree.Name, regions []tree.Name,
 ) (*multiregion.RegionConfig, error) {
 	if primaryRegion == "" && len(regions) == 0 {
-		return nil, nil
+		defaultPrimaryRegion := DefaultPrimaryRegion.Get(&p.execCfg.Settings.SV)
+		if defaultPrimaryRegion == "" {
+			return nil, nil
+		}
+		primaryRegion = tree.Name(defaultPrimaryRegion)
+		// TODO(#67156): send notice immediately, so it pops up even on error.
+		p.noticeSender.BufferNotice(
+			pgnotice.Newf("setting %s as the PRIMARY REGION as no PRIMARY REGION was specified", primaryRegion),
+		)
 	}
 
 	liveRegions, err := p.getLiveClusterRegions(ctx)
