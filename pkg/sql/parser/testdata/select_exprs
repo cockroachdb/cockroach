@@ -1035,42 +1035,42 @@ SELECT '0'::INTERVAL -- identifiers removed
 parse
 SELECT INTERVAL '0'
 ----
-SELECT '00:00:00' -- normalized!
-SELECT ('00:00:00') -- fully parenthesized
-SELECT _ -- literals removed
-SELECT '00:00:00' -- identifiers removed
+SELECT '0'::INTERVAL -- normalized!
+SELECT (('0')::INTERVAL) -- fully parenthesized
+SELECT _::INTERVAL -- literals removed
+SELECT '0'::INTERVAL -- identifiers removed
 
 parse
 SELECT INTERVAL '1' SECOND
 ----
-SELECT '00:00:01' -- normalized!
-SELECT ('00:00:01') -- fully parenthesized
-SELECT _ -- literals removed
-SELECT '00:00:01' -- identifiers removed
+SELECT '1'::INTERVAL SECOND -- normalized!
+SELECT (('1')::INTERVAL SECOND) -- fully parenthesized
+SELECT _::INTERVAL SECOND -- literals removed
+SELECT '1'::INTERVAL SECOND -- identifiers removed
 
 parse
 SELECT INTERVAL(3) '12.1234s'
 ----
-SELECT '00:00:12.123' -- normalized!
-SELECT ('00:00:12.123') -- fully parenthesized
-SELECT _ -- literals removed
-SELECT '00:00:12.123' -- identifiers removed
+SELECT '12.1234s'::INTERVAL(3) -- normalized!
+SELECT (('12.1234s')::INTERVAL(3)) -- fully parenthesized
+SELECT _::INTERVAL(3) -- literals removed
+SELECT '12.1234s'::INTERVAL(3) -- identifiers removed
 
 parse
 SELECT INTERVAL '12.1234s' SECOND(3)
 ----
-SELECT '00:00:12.123' -- normalized!
-SELECT ('00:00:12.123') -- fully parenthesized
-SELECT _ -- literals removed
-SELECT '00:00:12.123' -- identifiers removed
+SELECT '12.1234s'::INTERVAL SECOND(3) -- normalized!
+SELECT (('12.1234s')::INTERVAL SECOND(3)) -- fully parenthesized
+SELECT _::INTERVAL SECOND(3) -- literals removed
+SELECT '12.1234s'::INTERVAL SECOND(3) -- identifiers removed
 
 parse
 SELECT INTERVAL '14.7899s' SECOND(3)
 ----
-SELECT '00:00:14.79' -- normalized!
-SELECT ('00:00:14.79') -- fully parenthesized
-SELECT _ -- literals removed
-SELECT '00:00:14.79' -- identifiers removed
+SELECT '14.7899s'::INTERVAL SECOND(3) -- normalized!
+SELECT (('14.7899s')::INTERVAL SECOND(3)) -- fully parenthesized
+SELECT _::INTERVAL SECOND(3) -- literals removed
+SELECT '14.7899s'::INTERVAL SECOND(3) -- identifiers removed
 
 parse
 SELECT '11s'::INTERVAL(3)
@@ -1112,14 +1112,13 @@ SELECT (('10:00:13.123456')::INTERVAL MINUTE TO SECOND(3)) -- fully parenthesize
 SELECT _::INTERVAL MINUTE TO SECOND(3) -- literals removed
 SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND(3) -- identifiers removed
 
-error
+parse
 SELECT INTERVAL 'foo'
 ----
-at or near "EOF": syntax error: could not parse "foo" as type interval: interval: missing number at position 0: "foo"
-DETAIL: source SQL:
-SELECT INTERVAL 'foo'
-                     ^
-
+SELECT 'foo'::INTERVAL -- normalized!
+SELECT (('foo')::INTERVAL) -- fully parenthesized
+SELECT _::INTERVAL -- literals removed
+SELECT 'foo'::INTERVAL -- identifiers removed
 
 parse
 SELECT 'foo'::BOX2D
