@@ -216,9 +216,9 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 	})
 }
 
-// TestTxnHeartbeaterLoopNotStartedFor1PC tests that the txnHeartbeater does
-// not start a heartbeat loop if it detects a 1PC transaction.
-func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
+// TestTxnHeartbeaterLoopStartedFor1PC tests that the txnHeartbeater
+// starts a heartbeat loop if it detects a 1PC transaction.
+func TestTxnHeartbeaterLoopStartedFor1PC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -238,7 +238,7 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
 		etReq := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
-		require.False(t, etReq.TxnHeartbeating)
+		require.True(t, etReq.TxnHeartbeating)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -250,8 +250,9 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 	require.NotNil(t, br)
 
 	th.mu.Lock()
-	require.False(t, th.mu.loopStarted)
-	require.False(t, th.heartbeatLoopRunningLocked())
+	require.True(t, th.mu.loopStarted)
+	require.True(t, th.heartbeatLoopRunningLocked())
+	th.closeLocked()
 	th.mu.Unlock()
 }
 
