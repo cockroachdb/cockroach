@@ -688,7 +688,10 @@ func mergeCheckingTimestampCaches(
 			}()
 			// NB: the operation won't complete, so peek below Raft and wait for
 			// the result to apply on the majority quorum.
-			tc.WaitForValues(t, lhsKey, []int64{0, 4, 4})
+			if err := tc.WaitForValuesE(lhsKey, []int64{0, 4, 4}); err != nil {
+				t.Error(err) // we're on a goroutine
+				return
+			}
 
 			// Truncate the log to eventually force a snapshot. Determining
 			// which log index to truncate is tricky. We need to make sure it is
@@ -719,7 +722,7 @@ func mergeCheckingTimestampCaches(
 			}()
 			// NB: the operation won't complete, so peek below Raft and wait for
 			// the result to apply on the majority quorum.
-			testutils.SucceedsSoon(t, func() error {
+			if err := testutils.SucceedsSoonError(func() error {
 				for _, r := range lhsRepls[1:] {
 					firstIndex, err := r.GetFirstIndex()
 					require.NoError(t, err)
@@ -728,7 +731,10 @@ func mergeCheckingTimestampCaches(
 					}
 				}
 				return nil
-			})
+			}); err != nil {
+				t.Error(err)
+				return
+			}
 		}
 
 		// Begin blocking txn heartbeats and GC requests. They cause issues
