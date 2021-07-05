@@ -195,9 +195,6 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 			require.Len(t, ba.Requests, 1)
 			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
-			etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
-			require.True(t, etReq.TxnHeartbeating)
-
 			br = ba.CreateReply()
 			br.Txn = ba.Txn
 			br.Txn.Status = roachpb.COMMITTED
@@ -216,8 +213,8 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 	})
 }
 
-// TestTxnHeartbeaterLoopNotStartedFor1PC tests that the txnHeartbeater does
-// not start a heartbeat loop if it detects a 1PC transaction.
+// TestTxnHeartbeaterLoopStartedFor1PC tests that the txnHeartbeater does
+// start a heartbeat loop if it detects a 1PC transaction.
 func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -237,9 +234,6 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
-		etReq := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
-		require.False(t, etReq.TxnHeartbeating)
-
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.COMMITTED
@@ -250,8 +244,9 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 	require.NotNil(t, br)
 
 	th.mu.Lock()
-	require.False(t, th.mu.loopStarted)
-	require.False(t, th.heartbeatLoopRunningLocked())
+	require.True(t, th.mu.loopStarted)
+	require.True(t, th.heartbeatLoopRunningLocked())
+	th.closeLocked()
 	th.mu.Unlock()
 }
 
@@ -395,7 +390,6 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 			require.Nil(t, etReq.Key) // set in txnCommitter
 			require.False(t, etReq.Commit)
 			require.True(t, etReq.Poison)
-			require.True(t, etReq.TxnHeartbeating)
 
 			br = ba.CreateReply()
 			br.Txn = ba.Txn
@@ -473,7 +467,6 @@ func TestTxnHeartbeaterAsyncAbortWaitsForInFlight(t *testing.T) {
 			require.Equal(t, &txn, ba.Txn)
 			require.False(t, etReq.Commit)
 			require.True(t, etReq.Poison)
-			require.True(t, etReq.TxnHeartbeating)
 
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
@@ -563,7 +556,6 @@ func TestTxnHeartbeaterAsyncAbortCollapsesRequests(t *testing.T) {
 			require.Equal(t, &txn, ba.Txn)
 			require.False(t, etReq.Commit)
 			require.True(t, etReq.Poison)
-			require.True(t, etReq.TxnHeartbeating)
 
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
