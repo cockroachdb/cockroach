@@ -72,11 +72,11 @@ func openSourceFile(source string) (io.ReadCloser, error) {
 }
 
 func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destination string) error {
-	if err := conn.ensureConn(); err != nil {
+	if err := conn.EnsureConn(); err != nil {
 		return err
 	}
 
-	ex := conn.conn.(driver.ExecerContext)
+	ex := conn.GetDriverConn()
 	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destinatio
 		Host:   "self",
 		Path:   destination,
 	}
-	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(nodelocalURL.String(), sql.CrdbInternalName,
+	stmt, err := conn.GetDriverConn().Prepare(sql.CopyInFileStmt(nodelocalURL.String(), sql.CrdbInternalName,
 		sql.NodelocalFileUploadTable))
 	if err != nil {
 		return err
@@ -125,7 +125,7 @@ func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destinatio
 		return err
 	}
 
-	nodeID, _, _, err := conn.getServerMetadata()
+	nodeID, _, _, err := conn.GetServerMetadata()
 	if err != nil {
 		return errors.Wrap(err, "unable to get node id")
 	}

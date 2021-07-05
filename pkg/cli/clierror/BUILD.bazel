@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "clierror",
+    srcs = [
+        "cli_error.go",
+        "doc.go",
+        "formatted_error.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/clierror",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/exit",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/log",
+        "//pkg/util/log/severity",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//:pq",
+    ],
+)
+
+go_test(
+    name = "clierror_test",
+    srcs = ["error_test.go"],
+    embed = [":clierror"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//:pq",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/docs"
@@ -318,7 +319,7 @@ var options = map[string]struct {
 		isBoolean:                 false,
 		validDuringMultilineEntry: false,
 		set: func(val string) error {
-			b, err := parseBool(val)
+			b, err := clisqlclient.ParseBool(val)
 			if err != nil {
 				sqlCtx.autoTrace = "on, " + val
 			} else if b {
@@ -364,9 +365,9 @@ var options = map[string]struct {
 			return cliCtx.tableDisplayFormat.Set(val)
 		},
 		reset: func() error {
-			displayFormat := tableDisplayTSV
+			displayFormat := clisqlclient.TableDisplayTSV
 			if cliCtx.terminalOutput {
-				displayFormat = tableDisplayTable
+				displayFormat = clisqlclient.TableDisplayTable
 			}
 			cliCtx.tableDisplayFormat = displayFormat
 			return nil
@@ -505,7 +506,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	var err error
 	if !opt.isBoolean {
 		err = opt.set(val)
-	} else if b, e := parseBool(val); e != nil {
+	} else if b, e := clisqlclient.ParseBool(val); e != nil {
 		return c.invalidOptSet(errState, args)
 	} else if b {
 		err = opt.set("true")
@@ -778,11 +779,11 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 
 	// Configure the editor to use the new prompt.
 
-	parsedURL, err := url.Parse(c.conn.url)
+	parsedURL, err := url.Parse(c.conn.GetURL())
 	if err != nil {
 		// If parsing fails, we'll keep the entire URL. The Open call succeeded, and that
 		// is the important part.
-		c.fullPrompt = c.conn.url + "> "
+		c.fullPrompt = c.conn.GetURL() + "> "
 		c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
 		return nextState
 	}
@@ -844,7 +845,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 func (c *cliState) refreshTransactionStatus() {
 	c.lastKnownTxnStatus = unknownTxnStatus
 
-	dbVal, dbColType, hasVal := c.conn.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
+	dbVal, dbColType, hasVal := c.conn.GetServerValue("transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
 		return
 	}
@@ -877,7 +878,7 @@ func (c *cliState) refreshDatabaseName() string {
 		return unknownDbName
 	}
 
-	dbVal, dbColType, hasVal := c.conn.getServerValue("database name", `SHOW DATABASE`)
+	dbVal, dbColType, hasVal := c.conn.GetServerValue("database name", `SHOW DATABASE`)
 	if !hasVal {
 		return unknownDbName
 	}
@@ -892,7 +893,7 @@ func (c *cliState) refreshDatabaseName() string {
 		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
 	// Preserve the current database name in case of reconnects.
-	c.conn.dbName = dbName
+	c.conn.SetCurrentDatabase(dbName)
 
 	return dbName
 }
@@ -914,7 +915,7 @@ func (c *cliState) GetCompletions(_ string) []string {
 		} else if err != nil {
 			// Some other error. Display it.
 			fmt.Fprintln(c.ins.Stdout())
-			cliOutputError(c.ins.Stdout(), err, true /*showSeverity*/, false /*verbose*/)
+			clierror.OutputError(c.ins.Stdout(), err, true /*showSeverity*/, false /*verbose*/)
 		}
 	}
 
@@ -1187,20 +1188,20 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.invalidSyntax(errState, `%s. Try \? for help`, c.lastInputLine)
 
 	case `\x`:
-		format := tableDisplayRecords
+		format := clisqlclient.TableDisplayRecords
 		switch len(cmd) {
 		case 1:
-			if cliCtx.tableDisplayFormat == tableDisplayRecords {
-				format = tableDisplayTable
+			if cliCtx.tableDisplayFormat == clisqlclient.TableDisplayRecords {
+				format = clisqlclient.TableDisplayTable
 			}
 		case 2:
-			b, err := parseBool(cmd[1])
+			b, err := clisqlclient.ParseBool(cmd[1])
 			if err != nil {
 				return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
 			} else if b {
-				format = tableDisplayRecords
+				format = clisqlclient.TableDisplayRecords
 			} else {
-				format = tableDisplayTable
+				format = clisqlclient.TableDisplayTable
 			}
 		default:
 			return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
@@ -1347,7 +1348,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 		}
 
 		_ = c.invalidSyntax(cliStart, "statement ignored: %v",
-			&formattedError{err: err, showSeverity: false, verbose: false})
+			clierror.NewFormattedError(err, false /*showSeverity*/, false /*verbose*/))
 
 		// Stop here if exiterr is set.
 		if sqlCtx.errExit {
@@ -1387,7 +1388,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 		// with the specified options.
 		c.exitErr = c.conn.Exec("SET tracing = off; SET tracing = "+sqlCtx.autoTrace, nil)
 		if c.exitErr != nil {
-			cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			clierror.OutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
 			if sqlCtx.errExit {
 				return cliStop
 			}
@@ -1398,7 +1399,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	// Now run the statement/query.
 	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines))
 	if c.exitErr != nil {
-		cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		clierror.OutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
 	}
 
 	// If we are tracing, stop tracing and display the trace. We do
@@ -1408,7 +1409,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 		if err := c.conn.Exec("SET tracing = off", nil); err != nil {
 			// Print the error for the SET tracing statement. This will
 			// appear below the error for the main query above, if any,
-			cliOutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
+			clierror.OutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
 			if c.exitErr == nil {
 				// The query had encountered no error above, but now we are
 				// encountering an error on SET tracing. Consider this to
@@ -1425,7 +1426,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			}
 			if err := runQueryAndFormatResults(c.conn, os.Stdout,
 				makeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
-				cliOutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
+				clierror.OutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
 					// Both the query and SET tracing had encountered no error
 					// above, but now we are encountering an error on SHOW TRACE
@@ -1664,7 +1665,7 @@ func (c *cliState) runStatements(stmts []string) error {
 			if c.exitErr != nil {
 				if !sqlCtx.errExit && i < len(stmts)-1 {
 					// Print the error now because we don't get a chance later.
-					cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+					clierror.OutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
 				}
 				if sqlCtx.errExit {
 					break
@@ -1683,7 +1684,7 @@ func (c *cliState) runStatements(stmts []string) error {
 	if c.exitErr != nil {
 		// Don't write the error to stderr ourselves. Cobra will do this for
 		// us on the exit path. We do want the details though, so add them.
-		c.exitErr = &formattedError{err: c.exitErr, showSeverity: true, verbose: false}
+		c.exitErr = clierror.NewFormattedError(c.exitErr, true /*showSeverity*/, false /*verbose*/)
 	}
 	return c.exitErr
 }
@@ -1743,7 +1744,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 func runClient(cmd *cobra.Command, conn *sqlConn, cmdIn *os.File) error {
 	// Open the connection to make sure everything is OK before running any
 	// statements. Performs authentication.
-	if err := conn.ensureConn(); err != nil {
+	if err := conn.EnsureConn(); err != nil {
 		return err
 	}
 
