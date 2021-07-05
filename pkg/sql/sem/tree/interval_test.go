@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -155,24 +156,28 @@ func TestValidSQLIntervalSyntax(t *testing.T) {
 				t.Fatalf(`%q: got "%s", expected "%s"`, test.input, s, test.output)
 			}
 
-			dur2, err := parseDuration(s, test.itm)
-			if err != nil {
-				t.Fatalf(`%q: repr "%s" is not parsable: %v`, test.input, s, err)
-			}
-			s2 := dur2.String()
-			if s2 != s {
-				t.Fatalf(`%q: repr "%s" does not round-trip, got "%s" instead`,
-					test.input, s, s2)
-			}
+			for style := range duration.IntervalStyle_value {
+				t.Run(style, func(t *testing.T) {
+					dur2, err := parseDuration(duration.IntervalStyle(duration.IntervalStyle_value[style]), s, test.itm)
+					if err != nil {
+						t.Fatalf(`%q: repr "%s" is not parsable: %v`, test.input, s, err)
+					}
+					s2 := dur2.String()
+					if s2 != s {
+						t.Fatalf(`%q: repr "%s" does not round-trip, got "%s" instead`,
+							test.input, s, s2)
+					}
 
-			// Test that a Datum recognizes the format.
-			di, err := parseDInterval(test.input, test.itm)
-			if err != nil {
-				t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
-			}
-			s3 := di.Duration.String()
-			if s3 != test.output {
-				t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
+					// Test that a Datum recognizes the format.
+					di, err := parseDInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), test.input, test.itm)
+					if err != nil {
+						t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
+					}
+					s3 := di.Duration.String()
+					if s3 != test.output {
+						t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
+					}
+				})
 			}
 		})
 	}
@@ -227,26 +232,30 @@ func TestInvalidSQLIntervalSyntax(t *testing.T) {
 			continue
 		}
 
-		dur2, err := parseDuration(s, types.IntervalTypeMetadata{})
-		if err != nil {
-			t.Errorf(`%d: %q: repr "%s" is not parsable: %v`, i, test.input, s, err)
-			continue
-		}
-		s2 := dur2.String()
-		if s2 != s {
-			t.Errorf(`%d: %q: repr "%s" does not round-trip, got "%s" instead`,
-				i, test.input, s, s2)
-		}
+		for style := range duration.IntervalStyle_value {
+			t.Run(style, func(t *testing.T) {
+				dur2, err := parseDuration(duration.IntervalStyle(duration.IntervalStyle_value[style]), s, types.IntervalTypeMetadata{})
+				if err != nil {
+					t.Errorf(`%d: %q: repr "%s" is not parsable: %v`, i, test.input, s, err)
+					return
+				}
+				s2 := dur2.String()
+				if s2 != s {
+					t.Errorf(`%d: %q: repr "%s" does not round-trip, got "%s" instead`,
+						i, test.input, s, s2)
+				}
 
-		// Test that a Datum recognizes the format.
-		di, err := parseDInterval(test.input, types.IntervalTypeMetadata{})
-		if err != nil {
-			t.Errorf(`%d: %q: unrecognized as datum: %v`, i, test.input, err)
-			continue
-		}
-		s3 := di.Duration.String()
-		if s3 != test.output {
-			t.Errorf(`%d: %q: as datum, got "%s", expected "%s"`, i, test.input, s3, test.output)
+				// Test that a Datum recognizes the format.
+				di, err := parseDInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), test.input, types.IntervalTypeMetadata{})
+				if err != nil {
+					t.Errorf(`%d: %q: unrecognized as datum: %v`, i, test.input, err)
+					return
+				}
+				s3 := di.Duration.String()
+				if s3 != test.output {
+					t.Errorf(`%d: %q: as datum, got "%s", expected "%s"`, i, test.input, s3, test.output)
+				}
+			})
 		}
 	}
 }
@@ -408,42 +417,46 @@ func TestPGIntervalSyntax(t *testing.T) {
 	}
 	for _, test := range testData {
 		t.Run(test.input, func(t *testing.T) {
-			dur, err := parseDuration(test.input, test.itm)
-			if err != nil {
-				if test.error != "" {
-					if err.Error() != test.error {
-						t.Fatalf(`%q: got error "%v", expected "%s"`, test.input, err, test.error)
+			for style := range duration.IntervalStyle_value {
+				t.Run(style, func(t *testing.T) {
+					dur, err := parseDuration(duration.IntervalStyle(duration.IntervalStyle_value[style]), test.input, test.itm)
+					if err != nil {
+						if test.error != "" {
+							if err.Error() != test.error {
+								t.Fatalf(`%q: got error "%v", expected "%s"`, test.input, err, test.error)
+							}
+						} else {
+							t.Fatalf("%q: %v", test.input, err)
+						}
+						return
 					}
-				} else {
-					t.Fatalf("%q: %v", test.input, err)
-				}
-				return
-			}
-			if test.error != "" {
-				t.Fatalf(`%q: expected error "%q"`, test.input, test.error)
-			}
-			s := dur.String()
-			if s != test.output {
-				t.Fatalf(`%q: got "%s", expected "%s"`, test.input, s, test.output)
-			}
+					if test.error != "" {
+						t.Fatalf(`%q: expected error "%q"`, test.input, test.error)
+					}
+					s := dur.String()
+					if s != test.output {
+						t.Fatalf(`%q: got "%s", expected "%s"`, test.input, s, test.output)
+					}
 
-			dur2, err := parseDuration(s, test.itm)
-			if err != nil {
-				t.Fatalf(`%q: repr "%s" is not parsable: %v`, test.input, s, err)
-			}
-			s2 := dur2.String()
-			if s2 != s {
-				t.Fatalf(`%q: repr "%s" does not round-trip, got "%s" instead`, test.input, s, s2)
-			}
+					dur2, err := parseDuration(duration.IntervalStyle(duration.IntervalStyle_value[style]), s, test.itm)
+					if err != nil {
+						t.Fatalf(`%q: repr "%s" is not parsable: %v`, test.input, s, err)
+					}
+					s2 := dur2.String()
+					if s2 != s {
+						t.Fatalf(`%q: repr "%s" does not round-trip, got "%s" instead`, test.input, s, s2)
+					}
 
-			// Test that a Datum recognizes the format.
-			di, err := parseDInterval(test.input, test.itm)
-			if err != nil {
-				t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
-			}
-			s3 := di.Duration.String()
-			if s3 != test.output {
-				t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
+					// Test that a Datum recognizes the format.
+					di, err := parseDInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), test.input, test.itm)
+					if err != nil {
+						t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
+					}
+					s3 := di.Duration.String()
+					if s3 != test.output {
+						t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
+					}
+				})
 			}
 		})
 	}
@@ -546,36 +559,40 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 				t.Fatalf(`%q: got "%s", expected "%s"`, test.input, s, test.output)
 			}
 
-			dur2, err := parseDuration(s, test.itm)
-			if err != nil {
-				t.Fatalf(`%q: repr "%s" is not parsable: %v`, test.input, s, err)
-			}
-			s2 := dur2.String()
-			if s2 != s {
-				t.Fatalf(`%q: repr "%s" does not round-trip, got "%s" instead`, test.input, s, s2)
-			}
+			for style := range duration.IntervalStyle_value {
+				t.Run(style, func(t *testing.T) {
+					dur2, err := parseDuration(duration.IntervalStyle(duration.IntervalStyle_value[style]), s, test.itm)
+					if err != nil {
+						t.Fatalf(`%q: repr "%s" is not parsable: %v`, test.input, s, err)
+					}
+					s2 := dur2.String()
+					if s2 != s {
+						t.Fatalf(`%q: repr "%s" does not round-trip, got "%s" instead`, test.input, s, s2)
+					}
 
-			// Test that a Datum recognizes the format.
-			di, err := parseDInterval(test.input, test.itm)
-			if err != nil {
-				t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
-			}
-			s3 := di.Duration.String()
-			if s3 != test.output {
-				t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
-			}
+					// Test that a Datum recognizes the format.
+					di, err := parseDInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), test.input, test.itm)
+					if err != nil {
+						t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
+					}
+					s3 := di.Duration.String()
+					if s3 != test.output {
+						t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
+					}
+				})
 
-			// Test that ISO 8601 output format also round-trips
-			s4 := dur.ISO8601String()
-			di2, err := parseDInterval(s4, test.itm)
-			if err != nil {
-				t.Fatalf(`%q: ISO8601String "%s" unrecognized as datum: %v`, test.input, s4, err)
-			}
-			s5 := di2.Duration.String()
-			if s != s5 {
-				t.Fatalf(`%q: repr "%s" does not round-trip, got %s instead`, test.input, s4, s5)
-			}
+				// Test that ISO 8601 output format also round-trips
+				s4 := dur.ISO8601String()
+				di2, err := parseDInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), s4, test.itm)
+				if err != nil {
+					t.Fatalf(`%q: ISO8601String "%s" unrecognized as datum: %v`, test.input, s4, err)
+				}
+				s5 := di2.Duration.String()
+				if s != s5 {
+					t.Fatalf(`%q: repr "%s" does not round-trip, got %s instead`, test.input, s4, s5)
 
+				}
+			}
 		})
 	}
 }
