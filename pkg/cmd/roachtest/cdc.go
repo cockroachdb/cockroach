@@ -72,6 +72,10 @@ type cdcTestArgs struct {
 	whichSink          sinkType
 	sinkURI            string
 
+	// preStartStatements are executed after the workload is initialized but before the
+	// changefeed is created.
+	preStartStatements []string
+
 	targetInitialScanLatency time.Duration
 	targetSteadyLatency      time.Duration
 	targetTxnPerSecond       float64
@@ -211,6 +215,13 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 		); err != nil {
 			// We don't hard fail here because, not all versions support this setting
 			t.L().Printf("failed to set cluster setting: %s", err)
+		}
+
+		for _, stmt := range args.preStartStatements {
+			_, err := db.ExecContext(ctx, stmt)
+			if err != nil {
+				t.Fatalf("failed pre-start statement %q: %s", stmt, err.Error())
+			}
 		}
 
 		var targets string
@@ -730,12 +741,17 @@ func registerCDC(r registry.Registry) {
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             ledgerWorkloadType,
-				workloadDuration:         "30m",
+				workloadType: ledgerWorkloadType,
+				// TODO(ssd): Range splits cause changefeed latencies to balloon
+				// because of catchup-scan performance. Reducing the test time and
+				// bumping the range_max_bytes avoids the split until we can improve
+				// catchup scan performance.
+				workloadDuration:         "28m",
 				initialScan:              true,
 				targetInitialScanLatency: 10 * time.Minute,
 				targetSteadyLatency:      time.Minute,
 				targetTxnPerSecond:       575,
+				preStartStatements:       []string{"ALTER DATABASE ledger CONFIGURE ZONE USING range_max_bytes = 805306368, range_min_bytes = 134217728"},
 			})
 		},
 	})
