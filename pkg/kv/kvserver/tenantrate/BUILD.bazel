@@ -13,7 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
@@ -32,7 +32,7 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         ":tenantrate",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util/leaktest",

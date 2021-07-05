@@ -25,7 +25,7 @@ go_test(
     srcs = ["agg_metric_test.go"],
     deps = [
         ":aggmetric",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "@com_github_stretchr_testify//require",

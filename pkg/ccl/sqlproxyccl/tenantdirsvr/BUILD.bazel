@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",

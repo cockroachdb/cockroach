@@ -14,7 +14,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/timeutil",
     ],
 )
@@ -42,7 +42,7 @@ go_proto_library(
     proto = ":ctpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
         "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",

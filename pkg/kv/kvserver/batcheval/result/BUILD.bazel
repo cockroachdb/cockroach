@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_kr_pretty//:pretty",

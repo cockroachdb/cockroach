@@ -12,7 +12,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/interval/generic",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/roachpb"],
+    deps = ["//pkg/roachpb:with-mocks"],
 )
 
 # keep
@@ -23,7 +23,7 @@ go_test(
     embed = [":generic"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],

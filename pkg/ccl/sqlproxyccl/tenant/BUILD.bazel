@@ -26,36 +26,21 @@ go_library(
         "directory.go",
         "entry.go",
         "pod.go",
-        ":mocks_tenant",  # keep
     ],
     embed = [":tenant_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/grpcutil",
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "@com_github_golang_mock//gomock",  # keep
         "@org_golang_google_grpc//codes",
-        "@org_golang_google_grpc//metadata",  # keep
         "@org_golang_google_grpc//status",
     ],
-)
-
-gomock(
-    name = "mocks_tenant",
-    out = "mocks_generated.go",
-    interfaces = [
-        "DirectoryClient",
-        "Directory_WatchPodsClient",
-    ],
-    library = ":tenant_go_proto",
-    package = "tenant",
-    self_package = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant",
 )
 
 go_test(
@@ -72,7 +57,7 @@ go_test(
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/ccl/utilccl",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

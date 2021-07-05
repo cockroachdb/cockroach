@@ -44,7 +44,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",  # keep
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scpb",

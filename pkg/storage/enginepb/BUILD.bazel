@@ -59,7 +59,7 @@ go_test(
     ],
     deps = [
         ":enginepb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/storage",
         "//pkg/util/hlc",
         "//pkg/util/uuid",

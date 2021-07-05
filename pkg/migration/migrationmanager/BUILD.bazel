@@ -47,7 +47,7 @@ go_test(
         "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/liveness",
         "//pkg/migration",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
