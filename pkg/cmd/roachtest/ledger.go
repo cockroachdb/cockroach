@@ -39,7 +39,7 @@ func registerLedger(r registry.Registry) {
 			c.Start(ctx, roachNodes)
 
 			t.Status("running workload")
-			m := newMonitor(ctx, c, roachNodes)
+			m := c.NewMonitor(ctx, t, roachNodes)
 			m.Go(func(ctx context.Context) error {
 				concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*32))
 				duration := " --duration=" + ifLocal("10s", "10m")

@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func registerNodeJSPostgres(r registry.Registry) {
 		t.Status("setting up cockroach")
 		err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
 		require.NoError(t, err)
-		err = c.StartE(ctx, startArgs("--secure"))
+		err = c.StartE(ctx, option.StartArgs("--secure"))
 		require.NoError(t, err)
 
 		user := "testuser"

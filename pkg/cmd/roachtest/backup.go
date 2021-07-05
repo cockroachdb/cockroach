@@ -194,7 +194,7 @@ func registerBackup(r registry.Registry) {
 			dest := importBankData(ctx, rows, t, c)
 			tick := initBulkJobPerfArtifacts(ctx, "backup/2TB", 2*time.Hour)
 
-			m := newMonitor(ctx, c)
+			m := c.NewMonitor(ctx, t)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
 				// Tick once before starting the backup, and once after to capture the
@@ -234,7 +234,7 @@ func registerBackup(r registry.Registry) {
 			dest := importBankData(ctx, rows, t, c)
 
 			conn := c.Conn(ctx, 1)
-			m := newMonitor(ctx, c)
+			m := c.NewMonitor(ctx, t)
 			m.Go(func(ctx context.Context) error {
 				_, err := conn.ExecContext(ctx, `
 					CREATE DATABASE restoreA;
@@ -246,7 +246,7 @@ func registerBackup(r registry.Registry) {
 
 			var kmsURIA, kmsURIB string
 			var err error
-			m = newMonitor(ctx, c)
+			m = c.NewMonitor(ctx, t)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running encrypted backup`)
 				kmsURIA, err = getAWSKMSURI(KMSRegionAEnvVar, KMSKeyARNAEnvVar)
@@ -267,7 +267,7 @@ func registerBackup(r registry.Registry) {
 			m.Wait()
 
 			// Restore the encrypted BACKUP using each of KMS URI A and B separately.
-			m = newMonitor(ctx, c)
+			m = c.NewMonitor(ctx, t)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`restore using KMSURIA`)
 				if _, err := conn.ExecContext(ctx,
@@ -372,7 +372,7 @@ func registerBackup(r registry.Registry) {
 			}
 			c.Run(ctx, c.Node(1), cmd...)
 
-			m := newMonitor(ctx, c)
+			m := c.NewMonitor(ctx, t)
 			m.Go(func(ctx context.Context) error {
 				_, err := conn.ExecContext(ctx, `
 					CREATE DATABASE restore_full;
@@ -404,7 +404,7 @@ func registerBackup(r registry.Registry) {
 
 			// Use a time slightly in the past to avoid "cannot specify timestamp in the future" errors.
 			tFull := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
-			m = newMonitor(ctx, c)
+			m = newMonitor(ctx, t, c)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`full backup`)
 				_, err := conn.ExecContext(ctx,
@@ -423,7 +423,7 @@ func registerBackup(r registry.Registry) {
 			}
 
 			tInc := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
-			m = newMonitor(ctx, c)
+			m = newMonitor(ctx, t, c)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`incremental backup`)
 				_, err := conn.ExecContext(ctx,
@@ -446,7 +446,7 @@ func registerBackup(r registry.Registry) {
 			})
 			m.Wait()
 
-			m = newMonitor(ctx, c)
+			m = c.NewMonitor(ctx, t)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`restore full`)
 				if _, err := conn.ExecContext(ctx,

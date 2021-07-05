@@ -303,7 +303,7 @@ func binaryPathFromVersion(v string) string {
 func (u *versionUpgradeTest) uploadVersion(
 	ctx context.Context, t test.Test, nodes option.NodeListOption, newVersion string,
 ) option.Option {
-	return startArgs("--binary=" + uploadVersion(ctx, t, u.c, nodes, newVersion))
+	return option.StartArgs("--binary=" + uploadVersion(ctx, t, u.c, nodes, newVersion))
 }
 
 // binaryVersion returns the binary running on the (one-indexed) node.
@@ -375,7 +375,7 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 		// Put and start the binary.
 		args := u.uploadVersion(ctx, t, nodes, v)
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		u.c.Start(ctx, nodes, args, option.StartArgsDontEncrypt, option.RoachprodArgOption{"--sequential=false"})
 	}
 }
 
@@ -419,8 +419,8 @@ func upgradeNodes(
 		}
 		t.L().Printf("restarting node %d into version %s", node, newVersionMsg)
 		c.Stop(ctx, c.Node(node))
-		args := startArgs("--binary=" + uploadVersion(ctx, t, c, c.Node(node), newVersion))
-		c.Start(ctx, c.Node(node), args, startArgsDontEncrypt)
+		args := option.StartArgs("--binary=" + uploadVersion(ctx, t, c, c.Node(node), newVersion))
+		c.Start(ctx, c.Node(node), args, option.StartArgsDontEncrypt)
 	}
 }
 
@@ -666,7 +666,7 @@ func importTPCCStep(
 		}
 		// Use a monitor so that we fail cleanly if the cluster crashes
 		// during import.
-		m := newMonitor(ctx, u.c, crdbNodes)
+		m := u.c.NewMonitor(ctx, t, crdbNodes)
 		m.Go(func(ctx context.Context) error {
 			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), cmd)
 		})
@@ -685,7 +685,7 @@ func importLargeBankStep(oldV string, rows int, crdbNodes option.NodeListOption)
 
 		// Use a monitor so that we fail cleanly if the cluster crashes
 		// during import.
-		m := newMonitor(ctx, u.c, crdbNodes)
+		m := u.c.NewMonitor(ctx, t, crdbNodes)
 		m.Go(func(ctx context.Context) error {
 			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), binary, "workload", "fixtures", "import", "bank",
 				"--payload-bytes=10240", "--rows="+fmt.Sprint(rows), "--seed=4", "--db=bigbank")

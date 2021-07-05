@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -31,12 +32,12 @@ func registerAllocator(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 
 		// Start the first `start` nodes and restore a tpch fixture.
-		args := startArgs("--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
+		args := option.StartArgs("--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		c.Start(ctx, c.Range(1, start), args)
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 
-		m := newMonitor(ctx, c, c.Range(1, start))
+		m := c.NewMonitor(ctx, t, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
 			if err := c.RunE(
@@ -63,11 +64,11 @@ func registerAllocator(r registry.Registry) {
 					t.Fatal(err)
 				}
 				defer l.Close()
-				_ = execCmd(ctx, t.L(), roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
+				_ = c.RunE(ctx, c.Node(node), cmd)
 			}()
 		}
 
-		m = newMonitor(ctx, c, c.All())
+		m = c.NewMonitor(ctx, t, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
 			return waitForRebalance(ctx, t.L(), db, maxStdDev)
@@ -262,7 +263,7 @@ func runWideReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("9-node cluster required")
 	}
 
-	args := startArgs(
+	args := option.StartArgs(
 		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",
 		"--args=--vmodule=replicate_queue=6",
 	)

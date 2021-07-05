@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -38,7 +39,7 @@ func registerVersion(r registry.Registry) {
 
 		// Force disable encryption.
 		// TODO(mberhault): allow it once version >= 2.1.
-		c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
+		c.Start(ctx, c.Range(1, nodes), option.StartArgsDontEncrypt)
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
@@ -60,7 +61,7 @@ func registerVersion(r registry.Registry) {
 			"./workload run kv --tolerate-errors --init" + loadDuration + " {pgurl:1-%d}",
 		}
 
-		m := newMonitor(ctx, c, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 		for _, cmd := range workloads {
 			cmd := cmd // loop-local copy
 			m.Go(func(ctx context.Context) error {
@@ -139,7 +140,7 @@ func registerVersion(r registry.Registry) {
 					return err
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
-				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -163,7 +164,7 @@ func registerVersion(r registry.Registry) {
 			// Do upgrade for the last node.
 			l.Printf("upgrading last node\n")
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(nodes))
-			c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
+			c.Start(ctx, c.Node(nodes), option.StartArgsDontEncrypt)
 			if err := sleepAndCheck(); err != nil {
 				return err
 			}
@@ -178,7 +179,7 @@ func registerVersion(r registry.Registry) {
 				if err := c.Stage(ctx, t.L(), "release", "v"+binaryVersion, "", c.Node(i)); err != nil {
 					t.Fatal(err)
 				}
-				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -192,7 +193,7 @@ func registerVersion(r registry.Registry) {
 					return err
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
-				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}

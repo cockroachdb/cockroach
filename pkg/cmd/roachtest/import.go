@@ -100,7 +100,7 @@ func registerImportTPCC(r registry.Registry) {
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
-		m := newMonitor(ctx, c)
+		m := c.NewMonitor(ctx, t)
 		dul := NewDiskUsageLogger(t, c)
 		m.Go(dul.Runner)
 		hc := NewHealthChecker(t, c, c.All())
@@ -209,7 +209,7 @@ func registerImportTPCH(r registry.Registry) {
 				}); err != nil {
 					t.Fatal(err)
 				}
-				m := newMonitor(ctx, c)
+				m := c.NewMonitor(ctx, t)
 				dul := NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
 				hc := NewHealthChecker(t, c, c.All())

@@ -47,7 +47,7 @@ func registerAlterPK(r registry.Registry) {
 		initDone := make(chan struct{}, 1)
 		pkChangeDone := make(chan struct{}, 1)
 
-		m := newMonitor(ctx, c, roachNodes)
+		m := c.NewMonitor(ctx, t, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			// Load up a relatively small dataset to perform a workload on.
 
@@ -106,7 +106,7 @@ func registerAlterPK(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		m := newMonitor(ctx, c, roachNodes)
+		m := c.NewMonitor(ctx, t, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			// Start running the workload.
 			runCmd := fmt.Sprintf(

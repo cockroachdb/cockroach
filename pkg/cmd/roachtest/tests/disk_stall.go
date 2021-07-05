@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package main
+package tests
 
 import (
 	"context"
@@ -24,7 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskStalledDetection(r registry.Registry) {
+// RegisterDiskStalledDetection registers the disk stall test.
+func RegisterDiskStalledDetection(r registry.Registry) {
 	for _, affectsLogDir := range []bool{false, true} {
 		for _, affectsDataDir := range []bool{false, true} {
 			// Grab copies of the args because we'll pass them into a closure.
@@ -49,7 +50,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 func runDiskStalledDetection(
 	ctx context.Context, t test.Test, c cluster.Cluster, affectsLogDir bool, affectsDataDir bool,
 ) {
-	if local && runtime.GOOS != "linux" {
+	if c.IsLocal() && runtime.GOOS != "linux" {
 		t.Fatalf("must run on linux os, found %s", runtime.GOOS)
 	}
 
@@ -63,7 +64,7 @@ func runDiskStalledDetection(
 
 	t.Status("setting up charybdefs")
 
-	if err := execCmd(ctx, t.L(), roachprod, "install", c.MakeNodes(n), "charybdefs"); err != nil {
+	if err := c.Install(ctx, n, "charybdefs"); err != nil {
 		t.Fatal(err)
 	}
 	c.Run(ctx, n, "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real")
