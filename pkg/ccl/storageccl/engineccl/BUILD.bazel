@@ -41,7 +41,7 @@ go_test(
         "//pkg/ccl/baseccl",
         "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",

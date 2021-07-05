@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/util/encoding",
@@ -22,7 +22,7 @@ go_test(
     embed = [":keysutils"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/testutils",
         "//pkg/util/encoding",
     ],

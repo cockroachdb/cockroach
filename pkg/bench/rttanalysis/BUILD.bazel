@@ -10,7 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/sql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

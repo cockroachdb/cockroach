@@ -14,7 +14,7 @@ go_library(
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs/jobspb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",

@@ -9,7 +9,7 @@ go_library(
         "//pkg/kv/kvbase",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/util/grpcutil",
         "//pkg/util/log",
@@ -28,7 +28,7 @@ go_test(
     embed = [":nodedialer"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/testutils",

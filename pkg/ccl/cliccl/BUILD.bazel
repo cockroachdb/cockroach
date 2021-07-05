@@ -24,7 +24,7 @@ go_library(
         "//pkg/cli",
         "//pkg/cli/cliflags",
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/server",
         "//pkg/settings/cluster",

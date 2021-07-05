@@ -16,7 +16,7 @@ go_library(
         "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc/nodedialer",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/colcontainer",
