@@ -3730,6 +3730,11 @@ func (ctx *EvalContext) GetLocation() *time.Location {
 	return ctx.SessionData.GetLocation()
 }
 
+// GetIntervalStyle returns the session interval style.
+func (ctx *EvalContext) GetIntervalStyle() duration.IntervalStyle {
+	return ctx.SessionData.GetIntervalStyle()
+}
+
 // Ctx returns the session's context.
 func (ctx *EvalContext) Ctx() context.Context {
 	return ctx.Context

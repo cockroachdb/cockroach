@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -353,7 +354,7 @@ func benchmarkWriteTimestampTZ(b *testing.B, format pgwirebase.FormatCode) {
 }
 
 func benchmarkWriteInterval(b *testing.B, format pgwirebase.FormatCode) {
-	i, err := tree.ParseDInterval("PT12H2M")
+	i, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, "PT12H2M")
 	if err != nil {
 		b.Fatal(err)
 	}

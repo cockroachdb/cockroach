@@ -1754,14 +1754,17 @@ func NewDDateFromTime(t time.Time) (*DDate, error) {
 }
 
 // ParseTimeContext provides the information necessary for
-// parsing dates, times, and timestamps. A nil value is generally
-// acceptable and will result in reasonable defaults being applied.
+// parsing dates, intervals times, and timestamps.
+// A nil value is generally acceptable and will result in
+// reasonable defaults being applied.
 type ParseTimeContext interface {
 	// GetRelativeParseTime returns the transaction time in the session's
 	// timezone (i.e. now()). This is used to calculate relative dates,
 	// like "tomorrow", and also provides a default time.Location for
 	// parsed times.
 	GetRelativeParseTime() time.Time
+	// GetIntervalStyle returns the interval style in the session.
+	GetIntervalStyle() duration.IntervalStyle
 }
 
 var _ ParseTimeContext = &EvalContext{}
@@ -1782,6 +1785,11 @@ type simpleParseTimeContext struct {
 // GetRelativeParseTime implements ParseTimeContext.
 func (ctx simpleParseTimeContext) GetRelativeParseTime() time.Time {
 	return ctx.RelativeParseTime
+}
+
+// GetIntervalStyle implements ParseTimeContext..
+func (ctx simpleParseTimeContext) GetIntervalStyle() duration.IntervalStyle {
+	return duration.IntervalStyle_POSTGRES
 }
 
 // relativeParseTime chooses a reasonable "now" value for
@@ -2638,8 +2646,8 @@ func NewDInterval(d duration.Duration, itm types.IntervalTypeMetadata) *DInterva
 
 // ParseDInterval parses and returns the *DInterval Datum value represented by the provided
 // string, or an error if parsing is unsuccessful.
-func ParseDInterval(s string) (*DInterval, error) {
-	return ParseDIntervalWithTypeMetadata(s, types.DefaultIntervalTypeMetadata)
+func ParseDInterval(style duration.IntervalStyle, s string) (*DInterval, error) {
+	return ParseDIntervalWithTypeMetadata(style, s, types.DefaultIntervalTypeMetadata)
 }
 
 // truncateDInterval truncates the input DInterval downward to the nearest
@@ -2671,8 +2679,10 @@ func truncateDInterval(d *DInterval, itm types.IntervalTypeMetadata) {
 // ParseDIntervalWithTypeMetadata is like ParseDInterval, but it also takes a
 // types.IntervalTypeMetadata that both specifies the units for unitless, numeric intervals
 // and also specifies the precision of the interval.
-func ParseDIntervalWithTypeMetadata(s string, itm types.IntervalTypeMetadata) (*DInterval, error) {
-	d, err := parseDInterval(s, itm)
+func ParseDIntervalWithTypeMetadata(
+	style duration.IntervalStyle, s string, itm types.IntervalTypeMetadata,
+) (*DInterval, error) {
+	d, err := parseDInterval(style, s, itm)
 	if err != nil {
 		return nil, err
 	}
@@ -2680,7 +2690,9 @@ func ParseDIntervalWithTypeMetadata(s string, itm types.IntervalTypeMetadata) (*
 	return d, nil
 }
 
-func parseDInterval(s string, itm types.IntervalTypeMetadata) (*DInterval, error) {
+func parseDInterval(
+	style duration.IntervalStyle, s string, itm types.IntervalTypeMetadata,
+) (*DInterval, error) {
 	// At this time the only supported interval formats are:
 	// - SQL standard.
 	// - Postgres compatible.
@@ -2713,7 +2725,7 @@ func parseDInterval(s string, itm types.IntervalTypeMetadata) (*DInterval, error
 
 	// We're either a postgres string or a Go duration.
 	// Our postgres syntax parser also supports golang, so just use that for both.
-	dur, err := parseDuration(s, itm)
+	dur, err := parseDuration(style, s, itm)
 	if err != nil {
 		return nil, makeParseError(s, types.Interval, err)
 	}

@@ -501,7 +501,9 @@ var unitMap = func(
 // parseDuration parses a duration in the "traditional" Postgres
 // format (e.g. '1 day 2 hours', '1 day 03:02:04', etc.) or golang
 // format (e.g. '1d2h', '1d3h2m4s', etc.)
-func parseDuration(s string, itm types.IntervalTypeMetadata) (duration.Duration, error) {
+func parseDuration(
+	style duration.IntervalStyle, s string, itm types.IntervalTypeMetadata,
+) (duration.Duration, error) {
 	var d duration.Duration
 	l := intervalLexer{str: s, offset: 0, err: nil}
 	l.consumeSpaces()

@@ -128,7 +128,7 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 			break
 		}
 		// Attempt to parse as an interval.
-		if iv, err := ParseDInterval(s); err == nil {
+		if iv, err := ParseDInterval(evalCtx.GetIntervalStyle(), s); err == nil {
 			if (iv.Duration == duration.Duration{}) {
 				convErr = errors.Errorf("interval value %v too small, absolute value must be >= %v", d, time.Microsecond)
 			}
