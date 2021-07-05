@@ -11264,7 +11264,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
 				et.InFlightWrites = inFlightWrites
-				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			expTxn: txnWithStagingStatusAndInFlightWrites,
@@ -11277,7 +11276,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
-				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			// The transaction record will be eagerly GC-ed.
@@ -11291,7 +11289,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
-				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			// The transaction record will be eagerly GC-ed.
@@ -11305,7 +11302,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
-				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			expTxn:           txnWithStatus(roachpb.ABORTED),
@@ -11319,7 +11315,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
-				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			expTxn:           txnWithStatus(roachpb.COMMITTED),
@@ -12105,7 +12100,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
 				et.Sequence = 1 // qualify for 1PC
-				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			expTxn: noTxnRecord,
@@ -12122,7 +12116,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
 				et.Sequence = 1 // qualify for 1PC
-				et.TxnHeartbeating = true
 				et.Require1PC = true
 				return sendWrappedWithErr(etH, &et)
 			},
