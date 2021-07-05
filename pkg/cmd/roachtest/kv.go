@@ -66,8 +66,8 @@ func registerKV(r *testRegistry) {
 	}
 	runKV := func(ctx context.Context, t test.Test, c cluster.Cluster, opts kvOptions) {
 		nodes := c.Spec().NodeCount - 1
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
 
 		if opts.splits < 0 {
@@ -246,8 +246,8 @@ func registerKVContention(r *testRegistry) {
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(nodes + 1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 
 			// Start the cluster with an extremely high txn liveness threshold.
 			// If requests ever get stuck on a transaction that was abandoned
@@ -316,8 +316,8 @@ func registerKVQuiescenceDead(r *testRegistry) {
 		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 			c.Start(ctx, c.Range(1, nodes))
 
 			run := func(cmd string, lastDown bool) {
@@ -397,8 +397,8 @@ func registerKVGracefulDraining(r *testRegistry) {
 		Cluster: r.makeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 
 			t.Status("starting cluster")
 
@@ -614,8 +614,8 @@ func registerKVSplits(r *testRegistry) {
 			Cluster: r.makeClusterSpec(4),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				nodes := c.Spec().NodeCount - 1
-				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-				c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+				c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+				c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 				c.Start(ctx, c.Range(1, nodes), startArgs(
 					// NB: this works. Don't change it or only one of the two vars may actually
 					// make it to the server.
@@ -646,8 +646,8 @@ func registerKVScalability(r *testRegistry) {
 	runScalability := func(ctx context.Context, t test.Test, c cluster.Cluster, percent int) {
 		nodes := c.Spec().NodeCount - 1
 
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
@@ -700,8 +700,8 @@ func registerKVRangeLookups(r *testRegistry) {
 		nodes := c.Spec().NodeCount - 1
 		doneInit := make(chan struct{})
 		doneWorkload := make(chan struct{})
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")

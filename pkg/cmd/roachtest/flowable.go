@@ -33,7 +33,7 @@ func registerFlowable(r *testRegistry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, c.All())
 
 		t.Status("cloning flowable and installing prerequisites")

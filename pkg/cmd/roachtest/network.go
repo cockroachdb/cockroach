@@ -28,7 +28,7 @@ import (
 // correctly. It injects latency between the nodes and verifies that we're not
 // seeing the latency on the client connection running `SELECT 1` on each node.
 func runNetworkSanity(ctx context.Context, t test.Test, origC cluster.Cluster, nodes int) {
-	origC.Put(ctx, cockroach, "./cockroach", origC.All())
+	origC.Put(ctx, t.Cockroach(), "./cockroach", origC.All())
 	c, err := Toxify(ctx, t, origC, origC.All())
 	if err != nil {
 		t.Fatal(err)
@@ -100,8 +100,8 @@ select age, message from [ show trace for session ];
 func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nodes int) {
 	n := origC.Spec().NodeCount
 	serverNodes, workerNode := origC.Range(1, n-1), origC.Node(n)
-	origC.Put(ctx, cockroach, "./cockroach", origC.All())
-	origC.Put(ctx, workload, "./workload", origC.All())
+	origC.Put(ctx, t.Cockroach(), "./cockroach", origC.All())
+	origC.Put(ctx, t.DeprecatedWorkload(), "./workload", origC.All())
 
 	c, err := Toxify(ctx, t, origC, serverNodes)
 	if err != nil {

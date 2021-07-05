@@ -52,7 +52,7 @@ const (
 )
 
 func importBankDataSplit(
-	ctx context.Context, rows, ranges int, _ test.Test, c cluster.Cluster,
+	ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster,
 ) string {
 	dest := c.Name()
 	// Randomize starting with encryption-at-rest enabled.
@@ -62,8 +62,8 @@ func importBankDataSplit(
 		dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 	}
 
-	c.Put(ctx, workload, "./workload")
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
@@ -346,8 +346,8 @@ func registerBackup(r *testRegistry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Randomize starting with encryption-at-rest enabled.
 			c.EncryptAtRandom(true)
-			c.Put(ctx, cockroach, "./cockroach")
-			c.Put(ctx, workload, "./workload")
+			c.Put(ctx, t.Cockroach(), "./cockroach")
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 			c.Start(ctx)
 			conn := c.Conn(ctx, 1)
 

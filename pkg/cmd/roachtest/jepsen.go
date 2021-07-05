@@ -98,7 +98,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// quirks in tar. The --transform option is only available on gnu
 	// tar. To be able to run from a macOS host with BSD tar we'd need
 	// use the similar -s option on that platform.
-	c.Put(ctx, cockroach, "./cockroach", c.All())
+	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	// Jepsen expects a tarball that expands to cockroach/cockroach
 	// (which is not how our official builds are laid out).
 	c.Run(ctx, c.All(), "tar --transform s,^,cockroach/, -c -z -f cockroach.tgz cockroach")

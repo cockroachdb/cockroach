@@ -65,7 +65,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	rnd, seed := randutil.NewPseudoRand()
 	t.L().Printf("seed: %d", seed)
 
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	if err := c.PutLibraries(ctx, "./lib"); err != nil {
 		t.Fatalf("could not initialize libraries: %v", err)
 	}

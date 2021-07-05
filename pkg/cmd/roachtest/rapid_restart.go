@@ -28,7 +28,7 @@ import (
 func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Use a single-node cluster which speeds the stop/start cycle.
 	nodes := c.Node(1)
-	c.Put(ctx, cockroach, "./cockroach", nodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", nodes)
 
 	// In a loop, bootstrap a new single-node cluster and immediately kill
 	// it. This is more effective at finding problems than restarting an existing

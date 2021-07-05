@@ -26,7 +26,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	const restartNode = 3
 
 	t.Status("installing cockroach")
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, crdbNodes, startArgs(`--args=--vmodule=raft_log_queue=3`))
 
 	// We don't really need tpcc, we just need a good amount of traffic and a good

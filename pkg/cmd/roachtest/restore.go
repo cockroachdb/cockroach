@@ -292,7 +292,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
-			c.Put(ctx, cockroach, "./cockroach")
+			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx)
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
@@ -307,7 +307,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
-			c.Put(ctx, cockroach, "./cockroach")
+			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx)
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
@@ -390,7 +390,7 @@ func registerRestore(r *testRegistry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
-				c.Put(ctx, cockroach, "./cockroach")
+				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx)
 				m := newMonitor(ctx, c)
 

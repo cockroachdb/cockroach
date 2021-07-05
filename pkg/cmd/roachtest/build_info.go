@@ -22,7 +22,7 @@ import (
 )
 
 func runBuildInfo(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx)
 
 	var details serverpb.DetailsResponse
@@ -60,7 +60,7 @@ func runBuildAnalyze(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Skip("local execution not supported")
 	}
 
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	// 1. Check for executable stack.
 	//

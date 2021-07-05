@@ -40,8 +40,8 @@ func registerCopy(r *testRegistry) {
 		const rowOverheadEstimate = 160
 		const rowEstimate = rowOverheadEstimate + payload
 
-		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Put(ctx, workload, "./workload", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 		c.Start(ctx, c.All())
 
 		m := newMonitor(ctx, c, c.All())

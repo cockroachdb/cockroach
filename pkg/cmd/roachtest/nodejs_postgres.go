@@ -39,7 +39,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		err := c.PutE(ctx, t.L(), cockroach, "./cockroach", c.All())
+		err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
 		require.NoError(t, err)
 		err = c.StartE(ctx, startArgs("--secure"))
 		require.NoError(t, err)

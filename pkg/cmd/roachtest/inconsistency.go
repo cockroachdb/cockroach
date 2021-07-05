@@ -35,7 +35,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.EncryptDefault(false)
 
 	nodes := c.Range(1, 3)
-	c.Put(ctx, cockroach, "./cockroach", nodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", nodes)
 	c.Start(ctx, nodes)
 
 	{

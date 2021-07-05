@@ -40,8 +40,8 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	workloadNode := c.Spec().NodeCount
 
 	// Distribute programs to the correct nodes and start CockroachDB.
-	c.Put(ctx, cockroach, "./cockroach", c.Range(1, dbNodeCount))
-	c.Put(ctx, workload, "./workload", c.Node(workloadNode))
+	c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, dbNodeCount))
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	c.Start(ctx, c.Range(1, dbNodeCount))
 
 	runQueueWorkload := func(duration time.Duration, initTables bool) {
