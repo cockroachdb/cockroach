@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +25,7 @@ import (
 var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 var libPQSupportedTag = "v1.10.0"
 
-func registerLibPQ(r *testRegistry) {
+func registerLibPQ(r registry.Registry) {
 	runLibPQ := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -138,12 +139,11 @@ func registerLibPQ(r *testRegistry) {
 		)
 	}
 
-	r.Add(TestSpec{
-		Name:       "lib/pq",
-		Owner:      OwnerSQLExperience,
-		MinVersion: "v20.2.0",
-		Cluster:    r.makeClusterSpec(1),
-		Tags:       []string{`default`, `driver`},
-		Run:        runLibPQ,
+	r.Add(registry.TestSpec{
+		Name:    "lib/pq",
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `driver`},
+		Run:     runLibPQ,
 	})
 }

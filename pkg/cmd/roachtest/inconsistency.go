@@ -15,17 +15,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	_ "github.com/lib/pq"
 )
 
-func registerInconsistency(r *testRegistry) {
-	r.Add(TestSpec{
-		Name:       "inconsistency",
-		Owner:      OwnerKV,
-		MinVersion: "v19.2.2", // https://github.com/cockroachdb/cockroach/pull/42149 is new in 19.2.2
-		Cluster:    r.makeClusterSpec(3),
-		Run:        runInconsistency,
+func registerInconsistency(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "inconsistency",
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(3),
+		Run:     runInconsistency,
 	})
 }
 

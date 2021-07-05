@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -24,7 +25,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerHotSpotSplits(r *testRegistry) {
+func registerHotSpotSplits(r registry.Registry) {
 	// This test sets up a cluster and runs kv on it with high concurrency and a large block size
 	// to force a large range. We then make sure that the largest range isn't larger than a threshold and
 	// that backpressure is working correctly.
@@ -90,14 +91,13 @@ func registerHotSpotSplits(r *testRegistry) {
 	numNodes := 4
 	concurrency := 128
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
-		Owner: OwnerKV,
+		Owner: registry.OwnerKV,
 		// Test OOMs below this version because of scans over the large rows.
 		// No problem in 20.1 thanks to:
 		// https://github.com/cockroachdb/cockroach/pull/45323.
-		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(numNodes),
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if local {
 				concurrency = 32

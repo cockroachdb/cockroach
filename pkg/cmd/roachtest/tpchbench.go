@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/workload/querybench"
@@ -148,7 +149,7 @@ func downloadFile(filename string, url string) (*os.File, error) {
 	return out, err
 }
 
-func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
+func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 	nameParts := []string{
 		"tpchbench",
 		b.benchType,
@@ -164,18 +165,17 @@ func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 		minVersion = "v19.1.0" // needed for import
 	}
 
-	r.Add(TestSpec{
-		Name:       strings.Join(nameParts, "/"),
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.makeClusterSpec(numNodes),
-		MinVersion: minVersion,
+	r.Add(registry.TestSpec{
+		Name:    strings.Join(nameParts, "/"),
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
 	})
 }
 
-func registerTPCHBench(r *testRegistry) {
+func registerTPCHBench(r registry.Registry) {
 	specs := []tpchBenchSpec{
 		{
 			Nodes:           3,

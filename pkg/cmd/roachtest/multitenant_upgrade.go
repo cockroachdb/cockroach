@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -28,12 +29,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func registerMultiTenantUpgrade(r *testRegistry) {
-	r.Add(TestSpec{
+func registerMultiTenantUpgrade(r registry.Registry) {
+	r.Add(registry.TestSpec{
 		Name:              "multitenant-upgrade",
-		MinVersion:        "v21.1.0",
-		Cluster:           r.makeClusterSpec(2),
-		Owner:             OwnerKV,
+		Cluster:           r.MakeClusterSpec(2),
+		Owner:             registry.OwnerKV,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runMultiTenantUpgrade(ctx, t, c, *t.BuildVersion())

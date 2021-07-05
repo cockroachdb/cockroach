@@ -18,17 +18,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-func registerSchemaChangeDuringKV(r *testRegistry) {
-	r.Add(TestSpec{
+func registerSchemaChangeDuringKV(r registry.Registry) {
+	r.Add(registry.TestSpec{
 		Name:    `schemachange/during/kv`,
-		Owner:   OwnerSQLSchema,
-		Cluster: r.makeClusterSpec(5),
+		Owner:   registry.OwnerSQLSchema,
+		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup?AUTH=implicit`
 
@@ -290,18 +291,20 @@ func findIndexProblem(
 	return nil
 }
 
-func registerSchemaChangeIndexTPCC1000(r *testRegistry) {
-	r.Add(makeIndexAddTpccTest(r.makeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*2))
+func registerSchemaChangeIndexTPCC1000(r registry.Registry) {
+	r.Add(makeIndexAddTpccTest(r.MakeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*2))
 }
 
-func registerSchemaChangeIndexTPCC100(r *testRegistry) {
-	r.Add(makeIndexAddTpccTest(r.makeClusterSpec(5), 100, time.Minute*15))
+func registerSchemaChangeIndexTPCC100(r registry.Registry) {
+	r.Add(makeIndexAddTpccTest(r.MakeClusterSpec(5), 100, time.Minute*15))
 }
 
-func makeIndexAddTpccTest(spec spec.ClusterSpec, warehouses int, length time.Duration) TestSpec {
-	return TestSpec{
+func makeIndexAddTpccTest(
+	spec spec.ClusterSpec, warehouses int, length time.Duration,
+) registry.TestSpec {
+	return registry.TestSpec{
 		Name:    fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -321,24 +324,22 @@ func makeIndexAddTpccTest(spec spec.ClusterSpec, warehouses int, length time.Dur
 				SetupType: usingImport,
 			})
 		},
-		MinVersion: "v19.1.0",
 	}
 }
 
-func registerSchemaChangeBulkIngest(r *testRegistry) {
+func registerSchemaChangeBulkIngest(r registry.Registry) {
 	r.Add(makeSchemaChangeBulkIngestTest(r, 5, 100000000, time.Minute*20))
 }
 
 func makeSchemaChangeBulkIngestTest(
-	r *testRegistry, numNodes, numRows int, length time.Duration,
-) TestSpec {
-	return TestSpec{
+	r registry.Registry, numNodes, numRows int, length time.Duration,
+) registry.TestSpec {
+	return registry.TestSpec{
 		Name:    "schemachange/bulkingest",
-		Owner:   OwnerSQLSchema,
-		Cluster: r.makeClusterSpec(numNodes),
+		Owner:   registry.OwnerSQLSchema,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Timeout: length * 2,
 		// `fixtures import` (with the workload paths) is not supported in 2.1
-		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Configure column a to have sequential ascending values, and columns b and c to be constant.
 			// The payload column will be randomized and thus uncorrelated with the primary key (a, b, c).
@@ -411,16 +412,16 @@ func makeSchemaChangeBulkIngestTest(
 	}
 }
 
-func registerSchemaChangeDuringTPCC1000(r *testRegistry) {
-	r.Add(makeSchemaChangeDuringTPCC(r.makeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*3))
+func registerSchemaChangeDuringTPCC1000(r registry.Registry) {
+	r.Add(makeSchemaChangeDuringTPCC(r.MakeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*3))
 }
 
 func makeSchemaChangeDuringTPCC(
 	spec spec.ClusterSpec, warehouses int, length time.Duration,
-) TestSpec {
-	return TestSpec{
+) registry.TestSpec {
+	return registry.TestSpec{
 		Name:    "schemachange/during/tpcc",
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -470,7 +471,6 @@ func makeSchemaChangeDuringTPCC(
 				SetupType: usingImport,
 			})
 		},
-		MinVersion: "v19.1.0",
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -26,7 +27,7 @@ var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<
 var djangoSupportedTag = "cockroach-3.2.x"
 var djangoCockroachDBSupportedTag = "3.2.1"
 
-func registerDjango(r *testRegistry) {
+func registerDjango(r registry.Registry) {
 	runDjango := func(
 		ctx context.Context,
 		t test.Test,
@@ -214,12 +215,11 @@ func registerDjango(r *testRegistry) {
 		)
 	}
 
-	r.Add(TestSpec{
-		MinVersion: "v20.2.0",
-		Name:       "django",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1, spec.CPU(16)),
-		Tags:       []string{`default`, `orm`},
+	r.Add(registry.TestSpec{
+		Name:    "django",
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDjango(ctx, t, c)
 		},

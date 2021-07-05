@@ -21,10 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -32,89 +30,10 @@ import (
 	"github.com/petermattis/goid"
 )
 
-// TestSpec is a spec for a roachtest.
-type TestSpec struct {
-	Skip string // if non-empty, test will be skipped
-	// When Skip is set, this can contain more text to be printed in the logs
-	// after the "--- SKIP" line.
-	SkipDetails string
-
-	Name string
-	// Owner is the name of the team responsible for signing off on failures of
-	// this test that happen in the release process. This must be one of a limited
-	// set of values (the keys in the roachtestTeams map).
-	Owner Owner
-	// The maximum duration the test is allowed to run before it is considered
-	// failed. If not specified, the default timeout is 10m before the test's
-	// associated cluster expires. The timeout is always truncated to 10m before
-	// the test's cluster expires.
-	Timeout time.Duration
-	// MinVersion indicates the minimum cockroach version that is required for
-	// the test to be run. If MinVersion is less than the version specified
-	// --cockroach-version, Skip will be populated causing the test to be
-	// skipped.
-	MinVersion string
-	minVersion *version.Version
-	// Tags is a set of tags associated with the test that allow grouping
-	// tests. If no tags are specified, the set ["default"] is automatically
-	// given.
-	Tags []string
-	// Cluster provides the specification for the cluster to use for the test.
-	Cluster spec.ClusterSpec
-
-	// UseIOBarrier controls the local-ssd-no-ext4-barrier flag passed to
-	// roachprod when creating a cluster. If set, the flag is not passed, and so
-	// you get durable writes. If not set (the default!), the filesystem is
-	// mounted without the barrier.
-	//
-	// The default (false) is chosen because it the no-barrier option is needed
-	// explicitly by some tests (particularly benchmarks, ironically, since they'd
-	// rather measure other things than I/O) and the vast majority of other tests
-	// don't care - there's no durability across machine crashes that roachtests
-	// care about.
-	UseIOBarrier bool
-
-	// NonReleaseBlocker indicates that a test failure should not be tagged as a
-	// release blocker. Use this for tests that are not yet stable but should
-	// still be run regularly.
-	NonReleaseBlocker bool
-
-	// RequiresLicense indicates that the test requires an
-	// enterprise license to run correctly. Use this to ensure
-	// tests will fail-early if COCKROACH_DEV_LICENSE is not set
-	// in the environment.
-	RequiresLicense bool
-
-	// Run is the test function.
-	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
-}
-
 // perfArtifactsDir is the directory on cluster nodes in which perf artifacts
 // reside. Upon success this directory is copied into test artifactsDir from
 // each node in the cluster.
 const perfArtifactsDir = "perf"
-
-// matchOrSkip returns true if the filter matches the test. If the filter does
-// not match the test because the tag filter does not match, the test is
-// matched, but marked as skipped.
-func (t *TestSpec) matchOrSkip(filter *testFilter) bool {
-	if !filter.name.MatchString(t.Name) {
-		return false
-	}
-	if len(t.Tags) == 0 {
-		if !filter.tag.MatchString("default") {
-			t.Skip = fmt.Sprintf("%s does not match [default]", filter.rawTag)
-		}
-		return true
-	}
-	for _, t := range t.Tags {
-		if filter.tag.MatchString(t) {
-			return true
-		}
-	}
-	t.Skip = fmt.Sprintf("%s does not match %s", filter.rawTag, t.Tags)
-	return true
-}
 
 type testStatus struct {
 	msg      string
@@ -123,7 +42,7 @@ type testStatus struct {
 }
 
 type testImpl struct {
-	spec *TestSpec
+	spec *registry.TestSpec
 
 	cockroach          string // path to main cockroach binary
 	deprecatedWorkload string // path to workload binary
@@ -523,7 +442,7 @@ func teamCityNameEscape(name string) string {
 }
 
 type testWithCount struct {
-	spec TestSpec
+	spec registry.TestSpec
 	// count maintains the number of runs remaining for a test.
 	count int
 }

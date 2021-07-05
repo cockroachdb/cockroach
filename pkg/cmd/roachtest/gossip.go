@@ -24,6 +24,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -33,7 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerGossip(r *testRegistry) {
+func registerGossip(r registry.Registry) {
 	runGossipChaos := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		args := startArgs("--args=--vmodule=*=1")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
@@ -151,10 +152,10 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 		}
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "gossip/chaos/nodes=9",
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(9),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(9),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGossipChaos(ctx, t, c)
 		},

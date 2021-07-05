@@ -19,6 +19,7 @@ import (
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	_ "github.com/lib/pq"
@@ -235,21 +236,21 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 	m.Wait()
 }
 
-func registerNetwork(r *testRegistry) {
+func registerNetwork(r registry.Registry) {
 	const numNodes = 4
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("network/sanity/nodes=%d", numNodes),
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(numNodes),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkSanity(ctx, t, c, numNodes)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(numNodes),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/49901#issuecomment-640666646",
 		SkipDetails: `The ordering of steps in the test is:
 

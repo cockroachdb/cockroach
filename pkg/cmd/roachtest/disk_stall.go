@@ -19,25 +19,25 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskStalledDetection(r *testRegistry) {
+func registerDiskStalledDetection(r registry.Registry) {
 	for _, affectsLogDir := range []bool{false, true} {
 		for _, affectsDataDir := range []bool{false, true} {
 			// Grab copies of the args because we'll pass them into a closure.
 			// Everyone's favorite bug to write in Go.
 			affectsLogDir := affectsLogDir
 			affectsDataDir := affectsDataDir
-			r.Add(TestSpec{
+			r.Add(registry.TestSpec{
 				Name: fmt.Sprintf(
 					"disk-stalled/log=%t,data=%t",
 					affectsLogDir, affectsDataDir,
 				),
-				Owner:      OwnerStorage,
-				MinVersion: "v19.2.0",
-				Cluster:    r.makeClusterSpec(1),
+				Owner:   registry.OwnerStorage,
+				Cluster: r.MakeClusterSpec(1),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runDiskStalledDetection(ctx, t, c, affectsLogDir, affectsDataDir)
 				},

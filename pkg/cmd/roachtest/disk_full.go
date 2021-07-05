@@ -17,16 +17,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskFull(r *testRegistry) {
-	r.Add(TestSpec{
-		Name:       "disk-full",
-		Owner:      OwnerStorage,
-		MinVersion: `v20.2.0`,
-		Cluster:    r.makeClusterSpec(5),
+func registerDiskFull(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "disk-full",
+		Owner:   registry.OwnerStorage,
+		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				t.Skip("you probably don't want to fill your local disk")

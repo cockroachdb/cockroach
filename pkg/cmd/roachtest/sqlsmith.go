@@ -20,13 +20,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
-func registerSQLSmith(r *testRegistry) {
+func registerSQLSmith(r registry.Registry) {
 	setups := map[string]sqlsmith.Setup{
 		"empty":       sqlsmith.Setups["empty"],
 		"seed":        sqlsmith.Setups["seed"],
@@ -138,7 +139,7 @@ func registerSQLSmith(r *testRegistry) {
 		logStmt(injectPanicsStmt)
 
 		t.Status("smithing")
-		until := time.After(t.Spec().(*TestSpec).Timeout / 2)
+		until := time.After(t.Spec().(*registry.TestSpec).Timeout / 2)
 		done := ctx.Done()
 		for i := 1; ; i++ {
 			if i%10000 == 0 {
@@ -241,13 +242,12 @@ func registerSQLSmith(r *testRegistry) {
 	}
 
 	register := func(setup, setting string) {
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
-			Owner:      OwnerSQLQueries,
-			Cluster:    r.makeClusterSpec(4),
-			MinVersion: "v20.2.0",
-			Timeout:    time.Minute * 20,
+			Owner:   registry.OwnerSQLQueries,
+			Cluster: r.MakeClusterSpec(4),
+			Timeout: time.Minute * 20,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
 			},

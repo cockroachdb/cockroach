@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,12 +41,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerFollowerReads(r *testRegistry) {
+func registerFollowerReads(r registry.Registry) {
 	register := func(survival survivalGoal, locality localitySetting) {
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
-			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Wipe(ctx)
@@ -62,10 +63,10 @@ func registerFollowerReads(r *testRegistry) {
 		}
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  "follower-reads/mixed-version/single-region",
-		Owner: OwnerKV,
-		Cluster: r.makeClusterSpec(
+		Owner: registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(
 			3, /* nodeCount */
 			spec.CPU(2),
 		),

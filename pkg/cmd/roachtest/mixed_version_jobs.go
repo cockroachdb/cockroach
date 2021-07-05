@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -323,19 +324,18 @@ func runJobsMixedVersions(
 	u.run(ctx, t)
 }
 
-func registerJobsMixedVersions(r *testRegistry) {
-	r.Add(TestSpec{
+func registerJobsMixedVersions(r registry.Registry) {
+	r.Add(registry.TestSpec{
 		Name:  "jobs/mixed-versions",
-		Owner: OwnerBulkIO,
+		Owner: registry.OwnerBulkIO,
 		// Jobs infrastructure was unstable prior to 20.1 in terms of the behavior
 		// of `PAUSE/CANCEL JOB` commands which were best effort and relied on the
 		// job itself to detect the request. These were fixed by introducing new job
 		// state machine states `Status{Pause,Cancel}Requested`. This test purpose
 		// is to to test the state transitions of jobs from paused to resumed and
 		// vice versa in order to detect regressions in the work done for 20.1.
-		MinVersion: "v20.1.0",
-		Skip:       "https://github.com/cockroachdb/cockroach/issues/57230",
-		Cluster:    r.makeClusterSpec(4),
+		Skip:    "https://github.com/cockroachdb/cockroach/issues/57230",
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := PredecessorVersion(*t.BuildVersion())
 			if err != nil {

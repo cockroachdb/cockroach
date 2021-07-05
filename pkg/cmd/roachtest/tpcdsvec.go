@@ -17,13 +17,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcds"
 	"github.com/cockroachdb/errors"
 )
 
-func registerTPCDSVec(r *testRegistry) {
+func registerTPCDSVec(r registry.Registry) {
 	const (
 		timeout                         = 5 * time.Minute
 		withStatsSlowerWarningThreshold = 1.25
@@ -171,11 +172,10 @@ func registerTPCDSVec(r *testRegistry) {
 		}
 	}
 
-	r.Add(TestSpec{
-		Name:       "tpcdsvec",
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.makeClusterSpec(3),
-		MinVersion: "v20.1.0",
+	r.Add(registry.TestSpec{
+		Name:    "tpcdsvec",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCDSVec(ctx, t, c)
 		},
