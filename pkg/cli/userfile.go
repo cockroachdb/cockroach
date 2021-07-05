@@ -234,7 +234,7 @@ func runUserFileGet(cmd *cobra.Command, args []string) error {
 	}
 	glob := conf.Path
 	conf.Path = "/"
-	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.conn.(cloud.SQLConnI))
+	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.GetDriverConn().(cloud.SQLConnI))
 	if err != nil {
 		return err
 	}
@@ -398,11 +398,11 @@ func constructUserfileListURI(glob string, user security.SQLUsername) string {
 func getUserfileConf(
 	ctx context.Context, conn *sqlConn, glob string,
 ) (roachpb.ExternalStorage_FileTable, error) {
-	if err := conn.ensureConn(); err != nil {
+	if err := conn.EnsureConn(); err != nil {
 		return roachpb.ExternalStorage_FileTable{}, err
 	}
 
-	connURL, err := url.Parse(conn.url)
+	connURL, err := url.Parse(conn.GetURL())
 	if err != nil {
 		return roachpb.ExternalStorage_FileTable{}, err
 	}
@@ -430,7 +430,7 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, er
 	}
 	prefix := conf.Path
 	conf.Path = ""
-	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.conn.(cloud.SQLConnI))
+	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.GetDriverConn().(cloud.SQLConnI))
 	if err != nil {
 		return nil, err
 	}
@@ -464,11 +464,11 @@ func downloadUserfile(
 }
 
 func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, error) {
-	if err := conn.ensureConn(); err != nil {
+	if err := conn.EnsureConn(); err != nil {
 		return nil, err
 	}
 
-	connURL, err := url.Parse(conn.url)
+	connURL, err := url.Parse(conn.GetURL())
 	if err != nil {
 		return nil, err
 	}
@@ -491,7 +491,7 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 	// ExternalStorage for both the ListFiles() and Delete() methods.
 	userFileTableConf.FileTableConfig.Path = ""
 	f, err := userfile.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
-		conn.conn.(cloud.SQLConnI))
+		conn.GetDriverConn().(cloud.SQLConnI))
 	if err != nil {
 		return nil, err
 	}
@@ -518,16 +518,16 @@ func renameUserFile(
 	ctx context.Context, conn *sqlConn, oldFilename,
 	newFilename, qualifiedTableName string,
 ) error {
-	if err := conn.ensureConn(); err != nil {
+	if err := conn.EnsureConn(); err != nil {
 		return err
 	}
 
-	ex := conn.conn.(driver.ExecerContext)
+	ex := conn.GetDriverConn()
 	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
 		return err
 	}
 
-	stmt, err := conn.conn.Prepare(fmt.Sprintf(`UPDATE %s SET filename=$1 WHERE filename=$2`,
+	stmt, err := conn.GetDriverConn().Prepare(fmt.Sprintf(`UPDATE %s SET filename=$1 WHERE filename=$2`,
 		qualifiedTableName+fileTableNameSuffix))
 	if err != nil {
 		return err
@@ -570,16 +570,16 @@ func uploadUserFile(
 	}
 	defer reader.Close()
 
-	if err := conn.ensureConn(); err != nil {
+	if err := conn.EnsureConn(); err != nil {
 		return "", err
 	}
 
-	ex := conn.conn.(driver.ExecerContext)
+	ex := conn.GetDriverConn()
 	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
 		return "", err
 	}
 
-	connURL, err := url.Parse(conn.url)
+	connURL, err := url.Parse(conn.GetURL())
 	if err != nil {
 		return "", err
 	}
@@ -609,7 +609,7 @@ func uploadUserFile(
 	if err != nil {
 		return "", err
 	}
-	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(unescapedUserfileURL, sql.CrdbInternalName,
+	stmt, err := conn.GetDriverConn().Prepare(sql.CopyInFileStmt(unescapedUserfileURL, sql.CrdbInternalName,
 		sql.UserFileUploadTable))
 	if err != nil {
 		return "", err

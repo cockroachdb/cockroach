@@ -314,67 +314,6 @@ func (s *nodeDecommissionWaitType) Set(value string) error {
 	return nil
 }
 
-type tableDisplayFormat int
-
-const (
-	tableDisplayTSV tableDisplayFormat = iota
-	tableDisplayCSV
-	tableDisplayTable
-	tableDisplayRecords
-	tableDisplaySQL
-	tableDisplayHTML
-	tableDisplayRaw
-	tableDisplayLastFormat
-)
-
-// Type implements the pflag.Value interface.
-func (f *tableDisplayFormat) Type() string { return "string" }
-
-// String implements the pflag.Value interface.
-func (f *tableDisplayFormat) String() string {
-	switch *f {
-	case tableDisplayTSV:
-		return "tsv"
-	case tableDisplayCSV:
-		return "csv"
-	case tableDisplayTable:
-		return "table"
-	case tableDisplayRecords:
-		return "records"
-	case tableDisplaySQL:
-		return "sql"
-	case tableDisplayHTML:
-		return "html"
-	case tableDisplayRaw:
-		return "raw"
-	}
-	return ""
-}
-
-// Set implements the pflag.Value interface.
-func (f *tableDisplayFormat) Set(s string) error {
-	switch s {
-	case "tsv":
-		*f = tableDisplayTSV
-	case "csv":
-		*f = tableDisplayCSV
-	case "table":
-		*f = tableDisplayTable
-	case "records":
-		*f = tableDisplayRecords
-	case "sql":
-		*f = tableDisplaySQL
-	case "html":
-		*f = tableDisplayHTML
-	case "raw":
-		*f = tableDisplayRaw
-	default:
-		return fmt.Errorf("invalid table display format: %s "+
-			"(possible values: tsv, csv, table, records, sql, html, raw)", s)
-	}
-	return nil
-}
-
 // bytesOrPercentageValue is a flag that accepts an integer value, an integer
 // plus a unit (e.g. 32GB or 32GiB) or a percentage (e.g. 32%). In all these
 // cases, it transforms the string flag input into an int64 value.

@@ -8,23 +8,21 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clisqlclient_test
 
 import (
 	"bytes"
-	"fmt"
 	"strconv"
 	"strings"
-	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func Example_sql_column_labels() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	testData := []string{
@@ -55,7 +53,7 @@ thenshort`,
 	c.RunWithArgs([]string{"sql", "-e", "show columns from t.u"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.u"})
 	c.RunWithArgs([]string{"sql", "--format=table", "-e", "show columns from t.u"})
-	for i := tableDisplayFormat(0); i < tableDisplayLastFormat; i++ {
+	for i := clisqlclient.TableDisplayFormat(0); i < clisqlclient.TableDisplayLastFormat; i++ {
 		c.RunWithArgs([]string{"sql", "--format=" + i.String(), "-e", "select * from t.u"})
 	}
 
@@ -180,7 +178,7 @@ thenshort`,
 }
 
 func Example_sql_empty_table() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t;" +
@@ -188,7 +186,7 @@ func Example_sql_empty_table() {
 		"create table t.nocolsnorows();" +
 		"create table t.nocols(); insert into t.nocols(rowid) values (1),(2),(3);"})
 	for _, table := range []string{"norows", "nocols", "nocolsnorows"} {
-		for format := tableDisplayFormat(0); format < tableDisplayLastFormat; format++ {
+		for format := clisqlclient.TableDisplayFormat(0); format < clisqlclient.TableDisplayLastFormat; format++ {
 			c.RunWithArgs([]string{"sql", "--format=" + format.String(), "-e", "select * from t." + table})
 		}
 	}
@@ -216,6 +214,11 @@ func Example_sql_empty_table() {
 	// <thead><tr><th>row</th><th>x</th></tr></thead>
 	// </tbody>
 	// <tfoot><tr><td colspan=2>0 rows</td></tr></tfoot></table>
+	// sql --format=rawhtml -e select * from t.norows
+	// <table>
+	// <thead><tr><th>x</th></tr></thead>
+	// </tbody>
+	// </table>
 	// sql --format=raw -e select * from t.norows
 	// # 1 column
 	// # 0 rows
@@ -251,6 +254,15 @@ func Example_sql_empty_table() {
 	// <tr><td>3</td></tr>
 	// </tbody>
 	// <tfoot><tr><td colspan=1>3 rows</td></tr></tfoot></table>
+	// sql --format=rawhtml -e select * from t.nocols
+	// <table>
+	// <thead><tr></tr></thead>
+	// <tbody>
+	// <tr></tr>
+	// <tr></tr>
+	// <tr></tr>
+	// </tbody>
+	// </table>
 	// sql --format=raw -e select * from t.nocols
 	// # 0 columns
 	// # row 1
@@ -276,13 +288,18 @@ func Example_sql_empty_table() {
 	// <thead><tr><th>row</th></tr></thead>
 	// </tbody>
 	// <tfoot><tr><td colspan=1>0 rows</td></tr></tfoot></table>
+	// sql --format=rawhtml -e select * from t.nocolsnorows
+	// <table>
+	// <thead><tr></tr></thead>
+	// </tbody>
+	// </table>
 	// sql --format=raw -e select * from t.nocolsnorows
 	// # 0 columns
 	// # 0 rows
 }
 
 func Example_csv_tsv_quoting() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	testData := []string{
@@ -437,7 +454,7 @@ def`,
 }
 
 func Example_sql_table() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	testData := []struct {
@@ -460,7 +477,7 @@ func Example_sql_table() {
 		c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (" + t.str + ", '" + t.desc + "')"})
 	}
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.t"})
-	for format := tableDisplayFormat(0); format < tableDisplayLastFormat; format++ {
+	for format := clisqlclient.TableDisplayFormat(0); format < clisqlclient.TableDisplayLastFormat; format++ {
 		c.RunWithArgs([]string{"sql", "--format=" + format.String(), "-e", "select * from t.t"})
 	}
 
@@ -607,6 +624,21 @@ func Example_sql_table() {
 	// <tr><td>9</td><td>a	b	c<br/>12	123123213	12313</td><td>tabs</td></tr>
 	// </tbody>
 	// <tfoot><tr><td colspan=3>9 rows</td></tr></tfoot></table>
+	// sql --format=rawhtml -e select * from t.t
+	// <table>
+	// <thead><tr><th>s</th><th>d</th></tr></thead>
+	// <tbody>
+	// <tr><td>foo</td><td>printable ASCII</td></tr>
+	// <tr><td>"foo</td><td>printable ASCII with quotes</td></tr>
+	// <tr><td>\foo</td><td>printable ASCII with backslash</td></tr>
+	// <tr><td>foo<br/>bar</td><td>non-printable ASCII</td></tr>
+	// <tr><td>κόσμε</td><td>printable UTF8</td></tr>
+	// <tr><td>ñ</td><td>printable UTF8 using escapes</td></tr>
+	// <tr><td>\x01</td><td>non-printable UTF8 string</td></tr>
+	// <tr><td>܈85</td><td>UTF8 string with RTL char</td></tr>
+	// <tr><td>a	b	c<br/>12	123123213	12313</td><td>tabs</td></tr>
+	// </tbody>
+	// </table>
 	// sql --format=raw -e select * from t.t
 	// # 2 columns
 	// # row 1
@@ -660,7 +692,7 @@ func Example_sql_table() {
 }
 
 func Example_sql_table_border() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	for i := 0; i < 4; i++ {
@@ -704,84 +736,4 @@ func Example_sql_table_border() {
 	// |         | foobar  |
 	// +---------+---------+
 	// (2 rows)
-}
-
-func TestRenderHTML(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	cols := []string{"colname"}
-	align := "d"
-	rows := [][]string{
-		{"<b>foo</b>"},
-		{"bar"},
-	}
-
-	type testCase struct {
-		reporter htmlReporter
-		out      string
-	}
-
-	testCases := []testCase{
-		{
-			reporter: htmlReporter{},
-			out: `<table>
-<thead><tr><th>colname</th></tr></thead>
-<tbody>
-<tr><td><b>foo</b></td></tr>
-<tr><td>bar</td></tr>
-</tbody>
-</table>
-`,
-		},
-		{
-			reporter: htmlReporter{escape: true},
-			out: `<table>
-<thead><tr><th>colname</th></tr></thead>
-<tbody>
-<tr><td>&lt;b&gt;foo&lt;/b&gt;</td></tr>
-<tr><td>bar</td></tr>
-</tbody>
-</table>
-`,
-		},
-		{
-			reporter: htmlReporter{rowStats: true},
-			out: `<table>
-<thead><tr><th>row</th><th>colname</th></tr></thead>
-<tbody>
-<tr><td>1</td><td><b>foo</b></td></tr>
-<tr><td>2</td><td>bar</td></tr>
-</tbody>
-<tfoot><tr><td colspan=2>2 rows</td></tr></tfoot></table>
-`,
-		},
-		{
-			reporter: htmlReporter{escape: true, rowStats: true},
-			out: `<table>
-<thead><tr><th>row</th><th>colname</th></tr></thead>
-<tbody>
-<tr><td>1</td><td>&lt;b&gt;foo&lt;/b&gt;</td></tr>
-<tr><td>2</td><td>bar</td></tr>
-</tbody>
-<tfoot><tr><td colspan=2>2 rows</td></tr></tfoot></table>
-`,
-		},
-	}
-
-	for _, tc := range testCases {
-		name := fmt.Sprintf("escape=%v/rowStats=%v", tc.reporter.escape, tc.reporter.rowStats)
-		t.Run(name, func(t *testing.T) {
-			var buf bytes.Buffer
-			err := render(&tc.reporter, &buf,
-				cols, NewRowSliceIter(rows, align),
-				nil /* completedHook */, nil /* noRowsHook */)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if tc.out != buf.String() {
-				t.Errorf("expected:\n%s\ngot:\n%s", tc.out, buf.String())
-			}
-		})
-	}
 }
