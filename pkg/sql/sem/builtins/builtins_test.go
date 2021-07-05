@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
@@ -425,7 +426,7 @@ func TestExtractTimeSpanFromInterval(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s as %s", tc.intervalStr, tc.timeSpan), func(t *testing.T) {
-			interval, err := tree.ParseDInterval(tc.intervalStr)
+			interval, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, tc.intervalStr)
 			assert.NoError(t, err)
 
 			d, err := extractTimeSpanFromInterval(interval, tc.timeSpan)
