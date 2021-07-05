@@ -15,11 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerRoachmart(r *testRegistry) {
+func registerRoachmart(r registry.Registry) {
 	runRoachmart := func(ctx context.Context, t test.Test, c cluster.Cluster, partition bool) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
@@ -67,10 +68,10 @@ func registerRoachmart(r *testRegistry) {
 
 	for _, v := range []bool{true, false} {
 		v := v
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("roachmart/partition=%v", v),
-			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(9, spec.Geo(), spec.Zones("us-central1-b,us-west1-b,europe-west2-b")),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(9, spec.Geo(), spec.Zones("us-central1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

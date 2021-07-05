@@ -14,6 +14,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -22,7 +23,7 @@ var supportedSequelizeRelease = "v6.0.0-alpha.0"
 
 // This test runs sequelize's full test suite against a single cockroach node.
 
-func registerSequelize(r *testRegistry) {
+func registerSequelize(r registry.Registry) {
 	runSequelize := func(
 		ctx context.Context,
 		t test.Test,
@@ -146,12 +147,11 @@ func registerSequelize(r *testRegistry) {
 		}
 	}
 
-	r.Add(TestSpec{
-		MinVersion: "v20.2.0",
-		Name:       "sequelize",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
-		Tags:       []string{`default`, `orm`},
+	r.Add(registry.TestSpec{
+		Name:    "sequelize",
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSequelize(ctx, t, c)
 		},

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -25,7 +26,7 @@ import (
 
 // TODO(tbg): remove this test. Use the harness in versionupgrade.go
 // to make a much better one, much more easily.
-func registerVersion(r *testRegistry) {
+func registerVersion(r registry.Registry) {
 	runVersion := func(ctx context.Context, t test.Test, c cluster.Cluster, binaryVersion string) {
 		nodes := c.Spec().NodeCount - 1
 
@@ -211,11 +212,10 @@ func registerVersion(r *testRegistry) {
 	}
 
 	for _, n := range []int{3, 5} {
-		r.Add(TestSpec{
-			Name:       fmt.Sprintf("version/mixed/nodes=%d", n),
-			Owner:      OwnerKV,
-			MinVersion: "v2.1.0",
-			Cluster:    r.makeClusterSpec(n + 1),
+		r.Add(registry.TestSpec{
+			Name:    fmt.Sprintf("version/mixed/nodes=%d", n),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				pred, err := PredecessorVersion(*t.BuildVersion())
 				if err != nil {

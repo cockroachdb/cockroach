@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
@@ -55,7 +56,7 @@ type kvBenchSpec struct {
 	LatencyThresholdMs     float64
 }
 
-func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
+func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 	nameParts := []string{
 		"kv0bench",
 		fmt.Sprintf("nodes=%d", b.Nodes),
@@ -81,8 +82,8 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 	}
 
 	name := strings.Join(nameParts, "/")
-	nodes := r.makeClusterSpec(b.Nodes+1, opts...)
-	r.Add(TestSpec{
+	nodes := r.MakeClusterSpec(b.Nodes+1, opts...)
+	r.Add(registry.TestSpec{
 		Name: name,
 		// These tests don't have pass/fail conditions so we don't want to run them
 		// nightly. Currently they're only good for printing the results of a search
@@ -90,7 +91,7 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 		// TODO(andrei): output something to roachperf and start running them
 		// nightly.
 		Tags:    []string{"manual"},
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: nodes,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKVBench(ctx, t, c, b)
@@ -98,7 +99,7 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 	})
 }
 
-func registerKVBench(r *testRegistry) {
+func registerKVBench(r registry.Registry) {
 	specs := []kvBenchSpec{
 		{
 			Nodes:                  5,

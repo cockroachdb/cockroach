@@ -19,16 +19,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerReplicaGC(r *testRegistry) {
+func registerReplicaGC(r registry.Registry) {
 	for _, restart := range []bool{true, false} {
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
-			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(6),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(6),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runReplicaGCChangedPeers(ctx, t, c, restart)
 			},

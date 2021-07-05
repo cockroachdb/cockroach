@@ -20,12 +20,13 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
 )
 
-func registerCopy(r *testRegistry) {
+func registerCopy(r registry.Registry) {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
 	// statements to copy all data from the first table into the second table.
@@ -172,10 +173,10 @@ func registerCopy(r *testRegistry) {
 
 	for _, tc := range testcases {
 		tc := tc
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
-			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(tc.nodes),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(tc.nodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},

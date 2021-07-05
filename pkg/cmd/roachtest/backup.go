@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	cloudstorage "github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -85,10 +86,10 @@ func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluste
 	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
 }
 
-func registerBackupNodeShutdown(r *testRegistry) {
+func registerBackupNodeShutdown(r registry.Registry) {
 	// backupNodeRestartSpec runs a backup and randomly shuts down a node during
 	// the backup.
-	backupNodeRestartSpec := r.makeClusterSpec(4)
+	backupNodeRestartSpec := r.MakeClusterSpec(4)
 	loadBackupData := func(ctx context.Context, t test.Test, c cluster.Cluster) string {
 		// This aught to be enough since this isn't a performance test.
 		rows := rows15GiB
@@ -100,11 +101,10 @@ func registerBackupNodeShutdown(r *testRegistry) {
 		return importBankData(ctx, rows, t, c)
 	}
 
-	r.Add(TestSpec{
-		Name:       fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
-		Owner:      OwnerBulkIO,
-		Cluster:    backupNodeRestartSpec,
-		MinVersion: "v21.1.0",
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
+		Owner:   registry.OwnerBulkIO,
+		Cluster: backupNodeRestartSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -121,11 +121,10 @@ func registerBackupNodeShutdown(r *testRegistry) {
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startBackup)
 		},
 	})
-	r.Add(TestSpec{
-		Name:       fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
-		Owner:      OwnerBulkIO,
-		Cluster:    backupNodeRestartSpec,
-		MinVersion: "v21.1.0",
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
+		Owner:   registry.OwnerBulkIO,
+		Cluster: backupNodeRestartSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -180,14 +179,13 @@ func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time
 	return tick
 }
 
-func registerBackup(r *testRegistry) {
+func registerBackup(r registry.Registry) {
 
-	backup2TBSpec := r.makeClusterSpec(10)
-	r.Add(TestSpec{
-		Name:       fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
-		Owner:      OwnerBulkIO,
-		Cluster:    backup2TBSpec,
-		MinVersion: "v2.1.0",
+	backup2TBSpec := r.MakeClusterSpec(10)
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
+		Owner:   registry.OwnerBulkIO,
+		Cluster: backup2TBSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
 			if local {
@@ -218,12 +216,11 @@ func registerBackup(r *testRegistry) {
 		},
 	})
 
-	KMSSpec := r.makeClusterSpec(3)
-	r.Add(TestSpec{
-		Name:       fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
-		Owner:      OwnerBulkIO,
-		Cluster:    KMSSpec,
-		MinVersion: "v20.2.0",
+	KMSSpec := r.MakeClusterSpec(3)
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
+		Owner:   registry.OwnerBulkIO,
+		Cluster: KMSSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if cloud == spec.GCE {
 				t.Skip("backupKMS roachtest is only configured to run on AWS", "")
@@ -338,10 +335,10 @@ func registerBackup(r *testRegistry) {
 	// backupTPCC continuously runs TPCC, takes a full backup after some time,
 	// and incremental after more time. It then restores the two backups and
 	// verifies them with a fingerprint.
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    `backupTPCC`,
-		Owner:   OwnerBulkIO,
-		Cluster: r.makeClusterSpec(3),
+		Owner:   registry.OwnerBulkIO,
+		Cluster: r.MakeClusterSpec(3),
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Randomize starting with encryption-at-rest enabled.

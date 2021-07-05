@@ -17,12 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func registerAlterPK(r *testRegistry) {
+func registerAlterPK(r registry.Registry) {
 
 	setupTest := func(ctx context.Context, t test.Test, c cluster.Cluster) (option.NodeListOption, option.NodeListOption) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
@@ -168,33 +169,30 @@ func registerAlterPK(r *testRegistry) {
 		c.Run(ctx, loadNode, checkCmd)
 		t.Status("finished database verification")
 	}
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  "alterpk-bank",
-		Owner: OwnerSQLSchema,
+		Owner: registry.OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
-		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(4),
-		Run:        runAlterPKBank,
+		Cluster: r.MakeClusterSpec(4),
+		Run:     runAlterPKBank,
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  "alterpk-tpcc-250",
-		Owner: OwnerSQLSchema,
+		Owner: registry.OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
-		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(4, spec.CPU(32)),
+		Cluster: r.MakeClusterSpec(4, spec.CPU(32)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAlterPKTPCC(ctx, t, c, 250 /* warehouses */, true /* expensiveChecks */)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  "alterpk-tpcc-500",
-		Owner: OwnerSQLSchema,
+		Owner: registry.OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
-		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
+		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAlterPKTPCC(ctx, t, c, 500 /* warehouses */, false /* expensiveChecks */)
 		},

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -31,16 +32,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerDecommission(r *testRegistry) {
+func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 4
 		duration := time.Hour
 
-		r.Add(TestSpec{
-			Name:       fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
-			Owner:      OwnerKV,
-			MinVersion: "v20.2.0",
-			Cluster:    r.makeClusterSpec(4),
+		r.Add(registry.TestSpec{
+			Name:    fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(4),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if local {
 					duration = 5 * time.Minute
@@ -52,12 +52,11 @@ func registerDecommission(r *testRegistry) {
 	}
 	{
 		numNodes := 6
-		r.Add(TestSpec{
-			Name:       "decommission/randomized",
-			Owner:      OwnerKV,
-			MinVersion: "v20.2.0",
-			Timeout:    10 * time.Minute,
-			Cluster:    r.makeClusterSpec(numNodes),
+		r.Add(registry.TestSpec{
+			Name:    "decommission/randomized",
+			Owner:   registry.OwnerKV,
+			Timeout: 10 * time.Minute,
+			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionRandomized(ctx, t, c)
 			},
@@ -65,11 +64,10 @@ func registerDecommission(r *testRegistry) {
 	}
 	{
 		numNodes := 4
-		r.Add(TestSpec{
-			Name:       "decommission/mixed-versions",
-			Owner:      OwnerKV,
-			MinVersion: "v20.2.0",
-			Cluster:    r.makeClusterSpec(numNodes),
+		r.Add(registry.TestSpec{
+			Name:    "decommission/mixed-versions",
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, *t.BuildVersion())
 			},

@@ -15,11 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerYCSB(r *testRegistry) {
+func registerYCSB(r registry.Registry) {
 	workloads := []string{"A", "B", "C", "D", "E", "F"}
 	cpusConfigs := []int{8, 32}
 
@@ -75,10 +76,10 @@ func registerYCSB(r *testRegistry) {
 				name = fmt.Sprintf("ycsb/%s/nodes=3/cpu=%d", wl, cpus)
 			}
 			wl, cpus := wl, cpus
-			r.Add(TestSpec{
+			r.Add(registry.TestSpec{
 				Name:    name,
-				Owner:   OwnerKV,
-				Cluster: r.makeClusterSpec(4, spec.CPU(cpus)),
+				Owner:   registry.OwnerKV,
+				Cluster: r.MakeClusterSpec(4, spec.CPU(cpus)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus)
 				},

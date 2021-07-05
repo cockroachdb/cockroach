@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -38,7 +39,7 @@ import (
 //
 // Once DistSQL queries provide more testing knobs, these tests can likely be
 // replaced with unit tests.
-func registerCancel(r *testRegistry) {
+func registerCancel(r registry.Registry) {
 	runCancel := func(ctx context.Context, t test.Test, c cluster.Cluster, tpchQueriesToRun []int, useDistsql bool) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, c.All())
@@ -129,19 +130,19 @@ func registerCancel(r *testRegistry) {
 		queries += fmt.Sprintf("%d", q)
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("cancel/tpch/distsql/queries=%s,nodes=%d", queries, numNodes),
-		Owner:   OwnerSQLQueries,
-		Cluster: r.makeClusterSpec(numNodes),
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCancel(ctx, t, c, tpchQueriesToRun, true /* useDistsql */)
 		},
 	})
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("cancel/tpch/local/queries=%s,nodes=%d", queries, numNodes),
-		Owner:   OwnerSQLQueries,
-		Cluster: r.makeClusterSpec(numNodes),
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCancel(ctx, t, c, tpchQueriesToRun, false /* useDistsql */)
 		},

@@ -16,15 +16,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerSchemaChangeInvertedIndex(r *testRegistry) {
-	r.Add(TestSpec{
+func registerSchemaChangeInvertedIndex(r registry.Registry) {
+	r.Add(registry.TestSpec{
 		Name:    "schemachange/invertedindex",
-		Owner:   OwnerSQLSchema,
-		Cluster: r.makeClusterSpec(5),
+		Owner:   registry.OwnerSQLSchema,
+		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},

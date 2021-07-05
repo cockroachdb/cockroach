@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -219,7 +220,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 		l.Printf("%s\n", strings.Join(s, ", "))
 	}
 }
-func registerRestoreNodeShutdown(r *testRegistry) {
+func registerRestoreNodeShutdown(r registry.Registry) {
 	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster, gatewayNode int) jobStarter {
 		return func(c cluster.Cluster) (string, error) {
 			t.L().Printf("connecting to gateway")
@@ -284,11 +285,10 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		}
 	}
 
-	r.Add(TestSpec{
-		Name:       "restore/nodeShutdown/worker",
-		Owner:      OwnerBulkIO,
-		Cluster:    r.makeClusterSpec(4),
-		MinVersion: "v21.1.0",
+	r.Add(registry.TestSpec{
+		Name:    "restore/nodeShutdown/worker",
+		Owner:   registry.OwnerBulkIO,
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -299,11 +299,10 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		},
 	})
 
-	r.Add(TestSpec{
-		Name:       "restore/nodeShutdown/coordinator",
-		Owner:      OwnerBulkIO,
-		Cluster:    r.makeClusterSpec(4),
-		MinVersion: "v21.1.0",
+	r.Add(registry.TestSpec{
+		Name:    "restore/nodeShutdown/coordinator",
+		Owner:   registry.OwnerBulkIO,
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -354,7 +353,7 @@ func (tpccIncData) runRestore(ctx context.Context, c cluster.Cluster) {
 				AS OF SYSTEM TIME '2021-05-21 14:40:22'"`)
 }
 
-func registerRestore(r *testRegistry) {
+func registerRestore(r registry.Registry) {
 	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
 
 	for _, item := range []struct {
@@ -382,10 +381,10 @@ func registerRestore(r *testRegistry) {
 			testName += fmt.Sprintf("/pd-volume=%dGB", largeVolumeSize)
 		}
 
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    testName,
-			Owner:   OwnerBulkIO,
-			Cluster: r.makeClusterSpec(item.nodes, clusterOpts...),
+			Owner:   registry.OwnerBulkIO,
+			Cluster: r.MakeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// Randomize starting with encryption-at-rest enabled.

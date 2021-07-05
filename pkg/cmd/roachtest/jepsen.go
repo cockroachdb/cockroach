@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -326,7 +327,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	}
 }
 
-func registerJepsen(r *testRegistry) {
+func registerJepsen(r registry.Registry) {
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
 	tests := []string{
@@ -343,11 +344,10 @@ func registerJepsen(r *testRegistry) {
 		testName := testName
 		for _, nemesis := range jepsenNemeses {
 			nemesis := nemesis // copy for closure
-			s := TestSpec{
+			s := registry.TestSpec{
 				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				// We don't run jepsen on older releases due to the high rate of flakes.
-				MinVersion: "v20.1.0",
-				Owner:      OwnerKV,
+				Owner: registry.OwnerKV,
 				// The Jepsen tests do funky things to machines, like muck with the
 				// system clock; therefore, their clusters cannot be reused other tests
 				// except the Jepsen ones themselves which reset all this state when
@@ -355,7 +355,7 @@ func registerJepsen(r *testRegistry) {
 				// clusters because they have a lengthy setup step, but avoid doing it
 				// if they detect that the machines have already been properly
 				// initialized.
-				Cluster: r.makeClusterSpec(6, spec.ReuseTagged("jepsen")),
+				Cluster: r.MakeClusterSpec(6, spec.ReuseTagged("jepsen")),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},

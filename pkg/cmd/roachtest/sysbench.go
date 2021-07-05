@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -128,7 +129,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	m.Wait()
 }
 
-func registerSysbench(r *testRegistry) {
+func registerSysbench(r registry.Registry) {
 	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
 		const n = 3
 		const cpus = 32
@@ -141,10 +142,10 @@ func registerSysbench(r *testRegistry) {
 			rowsPerTable: 10000000,
 		}
 
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
-			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(n+1, spec.CPU(cpus)),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(n+1, spec.CPU(cpus)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSysbench(ctx, t, c, opts)
 			},

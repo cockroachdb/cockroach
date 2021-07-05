@@ -20,13 +20,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
-func registerRebalanceLoad(r *testRegistry) {
+func registerRebalanceLoad(r registry.Registry) {
 	// This test creates a single table for kv to use and splits the table to
 	// have one range for every node in the cluster. Because even brand new
 	// clusters start with 20+ ranges in them, the number of new ranges in kv's
@@ -128,11 +129,10 @@ func registerRebalanceLoad(r *testRegistry) {
 
 	concurrency := 128
 
-	r.Add(TestSpec{
-		Name:       `rebalance/by-load/leases`,
-		Owner:      OwnerKV,
-		Cluster:    r.makeClusterSpec(4), // the last node is just used to generate load
-		MinVersion: "v2.1.0",
+	r.Add(registry.TestSpec{
+		Name:    `rebalance/by-load/leases`,
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if local {
 				concurrency = 32
@@ -141,11 +141,10 @@ func registerRebalanceLoad(r *testRegistry) {
 			rebalanceLoadRun(ctx, t, c, "leases", 3*time.Minute, concurrency)
 		},
 	})
-	r.Add(TestSpec{
-		Name:       `rebalance/by-load/replicas`,
-		Owner:      OwnerKV,
-		Cluster:    r.makeClusterSpec(7), // the last node is just used to generate load
-		MinVersion: "v2.1.0",
+	r.Add(registry.TestSpec{
+		Name:    `rebalance/by-load/replicas`,
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if local {
 				concurrency = 32

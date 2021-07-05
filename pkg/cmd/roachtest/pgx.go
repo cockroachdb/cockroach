@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -24,7 +25,7 @@ var supportedPGXTag = "v4.11.0"
 
 // This test runs pgx's full test suite against a single cockroach node.
 
-func registerPgx(r *testRegistry) {
+func registerPgx(r registry.Registry) {
 	runPgx := func(
 		ctx context.Context,
 		t test.Test,
@@ -126,12 +127,11 @@ func registerPgx(r *testRegistry) {
 		)
 	}
 
-	r.Add(TestSpec{
-		Name:       "pgx",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
-		MinVersion: "v20.2.0",
-		Tags:       []string{`default`, `driver`},
+	r.Add(registry.TestSpec{
+		Name:    "pgx",
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPgx(ctx, t, c)
 		},
