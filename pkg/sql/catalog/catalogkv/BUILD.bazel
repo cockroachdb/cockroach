@@ -42,7 +42,7 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/testutils",

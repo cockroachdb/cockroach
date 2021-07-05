@@ -68,7 +68,7 @@ go_test(
     embed = [":security"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/security/securitytest",
         "//pkg/server",

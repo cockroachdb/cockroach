@@ -23,7 +23,7 @@ go_test(
         "//pkg/ccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/utilccl",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

@@ -14,7 +14,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/lease",
