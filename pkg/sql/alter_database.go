@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -280,6 +281,12 @@ type alterDatabaseDropRegionNode struct {
 	toDrop                []*typedesc.Mutable
 }
 
+var allowDropFinalRegion = settings.RegisterBoolSetting(
+	"sql.multiregion.drop_primary_region.enabled",
+	"allows dropping the PRIMARY REGION of a database if it is the last region",
+	true,
+).WithPublic()
+
 // AlterDatabaseDropRegion transforms a tree.AlterDatabaseDropRegion into a plan node.
 func (p *planner) AlterDatabaseDropRegion(
 	ctx context.Context, n *tree.AlterDatabaseDropRegion,
@@ -370,6 +377,15 @@ func (p *planner) AlterDatabaseDropRegion(
 				"You must designate another region as the primary region using "+
 					"ALTER DATABASE %s PRIMARY REGION <region name> or remove all other regions before "+
 					"attempting to drop region %q", dbDesc.GetName(), n.Region,
+			)
+		}
+
+		if allowDrop := allowDropFinalRegion.Get(&p.execCfg.Settings.SV); !allowDrop {
+			return nil, pgerror.Newf(
+				pgcode.InvalidDatabaseDefinition,
+				"databases in this cluster must have at least 1 region",
+				n.Region,
+				DefaultPrimaryRegionClusterSettingName,
 			)
 		}
 
