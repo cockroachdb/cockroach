@@ -10,7 +10,10 @@
 
 package main
 
-import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
+)
 
 func registerTests(r registry.Registry) {
 	// Helpful shell pipeline to generate the list below:
@@ -33,7 +36,7 @@ func registerTests(r registry.Registry) {
 	registerCopy(r)
 	registerDecommission(r)
 	registerDiskFull(r)
-	registerDiskStalledDetection(r)
+	tests.RegisterDiskStalledDetection(r)
 	registerDjango(r)
 	registerDrop(r)
 	registerEncryption(r)
@@ -54,7 +57,7 @@ func registerTests(r registry.Registry) {
 	registerInconsistency(r)
 	registerIndexes(r)
 	registerInterleaved(r)
-	registerJepsen(r)
+	tests.RegisterJepsen(r)
 	registerJobsMixedVersions(r)
 	registerKV(r)
 	registerKVContention(r)

@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -71,7 +72,7 @@ func registerKV(r registry.Registry) {
 		nodes := c.Spec().NodeCount - 1
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
+		c.Start(ctx, c.Range(1, nodes), option.StartArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
 
 		if opts.disableLoadSplits {
 			db := c.Conn(ctx, 1)
@@ -82,7 +83,7 @@ func registerKV(r registry.Registry) {
 		}
 
 		t.Status("running workload")
-		m := newMonitor(ctx, c, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrencyMultiplier := 64
 			if opts.concMultiplier != 0 {
@@ -250,7 +251,7 @@ func registerKVContention(r registry.Registry) {
 			// If requests ever get stuck on a transaction that was abandoned
 			// then it will take 10m for them to get unstuck, at which point the
 			// QPS threshold check in the test is guaranteed to fail.
-			args := startArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
+			args := option.StartArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
 			c.Start(ctx, args, c.Range(1, nodes))
 
 			conn := c.Conn(ctx, 1)
@@ -270,7 +271,7 @@ func registerKVContention(r registry.Registry) {
 			}
 
 			t.Status("running workload")
-			m := newMonitor(ctx, c, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				// Write to a small number of keys to generate a large amount of
 				// contention. Use a relatively high amount of concurrency and
@@ -321,7 +322,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 				if lastDown {
 					n--
 				}
-				m := newMonitor(ctx, c, c.Range(1, n))
+				m := c.NewMonitor(ctx, t, c.Range(1, n))
 				m.Go(func(ctx context.Context) error {
 					t.WorkerStatus(cmd)
 					defer t.WorkerStatus()
@@ -400,7 +401,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 
 			// If the test ever fails, the person who investigates the
 			// failure will likely be thankful for this additional logging.
-			args := startArgs(`--args=--vmodule=store=2,store_rebalancer=2`)
+			args := option.StartArgs(`--args=--vmodule=store=2,store_rebalancer=2`)
 			c.Start(ctx, args, c.Range(1, nodes))
 
 			db := c.Conn(ctx, 1)
@@ -416,7 +417,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			splitCmd := "./workload run kv --init --max-ops=1 --splits 100 {pgurl:1}"
 			c.Run(ctx, c.Node(nodes+1), splitCmd)
 
-			m := newMonitor(ctx, c, c.Nodes(1, nodes))
+			m := c.NewMonitor(ctx, t, c.Nodes(1, nodes))
 
 			// specifiedQPS is going to be the --max-rate for the kv workload.
 			const specifiedQPS = 1000
@@ -612,7 +613,7 @@ func registerKVSplits(r registry.Registry) {
 				nodes := c.Spec().NodeCount - 1
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 				c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-				c.Start(ctx, c.Range(1, nodes), startArgs(
+				c.Start(ctx, c.Range(1, nodes), option.StartArgs(
 					// NB: this works. Don't change it or only one of the two vars may actually
 					// make it to the server.
 					"--env", "COCKROACH_MEMPROF_INTERVAL=1m COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce),
@@ -620,7 +621,7 @@ func registerKVSplits(r registry.Registry) {
 				))
 
 				t.Status("running workload")
-				m := newMonitor(ctx, c, c.Range(1, nodes))
+				m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 				m.Go(func(ctx context.Context) error {
 					concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
 					splits := " --splits=" + ifLocal("2000", fmt.Sprint(item.splits))
@@ -651,7 +652,7 @@ func registerKVScalability(r registry.Registry) {
 			c.Start(ctx, c.Range(1, nodes))
 
 			t.Status("running workload")
-			m := newMonitor(ctx, c, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf("./workload run kv --init --read-percent=%d "+
 					"--splits=1000 --duration=1m "+fmt.Sprintf("--concurrency=%d", i)+
@@ -713,7 +714,7 @@ func registerKVRangeLookups(r registry.Registry) {
 		}()
 		waitForFullReplication(t, conns[0])
 
-		m := newMonitor(ctx, c, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
 			cmd := "./workload init kv --splits=1000 {pgurl:1}"

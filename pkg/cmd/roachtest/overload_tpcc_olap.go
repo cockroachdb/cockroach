@@ -56,7 +56,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 	queryLine := `"` + strings.Replace(tpccOlapQuery, "\n", " ", -1) + `"`
 	c.Run(ctx, workloadNode, "echo", queryLine, "> "+queryFileName)
 	t.Status("waiting")
-	m := newMonitor(ctx, c, crdbNodes)
+	m := c.NewMonitor(ctx, t, crdbNodes)
 	rampDuration := 2 * time.Minute
 	duration := 3 * time.Minute
 	m.Go(func(ctx context.Context) error {

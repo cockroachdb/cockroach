@@ -106,7 +106,7 @@ func runDecommission(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(pinnedNode))
 
 	for i := 1; i <= nodes; i++ {
-		c.Start(ctx, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
+		c.Start(ctx, c.Node(i), option.StartArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
 	}
 	c.Run(ctx, c.Node(pinnedNode), `./workload init kv --drop`)
 
@@ -279,7 +279,7 @@ func runDecommission(
 			if err != nil {
 				return err
 			}
-			sArgs := startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", internalAddrs[0], node))
+			sArgs := option.StartArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", internalAddrs[0], node))
 			if err := c.StartE(ctx, c.Node(node), sArgs); err != nil {
 				return err
 			}
@@ -301,7 +301,7 @@ func runDecommission(
 // those operations. We then fully decommission nodes, verifying it's an
 // irreversible operation.
 func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Cluster) {
-	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	args := option.StartArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, args)
 
@@ -776,7 +776,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 				t.Fatal(err)
 			}
 			joinAddr := internalAddrs[0]
-			c.Start(ctx, c.Node(targetNode), startArgs(
+			c.Start(ctx, c.Node(targetNode), option.StartArgs(
 				fmt.Sprintf("-a=--join %s", joinAddr),
 			))
 		}

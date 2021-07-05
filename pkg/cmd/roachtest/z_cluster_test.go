@@ -61,6 +61,7 @@ func TestClusterNodes(t *testing.T) {
 
 type testWrapper struct {
 	*testing.T
+	l *logger.Logger
 }
 
 func (t testWrapper) BuildVersion() *version.Version {
@@ -92,7 +93,6 @@ func (t testWrapper) Progress(f float64) {
 }
 
 func (t testWrapper) WorkerStatus(args ...interface{}) {
-	panic("implement me")
 }
 
 func (t testWrapper) WorkerProgress(f float64) {
@@ -108,7 +108,7 @@ func (t testWrapper) ArtifactsDir() string {
 
 // logger is part of the testI interface.
 func (t testWrapper) L() *logger.Logger {
-	return nil
+	return t.l
 }
 
 // Status is part of the testI interface.
@@ -171,8 +171,8 @@ func TestClusterMonitor(t *testing.T) {
 	}
 
 	t.Run(`success`, func(t *testing.T) {
-		c := &clusterImpl{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(context.Context) error { return nil })
 		if err := m.wait(`echo`, `1`); err != nil {
 			t.Fatal(err)
@@ -180,8 +180,8 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`dead`, func(t *testing.T) {
-		c := &clusterImpl{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
 			fmt.Printf("worker done\n")
@@ -196,8 +196,8 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`worker-fail`, func(t *testing.T) {
-		c := &clusterImpl{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(context.Context) error {
 			return errors.New(`worker-fail`)
 		})
@@ -214,8 +214,8 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`wait-fail`, func(t *testing.T) {
-		c := &clusterImpl{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
 			return ctx.Err()
@@ -234,8 +234,8 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`wait-ok`, func(t *testing.T) {
-		c := &clusterImpl{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
 			return ctx.Err()
@@ -256,8 +256,8 @@ func TestClusterMonitor(t *testing.T) {
 	// them finish pretty soon (think stress testing). As a matter of fact, `make test` waits
 	// for these child goroutines to finish (so these tests take seconds).
 	t.Run(`worker-fd-error`, func(t *testing.T) {
-		c := &clusterImpl{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(ctx context.Context) error {
 			defer func() {
 				fmt.Println("sleep returns")
@@ -278,8 +278,8 @@ func TestClusterMonitor(t *testing.T) {
 		}
 	})
 	t.Run(`worker-fd-fatal`, func(t *testing.T) {
-		c := &clusterImpl{t: testWrapper{t}, l: logger}
-		m := newMonitor(context.Background(), c)
+		c := &clusterImpl{t: testWrapper{T: t}, l: logger}
+		m := newMonitor(context.Background(), testWrapper{T: t, l: logger}, c)
 		m.Go(func(ctx context.Context) error {
 			err := execCmd(ctx, logger, "/bin/bash", "-c", "echo foo && sleep 3& wait")
 			return err
@@ -396,7 +396,7 @@ func TestLoadGroups(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%d/%d/%d", tc.numZones, tc.numRoachNodes, tc.numLoadNodes),
 			func(t *testing.T) {
-				c := &clusterImpl{t: testWrapper{t}, l: logger, spec: spec.MakeClusterSpec(spec.GCE, "", tc.numRoachNodes+tc.numLoadNodes)}
+				c := &clusterImpl{t: testWrapper{T: t}, l: logger, spec: spec.MakeClusterSpec(spec.GCE, "", tc.numRoachNodes+tc.numLoadNodes)}
 				lg := makeLoadGroups(c, tc.numZones, tc.numRoachNodes, tc.numLoadNodes)
 				require.EqualValues(t, lg, tc.loadGroups)
 			})

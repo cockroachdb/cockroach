@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -40,7 +41,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			m := newMonitor(ctx, c, c.All())
+			m := c.NewMonitor(ctx, t, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("loading fixture")
 				if _, err := db.Exec(`RESTORE DATABASE tpch FROM $1`, fixturePath); err != nil {
@@ -62,11 +63,11 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 						t.Fatal(err)
 					}
 					defer l.Close()
-					_ = execCmd(ctx, t.L(), roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
+					_ = c.RunE(ctx, c.Node(node), cmd)
 				}()
 			}
 
-			m = newMonitor(ctx, c, c.All())
+			m = c.NewMonitor(ctx, t, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("running schema change tests")
 				return waitForSchemaChanges(ctx, t.L(), db)
@@ -357,7 +358,7 @@ func makeSchemaChangeBulkIngestTest(
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 			// TODO (lucy): Remove flag once the faster import is enabled by default
-			c.Start(ctx, crdbNodes, startArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
+			c.Start(ctx, crdbNodes, option.StartArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
 
 			// Don't add another index when importing.
 			cmdWrite := fmt.Sprintf(
@@ -369,7 +370,7 @@ func makeSchemaChangeBulkIngestTest(
 
 			c.Run(ctx, workloadNode, cmdWrite)
 
-			m := newMonitor(ctx, c, crdbNodes)
+			m := c.NewMonitor(ctx, t, crdbNodes)
 
 			indexDuration := length
 			if c.IsLocal() {

@@ -132,7 +132,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 		sinkURI = kafka.sinkURL(ctx)
 	}
 
-	m := newMonitor(ctx, c, crdbNodes)
+	m := c.NewMonitor(ctx, t, crdbNodes)
 	workloadCompleteCh := make(chan struct{}, 1)
 
 	workloadStart := timeutil.Now()
@@ -255,7 +255,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 			Target:  crdbNodes.RandNode,
 			Stopper: time.After(chaosDuration),
 		}
-		m.Go(ch.Runner(c, m))
+		m.Go(ch.Runner(c, t, m))
 	}
 	m.Wait()
 
@@ -334,7 +334,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	t.Status("running workload")
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := newMonitor(workloadCtx, c, crdbNodes)
+	m := c.NewMonitor(workloadCtx, t, crdbNodes)
 	var doneAtomic int64
 	m.Go(func(ctx context.Context) error {
 		err := c.RunE(ctx, workloadNode, `./workload run bank {pgurl:1} --max-rate=10`)

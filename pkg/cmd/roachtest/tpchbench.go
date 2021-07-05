@@ -68,7 +68,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 	t.Status("starting nodes")
 	c.Start(ctx, roachNodes)
 
-	m := newMonitor(ctx, c, roachNodes)
+	m := c.NewMonitor(ctx, t, roachNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("setting up dataset")
 		err := loadTPCHDataset(ctx, t, c, b.ScaleFactor, m, roachNodes)

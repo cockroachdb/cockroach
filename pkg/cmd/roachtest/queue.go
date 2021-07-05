@@ -46,7 +46,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, c.Range(1, dbNodeCount))
 
 	runQueueWorkload := func(duration time.Duration, initTables bool) {
-		m := newMonitor(ctx, c, c.Range(1, dbNodeCount))
+		m := c.NewMonitor(ctx, t, c.Range(1, dbNodeCount))
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(dbNodeCount*64))
 			duration := fmt.Sprintf(" --duration=%s", duration.String())

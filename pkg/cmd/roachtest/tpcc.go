@@ -217,7 +217,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
 	t.Status("waiting")
-	m := newMonitor(ctx, c, crdbNodes)
+	m := c.NewMonitor(ctx, t, crdbNodes)
 	for i := range workloadInstances {
 		// Make a copy of i for the goroutine.
 		i := i
@@ -240,7 +240,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 	if opts.Chaos != nil {
 		chaos := opts.Chaos()
-		m.Go(chaos.Runner(c, m))
+		m.Go(chaos.Runner(c, t, m))
 	}
 	if opts.During != nil {
 		m.Go(opts.During)
@@ -800,9 +800,9 @@ func (s tpccBenchSpec) partitions() int {
 
 // startOpts returns any extra start options that the spec requires.
 func (s tpccBenchSpec) startOpts() []option.Option {
-	opts := []option.Option{startArgsDontEncrypt}
+	opts := []option.Option{option.StartArgsDontEncrypt}
 	if s.LoadConfig == singlePartitionedLoadgen {
-		opts = append(opts, racks(s.partitions()))
+		opts = append(opts, option.Racks(s.partitions()))
 	}
 	return opts
 }
@@ -1002,7 +1002,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				t.Fatal("distributed chaos benchmarking not supported")
 			}
 			t.Status("installing haproxy")
-			if err := c.Install(ctx, t.L(), loadNodes, "haproxy"); err != nil {
+			if err := c.Install(ctx, loadNodes, "haproxy"); err != nil {
 				t.Fatal(err)
 			}
 			c.Run(ctx, loadNodes, "./cockroach gen haproxy --insecure --url {pgurl:1}")
@@ -1017,7 +1017,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
 		}
 
-		m := newMonitor(ctx, c, roachNodes)
+		m := c.NewMonitor(ctx, t, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			t.Status("setting up dataset")
 			return loadTPCCBench(ctx, t, c, b, roachNodes, c.Node(loadNodes[0]))
@@ -1100,7 +1100,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		// *abort* the line search and whole tpccbench run. Return the errors
 		// to indicate that the specific warehouse count failed, but that the
 		// line search ought to continue.
-		m := newMonitor(ctx, c, roachNodes)
+		m := c.NewMonitor(ctx, t, roachNodes)
 
 		// If we're running chaos in this configuration, modify this config.
 		if b.Chaos {
@@ -1110,7 +1110,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				Target:  roachNodes.RandNode,
 				Stopper: loadDone,
 			}
-			m.Go(ch.Runner(c, m))
+			m.Go(ch.Runner(c, t, m))
 		}
 		if b.Distribution == multiRegion {
 			rampDur = 3 * time.Minute

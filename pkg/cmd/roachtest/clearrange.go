@@ -63,7 +63,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 		// This slows down merges, so it might hide some races.
 		//
 		// NB: the below invocation was found to actually make it to the server at the time of writing.
-		opts = append(opts, startArgs(
+		opts = append(opts, option.StartArgs(
 			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true COCKROACH_ENFORCE_CONSISTENT_STATS=true",
 		))
 	}
@@ -117,7 +117,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 		}
 	}()
 
-	m := newMonitor(ctx, c)
+	m := c.NewMonitor(ctx, t)
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(1), `./cockroach workload init kv`)
 		c.Run(ctx, c.All(), `./cockroach workload run kv --concurrency=32 --duration=1h`)

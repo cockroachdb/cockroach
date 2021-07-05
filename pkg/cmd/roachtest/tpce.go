@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -41,13 +42,13 @@ func registerTPCE(r registry.Registry) {
 
 		t.Status("installing cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-		c.Start(ctx, roachNodes, startArgs(
+		c.Start(ctx, roachNodes, option.StartArgs(
 			fmt.Sprintf("--racks=%d", racks),
 			fmt.Sprintf("--store-count=%d", opts.ssds),
 		))
 
 		t.Status("installing docker")
-		if err := c.Install(ctx, t.L(), loadNode, "docker"); err != nil {
+		if err := c.Install(ctx, loadNode, "docker"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -67,7 +68,7 @@ func registerTPCE(r registry.Registry) {
 			}
 		}()
 
-		m := newMonitor(ctx, c, roachNodes)
+		m := c.NewMonitor(ctx, t, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			const dockerRun = `sudo docker run cockroachdb/tpc-e:latest`
 

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -66,7 +67,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			var err error
 			for err == nil {
-				c.Stop(ctx, nodes, stopArgs("--sig="+sig))
+				c.Stop(ctx, nodes, option.StopArgs("--sig="+sig))
 				select {
 				case <-ctx.Done():
 					return

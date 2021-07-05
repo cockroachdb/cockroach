@@ -99,18 +99,18 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	waitForFullReplication(t, c.Conn(ctx, allNodes[0]))
 
 	t.Status("installing haproxy")
-	if err := c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
+	if err := c.Install(ctx, loadNode, "haproxy"); err != nil {
 		t.Fatal(err)
 	}
 	c.Run(ctx, loadNode, "./cockroach gen haproxy --insecure --url {pgurl:1}")
 	c.Run(ctx, loadNode, "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
-	if err := c.Install(ctx, t.L(), loadNode, "sysbench"); err != nil {
+	if err := c.Install(ctx, loadNode, "sysbench"); err != nil {
 		t.Fatal(err)
 	}
 
-	m := newMonitor(ctx, c, roachNodes)
+	m := c.NewMonitor(ctx, t, roachNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("preparing workload")
 		c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE sysbench"`)
