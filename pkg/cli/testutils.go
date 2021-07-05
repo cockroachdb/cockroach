@@ -25,7 +25,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -175,6 +177,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 	// captured.
 	c.prevStderr = stderr
 	stderr = os.Stdout
+	clisqlclient.TestingSetStderr(os.Stdout)
 
 	return c
 }
@@ -188,7 +191,7 @@ func setCLIDefaultsForTests() {
 	sqlCtx.showTimes = false
 	// Even though we pretend there is no terminal, most tests want
 	// pretty tables.
-	cliCtx.tableDisplayFormat = tableDisplayTable
+	cliCtx.tableDisplayFormat = clisqlclient.TableDisplayTable
 }
 
 // stopServer stops the test server.
@@ -200,9 +203,9 @@ func (c *TestCLI) stopServer() {
 	}
 }
 
-// restartServer stops and restarts the test server. The ServingRPCAddr() may
+// RestartServer stops and restarts the test server. The ServingRPCAddr() may
 // have changed after this method returns.
-func (c *TestCLI) restartServer(params TestCLIParams) {
+func (c *TestCLI) RestartServer(params TestCLIParams) {
 	c.stopServer()
 	log.Info(context.Background(), "restarting server")
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{
@@ -229,6 +232,7 @@ func (c *TestCLI) Cleanup() {
 
 	// Restore stderr.
 	stderr = c.prevStderr
+	clisqlclient.TestingSetStderr(c.prevStderr)
 
 	log.Info(context.Background(), "stopping server and cleaning up CLI test")
 
@@ -275,6 +279,7 @@ func captureOutput(f func()) (out string, err error) {
 	}
 	os.Stdout = w
 	stderr = w
+	clisqlclient.TestingSetStderr(w)
 
 	// Send all bytes from piped stdout through the output channel.
 	type captureResult struct {
@@ -371,7 +376,7 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 
 		return Run(args)
 	}(); err != nil {
-		cliOutputError(os.Stdout, err, true /*showSeverity*/, false /*verbose*/)
+		clierror.OutputError(os.Stdout, err, true /*showSeverity*/, false /*verbose*/)
 	}
 }
 
