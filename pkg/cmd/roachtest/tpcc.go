@@ -117,10 +117,10 @@ func setupTPCC(
 		opts.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// NB: workloadNode also needs ./cockroach because
 			// of `./cockroach workload` for usingImport.
-			c.Put(ctx, cockroach, "./cockroach", c.All())
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 			// We still use bare workload, though we could likely replace
 			// those with ./cockroach workload as well.
-			c.Put(ctx, workload, "./workload", workloadNode)
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 			c.Start(ctx, crdbNodes)
 		}
 	}
@@ -987,11 +987,11 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	loadGroups := makeLoadGroups(c, numZones, b.Nodes, numLoadGroups)
 	roachNodes := loadGroups.roachNodes()
 	loadNodes := loadGroups.loadNodes()
-	c.Put(ctx, cockroach, "./cockroach", roachNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 	// Fixture import needs './cockroach workload' on loadNodes[0],
 	// and if we use haproxy (see below) we need it on the others
 	// as well.
-	c.Put(ctx, cockroach, "./cockroach", loadNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", loadNodes)
 	// Don't encrypt in tpccbench tests.
 	c.EncryptDefault(false)
 	c.EncryptAtRandom(false)

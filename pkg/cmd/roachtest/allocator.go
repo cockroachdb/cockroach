@@ -27,7 +27,7 @@ import (
 
 func registerAllocator(r *testRegistry) {
 	runAllocator := func(ctx context.Context, t test.Test, c cluster.Cluster, start int, maxStdDev float64) {
-		c.Put(ctx, cockroach, "./cockroach")
+		c.Put(ctx, t.Cockroach(), "./cockroach")
 
 		// Start the first `start` nodes and restore a tpch fixture.
 		args := startArgs("--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
@@ -266,7 +266,7 @@ func runWideReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",
 		"--args=--vmodule=replicate_queue=6",
 	)
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, c.All(), args)
 
 	db := c.Conn(ctx, 1)

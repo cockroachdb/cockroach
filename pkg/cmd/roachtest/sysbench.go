@@ -93,7 +93,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	loadNode := c.Node(c.Spec().NodeCount)
 
 	t.Status("installing cockroach")
-	c.Put(ctx, cockroach, "./cockroach", allNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", allNodes)
 	c.Start(ctx, roachNodes)
 	waitForFullReplication(t, c.Conn(ctx, allNodes[0]))
 

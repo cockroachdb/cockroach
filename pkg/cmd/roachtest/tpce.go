@@ -39,7 +39,7 @@ func registerTPCE(r *testRegistry) {
 		racks := opts.nodes
 
 		t.Status("installing cockroach")
-		c.Put(ctx, cockroach, "./cockroach", roachNodes)
+		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 		c.Start(ctx, roachNodes, startArgs(
 			fmt.Sprintf("--racks=%d", racks),
 			fmt.Sprintf("--store-count=%d", opts.ssds),

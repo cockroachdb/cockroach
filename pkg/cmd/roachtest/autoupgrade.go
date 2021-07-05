@@ -121,7 +121,7 @@ func registerAutoUpgrade(r *testRegistry) {
 			if err := c.StopCockroachGracefullyOnNode(ctx, i); err != nil {
 				t.Fatal(err)
 			}
-			c.Put(ctx, cockroach, "./cockroach", c.Node(i))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
 			c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
@@ -143,7 +143,7 @@ func registerAutoUpgrade(r *testRegistry) {
 		if err := c.StopCockroachGracefullyOnNode(ctx, nodes); err != nil {
 			t.Fatal(err)
 		}
-		c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(nodes))
 		c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)

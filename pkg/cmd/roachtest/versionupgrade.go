@@ -263,7 +263,7 @@ func uploadVersion(
 ) (binaryName string) {
 	binaryName = "./cockroach"
 	if newVersion == "" {
-		if err := c.PutE(ctx, t.L(), cockroach, binaryName, nodes); err != nil {
+		if err := c.PutE(ctx, t.L(), t.Cockroach(), binaryName, nodes); err != nil {
 			t.Fatal(err)
 		}
 	} else if binary, ok := t.VersionsBinaryOverride()[newVersion]; ok {

@@ -63,7 +63,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			c.Put(ctx, cockroach, "./cockroach")
+			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx)
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -78,7 +78,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			c.Put(ctx, cockroach, "./cockroach")
+			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx)
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -94,8 +94,8 @@ func registerImportTPCC(r *testRegistry) {
 		timeout time.Duration, warehouses int) {
 		// Randomize starting with encryption-at-rest enabled.
 		c.EncryptAtRandom(true)
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, t.Cockroach(), "./cockroach")
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
 		c.Start(ctx)
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
@@ -185,7 +185,7 @@ func registerImportTPCH(r *testRegistry) {
 
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
-				c.Put(ctx, cockroach, "./cockroach")
+				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx)
 				conn := c.Conn(ctx, 1)
 				if _, err := conn.Exec(`CREATE DATABASE csv;`); err != nil {
@@ -329,8 +329,8 @@ func registerImportDecommissioned(r *testRegistry) {
 			warehouses = 10
 		}
 
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, t.Cockroach(), "./cockroach")
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
 		c.Start(ctx)
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)

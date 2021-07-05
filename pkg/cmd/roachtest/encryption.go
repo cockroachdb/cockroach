@@ -25,7 +25,7 @@ func registerEncryption(r *testRegistry) {
 	// to test the correctness of encryption at rest.
 	runEncryption := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		nodes := c.Spec().NodeCount
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes), startArgs("--encrypt"))
 
 		// Check that /_status/stores/local endpoint has encryption status.
