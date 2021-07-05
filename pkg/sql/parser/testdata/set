@@ -375,35 +375,34 @@ SET timezone = 'Europe/Rome' -- identifiers removed
 parse
 SET TIME ZONE INTERVAL '-7h'
 ----
-SET timezone = '-07:00:00' -- normalized!
-SET timezone = ('-07:00:00') -- fully parenthesized
-SET timezone = _ -- literals removed
-SET timezone = '-07:00:00' -- identifiers removed
+SET timezone = '-7h'::INTERVAL -- normalized!
+SET timezone = (('-7h')::INTERVAL) -- fully parenthesized
+SET timezone = _::INTERVAL -- literals removed
+SET timezone = '-7h'::INTERVAL -- identifiers removed
 
 parse
 SET TIME ZONE INTERVAL(3) '-7h'
 ----
-SET timezone = '-07:00:00' -- normalized!
-SET timezone = ('-07:00:00') -- fully parenthesized
-SET timezone = _ -- literals removed
-SET timezone = '-07:00:00' -- identifiers removed
+SET timezone = '-7h'::INTERVAL(3) -- normalized!
+SET timezone = (('-7h')::INTERVAL(3)) -- fully parenthesized
+SET timezone = _::INTERVAL(3) -- literals removed
+SET timezone = '-7h'::INTERVAL(3) -- identifiers removed
 
 parse
 SET TIME ZONE INTERVAL '-7h0m5s' HOUR TO MINUTE
 ----
-SET timezone = '-06:59:00' -- normalized!
-SET timezone = ('-06:59:00') -- fully parenthesized
-SET timezone = _ -- literals removed
-SET timezone = '-06:59:00' -- identifiers removed
+SET timezone = '-7h0m5s'::INTERVAL HOUR TO MINUTE -- normalized!
+SET timezone = (('-7h0m5s')::INTERVAL HOUR TO MINUTE) -- fully parenthesized
+SET timezone = _::INTERVAL HOUR TO MINUTE -- literals removed
+SET timezone = '-7h0m5s'::INTERVAL HOUR TO MINUTE -- identifiers removed
 
-error
+parse
 SET TIME ZONE INTERVAL 'foobar'
 ----
-at or near "EOF": syntax error: could not parse "foobar" as type interval: interval: missing number at position 0: "foobar"
-DETAIL: source SQL:
-SET TIME ZONE INTERVAL 'foobar'
-                               ^
-
+SET timezone = 'foobar'::INTERVAL -- normalized!
+SET timezone = (('foobar')::INTERVAL) -- fully parenthesized
+SET timezone = _::INTERVAL -- literals removed
+SET timezone = 'foobar'::INTERVAL -- identifiers removed
 
 parse
 SET TRANSACTION PRIORITY NORMAL, ISOLATION LEVEL SERIALIZABLE
