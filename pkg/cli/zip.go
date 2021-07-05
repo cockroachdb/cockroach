@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
@@ -183,7 +184,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	cliCtx.terminalOutput = false
 	sqlCtx.showTimes = false
 	// Use a streaming format to avoid accumulating all rows in RAM.
-	cliCtx.tableDisplayFormat = tableDisplayTSV
+	cliCtx.tableDisplayFormat = clisqlclient.TableDisplayTSV
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
 	if err != nil {
@@ -192,7 +193,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		// Note: we're not printing "connection established" because the driver we're using
 		// does late binding.
 		defer sqlConn.Close()
-		s.progress("using SQL connection URL: %s", sqlConn.url)
+		s.progress("using SQL connection URL: %s", sqlConn.GetURL())
 		s.done()
 	}
 

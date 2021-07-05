@@ -23,7 +23,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	apd "github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -145,10 +146,8 @@ func runDoctor(
 			context.Background(), descTable, namespaceTable, jobsTable, debugCtx.verbose, out)
 		if err == nil {
 			if !valid {
-				return &cliError{
-					exitCode: exit.DoctorValidationFailed(),
-					cause:    errors.New("validation failed"),
-				}
+				return clierror.NewError(errors.New("validation failed"),
+					exit.DoctorValidationFailed())
 			}
 			fmt.Fprintln(out, "No problems found!")
 		}
@@ -158,13 +157,12 @@ func runDoctor(
 	if err == nil {
 		return nil
 	}
-	return &cliError{
+	return clierror.NewError(
+		errors.Wrapf(err, "doctor command %q failed", commandName),
 		// Note: we are using "unspecified" here because the error
 		// return does not distinguish errors like connection errors
 		// etc, from errors during extraction.
-		exitCode: exit.UnspecifiedError(),
-		cause:    errors.Wrapf(err, "doctor command %q failed", commandName),
-	}
+		exit.UnspecifiedError())
 }
 
 // fromCluster collects system table data from a live cluster.

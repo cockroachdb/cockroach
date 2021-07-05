@@ -981,7 +981,7 @@ $(COCKROACH) $(COCKROACHOSS) go-install: override LINKFLAGS += \
 settings-doc-gen = $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
 
 docs/generated/settings/settings.html: $(settings-doc-gen)
-	@$(settings-doc-gen) gen settings-list --format=html > $@
+	@$(settings-doc-gen) gen settings-list --format=rawhtml > $@
 
 docs/generated/settings/settings-for-tenants.txt:  $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --without-system-only > $@

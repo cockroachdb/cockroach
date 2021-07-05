@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -144,7 +145,7 @@ type cliContext struct {
 	terminalOutput bool
 
 	// tableDisplayFormat indicates how to format result tables.
-	tableDisplayFormat tableDisplayFormat
+	tableDisplayFormat clisqlclient.TableDisplayFormat
 
 	// tableBorderMode indicates how to format tables when the display
 	// format is 'table'. This exists for compatibility
@@ -216,11 +217,11 @@ func setCliContextDefaults() {
 	cliCtx.isInteractive = false
 	// See also setCLIDefaultForTests() in cli_test.go.
 	cliCtx.terminalOutput = isatty.IsTerminal(os.Stdout.Fd())
-	cliCtx.tableDisplayFormat = tableDisplayTSV
+	cliCtx.tableDisplayFormat = clisqlclient.TableDisplayTSV
 	cliCtx.tableBorderMode = 0 /* no outer lines + no inside row lines */
 	if cliCtx.terminalOutput {
 		// See also setCLIDefaultForTests() in cli_test.go.
-		cliCtx.tableDisplayFormat = tableDisplayTable
+		cliCtx.tableDisplayFormat = clisqlclient.TableDisplayTable
 	}
 	cliCtx.cmdTimeout = 0 // no timeout
 	cliCtx.clientConnHost = ""
