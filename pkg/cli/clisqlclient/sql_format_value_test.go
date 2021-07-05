@@ -8,10 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clisqlclient_test
+
+import "github.com/cockroachdb/cockroach/pkg/cli"
 
 func Example_sql_format() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.times (bare timestamp, withtz timestamptz)"})
