@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -441,13 +442,16 @@ func (c *sqlConn) getLastQueryStatistics() (
 			errors.Newf("unexpected number of rows in SHOW LAST QUERY STATISTICS: %d", nRows)
 	}
 
-	parsedExecLatency, _ := tree.ParseDInterval(execLatencyRaw)
-	parsedServiceLatency, _ := tree.ParseDInterval(serviceLatencyRaw)
-	parsedPlanLatency, _ := tree.ParseDInterval(planLatencyRaw)
-	parsedParseLatency, _ := tree.ParseDInterval(parseLatencyRaw)
+	// This should really be the same as the session's IntervalStyle
+	// but that only effect negative intervals in the magnitude
+	// of days - and all these latencies should be positive.
+	parsedExecLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, execLatencyRaw)
+	parsedServiceLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, serviceLatencyRaw)
+	parsedPlanLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, planLatencyRaw)
+	parsedParseLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, parseLatencyRaw)
 
 	if containsJobLat {
-		parsedJobsLatency, _ := tree.ParseDInterval(jobsLatencyRaw)
+		parsedJobsLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, jobsLatencyRaw)
 		jobsLat = time.Duration(parsedJobsLatency.Duration.Nanos())
 	}
 

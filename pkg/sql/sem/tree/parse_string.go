@@ -52,7 +52,7 @@ func ParseAndRequireString(
 		if typErr != nil {
 			return nil, false, typErr
 		}
-		d, err = ParseDIntervalWithTypeMetadata(s, itm)
+		d, err = ParseDIntervalWithTypeMetadata(ctx.GetIntervalStyle(), s, itm)
 	case types.Box2DFamily:
 		d, err = ParseDBox2D(s)
 	case types.GeographyFamily:
