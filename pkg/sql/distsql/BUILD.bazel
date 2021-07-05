@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/gossip",
         "//pkg/kv",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/server/telemetry",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
@@ -51,7 +51,7 @@ go_test(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/typeconv",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/security",

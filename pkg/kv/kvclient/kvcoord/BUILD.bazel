@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
 go_library(
-    name = "kvcoord_base",
+    name = "kvcoord",
     srcs = [
         "batch.go",
         "condensable_span_set.go",
@@ -32,15 +32,15 @@ go_library(
         ":gen-txnstate-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
-    visibility = ["//visibility:private"],
+    visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/rangecache",
+        "//pkg/kv/kvclient/rangecache:with-mocks",
         "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/server/telemetry",
@@ -70,28 +70,30 @@ go_library(
     ],
 )
 
-# keep
-go_library(
-    name = "kvcoord",
-    srcs = [":mocks_transport"],
-    embed = [":kvcoord_base"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@com_github_golang_mock//gomock",
-        "@org_golang_google_grpc//metadata",
-    ],
-)
-
 gomock(
-    name = "mocks_transport",
+    name = "mock_kvcoord",
     out = "mocks_generated.go",
     interfaces = [
         "Transport",
     ],
-    library = ":kvcoord_base",
+    library = ":kvcoord",
     package = "kvcoord",
     self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
 )
+
+go_library(
+    name = "with-mocks",
+    srcs = [":mock_kvcoord"],
+    embed = [":kvcoord"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+    ],
+)
+
+# This noop target is a workaround for https://github.com/bazelbuild/bazel-gazelle/issues/1078.
+#
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord //build/bazelutil:noop
 
 go_test(
     name = "kvcoord_test",
@@ -123,8 +125,9 @@ go_test(
         "txn_test.go",
     ],
     data = glob(["testdata/**"]),
-    embed = [":kvcoord"],
+    embed = [":with-mocks"],  # keep
     deps = [
+        "//build/bazelutil:noop",
         "//pkg/base",
         "//pkg/config",
         "//pkg/config/zonepb",
@@ -132,13 +135,13 @@ go_test(
         "//pkg/gossip/simulation",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/rangecache",
+        "//pkg/kv/kvclient/rangecache:with-mocks",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/tscache",
         "//pkg/kv/kvserver/txnwait",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/security",

@@ -20,7 +20,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

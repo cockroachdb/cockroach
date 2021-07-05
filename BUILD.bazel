@@ -41,16 +41,29 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test @cockroach//pkg/util/caller:caller_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test @cockroach//pkg/util/json:json_test
 
+# These packages use github.com/golang/mock to generate mocks. The target
+# generating mocks for a given package necessarily depends on the package's
+# go_library target, which then prevents us from including those mock symbols
+# as part of the package's go_library target. We consequently export a second
+# target, embedding the first but also including the mock symbols. We need to
+# tell gazelle to resolve to this second target instead. See
+# pkg/kv/kvclient/rangefeed/BUILD.bazel for an annotated example.
+#
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb:with-mocks
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord //pkg/kv/kvclient/kvcoord:with-mocks
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed //pkg/kv/kvclient/rangefeed:with-mocks
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache //pkg/kv/kvclient/rangecache:with-mocks
+
 # See pkg/roachpb/gen/BUILD.bazel for more details.
 #
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb
-# gazelle:resolve proto go roachpb/api.proto //pkg/roachpb
-# gazelle:resolve proto go roachpb/app_stats.proto //pkg/roachpb
-# gazelle:resolve proto go roachpb/data.proto //pkg/roachpb
-# gazelle:resolve proto go roachpb/errors.proto //pkg/roachpb
-# gazelle:resolve proto go roachpb/internal_raft.proto //pkg/roachpb
-# gazelle:resolve proto go roachpb/io-formats.proto //pkg/roachpb
-# gazelle:resolve proto go roachpb/metadata.proto //pkg/roachpb
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb:with-mocks
+# gazelle:resolve proto go roachpb/api.proto //pkg/roachpb:with-mocks
+# gazelle:resolve proto go roachpb/app_stats.proto //pkg/roachpb:with-mocks
+# gazelle:resolve proto go roachpb/data.proto //pkg/roachpb:with-mocks
+# gazelle:resolve proto go roachpb/errors.proto //pkg/roachpb:with-mocks
+# gazelle:resolve proto go roachpb/internal_raft.proto //pkg/roachpb:with-mocks
+# gazelle:resolve proto go roachpb/io-formats.proto //pkg/roachpb:with-mocks
+# gazelle:resolve proto go roachpb/metadata.proto //pkg/roachpb:with-mocks
 # gazelle:exclude pkg/roachpb/batch_generated.go
 # gazelle:exclude pkg/roachpb/batch_generated-gen.go
 

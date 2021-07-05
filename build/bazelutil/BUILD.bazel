@@ -1,6 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load(":lint.bzl", "lint_binary")
 
 lint_binary(
     name = "lint",
     test = "//pkg/testutils/lint:lint_test",
+)
+
+# This noop target is a workaround for https://github.com/bazelbuild/bazel-gazelle/issues/1078.
+# We use it in //pkg/kv/kvclient/{kvcoord,rangefeed}.
+go_library(
+    name = "noop",
+    importpath = "noop",
+    visibility = ["//pkg:__subpackages__"],
 )

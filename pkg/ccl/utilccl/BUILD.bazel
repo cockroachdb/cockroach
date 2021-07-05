@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/utilccl/licenseccl",
-        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",

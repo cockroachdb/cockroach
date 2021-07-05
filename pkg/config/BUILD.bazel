@@ -17,7 +17,7 @@ go_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
@@ -39,7 +39,7 @@ go_test(
         ":config",
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
@@ -69,7 +69,7 @@ go_proto_library(
     proto = ":config_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
