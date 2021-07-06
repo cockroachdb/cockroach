@@ -653,7 +653,7 @@ func setProxyContextDefaults() {
 	proxyContext.RatelimitBaseDelay = 50 * time.Millisecond
 	proxyContext.ValidateAccessInterval = 30 * time.Second
 	proxyContext.PollConfigInterval = 30 * time.Second
-	proxyContext.IdleTimeout = 0
+	proxyContext.DrainTimeout = 0
 }
 
 var testDirectorySvrContext struct {
