@@ -39,3 +39,18 @@ var StartArgsDontEncrypt = StartArgs("--encrypt=false")
 func Racks(n int) Option {
 	return StartArgs(fmt.Sprintf("--racks=%d", n))
 }
+
+// WorkerAction informs a cluster operation that the callee is a "worker" rather
+// than the test's main goroutine.
+type WorkerAction struct{}
+
+var _ Option = WorkerAction{}
+
+// Option implements Option.
+func (o WorkerAction) Option() {}
+
+// WithWorkerAction is an option informing a cluster operation that the callee
+// is a "worker" rather than the test's main goroutine.
+func WithWorkerAction() Option {
+	return WorkerAction{}
+}

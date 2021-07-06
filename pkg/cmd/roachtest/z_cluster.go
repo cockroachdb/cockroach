@@ -658,21 +658,6 @@ type nodeSelector interface {
 	Merge(option.NodeListOption) option.NodeListOption
 }
 
-// workerAction informs a cluster operation that the callee is a "worker" rather
-// than the test's main goroutine.
-type workerAction struct{}
-
-var _ option.Option = workerAction{}
-
-func (o workerAction) Option() {}
-
-// withWorkerAction creates the workerAction option, informing a cluster
-// operation that the callee is a "worker" rather than the test's main
-// goroutine.
-func withWorkerAction() option.Option {
-	return workerAction{}
-}
-
 // clusterImpl implements cluster.Cluster.
 
 // It is safe for concurrent use by multiple goroutines.
@@ -1746,7 +1731,7 @@ func (c *clusterImpl) setStatusForClusterOpt(operation string, opts ...option.Op
 		if s, ok := o.(nodeSelector); ok {
 			nodes = s.Merge(nodes)
 		}
-		if _, ok := o.(workerAction); ok {
+		if _, ok := o.(option.WorkerAction); ok {
 			worker = true
 		}
 	}
@@ -1765,7 +1750,7 @@ func (c *clusterImpl) setStatusForClusterOpt(operation string, opts ...option.Op
 func (c *clusterImpl) clearStatusForClusterOpt(opts ...option.Option) {
 	worker := false
 	for _, o := range opts {
-		if _, ok := o.(workerAction); ok {
+		if _, ok := o.(option.WorkerAction); ok {
 			worker = true
 		}
 	}
