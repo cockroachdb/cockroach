@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -164,7 +165,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 
 			// This will only succeed if 3 nodes joined the cluster.
-			waitForFullReplication(t, dbs[0])
+			tests.WaitFor3XReplication(t, dbs[0])
 
 			execCLI := func(runNode int, extraArgs ...string) (string, error) {
 				args := []string{"./cockroach"}

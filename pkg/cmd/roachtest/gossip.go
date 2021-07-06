@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -40,7 +41,7 @@ func registerGossip(r registry.Registry) {
 		args := option.StartArgs("--args=--vmodule=*=1")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, c.All(), args)
-		waitForFullReplication(t, c.Conn(ctx, 1))
+		tests.WaitFor3XReplication(t, c.Conn(ctx, 1))
 
 		// TODO(irfansharif): We could also look at gossip_liveness to determine
 		// cluster membership as seen by each gossip module, and ensure each

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	_ "github.com/lib/pq"
 )
@@ -39,7 +40,7 @@ func runNetworkSanity(ctx context.Context, t test.Test, origC cluster.Cluster, n
 
 	db := c.Conn(ctx, 1) // unaffected by toxiproxy
 	defer db.Close()
-	waitForFullReplication(t, db)
+	tests.WaitFor3XReplication(t, db)
 
 	// NB: we're generous with latency in this test because we're checking that
 	// the upstream connections aren't affected by latency below, but the fixed
@@ -115,7 +116,7 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
-	waitForFullReplication(t, db)
+	tests.WaitFor3XReplication(t, db)
 
 	duration := time.Hour
 	if c.IsLocal() {

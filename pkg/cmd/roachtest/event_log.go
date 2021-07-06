@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -35,7 +36,7 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// a node starts and contacts the cluster.
 	db := c.Conn(ctx, 1)
 	defer db.Close()
-	waitForFullReplication(t, db)
+	tests.WaitFor3XReplication(t, db)
 
 	err := retry.ForDuration(10*time.Second, func() error {
 		rows, err := db.Query(
