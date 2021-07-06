@@ -423,7 +423,7 @@ func registerBackup(r registry.Registry) {
 			}
 
 			tInc := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
-			m = newMonitor(ctx, t, c)
+			m = c.NewMonitor(ctx, t)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`incremental backup`)
 				_, err := conn.ExecContext(ctx,
