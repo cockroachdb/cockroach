@@ -4,7 +4,7 @@ go_library(
     name = "clisqlclient",
     srcs = [
         "api.go",
-        "conn_util.go",
+        "conn.go",
         "doc.go",
         "format_table.go",
         "format_value.go",
@@ -48,7 +48,7 @@ go_library(
 go_test(
     name = "clisqlclient_test",
     srcs = [
-        "conn_util_test.go",
+        "conn_test.go",
         "format_html_test.go",
         "format_table_test.go",
         "format_value_test.go",
