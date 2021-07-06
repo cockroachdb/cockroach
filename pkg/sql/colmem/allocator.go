@@ -309,18 +309,16 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 // AppendBufferedBatch.AppendTuples. It is more efficient than PerformOperation
 // for appending to Decimal column types since the expensive portion of the cost
 // calculation only needs to be performed for the newly appended elements.
-func (a *Allocator) PerformAppend(destVecs []coldata.Vec, operation func()) {
+func (a *Allocator) PerformAppend(batch coldata.Batch, operation func()) {
+	prevLength := batch.Length()
 	var before int64
-	var prevLength int
-	for _, dest := range destVecs {
+	for _, dest := range batch.ColVecs() {
 		switch dest.CanonicalTypeFamily() {
 		case types.DecimalFamily:
 			// Don't add the size of the existing decimals to the 'before' cost, since
 			// they are guaranteed not to be modified by an append operation.
-			prevLength = dest.Length()
 			before += int64(sizeOfDecimals(dest.Decimal(), prevLength))
 		case typeconv.DatumVecCanonicalTypeFamily:
-			prevLength = dest.Length()
 			before += int64(dest.Datum().Size(prevLength))
 		default:
 			before += getVecMemoryFootprint(dest)
@@ -328,7 +326,7 @@ func (a *Allocator) PerformAppend(destVecs []coldata.Vec, operation func()) {
 	}
 	operation()
 	var after int64
-	for _, dest := range destVecs {
+	for _, dest := range batch.ColVecs() {
 		switch dest.CanonicalTypeFamily() {
 		case types.DecimalFamily:
 			after += int64(sizeOfDecimals(dest.Decimal(), prevLength))

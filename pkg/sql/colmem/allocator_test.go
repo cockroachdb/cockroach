@@ -180,6 +180,7 @@ func TestPerformAppend(t *testing.T) {
 	const maxBatchSize = 100
 	const numRows = 1000
 	const nullOk = false
+	const resetChance = 0.5
 
 	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
@@ -228,7 +229,7 @@ func TestPerformAppend(t *testing.T) {
 		afterPerformOperation := testAllocator.Used()
 
 		beforePerformAppend := afterPerformOperation
-		testAllocator.PerformAppend(batch2.ColVecs(), func() {
+		testAllocator.PerformAppend(batch2, func() {
 			batch2.AppendTuples(inputBatch, 0 /* startIdx */, inputBatch.Length())
 		})
 		afterPerformAppend := testAllocator.Used()
@@ -236,5 +237,11 @@ func TestPerformAppend(t *testing.T) {
 		performOperationMem := afterPerformOperation - beforePerformOperation
 		performAppendMem := afterPerformAppend - beforePerformAppend
 		require.Equal(t, performOperationMem, performAppendMem)
+
+		if rng.Float64() < resetChance {
+			// Reset the test batches in order to simulate reuse.
+			batch1.ResetInternalBatch()
+			batch2.ResetInternalBatch()
+		}
 	}
 }
