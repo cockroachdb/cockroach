@@ -8,14 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package clisqlclient
+package clisqlexec
 
 import (
 	"database/sql/driver"
 	"io"
+
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 )
 
-func getAllRowStrings(rows Rows, colTypes []string, showMoreChars bool) ([][]string, error) {
+func getAllRowStrings(
+	rows clisqlclient.Rows, colTypes []string, showMoreChars bool,
+) ([][]string, error) {
 	var allRows [][]string
 
 	for {
@@ -32,7 +36,9 @@ func getAllRowStrings(rows Rows, colTypes []string, showMoreChars bool) ([][]str
 	return allRows, nil
 }
 
-func getNextRowStrings(rows Rows, colTypes []string, showMoreChars bool) ([]string, error) {
+func getNextRowStrings(
+	rows clisqlclient.Rows, colTypes []string, showMoreChars bool,
+) ([]string, error) {
 	cols := rows.Columns()
 	var vals []driver.Value
 	if len(cols) > 0 {

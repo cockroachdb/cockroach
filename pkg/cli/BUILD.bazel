@@ -100,6 +100,7 @@ go_library(
         "//pkg/cli/clierror",
         "//pkg/cli/cliflags",
         "//pkg/cli/clisqlclient",
+        "//pkg/cli/clisqlexec",
         "//pkg/cli/exit",
         "//pkg/cli/syncbench",
         "//pkg/clusterversion",

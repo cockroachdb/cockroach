@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -365,9 +366,9 @@ var options = map[string]struct {
 			return sqlExecCtx.TableDisplayFormat.Set(val)
 		},
 		reset: func() error {
-			displayFormat := clisqlclient.TableDisplayTSV
+			displayFormat := clisqlexec.TableDisplayTSV
 			if sqlExecCtx.TerminalOutput {
-				displayFormat = clisqlclient.TableDisplayTable
+				displayFormat = clisqlexec.TableDisplayTable
 			}
 			sqlExecCtx.TableDisplayFormat = displayFormat
 			return nil
@@ -470,7 +471,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 		}
 		err := sqlExecCtx.PrintQueryOutput(os.Stdout,
 			[]string{"Option", "Value", "Description"},
-			clisqlclient.NewRowSliceIter(optData, "lll" /*align*/))
+			clisqlexec.NewRowSliceIter(optData, "lll" /*align*/))
 		if err != nil {
 			panic(err)
 		}
@@ -850,7 +851,7 @@ func (c *cliState) refreshTransactionStatus() {
 		return
 	}
 
-	txnString := clisqlclient.FormatVal(dbVal, dbColType,
+	txnString := clisqlexec.FormatVal(dbVal, dbColType,
 		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
 	// Change the prompt based on the response from the server.
@@ -889,7 +890,7 @@ func (c *cliState) refreshDatabaseName() string {
 			" Use SET database = <dbname> to change, CREATE DATABASE to make a new database.")
 	}
 
-	dbName := clisqlclient.FormatVal(dbVal, dbColType,
+	dbName := clisqlexec.FormatVal(dbVal, dbColType,
 		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
 	// Preserve the current database name in case of reconnects.
@@ -1188,20 +1189,20 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.invalidSyntax(errState, `%s. Try \? for help`, c.lastInputLine)
 
 	case `\x`:
-		format := clisqlclient.TableDisplayRecords
+		format := clisqlexec.TableDisplayRecords
 		switch len(cmd) {
 		case 1:
-			if sqlExecCtx.TableDisplayFormat == clisqlclient.TableDisplayRecords {
-				format = clisqlclient.TableDisplayTable
+			if sqlExecCtx.TableDisplayFormat == clisqlexec.TableDisplayRecords {
+				format = clisqlexec.TableDisplayTable
 			}
 		case 2:
 			b, err := clisqlclient.ParseBool(cmd[1])
 			if err != nil {
 				return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
 			} else if b {
-				format = clisqlclient.TableDisplayRecords
+				format = clisqlexec.TableDisplayRecords
 			} else {
-				format = clisqlclient.TableDisplayTable
+				format = clisqlexec.TableDisplayTable
 			}
 		default:
 			return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
