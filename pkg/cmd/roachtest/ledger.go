@@ -41,8 +41,8 @@ func registerLedger(r registry.Registry) {
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, t, roachNodes)
 			m.Go(func(ctx context.Context) error {
-				concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*32))
-				duration := " --duration=" + ifLocal("10s", "10m")
+				concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*32))
+				duration := " --duration=" + ifLocal(c, "10s", "10m")
 
 				cmd := fmt.Sprintf("./workload run ledger --init --histograms="+perfArtifactsDir+"/stats.json"+
 					concurrency+duration+" {pgurl%s}", gatewayNodes)

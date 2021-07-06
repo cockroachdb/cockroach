@@ -363,7 +363,7 @@ func registerTPCC(r registry.Registry) {
 
 			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
-			if local {
+			if c.IsLocal() {
 				headroomWarehouses = 10
 			}
 
@@ -393,7 +393,7 @@ func registerTPCC(r registry.Registry) {
 			// The full 6.5m import ran into out of disk errors (on 250gb machines),
 			// hence division by two.
 			bankRows := 65104166 / 2
-			if local {
+			if c.IsLocal() {
 				bankRows = 1000
 			}
 

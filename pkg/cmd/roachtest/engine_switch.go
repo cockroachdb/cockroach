@@ -36,7 +36,7 @@ func registerEngineSwitch(r registry.Registry) {
 		rocksdbArgs := option.StartArgs(append(additionalArgs, "--args=--storage-engine=rocksdb")...)
 		c.Start(ctx, roachNodes, rocksdbArgs)
 		stageDuration := 1 * time.Minute
-		if local {
+		if c.IsLocal() {
 			t.L().Printf("local mode: speeding up test\n")
 			stageDuration = 10 * time.Second
 		}

@@ -493,7 +493,7 @@ func (s tpchVecSmithcmpTest) preTestRunHook(
 	s.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 	const smithcmpSHA = "a3f41f5ba9273249c5ecfa6348ea8ee3ac4b77e3"
 	node := c.Node(1)
-	if local && runtime.GOOS != "linux" {
+	if c.IsLocal() && runtime.GOOS != "linux" {
 		t.Fatalf("must run on linux os, found %s", runtime.GOOS)
 	}
 	// This binary has been manually compiled using

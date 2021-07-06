@@ -43,7 +43,7 @@ func registerVersion(r registry.Registry) {
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
-		if local {
+		if c.IsLocal() {
 			t.L().Printf("local mode: speeding up test\n")
 			stageDuration = 10 * time.Second
 			buffer = time.Minute

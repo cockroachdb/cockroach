@@ -59,7 +59,7 @@ func importBankDataSplit(
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
 
-	if local {
+	if c.IsLocal() {
 		dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 	}
 
@@ -93,7 +93,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 	loadBackupData := func(ctx context.Context, t test.Test, c cluster.Cluster) string {
 		// This aught to be enough since this isn't a performance test.
 		rows := rows15GiB
-		if local {
+		if c.IsLocal() {
 			// Needs to be sufficiently large to give each processor a good chunk of
 			// works so the job doesn't complete immediately.
 			rows = rows5GiB
@@ -188,7 +188,7 @@ func registerBackup(r registry.Registry) {
 		Cluster: backup2TBSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
-			if local {
+			if c.IsLocal() {
 				rows = 100
 			}
 			dest := importBankData(ctx, rows, t, c)
@@ -228,7 +228,7 @@ func registerBackup(r registry.Registry) {
 
 			// ~10GiB - which is 30Gib replicated.
 			rows := rows30GiB
-			if local {
+			if c.IsLocal() {
 				rows = 100
 			}
 			dest := importBankData(ctx, rows, t, c)
@@ -349,7 +349,7 @@ func registerBackup(r registry.Registry) {
 			conn := c.Conn(ctx, 1)
 
 			duration := 5 * time.Minute
-			if local {
+			if c.IsLocal() {
 				duration = 5 * time.Second
 			}
 			warehouses := 10

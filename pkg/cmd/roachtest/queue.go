@@ -48,7 +48,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	runQueueWorkload := func(duration time.Duration, initTables bool) {
 		m := c.NewMonitor(ctx, t, c.Range(1, dbNodeCount))
 		m.Go(func(ctx context.Context) error {
-			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(dbNodeCount*64))
+			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(dbNodeCount*64))
 			duration := fmt.Sprintf(" --duration=%s", duration.String())
 			batch := " --batch 100"
 			init := ""
@@ -128,7 +128,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("error selecting queueCount from queue: %s", err)
 	}
 	maxRows := 100
-	if local {
+	if c.IsLocal() {
 		maxRows *= dbNodeCount * 64
 	}
 	if queueCount > maxRows {

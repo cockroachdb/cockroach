@@ -106,8 +106,8 @@ func (v *encryptValue) Type() string {
 	return "string"
 }
 
-func ifLocal(trueVal, falseVal string) string {
-	if local {
+func ifLocal(c cluster.Cluster, trueVal, falseVal string) string {
+	if c.IsLocal() {
 		return trueVal
 	}
 	return falseVal

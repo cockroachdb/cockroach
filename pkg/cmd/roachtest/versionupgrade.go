@@ -228,7 +228,7 @@ type versionUpgradeTest struct {
 
 func newVersionUpgradeTest(c cluster.Cluster, steps ...versionStep) *versionUpgradeTest {
 	return &versionUpgradeTest{
-		goOS:  ifLocal(runtime.GOOS, "linux"),
+		goOS:  ifLocal(c, runtime.GOOS, "linux"),
 		c:     c,
 		steps: steps,
 	}

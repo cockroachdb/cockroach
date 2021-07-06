@@ -56,7 +56,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 
 				// Set lease preferences so that all leases for the table are
 				// located in the availability zone with the load generator.
-				if !local {
+				if !c.IsLocal() {
 					t.L().Printf("setting lease preferences")
 					if _, err := conn.ExecContext(ctx, fmt.Sprintf(`
 						ALTER TABLE indexes.indexes
@@ -122,8 +122,8 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 				}
 
 				payload := " --payload=64"
-				concurrency := ifLocal("", " --concurrency="+strconv.Itoa(conc))
-				duration := " --duration=" + ifLocal("10s", "10m")
+				concurrency := ifLocal(c, "", " --concurrency="+strconv.Itoa(conc))
+				duration := " --duration=" + ifLocal(c, "10s", "10m")
 				runCmd := fmt.Sprintf("./workload run indexes --histograms="+perfArtifactsDir+"/stats.json"+
 					payload+concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, loadNode, runCmd)

@@ -424,10 +424,10 @@ func startTenantServer(
 		// "--certs-dir", "certs",
 		"--insecure",
 		"--tenant-id=" + strconv.Itoa(tenantID),
-		"--http-addr", ifLocal("127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(httpPort),
+		"--http-addr", ifLocal(c, "127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(httpPort),
 		"--kv-addrs", strings.Join(kvAddrs, ","),
 		// Don't bind to external interfaces when running locally.
-		"--sql-addr", ifLocal("127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(sqlPort),
+		"--sql-addr", ifLocal(c, "127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(sqlPort),
 	}
 	if logFlags != "" {
 		args = append(args, logFlags)

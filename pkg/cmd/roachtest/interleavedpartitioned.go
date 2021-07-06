@@ -72,7 +72,7 @@ func registerInterleaved(r registry.Registry) {
 		// Always init on an east node.
 		c.Run(ctx, cockroachEast.RandNode(), cmdInit)
 
-		duration := " --duration " + ifLocal("10s", "10m")
+		duration := " --duration " + ifLocal(c, "10s", "10m")
 		histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
 
 		createCmd := func(locality string, cockroachNodes option.NodeListOption) string {

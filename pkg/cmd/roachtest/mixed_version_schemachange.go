@@ -31,7 +31,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 100
 			concurrency := 5
-			if local {
+			if c.IsLocal() {
 				maxOps = 10
 				concurrency = 2
 			}

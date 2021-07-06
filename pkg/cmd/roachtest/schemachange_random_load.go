@@ -49,7 +49,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
-			if local {
+			if c.IsLocal() {
 				maxOps = 200
 				concurrency = 2
 			}

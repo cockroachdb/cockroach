@@ -42,7 +42,7 @@ func registerDecommission(r registry.Registry) {
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(4),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if local {
+				if c.IsLocal() {
 					duration = 5 * time.Minute
 					t.L().Printf("running with duration=%s in local mode\n", duration)
 				}
