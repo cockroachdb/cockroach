@@ -11,7 +11,7 @@
 import React from "react";
 import _ from "lodash";
 import { assert } from "chai";
-import { mount } from "enzyme";
+import { mount, ReactWrapper } from "enzyme";
 import * as sinon from "sinon";
 import classNames from "classnames/bind";
 import {
@@ -79,6 +79,10 @@ function makeExpandableTable(data: TestRow[], sortSetting: SortSetting) {
       }}
     />,
   );
+}
+
+function rowsOf(wrapper: ReactWrapper): Array<Array<string>> {
+  return wrapper.find("tr").map(tr => tr.find("td").map(td => td.text()));
 }
 
 describe("<SortedTable>", function() {
@@ -291,5 +295,34 @@ describe("<SortedTable>", function() {
       "c",
       "first row column at seconds page match",
     );
+  });
+
+  it("should update when pagination changes", function() {
+    const table = makeTable(
+      [
+        new TestRow("c", 3),
+        new TestRow("d", 4),
+        new TestRow("a", 1),
+        new TestRow("b", 2),
+      ],
+      undefined,
+      undefined,
+      {
+        current: 1,
+        pageSize: 2,
+      },
+    );
+
+    assert.deepEqual(rowsOf(table.find("tbody")), [
+      ["c", "3"],
+      ["d", "4"],
+    ]);
+
+    table.setProps({ pagination: { current: 2, pageSize: 2 } });
+
+    assert.deepEqual(rowsOf(table.find("tbody")), [
+      ["a", "1"],
+      ["b", "2"],
+    ]);
   });
 });
