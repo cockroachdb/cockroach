@@ -29,7 +29,7 @@ import (
 )
 
 func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	addrs, err := c.InternalAddr(ctx, c.All())
 	if err != nil {

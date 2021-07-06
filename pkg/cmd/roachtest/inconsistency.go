@@ -15,17 +15,18 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	_ "github.com/lib/pq"
 )
 
-func registerInconsistency(r *testRegistry) {
-	r.Add(TestSpec{
-		Name:       "inconsistency",
-		Owner:      OwnerKV,
-		MinVersion: "v19.2.2", // https://github.com/cockroachdb/cockroach/pull/42149 is new in 19.2.2
-		Cluster:    r.makeClusterSpec(3),
-		Run:        runInconsistency,
+func registerInconsistency(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "inconsistency",
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(3),
+		Run:     runInconsistency,
 	})
 }
 
@@ -35,7 +36,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.EncryptDefault(false)
 
 	nodes := c.Range(1, 3)
-	c.Put(ctx, cockroach, "./cockroach", nodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", nodes)
 	c.Start(ctx, nodes)
 
 	{
@@ -59,8 +60,8 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	//
 	// First SIGINT initiates graceful shutdown, second one initiates a
 	// "hard" (i.e. don't shed leases, etc) shutdown.
-	c.Stop(ctx, nodes, stopArgs("--sig=2", "--wait=false"))
-	c.Stop(ctx, nodes, stopArgs("--sig=2", "--wait=true"))
+	c.Stop(ctx, nodes, option.StopArgs("--sig=2", "--wait=false"))
+	c.Stop(ctx, nodes, option.StopArgs("--sig=2", "--wait=true"))
 
 	// Write an extraneous transaction record to n1's engine. This means n1 should
 	// ultimately be terminated by the consistency checker (as the other two nodes
@@ -88,10 +89,10 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"hex:016b1202000174786e2d0000000000000000000000000000000000 "+
 		"hex:120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20302a004a00")
 
-	m := newMonitor(ctx, c)
+	m := c.NewMonitor(ctx, t)
 	// If the consistency check "fails to fail", the verbose logging will help
 	// determine why.
-	c.Start(ctx, nodes, startArgs("--args='--vmodule=consistency_queue=5,replica_consistency=5,queue=5'"))
+	c.Start(ctx, nodes, option.StartArgs("--args='--vmodule=consistency_queue=5,replica_consistency=5,queue=5'"))
 	m.Go(func(ctx context.Context) error {
 		select {
 		case <-time.After(5 * time.Minute):

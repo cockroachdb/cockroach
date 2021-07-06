@@ -17,13 +17,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
 )
 
-func registerDrop(r *testRegistry) {
+func registerDrop(r registry.Registry) {
 	// TODO(tschottdorf): rearrange all tests so that their synopses are available
 	// via godoc and (some variation on) `roachtest run <testname> --help`.
 
@@ -32,11 +34,11 @@ func registerDrop(r *testRegistry) {
 	// rows). Next, it issues a `DROP` for the whole database, and sets the GC TTL
 	// to one second.
 	runDrop := func(ctx context.Context, t test.Test, c cluster.Cluster, warehouses, nodes int) {
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Range(1, nodes))
+		c.Start(ctx, c.Range(1, nodes), option.StartArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
 
-		m := newMonitor(ctx, c, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			t.WorkerStatus("importing TPCC fixture")
 			c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
@@ -156,11 +158,10 @@ func registerDrop(r *testRegistry) {
 	warehouses := 100
 	numNodes := 9
 
-	r.Add(TestSpec{
-		Name:       fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
-		Owner:      OwnerKV,
-		MinVersion: `v2.1.0`,
-		Cluster:    r.makeClusterSpec(numNodes),
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.

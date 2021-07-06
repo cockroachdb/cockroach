@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	_ "github.com/lib/pq"
@@ -35,7 +36,7 @@ func runClockJump(ctx context.Context, t test.Test, c cluster.Cluster, tc clockJ
 	}
 
 	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
 	c.Start(ctx)
@@ -92,7 +93,7 @@ type clockJumpTestCase struct {
 	aliveAfterOffset bool
 }
 
-func registerClockJumpTests(r *testRegistry) {
+func registerClockJumpTests(r registry.Registry) {
 	testCases := []clockJumpTestCase{
 		{
 			name:             "large_forward_enabled",
@@ -131,12 +132,12 @@ func registerClockJumpTests(r *testRegistry) {
 
 	for i := range testCases {
 		tc := testCases[i]
-		s := TestSpec{
+		s := registry.TestSpec{
 			Name:  "clock/jump/" + tc.name,
-			Owner: OwnerKV,
+			Owner: registry.OwnerKV,
 			// These tests muck with NTP, therefore we don't want the cluster reused
 			// by others.
-			Cluster: r.makeClusterSpec(1, spec.ReuseTagged("offset-injector")),
+			Cluster: r.MakeClusterSpec(1, spec.ReuseTagged("offset-injector")),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClockJump(ctx, t, c, tc)
 			},

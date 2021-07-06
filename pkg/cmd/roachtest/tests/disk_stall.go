@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package main
+package tests
 
 import (
 	"context"
@@ -19,25 +19,26 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskStalledDetection(r *testRegistry) {
+// RegisterDiskStalledDetection registers the disk stall test.
+func RegisterDiskStalledDetection(r registry.Registry) {
 	for _, affectsLogDir := range []bool{false, true} {
 		for _, affectsDataDir := range []bool{false, true} {
 			// Grab copies of the args because we'll pass them into a closure.
 			// Everyone's favorite bug to write in Go.
 			affectsLogDir := affectsLogDir
 			affectsDataDir := affectsDataDir
-			r.Add(TestSpec{
+			r.Add(registry.TestSpec{
 				Name: fmt.Sprintf(
 					"disk-stalled/log=%t,data=%t",
 					affectsLogDir, affectsDataDir,
 				),
-				Owner:      OwnerStorage,
-				MinVersion: "v19.2.0",
-				Cluster:    r.makeClusterSpec(1),
+				Owner:   registry.OwnerStorage,
+				Cluster: r.MakeClusterSpec(1),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runDiskStalledDetection(ctx, t, c, affectsLogDir, affectsDataDir)
 				},
@@ -49,13 +50,13 @@ func registerDiskStalledDetection(r *testRegistry) {
 func runDiskStalledDetection(
 	ctx context.Context, t test.Test, c cluster.Cluster, affectsLogDir bool, affectsDataDir bool,
 ) {
-	if local && runtime.GOOS != "linux" {
+	if c.IsLocal() && runtime.GOOS != "linux" {
 		t.Fatalf("must run on linux os, found %s", runtime.GOOS)
 	}
 
 	n := c.Node(1)
 
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Run(ctx, n, "sudo umount -f {store-dir}/faulty || true")
 	c.Run(ctx, n, "mkdir -p {store-dir}/{real,faulty} || true")
 	// Make sure the actual logs are downloaded as artifacts.
@@ -63,7 +64,7 @@ func runDiskStalledDetection(
 
 	t.Status("setting up charybdefs")
 
-	if err := execCmd(ctx, t.L(), roachprod, "install", c.MakeNodes(n), "charybdefs"); err != nil {
+	if err := c.Install(ctx, n, "charybdefs"); err != nil {
 		t.Fatal(err)
 	}
 	c.Run(ctx, n, "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real")

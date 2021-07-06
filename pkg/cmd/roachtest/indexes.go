@@ -18,37 +18,37 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func registerNIndexes(r *testRegistry, secondaryIndexes int) {
+func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 	const nodes = 6
 	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
 	if cloud == spec.AWS {
 		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
 	}
 	geoZonesStr := strings.Join(geoZones, ",")
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(geoZonesStr)),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(geoZonesStr)),
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
-		MinVersion: `v19.1.0`,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			firstAZ := geoZones[0]
 			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)
 			loadNode := c.Node(nodes + 1)
 
-			c.Put(ctx, cockroach, "./cockroach", roachNodes)
-			c.Put(ctx, workload, "./workload", loadNode)
+			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 			c.Start(ctx, roachNodes)
 			conn := c.Conn(ctx, 1)
 
 			t.Status("running workload")
-			m := newMonitor(ctx, c, roachNodes)
+			m := c.NewMonitor(ctx, t, roachNodes)
 			m.Go(func(ctx context.Context) error {
 				secondary := " --secondary-indexes=" + strconv.Itoa(secondaryIndexes)
 				initCmd := "./workload init indexes" + secondary + " {pgurl:1}"
@@ -134,11 +134,11 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 	})
 }
 
-func registerIndexes(r *testRegistry) {
+func registerIndexes(r registry.Registry) {
 	registerNIndexes(r, 2)
 }
 
-func registerIndexesBench(r *testRegistry) {
+func registerIndexesBench(r registry.Registry) {
 	for i := 0; i <= 100; i++ {
 		registerNIndexes(r, i)
 	}

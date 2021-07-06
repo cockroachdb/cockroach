@@ -19,16 +19,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerReplicaGC(r *testRegistry) {
+func registerReplicaGC(r registry.Registry) {
 	for _, restart := range []bool{true, false} {
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
-			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(6),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(6),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runReplicaGCChangedPeers(ctx, t, c, restart)
 			},
@@ -56,9 +57,9 @@ func runReplicaGCChangedPeers(
 		t.Fatal("test needs to be run with 6 nodes")
 	}
 
-	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
-	c.Put(ctx, cockroach, "./cockroach")
-	c.Put(ctx, workload, "./workload", c.Node(1))
+	args := option.StartArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 	c.Start(ctx, args, c.Range(1, 3))
 
 	h := &replicagcTestHelper{c: c, t: t}
@@ -126,7 +127,7 @@ func runReplicaGCChangedPeers(
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Start(ctx, c.Node(3), startArgs(
+	c.Start(ctx, c.Node(3), option.StartArgs(
 		"--args=--join="+internalAddrs[0],
 		"--args=--attrs="+deadNodeAttr,
 		"--args=--vmodule=raft=5,replicate_queue=5,allocator=5",

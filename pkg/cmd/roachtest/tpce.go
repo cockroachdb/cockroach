@@ -17,12 +17,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 )
 
-func registerTPCE(r *testRegistry) {
+func registerTPCE(r registry.Registry) {
 	type tpceOptions struct {
 		customers int
 		nodes     int
@@ -39,14 +41,14 @@ func registerTPCE(r *testRegistry) {
 		racks := opts.nodes
 
 		t.Status("installing cockroach")
-		c.Put(ctx, cockroach, "./cockroach", roachNodes)
-		c.Start(ctx, roachNodes, startArgs(
+		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+		c.Start(ctx, roachNodes, option.StartArgs(
 			fmt.Sprintf("--racks=%d", racks),
 			fmt.Sprintf("--store-count=%d", opts.ssds),
 		))
 
 		t.Status("installing docker")
-		if err := c.Install(ctx, t.L(), loadNode, "docker"); err != nil {
+		if err := c.Install(ctx, loadNode, "docker"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -66,7 +68,7 @@ func registerTPCE(r *testRegistry) {
 			}
 		}()
 
-		m := newMonitor(ctx, c, roachNodes)
+		m := c.NewMonitor(ctx, t, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			const dockerRun = `sudo docker run cockroachdb/tpc-e:latest`
 
@@ -109,12 +111,12 @@ func registerTPCE(r *testRegistry) {
 		{customers: 100_000, nodes: 5, cpus: 32, ssds: 2, tags: []string{"weekly"}, timeout: 36 * time.Hour},
 	} {
 		opts := opts
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", opts.customers, opts.nodes),
-			Owner:   OwnerKV,
+			Owner:   registry.OwnerKV,
 			Tags:    opts.tags,
 			Timeout: opts.timeout,
-			Cluster: r.makeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds)),
+			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runTPCE(ctx, t, c, opts)
 			},

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -93,23 +94,23 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	loadNode := c.Node(c.Spec().NodeCount)
 
 	t.Status("installing cockroach")
-	c.Put(ctx, cockroach, "./cockroach", allNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", allNodes)
 	c.Start(ctx, roachNodes)
 	waitForFullReplication(t, c.Conn(ctx, allNodes[0]))
 
 	t.Status("installing haproxy")
-	if err := c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
+	if err := c.Install(ctx, loadNode, "haproxy"); err != nil {
 		t.Fatal(err)
 	}
 	c.Run(ctx, loadNode, "./cockroach gen haproxy --insecure --url {pgurl:1}")
 	c.Run(ctx, loadNode, "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
-	if err := c.Install(ctx, t.L(), loadNode, "sysbench"); err != nil {
+	if err := c.Install(ctx, loadNode, "sysbench"); err != nil {
 		t.Fatal(err)
 	}
 
-	m := newMonitor(ctx, c, roachNodes)
+	m := c.NewMonitor(ctx, t, roachNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("preparing workload")
 		c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE sysbench"`)
@@ -128,7 +129,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	m.Wait()
 }
 
-func registerSysbench(r *testRegistry) {
+func registerSysbench(r registry.Registry) {
 	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
 		const n = 3
 		const cpus = 32
@@ -141,10 +142,10 @@ func registerSysbench(r *testRegistry) {
 			rowsPerTable: 10000000,
 		}
 
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
-			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(n+1, spec.CPU(cpus)),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(n+1, spec.CPU(cpus)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSysbench(ctx, t, c, opts)
 			},

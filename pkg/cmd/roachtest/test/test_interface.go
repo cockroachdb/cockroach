@@ -18,6 +18,7 @@ import (
 // Test is the interface through which roachtests interact with the
 // test harness.
 type Test interface {
+	Cockroach() string // path to main cockroach binary
 	Name() string
 	BuildVersion() *version.Version
 	IsBuildVersion(string) bool // "vXX.YY"
@@ -37,4 +38,8 @@ type Test interface {
 	Status(args ...interface{})
 	WorkerStatus(args ...interface{})
 	WorkerProgress(float64)
+
+	// DeprecatedWorkload returns the path to the workload binary.
+	// Don't use this, invoke `./cockroach workload` instead.
+	DeprecatedWorkload() string
 }

@@ -15,18 +15,20 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 )
 
-func registerEncryption(r *testRegistry) {
+func registerEncryption(r registry.Registry) {
 	// Note that no workload is run in this roachtest because kv roachtest
 	// ideally runs with encryption turned on to see the performance impact and
 	// to test the correctness of encryption at rest.
 	runEncryption := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		nodes := c.Spec().NodeCount
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes), startArgs("--encrypt"))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+		c.Start(ctx, c.Range(1, nodes), option.StartArgs("--encrypt"))
 
 		// Check that /_status/stores/local endpoint has encryption status.
 		adminAddrs, err := c.InternalAdminUIAddr(ctx, c.Range(1, nodes))
@@ -46,7 +48,7 @@ func registerEncryption(r *testRegistry) {
 		}
 
 		// Restart node with encryption turned on to verify old key works.
-		c.Start(ctx, c.Range(1, nodes), startArgs("--encrypt"))
+		c.Start(ctx, c.Range(1, nodes), option.StartArgs("--encrypt"))
 
 		testCLIGenKey := func(size int) error {
 			// Generate encryption store key through `./cockroach gen encryption-key -s=size aes-size.key`.
@@ -80,11 +82,10 @@ func registerEncryption(r *testRegistry) {
 	}
 
 	for _, n := range []int{1} {
-		r.Add(TestSpec{
-			Name:       fmt.Sprintf("encryption/nodes=%d", n),
-			Owner:      OwnerStorage,
-			MinVersion: "v2.1.0",
-			Cluster:    r.makeClusterSpec(n),
+		r.Add(registry.TestSpec{
+			Name:    fmt.Sprintf("encryption/nodes=%d", n),
+			Owner:   registry.OwnerStorage,
+			Cluster: r.MakeClusterSpec(n),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEncryption(ctx, t, c)
 			},

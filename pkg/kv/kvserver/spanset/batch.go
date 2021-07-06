@@ -65,11 +65,6 @@ func (i *MVCCIterator) Close() {
 	i.i.Close()
 }
 
-// Iterator returns the underlying storage.MVCCIterator.
-func (i *MVCCIterator) Iterator() storage.MVCCIterator {
-	return i.i
-}
-
 // Valid is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Valid() (bool, error) {
 	if i.err != nil {

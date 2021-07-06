@@ -16,28 +16,29 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerScrubIndexOnlyTPCC(r *testRegistry) {
+func registerScrubIndexOnlyTPCC(r registry.Registry) {
 	// numScrubRuns is set assuming a single SCRUB run (index only) takes ~1 min
 	r.Add(makeScrubTPCCTest(r, 5, 100, 30*time.Minute, "index-only", 20))
 }
 
-func registerScrubAllChecksTPCC(r *testRegistry) {
+func registerScrubAllChecksTPCC(r registry.Registry) {
 	// numScrubRuns is set assuming a single SCRUB run (all checks) takes ~2 min
 	r.Add(makeScrubTPCCTest(r, 5, 100, 30*time.Minute, "all-checks", 10))
 }
 
 func makeScrubTPCCTest(
-	r *testRegistry,
+	r registry.Registry,
 	numNodes, warehouses int,
 	length time.Duration,
 	optionName string,
 	numScrubRuns int,
-) TestSpec {
+) registry.TestSpec {
 	var stmtOptions string
 	// SCRUB checks are run at -1m to avoid contention with TPCC traffic.
 	// By the time the SCRUB queries start, the tables will have been loaded for
@@ -52,10 +53,10 @@ func makeScrubTPCCTest(
 		panic(fmt.Sprintf("Not a valid option: %s", optionName))
 	}
 
-	return TestSpec{
+	return registry.TestSpec{
 		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
-		Owner:   OwnerSQLQueries,
-		Cluster: r.makeClusterSpec(numNodes),
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   warehouses,
@@ -91,6 +92,5 @@ func makeScrubTPCCTest(
 				SetupType: usingImport,
 			})
 		},
-		MinVersion: "v19.1.0",
 	}
 }

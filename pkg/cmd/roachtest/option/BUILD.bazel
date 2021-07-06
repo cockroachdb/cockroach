@@ -4,7 +4,8 @@ go_library(
     name = "option",
     srcs = [
         "node_list_option.go",
-        "option.go",
+        "option_interface.go",
+        "options.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option",
     visibility = ["//visibility:public"],

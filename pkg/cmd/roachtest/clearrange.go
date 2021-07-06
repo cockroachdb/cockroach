@@ -17,23 +17,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
-func registerClearRange(r *testRegistry) {
+func registerClearRange(r registry.Registry) {
 	for _, checks := range []bool{true, false} {
 		checks := checks
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:  fmt.Sprintf(`clearrange/checks=%t`, checks),
-			Owner: OwnerStorage,
+			Owner: registry.OwnerStorage,
 			// 5h for import, 90 for the test. The import should take closer
 			// to <3:30h but it varies.
-			Timeout:    5*time.Hour + 90*time.Minute,
-			MinVersion: "v19.1.0",
-			Cluster:    r.makeClusterSpec(10, spec.CPU(16)),
+			Timeout: 5*time.Hour + 90*time.Minute,
+			Cluster: r.MakeClusterSpec(10, spec.CPU(16)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClearRange(ctx, t, c, checks)
 			},
@@ -44,7 +44,7 @@ func registerClearRange(r *testRegistry) {
 func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	t.Status("restoring fixture")
 	c.Start(ctx)
@@ -63,7 +63,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 		// This slows down merges, so it might hide some races.
 		//
 		// NB: the below invocation was found to actually make it to the server at the time of writing.
-		opts = append(opts, startArgs(
+		opts = append(opts, option.StartArgs(
 			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true COCKROACH_ENFORCE_CONSISTENT_STATS=true",
 		))
 	}
@@ -117,7 +117,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 		}
 	}()
 
-	m := newMonitor(ctx, c)
+	m := c.NewMonitor(ctx, t)
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(1), `./cockroach workload init kv`)
 		c.Run(ctx, c.All(), `./cockroach workload run kv --concurrency=32 --duration=1h`)

@@ -256,7 +256,6 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.TruncateLogRequest:
 			case *roachpb.RequestLeaseRequest:
 			case *roachpb.CheckConsistencyRequest:
-			case *roachpb.WriteBatchRequest:
 			case *roachpb.AdminScatterRequest:
 			case *roachpb.AddSSTableRequest:
 			case *roachpb.MigrateRequest:
@@ -747,28 +746,6 @@ func (b *Batch) adminRelocateRange(
 		},
 		VoterTargets:    voterTargets,
 		NonVoterTargets: nonVoterTargets,
-	}
-	b.appendReqs(req)
-	b.initResult(1, 0, notRaw, nil)
-}
-
-// writeBatch is only exported on DB.
-func (b *Batch) writeBatch(s, e interface{}, data []byte) {
-	begin, err := marshalKey(s)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	end, err := marshalKey(e)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	span := roachpb.Span{Key: begin, EndKey: end}
-	req := &roachpb.WriteBatchRequest{
-		RequestHeader: roachpb.RequestHeaderFromSpan(span),
-		DataSpan:      span,
-		Data:          data,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

@@ -15,11 +15,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 )
 
-func registerAcceptance(r *testRegistry) {
-	testCases := map[Owner][]struct {
+func registerAcceptance(r registry.Registry) {
+	testCases := map[registry.Owner][]struct {
 		name       string
 		fn         func(ctx context.Context, t test.Test, c cluster.Cluster)
 		skip       string
@@ -27,7 +29,7 @@ func registerAcceptance(r *testRegistry) {
 		numNodes   int
 		timeout    time.Duration
 	}{
-		OwnerKV: {
+		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
 			{name: "event-log", fn: runEventLog},
 			{name: "gossip/peerings", fn: runGossipPeerings},
@@ -58,9 +60,9 @@ func registerAcceptance(r *testRegistry) {
 				timeout:    30 * time.Minute,
 			},
 		},
-		OwnerServer: {
-			{name: "build-info", fn: runBuildInfo},
-			{name: "build-analyze", fn: runBuildAnalyze},
+		registry.OwnerServer: {
+			{name: "build-info", fn: tests.RunBuildInfo},
+			{name: "build-analyze", fn: tests.RunBuildAnalyze},
 			{name: "cli/node-status", fn: runCLINodeStatus},
 			{name: "cluster-init", fn: runClusterInit},
 			{
@@ -71,7 +73,7 @@ func registerAcceptance(r *testRegistry) {
 		},
 	}
 	tags := []string{"default", "quick"}
-	specTemplate := TestSpec{
+	specTemplate := registry.TestSpec{
 		// NB: teamcity-post-failures.py relies on the acceptance tests
 		// being named acceptance/<testname> and will avoid posting a
 		// blank issue for the "acceptance" parent test. Make sure to
@@ -93,10 +95,9 @@ func registerAcceptance(r *testRegistry) {
 
 			spec := specTemplate
 			spec.Owner = owner
-			spec.Cluster = r.makeClusterSpec(numNodes)
+			spec.Cluster = r.MakeClusterSpec(numNodes)
 			spec.Skip = tc.skip
 			spec.Name = specTemplate.Name + "/" + tc.name
-			spec.MinVersion = tc.minVersion
 			if tc.timeout != 0 {
 				spec.Timeout = tc.timeout
 			}

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -28,7 +29,7 @@ import (
 func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Use a single-node cluster which speeds the stop/start cycle.
 	nodes := c.Node(1)
-	c.Put(ctx, cockroach, "./cockroach", nodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", nodes)
 
 	// In a loop, bootstrap a new single-node cluster and immediately kill
 	// it. This is more effective at finding problems than restarting an existing
@@ -66,7 +67,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			var err error
 			for err == nil {
-				c.Stop(ctx, nodes, stopArgs("--sig="+sig))
+				c.Stop(ctx, nodes, option.StopArgs("--sig="+sig))
 				select {
 				case <-ctx.Done():
 					return

@@ -230,8 +230,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// Check if the columns exist on the table.
 				for _, column := range d.Columns {
-					if _, err := n.tableDesc.FindColumnWithName(column.Column); err != nil {
+					col, err := n.tableDesc.FindColumnWithName(column.Column)
+					if err != nil {
 						return err
+					}
+					if col.IsInaccessible() {
+						return pgerror.Newf(
+							pgcode.UndefinedColumn,
+							"column %q is inaccessible and cannot be referenced by a unique constraint",
+							column.Column,
+						)
 					}
 				}
 				// If the index is named, ensure that the name is unique.

@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "engineccl",
     srcs = [
-        "batch_repr.go",
         "ctr_stream.go",
         "encrypted_fs.go",
         "pebble_key_manager.go",
@@ -14,13 +13,11 @@ go_library(
     deps = [
         "//pkg/ccl/baseccl",
         "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
-        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_gogo_protobuf//proto",
@@ -31,7 +28,6 @@ go_test(
     name = "engineccl_test",
     size = "small",
     srcs = [
-        "batch_repr_test.go",
         "bench_test.go",
         "ctr_stream_test.go",
         "encrypted_fs_test.go",

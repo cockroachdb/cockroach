@@ -12,6 +12,8 @@ package descpb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -66,6 +68,13 @@ func (desc *ColumnDescriptor) CheckCanBeOutboundFKRef() error {
 // CheckCanBeInboundFKRef returns whether the given column can be on the
 // referenced (target) side of a foreign key relation.
 func (desc *ColumnDescriptor) CheckCanBeInboundFKRef() error {
+	if desc.Inaccessible {
+		return pgerror.Newf(
+			pgcode.UndefinedColumn,
+			"column %q is inaccessible and cannot be referenced by a foreign key",
+			desc.Name,
+		)
+	}
 	if desc.Virtual {
 		return unimplemented.NewWithIssuef(
 			59671, "virtual column %q cannot be referenced by a foreign key",
