@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -294,6 +295,11 @@ func importPlanHook(
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
 		return nil, nil, nil, false, nil
+	}
+
+	if !importStmt.Bundle && !importStmt.Into {
+		p.BufferClientNotice(ctx, pgnotice.Newf("IMPORT TABLE has been deprecated in 21.2, and will be removed in a future version."+
+			" Instead, use CREATE TABLE with the desired schema, and IMPORT INTO the newly created table."))
 	}
 
 	addToFileFormatTelemetry(importStmt.FileFormat, "attempted")
