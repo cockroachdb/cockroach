@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
@@ -78,7 +79,7 @@ func runSchemaChangeMixedVersions(
 	concurrency int,
 	buildVersion version.Version,
 ) {
-	predecessorVersion, err := PredecessorVersion(buildVersion)
+	predecessorVersion, err := tests.PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

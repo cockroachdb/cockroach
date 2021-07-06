@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
@@ -218,7 +219,7 @@ func registerVersion(r registry.Registry) {
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				pred, err := PredecessorVersion(*t.BuildVersion())
+				pred, err := tests.PredecessorVersion(*t.BuildVersion())
 				if err != nil {
 					t.Fatal(err)
 				}
