@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -129,6 +130,15 @@ func (pm *Prometheus) Snapshot(
 	)
 }
 
+const (
+	// DefaultScrapeInterval is the default interval between prometheus
+	// scrapes.
+	DefaultScrapeInterval = 10 * time.Second
+	// DefaultScrapeTimeout is the maximum amount of time before a scrape
+	// is timed out.
+	DefaultScrapeTimeout = 5 * time.Second
+)
+
 // makeYAMLConfig creates a prometheus YAML config for the server to use.
 func makeYAMLConfig(ctx context.Context, c cluster, scrapeConfigs []ScrapeConfig) (string, error) {
 	type yamlStaticConfig struct {
@@ -150,8 +160,8 @@ func makeYAMLConfig(ctx context.Context, c cluster, scrapeConfigs []ScrapeConfig
 	}
 
 	cfg := yamlConfig{}
-	cfg.Global.ScrapeInterval = "10s"
-	cfg.Global.ScrapeTimeout = "5s"
+	cfg.Global.ScrapeInterval = DefaultScrapeInterval.String()
+	cfg.Global.ScrapeTimeout = DefaultScrapeTimeout.String()
 
 	for _, scrapeConfig := range scrapeConfigs {
 		var targets []string
