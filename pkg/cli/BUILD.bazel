@@ -312,6 +312,7 @@ go_test(
         "//pkg/build",
         "//pkg/cli/clierror",
         "//pkg/cli/cliflags",
+        "//pkg/cli/clisqlclient",
         "//pkg/cli/exit",
         "//pkg/gossip",
         "//pkg/gossip/resolver",

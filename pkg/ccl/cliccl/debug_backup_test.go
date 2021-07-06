@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -185,7 +186,7 @@ func TestListBackups(t *testing.T) {
 			{"." + ts[2].GoTime().Format(backupccl.DateBasedIntoFolderName)},
 		}
 		cols := []string{"path"}
-		rowSliceIter := cli.NewRowSliceIter(rows, "l" /*align*/)
+		rowSliceIter := clisqlclient.NewRowSliceIter(rows, "l" /*align*/)
 		if err := cli.PrintQueryOutput(&buf, cols, rowSliceIter); err != nil {
 			t.Fatalf("TestListBackups: PrintQueryOutput: %v", err)
 		}
@@ -227,7 +228,7 @@ func TestListIncremental(t *testing.T) {
 		{"/fooFolder" + expectedIncFolder2, ts[1].GoTime().Format(time.RFC3339), ts[2].GoTime().Format(time.RFC3339)},
 	}
 	cols := []string{"path", "start time", "end time"}
-	rowSliceIter := cli.NewRowSliceIter(rows, "lll" /*align*/)
+	rowSliceIter := clisqlclient.NewRowSliceIter(rows, "lll" /*align*/)
 	if err := cli.PrintQueryOutput(&buf, cols, rowSliceIter); err != nil {
 		t.Fatalf("TestListIncremental: PrintQueryOutput: %v", err)
 	}

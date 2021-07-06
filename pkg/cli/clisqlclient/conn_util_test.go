@@ -30,11 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Temporary binding to simplify during code migration.
-// TODO(knz): Remove this and replace all calls to MakeQuery().
-var makeQuery = clisqlclient.MakeQuery
-
-func makeSQLConn(url string) *clisqlclient.Conn {
+func makeSQLConn(url string) clisqlclient.Conn {
 	bf := false
 	return clisqlclient.MakeSQLConn(url,
 		false, /* isInteractive */
@@ -47,7 +43,7 @@ func makeSQLConn(url string) *clisqlclient.Conn {
 }
 
 func runQueryAndFormatResults(
-	conn *clisqlclient.Conn, w io.Writer, fn clisqlclient.QueryFn,
+	conn clisqlclient.Conn, w io.Writer, fn clisqlclient.QueryFn,
 ) (err error) {
 	return clisqlclient.RunQueryAndFormatResults(conn, w, fn,
 		clisqlclient.TableDisplayTable,
@@ -125,7 +121,7 @@ func TestConnRecover(t *testing.T) {
 // to use the new test server's port number. This is necessary because the port
 // number is selected randomly.
 func simulateServerRestart(
-	t *testing.T, c *cli.TestCLI, p cli.TestCLIParams, conn *clisqlclient.Conn,
+	t *testing.T, c *cli.TestCLI, p cli.TestCLIParams, conn clisqlclient.Conn,
 ) func() {
 	c.RestartServer(p)
 	url2, cleanup2 := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
@@ -162,7 +158,7 @@ SET
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
-	cols, rows, err := clisqlclient.RunQuery(conn, makeQuery(`SHOW COLUMNS FROM system.namespace`), false)
+	cols, rows, err := clisqlclient.RunQuery(conn, clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +187,7 @@ SET
 	}
 
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SHOW COLUMNS FROM system.namespace`)); err != nil {
+		clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -212,7 +208,7 @@ SET
 
 	// Test placeholders.
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor")); err != nil {
+		clisqlclient.MakeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -229,7 +225,7 @@ SET
 
 	// Test multiple results.
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SELECT 1 AS "1"; SELECT 2 AS "2", 3 AS "3"; SELECT 'hello' AS "'hello'"`)); err != nil {
+		clisqlclient.MakeQuery(`SELECT 1 AS "1"; SELECT 2 AS "2", 3 AS "3"; SELECT 'hello' AS "'hello'"`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -269,7 +265,7 @@ func TestUtfName(t *testing.T) {
 	var b bytes.Buffer
 
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`CREATE DATABASE test_utf;
+		clisqlclient.MakeQuery(`CREATE DATABASE test_utf;
 CREATE TABLE test_utf.żółw (id INT PRIMARY KEY, value INT);
 ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
 		t.Fatal(err)
@@ -277,7 +273,7 @@ ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
 
 	b.Reset()
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SHOW TABLES FROM test_utf;`)); err != nil {
+		clisqlclient.MakeQuery(`SHOW TABLES FROM test_utf;`)); err != nil {
 		t.Fatal(err)
 	}
 	expected := `
@@ -292,7 +288,7 @@ ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
 	b.Reset()
 
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SHOW CONSTRAINTS FROM test_utf.żółw;`)); err != nil {
+		clisqlclient.MakeQuery(`SHOW CONSTRAINTS FROM test_utf.żółw;`)); err != nil {
 		t.Fatal(err)
 	}
 	expected = `
@@ -322,7 +318,7 @@ func TestTransactionRetry(t *testing.T) {
 	defer conn.Close()
 
 	var tries int
-	err := conn.ExecTxn(func(conn *clisqlclient.Conn) error {
+	err := conn.ExecTxn(func(conn clisqlclient.TxBoundConn) error {
 		tries++
 		if tries > 2 {
 			return nil

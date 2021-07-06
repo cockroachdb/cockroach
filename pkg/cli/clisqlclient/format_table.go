@@ -29,10 +29,10 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-// rowStrIter is an iterator interface for the PrintQueryOutput function. It is
+// RowStrIter is an iterator interface for the PrintQueryOutput function. It is
 // used so that results can be streamed to the row formatters as they arrive
 // to the CLI.
-type rowStrIter interface {
+type RowStrIter interface {
 	Next() (row []string, err error)
 	ToSlice() (allRows [][]string, err error)
 	Align() []int
@@ -96,7 +96,7 @@ func NewRowSliceIter(allRows [][]string, align string) RowStrIter {
 }
 
 type rowIter struct {
-	rows          *sqlRows
+	rows          Rows
 	colTypes      []string
 	showMoreChars bool
 }
@@ -138,10 +138,10 @@ func (iter *rowIter) Align() []int {
 	return align
 }
 
-func newRowIter(rows *sqlRows, showMoreChars bool) *rowIter {
+func newRowIter(rows Rows, showMoreChars bool) *rowIter {
 	return &rowIter{
 		rows:          rows,
-		colTypes:      rows.getColTypes(),
+		colTypes:      rows.ColumnTypeNames(),
 		showMoreChars: showMoreChars,
 	}
 }
@@ -157,7 +157,7 @@ func newRowIter(rows *sqlRows, showMoreChars bool) *rowIter {
 //   returns true.
 type rowReporter interface {
 	describe(w io.Writer, cols []string) error
-	beforeFirstRow(w io.Writer, allRows rowStrIter) error
+	beforeFirstRow(w io.Writer, allRows RowStrIter) error
 	iter(w io.Writer, rowIdx int, row []string) error
 	doneRows(w io.Writer, seenRows int) error
 	doneNoRows(w io.Writer) error
@@ -176,7 +176,7 @@ func render(
 	r rowReporter,
 	w io.Writer,
 	cols []string,
-	iter rowStrIter,
+	iter RowStrIter,
 	completedHook func(),
 	noRowsHook func() (bool, error),
 ) (err error) {
@@ -306,7 +306,7 @@ func (p *asciiTableReporter) describe(w io.Writer, cols []string) error {
 	return nil
 }
 
-func (p *asciiTableReporter) beforeFirstRow(w io.Writer, iter rowStrIter) error {
+func (p *asciiTableReporter) beforeFirstRow(w io.Writer, iter RowStrIter) error {
 	if p.table == nil {
 		return nil
 	}
@@ -423,7 +423,7 @@ func (p *csvReporter) iter(_ io.Writer, _ int, row []string) error {
 	return nil
 }
 
-func (p *csvReporter) beforeFirstRow(_ io.Writer, _ rowStrIter) error { return nil }
+func (p *csvReporter) beforeFirstRow(_ io.Writer, _ RowStrIter) error { return nil }
 func (p *csvReporter) doneNoRows(_ io.Writer) error                   { return nil }
 
 func (p *csvReporter) doneRows(w io.Writer, seenRows int) error {
@@ -449,7 +449,7 @@ func (p *rawReporter) iter(w io.Writer, rowIdx int, row []string) error {
 	return nil
 }
 
-func (p *rawReporter) beforeFirstRow(_ io.Writer, _ rowStrIter) error { return nil }
+func (p *rawReporter) beforeFirstRow(_ io.Writer, _ RowStrIter) error { return nil }
 func (p *rawReporter) doneNoRows(_ io.Writer) error                   { return nil }
 
 func (p *rawReporter) doneRows(w io.Writer, nRows int) error {
@@ -480,7 +480,7 @@ func (p *htmlReporter) describe(w io.Writer, cols []string) error {
 	return nil
 }
 
-func (p *htmlReporter) beforeFirstRow(w io.Writer, _ rowStrIter) error {
+func (p *htmlReporter) beforeFirstRow(w io.Writer, _ RowStrIter) error {
 	fmt.Fprintln(w, "<tbody>")
 	return nil
 }
@@ -580,7 +580,7 @@ func (p *recordReporter) doneRows(w io.Writer, seenRows int) error {
 	return nil
 }
 
-func (p *recordReporter) beforeFirstRow(_ io.Writer, _ rowStrIter) error { return nil }
+func (p *recordReporter) beforeFirstRow(_ io.Writer, _ RowStrIter) error { return nil }
 func (p *recordReporter) doneNoRows(_ io.Writer) error                   { return nil }
 
 type sqlReporter struct {
@@ -620,7 +620,7 @@ func (p *sqlReporter) iter(w io.Writer, _ int, row []string) error {
 	return nil
 }
 
-func (p *sqlReporter) beforeFirstRow(_ io.Writer, _ rowStrIter) error { return nil }
+func (p *sqlReporter) beforeFirstRow(_ io.Writer, _ RowStrIter) error { return nil }
 func (p *sqlReporter) doneNoRows(_ io.Writer) error                   { return nil }
 func (p *sqlReporter) doneRows(w io.Writer, seenRows int) error {
 	fmt.Fprintf(w, "-- %d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
