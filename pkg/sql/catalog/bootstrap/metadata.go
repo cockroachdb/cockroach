@@ -269,9 +269,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.NamespaceTable)
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.DescriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.UsersTable)
-	if target.codec.ForSystemTenant() {
-		target.AddDescriptor(keys.SystemDatabaseID, systemschema.ZonesTable)
-	}
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ZonesTable)
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SettingsTable)
 	if !target.codec.ForSystemTenant() {
 		// Only add the descriptor ID sequence if this is a non-system tenant.

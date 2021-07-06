@@ -71,6 +71,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.SpanConfigurationsTable),
 		spanConfigurationsTokensTableMigration,
 	),
+	migration.NewTenantMigration(
+		"add system.zones table to secondary tenants",
+		toCV(clusterversion.ZonesTableForSecondaryTenants),
+		zonesTableForSecondaryTenants,
+	),
 }
 
 func init() {

@@ -304,6 +304,11 @@ const (
 	// store all KV span configs.
 	SpanConfigurationsTable
 
+	// ZonesTableForSecondaryTenants adds the zones system table for all secondary
+	// tenants. This doesn't affect the system tenant, as the system tenant
+	// already has the zones table.
+	ZonesTableForSecondaryTenants
+
 	// Step (1): Add new versions here.
 )
 
@@ -507,6 +512,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     SpanConfigurationsTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 14},
+	},
+	{
+		Key:     ZonesTableForSecondaryTenants,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 15},
 	},
 
 	// Step (2): Add new versions here.

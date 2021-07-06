@@ -11,6 +11,7 @@ go_library(
         "protected_ts_meta_migration.go",
         "span_configurations.go",
         "truncated_state.go",
+        "zones.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrations",
     visibility = ["//visibility:public"],
