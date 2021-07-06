@@ -29,39 +29,38 @@ Stage 0
     - 2
     TableID: 52
     Unique: true
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    IndexID: 1
+    TableID: 52
 Stage 1
+  *scop.MakeDroppedIndexDeleteOnly
+    IndexID: 1
+    TableID: 52
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
 Stage 2
+  *scop.MakeIndexAbsent
+    IndexID: 1
+    TableID: 52
+Stage 3
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 3
+Stage 4
   scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 4
+Stage 5
   *scop.ValidateUniqueIndex
     IndexID: 2
     TableID: 52
-Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+Stage 6
   *scop.MakeAddedPrimaryIndexPublic
     IndexID: 2
     TableID: 52
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
-    TableID: 52
-Stage 6
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 52
-Stage 7
-  *scop.MakeIndexAbsent
-    IndexID: 1
+  *scop.MakeColumnPublic
+    ColumnID: 2
     TableID: 52
 
 deps
@@ -71,10 +70,10 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
   to:   [PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}, DELETE_AND_WRITE_ONLY]
 - from: [Column:{DescID: 52, ColumnID: 2, ElementName: "j"}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}, PUBLIC]
-- from: [PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}, PUBLIC]
-  to:   [PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}, DELETE_AND_WRITE_ONLY]
+- from: [PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}, DELETE_ONLY]
+  to:   [Column:{DescID: 52, ColumnID: 2, ElementName: "j"}, DELETE_ONLY]
 - from: [PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}, DELETE_AND_WRITE_ONLY]
-  to:   [PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}, DELETE_ONLY]
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
@@ -104,39 +103,38 @@ Stage 0
     - 2
     TableID: 52
     Unique: true
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    IndexID: 1
+    TableID: 52
 Stage 1
+  *scop.MakeDroppedIndexDeleteOnly
+    IndexID: 1
+    TableID: 52
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
 Stage 2
+  *scop.MakeIndexAbsent
+    IndexID: 1
+    TableID: 52
+Stage 3
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 3
+Stage 4
   scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 4
+Stage 5
   *scop.ValidateUniqueIndex
     IndexID: 2
     TableID: 52
-Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+Stage 6
   *scop.MakeAddedPrimaryIndexPublic
     IndexID: 2
     TableID: 52
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
-    TableID: 52
-Stage 6
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 52
-Stage 7
-  *scop.MakeIndexAbsent
-    IndexID: 1
+  *scop.MakeColumnPublic
+    ColumnID: 2
     TableID: 52
 
 ops
@@ -144,6 +142,18 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
 Stage 0
+  *scop.MakeAddedColumnDeleteOnly
+    Column:
+      DefaultExpr: 456:::INT8
+      ID: 3
+      Name: k
+      Nullable: true
+      Type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    FamilyName: primary
+    TableID: 52
   *scop.MakeAddedColumnDeleteOnly
     Column:
       DefaultExpr: 123:::INT8
@@ -169,57 +179,44 @@ Stage 0
     - 3
     TableID: 52
     Unique: true
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      DefaultExpr: 456:::INT8
-      ID: 3
-      Name: k
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    IndexID: 1
     TableID: 52
 Stage 1
+  *scop.MakeDroppedIndexDeleteOnly
+    IndexID: 1
+    TableID: 52
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
 Stage 2
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 2
+  *scop.MakeIndexAbsent
+    IndexID: 1
     TableID: 52
+Stage 3
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 3
     TableID: 52
-Stage 3
+  *scop.MakeAddedColumnDeleteAndWriteOnly
+    ColumnID: 2
+    TableID: 52
+Stage 4
   scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 4
+Stage 5
   *scop.ValidateUniqueIndex
     IndexID: 2
     TableID: 52
-Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+Stage 6
   *scop.MakeAddedPrimaryIndexPublic
     IndexID: 2
-    TableID: 52
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
     TableID: 52
   *scop.MakeColumnPublic
     ColumnID: 3
     TableID: 52
-Stage 6
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 52
-Stage 7
-  *scop.MakeIndexAbsent
-    IndexID: 1
+  *scop.MakeColumnPublic
+    ColumnID: 2
     TableID: 52
 
 ops
@@ -250,39 +247,38 @@ Stage 0
     - 2
     TableID: 52
     Unique: true
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    IndexID: 1
+    TableID: 52
 Stage 1
+  *scop.MakeDroppedIndexDeleteOnly
+    IndexID: 1
+    TableID: 52
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
 Stage 2
+  *scop.MakeIndexAbsent
+    IndexID: 1
+    TableID: 52
+Stage 3
   *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-Stage 3
+Stage 4
   scop.BackfillIndex
     IndexID: 2
     TableID: 52
-Stage 4
+Stage 5
   *scop.ValidateUniqueIndex
     IndexID: 2
     TableID: 52
-Stage 5
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+Stage 6
   *scop.MakeAddedPrimaryIndexPublic
     IndexID: 2
     TableID: 52
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
-    TableID: 52
-Stage 6
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 52
-Stage 7
-  *scop.MakeIndexAbsent
-    IndexID: 1
+  *scop.MakeColumnPublic
+    ColumnID: 2
     TableID: 52
 
 
@@ -295,29 +291,6 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
 Stage 0
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ID: 2
-      Name: a
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
-  *scop.MakeAddedIndexDeleteOnly
-    IndexID: 2
-    IndexName: new_primary_key
-    KeyColumnDirections:
-    - 0
-    KeyColumnIDs:
-    - 1
-    ShardedDescriptor: {}
-    StoreColumnIDs:
-    - 2
-    TableID: 52
-    Unique: true
   *scop.MakeAddedColumnDeleteOnly
     Column:
       ID: 3
@@ -342,64 +315,86 @@ Stage 0
     - 3
     TableID: 53
     Unique: true
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    IndexID: 1
+    TableID: 53
+  *scop.MakeAddedColumnDeleteOnly
+    Column:
+      ID: 2
+      Name: a
+      Nullable: true
+      Type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    FamilyName: primary
+    TableID: 52
+  *scop.MakeAddedIndexDeleteOnly
+    IndexID: 2
+    IndexName: new_primary_key
+    KeyColumnDirections:
+    - 0
+    KeyColumnIDs:
+    - 1
+    ShardedDescriptor: {}
+    StoreColumnIDs:
+    - 2
+    TableID: 52
+    Unique: true
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    IndexID: 1
+    TableID: 52
 Stage 1
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
+  *scop.MakeDroppedIndexDeleteOnly
+    IndexID: 1
+    TableID: 53
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 53
+  *scop.MakeDroppedIndexDeleteOnly
+    IndexID: 1
+    TableID: 52
+  *scop.MakeAddedIndexDeleteAndWriteOnly
+    IndexID: 2
+    TableID: 52
 Stage 2
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 2
-    TableID: 52
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 3
+  *scop.MakeIndexAbsent
+    IndexID: 1
     TableID: 53
+  *scop.MakeIndexAbsent
+    IndexID: 1
+    TableID: 52
 Stage 3
-  scop.BackfillIndex
-    IndexID: 2
-    TableID: 52
-  scop.BackfillIndex
-    IndexID: 2
+  *scop.MakeAddedColumnDeleteAndWriteOnly
+    ColumnID: 3
     TableID: 53
-Stage 4
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 52
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 53
-Stage 5
-  *scop.MakeColumnPublic
+  *scop.MakeAddedColumnDeleteAndWriteOnly
     ColumnID: 2
     TableID: 52
-  *scop.MakeAddedPrimaryIndexPublic
+Stage 4
+  scop.BackfillIndex
+    IndexID: 2
+    TableID: 53
+  scop.BackfillIndex
     IndexID: 2
     TableID: 52
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
+Stage 5
+  *scop.ValidateUniqueIndex
+    IndexID: 2
+    TableID: 53
+  *scop.ValidateUniqueIndex
+    IndexID: 2
     TableID: 52
+Stage 6
+  *scop.MakeAddedPrimaryIndexPublic
+    IndexID: 2
+    TableID: 53
   *scop.MakeColumnPublic
     ColumnID: 3
     TableID: 53
   *scop.MakeAddedPrimaryIndexPublic
     IndexID: 2
-    TableID: 53
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
-    TableID: 53
-Stage 6
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
     TableID: 52
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 53
-Stage 7
-  *scop.MakeIndexAbsent
-    IndexID: 1
+  *scop.MakeColumnPublic
+    ColumnID: 2
     TableID: 52
-  *scop.MakeIndexAbsent
-    IndexID: 1
-    TableID: 53
