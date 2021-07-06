@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -230,7 +231,7 @@ func setSQLConnContextDefaults() {
 	sqlConnCtx.EnableServerExecutionTimings = false
 }
 
-var sqlExecCtx = clisqlclient.ExecContext{
+var sqlExecCtx = clisqlexec.Context{
 	CliCtx: &cliCtx.Context,
 }
 
@@ -239,7 +240,7 @@ var sqlExecCtx = clisqlclient.ExecContext{
 //
 // This binds PrintQueryOutput to this package's common/global
 // CLI configuration, for use by other packages like the CCL CLI.
-func PrintQueryOutput(w io.Writer, cols []string, allRows clisqlclient.RowStrIter) error {
+func PrintQueryOutput(w io.Writer, cols []string, allRows clisqlexec.RowStrIter) error {
 	return sqlExecCtx.PrintQueryOutput(w, cols, allRows)
 }
 
@@ -249,11 +250,11 @@ func PrintQueryOutput(w io.Writer, cols []string, allRows clisqlclient.RowStrIte
 func setSQLExecContextDefaults() {
 	// See also setCLIDefaultForTests() in cli_test.go.
 	sqlExecCtx.TerminalOutput = isatty.IsTerminal(os.Stdout.Fd())
-	sqlExecCtx.TableDisplayFormat = clisqlclient.TableDisplayTSV
+	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
 	sqlExecCtx.TableBorderMode = 0 /* no outer lines + no inside row lines */
 	if sqlExecCtx.TerminalOutput {
 		// See also setCLIDefaultForTests() in cli_test.go.
-		sqlExecCtx.TableDisplayFormat = clisqlclient.TableDisplayTable
+		sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTable
 	}
 	sqlExecCtx.ShowTimes = false
 	sqlExecCtx.VerboseTimings = false

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -76,7 +77,7 @@ func runLsNodes(cmd *cobra.Command, args []string) (resErr error) {
 	}
 
 	return sqlExecCtx.PrintQueryOutput(os.Stdout, lsNodesColumnHeaders,
-		clisqlclient.NewRowSliceIter(rows, "r"))
+		clisqlexec.NewRowSliceIter(rows, "r"))
 }
 
 var baseNodeColumnHeaders = []string{
@@ -131,7 +132,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	sliceIter := clisqlclient.NewRowSliceIter(rows, getStatusNodeAlignment())
+	sliceIter := clisqlexec.NewRowSliceIter(rows, getStatusNodeAlignment())
 	return sqlExecCtx.PrintQueryOutput(os.Stdout, getStatusNodeHeaders(), sliceIter)
 }
 
@@ -533,7 +534,7 @@ signaling the affected nodes to participate in the cluster again.
 
 func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
 	return sqlExecCtx.PrintQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
-		clisqlclient.NewRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
+		clisqlexec.NewRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
 }
 
 func runRecommissionNode(cmd *cobra.Command, args []string) error {

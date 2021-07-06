@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package clisqlclient_test
+package clisqlexec_test
 
 import (
 	"bytes"
@@ -19,13 +19,19 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-var testExecCtx = clisqlclient.ExecContext{
-	TableDisplayFormat: clisqlclient.TableDisplayTable,
+var testExecCtx = clisqlexec.Context{
+	TableDisplayFormat: clisqlexec.TableDisplayTable,
+}
+
+func makeSQLConn(url string) clisqlclient.Conn {
+	var sqlConnCtx clisqlclient.Context
+	return sqlConnCtx.MakeSQLConn(url)
 }
 
 func runQueryAndFormatResults(
