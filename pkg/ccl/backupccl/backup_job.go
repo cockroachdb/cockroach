@@ -203,6 +203,7 @@ func backup(
 	}
 
 	backupSpecs, err := distBackupPlanSpecs(
+		ctx,
 		planCtx,
 		execCtx,
 		dsp,
