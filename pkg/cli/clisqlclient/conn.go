@@ -220,7 +220,7 @@ func (c *sqlConn) EnsureConn() error {
 func (c *sqlConn) tryEnableServerExecutionTimings() {
 	_, _, _, _, _, _, err := c.getLastQueryStatistics()
 	if err != nil {
-		fmt.Fprintf(stderr, "warning: cannot show server execution timings: unexpected column found\n")
+		fmt.Fprintf(stderr, "warning: cannot show server execution timings: %v\n", err)
 		*c.enableServerExecutionTimings = false
 	} else {
 		*c.enableServerExecutionTimings = true
@@ -243,7 +243,7 @@ func (c *sqlConn) GetServerMetadata() (
 	defer func() { _ = rows.Close() }()
 
 	// Read the node_build_info table as an array of strings.
-	rowVals, err := getAllRowStrings(rows, rows.ColumnTypeNames(), true /* showMoreChars */)
+	rowVals, err := getServerMetadataRows(rows)
 	if err != nil || len(rowVals) == 0 || len(rowVals[0]) != 3 {
 		return 0, "", "", errors.New("incorrect data while retrieving the server version")
 	}
@@ -262,7 +262,7 @@ func (c *sqlConn) GetServerMetadata() (
 			c.clusterOrganization = row[2]
 			id, err := strconv.Atoi(row[0])
 			if err != nil {
-				return 0, "", "", errors.New("incorrect data while retrieving node id")
+				return 0, "", "", errors.Newf("incorrect data while retrieving node id: %v", err)
 			}
 			nodeID = roachpb.NodeID(id)
 
@@ -288,6 +288,39 @@ func (c *sqlConn) GetServerMetadata() (
 			v10fields[0], version, v10fields[2], v10fields[3], v10fields[4])
 	}
 	return nodeID, version, clusterID, nil
+}
+
+func getServerMetadataRows(rows Rows) (data [][]string, err error) {
+	var vals []driver.Value
+	cols := rows.Columns()
+	if len(cols) > 0 {
+		vals = make([]driver.Value, len(cols))
+	}
+	for {
+		err = rows.Next(vals)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		rowStrings := make([]string, len(cols))
+		for i, v := range vals {
+			rowStrings[i] = toString(v)
+		}
+		data = append(data, rowStrings)
+	}
+
+	return data, nil
+}
+
+func toString(v driver.Value) string {
+	switch x := v.(type) {
+	case []byte:
+		return fmt.Sprint(string(x))
+	default:
+		return fmt.Sprint(x)
+	}
 }
 
 // checkServerMetadata reports the server version and cluster ID
@@ -404,76 +437,49 @@ func (c *sqlConn) getLastQueryStatistics() (
 	containsJobLat bool,
 	err error,
 ) {
-	rows, err := c.Query("SHOW LAST QUERY STATISTICS", nil)
+	vals, err := c.QueryRow("SHOW LAST QUERY STATISTICS", nil)
 	if err != nil {
 		return 0, 0, 0, 0, 0, false, err
 	}
-	defer func() {
-		closeErr := rows.Close()
-		err = errors.CombineErrors(err, closeErr)
-	}()
 
 	// TODO(arul): In 21.1, SHOW LAST QUERY STATISTICS returned 4 columns. In 21.2,
 	// it returns 5. Depending on which server version the CLI is connected to,
 	// both are valid. We won't have to account for this mixed version state in
 	// 22.1. All this logic can be simplified in 22.1.
-	if len(rows.Columns()) == 5 {
+	if len(vals) == 5 {
 		containsJobLat = true
-	} else if len(rows.Columns()) != 4 {
+	} else if len(vals) != 4 {
 		return 0, 0, 0, 0, 0, false,
 			errors.Newf("unexpected number of columns in SHOW LAST QUERY STATISTICS")
 	}
 
-	if rows.Columns()[0] != "parse_latency" ||
-		rows.Columns()[1] != "plan_latency" ||
-		rows.Columns()[2] != "exec_latency" ||
-		rows.Columns()[3] != "service_latency" ||
-		(containsJobLat && rows.Columns()[4] != "post_commit_jobs_latency") {
-		return 0, 0, 0, 0, 0, containsJobLat,
-			errors.New("unexpected columns in SHOW LAST QUERY STATISTICS")
-	}
-
-	iter := newRowIter(rows, true /* showMoreChars */)
-	nRows := 0
-	var parseLatencyRaw string
-	var planLatencyRaw string
-	var execLatencyRaw string
-	var serviceLatencyRaw string
+	parseLatencyRaw := toString(vals[0])
+	planLatencyRaw := toString(vals[1])
+	execLatencyRaw := toString(vals[2])
+	serviceLatencyRaw := toString(vals[3])
 	var jobsLatencyRaw string
-	for {
-		row, err := iter.Next()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return 0, 0, 0, 0, 0, containsJobLat, err
-		}
-
-		parseLatencyRaw = FormatVal(row[0], iter.colTypes[0], false, false)
-		planLatencyRaw = FormatVal(row[1], iter.colTypes[1], false, false)
-		execLatencyRaw = FormatVal(row[2], iter.colTypes[2], false, false)
-		serviceLatencyRaw = FormatVal(row[3], iter.colTypes[3], false, false)
-		if containsJobLat {
-			jobsLatencyRaw = FormatVal(row[4], iter.colTypes[4], false, false)
-		}
-
-		nRows++
+	if containsJobLat {
+		jobsLatencyRaw = toString(vals[4])
 	}
 
-	if nRows != 1 {
-		return 0, 0, 0, 0, 0, containsJobLat,
-			errors.Newf("unexpected number of rows in SHOW LAST QUERY STATISTICS: %d", nRows)
+	parsedExecLatency, e1 := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, execLatencyRaw)
+	parsedServiceLatency, e2 := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, serviceLatencyRaw)
+	parsedPlanLatency, e3 := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, planLatencyRaw)
+	parsedParseLatency, e4 := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, parseLatencyRaw)
+	var e5 error
+	var parsedJobsLatency *tree.DInterval
+	if containsJobLat {
+		parsedJobsLatency, e5 = tree.ParseDInterval(duration.IntervalStyle_POSTGRES, jobsLatencyRaw)
 	}
-
-	// This should really be the same as the session's IntervalStyle
-	// but that only effects negative intervals in the magnitude
-	// of days - and all these latencies should be positive.
-	parsedExecLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, execLatencyRaw)
-	parsedServiceLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, serviceLatencyRaw)
-	parsedPlanLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, planLatencyRaw)
-	parsedParseLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, parseLatencyRaw)
+	if err := errors.CombineErrors(e1,
+		errors.CombineErrors(e2,
+			errors.CombineErrors(e3,
+				errors.CombineErrors(e4, e5)))); err != nil {
+		return 0, 0, 0, 0, 0, false,
+			errors.Wrap(err, "invalid interval value in SHOW LAST QUERY STATISTICS")
+	}
 
 	if containsJobLat {
-		parsedJobsLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, jobsLatencyRaw)
 		jobsLat = time.Duration(parsedJobsLatency.Duration.Nanos())
 	}
 
