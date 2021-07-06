@@ -1412,12 +1412,34 @@ CREATE INDEX new_idx ON regional_by_row_table(a, b)
 # The validation query to create the unique constraint should be efficient (see
 # #56201).
 statement ok
-CREATE TABLE t56201 (a INT, b STRING) LOCALITY REGIONAL BY ROW;
+CREATE TABLE t56201 (a INT, b STRING, c STRING NOT NULL) LOCALITY REGIONAL BY ROW;
+ALTER TABLE t56201 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "distinct_count": 3,
+    "row_count": 1000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["b"],
+    "distinct_count": 999900,
+    "null_count": 5,
+    "row_count": 1000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c"],
+    "distinct_count": 999999,
+    "row_count": 1000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  }
+]';
 ALTER TABLE t56201 ADD CONSTRAINT key_a_b UNIQUE (a, b);
 
 query T
 SELECT * FROM [EXPLAIN (VERBOSE) SELECT a, b
 FROM t56201
+WHERE a IS NOT NULL AND b IS NOT NULL
 GROUP BY a, b
 HAVING count(*) > 1
 LIMIT 1] OFFSET 2
@@ -1425,21 +1447,21 @@ LIMIT 1] OFFSET 2
 ·
 • project
 │ columns: (a, b)
-│ estimated row count: 1 (missing stats)
+│ estimated row count: 1
 │
 └── • limit
     │ columns: (a, b, count_rows)
-    │ estimated row count: 1 (missing stats)
+    │ estimated row count: 1
     │ count: 1
     │
     └── • filter
         │ columns: (a, b, count_rows)
-        │ estimated row count: 330 (missing stats)
+        │ estimated row count: 333,300
         │ filter: count_rows > 1
         │
         └── • group
             │ columns: (a, b, count_rows)
-            │ estimated row count: 991 (missing stats)
+            │ estimated row count: 999,900
             │ aggregate 0: count_rows()
             │ group by: a, b
             │ ordered: +a,+b
@@ -1447,32 +1469,182 @@ LIMIT 1] OFFSET 2
             └── • union all
                 │ columns: (a, b)
                 │ ordering: +a,+b
-                │ estimated row count: 30 (missing stats)
+                │ estimated row count: 30
                 │
                 ├── • union all
                 │   │ columns: (a, b)
                 │   │ ordering: +a,+b
-                │   │ estimated row count: 20 (missing stats)
+                │   │ estimated row count: 20
+                │   │
+                │   ├── • filter
+                │   │   │ columns: (a, b)
+                │   │   │ ordering: +a,+b
+                │   │   │ estimated row count: 10
+                │   │   │ filter: b IS NOT NULL
+                │   │   │
+                │   │   └── • scan
+                │   │         columns: (a, b)
+                │   │         ordering: +a,+b
+                │   │         estimated row count: 10 (<0.01% of the table; stats collected <hidden> ago)
+                │   │         table: t56201@key_a_b
+                │   │         spans: /"@"/!NULL-/"@"/PrefixEnd
+                │   │
+                │   └── • filter
+                │       │ columns: (a, b)
+                │       │ ordering: +a,+b
+                │       │ estimated row count: 10
+                │       │ filter: b IS NOT NULL
+                │       │
+                │       └── • scan
+                │             columns: (a, b)
+                │             ordering: +a,+b
+                │             estimated row count: 10 (<0.01% of the table; stats collected <hidden> ago)
+                │             table: t56201@key_a_b
+                │             spans: /"\x80"/!NULL-/"\x80"/PrefixEnd
+                │
+                └── • filter
+                    │ columns: (a, b)
+                    │ ordering: +a,+b
+                    │ estimated row count: 10
+                    │ filter: b IS NOT NULL
+                    │
+                    └── • scan
+                          columns: (a, b)
+                          ordering: +a,+b
+                          estimated row count: 10 (<0.01% of the table; stats collected <hidden> ago)
+                          table: t56201@key_a_b
+                          spans: /"\xc0"/!NULL-/"\xc0"/PrefixEnd
+
+statement ok
+CREATE UNIQUE INDEX key_b_partial ON t56201 (b) WHERE a > 0;
+
+query T
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT b
+FROM t56201@key_b_partial
+WHERE b IS NOT NULL AND a > 0
+GROUP BY b
+HAVING count(*) > 1
+LIMIT 1] OFFSET 2
+----
+·
+• project
+│ columns: (b)
+│ estimated row count: 1
+│
+└── • limit
+    │ columns: (b, count_rows)
+    │ estimated row count: 1
+    │ count: 1
+    │
+    └── • filter
+        │ columns: (b, count_rows)
+        │ estimated row count: 111,111
+        │ filter: count_rows > 1
+        │
+        └── • group
+            │ columns: (b, count_rows)
+            │ estimated row count: 333,333
+            │ aggregate 0: count_rows()
+            │ group by: b
+            │ ordered: +b
+            │
+            └── • project
+                │ columns: (b)
+                │ ordering: +b
+                │
+                └── • union all
+                    │ columns: (b, crdb_region, rowid)
+                    │ ordering: +b
+                    │ estimated row count: 10
+                    │
+                    ├── • union all
+                    │   │ columns: (b, crdb_region, rowid)
+                    │   │ ordering: +b
+                    │   │ estimated row count: 7
+                    │   │
+                    │   ├── • scan
+                    │   │     columns: (b, crdb_region, rowid)
+                    │   │     ordering: +b
+                    │   │     estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                    │   │     table: t56201@key_b_partial (partial index)
+                    │   │     spans: /"@"/!NULL-/"@"/PrefixEnd
+                    │   │
+                    │   └── • scan
+                    │         columns: (b, crdb_region, rowid)
+                    │         ordering: +b
+                    │         estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                    │         table: t56201@key_b_partial (partial index)
+                    │         spans: /"\x80"/!NULL-/"\x80"/PrefixEnd
+                    │
+                    └── • scan
+                          columns: (b, crdb_region, rowid)
+                          ordering: +b
+                          estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                          table: t56201@key_b_partial (partial index)
+                          spans: /"\xc0"/!NULL-/"\xc0"/PrefixEnd
+
+statement ok
+CREATE UNIQUE INDEX key_c_partial ON t56201 (c) WHERE a = 1;
+
+query T
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT c
+FROM t56201
+WHERE c IS NOT NULL AND a = 1
+GROUP BY c
+HAVING count(*) > 1
+LIMIT 1] OFFSET 2
+----
+·
+• project
+│ columns: (c)
+│ estimated row count: 1
+│
+└── • limit
+    │ columns: (c, count_rows)
+    │ estimated row count: 1
+    │ count: 1
+    │
+    └── • filter
+        │ columns: (c, count_rows)
+        │ estimated row count: 111,111
+        │ filter: count_rows > 1
+        │
+        └── • group
+            │ columns: (c, count_rows)
+            │ estimated row count: 333,333
+            │ aggregate 0: count_rows()
+            │ group by: c
+            │ ordered: +c
+            │
+            └── • union all
+                │ columns: (c)
+                │ ordering: +c
+                │ estimated row count: 10
+                │
+                ├── • union all
+                │   │ columns: (c)
+                │   │ ordering: +c
+                │   │ estimated row count: 7
                 │   │
                 │   ├── • scan
-                │   │     columns: (a, b)
-                │   │     ordering: +a,+b
-                │   │     estimated row count: 10 (missing stats)
-                │   │     table: t56201@key_a_b
+                │   │     columns: (c)
+                │   │     ordering: +c
+                │   │     estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                │   │     table: t56201@key_c_partial (partial index)
                 │   │     spans: /"@"-/"@"/PrefixEnd
                 │   │
                 │   └── • scan
-                │         columns: (a, b)
-                │         ordering: +a,+b
-                │         estimated row count: 10 (missing stats)
-                │         table: t56201@key_a_b
+                │         columns: (c)
+                │         ordering: +c
+                │         estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                │         table: t56201@key_c_partial (partial index)
                 │         spans: /"\x80"-/"\x80"/PrefixEnd
                 │
                 └── • scan
-                      columns: (a, b)
-                      ordering: +a,+b
-                      estimated row count: 10 (missing stats)
-                      table: t56201@key_a_b
+                      columns: (c)
+                      ordering: +c
+                      estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                      table: t56201@key_c_partial (partial index)
                       spans: /"\xc0"-/"\xc0"/PrefixEnd
 
 statement ok
