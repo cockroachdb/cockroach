@@ -977,7 +977,7 @@ func init() {
 		durationFlag(f, &proxyContext.RatelimitBaseDelay, cliflags.RatelimitBaseDelay)
 		durationFlag(f, &proxyContext.ValidateAccessInterval, cliflags.ValidateAccessInterval)
 		durationFlag(f, &proxyContext.PollConfigInterval, cliflags.PollConfigInterval)
-		durationFlag(f, &proxyContext.IdleTimeout, cliflags.IdleTimeout)
+		durationFlag(f, &proxyContext.DrainTimeout, cliflags.DrainTimeout)
 	}
 	// Multi-tenancy test directory command flags.
 	{

@@ -86,9 +86,9 @@ This rule must include the port of the SQL pod.`,
 		Description: "Polling interval changes in config file.",
 	}
 
-	IdleTimeout = FlagInfo{
-		Name:        "idle-timeout",
-		Description: "Close connections idle for this duration.",
+	DrainTimeout = FlagInfo{
+		Name:        "drain-timeout",
+		Description: "Close DRAINING connections idle for this duration.",
 	}
 
 	TestDirectoryListenPort = FlagInfo{

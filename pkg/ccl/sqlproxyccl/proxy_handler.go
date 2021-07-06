@@ -97,9 +97,9 @@ type ProxyOptions struct {
 	// PollConfigInterval defines polling interval for pickup up changes in
 	// config file.
 	PollConfigInterval time.Duration
-	// IdleTimeout if set, will close connections that have been idle for that
-	// duration.
-	IdleTimeout time.Duration
+	// DrainTimeout if set, will close DRAINING connections that have been idle
+	// for this duration.
+	DrainTimeout time.Duration
 }
 
 // proxyHandler is the default implementation of a proxy handler.
@@ -121,6 +121,9 @@ type proxyHandler struct {
 
 	// throttleService will do throttling of incoming connection requests.
 	throttleService throttler.Service
+
+	// idleMonitor will detect idle connections to DRAINING pods.
+	idleMonitor *idle.Monitor
 
 	// directory is optional and if set, will be used to resolve
 	// backend id to IP addresses.
@@ -158,6 +161,10 @@ func newProxyHandler(
 			denylist.WithPollingInterval(options.PollConfigInterval))
 	} else {
 		handler.denyListWatcher = denylist.NilWatcher()
+	}
+
+	if options.DrainTimeout != 0 {
+		handler.idleMonitor = idle.NewMonitor(ctx, options.DrainTimeout)
 	}
 
 	handler.throttleService = throttler.NewLocalService(throttler.WithBaseDelay(options.RatelimitBaseDelay))
@@ -336,8 +343,16 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		return err
 	}
 
-	// Set up the idle timeout monitor.
-	crdbConn = idle.DisconnectOverlay(crdbConn, handler.IdleTimeout)
+	// Monitor for idle connection, if requested.
+	if handler.idleMonitor != nil {
+		crdbConn = handler.idleMonitor.DetectIdle(crdbConn, func() {
+			err = newErrorf(codeIdleDisconnect, "idle connection closed")
+			select {
+			case errConnection <- err: /* error reported */
+			default: /* the channel already contains an error */
+			}
+		})
+	}
 
 	defer func() { _ = crdbConn.Close() }()
 
