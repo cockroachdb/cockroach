@@ -242,7 +242,7 @@ Output the list of cluster settings known to this binary.
 			rows = append(rows, row)
 		}
 
-		sliceIter := NewRowSliceIter(rows, "dddd")
+		sliceIter := clisqlclient.NewRowSliceIter(rows, "dddd")
 		cols := []string{"Setting", "Type", "Default", "Description"}
 		return PrintQueryOutput(os.Stdout, cols, sliceIter)
 	},

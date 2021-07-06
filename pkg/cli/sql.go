@@ -134,7 +134,7 @@ Open a sql shell running against a cockroach database.
 // across multiple instances of cliState (e.g. across file inclusion
 // with \i).
 type cliState struct {
-	conn *sqlConn
+	conn clisqlclient.Conn
 	// ins is used to read lines if isInteractive is true.
 	ins readline.EditLine
 	// buf is used to read lines if isInteractive is false.
@@ -470,7 +470,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 		}
 		err := PrintQueryOutput(os.Stdout,
 			[]string{"Option", "Value", "Description"},
-			NewRowSliceIter(optData, "lll" /*align*/))
+			clisqlclient.NewRowSliceIter(optData, "lll" /*align*/))
 		if err != nil {
 			panic(err)
 		}
@@ -1397,7 +1397,8 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	}
 
 	// Now run the statement/query.
-	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines))
+	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout,
+		clisqlclient.MakeQuery(c.concatLines))
 	if c.exitErr != nil {
 		clierror.OutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
 	}
@@ -1425,7 +1426,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 				traceType = "kv"
 			}
 			if err := runQueryAndFormatResults(c.conn, os.Stdout,
-				makeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
+				clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
 				clierror.OutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
 					// Both the query and SET tracing had encountered no error
@@ -1461,7 +1462,7 @@ func (c *cliState) doDecidePath() cliStateEnum {
 
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
-func runInteractive(conn *sqlConn, cmdIn *os.File) (exitErr error) {
+func runInteractive(conn clisqlclient.Conn, cmdIn *os.File) (exitErr error) {
 	c := cliState{
 		conn:       conn,
 		includeDir: ".",
@@ -1660,7 +1661,7 @@ func (c *cliState) runStatements(stmts []string) error {
 					c.exitErr = errors.New("error in client-side command")
 				}
 			} else {
-				c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(stmt))
+				c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, clisqlclient.MakeQuery(stmt))
 			}
 			if c.exitErr != nil {
 				if !sqlCtx.errExit && i < len(stmts)-1 {
@@ -1741,7 +1742,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	return runClient(cmd, conn, cmdIn)
 }
 
-func runClient(cmd *cobra.Command, conn *sqlConn, cmdIn *os.File) error {
+func runClient(cmd *cobra.Command, conn clisqlclient.Conn, cmdIn *os.File) error {
 	// Open the connection to make sure everything is OK before running any
 	// statements. Performs authentication.
 	if err := conn.EnsureConn(); err != nil {
@@ -1757,7 +1758,7 @@ func runClient(cmd *cobra.Command, conn *sqlConn, cmdIn *os.File) error {
 // setupSafeUpdates attempts to enable "safe mode" if the session is
 // interactive and the user is not disabling this behavior with
 // --safe-updates=false.
-func setupSafeUpdates(cmd *cobra.Command, conn *sqlConn) {
+func setupSafeUpdates(cmd *cobra.Command, conn clisqlclient.Conn) {
 	pf := cmd.Flags()
 	vf := pf.Lookup(cliflags.SafeUpdates.Name)
 
@@ -1787,7 +1788,9 @@ func setupSafeUpdates(cmd *cobra.Command, conn *sqlConn) {
 // decomposition in the first return value. If it is not, the function
 // extracts a help string if available.
 func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
-	cols, rows, err := runQuery(c.conn, makeQuery("SHOW SYNTAX "+lex.EscapeSQLString(sql)), true)
+	cols, rows, err := clisqlclient.RunQuery(c.conn,
+		clisqlclient.MakeQuery("SHOW SYNTAX "+lex.EscapeSQLString(sql)),
+		true)
 	if err != nil {
 		// The query failed with some error. This is not a syntax error
 		// detected by SHOW SYNTAX (those show up as valid rows) but

@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -138,7 +139,7 @@ func runUserFileList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func uploadUserFileRecursive(conn *sqlConn, srcDir, dstDir string) error {
+func uploadUserFileRecursive(conn clisqlclient.Conn, srcDir, dstDir string) error {
 	srcHasTrailingSlash := strings.HasSuffix(srcDir, "/")
 	var err error
 	srcDir, err = filepath.Abs(srcDir)
@@ -394,7 +395,7 @@ func constructUserfileListURI(glob string, user security.SQLUsername) string {
 }
 
 func getUserfileConf(
-	ctx context.Context, conn *sqlConn, glob string,
+	ctx context.Context, conn clisqlclient.Conn, glob string,
 ) (roachpb.ExternalStorage_FileTable, error) {
 	if err := conn.EnsureConn(); err != nil {
 		return roachpb.ExternalStorage_FileTable{}, err
@@ -421,7 +422,7 @@ func getUserfileConf(
 
 }
 
-func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, error) {
+func listUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]string, error) {
 	conf, err := getUserfileConf(ctx, conn, glob)
 	if err != nil {
 		return nil, err
@@ -478,7 +479,7 @@ func downloadUserfile(
 	return io.Copy(localFile, remoteFile)
 }
 
-func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, error) {
+func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]string, error) {
 	if err := conn.EnsureConn(); err != nil {
 		return nil, err
 	}
@@ -537,7 +538,7 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 }
 
 func renameUserFile(
-	ctx context.Context, conn *sqlConn, oldFilename,
+	ctx context.Context, conn clisqlclient.Conn, oldFilename,
 	newFilename, qualifiedTableName string,
 ) error {
 	if err := conn.EnsureConn(); err != nil {
@@ -584,7 +585,7 @@ func renameUserFile(
 // This method returns the complete userfile URI representation to which the
 // file is uploaded to.
 func uploadUserFile(
-	ctx context.Context, conn *sqlConn, source, destination string,
+	ctx context.Context, conn clisqlclient.Conn, source, destination string,
 ) (string, error) {
 	reader, err := openUserFile(source)
 	if err != nil {

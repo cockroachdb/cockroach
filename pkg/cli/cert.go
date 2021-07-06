@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -299,7 +300,7 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 		addRow(cert, fmt.Sprintf("user: %s", user))
 	}
 
-	return PrintQueryOutput(os.Stdout, certTableHeaders, NewRowSliceIter(rows, alignment))
+	return PrintQueryOutput(os.Stdout, certTableHeaders, clisqlclient.NewRowSliceIter(rows, alignment))
 }
 
 var certCmds = []*cobra.Command{

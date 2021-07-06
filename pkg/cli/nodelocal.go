@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -71,7 +72,7 @@ func openSourceFile(source string) (io.ReadCloser, error) {
 	return f, nil
 }
 
-func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destination string) error {
+func uploadFile(ctx context.Context, conn clisqlclient.Conn, reader io.Reader, destination string) error {
 	if err := conn.EnsureConn(); err != nil {
 		return err
 	}
