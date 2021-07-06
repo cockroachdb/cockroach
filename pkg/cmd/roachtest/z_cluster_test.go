@@ -101,8 +101,13 @@ func (t testWrapper) WorkerProgress(f float64) {
 
 var _ test2.Test = testWrapper{}
 
-// ArtifactsDir is part of the testI interface.
+// ArtifactsDir is part of the test.Test interface.
 func (t testWrapper) ArtifactsDir() string {
+	return ""
+}
+
+// PerfArtifactsDir is part of the test.Test interface.
+func (t testWrapper) PerfArtifactsDir() string {
 	return ""
 }
 
