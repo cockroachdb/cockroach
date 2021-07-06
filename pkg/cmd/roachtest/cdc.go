@@ -760,27 +760,23 @@ func registerCDC(r registry.Registry) {
 			})
 		},
 	})
-	// TODO(ryan min): uncomment once parallelism is implemented for webhook
-	// sink, currently fails with "initial scan did not complete"
-	/*
-		r.Add(testSpec{
-			Name:            "cdc/webhook-sink",
-			Owner:           OwnerCDC,
-			Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-			RequiresLicense: true,
-			Run: func(ctx context.Context, t *test, c Cluster) {
-				cdcBasicTest(ctx, t, c, cdcTestArgs{
-					workloadType:             tpccWorkloadType,
-					tpccWarehouseCount:       100,
-					workloadDuration:         "30m",
-					initialScan:              true,
-					whichSink:                webhookSink,
-					targetInitialScanLatency: 30 * time.Minute,
-					targetSteadyLatency:      time.Minute,
-				})
-			},
-		})
-	*/
+	r.Add(registry.TestSpec{
+		Name:            "cdc/webhook-sink",
+		Owner:           registry.OwnerCDC,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       100,
+				workloadDuration:         "30m",
+				initialScan:              true,
+				whichSink:                webhookSink,
+				targetInitialScanLatency: 30 * time.Minute,
+				targetSteadyLatency:      time.Minute,
+			})
+		},
+	})
 	r.Add(registry.TestSpec{
 		Name:            "cdc/kafka-auth",
 		Owner:           `cdc`,

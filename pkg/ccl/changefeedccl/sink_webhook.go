@@ -15,16 +15,21 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 )
 
@@ -63,14 +68,20 @@ func encodePayloadWebhook(value []byte) ([]byte, error) {
 }
 
 type webhookSink struct {
-	ctx        context.Context
-	url        sinkURL
-	authHeader string
-	client     *httputil.Client
-	cancelFunc func()
+	ctx         context.Context
+	url         sinkURL
+	authHeader  string
+	parallelism int
+	client      *httputil.Client
+	workerGroup ctxgroup.Group
+	cancelFunc  func()
+	eventsChans []chan []byte
+	in          *inflightTracker
 }
 
-func makeWebhookSink(ctx context.Context, u sinkURL, opts map[string]string) (Sink, error) {
+func makeWebhookSink(
+	ctx context.Context, u sinkURL, opts map[string]string, parallelism int,
+) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
 	}
@@ -115,9 +126,10 @@ func makeWebhookSink(ctx context.Context, u sinkURL, opts map[string]string) (Si
 	ctx, cancel := context.WithCancel(ctx)
 
 	sink := &webhookSink{
-		ctx:        ctx,
-		cancelFunc: cancel,
-		authHeader: opts[changefeedbase.OptWebhookAuthHeader],
+		ctx:         ctx,
+		authHeader:  opts[changefeedbase.OptWebhookAuthHeader],
+		cancelFunc:  cancel,
+		parallelism: parallelism,
 	}
 
 	var err error
@@ -137,6 +149,7 @@ func makeWebhookSink(ctx context.Context, u sinkURL, opts map[string]string) (Si
 	sinkURLParsed.RawQuery = params.Encode()
 	sink.url = sinkURL{URL: sinkURLParsed}
 
+	sink.in = makeInflightTracker()
 	return sink, nil
 }
 
@@ -187,9 +200,43 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 	return client, nil
 }
 
-// Dial is a no-op for this sink since we don't necessarily have
-// a "health check" endpoint to use.
+// defaultWorkerCount() is the number of CPU's on the machine
+func defaultWorkerCount() int {
+	return system.NumCPU()
+}
+
+func (s *webhookSink) setupWorkers() {
+	s.eventsChans = make([]chan []byte, s.parallelism)
+	s.workerGroup = ctxgroup.WithContext(s.ctx)
+	for i := 0; i < s.parallelism; i++ {
+		s.eventsChans[i] = make(chan []byte)
+		j := i
+		s.workerGroup.GoCtx(func(ctx context.Context) error {
+			s.workerLoop(s.eventsChans[j])
+			return nil
+		})
+	}
+}
+
+func (s *webhookSink) workerLoop(workerCh chan []byte) {
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case value := <-workerCh:
+			msg, err := encodePayloadWebhook(value)
+			if err == nil {
+				err = s.sendMessage(s.ctx, msg)
+			}
+			s.in.maybeSetError(err)
+			// reduce inflight count by one
+			s.in.Done()
+		}
+	}
+}
+
 func (s *webhookSink) Dial() error {
+	s.setupWorkers()
 	return nil
 }
 
@@ -220,15 +267,89 @@ func (s *webhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
 	return nil
 }
 
-func (s *webhookSink) EmitRow(
-	ctx context.Context, _ TopicDescriptor, _, value []byte, _ hlc.Timestamp,
-) error {
-	j, err := encodePayloadWebhook(value)
-	if err != nil {
-		return err
-	}
+// workerIndex assigns rows each to a worker goroutine based on the hash of its
+// primary key. This is to ensure that each message with the same key gets
+// deterministically assigned to the same worker. Since we have a channel per
+// worker, we can ensure per-worker ordering and therefore guarantee per-key
+// ordering.
+func (s *webhookSink) workerIndex(key []byte) uint32 {
+	return crc32.ChecksumIEEE(key) % uint32(s.parallelism)
+}
 
-	return s.sendMessage(ctx, j)
+// TODO (ryan min): add memory monitoring for inflight messages
+// inflightTracker wraps logic for counting number of inflight messages to
+// track when flushing sink, with error handling functionality. Implemented
+// as a wrapper for WaitGroup under a lock to block additional messages while
+// flushing.
+type inflightTracker struct {
+	// two mutexes are needed here since different goroutines will be accessing
+	// both the waitgroup and the flushErr at the same time. (i.e. when waiting,
+	// before Done() is called, the error is set, causes deadlock if the same
+	// lock is used)
+	wgMu struct {
+		syncutil.Mutex
+		inflightGroup *sync.WaitGroup
+	}
+	errMu struct {
+		syncutil.Mutex
+		flushErr error
+	}
+}
+
+func makeInflightTracker() *inflightTracker {
+	inflight := &inflightTracker{}
+	inflight.wgMu.inflightGroup = new(sync.WaitGroup)
+	return inflight
+}
+
+// maybeSetError sets flushErr to be err if it has not already been set.
+func (i *inflightTracker) maybeSetError(err error) {
+	i.errMu.Lock()
+	defer i.errMu.Unlock()
+	if err == nil || i.errMu.flushErr != nil {
+		return
+	}
+	i.errMu.flushErr = err
+}
+
+// Add enqueues one inflight message to be flushed.
+func (i *inflightTracker) Add() {
+	i.wgMu.Lock()
+	defer i.wgMu.Unlock()
+	i.wgMu.inflightGroup.Add(1)
+}
+
+// Done tells the inflight tracker one message has been delivered.
+func (i *inflightTracker) Done() {
+	i.wgMu.inflightGroup.Done()
+}
+
+// Wait waits for all inflight messages to be delivered (inflight = 0) and
+// returns a possible error
+func (i *inflightTracker) Wait() error {
+	i.wgMu.Lock()
+	defer i.wgMu.Unlock()
+	defer i.errMu.Unlock()
+	i.wgMu.inflightGroup.Wait()
+	// lock here to avoid deadlock with wgMu
+	i.errMu.Lock()
+	err := i.errMu.flushErr
+	i.errMu.flushErr = nil
+	return err
+}
+
+func (s *webhookSink) EmitRow(
+	ctx context.Context, _ TopicDescriptor, key, value []byte, _ hlc.Timestamp,
+) error {
+	index := s.workerIndex(key)
+	s.in.Add()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case s.eventsChans[index] <- value:
+	}
+	return nil
 }
 
 func (s *webhookSink) EmitResolvedTimestamp(
@@ -238,17 +359,26 @@ func (s *webhookSink) EmitResolvedTimestamp(
 	if err != nil {
 		return err
 	}
+	s.in.Add()
 
-	return s.sendMessage(ctx, j)
-}
-
-// Flush() is a no-op for now since calls to EmitRow() are synchronous
-func (s *webhookSink) Flush(ctx context.Context) error {
+	err = s.sendMessage(ctx, j)
+	s.in.maybeSetError(err)
+	s.in.Done()
 	return nil
 }
 
+func (s *webhookSink) Flush(ctx context.Context) error {
+	return s.in.Wait()
+}
+
 func (s *webhookSink) Close() error {
+	// ignore errors here since we're closing the sink anyway
+	_ = s.Flush(s.ctx)
 	s.cancelFunc()
+	_ = s.workerGroup.Wait()
+	for i := 0; i < len(s.eventsChans); i++ {
+		close(s.eventsChans[i])
+	}
 	s.client.CloseIdleConnections()
 	return nil
 }
