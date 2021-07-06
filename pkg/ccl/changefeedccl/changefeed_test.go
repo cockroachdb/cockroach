@@ -272,6 +272,50 @@ func TestChangefeedTenants(t *testing.T) {
 	})
 }
 
+func TestChangefeedTenantsExternalIOEnabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	kvServer, _, cleanup := startTestServer(t, func(args *base.TestServerArgs) {
+		args.ExternalIODirConfig.DisableOutbound = true
+	})
+	defer cleanup()
+
+	tenantArgs := base.TestTenantArgs{
+		// crdb_internal.create_tenant called by StartTenant
+		TenantID:    serverutils.TestTenantID(),
+		UseDatabase: `d`,
+		TestingKnobs: base.TestingKnobs{
+			DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	}
+
+	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
+	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
+	tenantSQL.Exec(t, serverSetupStatements)
+	tenantSQL.Exec(t, `CREATE TABLE foo_in_tenant (pk INT PRIMARY KEY)`)
+
+	t.Run("sinkful changefeed fails if protect_data_from_gc_on_pause is set", func(t *testing.T) {
+		tenantSQL.ExpectErr(t, "operation is unsupported in multi-tenancy mode",
+			`CREATE CHANGEFEED FOR foo_in_tenant INTO 'kafka://does-not-matter' WITH protect_data_from_gc_on_pause`,
+		)
+	})
+
+	t.Run("sinkful changefeed works", func(t *testing.T) {
+		f := makeKafkaFeedFactory(&testServerShim{
+			TestServerInterface: kvServer,
+			sqlServer:           tenantServer},
+			tenantDB)
+		tenantSQL.Exec(t, `INSERT INTO foo_in_tenant VALUES (1)`)
+		feed := feed(t, f, `CREATE CHANGEFEED FOR foo_in_tenant`)
+		defer closeFeed(t, feed)
+		assertPayloads(t, feed, []string{
+			`foo_in_tenant: [1]->{"after": {"pk": 1}}`,
+		})
+	})
+}
+
 func TestChangefeedEnvelope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -491,6 +491,16 @@ func (t *TestTenant) StatusServer() interface{} {
 	return t.execCfg.SQLStatusServer
 }
 
+// DistSQLServer is part of the TestTenantInterface interface.
+func (t *TestTenant) DistSQLServer() interface{} {
+	return t.SQLServer.distSQLServer
+}
+
+// JobRegistry is part of the TestTenantInterface interface.
+func (t *TestTenant) JobRegistry() interface{} {
+	return t.SQLServer.jobRegistry
+}
+
 // SetupIdleMonitor will monitor the active connections and if there are none,
 // will activate a `defaultCountdownDuration` countdown timer and terminate
 // the application. The monitoring will start after a warmup period
