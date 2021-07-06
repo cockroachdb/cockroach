@@ -10,88 +10,54 @@ package idle
 
 import (
 	"net"
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
+	"sync/atomic"
 )
 
-// DisconnectConnection is a wrapper around net.Conn that disconnects if
-// connection is idle. The idle time is only counted while the client is
-// waiting, blocked on Read.
-type DisconnectConnection struct {
+// monitorConn is a wrapper around net.Conn that intercepts reads/writes and
+// registers the activity so that the idle monitor will not trigger connection
+// closure. This is accomplished by using the "deadline" field as the central
+// point of coordination between the monitor and this connection. The monitor
+// atomically sets the deadline each time it wakes up, and the connection
+// atomically clears it, by setting it to zero when activity occurs. If no
+// activity occurs (and the connection is not clearing the deadline), then
+// eventually the deadline expires and the monitor reports the connection as
+// idle.
+type monitorConn struct {
 	net.Conn
-	timeout time.Duration
-	mu      struct {
-		syncutil.Mutex
-		lastDeadlineSetAt time.Time
-	}
+	monitor  *Monitor
+	deadline int64
 }
 
-var errNotSupported = errors.Errorf(
-	"Not supported for DisconnectConnection",
-)
-
-func (c *DisconnectConnection) updateDeadline() error {
-	now := timeutil.Now()
-	// If it has been more than 1% of the timeout duration - advance the deadline.
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if now.Sub(c.mu.lastDeadlineSetAt) > c.timeout/100 {
-		c.mu.lastDeadlineSetAt = now
-
-		if err := c.Conn.SetReadDeadline(now.Add(c.timeout)); err != nil {
-			return err
-		}
-	}
-	return nil
+// newMonitorConn wraps the given connection with a monitorConn.
+func newMonitorConn(monitor *Monitor, conn net.Conn) *monitorConn {
+	return &monitorConn{Conn: conn, monitor: monitor}
 }
 
 // Read reads data from the connection with timeout.
-func (c *DisconnectConnection) Read(b []byte) (n int, err error) {
-	if err := c.updateDeadline(); err != nil {
-		return 0, err
-	}
+func (c *monitorConn) Read(b []byte) (n int, err error) {
+	c.clearDeadline()
 	return c.Conn.Read(b)
 }
 
 // Write writes data to the connection and sets the read timeout.
-func (c *DisconnectConnection) Write(b []byte) (n int, err error) {
-	// The Write for the connection is not blocking (or can block only temporary
-	// in case of flow control). For idle connections, the Read will be the call
-	// that will block and stay blocked until the backend doesn't send something.
-	// However, it is theoretically possible, that the traffic is only going in
-	// one direction - from the proxy to the backend, in which case we will call
-	// repeatedly Write but stay blocked on the Read. For that specific case - the
-	// write pushes further out the read deadline so the read doesn't timeout.
-	if err := c.updateDeadline(); err != nil {
-		return 0, err
-	}
+func (c *monitorConn) Write(b []byte) (n int, err error) {
+	c.clearDeadline()
 	return c.Conn.Write(b)
 }
 
-// SetDeadline is unsupported as it will interfere with the reads.
-func (c *DisconnectConnection) SetDeadline(t time.Time) error {
-	return errNotSupported
+// Close removes this connection from the monitor and passes through the call to
+// the wrapped connection.
+func (c *monitorConn) Close() error {
+	c.monitor.removeConn(c)
+	return c.Conn.Close()
 }
 
-// SetReadDeadline is unsupported as it will interfere with the reads.
-func (c *DisconnectConnection) SetReadDeadline(t time.Time) error {
-	return errNotSupported
-}
-
-// SetWriteDeadline is unsupported as it will interfere with the reads.
-func (c *DisconnectConnection) SetWriteDeadline(t time.Time) error {
-	return errNotSupported
-}
-
-// DisconnectOverlay upgrades the connection to one that closes when
-// idle for more than timeout duration. Timeout of zero will turn off
-// the idle disconnect code.
-func DisconnectOverlay(conn net.Conn, timeout time.Duration) net.Conn {
-	if timeout != 0 {
-		return &DisconnectConnection{Conn: conn, timeout: timeout}
+// clearDeadline atomically sets the deadline field to zero in order to prevent
+// the monitor from declaring the connection as idle.
+func (c *monitorConn) clearDeadline() {
+	deadline := atomic.LoadInt64(&c.deadline)
+	if deadline == 0 {
+		return
 	}
-	return conn
+	atomic.StoreInt64(&c.deadline, 0)
 }

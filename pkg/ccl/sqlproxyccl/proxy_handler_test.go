@@ -488,49 +488,6 @@ func TestDenylistUpdate(t *testing.T) {
 	})
 }
 
-func TestProxyAgainstSecureCRDBWithIdleTimeout(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	te := newTester()
-	defer te.Close()
-
-	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
-	defer sql.Stopper().Stop(ctx)
-
-	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()
-	require.NoError(t, err)
-	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
-	proxyOutgoingTLSConfig.InsecureSkipVerify = true
-
-	idleTimeout, _ := time.ParseDuration("0.5s")
-	originalBackendDial := BackendDial
-	defer testutils.TestingHook(&BackendDial, func(
-		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
-	) (net.Conn, error) {
-		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
-	})()
-
-	s, addr := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{IdleTimeout: idleTimeout})
-
-	url := fmt.Sprintf("postgres://root:admin@%s/?sslmode=require&options=--cluster=dim-dog-28", addr)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-
-		var n int
-		err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
-		require.NoError(t, err)
-		require.EqualValues(t, 1, n)
-
-		time.Sleep(idleTimeout * 2)
-		err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
-		require.EqualError(t, err, "unexpected EOF")
-		require.Equal(t, int64(1), s.metrics.IdleDisconnectCount.Count())
-		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
-	})
-}
-
 func TestDirectoryConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
