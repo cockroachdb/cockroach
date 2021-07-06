@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,7 +67,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		rows := [][]string{
 			{username, fmt.Sprintf("%d", id), hC},
 		}
-		if err := PrintQueryOutput(os.Stdout, cols, NewRowSliceIter(rows, "ll")); err != nil {
+		if err := PrintQueryOutput(os.Stdout, cols, clisqlclient.NewRowSliceIter(rows, "ll")); err != nil {
 			return err
 		}
 
@@ -94,8 +95,8 @@ func createAuthSessionToken(username string) (sessionID int64, httpCookie *http.
 	defer sqlConn.Close()
 
 	// First things first. Does the user exist?
-	_, rows, err := runQuery(sqlConn,
-		makeQuery(`SELECT count(username) FROM system.users WHERE username = $1 AND NOT "isRole"`, username), false)
+	_, rows, err := clisqlclient.RunQuery(sqlConn,
+		clisqlclient.MakeQuery(`SELECT count(username) FROM system.users WHERE username = $1 AND NOT "isRole"`, username), false)
 	if err != nil {
 		return -1, nil, err
 	}
@@ -164,7 +165,7 @@ func runLogout(cmd *cobra.Command, args []string) error {
 	}
 	defer sqlConn.Close()
 
-	logoutQuery := makeQuery(
+	logoutQuery := clisqlclient.MakeQuery(
 		`UPDATE system.web_sessions SET "revokedAt" = if("revokedAt"::timestamptz<now(),"revokedAt",now())
       WHERE username = $1
   RETURNING username,
@@ -193,7 +194,7 @@ func runAuthList(cmd *cobra.Command, args []string) error {
 	}
 	defer sqlConn.Close()
 
-	logoutQuery := makeQuery(`
+	logoutQuery := clisqlclient.MakeQuery(`
 SELECT username,
        id AS "session ID",
        "createdAt" as "created",

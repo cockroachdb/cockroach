@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/errors"
@@ -104,7 +105,10 @@ func runDumpFileImport(cmd *cobra.Command, args []string) error {
 }
 
 func runImport(
-	ctx context.Context, conn *sqlConn, importFormat, source, tableName string, mode importMode,
+	ctx context.Context,
+	conn clisqlclient.Conn,
+	importFormat, source, tableName string,
+	mode importMode,
 ) error {
 	if err := conn.EnsureConn(); err != nil {
 		return err

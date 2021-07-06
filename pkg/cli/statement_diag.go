@@ -20,6 +20,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -249,7 +250,7 @@ func runStmtDiagDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return conn.ExecTxn(func(conn *sqlConn) error {
+	return conn.ExecTxn(func(conn clisqlclient.TxBoundConn) error {
 		// Delete the request metadata.
 		if err := conn.Exec(
 			"DELETE FROM system.statement_diagnostics_requests WHERE statement_diagnostics_id = $1",
@@ -275,8 +276,8 @@ func runStmtDiagDelete(cmd *cobra.Command, args []string) error {
 	})
 }
 
-func runStmtDiagDeleteAll(conn *sqlConn) error {
-	return conn.ExecTxn(func(conn *sqlConn) error {
+func runStmtDiagDeleteAll(conn clisqlclient.Conn) error {
+	return conn.ExecTxn(func(conn clisqlclient.TxBoundConn) error {
 		// Delete the request metadata.
 		if err := conn.Exec(
 			"DELETE FROM system.statement_diagnostics_requests WHERE completed",

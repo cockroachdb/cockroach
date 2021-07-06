@@ -22,13 +22,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	apd "github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -342,7 +343,7 @@ func runListBackupsCmd(cmd *cobra.Command, args []string) error {
 	for _, backupPath := range backupPaths {
 		rows = append(rows, []string{"." + backupPath})
 	}
-	rowSliceIter := cli.NewRowSliceIter(rows, "l" /*align*/)
+	rowSliceIter := clisqlclient.NewRowSliceIter(rows, "l" /*align*/)
 	return cli.PrintQueryOutput(os.Stdout, cols, rowSliceIter)
 }
 
@@ -400,7 +401,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 		rows = append(rows, newRow)
 	}
 	cols := []string{"path", "start time", "end time"}
-	rowSliceIter := cli.NewRowSliceIter(rows, "lll" /*align*/)
+	rowSliceIter := clisqlclient.NewRowSliceIter(rows, "lll" /*align*/)
 	return cli.PrintQueryOutput(os.Stdout, cols, rowSliceIter)
 }
 
