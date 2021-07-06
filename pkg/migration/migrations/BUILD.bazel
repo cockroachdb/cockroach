@@ -9,6 +9,7 @@ go_library(
         "join_tokens.go",
         "migrations.go",
         "protected_ts_meta_migration.go",
+        "sql_stats.go",
         "truncated_state.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrations",

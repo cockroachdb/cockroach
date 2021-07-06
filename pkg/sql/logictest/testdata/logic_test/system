@@ -34,8 +34,10 @@ public  sqlliveness                      table  NULL  0  NULL
 public  statement_bundle_chunks          table  NULL  0  NULL
 public  statement_diagnostics            table  NULL  0  NULL
 public  statement_diagnostics_requests   table  NULL  0  NULL
+public  statement_statistics             table  NULL  0  NULL
 public  table_statistics                 table  NULL  0  NULL
 public  tenants                          table  NULL  0  NULL
+public  transaction_statistics           table  NULL  0  NULL
 public  ui                               table  NULL  0  NULL
 public  users                            table  NULL  0  NULL
 public  web_sessions                     table  NULL  0  NULL
@@ -75,6 +77,8 @@ SELECT id FROM system.descriptor
 39
 40
 41
+42
+43
 50
 51
 52
@@ -410,6 +414,10 @@ system  public  statement_diagnostics_requests   root    GRANT
 system  public  statement_diagnostics_requests   root    INSERT
 system  public  statement_diagnostics_requests   root    SELECT
 system  public  statement_diagnostics_requests   root    UPDATE
+system  public  statement_statistics             admin   GRANT
+system  public  statement_statistics             admin   SELECT
+system  public  statement_statistics             root    GRANT
+system  public  statement_statistics             root    SELECT
 system  public  table_statistics                 admin   DELETE
 system  public  table_statistics                 admin   GRANT
 system  public  table_statistics                 admin   INSERT
@@ -424,6 +432,10 @@ system  public  tenants                          admin   GRANT
 system  public  tenants                          admin   SELECT
 system  public  tenants                          root    GRANT
 system  public  tenants                          root    SELECT
+system  public  transaction_statistics           admin   GRANT
+system  public  transaction_statistics           admin   SELECT
+system  public  transaction_statistics           root    GRANT
+system  public  transaction_statistics           root    SELECT
 system  public  ui                               admin   DELETE
 system  public  ui                               admin   GRANT
 system  public  ui                               admin   INSERT
