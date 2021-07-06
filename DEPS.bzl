@@ -400,8 +400,8 @@ def go_deps():
         build_file_proto_mode = "disable_global",
         importpath = "github.com/bufbuild/buf",
         replace = "github.com/cockroachdb/buf",
-        sum = "h1:3JIbI8ldy42gUIvkcsc48LU8VGJ8OcNR+X1bUM/S6MI=",
-        version = "v0.43.2-0.20210705165955-fe556391f1c7",
+        sum = "h1:3JIzmmhIDkyRcQhnjWAEiEzdLbVtt/WKLU8erjE8T34=",
+        version = "v0.42.2-0.20210706083726-883d34031660",
     )
 
     go_repository(
@@ -543,14 +543,6 @@ def go_deps():
         sum = "h1:cqQfy1jclcSy/FwLjemeg3SR1yaINm74aQyupQ0Bl8M=",
         version = "v0.0.0-20201120205902-5459f2c99403",
     )
-    go_repository(
-        name = "com_github_cncf_xds_go",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/cncf/xds/go",
-        sum = "h1:OZmjad4L3H8ncOIR8rnb5MREYqG8ixi5+WbeUsquF0c=",
-        version = "v0.0.0-20210312221358-fbca930ec8ed",
-    )
-
     go_repository(
         name = "com_github_cockroachdb_apd",
         build_file_proto_mode = "disable_global",
@@ -1065,8 +1057,8 @@ def go_deps():
         name = "com_github_envoyproxy_go_control_plane",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/envoyproxy/go-control-plane",
-        sum = "h1:dulLQAYQFYtG5MTplgNGHWuV2D+OBD+Z8lmDBmbLg+s=",
-        version = "v0.9.9-0.20210512163311-63b5d3c536b0",
+        sum = "h1:QyzYnTnPE15SQyUeqU6qLbWxMkwyAyu+vGksa0b7j00=",
+        version = "v0.9.9-0.20210217033140-668b12f5399d",
     )
     go_repository(
         name = "com_github_envoyproxy_protoc_gen_validate",
@@ -1656,8 +1648,8 @@ def go_deps():
         name = "com_github_google_go_cmp",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/go-cmp",
-        sum = "h1:BKbKCqvP6I+rmFHt06ZmyQtvB8xAkWdhFyr0ZUNZcxQ=",
-        version = "v0.5.6",
+        sum = "h1:Khx7svrCpmxxtHBq5j2mp/xVjsi8hQMfNLvJFAlrGgU=",
+        version = "v0.5.5",
     )
     go_repository(
         name = "com_github_google_go_github",
@@ -2285,8 +2277,8 @@ def go_deps():
         name = "com_github_jhump_protoreflect",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jhump/protoreflect",
-        sum = "h1:Ivt7LN1DpWfBtIQrpCUCou0FNqhcEEKNGeU900XxW6k=",
-        version = "v1.8.3-0.20210426154227-2837af466451",
+        sum = "h1:dBmhjIVYJbfDDPGBvq/WLfi0mAMg5e2GGYzv9nW/Jxg=",
+        version = "v1.8.3-0.20210302193947-8255811fc3c0",
     )
 
     go_repository(
@@ -2466,8 +2458,8 @@ def go_deps():
         name = "com_github_klauspost_compress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
-        sum = "h1:G5AfA94pHPysR56qqrkO2pxEexdDzrpFJ6yt/VqWxVU=",
-        version = "v1.12.3",
+        sum = "h1:2KCfW3I9M7nSc5wOqXAlW2v2U6v+w6cbjvbfp+OykW8=",
+        version = "v1.12.2",
     )
     go_repository(
         name = "com_github_klauspost_cpuid",
@@ -3847,8 +3839,8 @@ def go_deps():
         name = "com_github_twitchtv_twirp",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/twitchtv/twirp",
-        sum = "h1:uYHA8+9cit/+LUfQjL6zo/0QDKTo4U2H/WAnJ6LfhBU=",
-        version = "v8.0.0+incompatible",
+        sum = "h1:VgwjwtPtKRwVt80FRXNCSkm30+n4YhqroQMkjLEbtik=",
+        version = "v7.1.1+incompatible",
     )
 
     go_repository(
@@ -4497,14 +4489,6 @@ def go_deps():
         version = "v0.23.0",
     )
     go_repository(
-        name = "io_opentelemetry_go_proto_otlp",
-        build_file_proto_mode = "disable_global",
-        importpath = "go.opentelemetry.io/proto/otlp",
-        sum = "h1:rwOQPCuKAKmwGKq2aVNnYIibI6wnV7EvzgfTCzcdGg8=",
-        version = "v0.7.0",
-    )
-
-    go_repository(
         name = "io_rsc_binaryregexp",
         build_file_proto_mode = "disable_global",
         importpath = "rsc.io/binaryregexp",
@@ -4554,8 +4538,8 @@ def go_deps():
         name = "org_golang_google_grpc",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/grpc",
-        sum = "h1:UwAg44F4WVGhmEWcBpHqAfe5XGLe6FwErLFEfbmeNdI=",
-        version = "v1.39.0-dev.0.20210519181852-3dd75a6888ce",
+        sum = "h1:/9BgsAsa5nWe26HqOlvlgJnqBuktYOLCgjCPqsa56W0=",
+        version = "v1.38.0",
     )
     go_repository(
         name = "org_golang_google_grpc_examples",
@@ -4569,8 +4553,8 @@ def go_deps():
         name = "org_golang_google_protobuf",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/protobuf",
-        sum = "h1:nVuQ4k/NgcScf/FWjCN+NO1lTEMTfTBIFp5w7/qxyUA=",
-        version = "v1.26.1-0.20210520194023-50a85913fbce",
+        sum = "h1:bxAC2xTBsZGibn2RTntX0oH50xLsqy1OxA9tTL3p/lk=",
+        version = "v1.26.0",
     )
     go_repository(
         name = "org_golang_x_arch",
@@ -4761,8 +4745,8 @@ def go_deps():
         name = "org_uber_go_zap",
         build_file_proto_mode = "disable_global",
         importpath = "go.uber.org/zap",
-        sum = "h1:MTjgFu6ZLKvY6Pvaqk97GlxNBuMpV4Hy/3P6tRGlI2U=",
-        version = "v1.17.0",
+        sum = "h1:uFRZXykJGK9lLY4HtgSw44DnIcAM+kRBP7x5m+NpAOM=",
+        version = "v1.16.0",
     )
     go_repository(
         name = "tools_gotest",
