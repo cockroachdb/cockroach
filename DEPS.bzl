@@ -399,8 +399,9 @@ def go_deps():
         name = "com_github_bufbuild_buf",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/bufbuild/buf",
-        sum = "h1:qXTtmuF3vBbR2K8RuyO3Qu8Yh887U1SG5g2ZlwOxUxQ=",
-        version = "v0.42.1",
+        replace = "github.com/cockroachdb/buf",
+        sum = "h1:3JIzmmhIDkyRcQhnjWAEiEzdLbVtt/WKLU8erjE8T34=",
+        version = "v0.42.2-0.20210706083726-883d34031660",
     )
 
     go_repository(
