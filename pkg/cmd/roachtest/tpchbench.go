@@ -90,7 +90,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 		cmd := fmt.Sprintf(
 			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
 				"--num-runs=%d --max-ops=%d {pgurl%s} "+
-				"--histograms="+perfArtifactsDir+"/stats.json --histograms-max-latency=%s",
+				"--histograms="+t.PerfArtifactsDir()+"/stats.json --histograms-max-latency=%s",
 			filename,
 			b.numRunsPerQuery,
 			maxOps,

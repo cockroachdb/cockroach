@@ -44,7 +44,7 @@ func registerLedger(r registry.Registry) {
 				concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*32))
 				duration := " --duration=" + ifLocal(c, "10s", "10m")
 
-				cmd := fmt.Sprintf("./workload run ledger --init --histograms="+perfArtifactsDir+"/stats.json"+
+				cmd := fmt.Sprintf("./workload run ledger --init --histograms="+t.PerfArtifactsDir()+"/stats.json"+
 					concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, loadNode, cmd)
 				return nil

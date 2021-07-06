@@ -66,7 +66,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 				" --tolerate-errors=t"+
 				" --concurrency=%d"+
 				" --query-file %s"+
-				" --histograms="+perfArtifactsDir+"/stats.json "+
+				" --histograms="+t.PerfArtifactsDir()+"/stats.json "+
 				" --ramp=%s --duration=%s {pgurl:1-%d}",
 			s.Concurrency, queryFileName, rampDuration, duration, c.Spec().NodeCount-1)
 		c.Run(ctx, workloadNode, cmd)

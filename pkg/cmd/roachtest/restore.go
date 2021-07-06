@@ -411,7 +411,7 @@ func registerRestore(r registry.Registry) {
 				// 	})
 				// })
 
-				tick := initBulkJobPerfArtifacts(ctx, testName, item.timeout)
+				tick := initBulkJobPerfArtifacts(ctx, t, testName, item.timeout)
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
 					defer hc.Done()
@@ -436,7 +436,7 @@ func registerRestore(r registry.Registry) {
 
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
-					if err := c.PutE(ctx, t.L(), perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+					if err := c.PutE(ctx, t.L(), t.PerfArtifactsDir(), t.PerfArtifactsDir(), c.Node(1)); err != nil {
 						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 					}
 					return nil

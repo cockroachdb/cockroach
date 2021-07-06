@@ -73,7 +73,7 @@ func registerInterleaved(r registry.Registry) {
 		c.Run(ctx, cockroachEast.RandNode(), cmdInit)
 
 		duration := " --duration " + ifLocal(c, "10s", "10m")
-		histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
+		histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
 
 		createCmd := func(locality string, cockroachNodes option.NodeListOption) string {
 			return fmt.Sprintf(
