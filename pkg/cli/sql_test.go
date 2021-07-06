@@ -346,7 +346,11 @@ func Example_sql_lex() {
 
 	conn := makeSQLConn(fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
 		security.RootUser, c.ServingSQLAddr()))
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			fmt.Fprintf(stderr, "error closing connection: %v\n", err)
+		}
+	}()
 
 	tests := []string{`
 select '
