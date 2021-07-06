@@ -3,13 +3,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "clisqlclient",
     srcs = [
-        "binding.go",
+        "api.go",
         "conn_util.go",
         "doc.go",
         "format_table.go",
         "format_value.go",
         "init_conn_error.go",
         "table_display_format.go",
+        "testutils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli/clisqlclient",
     visibility = ["//visibility:public"],
