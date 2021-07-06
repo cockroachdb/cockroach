@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/faketreeeval",
         "//pkg/sql/gcjob",
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
