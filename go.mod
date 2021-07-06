@@ -182,6 +182,10 @@ replace github.com/olekukonko/tablewriter => github.com/cockroachdb/tablewriter 
 
 replace github.com/abourget/teamcity => github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11
 
+// Temporary replacement until https://github.com/cockroachdb/cockroach/pull/67221#issuecomment-874236134
+// has been addressed.
+replace github.com/bufbuild/buf => github.com/cockroachdb/buf v0.42.2-0.20210706083726-883d34031660
+
 replace honnef.co/go/tools => honnef.co/go/tools v0.0.1-2020.1.6
 
 replace vitess.io/vitess => github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82
