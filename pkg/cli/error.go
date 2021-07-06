@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -126,7 +127,7 @@ func MaybeDecorateGRPCError(
 			return connSecurityHint()
 		}
 
-		if wErr := (*initialSQLConnectionError)(nil); errors.As(err, &wErr) {
+		if wErr := (*clisqlclient.InitialSQLConnectionError)(nil); errors.As(err, &wErr) {
 			// SQL handshake failed after establishing a TCP connection
 			// successfully, something else than CockroachDB responded, was
 			// confused and closed the door on us.

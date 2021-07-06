@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -548,7 +549,7 @@ func (zc *debugZipContext) collectPerNodeData(
 	return nil
 }
 
-func guessNodeURL(workingURL string, hostport string) *sqlConn {
+func guessNodeURL(workingURL string, hostport string) clisqlclient.Conn {
 	u, err := url.Parse(workingURL)
 	if err != nil {
 		u = &url.URL{Host: "invalid"}
