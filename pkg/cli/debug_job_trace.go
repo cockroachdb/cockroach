@@ -37,7 +37,7 @@ var debugJobTraceFromClusterCmd = &cobra.Command{
 
 const jobTraceZipSuffix = "job-trace.zip"
 
-func runDebugJobTrace(_ *cobra.Command, args []string) error {
+func runDebugJobTrace(_ *cobra.Command, args []string) (resErr error) {
 	jobID, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil {
 		return err
@@ -47,7 +47,7 @@ func runDebugJobTrace(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Wrap(err, "could not establish connection to cluster")
 	}
-	defer sqlConn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
 
 	return constructJobTraceZipBundle(context.Background(), sqlConn, jobID)
 }
