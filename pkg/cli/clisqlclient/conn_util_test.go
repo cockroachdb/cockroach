@@ -62,7 +62,11 @@ func TestConnRecover(t *testing.T) {
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	// Sanity check to establish baseline.
 	rows, err := conn.Query(`SELECT 1`, nil)
@@ -139,7 +143,11 @@ func TestRunQuery(t *testing.T) {
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	var b bytes.Buffer
 
@@ -260,7 +268,11 @@ func TestUtfName(t *testing.T) {
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	var b bytes.Buffer
 
@@ -315,7 +327,11 @@ func TestTransactionRetry(t *testing.T) {
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	var tries int
 	err := conn.ExecTxn(func(conn clisqlclient.TxBoundConn) error {

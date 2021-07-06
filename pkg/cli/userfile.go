@@ -92,12 +92,12 @@ atomic, and all deletions prior to the first failure will occur.
 	Aliases: []string{"rm"},
 }
 
-func runUserFileDelete(cmd *cobra.Command, args []string) error {
+func runUserFileDelete(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	glob := args[0]
 
@@ -114,12 +114,12 @@ func runUserFileDelete(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runUserFileList(cmd *cobra.Command, args []string) error {
+func runUserFileList(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	var glob string
 	if len(args) > 0 {
@@ -185,12 +185,12 @@ func uploadUserFileRecursive(conn clisqlclient.Conn, srcDir, dstDir string) erro
 	return nil
 }
 
-func runUserFileUpload(cmd *cobra.Command, args []string) error {
+func runUserFileUpload(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	source := args[0]
 
@@ -216,12 +216,12 @@ func runUserFileUpload(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runUserFileGet(cmd *cobra.Command, args []string) error {
+func runUserFileGet(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 	ctx := context.Background()
 
 	var dest string
