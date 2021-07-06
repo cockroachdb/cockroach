@@ -790,7 +790,6 @@ func init() {
 			genSettingsListCmd,
 			demoCmd,
 			debugListFilesCmd,
-			debugTimeSeriesDumpCmd,
 			debugJobTraceFromClusterCmd,
 		},
 		demoCmd.Commands()...)
