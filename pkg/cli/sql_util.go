@@ -975,6 +975,11 @@ func maybeShowTimes(
 	// output will be execution time(s).
 	fmt.Fprintln(w)
 
+	// We accumulate the timing details into a buffer prior to emitting
+	// them to the output stream, so as to avoid interleaving warnings
+	// or SQL notices with the full timing string.
+	var stats strings.Builder
+
 	// Suggested by Radu: for sub-second results, show simplified
 	// timings in milliseconds.
 	unit := "s"
@@ -987,26 +992,27 @@ func maybeShowTimes(
 	}
 
 	if sqlCtx.verboseTimings {
-		fmt.Fprintf(w, "Time: %s", clientSideQueryLatency)
+		fmt.Fprintf(&stats, "Time: %s", clientSideQueryLatency)
 	} else {
 		// Simplified displays: human users typically can't
 		// distinguish sub-millisecond latencies.
-		fmt.Fprintf(w, "Time: %.*f%s", precision, clientSideQueryLatency.Seconds()*multiplier, unit)
+		fmt.Fprintf(&stats, "Time: %.*f%s", precision, clientSideQueryLatency.Seconds()*multiplier, unit)
 	}
 
 	if !sqlCtx.enableServerExecutionTimings {
-		fmt.Fprintln(w)
+		fmt.Fprintln(w, stats.String())
 		return
 	}
 
 	// If discrete server/network timings are available, also print them.
 	parseLat, planLat, execLat, serviceLat, jobsLat, containsJobLat, err := conn.getLastQueryStatistics()
 	if err != nil {
+		fmt.Fprint(w, stats.String())
 		fmt.Fprintf(stderr, "\nwarning: %v", err)
 		return
 	}
 
-	fmt.Fprint(stderr, " total")
+	fmt.Fprint(&stats, " total")
 
 	networkLat := clientSideQueryLatency - (serviceLat + jobsLat)
 	// serviceLat can be greater than clientSideQueryLatency for some extremely quick
@@ -1021,10 +1027,10 @@ func maybeShowTimes(
 		// information to not confuse users.
 		// TODO(arul): this can be removed in 22.1.
 		if containsJobLat {
-			fmt.Fprintf(w, " (parse %s / plan %s / exec %s / schema change %s / other %s / network %s)\n",
+			fmt.Fprintf(&stats, " (parse %s / plan %s / exec %s / schema change %s / other %s / network %s)",
 				parseLat, planLat, execLat, jobsLat, otherLat, networkLat)
 		} else {
-			fmt.Fprintf(w, " (parse %s / plan %s / exec %s / other %s / network %s)\n",
+			fmt.Fprintf(&stats, " (parse %s / plan %s / exec %s / other %s / network %s)",
 				parseLat, planLat, execLat, otherLat, networkLat)
 		}
 	} else {
@@ -1035,13 +1041,14 @@ func maybeShowTimes(
 		// small queries, the detail is just noise to the human observer.
 		sep := " ("
 		reportTiming := func(label string, lat time.Duration) {
-			fmt.Fprintf(w, "%s%s %.*f%s", sep, label, precision, lat.Seconds()*multiplier, unit)
+			fmt.Fprintf(&stats, "%s%s %.*f%s", sep, label, precision, lat.Seconds()*multiplier, unit)
 			sep = " / "
 		}
 		reportTiming("execution", serviceLat+jobsLat)
 		reportTiming("network", networkLat)
-		fmt.Fprintln(w, ")")
+		fmt.Fprint(&stats, ")")
 	}
+	fmt.Fprintln(w, stats.String())
 }
 
 // sqlRowsToStrings turns 'rows' into a list of rows, each of which
