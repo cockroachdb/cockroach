@@ -165,7 +165,7 @@ func registerDrop(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.
-			if local {
+			if c.IsLocal() {
 				numNodes = 4
 				warehouses = 1
 				fmt.Printf("running with w=%d,nodes=%d in local mode\n", warehouses, numNodes)

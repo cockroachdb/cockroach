@@ -51,7 +51,7 @@ func registerRoachmart(r registry.Registry) {
 		t.Status("initializing workload")
 		roachmartRun(ctx, 0, "./workload", "init", "roachmart")
 
-		duration := " --duration=" + ifLocal("10s", "10m")
+		duration := " --duration=" + ifLocal(c, "10s", "10m")
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, t)

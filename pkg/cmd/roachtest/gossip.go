@@ -506,7 +506,7 @@ func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Clust
 	}
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		if local {
+		if c.IsLocal() {
 			externalIP[i-1] = "localhost"
 		}
 		extAddr := externalIP[i-1]
@@ -536,7 +536,7 @@ func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Clust
 				t.Fatal(err)
 			}
 
-			if local {
+			if c.IsLocal() {
 				if !strings.Contains(advertiseAddress, "localhost") {
 					t.Fatal("Expected connect address to contain localhost")
 				}

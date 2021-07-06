@@ -30,7 +30,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		startImport := func(c cluster.Cluster) (jobID string, err error) {
 			// partsupp is 11.2 GiB.
 			tableName := "partsupp"
-			if local {
+			if c.IsLocal() {
 				// part is 2.264 GiB.
 				tableName = "part"
 			}
@@ -312,7 +312,7 @@ func registerImportMixedVersion(r registry.Registry) {
 				t.Fatal(err)
 			}
 			warehouses := 100
-			if local {
+			if c.IsLocal() {
 				warehouses = 10
 			}
 			runImportMixedVersion(ctx, t, c, warehouses, predV)
@@ -323,7 +323,7 @@ func registerImportMixedVersion(r registry.Registry) {
 func registerImportDecommissioned(r registry.Registry) {
 	runImportDecommissioned := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		warehouses := 100
-		if local {
+		if c.IsLocal() {
 			warehouses = 10
 		}
 

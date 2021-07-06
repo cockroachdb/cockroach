@@ -89,13 +89,13 @@ func registerKV(r registry.Registry) {
 			if opts.concMultiplier != 0 {
 				concurrencyMultiplier = opts.concMultiplier
 			}
-			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*concurrencyMultiplier))
+			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*concurrencyMultiplier))
 
 			splits := " --splits=" + strconv.Itoa(computeNumSplits(opts))
 			if opts.duration == 0 {
 				opts.duration = 10 * time.Minute
 			}
-			duration := " --duration=" + ifLocal("10s", opts.duration.String())
+			duration := " --duration=" + ifLocal(c, "10s", opts.duration.String())
 			var readPercent string
 			if opts.spanReads {
 				// SFU makes sense only if we repeat writes to the same key. Here
@@ -623,8 +623,8 @@ func registerKVSplits(r registry.Registry) {
 				t.Status("running workload")
 				m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 				m.Go(func(ctx context.Context) error {
-					concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-					splits := " --splits=" + ifLocal("2000", fmt.Sprint(item.splits))
+					concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
+					splits := " --splits=" + ifLocal(c, "2000", fmt.Sprint(item.splits))
 					cmd := fmt.Sprintf(
 						"./workload run kv --init --max-ops=1"+
 							concurrency+splits+
@@ -722,7 +722,7 @@ func registerKVRangeLookups(r registry.Registry) {
 				return err
 			}
 			close(doneInit)
-			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
 			duration := " --duration=10m"
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is

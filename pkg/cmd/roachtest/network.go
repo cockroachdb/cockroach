@@ -118,7 +118,7 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 	waitForFullReplication(t, db)
 
 	duration := time.Hour
-	if local {
+	if c.IsLocal() {
 		// NB: this is really just testing the test with this duration, it won't
 		// be able to detect slow goroutine leaks.
 		duration = 5 * time.Minute

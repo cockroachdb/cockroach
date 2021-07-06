@@ -91,7 +91,7 @@ func Toxify(
 	ctx context.Context, t test.Test, c cluster.Cluster, node option.NodeListOption,
 ) (*ToxiCluster, error) {
 	toxiURL := "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-linux-amd64"
-	if local && runtime.GOOS == "darwin" {
+	if c.IsLocal() && runtime.GOOS == "darwin" {
 		toxiURL = "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-darwin-amd64"
 	}
 	if err := func() error {
