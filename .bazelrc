@@ -5,7 +5,7 @@ query --ui_event_filters=-DEBUG
 try-import %workspace%/.bazelrc.user
 
 # CI should always run with `--config=ci`.
-build:ci --stamp --workspace_status_command=$(pwd)/build-rev.sh
+build:ci --stamp
 build:ci --host_crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
@@ -18,15 +18,25 @@ test:ci --test_output=errors
 # weird, but I think `rules_foreign_cc` doesn't play too nicely with `--platforms`?
 build:crosslinux --platforms=//build/toolchains:cross_linux
 build:crosslinux --crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
+build:crosslinux '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu'
+build:crosslinux --config=ci
 build:crosswindows --platforms=//build/toolchains:cross_windows
 build:crosswindows --crosstool_top=@toolchain_cross_x86_64-w64-mingw32//:suite
+build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32'
+build:crosswindows --config=ci
 build:crossmacos --platforms=//build/toolchains:cross_macos
 build:crossmacos --crosstool_top=@toolchain_cross_x86_64-apple-darwin19//:suite
+build:crossmacos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19'
+build:crossmacos --config=ci
 build:crosslinuxarm --platforms=//build/toolchains:cross_linux_arm
 build:crosslinuxarm --crosstool_top=@toolchain_cross_aarch64-unknown-linux-gnu//:suite
+build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-unknown-linux-gnu'
+build:crosslinuxarm --config=ci
 
 # developer configurations. Add e.g. --config=devdarwinx86_64 to turn these on.
 build:devdarwinx86_64 --crosstool_top=@toolchain_dev_darwin_x86-64//:suite
 # NOTE(ricky): This is consumed in `BUILD` files (see
 # `build/toolchains/BUILD.bazel`).
-build:devdarwinx86_64 --define cockroach_bazel_dev=y
+build:devdarwinx86_64 --config=dev
+build:dev --define cockroach_bazel_dev=y
+build:dev --stamp --workspace_status_command=./build/bazelutil/stamp.sh
