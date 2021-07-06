@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -94,6 +95,7 @@ type PlanHookState interface {
 	CreateSchemaNamespaceEntry(ctx context.Context, schemaNameKey roachpb.Key,
 		schemaID descpb.ID) error
 	MigrationJobDeps() migration.JobDeps
+	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

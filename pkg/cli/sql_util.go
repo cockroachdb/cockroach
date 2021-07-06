@@ -972,13 +972,17 @@ func maybeShowTimes(
 
 	// Print a newline early. This provides a discreet visual
 	// feedback that execution finished, and that the next line of
-	// output will be execution time(s).
+	// output will be a warning or execution time(s).
 	fmt.Fprintln(w)
 
 	// We accumulate the timing details into a buffer prior to emitting
 	// them to the output stream, so as to avoid interleaving warnings
 	// or SQL notices with the full timing string.
 	var stats strings.Builder
+
+	// Print a newline so that there is a visual separation between a notice and
+	// the timing information.
+	fmt.Fprintln(&stats)
 
 	// Suggested by Radu: for sub-second results, show simplified
 	// timings in milliseconds.
