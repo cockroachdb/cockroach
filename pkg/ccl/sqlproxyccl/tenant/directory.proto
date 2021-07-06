@@ -20,9 +20,43 @@ message WatchPodsRequest {}
 enum EventType {
   option (gogoproto.goproto_enum_prefix) = false;
 
+  // ADDED indicates that a new resource has been created.
   ADDED = 0;
+  // MODIFIED indicates one or more fields of an existing resources has been
+  // updated.
   MODIFIED = 1;
+  // DELETED indicates that an existing resource has been deleted.
   DELETED = 2;
+}
+
+// PodState gives the current state of a tenant pod, so that the proxy knows
+// how/where to route traffic.
+// NOTE: This is not the same as the Kubernetes Pod Status.
+enum PodState {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // RUNNING indicates the pod is active and ready to accept SQL connections.
+  // NOTE: The proxy must still be prepared to retry connections against a
+  // running pod in case of transient failures.
+  RUNNING = 0;
+  // DRAINING indicates that the pod is in the process of shedding its
+  // connections so that it can be terminated. No new connections should be
+  // routed to the pod. In addition, the proxy will begin terminating existing
+  // less active connections to the pod.
+  DRAINING = 1;
+  // DELETING indicates that the pod is being terminated.
+  DELETING = 2;
+}
+
+// Pod contains the information about a tenant pod. Most often it is a
+// combination of an ip address and port, e.g. 132.130.1.11:34576.
+message Pod {
+  // TenantID is the tenant that owns the pod.
+  uint64 tenant_id = 2[(gogoproto.customname) = "TenantID"];
+  // Addr is the ip and port combo identifying the tenant pod.
+  string Addr = 1;
+  // PodState gives the current status of the tenant pod
+  PodState State = 3;
 }
 
 // WatchPodsResponse represents the notifications that the server sends to
@@ -30,10 +64,9 @@ enum EventType {
 message WatchPodsResponse {
   // EventType is the type of the notifications - added, modified, deleted.
   EventType typ = 1;
-  // Addr is the address of the pod that this notification applies to.
-  string addr = 2;
-  // TenantID is the tenant that owns the pod.
-  uint64 tenant_id = 3[(gogoproto.customname) = "TenantID"];
+  reserved 2, 3;
+  // Pod describes the tenant pod which has been added, modified, or deleted.
+  Pod pod = 4;
 }
 
 // ListPodsRequest is used to query the server for the list of current
@@ -57,18 +90,10 @@ message EnsurePodRequest {
 message EnsurePodResponse {
 }
 
-// Pod contains the information about a tenant pod. Most often it is a
-// combination of an ip address and port, e.g. 132.130.1.11:34576.
-message Pod {
-  // Addr is the ip and port combo identifying the tenant pod.
-  string Addr = 1;
-}
-
-// ListPodsResponse is sent back as a result of requesting the list of
-// pods for a given tenant.
+// ListPodsResponse is sent back as a result of requesting the list of pods for
+// a given tenant.
 message ListPodsResponse {
-  // Pods is the list of pods currently active for the requested
-  // tenant.
+  // Pods is the list of pods currently active for the requested tenant.
   repeated Pod pods = 1;
 }
 
@@ -88,17 +113,17 @@ message GetTenantResponse {
 // Directory specifies a service that keeps track and manages tenant backends,
 // related metadata and their pods.
 service Directory {
-  // ListPods is used to query the server for the list of current pods
-  // of a given tenant.
+  // ListPods is used to query the server for the list of current pods of a
+  // given tenant.
   rpc ListPods(ListPodsRequest) returns (ListPodsResponse);
-  // WatchPods is used to get a stream, that is used to receive notifications
-  // about changes in tenant backend's state - added, modified and deleted.
+  // WatchPods gets a stream of tenant pod change notifications. Notifications
+  // are sent when a tenant pod is created, destroyed, or modified. When
+  // WatchPods is first called, it returns notifications for all existing pods.
   rpc WatchPods(WatchPodsRequest) returns (stream WatchPodsResponse);
-  // EnsurePod is used to ensure that a tenant's backend is active. If
-  // there is an active backend then the server doesn't have to do anything. If
-  // there isn't an active backend, then the server has to bring a new one up.
-  // If the requested tenant does not exist, EnsurePod returns a GRPC
-  // NotFound error.
+  // EnsurePod is used to ensure that a tenant's backend is active. If there is
+  // an active backend then the server doesn't have to do anything. If there
+  // isn't an active backend, then the server has to bring a new one up. If the
+  // requested tenant does not exist, EnsurePod returns a GRPC NotFound error.
   rpc EnsurePod(EnsurePodRequest) returns (EnsurePodResponse);
   // GetTenant is used to fetch the metadata of a specific tenant. If the tenant
   // does not exist, GetTenant returns a GRPC NotFound error.
