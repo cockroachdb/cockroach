@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kvevent",
@@ -22,5 +22,22 @@ go_library(
         "//pkg/util/quotapool",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "kvevent_test",
+    srcs = ["blocking_buffer_test.go"],
+    deps = [
+        ":kvevent",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/mon",
+        "@com_github_stretchr_testify//require",
     ],
 )
