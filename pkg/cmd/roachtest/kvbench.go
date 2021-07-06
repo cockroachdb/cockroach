@@ -267,7 +267,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 
 			workloadCmd := strings.Builder{}
 			clusterHistPath := fmt.Sprintf("%s/kvbench/maxrate=%d/stats.json",
-				perfArtifactsDir, maxrate)
+				t.PerfArtifactsDir(), maxrate)
 
 			// The number of workers running on the loadGen node must be high enough to
 			// fully saturate the loadGen node since the free variable here is the value

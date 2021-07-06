@@ -107,7 +107,7 @@ func registerImportTPCC(r registry.Registry) {
 		hc := NewHealthChecker(t, c, c.All())
 		m.Go(hc.Runner)
 
-		tick := initBulkJobPerfArtifacts(ctx, testName, timeout)
+		tick := initBulkJobPerfArtifacts(ctx, t, testName, timeout)
 		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
@@ -122,7 +122,7 @@ func registerImportTPCC(r registry.Registry) {
 
 			// Upload the perf artifacts to any one of the nodes so that the test
 			// runner copies it into an appropriate directory path.
-			if err := c.PutE(ctx, t.L(), perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+			if err := c.PutE(ctx, t.L(), t.PerfArtifactsDir(), t.PerfArtifactsDir(), c.Node(1)); err != nil {
 				log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 			}
 			return nil
@@ -181,7 +181,7 @@ func registerImportTPCH(r registry.Registry) {
 			Cluster: r.MakeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				tick := initBulkJobPerfArtifacts(ctx, t.Name(), item.timeout)
+				tick := initBulkJobPerfArtifacts(ctx, t, t.Name(), item.timeout)
 
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
@@ -258,7 +258,7 @@ func registerImportTPCH(r registry.Registry) {
 
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
-					if err := c.PutE(ctx, t.L(), perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+					if err := c.PutE(ctx, t.L(), t.PerfArtifactsDir(), t.PerfArtifactsDir(), c.Node(1)); err != nil {
 						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 					}
 					return nil

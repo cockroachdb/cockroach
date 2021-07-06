@@ -147,7 +147,7 @@ func runSchemaChangeRandomLoad(
 		"./workload run schemachange --verbose=1",
 		"--tolerate-errors=false",
 		// Save the histograms so that they can be reported to https://roachperf.crdb.dev/.
-		" --histograms=" + perfArtifactsDir + "/stats.json",
+		" --histograms=" + t.PerfArtifactsDir() + "/stats.json",
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
 		fmt.Sprintf("--txn-log %s", filepath.Join(string(storeDirectory), "transactions.json")),
