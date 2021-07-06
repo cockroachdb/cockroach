@@ -1478,9 +1478,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 func constructSchemaAndTableKey(
 	tableDesc *descpb.TableDescriptor, schemaIDToName map[descpb.ID]string,
 ) (schemaAndTableName, error) {
-	var schemaName string
-	var ok bool
-	schemaName, ok = schemaIDToName[tableDesc.GetUnexposedParentSchemaID()]
+	schemaName, ok := schemaIDToName[tableDesc.GetUnexposedParentSchemaID()]
 	if !ok && tableDesc.UnexposedParentSchemaID != keys.PublicSchemaID {
 		return schemaAndTableName{}, errors.Newf("invalid parent schema ID %d for table %s",
 			tableDesc.UnexposedParentSchemaID, tableDesc.GetName())
@@ -1716,7 +1714,7 @@ func parseAndCreateBundleTableDescs(
 	details jobspb.ImportDetails,
 	seqVals map[descpb.ID]int64,
 	skipFKs bool,
-	parentID descpb.ID,
+	parentDB catalog.DatabaseDescriptor,
 	files []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -1759,7 +1757,10 @@ func parseAndCreateBundleTableDescs(
 	case roachpb.IOFileFormat_Mysqldump:
 		fks.resolver.format.Format = roachpb.IOFileFormat_Mysqldump
 		evalCtx := &p.ExtendedEvalContext().EvalContext
-		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner, walltime)
+		tableDescs, err = readMysqlCreateTable(
+			ctx, reader, evalCtx, p, defaultCSVTableID, parentDB, tableName, fks,
+			seqVals, owner, walltime,
+		)
 	case roachpb.IOFileFormat_PgDump:
 		fks.resolver.format.Format = roachpb.IOFileFormat_PgDump
 		evalCtx := &p.ExtendedEvalContext().EvalContext
@@ -1770,7 +1771,7 @@ func parseAndCreateBundleTableDescs(
 			p.ExecCfg().DistSQLSrv.ExternalStorage)
 
 		tableDescs, schemaDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName,
-			parentID, walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
+			parentDB, walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
 
 		logErr := unsupportedStmtLogger.flush()
 		if logErr != nil {
@@ -1811,13 +1812,29 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
 		}
 
+		var dbDesc catalog.DatabaseDescriptor
+		{
+			s, lm, ie := p.ExtendedEvalContext().Settings, p.LeaseMgr(), p.ExecCfg().InternalExecutor
+			if err := descs.Txn(ctx, s, lm, ie, p.ExecCfg().DB, func(
+				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			) (err error) {
+				_, dbDesc, err = descriptors.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
+					Required:    true,
+					AvoidCached: true,
+				})
+				return err
+			}); err != nil {
+				return err
+			}
+		}
+
 		var schemaDescs []*schemadesc.Mutable
 		var tableDescs []*tabledesc.Mutable
 		var err error
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
 		if tableDescs, schemaDescs, err = parseAndCreateBundleTableDescs(
-			ctx, p, details, seqVals, skipFKs, parentID, files, format, walltime, owner,
+			ctx, p, details, seqVals, skipFKs, dbDesc, files, format, walltime, owner,
 			r.job.ID()); err != nil {
 			return err
 		}

@@ -797,7 +797,7 @@ meaningful deviation from how CockroachDB handles them today is that while the
 read does always need to touch the leader(s) of the data being read to determine
 the timestamp to read at, it doesn't necessarily need to read that data from the
 leader. Instead, it can take the timestamp provided by the leader and then wait
-on a follower replica for its safe time (synonymous with CockroachDB's closed
+on a follower replica for its safe time (synonymous with CockroachDB's resolved
 timestamp) to exceed the read timestamp. This is a fascinating form of load
 balancing, but is largely unrelated to this proposal, as this approach provides
 little latency or availability benefit.

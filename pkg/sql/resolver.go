@@ -1327,22 +1327,22 @@ func (p *planner) ResolveMutableTableDescriptorEx(
 	name *tree.UnresolvedObjectName,
 	required bool,
 	requiredType tree.RequiredTableKind,
-) (*tabledesc.Mutable, error) {
+) (catalog.ResolvedObjectPrefix, *tabledesc.Mutable, error) {
 	tn := name.ToTableName()
 	prefix, table, err := resolver.ResolveMutableExistingTableObject(ctx, p, &tn, required, requiredType)
 	if err != nil {
-		return nil, err
+		return catalog.ResolvedObjectPrefix{}, nil, err
 	}
 	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
 
 	if table != nil {
 		// Ensure that the user can access the target schema.
 		if err := p.canResolveDescUnderSchema(ctx, prefix.Schema, table); err != nil {
-			return nil, err
+			return catalog.ResolvedObjectPrefix{}, nil, err
 		}
 	}
 
-	return table, nil
+	return prefix, table, nil
 }
 
 // ResolveMutableTableDescriptorExAllowNoPrimaryKey performs the
@@ -1353,7 +1353,7 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 	name *tree.UnresolvedObjectName,
 	required bool,
 	requiredType tree.RequiredTableKind,
-) (*tabledesc.Mutable, error) {
+) (catalog.ResolvedObjectPrefix, *tabledesc.Mutable, error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags:      tree.CommonLookupFlags{Required: required, RequireMutable: true},
 		AllowWithoutPrimaryKey: true,
@@ -1362,7 +1362,7 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 	}
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
 	if err != nil || desc == nil {
-		return nil, err
+		return catalog.ResolvedObjectPrefix{}, nil, err
 	}
 	tn := tree.MakeTableNameFromPrefix(prefix.NamePrefix(), tree.Name(name.Object()))
 	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
@@ -1370,10 +1370,10 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 
 	// Ensure that the user can access the target schema.
 	if err := p.canResolveDescUnderSchema(ctx, prefix.Schema, table); err != nil {
-		return nil, err
+		return catalog.ResolvedObjectPrefix{}, nil, err
 	}
 
-	return table, nil
+	return prefix, table, err
 }
 
 // See ResolveUncachedTableDescriptor.

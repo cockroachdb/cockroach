@@ -540,6 +540,8 @@ func LoadAllDescs(
 
 // ResolveTargetsToDescriptors performs name resolution on a set of targets and
 // returns the resulting descriptors.
+//
+// TODO(ajwerner): adopt the collection here.
 func ResolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.TargetList,
 ) ([]catalog.Descriptor, []descpb.ID, error) {
