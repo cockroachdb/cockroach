@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -50,7 +49,6 @@ type EvalContext interface {
 	ClusterSettings() *cluster.Settings
 	EvalKnobs() kvserverbase.BatchEvalTestingKnobs
 
-	Engine() storage.Engine
 	Clock() *hlc.Clock
 	AbortSpan() *abortspan.AbortSpan
 	GetConcurrencyManager() concurrency.Manager
@@ -169,9 +167,6 @@ func (m *mockEvalCtxImpl) ClusterSettings() *cluster.Settings {
 }
 func (m *mockEvalCtxImpl) EvalKnobs() kvserverbase.BatchEvalTestingKnobs {
 	return kvserverbase.BatchEvalTestingKnobs{}
-}
-func (m *mockEvalCtxImpl) Engine() storage.Engine {
-	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) Clock() *hlc.Clock {
 	return m.MockEvalCtx.Clock

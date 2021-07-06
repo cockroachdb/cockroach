@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -84,11 +83,6 @@ func (rec *SpanSetReplicaEvalContext) NodeID() roachpb.NodeID {
 // GetNodeLocality returns the node locality.
 func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
 	return rec.i.GetNodeLocality()
-}
-
-// Engine returns the engine.
-func (rec *SpanSetReplicaEvalContext) Engine() storage.Engine {
-	return rec.i.Engine()
 }
 
 // GetFirstIndex returns the first index.

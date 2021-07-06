@@ -736,3 +736,16 @@ func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch
 		ts:         ts,
 	}
 }
+
+// DisableReaderAssertions unwraps any storage.Reader implementations that may
+// assert access against a given SpanSet.
+func DisableReaderAssertions(reader storage.Reader) storage.Reader {
+	switch v := reader.(type) {
+	case ReadWriter:
+		return DisableReaderAssertions(v.r)
+	case *spanSetBatch:
+		return DisableReaderAssertions(v.r)
+	default:
+		return reader
+	}
+}
