@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package clisqlclient
+package clisqlexec
 
 import (
 	"database/sql/driver"
@@ -18,14 +18,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // RunQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
-func (sqlExecCtx *ExecContext) RunQuery(
-	conn Conn, fn QueryFn, showMoreChars bool,
+func (sqlExecCtx *Context) RunQuery(
+	conn clisqlclient.Conn, fn clisqlclient.QueryFn, showMoreChars bool,
 ) ([]string, [][]string, error) {
 	rows, _, err := fn(conn)
 	if err != nil {
@@ -38,8 +39,8 @@ func (sqlExecCtx *ExecContext) RunQuery(
 
 // RunQueryAndFormatResults takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes output to 'w'.
-func (sqlExecCtx *ExecContext) RunQueryAndFormatResults(
-	conn Conn, w io.Writer, fn QueryFn,
+func (sqlExecCtx *Context) RunQueryAndFormatResults(
+	conn clisqlclient.Conn, w io.Writer, fn clisqlclient.QueryFn,
 ) (err error) {
 	startTime := timeutil.Now()
 	rows, isMultiStatementQuery, err := fn(conn)
@@ -144,9 +145,11 @@ func (sqlExecCtx *ExecContext) RunQueryAndFormatResults(
 }
 
 // maybeShowTimes displays the execution time if show_times has been set.
-func (sqlExecCtx *ExecContext) maybeShowTimes(
-	conn Conn, w io.Writer, isMultiStatementQuery bool, startTime,
-	queryCompleteTime time.Time,
+func (sqlExecCtx *Context) maybeShowTimes(
+	conn clisqlclient.Conn,
+	w io.Writer,
+	isMultiStatementQuery bool,
+	startTime, queryCompleteTime time.Time,
 ) {
 	if !sqlExecCtx.ShowTimes {
 		return
@@ -280,7 +283,7 @@ var tagsWithRowsAffected = map[string]struct{}{
 // If both the header row and list of rows are empty, it means no row
 // information was returned (eg: statement was not a query).
 // If showMoreChars is true, then more characters are not escaped.
-func sqlRowsToStrings(rows Rows, showMoreChars bool) ([]string, [][]string, error) {
+func sqlRowsToStrings(rows clisqlclient.Rows, showMoreChars bool) ([]string, [][]string, error) {
 	cols := getColumnStrings(rows, showMoreChars)
 	allRows, err := getAllRowStrings(rows, rows.ColumnTypeNames(), showMoreChars)
 	if err != nil {
@@ -289,7 +292,7 @@ func sqlRowsToStrings(rows Rows, showMoreChars bool) ([]string, [][]string, erro
 	return cols, allRows, nil
 }
 
-func getColumnStrings(rows Rows, showMoreChars bool) []string {
+func getColumnStrings(rows clisqlclient.Rows, showMoreChars bool) []string {
 	srcCols := rows.Columns()
 	cols := make([]string, len(srcCols))
 	for i, c := range srcCols {
