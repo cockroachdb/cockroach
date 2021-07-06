@@ -658,21 +658,14 @@ func allocateDescriptorRewrites(
 					return err
 				}
 
-				// We're restoring a table and not its parent database.  If the
-				// new database we're placing the table in is a multi-region database,
-				// block the restore. We do this because we currently have no way to
-				// modify this table and make it multi-region friendly. Long-term we'd
-				// want to modify the table so that it can exist in the multi-region
-				// database.
-				// https://github.com/cockroachdb/cockroach/issues/59804
-				if parentDB.IsMultiRegion() {
-					return pgerror.Newf(pgcode.FeatureNotSupported,
-						"cannot restore individual table %d into multi-region database %d",
-						table.GetID(),
-						parentDB.GetID(),
-					)
+				if parentDB.IsMultiRegion() && table.GetLocalityConfig() != nil {
+					// We're restoring a table and not its parent database. We may block
+					// restoring multi-region tables to multi-region databases since regions
+					// may mismatch.
+					if err := checkMultiRegionCompatible(ctx, txn, p.ExecCfg().Codec, table, parentDB); err != nil {
+						return pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
+					}
 				}
-
 				// Create the table rewrite with the new parent ID. We've done all the
 				// up-front validation that we can.
 				descriptorRewrites[table.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: parentID}
