@@ -476,3 +476,20 @@ SET standard_conforming_strings='true'
 
 statement ok
 SET standard_conforming_strings='on'
+
+
+subtest backslash_quote_test
+
+statement ok
+SET backslash_quote = 'on';
+
+statement ok
+SET backslash_quote = 'off';
+
+statement ok
+SET backslash_quote = 'safe_encoding';
+
+statement error invalid value for parameter "backslash_quote"
+SET backslash_quote = '123';
+
+

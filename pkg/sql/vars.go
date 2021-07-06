@@ -831,8 +831,11 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-LOC-TIMEOUT
 	`lock_timeout`: makeCompatIntVar(`lock_timeout`, 0),
 
+	// See https://www.postgresql.org/docs/9.1/runtime-config-compatible.html
+	`backslash_quote`: makeCompatStringVar(`backslash_quote`, `safe_encoding`, `on`, `off`, `safe_encoding`),
+
 	// Supported for PG compatibility only.
-	// See https://www.postgresql.org/docs/10/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+	// See https://www.postgresql.org/docs/10/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIER
 	`max_identifier_length`: {
 		Get: func(evalCtx *extendedEvalContext) string { return "128" },
 	},
