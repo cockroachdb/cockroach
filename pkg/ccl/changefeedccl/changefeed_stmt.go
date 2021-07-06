@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -285,6 +286,10 @@ func changefeedPlanHook(
 			return errors.Errorf("Outbound IO is disabled by configuration, cannot create changefeed into %s", parsedSink.Scheme)
 		}
 
+		if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; shouldProtect && !p.ExecCfg().Codec.ForSystemTenant() {
+			return errorutil.UnsupportedWithMultiTenancy(67271)
+		}
+
 		// Feature telemetry
 		telemetrySink := parsedSink.Scheme
 		if telemetrySink == `` {
@@ -347,15 +352,17 @@ func changefeedPlanHook(
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		{
+
 			var protectedTimestampID uuid.UUID
 			var spansToProtect []roachpb.Span
 			var ptr *ptpb.Record
-			if hasInitialScan := initialScanFromOptions(details.Opts); hasInitialScan {
+
+			shouldProtectTimestamp := initialScanFromOptions(details.Opts) && p.ExecCfg().Codec.ForSystemTenant()
+			if shouldProtectTimestamp {
 				protectedTimestampID = uuid.MakeV4()
 				spansToProtect = makeSpansToProtect(p.ExecCfg().Codec, details.Targets)
 				progress.GetChangefeed().ProtectedTimestampRecord = protectedTimestampID
-				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, jobID,
-					statementTime, spansToProtect)
+				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, jobID, statementTime, spansToProtect)
 			}
 
 			jr := jobs.Record{
@@ -370,6 +377,7 @@ func changefeedPlanHook(
 				Details:  details,
 				Progress: *progress.GetChangefeed(),
 			}
+
 			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr); err != nil {
 					return err
@@ -706,7 +714,7 @@ func (b *changefeedResumer) OnPauseRequest(
 	ctx context.Context, jobExec interface{}, txn *kv.Txn, progress *jobspb.Progress,
 ) error {
 	details := b.job.Details().(jobspb.ChangefeedDetails)
-	if _, shouldPause := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldPause {
+	if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldProtect {
 		return nil
 	}
 

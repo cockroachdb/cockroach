@@ -39,4 +39,11 @@ type TestTenantInterface interface {
 	// StatusServer returns the tenant's *server.SQLStatusServer as an
 	// interface{}.
 	StatusServer() interface{}
+
+	// DistSQLServer returns the *distsql.ServerImpl as an
+	// interface{}.
+	DistSQLServer() interface{}
+
+	// JobRegistry returns the *jobs.Registry as an interface{}.
+	JobRegistry() interface{}
 }
