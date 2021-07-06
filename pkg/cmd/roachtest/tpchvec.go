@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
@@ -556,7 +557,7 @@ func runTPCHVec(
 	}
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
-	waitForFullReplication(t, conn)
+	tests.WaitFor3XReplication(t, conn)
 
 	testRun(ctx, t, c, conn, testCase)
 	testCase.postTestRunHook(ctx, t, c, conn)
