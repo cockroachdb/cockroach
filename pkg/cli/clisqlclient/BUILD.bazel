@@ -8,6 +8,7 @@ go_library(
         "doc.go",
         "format_table.go",
         "format_value.go",
+        "init_conn_error.go",
         "table_display_format.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli/clisqlclient",
