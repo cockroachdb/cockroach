@@ -183,6 +183,29 @@ func (s *TestDirectoryServer) WatchPods(
 	return err
 }
 
+// Drain sends out DRAINING pod notifications for each process managed by the
+// test directory. This causes the proxy to start enforcing short idle
+// connection timeouts in order to drain the connections to the pod.
+func (s *TestDirectoryServer) Drain() {
+	s.proc.RLock()
+	defer s.proc.RUnlock()
+
+	for tenantID, processByAddr := range s.proc.processByAddrByTenantID {
+		for addr := range processByAddr {
+			s.listen.RLock()
+			defer s.listen.RUnlock()
+			s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
+				Typ: tenant.MODIFIED,
+				Pod: &tenant.Pod{
+					TenantID: tenantID,
+					Addr:     addr.String(),
+					State:    tenant.DRAINING,
+				},
+			})
+		}
+	}
+}
+
 func (s *TestDirectoryServer) notifyEventListenersLocked(req *tenant.WatchPodsResponse) {
 	for e := s.listen.eventListeners.Front(); e != nil; {
 		select {
@@ -264,9 +287,12 @@ func (s *TestDirectoryServer) registerInstanceLocked(tenantID uint64, process *P
 	s.listen.RLock()
 	defer s.listen.RUnlock()
 	s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-		Typ:      tenant.ADDED,
-		Addr:     process.SQL.String(),
-		TenantID: tenantID,
+		Typ: tenant.ADDED,
+		Pod: &tenant.Pod{
+			TenantID: tenantID,
+			Addr:     process.SQL.String(),
+			State:    tenant.RUNNING,
+		},
 	})
 }
 
@@ -284,9 +310,12 @@ func (s *TestDirectoryServer) deregisterInstance(tenantID uint64, sql net.Addr) 
 		s.listen.RLock()
 		defer s.listen.RUnlock()
 		s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-			Typ:      tenant.DELETED,
-			Addr:     sql.String(),
-			TenantID: tenantID,
+			Typ: tenant.DELETED,
+			Pod: &tenant.Pod{
+				TenantID: tenantID,
+				Addr:     sql.String(),
+				State:    tenant.DELETING,
+			},
 		})
 	}
 }
