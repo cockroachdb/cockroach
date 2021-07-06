@@ -33,6 +33,10 @@ type Test interface {
 	Fatalf(format string, args ...interface{})
 	Failed() bool
 	ArtifactsDir() string
+	// PerfArtifactsDir is the directory on cluster nodes in which perf artifacts
+	// reside. Upon success this directory is copied into test's ArtifactsDir from
+	// each node in the cluster.
+	PerfArtifactsDir() string
 	L() *logger.Logger
 	Progress(float64)
 	Status(args ...interface{})
