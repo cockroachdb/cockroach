@@ -51,12 +51,12 @@ To retrieve the IDs for inactive members, see 'node status --decommission'.
 	RunE: MaybeDecorateGRPCError(runLsNodes),
 }
 
-func runLsNodes(cmd *cobra.Command, args []string) error {
+func runLsNodes(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach node ls", useSystemDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	if cliCtx.cmdTimeout != 0 {
 		if err := conn.Exec(fmt.Sprintf("SET statement_timeout=%d", cliCtx.cmdTimeout), nil); err != nil {
@@ -135,7 +135,9 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 	return PrintQueryOutput(os.Stdout, getStatusNodeHeaders(), sliceIter)
 }
 
-func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]string, error) {
+func runStatusNodeInner(
+	showDecommissioned bool, args []string,
+) (colNames []string, rowVals [][]string, resErr error) {
 	joinUsingID := func(queries []string) (query string) {
 		for i, q := range queries {
 			if i == 0 {
@@ -203,7 +205,7 @@ FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (n
 	if err != nil {
 		return nil, nil, err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	queriesToJoin := []string{baseQuery}
 

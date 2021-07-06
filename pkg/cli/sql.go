@@ -1719,7 +1719,7 @@ func getInputFile() (cmdIn *os.File, closeFn func(), err error) {
 	return f, func() { _ = f.Close() }, nil
 }
 
-func runTerm(cmd *cobra.Command, args []string) error {
+func runTerm(cmd *cobra.Command, args []string) (resErr error) {
 	cmdIn, closeFn, err := getInputFile()
 	if err != nil {
 		return err
@@ -1737,7 +1737,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	return runClient(cmd, conn, cmdIn)
 }
