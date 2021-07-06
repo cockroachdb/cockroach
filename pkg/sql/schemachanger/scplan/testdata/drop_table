@@ -40,34 +40,10 @@ DROP TABLE defaultdb.shipments CASCADE;
 ----
 Stage 0
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 57
-    TableID: 55
-  *scop.DropForeignKeyRef
-    Name: fk_customers
-    Outbound: true
-    TableID: 55
-  *scop.DropForeignKeyRef
-    Name: fk_customers
-    TableID: 52
-  *scop.DropForeignKeyRef
-    Name: fk_orders
-    Outbound: true
-    TableID: 55
-  *scop.DropForeignKeyRef
-    Name: fk_orders
-    TableID: 53
+    DependedOnBy: 55
+    TableID: 54
   *scop.RemoveColumnDefaultExpression
-    ColumnID: 1
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 3
+    ColumnID: 5
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
@@ -77,20 +53,44 @@ Stage 0
   *scop.UpdateRelationDeps
     TableID: 55
   *scop.RemoveColumnDefaultExpression
-    ColumnID: 5
+    ColumnID: 3
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 2
+    TableID: 55
+  *scop.UpdateRelationDeps
+    TableID: 55
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 1
+    TableID: 55
+  *scop.UpdateRelationDeps
+    TableID: 55
+  *scop.DropForeignKeyRef
+    Name: fk_orders
+    TableID: 53
+  *scop.DropForeignKeyRef
+    Name: fk_orders
+    Outbound: true
+    TableID: 55
+  *scop.DropForeignKeyRef
+    Name: fk_customers
+    TableID: 52
+  *scop.DropForeignKeyRef
+    Name: fk_customers
+    Outbound: true
+    TableID: 55
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 55
-    TableID: 54
+    DependedOnBy: 57
+    TableID: 55
 Stage 1
   *scop.MarkDescriptorAsDropped
-    TableID: 57
+    TableID: 55
   *scop.DrainDescriptorName
-    TableID: 57
+    TableID: 55
   *scop.CreateGcJobForDescriptor
-    DescID: 57
+    DescID: 55
   *scop.MarkDescriptorAsDropped
     TableID: 56
   *scop.DrainDescriptorName
@@ -98,11 +98,11 @@ Stage 1
   *scop.CreateGcJobForDescriptor
     DescID: 56
   *scop.MarkDescriptorAsDropped
-    TableID: 55
+    TableID: 57
   *scop.DrainDescriptorName
-    TableID: 55
+    TableID: 57
   *scop.CreateGcJobForDescriptor
-    DescID: 55
+    DescID: 57
 
 deps
 DROP TABLE defaultdb.shipments CASCADE;

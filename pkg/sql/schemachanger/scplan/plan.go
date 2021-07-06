@@ -261,7 +261,7 @@ func doesPathExistToNode(graph *scgraph.Graph, start *scpb.Node, target *scpb.No
 			visitedNodes[curr] = struct{}{}
 			edges, ok := graph.GetDepEdgesFrom(curr)
 			if !ok {
-				return false
+				continue
 			}
 			// Append all of the nodes to visit
 			for _, currEdge := range edges {
@@ -291,8 +291,8 @@ func sortOps(graph *scgraph.Graph, ops []scop.Op) {
 			if !compareOps(graph, ops[i], ops[j]) && // Greater, but not equal (if equal opposite comparison would match).
 				compareOps(graph, ops[j], ops[i]) {
 				panic(errors.AssertionFailedf("Operators are not completely sorted %d %d", i, j))
-			} else if compareOps(graph, ops[j], ops[i]) {
-				compareOps(graph, ops[j], ops[i])
+			} else if compareOps(graph, ops[j], ops[i]) &&
+				!compareOps(graph, ops[j], ops[i]) {
 				panic(errors.AssertionFailedf("Operators are not completely sorted %d %d", i, j))
 			}
 		}
@@ -308,8 +308,12 @@ func compareOps(graph *scgraph.Graph, firstOp scop.Op, secondOp scop.Op) (less b
 	if firstNode == secondNode {
 		return false // Equal
 	}
-	firstExists := doesPathExistToNode(graph, firstNode, secondNode)
-	secondExists := doesPathExistToNode(graph, secondNode, firstNode)
+	// We need to check for dependencies between the To edges,
+	// not the starting point.
+	firstNodeEdge, _ := graph.GetOpEdgeFrom(firstNode)
+	secondNodeEdge, _ := graph.GetOpEdgeFrom(secondNode)
+	firstExists := doesPathExistToNode(graph, firstNodeEdge.To(), secondNodeEdge.To())
+	secondExists := doesPathExistToNode(graph, secondNodeEdge.To(), firstNodeEdge.To())
 	if firstExists && secondExists {
 		if firstNode.Target.Direction == scpb.Target_DROP {
 			return true
@@ -324,5 +328,6 @@ func compareOps(graph *scgraph.Graph, firstOp scop.Op, secondOp scop.Op) (less b
 	}
 
 	// Path exists from first to second, so we depend on second.
-	return firstExists
+	// So, second is less.
+	return !firstExists
 }
