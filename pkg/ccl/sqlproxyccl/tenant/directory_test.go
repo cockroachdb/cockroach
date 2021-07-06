@@ -64,24 +64,40 @@ func TestDirectoryErrors(t *testing.T) {
 	require.NoError(t, dir.ReportFailure(ctx, roachpb.MakeTenantID(1000), ""))
 }
 
-func TestPodWatcher(t *testing.T) {
+func TestWatchPods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
+	// Make pod watcher channel.
+	podWatcher := make(chan *tenant.Pod, 1)
+
 	// Create the directory.
 	ctx := context.Background()
-	tc, dir, tds := newTestDirectory(t)
+	tc, dir, tds := newTestDirectory(t, tenant.PodWatcher(podWatcher))
 	defer tc.Stopper().Stop(ctx)
 
 	tenantID := roachpb.MakeTenantID(20)
 	require.NoError(t, createTenant(tc, tenantID))
 
-	// Call EnsureTenantAddr to start a new tenant and create an entry
+	// Call EnsureTenantAddr to start a new tenant and create an entry.
 	addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
 
-	// Now shut it down
+	// Ensure that correct event was sent to watcher channel.
+	pod := <-podWatcher
+	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
+	require.Equal(t, addr, pod.Addr)
+	require.Equal(t, tenant.RUNNING, pod.State)
+
+	// Trigger drain of pod.
+	tds.Drain()
+	pod = <-podWatcher
+	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
+	require.Equal(t, addr, pod.Addr)
+	require.Equal(t, tenant.DRAINING, pod.State)
+
+	// Now shut the tenant directory down.
 	processes := tds.Get(tenantID)
 	require.NotNil(t, processes)
 	require.Len(t, processes, 1)
@@ -89,6 +105,12 @@ func TestPodWatcher(t *testing.T) {
 	for _, process := range processes {
 		process.Stopper.Stop(ctx)
 	}
+
+	// Ensure that correct event was sent to watcher channel.
+	pod = <-podWatcher
+	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
+	require.Equal(t, addr, pod.Addr)
+	require.Equal(t, tenant.DELETING, pod.State)
 
 	require.Eventually(t, func() bool {
 		addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
@@ -102,8 +124,18 @@ func TestPodWatcher(t *testing.T) {
 	// Wait for background watcher to populate the initial pod.
 	require.Eventually(t, func() bool {
 		addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
-		return len(addrs) != 0
+		if len(addrs) != 0 {
+			addr = addrs[0]
+			return true
+		}
+		return false
 	}, 10*time.Second, 100*time.Millisecond)
+
+	// Ensure that correct event was sent to watcher channel.
+	pod = <-podWatcher
+	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
+	require.Equal(t, addr, pod.Addr)
+	require.Equal(t, tenant.RUNNING, pod.State)
 
 	// Verify that EnsureTenantAddr returns the pod's IP address.
 	addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
@@ -127,10 +159,22 @@ func TestPodWatcher(t *testing.T) {
 		return len(addrs) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 
+	// Ensure that correct event was sent to watcher channel.
+	pod = <-podWatcher
+	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
+	require.Equal(t, addr, pod.Addr)
+	require.Equal(t, tenant.DELETING, pod.State)
+
 	// Verify that a new call to EnsureTenantAddr will resume again the tenant.
 	addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
+
+	// Ensure that correct event was sent to watcher channel.
+	pod = <-podWatcher
+	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
+	require.Equal(t, addr, pod.Addr)
+	require.Equal(t, tenant.RUNNING, pod.State)
 }
 
 func TestCancelLookups(t *testing.T) {
