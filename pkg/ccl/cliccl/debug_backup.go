@@ -340,8 +340,7 @@ func runListBackupsCmd(cmd *cobra.Command, args []string) error {
 	cols := []string{"path"}
 	rows := make([][]string, 0)
 	for _, backupPath := range backupPaths {
-		newRow := []string{"./" + backupPath}
-		rows = append(rows, newRow)
+		rows = append(rows, []string{"." + backupPath})
 	}
 	rowSliceIter := cli.NewRowSliceIter(rows, "l" /*align*/)
 	return cli.PrintQueryOutput(os.Stdout, cols, rowSliceIter)
@@ -366,7 +365,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	incPaths, err := backupccl.FindPriorBackupLocations(ctx, store)
+	incPaths, err := backupccl.FindPriorBackups(ctx, store, backupccl.OmitManifest)
 	if err != nil {
 		return err
 	}
