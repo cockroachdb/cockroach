@@ -192,7 +192,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	} else {
 		// Note: we're not printing "connection established" because the driver we're using
 		// does late binding.
-		defer sqlConn.Close()
+		defer func() { retErr = errors.CombineErrors(retErr, sqlConn.Close()) }()
 		s.progress("using SQL connection URL: %s", sqlConn.GetURL())
 		s.done()
 	}
