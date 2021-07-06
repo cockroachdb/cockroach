@@ -45,9 +45,6 @@ func TestTruncatedStateMigration(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			makeArgs := func() (args base.TestServerArgs) {
-				minVersion := minVersion
-				binaryVersion := binaryVersion
-				bootstrapVersion := bootstrapVersion
 				args.Settings = cluster.MakeTestingClusterSettingsWithVersions(
 					binaryVersion, minVersion, false,
 				)
