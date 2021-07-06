@@ -1280,6 +1280,16 @@ func (cf *changeFrontier) checkpointJobProgress(
 		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
 	}
 
+	updateStart := timeutil.Now()
+	defer func() {
+		elapsed := timeutil.Since(updateStart)
+		if elapsed > 5*time.Millisecond {
+			log.Warningf(cf.Ctx, "slow job progress update took %s", elapsed)
+		}
+	}()
+
+	cf.metrics.FrontierUpdates.Inc(1)
+
 	return cf.js.job.Update(cf.Ctx, nil, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
