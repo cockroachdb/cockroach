@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -27,15 +28,14 @@ import (
 
 const statementTimeout = time.Minute
 
-func registerTLP(r *testRegistry) {
-	r.Add(TestSpec{
-		Name:       "tlp",
-		Owner:      OwnerSQLQueries,
-		Timeout:    time.Minute * 5,
-		MinVersion: "v20.2.0",
-		Tags:       nil,
-		Cluster:    r.makeClusterSpec(1),
-		Run:        runTLP,
+func registerTLP(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "tlp",
+		Owner:   registry.OwnerSQLQueries,
+		Timeout: time.Minute * 5,
+		Tags:    nil,
+		Cluster: r.MakeClusterSpec(1),
+		Run:     runTLP,
 	})
 }
 
@@ -65,7 +65,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	rnd, seed := randutil.NewPseudoRand()
 	t.L().Printf("seed: %d", seed)
 
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	if err := c.PutLibraries(ctx, "./lib"); err != nil {
 		t.Fatalf("could not initialize libraries: %v", err)
 	}
@@ -100,7 +100,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	defer smither.Close()
 
 	t.Status("running TLP")
-	until := time.After(t.Spec().(*TestSpec).Timeout / 2)
+	until := time.After(t.Spec().(*registry.TestSpec).Timeout / 2)
 	done := ctx.Done()
 	for i := 1; ; i++ {
 		select {

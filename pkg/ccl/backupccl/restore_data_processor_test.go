@@ -226,7 +226,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		return path
 	}
 
-	// Make the first few WriteBatch/AddSSTable calls return
+	// Make the first few AddSSTable calls return
 	// AmbiguousResultError. Import should be resilient to this.
 	const initialAmbiguousSubReqs = 3
 	remainingAmbiguousSubReqs := int64(initialAmbiguousSubReqs)
@@ -234,7 +234,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 			TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 				switch filterArgs.Req.(type) {
-				case *roachpb.WriteBatchRequest, *roachpb.AddSSTableRequest:
+				case *roachpb.AddSSTableRequest:
 				// No-op.
 				default:
 					return nil

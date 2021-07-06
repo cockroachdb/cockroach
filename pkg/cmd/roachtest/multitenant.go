@@ -21,7 +21,7 @@ import (
 )
 
 func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	c.Start(ctx, c.All())
 

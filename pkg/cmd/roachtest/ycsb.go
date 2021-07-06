@@ -15,11 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerYCSB(r *testRegistry) {
+func registerYCSB(r registry.Registry) {
 	workloads := []string{"A", "B", "C", "D", "E", "F"}
 	cpusConfigs := []int{8, 32}
 
@@ -44,13 +45,13 @@ func registerYCSB(r *testRegistry) {
 			t.Fatalf("missing concurrency for (workload, cpus) = (%s, %d)", wl, cpus)
 		}
 
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
 		waitForFullReplication(t, c.Conn(ctx, 1))
 
 		t.Status("running workload")
-		m := newMonitor(ctx, c, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			sfu := fmt.Sprintf(" --select-for-update=%t", t.IsBuildVersion("v19.2.0"))
 			ramp := " --ramp=" + ifLocal("0s", "2m")
@@ -75,10 +76,10 @@ func registerYCSB(r *testRegistry) {
 				name = fmt.Sprintf("ycsb/%s/nodes=3/cpu=%d", wl, cpus)
 			}
 			wl, cpus := wl, cpus
-			r.Add(TestSpec{
+			r.Add(registry.TestSpec{
 				Name:    name,
-				Owner:   OwnerKV,
-				Cluster: r.makeClusterSpec(4, spec.CPU(cpus)),
+				Owner:   registry.OwnerKV,
+				Cluster: r.MakeClusterSpec(4, spec.CPU(cpus)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus)
 				},

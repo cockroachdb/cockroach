@@ -26,7 +26,7 @@ import (
 )
 
 func runStatusServer(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx)
 
 	// Get the ids for each node.

@@ -582,7 +582,6 @@ CGO_PKGS := \
 	pkg/cli \
 	pkg/server/status \
 	pkg/storage \
-	pkg/ccl/storageccl/engineccl \
 	pkg/ccl/gssapiccl \
 	pkg/geo/geoproj \
 	vendor/github.com/knz/go-libedit/unix

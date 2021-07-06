@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -50,11 +51,11 @@ func runQuitTransfersLeases(
 }
 
 func (q *quitTest) init(ctx context.Context) {
-	q.args = startArgs(
+	q.args = option.StartArgs(
 		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",               // iterate fast for rebalancing
 		"-a", "--vmodule=store=1,replica=1,replica_proposal=1", // verbosity to troubleshoot drains
 	)
-	q.c.Put(ctx, cockroach, "./cockroach")
+	q.c.Put(ctx, q.t.Cockroach(), "./cockroach")
 	q.c.Start(ctx, q.args)
 }
 
@@ -336,13 +337,12 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 	}
 }
 
-func registerQuitTransfersLeases(r *testRegistry) {
+func registerQuitTransfersLeases(r registry.Registry) {
 	registerTest := func(name, minver string, method func(context.Context, test.Test, cluster.Cluster, int)) {
-		r.Add(TestSpec{
-			Name:       fmt.Sprintf("transfer-leases/%s", name),
-			Owner:      OwnerKV,
-			Cluster:    r.makeClusterSpec(3),
-			MinVersion: minver,
+		r.Add(registry.TestSpec{
+			Name:    fmt.Sprintf("transfer-leases/%s", name),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(3),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runQuitTransfersLeases(ctx, t, c, name, method)
 			},
@@ -353,7 +353,7 @@ func registerQuitTransfersLeases(r *testRegistry) {
 	// until the process exits.
 	registerTest("signal", "v19.2.0", func(ctx context.Context, t test.Test, c cluster.Cluster, nodeID int) {
 		c.Stop(ctx, c.Node(nodeID),
-			roachprodArgOption{"--sig", "15", "--wait"}, // graceful shutdown
+			option.RoachprodArgOption{"--sig", "15", "--wait"}, // graceful shutdown
 		)
 	})
 
@@ -379,7 +379,7 @@ func registerQuitTransfersLeases(r *testRegistry) {
 		// before terminating. Otherwise the SIGKILL below will truncate
 		// the log.
 		c.Stop(ctx, c.Node(nodeID),
-			roachprodArgOption{"--sig", "1"},
+			option.RoachprodArgOption{"--sig", "1"},
 		)
 		// We use SIGKILL to terminate nodes here. Of course, an operator
 		// should not do this and instead terminate with SIGTERM even
@@ -394,7 +394,7 @@ func registerQuitTransfersLeases(r *testRegistry) {
 		// becomes broken, the test wouldn't help identify which one needs
 		// attention.)
 		c.Stop(ctx, c.Node(nodeID),
-			roachprodArgOption{"--sig", "9", "--wait"})
+			option.RoachprodArgOption{"--sig", "9", "--wait"})
 	})
 }
 
@@ -411,20 +411,19 @@ func runQuit(
 		t.Fatal(err)
 	}
 	c.Stop(ctx, c.Node(nodeID),
-		roachprodArgOption{"--sig", "0", "--wait"}, // no shutdown, just wait for exit
+		option.RoachprodArgOption{"--sig", "0", "--wait"}, // no shutdown, just wait for exit
 	)
 	return buf
 }
 
-func registerQuitAllNodes(r *testRegistry) {
+func registerQuitAllNodes(r registry.Registry) {
 	// This test verifies that 'cockroach quit' can terminate all nodes
 	// in the cluster: normally as long as there's quorum, then with a
 	// short --drain-wait for the remaining nodes under quorum.
-	r.Add(TestSpec{
-		Name:       "quit-all-nodes",
-		Owner:      OwnerServer,
-		Cluster:    r.makeClusterSpec(5),
-		MinVersion: "v20.1.0",
+	r.Add(registry.TestSpec{
+		Name:    "quit-all-nodes",
+		Owner:   registry.OwnerServer,
+		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			q := quitTest{t: t, c: c}
 

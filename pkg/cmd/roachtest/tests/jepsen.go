@@ -8,14 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package main
+package tests
 
 import (
 	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -23,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -98,7 +98,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// quirks in tar. The --transform option is only available on gnu
 	// tar. To be able to run from a macOS host with BSD tar we'd need
 	// use the similar -s option on that platform.
-	c.Put(ctx, cockroach, "./cockroach", c.All())
+	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	// Jepsen expects a tarball that expands to cockroach/cockroach
 	// (which is not how our official builds are laid out).
 	c.Run(ctx, c.All(), "tar --transform s,^,cockroach/, -c -z -f cockroach.tgz cockroach")
@@ -123,8 +123,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
-	cmd := loggedCommand(ctx, t.L(), roachprod, "get", c.MakeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
-	if err := cmd.Run(); err != nil {
+	if err := c.Get(ctx, t.L(), ".ssh/id_rsa.pub", pubSSHKey, controller); err != nil {
 		t.Fatal(err)
 	}
 	// TODO(bdarnell): make this idempotent instead of filling up .ssh configs.
@@ -160,21 +159,20 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
 
-	run := func(c cluster.Cluster, ctx context.Context, node option.NodeListOption, args ...string) {
-		if !c.IsLocal() {
-			c.Run(ctx, node, args...)
-			return
-		}
-		args = append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)
-		t.L().Printf("> %s\n", strings.Join(args, " "))
-	}
 	runE := func(c cluster.Cluster, ctx context.Context, node option.NodeListOption, args ...string) error {
-		if !c.IsLocal() {
-			return c.RunE(ctx, node, args...)
+		if c.IsLocal() {
+			// For local development.
+			t.L().Printf("> %s\n", strings.Join(args, " "))
+			return nil
 		}
-		args = append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)
-		t.L().Printf("> %s\n", strings.Join(args, " "))
-		return nil
+		return c.RunE(ctx, node, args...)
+	}
+
+	run := func(c cluster.Cluster, ctx context.Context, node option.NodeListOption, args ...string) {
+		err := runE(c, ctx, node, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Reset the "latest" alias for the next run.
@@ -193,7 +191,7 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 			// Ignore an error like the following.
 			// Could not transfer artifact org.clojure:clojure:jar:1.9.0 from/to central (https://repo1.maven.org/maven2/): GET request of: org/clojure/clojure/1.9.0/clojure-1.9.0.jar from central failed
 			r := regexp.MustCompile("Could not transfer artifact|Failed to read artifact descriptor for")
-			match := r.FindStringSubmatch(GetStderr(err))
+			match := r.FindStringSubmatch(fmt.Sprintf("%+v", err))
 			if match != nil {
 				t.L().PrintfCtx(ctx, "failure installing deps (\"%s\")\nfull err: %+v",
 					match, err)
@@ -282,11 +280,12 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			ignoreErr = true
 		}
 
-		cmd := exec.CommandContext(ctx, roachprod, "run", c.MakeNodes(controller),
+		if output, err := c.RunWithBuffer(
+			ctx, t.L(), controller,
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
-			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log")
-		if output, err := cmd.Output(); err != nil {
+			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log",
+		); err != nil {
 			t.L().Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
 		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
 			t.Fatal(err)
@@ -303,30 +302,32 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		}
 		anyFailed := false
 		for _, file := range collectFiles {
-			cmd := loggedCommand(ctx, t.L(), roachprod, "get", c.MakeNodes(controller),
+			if err := c.Get(
+				ctx, t.L(),
 				"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
-				filepath.Join(outputDir, file))
-			cmd.Stdout = t.L().Stdout
-			cmd.Stderr = t.L().Stderr
-			if err := cmd.Run(); err != nil {
+				filepath.Join(outputDir, file),
+				controller,
+			); err != nil {
+				anyFailed = true
 				t.L().Printf("failed to retrieve %s: %s", file, err)
 			}
 		}
 		if anyFailed {
 			// Try to figure out why this is so common.
-			cmd := loggedCommand(ctx, t.L(), roachprod, "get", c.MakeNodes(controller),
+			if err := c.Get(ctx, t.L(),
 				"/mnt/data1/jepsen/cockroachdb/invoke.log",
-				filepath.Join(outputDir, "invoke.log"))
-			cmd.Stdout = t.L().Stdout
-			cmd.Stderr = t.L().Stderr
-			if err := cmd.Run(); err != nil {
+				filepath.Join(outputDir, "invoke.log"),
+				controller,
+			); err != nil {
 				t.L().Printf("failed to retrieve invoke.log: %s", err)
 			}
 		}
 	}
 }
 
-func registerJepsen(r *testRegistry) {
+// RegisterJepsen registers the Jepsen test suite, which primarily checks for
+// transaction anomalies.
+func RegisterJepsen(r registry.Registry) {
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
 	tests := []string{
@@ -343,11 +344,10 @@ func registerJepsen(r *testRegistry) {
 		testName := testName
 		for _, nemesis := range jepsenNemeses {
 			nemesis := nemesis // copy for closure
-			s := TestSpec{
+			s := registry.TestSpec{
 				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				// We don't run jepsen on older releases due to the high rate of flakes.
-				MinVersion: "v20.1.0",
-				Owner:      OwnerKV,
+				Owner: registry.OwnerKV,
 				// The Jepsen tests do funky things to machines, like muck with the
 				// system clock; therefore, their clusters cannot be reused other tests
 				// except the Jepsen ones themselves which reset all this state when
@@ -355,7 +355,7 @@ func registerJepsen(r *testRegistry) {
 				// clusters because they have a lengthy setup step, but avoid doing it
 				// if they detect that the machines have already been properly
 				// initialized.
-				Cluster: r.makeClusterSpec(6, spec.ReuseTagged("jepsen")),
+				Cluster: r.MakeClusterSpec(6, spec.ReuseTagged("jepsen")),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},

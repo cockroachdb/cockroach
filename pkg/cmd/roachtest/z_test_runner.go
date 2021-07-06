@@ -31,6 +31,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
@@ -162,7 +164,7 @@ type testOpts struct {
 // lopt: Options for logging.
 func (r *testRunner) Run(
 	ctx context.Context,
-	tests []TestSpec,
+	tests []registry.TestSpec,
 	count int,
 	parallelism int,
 	clustersOpt clustersOpt,
@@ -228,7 +230,7 @@ func (r *testRunner) Run(
 	// to an existing one).
 	allocateCluster := func(
 		ctx context.Context,
-		t TestSpec,
+		t registry.TestSpec,
 		alloc *quotapool.IntAlloc,
 		artifactsDir string,
 		wStatus *workerStatus,
@@ -342,7 +344,7 @@ func (r *testRunner) Run(
 
 type clusterAllocatorFn func(
 	ctx context.Context,
-	t TestSpec,
+	t registry.TestSpec,
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
@@ -477,6 +479,8 @@ func (r *testRunner) runWorker(
 		}
 		t := &testImpl{
 			spec:                   &testToRun.spec,
+			cockroach:              cockroach,
+			deprecatedWorkload:     workload,
 			buildVersion:           r.buildVersion,
 			artifactsDir:           artifactsDir,
 			artifactsSpec:          artifactsSpec,
@@ -608,8 +612,8 @@ func (r *testRunner) runTest(
 	stdout io.Writer,
 	l *logger.Logger,
 ) (bool, error) {
-	if t.Spec().(*TestSpec).Skip != "" {
-		return false, fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.Spec().(*TestSpec).Skip)
+	if t.Spec().(*registry.TestSpec).Skip != "" {
+		return false, fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.Spec().(*registry.TestSpec).Skip)
 	}
 
 	if teamCity {
@@ -701,10 +705,10 @@ func (r *testRunner) runTest(
 		r.status.Lock()
 		delete(r.status.running, t)
 		// Only include tests with a Run function in the summary output.
-		if t.Spec().(*TestSpec).Run != nil {
+		if t.Spec().(*registry.TestSpec).Run != nil {
 			if t.Failed() {
 				r.status.fail[t] = struct{}{}
-			} else if t.Spec().(*TestSpec).Skip == "" {
+			} else if t.Spec().(*registry.TestSpec).Skip == "" {
 				r.status.pass[t] = struct{}{}
 			} else {
 				r.status.skip[t] = struct{}{}
@@ -716,7 +720,7 @@ func (r *testRunner) runTest(
 	t.start = timeutil.Now()
 
 	timeout := 10 * time.Hour
-	if d := t.Spec().(*TestSpec).Timeout; d != 0 {
+	if d := t.Spec().(*registry.TestSpec).Timeout; d != 0 {
 		timeout = d
 	}
 	// Make sure the cluster has enough life left for the test plus enough headroom
@@ -758,7 +762,7 @@ func (r *testRunner) runTest(
 			}
 		}()
 
-		t.Spec().(*TestSpec).Run(runCtx, t, c)
+		t.Spec().(*registry.TestSpec).Run(runCtx, t, c)
 	}()
 
 	teardownL, err := c.l.ChildLogger("teardown", logger.QuietStderr, logger.QuietStdout)
@@ -805,7 +809,7 @@ func (r *testRunner) runTest(
 		// Don't use surrounding context, which are likely already canceled.
 		if nodes := c.All(); len(nodes) > 0 { // avoid tests
 			innerCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			_ = c.StopE(innerCtx, c.All(), stopArgs("--sig=11"))
+			_ = c.StopE(innerCtx, c.All(), option.StopArgs("--sig=11"))
 			cancel()
 		}
 
@@ -874,7 +878,7 @@ func (r *testRunner) runTest(
 func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
 	// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 	opts := issues.DefaultOptionsFromEnv()
-	return opts.CanPost() && opts.IsReleaseBranch() && t.Spec().(*TestSpec).Run != nil && t.Spec().(*TestSpec).Cluster.NodeCount > 0
+	return opts.CanPost() && opts.IsReleaseBranch() && t.Spec().(*registry.TestSpec).Run != nil && t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
 }
 
 func (r *testRunner) maybePostGithubIssue(
@@ -891,7 +895,7 @@ func (r *testRunner) maybePostGithubIssue(
 
 	var mention []string
 	var projColID int
-	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(t.Spec().(*TestSpec).Owner), team.PurposeRoachtest); ok {
+	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(t.Spec().(*registry.TestSpec).Owner), team.PurposeRoachtest); ok {
 		for _, alias := range sl {
 			mention = append(mention, "@"+string(alias))
 		}
@@ -910,7 +914,7 @@ func (r *testRunner) maybePostGithubIssue(
 	// they are also release blockers (this label may be removed
 	// by a human upon closer investigation).
 	labels := []string{"O-roachtest"}
-	if !t.Spec().(*TestSpec).NonReleaseBlocker {
+	if !t.Spec().(*registry.TestSpec).NonReleaseBlocker {
 		labels = append(labels, "release-blocker")
 	}
 

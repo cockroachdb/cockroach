@@ -74,8 +74,8 @@ func (m *memColumn) Append(args SliceArgs) {
 				// bytes-like columns, we append an empty slice.
 				execgen.APPENDSLICE(toCol, toCol, args.DestIdx, 0, 0)
 				// {{else}}
-				// {{/* Here WINDOW means slicing which allows us to use APPENDVAL below. */}}
-				toCol = execgen.WINDOW(toCol, 0, args.DestIdx)
+				// {{/* Here Window means slicing which allows us to use APPENDVAL below. */}}
+				toCol = toCol.Window(0, args.DestIdx)
 				// {{end}}
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
@@ -203,7 +203,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 				return
 			}
 			// No Sel.
-			execgen.COPYSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 			// {{end}}
 		}
@@ -224,7 +224,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 execgen.WINDOW(col, start, end),
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 			// {{end}}

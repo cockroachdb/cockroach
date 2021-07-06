@@ -15,6 +15,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -22,7 +23,7 @@ var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d
 var supportedPsycopgTag = "2_8_6"
 
 // This test runs psycopg full test suite against a single cockroach node.
-func registerPsycopg(r *testRegistry) {
+func registerPsycopg(r registry.Registry) {
 	runPsycopg := func(
 		ctx context.Context,
 		t test.Test,
@@ -33,7 +34,7 @@ func registerPsycopg(r *testRegistry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
@@ -131,12 +132,11 @@ func registerPsycopg(r *testRegistry) {
 		)
 	}
 
-	r.Add(TestSpec{
-		Name:       "psycopg",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
-		MinVersion: "v20.2.0",
-		Tags:       []string{`default`, `driver`},
+	r.Add(registry.TestSpec{
+		Name:    "psycopg",
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPsycopg(ctx, t, c)
 		},

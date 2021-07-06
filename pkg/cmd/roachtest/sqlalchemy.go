@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -39,13 +40,12 @@ var alembicReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
 
-func registerSQLAlchemy(r *testRegistry) {
-	r.Add(TestSpec{
-		Name:       "sqlalchemy",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
-		MinVersion: "v20.2.0",
-		Tags:       []string{`default`, `orm`},
+func registerSQLAlchemy(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "sqlalchemy",
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSQLAlchemy(ctx, t, c)
 		},
@@ -167,7 +167,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Phew, after having setup all that, let's actually run the test.
 
 	t.Status("setting up cockroach")
-	c.Put(ctx, cockroach, "./cockroach", c.All())
+	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Start(ctx, c.All())
 
 	version, err := fetchCockroachVersion(ctx, c, node[0], nil)

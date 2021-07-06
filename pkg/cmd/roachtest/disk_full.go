@@ -17,28 +17,28 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskFull(r *testRegistry) {
-	r.Add(TestSpec{
-		Name:       "disk-full",
-		Owner:      OwnerStorage,
-		MinVersion: `v20.2.0`,
-		Cluster:    r.makeClusterSpec(5),
+func registerDiskFull(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "disk-full",
+		Owner:   registry.OwnerStorage,
+		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				t.Skip("you probably don't want to fill your local disk")
 			}
 
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 			c.Start(ctx, c.Range(1, nodes))
 
 			t.Status("running workload")
-			m := newMonitor(ctx, c, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
 					"./workload run kv --tolerate-errors --init --read-percent=0"+

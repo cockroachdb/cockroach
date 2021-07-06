@@ -1582,16 +1582,6 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 	return ch
 }
 
-// loggedCommand runs a command with output redirected to the logs instead of to os.Stdout
-// (which doesn't go anywhere I've been able to find) Don't use this if you're
-// going to call cmd.CombinedOutput or cmd.Output.
-func loggedCommand(ctx context.Context, l *logger.Logger, arg0 string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, arg0, args...)
-	cmd.Stdout = l.Stdout
-	cmd.Stderr = l.Stderr
-	return cmd
-}
-
 // Put a local file to all of the machines in a cluster.
 // Put is DEPRECATED. Use PutE instead.
 func (c *clusterImpl) Put(ctx context.Context, src, dest string, opts ...option.Option) {
@@ -1737,35 +1727,10 @@ fi
 		branch))
 }
 
-// startArgs specifies extra arguments that are passed to `roachprod` during `c.Start`.
-func startArgs(extraArgs ...string) option.Option {
-	return roachprodArgOption(extraArgs)
-}
-
-// startArgsDontEncrypt will pass '--encrypt=false' to roachprod regardless of the
-// --encrypt flag on roachtest. This is useful for tests that cannot pass with
-// encryption enabled.
-var startArgsDontEncrypt = startArgs("--encrypt=false")
-
-// racks is an option which specifies the number of racks to partition the nodes
-// into.
-func racks(n int) option.Option {
-	return startArgs(fmt.Sprintf("--racks=%d", n))
-}
-
-// stopArgs specifies extra arguments that are passed to `roachprod` during `c.Stop`.
-func stopArgs(extraArgs ...string) option.Option {
-	return roachprodArgOption(extraArgs)
-}
-
-type roachprodArgOption []string
-
-func (o roachprodArgOption) Option() {}
-
 func roachprodArgs(opts []option.Option) []string {
 	var args []string
 	for _, opt := range opts {
-		a, ok := opt.(roachprodArgOption)
+		a, ok := opt.(option.RoachprodArgOption)
 		if !ok {
 			continue
 		}
@@ -1955,10 +1920,13 @@ var _ = (&clusterImpl{}).Reformat
 
 // Install a package in a node
 func (c *clusterImpl) Install(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
+	ctx context.Context, node option.NodeListOption, args ...string,
 ) error {
-	return execCmd(ctx, l,
-		append([]string{roachprod, "install", c.MakeNodes(node), "--"}, args...)...)
+	l, _, err := c.loggerForCmd(node, append([]string{"install"}, args...)...)
+	if err != nil {
+		return err
+	}
+	return c.execRoachprodL(ctx, l, "install", node, args...)
 }
 
 var reOnlyAlphanumeric = regexp.MustCompile(`[^a-zA-Z0-9]+`)
@@ -1988,18 +1956,29 @@ func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) st
 	return logFile
 }
 
-// RunE runs a command on the specified node, returning an error. The output
-// will be redirected to a file which is logged via the cluster-wide logger in
-// case of an error. Logs will sort chronologically. Failing invocations will
-// have an additional marker file with a `.failed` extension instead of `.log`.
-func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args ...string) error {
+func (c *clusterImpl) loggerForCmd(
+	node option.NodeListOption, args ...string,
+) (*logger.Logger, string, error) {
 	logFile := cmdLogFileName(timeutil.Now(), node, args...)
 
 	// NB: we set no prefix because it's only going to a file anyway.
 	l, err := c.l.ChildLogger(logFile, logger.QuietStderr, logger.QuietStdout)
 	if err != nil {
+		return nil, "", err
+	}
+	return l, logFile, nil
+}
+
+// RunE runs a command on the specified node, returning an error. The output
+// will be redirected to a file which is logged via the cluster-wide logger in
+// case of an error. Logs will sort chronologically. Failing invocations will
+// have an additional marker file with a `.failed` extension instead of `.log`.
+func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args ...string) error {
+	l, logFile, err := c.loggerForCmd(node, args...)
+	if err != nil {
 		return err
 	}
+
 	err = c.RunL(ctx, l, node, args...)
 	l.Printf("> result: %+v", err)
 	if err := ctx.Err(); err != nil {
@@ -2024,8 +2003,14 @@ func (c *clusterImpl) RunL(
 	if err := errors.Wrap(ctx.Err(), "cluster.RunL"); err != nil {
 		return err
 	}
+	return c.execRoachprodL(ctx, l, "run", node, args...)
+}
+
+func (c *clusterImpl) execRoachprodL(
+	ctx context.Context, l *logger.Logger, verb string, node option.NodeListOption, args ...string,
+) error {
 	return execCmd(ctx, l,
-		append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)...)
+		append([]string{roachprod, verb, c.MakeNodes(node), "--"}, args...)...)
 }
 
 // RunWithBuffer runs a command on the specified node, returning the resulting combined stderr
@@ -2346,6 +2331,12 @@ func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Log
 	return nil
 }
 
+func (c *clusterImpl) NewMonitor(
+	ctx context.Context, t test.Test, opts ...option.Option,
+) cluster.Monitor {
+	return newMonitor(ctx, t, c, opts...)
+}
+
 // getDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
 func getDiskUsageInBytes(
 	ctx context.Context, c cluster.Cluster, logger *logger.Logger, nodeIdx int,
@@ -2395,8 +2386,12 @@ func getDiskUsageInBytes(
 	return size * 1024, nil
 }
 
-type monitor struct {
-	t         test.Test
+type monitorImpl struct {
+	t interface {
+		Fatal(...interface{})
+		Failed() bool
+		WorkerStatus(...interface{})
+	}
 	l         *logger.Logger
 	nodes     string
 	ctx       context.Context
@@ -2405,11 +2400,20 @@ type monitor struct {
 	expDeaths int32 // atomically
 }
 
-func newMonitor(ctx context.Context, ci cluster.Cluster, opts ...option.Option) *monitor {
-	c := ci.(*clusterImpl) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `MakeNodes`
-	m := &monitor{
-		t:     c.t,
-		l:     c.l,
+func newMonitor(
+	ctx context.Context,
+	t interface {
+		Fatal(...interface{})
+		Failed() bool
+		WorkerStatus(...interface{})
+		L() *logger.Logger
+	},
+	c cluster.Cluster,
+	opts ...option.Option,
+) *monitorImpl {
+	m := &monitorImpl{
+		t:     t,
+		l:     t.L(),
 		nodes: c.MakeNodes(opts...),
 	}
 	m.ctx, m.cancel = context.WithCancel(ctx)
@@ -2419,45 +2423,50 @@ func newMonitor(ctx context.Context, ci cluster.Cluster, opts ...option.Option) 
 
 // ExpectDeath lets the monitor know that a node is about to be killed, and that
 // this should be ignored.
-func (m *monitor) ExpectDeath() {
+func (m *monitorImpl) ExpectDeath() {
 	m.ExpectDeaths(1)
 }
 
 // ExpectDeaths lets the monitor know that a specific number of nodes are about
 // to be killed, and that they should be ignored.
-func (m *monitor) ExpectDeaths(count int32) {
+func (m *monitorImpl) ExpectDeaths(count int32) {
 	atomic.AddInt32(&m.expDeaths, count)
 }
 
-func (m *monitor) ResetDeaths() {
+func (m *monitorImpl) ResetDeaths() {
 	atomic.StoreInt32(&m.expDeaths, 0)
 }
 
 var errTestFatal = errors.New("t.Fatal() was called")
 
-func (m *monitor) Go(fn func(context.Context) error) {
+func (m *monitorImpl) Go(fn func(context.Context) error) {
 	m.g.Go(func() (err error) {
 		defer func() {
-			if r := recover(); r != nil {
-				if r != errTestFatal {
-					// Pass any regular panics through.
-					panic(r)
-				}
-				// t.{Skip,Fatal} perform a panic(errTestFatal). If we've caught the
-				// errTestFatal sentinel we transform the panic into an error return so
-				// that the wrapped errgroup cancels itself.
-				err = errTestFatal
+			r := recover()
+			if r == nil {
+				return
 			}
+			rErr, ok := r.(error)
+			if !ok {
+				rErr = errors.Errorf("recovered panic: %v", r)
+			}
+			// t.{Skip,Fatal} perform a panic(errTestFatal). If we've caught the
+			// errTestFatal sentinel we transform the panic into an error return so
+			// that the wrapped errgroup cancels itself. The "panic" will then be
+			// returned by `m.WaitE()`.
+			//
+			// Note that `t.Fatal` calls `panic(err)`, so this mechanism primarily
+			// enables that use case. But it also offers protection against accidental
+			// panics (NPEs and such) which should not bubble up to the runtime.
+			err = rErr
 		}()
-		if impl, ok := m.t.(*testImpl); ok {
-			// Automatically clear the worker status message when the goroutine exits.
-			defer impl.WorkerStatus()
-		}
+		// Automatically clear the worker status message when the goroutine exits.
+		defer m.t.WorkerStatus()
 		return fn(m.ctx)
 	})
 }
 
-func (m *monitor) WaitE() error {
+func (m *monitorImpl) WaitE() error {
 	if m.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return errors.New("already failed")
@@ -2466,7 +2475,7 @@ func (m *monitor) WaitE() error {
 	return errors.Wrap(m.wait(roachprod, "monitor", m.nodes), "monitor failure")
 }
 
-func (m *monitor) Wait() {
+func (m *monitorImpl) Wait() {
 	if m.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -2479,7 +2488,7 @@ func (m *monitor) Wait() {
 	}
 }
 
-func (m *monitor) wait(args ...string) error {
+func (m *monitorImpl) wait(args ...string) error {
 	// It is surprisingly difficult to get the cancellation semantics exactly
 	// right. We need to watch for the "workers" group (m.g) to finish, or for
 	// the monitor command to emit an unexpected node failure, or for the monitor

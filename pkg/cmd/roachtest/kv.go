@@ -22,6 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -33,7 +35,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerKV(r *testRegistry) {
+func registerKV(r registry.Registry) {
 	type kvOptions struct {
 		nodes       int
 		cpus        int
@@ -41,15 +43,17 @@ func registerKV(r *testRegistry) {
 		// If true, the reads are limited reads over the full span of the table.
 		// Currently this also enables SFU writes on the workload since this is
 		// geared towards testing optimistic locking and latching.
-		spanReads      bool
-		batchSize      int
-		blockSize      int
-		splits         int // 0 implies default, negative implies 0
-		encryption     bool
-		sequential     bool
-		concMultiplier int
-		duration       time.Duration
-		tags           []string
+		spanReads bool
+		batchSize int
+		blockSize int
+		splits    int // 0 implies default, negative implies 0
+		// If true, load-based splitting will be disabled.
+		disableLoadSplits bool
+		encryption        bool
+		sequential        bool
+		concMultiplier    int
+		duration          time.Duration
+		tags              []string
 	}
 	computeNumSplits := func(opts kvOptions) int {
 		// TODO(ajwerner): set this default to a more sane value or remove it and
@@ -66,13 +70,11 @@ func registerKV(r *testRegistry) {
 	}
 	runKV := func(ctx context.Context, t test.Test, c cluster.Cluster, opts kvOptions) {
 		nodes := c.Spec().NodeCount - 1
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
+		c.Start(ctx, c.Range(1, nodes), option.StartArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
 
-		if opts.splits < 0 {
-			// In addition to telling the workload to not split, disable load-based
-			// splitting.
+		if opts.disableLoadSplits {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'"); err != nil {
@@ -81,7 +83,7 @@ func registerKV(r *testRegistry) {
 		}
 
 		t.Status("running workload")
-		m := newMonitor(ctx, c, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrencyMultiplier := 64
 			if opts.concMultiplier != 0 {
@@ -181,8 +183,8 @@ func registerKV(r *testRegistry) {
 		{nodes: 3, cpus: 32, readPercent: 95, sequential: true},
 
 		// Configs with reads, that are of limited spans, along with SFU writes.
-		{nodes: 1, cpus: 8, readPercent: 95, spanReads: true, splits: -1 /* no splits */, sequential: true},
-		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true, splits: -1 /* no splits */, sequential: true},
+		{nodes: 1, cpus: 8, readPercent: 95, spanReads: true, splits: -1 /* no splits */, disableLoadSplits: true, sequential: true},
+		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true, splits: -1 /* no splits */, disableLoadSplits: true, sequential: true},
 
 		// Weekly larger scale configurations.
 		{nodes: 32, cpus: 8, readPercent: 0, tags: []string{"weekly"}, duration: time.Hour},
@@ -219,17 +221,14 @@ func registerKV(r *testRegistry) {
 		if opts.concMultiplier != 0 { // support legacy test name which didn't include this multiplier
 			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
 		}
-
-		minVersion := "v2.0.0"
-		if opts.encryption {
-			minVersion = "v2.1.0"
+		if opts.disableLoadSplits {
+			nameParts = append(nameParts, "no-load-splitting")
 		}
 
-		r.Add(TestSpec{
-			Name:       strings.Join(nameParts, "/"),
-			Owner:      OwnerKV,
-			MinVersion: minVersion,
-			Cluster:    r.makeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
+		r.Add(registry.TestSpec{
+			Name:    strings.Join(nameParts, "/"),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
@@ -238,22 +237,21 @@ func registerKV(r *testRegistry) {
 	}
 }
 
-func registerKVContention(r *testRegistry) {
+func registerKVContention(r registry.Registry) {
 	const nodes = 4
-	r.Add(TestSpec{
-		Name:       fmt.Sprintf("kv/contention/nodes=%d", nodes),
-		Owner:      OwnerKV,
-		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(nodes + 1),
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("kv/contention/nodes=%d", nodes),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(nodes + 1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 
 			// Start the cluster with an extremely high txn liveness threshold.
 			// If requests ever get stuck on a transaction that was abandoned
 			// then it will take 10m for them to get unstuck, at which point the
 			// QPS threshold check in the test is guaranteed to fail.
-			args := startArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
+			args := option.StartArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
 			c.Start(ctx, args, c.Range(1, nodes))
 
 			conn := c.Conn(ctx, 1)
@@ -273,7 +271,7 @@ func registerKVContention(r *testRegistry) {
 			}
 
 			t.Status("running workload")
-			m := newMonitor(ctx, c, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				// Write to a small number of keys to generate a large amount of
 				// contention. Use a relatively high amount of concurrency and
@@ -308,16 +306,15 @@ func registerKVContention(r *testRegistry) {
 	})
 }
 
-func registerKVQuiescenceDead(r *testRegistry) {
-	r.Add(TestSpec{
-		Name:       "kv/quiescence/nodes=3",
-		Owner:      OwnerKV,
-		Cluster:    r.makeClusterSpec(4),
-		MinVersion: "v2.1.0",
+func registerKVQuiescenceDead(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "kv/quiescence/nodes=3",
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 			c.Start(ctx, c.Range(1, nodes))
 
 			run := func(cmd string, lastDown bool) {
@@ -325,7 +322,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				if lastDown {
 					n--
 				}
-				m := newMonitor(ctx, c, c.Range(1, n))
+				m := c.NewMonitor(ctx, t, c.Range(1, n))
 				m.Go(func(ctx context.Context) error {
 					t.WorkerStatus(cmd)
 					defer t.WorkerStatus()
@@ -390,21 +387,21 @@ func registerKVQuiescenceDead(r *testRegistry) {
 	})
 }
 
-func registerKVGracefulDraining(r *testRegistry) {
-	r.Add(TestSpec{
+func registerKVGracefulDraining(r registry.Registry) {
+	r.Add(registry.TestSpec{
 		Name:    "kv/gracefuldraining/nodes=3",
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(4),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 
 			t.Status("starting cluster")
 
 			// If the test ever fails, the person who investigates the
 			// failure will likely be thankful for this additional logging.
-			args := startArgs(`--args=--vmodule=store=2,store_rebalancer=2`)
+			args := option.StartArgs(`--args=--vmodule=store=2,store_rebalancer=2`)
 			c.Start(ctx, args, c.Range(1, nodes))
 
 			db := c.Conn(ctx, 1)
@@ -420,7 +417,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 			splitCmd := "./workload run kv --init --max-ops=1 --splits 100 {pgurl:1}"
 			c.Run(ctx, c.Node(nodes+1), splitCmd)
 
-			m := newMonitor(ctx, c, c.Nodes(1, nodes))
+			m := c.NewMonitor(ctx, t, c.Nodes(1, nodes))
 
 			// specifiedQPS is going to be the --max-rate for the kv workload.
 			const specifiedQPS = 1000
@@ -589,7 +586,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 	})
 }
 
-func registerKVSplits(r *testRegistry) {
+func registerKVSplits(r registry.Registry) {
 	for _, item := range []struct {
 		quiesce bool
 		splits  int
@@ -607,16 +604,16 @@ func registerKVSplits(r *testRegistry) {
 		{false, 30000, 2 * time.Hour},
 	} {
 		item := item // for use in closure below
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", item.quiesce),
-			Owner:   OwnerKV,
+			Owner:   registry.OwnerKV,
 			Timeout: item.timeout,
-			Cluster: r.makeClusterSpec(4),
+			Cluster: r.MakeClusterSpec(4),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				nodes := c.Spec().NodeCount - 1
-				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-				c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-				c.Start(ctx, c.Range(1, nodes), startArgs(
+				c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+				c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
+				c.Start(ctx, c.Range(1, nodes), option.StartArgs(
 					// NB: this works. Don't change it or only one of the two vars may actually
 					// make it to the server.
 					"--env", "COCKROACH_MEMPROF_INTERVAL=1m COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce),
@@ -624,7 +621,7 @@ func registerKVSplits(r *testRegistry) {
 				))
 
 				t.Status("running workload")
-				m := newMonitor(ctx, c, c.Range(1, nodes))
+				m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 				m.Go(func(ctx context.Context) error {
 					concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
 					splits := " --splits=" + ifLocal("2000", fmt.Sprint(item.splits))
@@ -642,12 +639,12 @@ func registerKVSplits(r *testRegistry) {
 	}
 }
 
-func registerKVScalability(r *testRegistry) {
+func registerKVScalability(r registry.Registry) {
 	runScalability := func(ctx context.Context, t test.Test, c cluster.Cluster, percent int) {
 		nodes := c.Spec().NodeCount - 1
 
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
@@ -655,7 +652,7 @@ func registerKVScalability(r *testRegistry) {
 			c.Start(ctx, c.Range(1, nodes))
 
 			t.Status("running workload")
-			m := newMonitor(ctx, c, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf("./workload run kv --init --read-percent=%d "+
 					"--splits=1000 --duration=1m "+fmt.Sprintf("--concurrency=%d", i)+
@@ -672,10 +669,10 @@ func registerKVScalability(r *testRegistry) {
 	if false {
 		for _, p := range []int{0, 95} {
 			p := p
-			r.Add(TestSpec{
+			r.Add(registry.TestSpec{
 				Name:    fmt.Sprintf("kv%d/scale/nodes=6", p),
-				Owner:   OwnerKV,
-				Cluster: r.makeClusterSpec(7, spec.CPU(8)),
+				Owner:   registry.OwnerKV,
+				Cluster: r.MakeClusterSpec(7, spec.CPU(8)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runScalability(ctx, t, c, p)
 				},
@@ -684,7 +681,7 @@ func registerKVScalability(r *testRegistry) {
 	}
 }
 
-func registerKVRangeLookups(r *testRegistry) {
+func registerKVRangeLookups(r registry.Registry) {
 	type rangeLookupWorkloadType int
 	const (
 		splitWorkload rangeLookupWorkloadType = iota
@@ -700,8 +697,8 @@ func registerKVRangeLookups(r *testRegistry) {
 		nodes := c.Spec().NodeCount - 1
 		doneInit := make(chan struct{})
 		doneWorkload := make(chan struct{})
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
@@ -717,7 +714,7 @@ func registerKVRangeLookups(r *testRegistry) {
 		}()
 		waitForFullReplication(t, conns[0])
 
-		m := newMonitor(ctx, c, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
 			cmd := "./workload init kv --splits=1000 {pgurl:1}"
@@ -806,11 +803,10 @@ func registerKVRangeLookups(r *testRegistry) {
 		default:
 			panic("unexpected")
 		}
-		r.Add(TestSpec{
-			Name:       fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
-			Owner:      OwnerKV,
-			MinVersion: "v19.2.0",
-			Cluster:    r.makeClusterSpec(nodes+1, spec.CPU(cpus)),
+		r.Add(registry.TestSpec{
+			Name:    fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
 			},

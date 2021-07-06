@@ -262,7 +262,7 @@ func uploadVersionStep(nodes option.NodeListOption, version string) versionStep 
 // nodes.
 func startVersion(nodes option.NodeListOption, version string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		args := startArgs("--binary=" + cockroachBinaryPath(version))
-		u.c.Start(ctx, nodes, args, startArgsDontEncrypt)
+		args := option.StartArgs("--binary=" + cockroachBinaryPath(version))
+		u.c.Start(ctx, nodes, args, option.StartArgsDontEncrypt)
 	}
 }
