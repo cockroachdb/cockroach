@@ -487,7 +487,6 @@ endif
 
 C_DEPS_DIR := $(abspath c-deps)
 JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
-PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 GEOS_SRC_DIR     := $(C_DEPS_DIR)/geos
 PROJ_SRC_DIR     := $(C_DEPS_DIR)/proj
 LIBEDIT_SRC_DIR  := $(C_DEPS_DIR)/libedit
@@ -512,16 +511,13 @@ BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
 endif
 
 JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
-PROTOBUF_DIR := $(BUILD_DIR)/protobuf
 GEOS_DIR     := $(BUILD_DIR)/geos
 PROJ_DIR     := $(BUILD_DIR)/proj
 LIBEDIT_DIR  := $(BUILD_DIR)/libedit
 LIBROACH_DIR := $(BUILD_DIR)/libroach$(if $(ENABLE_LIBROACH_ASSERTIONS),_assert)
 KRB5_DIR     := $(BUILD_DIR)/krb5
-# Can't share with protobuf because protoc is always built for the host.
 
 LIBJEMALLOC := $(JEMALLOC_DIR)/lib/libjemalloc.a
-LIBPROTOBUF := $(PROTOBUF_DIR)/libprotobuf.a
 LIBEDIT     := $(LIBEDIT_DIR)/src/.libs/libedit.a
 LIBROACH    := $(LIBROACH_DIR)/libroach.a
 LIBPROJ     := $(PROJ_DIR)/lib/libproj$(if $(target-is-windows),_4_9).a
@@ -543,8 +539,8 @@ C_LIBS_COMMON = \
 	$(if $(target-is-windows),,$(LIBEDIT)) \
 	$(LIBPROJ) $(LIBROACH)
 C_LIBS_SHORT = $(C_LIBS_COMMON)
-C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBPROTOBUF)
-C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBPROTOBUF)
+C_LIBS_OSS = $(C_LIBS_COMMON)
+C_LIBS_CCL = $(C_LIBS_COMMON)
 C_LIBS_DYNAMIC = $(LIBGEOS)
 
 # We only include krb5 on linux, non-musl builds.
@@ -600,7 +596,7 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo 'package $(if $($(@D)-package),$($(@D)-package),$(notdir $(@D)))' >> $@
 	@echo >> $@
 	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS))' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(LIBEDIT_DIR)/src/.libs $(LIBROACH_DIR) $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(JEMALLOC_DIR)/lib $(LIBEDIT_DIR)/src/.libs $(LIBROACH_DIR) $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
 	@echo 'import "C"' >> $@
 
 vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized
@@ -657,14 +653,6 @@ $(KRB5_DIR)/Makefile: $(C_DEPS_DIR)/krb5-rebuild $(KRB5_SRC_DIR)/src/configure
 	@# If CFLAGS is set to -g1 then make will fail.
 	@# We specify -fcommon to get around duplicate definition errors in recent gcc.
 	cd $(KRB5_DIR) && env -u CXXFLAGS CFLAGS="-fcommon"  $(KRB5_SRC_DIR)/src/configure $(xconfigure-flags) --enable-static --disable-shared
-
-$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | bin/.submodules-initialized
-	rm -rf $(PROTOBUF_DIR)
-	mkdir -p $(PROTOBUF_DIR)
-	@# NOTE: If you change the CMake flags below, bump the version in
-	@# $(C_DEPS_DIR)/protobuf-rebuild. See above for rationale.
-	cd $(PROTOBUF_DIR) && cmake $(xcmake-flags) -Dprotobuf_WITH_ZLIB=OFF -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake \
-	  -DCMAKE_BUILD_TYPE=Release
 
 $(GEOS_DIR)/Makefile: $(C_DEPS_DIR)/geos-rebuild | bin/.submodules-initialized
 	rm -rf $(GEOS_DIR)
@@ -735,9 +723,6 @@ $(LIBEDIT_DIR)/Makefile: $(C_DEPS_DIR)/libedit-rebuild $(LIBEDIT_SRC_DIR)/config
 $(LIBJEMALLOC): $(JEMALLOC_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(JEMALLOC_SRC_DIR) || $(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static
 
-$(LIBPROTOBUF): $(PROTOBUF_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
-	@uptodate $@ $(PROTOBUF_SRC_DIR) || $(MAKE) --no-print-directory -C $(PROTOBUF_DIR) libprotobuf
-
 ifdef is-cross-compile
 ifdef target-is-macos
 geos_require_install_name_tool := 1
@@ -788,10 +773,9 @@ $(LIBKRB5): $(KRB5_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(KRB5_SRC_DIR)/src || $(MAKE) --no-print-directory -C $(KRB5_DIR)
 
 # Convenient names for maintainers. Not used by other targets in the Makefile.
-.PHONY:  libjemalloc libprotobuf libgeos libproj libroach libkrb5
+.PHONY:  libjemalloc libgeos libproj libroach libkrb5
 libedit:     $(LIBEDIT)
 libjemalloc: $(LIBJEMALLOC)
-libprotobuf: $(LIBPROTOBUF)
 libgeos:     $(LIBGEOS)
 libproj:     $(LIBPROJ)
 libroach:    $(LIBROACH)
@@ -1684,7 +1668,6 @@ c-deps-fmt:
 .PHONY: clean-c-deps
 clean-c-deps:
 	rm -rf $(JEMALLOC_DIR)
-	rm -rf $(PROTOBUF_DIR)
 	rm -rf $(GEOS_DIR)
 	rm -rf $(PROJ_DIR)
 	rm -rf $(LIBROACH_DIR)
@@ -1693,7 +1676,6 @@ clean-c-deps:
 .PHONY: unsafe-clean-c-deps
 unsafe-clean-c-deps:
 	git -C $(JEMALLOC_SRC_DIR) clean -dxf
-	git -C $(PROTOBUF_SRC_DIR) clean -dxf
 	git -C $(GEOS_SRC_DIR)     clean -dxf
 	git -C $(PROJ_SRC_DIR)     clean -dxf
 	git -C $(LIBROACH_SRC_DIR) clean -dxf

@@ -4,9 +4,6 @@
 [submodule "c-deps/jemalloc"]
 	path = c-deps/jemalloc
 	url = https://github.com/cockroachdb/jemalloc.git
-[submodule "c-deps/protobuf"]
-	path = c-deps/protobuf
-	url = https://github.com/cockroachdb/protobuf.git
 [submodule "pkg/ui/yarn-vendor"]
 	path = pkg/ui/yarn-vendor
 	url = https://github.com/cockroachdb/yarn-vendored
