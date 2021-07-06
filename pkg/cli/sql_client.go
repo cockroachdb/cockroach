@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -50,7 +51,7 @@ const (
 // The appName given as argument is added to the URL even if --url is
 // specified, but only if the URL didn't already specify
 // application_name. It is prefixed with '$ ' to mark it as internal.
-func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
+func makeSQLClient(appName string, defaultMode defaultSQLDb) (clisqlclient.Conn, error) {
 	baseURL, err := cliCtx.makeClientConnURL()
 	if err != nil {
 		return nil, err
