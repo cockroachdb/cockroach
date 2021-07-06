@@ -4,10 +4,10 @@ go_library(
     name = "clisqlclient",
     srcs = [
         "binding.go",
+        "conn_util.go",
         "doc.go",
-        "sql_format_table.go",
-        "sql_format_value.go",
-        "sql_util.go",
+        "format_table.go",
+        "format_value.go",
         "table_display_format.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli/clisqlclient",
@@ -40,11 +40,11 @@ go_library(
 go_test(
     name = "clisqlclient_test",
     srcs = [
+        "conn_util_test.go",
+        "format_html_test.go",
+        "format_table_test.go",
+        "format_value_test.go",
         "main_test.go",
-        "sql_format_html_test.go",
-        "sql_format_table_test.go",
-        "sql_format_value_test.go",
-        "sql_util_test.go",
     ],
     embed = [":clisqlclient"],
     deps = [
