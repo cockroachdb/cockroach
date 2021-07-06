@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -81,7 +82,7 @@ DROP TABLE test.t;
 }
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
-	predecessorVersion, err := PredecessorVersion(*t.BuildVersion())
+	predecessorVersion, err := tests.PredecessorVersion(*t.BuildVersion())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,7 +570,7 @@ func makeVersionFixtureAndFatal(
 		useLocalBinary = true
 	}
 
-	predecessorVersion, err := PredecessorVersion(*version.MustParse("v" + makeFixtureVersion))
+	predecessorVersion, err := tests.PredecessorVersion(*version.MustParse("v" + makeFixtureVersion))
 	if err != nil {
 		t.Fatal(err)
 	}

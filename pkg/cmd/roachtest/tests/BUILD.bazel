@@ -6,6 +6,7 @@ go_library(
         "build_info.go",
         "disk_stall.go",
         "jepsen.go",
+        "predecessor_version.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests",
     visibility = ["//visibility:public"],
@@ -18,5 +19,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/util/httputil",
         "//pkg/util/timeutil",
+        "//pkg/util/version",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

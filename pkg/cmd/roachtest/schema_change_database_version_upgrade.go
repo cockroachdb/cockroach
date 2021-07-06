@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -69,7 +70,7 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
 	const mainVersion = ""
-	predecessorVersion, err := PredecessorVersion(buildVersion)
+	predecessorVersion, err := tests.PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
