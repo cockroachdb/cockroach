@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -21,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 	"github.com/kr/pretty"
 )
 
@@ -40,9 +43,9 @@ func EvalAddSSTable(
 	ms := cArgs.Stats
 	mvccStartKey, mvccEndKey := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
 
-	// TODO(tschottdorf): restore the below in some form (gets in the way of testing).
-	// _, span := tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
-	// defer span.Finish()
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
+	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
 	// IMPORT INTO should not proceed if any KVs from the SST shadow existing data
@@ -179,6 +182,7 @@ func EvalAddSSTable(
 	ms.Add(stats)
 
 	if args.IngestAsWrites {
+		span.RecordStructured(&types.StringValue{Value: fmt.Sprintf("ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))})
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))
 		dataIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 		for {
