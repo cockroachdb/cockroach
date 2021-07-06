@@ -100,7 +100,6 @@ func registerTests(r registry.Registry) {
 	registerScrubIndexOnlyTPCC(r)
 	registerSecondaryIndexesMultiVersionCluster(r)
 	registerSequelize(r)
-	registerSequenceUpgrade(r)
 	registerSQLAlchemy(r)
 	registerSQLSmith(r)
 	registerSyncTest(r)
