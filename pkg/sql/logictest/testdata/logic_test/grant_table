@@ -855,6 +855,14 @@ system         public        join_tokens                      root       GRANT
 system         public        join_tokens                      root       INSERT
 system         public        join_tokens                      root       SELECT
 system         public        join_tokens                      root       UPDATE
+system         public        statement_statistics             admin      GRANT
+system         public        statement_statistics             admin      SELECT
+system         public        statement_statistics             root       GRANT
+system         public        statement_statistics             root       SELECT
+system         public        transaction_statistics           admin      GRANT
+system         public        transaction_statistics           admin      SELECT
+system         public        transaction_statistics           root       GRANT
+system         public        transaction_statistics           root       SELECT
 a              pg_extension  NULL                             admin      ALL
 a              pg_extension  NULL                             readwrite  ALL
 a              pg_extension  NULL                             root       ALL
@@ -1324,6 +1332,8 @@ system         public              statement_diagnostics_requests   root     GRA
 system         public              statement_diagnostics_requests   root     INSERT
 system         public              statement_diagnostics_requests   root     SELECT
 system         public              statement_diagnostics_requests   root     UPDATE
+system         public              statement_statistics             root     GRANT
+system         public              statement_statistics             root     SELECT
 system         public              table_statistics                 root     DELETE
 system         public              table_statistics                 root     GRANT
 system         public              table_statistics                 root     INSERT
@@ -1331,6 +1341,8 @@ system         public              table_statistics                 root     SEL
 system         public              table_statistics                 root     UPDATE
 system         public              tenants                          root     GRANT
 system         public              tenants                          root     SELECT
+system         public              transaction_statistics           root     GRANT
+system         public              transaction_statistics           root     SELECT
 system         public              ui                               root     DELETE
 system         public              ui                               root     GRANT
 system         public              ui                               root     INSERT

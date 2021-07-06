@@ -238,7 +238,7 @@ SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 EndTxn%' AND message NOT LIKE e'%proposing command%'
 ----
-r38: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+r40: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 node received request: 1 CPut, 1 EndTxn
 
 # Temporarily disabled flaky test (#58202).
@@ -349,9 +349,9 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r38: sending batch 1 CPut to (n1,s1):1
-dist sender send  r38: sending batch 1 EndTxn to (n1,s1):1
-dist sender send  r38: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r40: sending batch 1 CPut to (n1,s1):1
+dist sender send  r40: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r40: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
 # Make another session trace.
 statement ok
@@ -380,6 +380,6 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r38: sending batch 4 CPut, 1 EndTxn to (n1,s1):1
-dist sender send  r38: sending batch 5 CPut to (n1,s1):1
-dist sender send  r38: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r40: sending batch 4 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r40: sending batch 5 CPut to (n1,s1):1
+dist sender send  r40: sending batch 1 EndTxn to (n1,s1):1

@@ -259,7 +259,13 @@ func TestSafeMessage(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			desc, err := sql.CreateTestTableDescriptor(ctx, tc.parentID, tc.id, tc.schema, descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()))
+			desc, err := sql.CreateTestTableDescriptor(
+				ctx,
+				tc.parentID,
+				tc.id,
+				tc.schema,
+				descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+			)
 			require.NoError(t, err)
 			var td catalog.TableDescriptor
 			if tc.f != nil {
