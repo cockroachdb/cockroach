@@ -113,29 +113,6 @@ type sqlConn struct {
 	verboseTimings *bool
 }
 
-// initialSQLConnectionError signals to the error decorator in
-// error.go that we're failing during the initial connection set-up.
-type initialSQLConnectionError struct {
-	err error
-}
-
-// Error implements the error interface.
-func (i *initialSQLConnectionError) Error() string { return i.err.Error() }
-
-// Cause implements causer.
-func (i *initialSQLConnectionError) Cause() error { return i.err }
-
-// Format implements fmt.Formatter.
-func (i *initialSQLConnectionError) Format(s fmt.State, verb rune) { errors.FormatError(i, s, verb) }
-
-// FormatError implements errors.Formatter.
-func (i *initialSQLConnectionError) FormatError(p errors.Printer) error {
-	if p.Detail() {
-		p.Print("error while establishing the SQL session")
-	}
-	return i.err
-}
-
 // wrapConnError detects TCP EOF errors during the initial SQL handshake.
 // These are translated to a message "perhaps this is not a CockroachDB node"
 // at the top level.
@@ -145,7 +122,7 @@ func (i *initialSQLConnectionError) FormatError(p errors.Printer) error {
 func wrapConnError(err error) error {
 	errMsg := err.Error()
 	if errMsg == "EOF" || errMsg == "unexpected EOF" {
-		return &initialSQLConnectionError{err}
+		return &InitialSQLConnectionError{err}
 	}
 	return err
 }

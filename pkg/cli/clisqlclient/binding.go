@@ -28,10 +28,6 @@ type QueryFn = queryFunc
 // to the CLI.
 type RowStrIter = rowStrIter
 
-// InitialSQLConnnectionError exports initialSQLConnectionError for
-// use inside the cli package.
-type InitialSQLConnectionError = initialSQLConnectionError
-
 // stderr aliases log.OrigStderr; we use an alias here so that tests
 // in this package can redirect the output of CLI commands to stdout
 // to be captured.
