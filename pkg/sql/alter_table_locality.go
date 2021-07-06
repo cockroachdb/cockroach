@@ -50,7 +50,7 @@ func (p *planner) AlterTableLocality(
 		return nil, err
 	}
 
-	tableDesc, err := p.ResolveMutableTableDescriptorEx(
+	_, tableDesc, err := p.ResolveMutableTableDescriptorEx(
 		ctx, n.Name, !n.IfExists, tree.ResolveRequireTableDesc,
 	)
 	if err != nil {

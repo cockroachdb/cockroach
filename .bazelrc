@@ -24,3 +24,9 @@ build:crossmacos --platforms=//build/toolchains:cross_macos
 build:crossmacos --crosstool_top=@toolchain_cross_x86_64-apple-darwin19//:suite
 build:crosslinuxarm --platforms=//build/toolchains:cross_linux_arm
 build:crosslinuxarm --crosstool_top=@toolchain_cross_aarch64-unknown-linux-gnu//:suite
+
+# developer configurations. Add e.g. --config=devdarwinx86_64 to turn these on.
+build:devdarwinx86_64 --crosstool_top=@toolchain_dev_darwin_x86-64//:suite
+# NOTE(ricky): This is consumed in `BUILD` files (see
+# `build/toolchains/BUILD.bazel`).
+build:devdarwinx86_64 --define cockroach_bazel_dev=y

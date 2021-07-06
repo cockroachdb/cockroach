@@ -33,7 +33,7 @@ func (p *planner) RefreshMaterializedView(
 	if !p.EvalContext().TxnImplicit {
 		return nil, pgerror.Newf(pgcode.InvalidTransactionState, "cannot refresh view in an explicit transaction")
 	}
-	desc, err := p.ResolveMutableTableDescriptorEx(ctx, n.Name, true /* required */, tree.ResolveRequireViewDesc)
+	_, desc, err := p.ResolveMutableTableDescriptorEx(ctx, n.Name, true /* required */, tree.ResolveRequireViewDesc)
 	if err != nil {
 		return nil, err
 	}
