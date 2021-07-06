@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cdcutils",
+    srcs = ["throttle.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/settings",
+        "//pkg/util/log",
+        "//pkg/util/quotapool",
+        "//pkg/util/tracing",
+    ],
+)
+
+go_test(
+    name = "cdcutils_test",
+    srcs = ["throttle_test.go"],
+    embed = [":cdcutils"],
+    deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/settings/cluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)

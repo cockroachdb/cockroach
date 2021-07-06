@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
@@ -265,10 +266,11 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = makeMetricsSink(ca.metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	buf := kvevent.MakeChanBuffer()
+	cfg := ca.flowCtx.Cfg
+	buf := kvevent.NewThrottlingBuffer(
+		kvevent.MakeChanBuffer(), cdcutils.NodeLevelThrottler(&cfg.Settings.SV))
 	kvfeedCfg := makeKVFeedCfg(ctx, ca.flowCtx.Cfg, ca.kvFeedMemMon,
 		ca.spec, spans, buf, ca.metrics, ca.knobs.FeedKnobs)
-	cfg := ca.flowCtx.Cfg
 
 	ca.eventProducer = &bufEventProducer{buf}
 
