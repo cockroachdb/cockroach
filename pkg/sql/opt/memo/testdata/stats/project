@@ -197,7 +197,8 @@ project
                      ├── columns: column12:12(bool)
                      ├── grouping columns: column12:12(bool)
                      ├── outer: (3)
-                     ├── stats: [rows=10, distinct(12)=10, null(12)=0]
+                     ├── cardinality: [0 - 3]
+                     ├── stats: [rows=3, distinct(12)=3, null(12)=0]
                      ├── key: (12)
                      └── project
                           ├── columns: column12:12(bool)
