@@ -20,6 +20,7 @@ pkg/kv/kvclient/rangecache/range_cache.go://go:generate mockgen -package=rangeca
 pkg/kv/kvclient/rangefeed/rangefeed.go://go:generate mockgen -package=rangefeed -source rangefeed.go -destination=mocks_generated.go .
 pkg/kv/kvclient/kvcoord/transport.go://go:generate mockgen -package=kvcoord -destination=mocks_generated.go . Transport
 pkg/roachpb/api.go://go:generate mockgen -package=roachpb -destination=mocks_generated.go . InternalClient,Internal_RangeFeedClient
+pkg/cmd/roachtest/drt.go://go:generate mockgen -source drt.go -package main -destination drt_generated.go
 pkg/security/securitytest/securitytest.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs
 pkg/security/securitytest/securitytest.go://go:generate gofmt -s -w embedded.go
 pkg/security/securitytest/securitytest.go://go:generate goimports -w embedded.go

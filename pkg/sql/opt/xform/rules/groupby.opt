@@ -212,17 +212,17 @@
 =>
 ((OpName) (Select $unionScans $filters) $aggs $private)
 
-# EliminateIndexJoinInsideGroupBy removes an IndexJoin operator if it can be
-# proven that the removal does not affect the output of the parent grouping
-# operator. This is the case if:
+# EliminateIndexJoinOrProjectInsideGroupBy removes an IndexJoin or Project
+# operator if it can be proven that the removal does not affect the output of
+# the parent grouping operator. This is the case if:
 #
-# 1. Only columns from the index join's input are being used by the grouping
-#    operator.
+# 1. Only columns from the index join/project's input are being used by the
+#    grouping operator.
 #
 # 2. The OrderingChoice of the grouping operator can be expressed with only
-#    columns from the index join's input. Or in other words, at least one column
-#    in every ordering group is one of the output columns from the index join's
-#    input.
+#    columns from the index join/project's input. Or in other words, at least
+#    one column in every ordering group is one of the output columns from the
+#    index join/project's input.
 #
 # This rule is useful when using partial indexes. When generating partial index
 # scans, expressions can be removed from filters because they exactly match
@@ -270,22 +270,35 @@
 #    └── scan t@secondary,partial
 #         └── columns: i:1 rowid:4!null
 #
-[EliminateIndexJoinInsideGroupBy, Explore]
+# A Project is created in cases where the partial index predicate constrains
+# some columns to be constant, and therefore provides those columns as constant
+# projections instead of using an IndexJoin. The Project can be eliminated for
+# the same reasons as the IndexJoin.
+[EliminateIndexJoinOrProjectInsideGroupBy, Explore]
 (GroupBy | DistinctOn | EnsureUpsertDistinctOn
-    (IndexJoin $input:*)
+    (IndexJoin | Project $input:*)
     $aggs:*
     $private:* &
         (OrderingCanProjectCols
-            (GroupingOrdering $private)
+            $ordering:(GroupingOrdering $private)
             $inputCols:(OutputCols $input)
         ) &
         (ColsAreSubset
             (UnionCols
-                (GroupingColumns $private)
+                $groupingCols:(GroupingColumns $private)
                 (AggregationOuterCols $aggs)
             )
             $inputCols
         )
 )
 =>
-((OpName) $input $aggs $private)
+((OpName)
+    $input
+    $aggs
+    (MakeGroupingPrivate
+        $groupingCols
+        (PruneOrdering $ordering $inputCols)
+        (NullsAreDistinct $private)
+        (ErrorOnDup $private)
+    )
+)
