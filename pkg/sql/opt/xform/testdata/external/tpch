@@ -2186,59 +2186,50 @@ sort
            │         │    ├── grouping columns: ps_suppkey:17!null
            │         │    ├── immutable
            │         │    ├── key: (17)
-           │         │    └── project
-           │         │         ├── columns: ps_partkey:16!null ps_suppkey:17!null
+           │         │    └── inner-join (lookup part)
+           │         │         ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null p_partkey:23!null p_name:24!null sum:52!null
+           │         │         ├── key columns: [16] = [23]
+           │         │         ├── lookup columns are key
            │         │         ├── immutable
-           │         │         ├── key: (16,17)
-           │         │         └── project
-           │         │              ├── columns: ps_partkey:16!null ps_suppkey:17!null p_partkey:23!null
-           │         │              ├── immutable
-           │         │              ├── key: (17,23)
-           │         │              ├── fd: (16)==(23), (23)==(16)
-           │         │              └── inner-join (lookup part)
-           │         │                   ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null p_partkey:23!null p_name:24!null sum:52!null
-           │         │                   ├── key columns: [16] = [23]
-           │         │                   ├── lookup columns are key
-           │         │                   ├── immutable
-           │         │                   ├── key: (17,23)
-           │         │                   ├── fd: (16,17)-->(18,52), (23)-->(24), (16)==(23), (23)==(16)
-           │         │                   ├── select
-           │         │                   │    ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null sum:52!null
-           │         │                   │    ├── immutable
-           │         │                   │    ├── key: (16,17)
-           │         │                   │    ├── fd: (16,17)-->(18,52)
-           │         │                   │    ├── group-by
-           │         │                   │    │    ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null sum:52!null
-           │         │                   │    │    ├── grouping columns: ps_partkey:16!null ps_suppkey:17!null
-           │         │                   │    │    ├── key: (16,17)
-           │         │                   │    │    ├── fd: (16,17)-->(18,52)
-           │         │                   │    │    ├── inner-join (hash)
-           │         │                   │    │    │    ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null l_partkey:35!null l_suppkey:36!null l_quantity:38!null l_shipdate:44!null
-           │         │                   │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-           │         │                   │    │    │    ├── fd: (16,17)-->(18), (16)==(35), (35)==(16), (17)==(36), (36)==(17)
-           │         │                   │    │    │    ├── index-join lineitem
-           │         │                   │    │    │    │    ├── columns: l_partkey:35!null l_suppkey:36!null l_quantity:38!null l_shipdate:44!null
-           │         │                   │    │    │    │    └── scan lineitem@l_sd
-           │         │                   │    │    │    │         ├── columns: l_orderkey:34!null l_linenumber:37!null l_shipdate:44!null
-           │         │                   │    │    │    │         ├── constraint: /44/34/37: [/'1994-01-01' - /'1994-12-31']
-           │         │                   │    │    │    │         ├── key: (34,37)
-           │         │                   │    │    │    │         └── fd: (34,37)-->(44)
-           │         │                   │    │    │    ├── scan partsupp
-           │         │                   │    │    │    │    ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null
-           │         │                   │    │    │    │    ├── key: (16,17)
-           │         │                   │    │    │    │    └── fd: (16,17)-->(18)
-           │         │                   │    │    │    └── filters
-           │         │                   │    │    │         ├── l_partkey:35 = ps_partkey:16 [outer=(16,35), constraints=(/16: (/NULL - ]; /35: (/NULL - ]), fd=(16)==(35), (35)==(16)]
-           │         │                   │    │    │         └── l_suppkey:36 = ps_suppkey:17 [outer=(17,36), constraints=(/17: (/NULL - ]; /36: (/NULL - ]), fd=(17)==(36), (36)==(17)]
-           │         │                   │    │    └── aggregations
-           │         │                   │    │         ├── sum [as=sum:52, outer=(38)]
-           │         │                   │    │         │    └── l_quantity:38
-           │         │                   │    │         └── const-agg [as=ps_availqty:18, outer=(18)]
-           │         │                   │    │              └── ps_availqty:18
-           │         │                   │    └── filters
-           │         │                   │         └── ps_availqty:18 > (sum:52 * 0.5) [outer=(18,52), immutable, constraints=(/18: (/NULL - ])]
-           │         │                   └── filters
-           │         │                        └── p_name:24 LIKE 'forest%' [outer=(24), constraints=(/24: [/'forest' - /'foresu'); tight)]
+           │         │         ├── key: (17,23)
+           │         │         ├── fd: (16,17)-->(18,52), (23)-->(24), (16)==(23), (23)==(16)
+           │         │         ├── select
+           │         │         │    ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null sum:52!null
+           │         │         │    ├── immutable
+           │         │         │    ├── key: (16,17)
+           │         │         │    ├── fd: (16,17)-->(18,52)
+           │         │         │    ├── group-by
+           │         │         │    │    ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null sum:52!null
+           │         │         │    │    ├── grouping columns: ps_partkey:16!null ps_suppkey:17!null
+           │         │         │    │    ├── key: (16,17)
+           │         │         │    │    ├── fd: (16,17)-->(18,52)
+           │         │         │    │    ├── inner-join (hash)
+           │         │         │    │    │    ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null l_partkey:35!null l_suppkey:36!null l_quantity:38!null l_shipdate:44!null
+           │         │         │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+           │         │         │    │    │    ├── fd: (16,17)-->(18), (16)==(35), (35)==(16), (17)==(36), (36)==(17)
+           │         │         │    │    │    ├── index-join lineitem
+           │         │         │    │    │    │    ├── columns: l_partkey:35!null l_suppkey:36!null l_quantity:38!null l_shipdate:44!null
+           │         │         │    │    │    │    └── scan lineitem@l_sd
+           │         │         │    │    │    │         ├── columns: l_orderkey:34!null l_linenumber:37!null l_shipdate:44!null
+           │         │         │    │    │    │         ├── constraint: /44/34/37: [/'1994-01-01' - /'1994-12-31']
+           │         │         │    │    │    │         ├── key: (34,37)
+           │         │         │    │    │    │         └── fd: (34,37)-->(44)
+           │         │         │    │    │    ├── scan partsupp
+           │         │         │    │    │    │    ├── columns: ps_partkey:16!null ps_suppkey:17!null ps_availqty:18!null
+           │         │         │    │    │    │    ├── key: (16,17)
+           │         │         │    │    │    │    └── fd: (16,17)-->(18)
+           │         │         │    │    │    └── filters
+           │         │         │    │    │         ├── l_partkey:35 = ps_partkey:16 [outer=(16,35), constraints=(/16: (/NULL - ]; /35: (/NULL - ]), fd=(16)==(35), (35)==(16)]
+           │         │         │    │    │         └── l_suppkey:36 = ps_suppkey:17 [outer=(17,36), constraints=(/17: (/NULL - ]; /36: (/NULL - ]), fd=(17)==(36), (36)==(17)]
+           │         │         │    │    └── aggregations
+           │         │         │    │         ├── sum [as=sum:52, outer=(38)]
+           │         │         │    │         │    └── l_quantity:38
+           │         │         │    │         └── const-agg [as=ps_availqty:18, outer=(18)]
+           │         │         │    │              └── ps_availqty:18
+           │         │         │    └── filters
+           │         │         │         └── ps_availqty:18 > (sum:52 * 0.5) [outer=(18,52), immutable, constraints=(/18: (/NULL - ])]
+           │         │         └── filters
+           │         │              └── p_name:24 LIKE 'forest%' [outer=(24), constraints=(/24: [/'forest' - /'foresu'); tight)]
            │         └── filters (true)
            └── filters
                 └── n_name:11 = 'CANADA' [outer=(11), constraints=(/11: [/'CANADA' - /'CANADA']; tight), fd=()-->(11)]

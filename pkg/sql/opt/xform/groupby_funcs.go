@@ -266,3 +266,16 @@ func (c *CustomFuncs) GroupingColumns(private *memo.GroupingPrivate) opt.ColSet 
 func (c *CustomFuncs) GroupingOrdering(private *memo.GroupingPrivate) props.OrderingChoice {
 	return private.Ordering
 }
+
+// MakeGroupingPrivate constructs a new GroupingPrivate using the given
+// grouping columns, OrderingChoice, NullsAreDistinct bool, and ErrorOnDup text.
+func (c *CustomFuncs) MakeGroupingPrivate(
+	groupingCols opt.ColSet, ordering props.OrderingChoice, nullsAreDistinct bool, errorText string,
+) *memo.GroupingPrivate {
+	return &memo.GroupingPrivate{
+		GroupingCols:     groupingCols,
+		Ordering:         ordering,
+		NullsAreDistinct: nullsAreDistinct,
+		ErrorOnDup:       errorText,
+	}
+}
