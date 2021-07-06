@@ -79,7 +79,7 @@ func setImportCLITestingKnobs() (importCLITestingKnobs, func()) {
 	}
 }
 
-func runDumpTableImport(cmd *cobra.Command, args []string) error {
+func runDumpTableImport(cmd *cobra.Command, args []string) (resErr error) {
 	tableName := args[0]
 	importFormat := strings.ToLower(args[1])
 	source := args[2]
@@ -87,19 +87,19 @@ func runDumpTableImport(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 	ctx := context.Background()
 	return runImport(ctx, conn, importFormat, source, tableName, singleTable)
 }
 
-func runDumpFileImport(cmd *cobra.Command, args []string) error {
+func runDumpFileImport(cmd *cobra.Command, args []string) (resErr error) {
 	importFormat := strings.ToLower(args[0])
 	source := args[1]
 	conn, err := makeSQLClient("cockroach import db", useDefaultDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 	ctx := context.Background()
 	return runImport(ctx, conn, importFormat, source, "", multiTable)
 }

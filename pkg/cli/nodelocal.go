@@ -39,12 +39,12 @@ Uploads a file to a gateway node's local file system using a SQL connection.
 	RunE: maybeShoutError(runUpload),
 }
 
-func runUpload(cmd *cobra.Command, args []string) error {
+func runUpload(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach nodelocal", useSystemDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	source := args[0]
 	destination := args[1]
@@ -72,7 +72,9 @@ func openSourceFile(source string) (io.ReadCloser, error) {
 	return f, nil
 }
 
-func uploadFile(ctx context.Context, conn clisqlclient.Conn, reader io.Reader, destination string) error {
+func uploadFile(
+	ctx context.Context, conn clisqlclient.Conn, reader io.Reader, destination string,
+) error {
 	if err := conn.EnsureConn(); err != nil {
 		return err
 	}
