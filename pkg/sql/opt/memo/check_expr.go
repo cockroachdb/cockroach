@@ -176,6 +176,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *DistinctOnExpr, *EnsureDistinctOnExpr, *UpsertDistinctOnExpr, *EnsureUpsertDistinctOnExpr:
 		checkErrorOnDup(e.(RelExpr))
+		checkNullsAreDistinct(e.(RelExpr))
 
 		// Check that aggregates can be only FirstAgg or ConstAgg.
 		for _, item := range *t.Child(1).(*AggregationsExpr) {
@@ -189,6 +190,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *GroupByExpr, *ScalarGroupByExpr:
 		checkErrorOnDup(e.(RelExpr))
+		checkNullsAreDistinct(e.(RelExpr))
 
 		// Check that aggregates cannot be FirstAgg.
 		for _, item := range *t.Child(1).(*AggregationsExpr) {
@@ -408,6 +410,23 @@ func checkErrorOnDup(e RelExpr) {
 		e.Private().(*GroupingPrivate).ErrorOnDup == "" {
 		panic(errors.AssertionFailedf(
 			"%s should never leave ErrorOnDup as an empty string", log.Safe(e.Op())))
+	}
+}
+
+func checkNullsAreDistinct(e RelExpr) {
+	// Only UpsertDistinctOn and EnsureUpsertDistinctOn should set the
+	// NullsAreDistinct field to true.
+	if e.Op() != opt.UpsertDistinctOnOp &&
+		e.Op() != opt.EnsureUpsertDistinctOnOp &&
+		e.Private().(*GroupingPrivate).NullsAreDistinct {
+		panic(errors.AssertionFailedf(
+			"%s should never set NullsAreDistinct to true", log.Safe(e.Op())))
+	}
+	if (e.Op() == opt.UpsertDistinctOnOp ||
+		e.Op() == opt.EnsureUpsertDistinctOnOp) &&
+		!e.Private().(*GroupingPrivate).NullsAreDistinct {
+		panic(errors.AssertionFailedf(
+			"%s should never set NullsAreDistinct to false", log.Safe(e.Op())))
 	}
 }
 
