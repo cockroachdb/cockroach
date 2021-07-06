@@ -207,7 +207,7 @@ func (c *sqlConn) EnsureConn() error {
 		}
 		c.conn = conn.(DriverConn)
 		if err := c.checkServerMetadata(); err != nil {
-			c.Close()
+			err = errors.CombineErrors(err, c.Close())
 			return wrapConnError(err)
 		}
 		c.reconnecting = false
@@ -786,7 +786,7 @@ func handleCopyError(conn *sqlConn, err error) error {
 	// The COPY statement has hosed the connection by putting the
 	// protocol in a state that lib/pq cannot understand any more. Reset
 	// it.
-	conn.Close()
+	_ = conn.Close()
 	conn.reconnecting = true
 	return errors.New("woops! COPY has confused this client! Suggestion: use 'psql' for COPY")
 }

@@ -101,12 +101,12 @@ Run the doctor tool system data from a live cluster specified by --url.
 `,
 		Args: cobra.NoArgs,
 		RunE: MaybeDecorateGRPCError(
-			func(cmd *cobra.Command, args []string) error {
+			func(cmd *cobra.Command, args []string) (resErr error) {
 				sqlConn, err := makeSQLClient("cockroach doctor", useSystemDb)
 				if err != nil {
 					return errors.Wrap(err, "could not establish connection to cluster")
 				}
-				defer sqlConn.Close()
+				defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
 				descs, ns, jobs, err := fromCluster(sqlConn, cliCtx.cmdTimeout)
 				if err != nil {
 					return err
