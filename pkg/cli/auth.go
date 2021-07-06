@@ -17,6 +17,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -67,7 +68,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		rows := [][]string{
 			{username, fmt.Sprintf("%d", id), hC},
 		}
-		if err := sqlExecCtx.PrintQueryOutput(os.Stdout, cols, clisqlclient.NewRowSliceIter(rows, "ll")); err != nil {
+		if err := sqlExecCtx.PrintQueryOutput(os.Stdout, cols, clisqlexec.NewRowSliceIter(rows, "ll")); err != nil {
 			return err
 		}
 

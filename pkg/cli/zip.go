@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
@@ -184,7 +185,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	sqlExecCtx.TerminalOutput = false
 	sqlExecCtx.ShowTimes = false
 	// Use a streaming format to avoid accumulating all rows in RAM.
-	sqlExecCtx.TableDisplayFormat = clisqlclient.TableDisplayTSV
+	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
 	if err != nil {

@@ -8,19 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package clisqlclient
+package clisqlexec
 
 import "github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 
-// ExecContext represents configuration for running SQL query
+// Context represents configuration for running SQL query
 // and presenting results to the screen.
 // (Note: the execution of the interactive SQL shell
 // is configured via a separate shell configuration.)
-// TODO(knz): Move this to the right location.
 //
 // Note: when adding new configuration fields, consider adding
 // them to the most specific configuration context possible.
-type ExecContext struct {
+type Context struct {
 	// CliCtx links this connection context to a CLI configuration
 	// environment.
 	CliCtx *clicfg.Context
@@ -51,6 +50,6 @@ type ExecContext struct {
 // IsInteractive returns true if the connection configuration
 // is for an interactive session. This exposes the field
 // from clicfg.Context if available.
-func (sqlExecCtx *ExecContext) IsInteractive() bool {
+func (sqlExecCtx *Context) IsInteractive() bool {
 	return sqlExecCtx.CliCtx != nil && sqlExecCtx.CliCtx.IsInteractive
 }

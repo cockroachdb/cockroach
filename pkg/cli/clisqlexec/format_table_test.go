@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package clisqlclient_test
+package clisqlexec_test
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
-	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -53,7 +53,7 @@ thenshort`,
 	c.RunWithArgs([]string{"sql", "-e", "show columns from t.u"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.u"})
 	c.RunWithArgs([]string{"sql", "--format=table", "-e", "show columns from t.u"})
-	for i := clisqlclient.TableDisplayFormat(0); i < clisqlclient.TableDisplayLastFormat; i++ {
+	for i := clisqlexec.TableDisplayFormat(0); i < clisqlexec.TableDisplayLastFormat; i++ {
 		c.RunWithArgs([]string{"sql", "--format=" + i.String(), "-e", "select * from t.u"})
 	}
 
@@ -186,7 +186,7 @@ func Example_sql_empty_table() {
 		"create table t.nocolsnorows();" +
 		"create table t.nocols(); insert into t.nocols(rowid) values (1),(2),(3);"})
 	for _, table := range []string{"norows", "nocols", "nocolsnorows"} {
-		for format := clisqlclient.TableDisplayFormat(0); format < clisqlclient.TableDisplayLastFormat; format++ {
+		for format := clisqlexec.TableDisplayFormat(0); format < clisqlexec.TableDisplayLastFormat; format++ {
 			c.RunWithArgs([]string{"sql", "--format=" + format.String(), "-e", "select * from t." + table})
 		}
 	}
@@ -477,7 +477,7 @@ func Example_sql_table() {
 		c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (" + t.str + ", '" + t.desc + "')"})
 	}
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.t"})
-	for format := clisqlclient.TableDisplayFormat(0); format < clisqlclient.TableDisplayLastFormat; format++ {
+	for format := clisqlexec.TableDisplayFormat(0); format < clisqlexec.TableDisplayLastFormat; format++ {
 		c.RunWithArgs([]string{"sql", "--format=" + format.String(), "-e", "select * from t.t"})
 	}
 

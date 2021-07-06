@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package clisqlclient_test
+package clisqlexec_test
 
 import "github.com/cockroachdb/cockroach/pkg/cli"
 
