@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 )
 
 type sysbenchWorkload int
@@ -96,7 +97,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	t.Status("installing cockroach")
 	c.Put(ctx, t.Cockroach(), "./cockroach", allNodes)
 	c.Start(ctx, roachNodes)
-	waitForFullReplication(t, c.Conn(ctx, allNodes[0]))
+	tests.WaitFor3XReplication(t, c.Conn(ctx, allNodes[0]))
 
 	t.Status("installing haproxy")
 	if err := c.Install(ctx, loadNode, "haproxy"); err != nil {

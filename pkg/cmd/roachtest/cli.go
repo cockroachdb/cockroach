@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 )
 
 func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -28,7 +29,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
-	waitForFullReplication(t, db)
+	tests.WaitFor3XReplication(t, db)
 
 	lastWords := func(s string) []string {
 		var result []string
@@ -111,7 +112,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, c.Range(1, 2))
 
 	// Wait for the cluster to come back up.
-	waitForFullReplication(t, db)
+	tests.WaitFor3XReplication(t, db)
 
 	waitUntil([]string{
 		"is_available is_live",
