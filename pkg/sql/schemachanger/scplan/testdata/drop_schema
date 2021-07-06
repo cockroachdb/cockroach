@@ -90,80 +90,74 @@ ops
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
 Stage 0
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 3
-    TableID: 54
-  *scop.UpdateRelationDeps
-    TableID: 54
+  *scop.MarkDescriptorAsDropped
+    TableID: 60
+  *scop.MarkDescriptorAsDropped
+    TableID: 59
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 55
-    TableID: 54
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 56
-    TableID: 55
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 57
-    TableID: 55
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 57
-    TableID: 56
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 58
-    TableID: 56
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 61
-    TableID: 58
-  *scop.RemoveTypeBackRef
-    DescID: 61
-    TypeID: 59
-  *scop.RemoveTypeBackRef
-    DescID: 61
-    TypeID: 60
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 1
-    TableID: 54
-  *scop.UpdateRelationDeps
-    TableID: 54
+    DependedOnBy: 54
+    TableID: 53
   *scop.RemoveColumnDefaultExpression
     ColumnID: 2
     TableID: 54
   *scop.UpdateRelationDeps
     TableID: 54
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 1
+    TableID: 54
+  *scop.UpdateRelationDeps
+    TableID: 54
+  *scop.RemoveTypeBackRef
+    DescID: 61
+    TypeID: 60
+  *scop.RemoveTypeBackRef
+    DescID: 61
+    TypeID: 59
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 54
-    TableID: 53
-  *scop.MarkDescriptorAsDropped
-    TableID: 59
-  *scop.MarkDescriptorAsDropped
-    TableID: 60
+    DependedOnBy: 61
+    TableID: 58
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 58
+    TableID: 56
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 57
+    TableID: 56
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 57
+    TableID: 55
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 56
+    TableID: 55
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 55
+    TableID: 54
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 3
+    TableID: 54
+  *scop.UpdateRelationDeps
+    TableID: 54
 Stage 1
   *scop.MarkDescriptorAsDropped
     TableID: 52
 Stage 2
-  *scop.MarkDescriptorAsDropped
-    TableID: 53
   *scop.DrainDescriptorName
-    TableID: 53
-  *scop.CreateGcJobForDescriptor
-    DescID: 53
-  *scop.MarkDescriptorAsDropped
-    TableID: 55
+    TableID: 52
   *scop.DrainDescriptorName
-    TableID: 55
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
-  *scop.MarkDescriptorAsDropped
-    TableID: 56
+    TableID: 60
   *scop.DrainDescriptorName
-    TableID: 56
-  *scop.CreateGcJobForDescriptor
-    DescID: 56
+    TableID: 59
   *scop.MarkDescriptorAsDropped
-    TableID: 57
+    TableID: 54
   *scop.DrainDescriptorName
-    TableID: 57
+    TableID: 54
   *scop.CreateGcJobForDescriptor
-    DescID: 57
+    DescID: 54
+  *scop.MarkDescriptorAsDropped
+    TableID: 61
+  *scop.DrainDescriptorName
+    TableID: 61
+  *scop.CreateGcJobForDescriptor
+    DescID: 61
   *scop.MarkDescriptorAsDropped
     TableID: 58
   *scop.DrainDescriptorName
@@ -171,20 +165,26 @@ Stage 2
   *scop.CreateGcJobForDescriptor
     DescID: 58
   *scop.MarkDescriptorAsDropped
-    TableID: 61
+    TableID: 57
   *scop.DrainDescriptorName
-    TableID: 61
+    TableID: 57
   *scop.CreateGcJobForDescriptor
-    DescID: 61
+    DescID: 57
   *scop.MarkDescriptorAsDropped
-    TableID: 54
+    TableID: 56
   *scop.DrainDescriptorName
-    TableID: 54
+    TableID: 56
   *scop.CreateGcJobForDescriptor
-    DescID: 54
+    DescID: 56
+  *scop.MarkDescriptorAsDropped
+    TableID: 55
   *scop.DrainDescriptorName
-    TableID: 59
+    TableID: 55
+  *scop.CreateGcJobForDescriptor
+    DescID: 55
+  *scop.MarkDescriptorAsDropped
+    TableID: 53
   *scop.DrainDescriptorName
-    TableID: 60
-  *scop.DrainDescriptorName
-    TableID: 52
+    TableID: 53
+  *scop.CreateGcJobForDescriptor
+    DescID: 53
