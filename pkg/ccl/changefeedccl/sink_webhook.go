@@ -15,6 +15,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -23,8 +24,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 )
 
@@ -33,6 +37,8 @@ const (
 	authorizationHeader = `Authorization`
 	defaultConnTimeout  = 3 * time.Second
 )
+
+var numWorkers = workerCount()
 
 func isWebhookSink(u *url.URL) bool {
 	switch u.Scheme {
@@ -63,11 +69,20 @@ func encodePayloadWebhook(value []byte) ([]byte, error) {
 }
 
 type webhookSink struct {
-	ctx        context.Context
-	url        sinkURL
-	authHeader string
-	client     *httputil.Client
-	cancelFunc func()
+	ctx         context.Context
+	url         sinkURL
+	authHeader  string
+	client      *httputil.Client
+	workerGroup ctxgroup.Group
+	cancelFunc  func()
+	eventsChans []chan []byte
+	resultsChan chan error
+	mu          struct {
+		syncutil.Mutex
+		flushChan chan struct{}
+		flushErr  error
+		inflight  int
+	}
 }
 
 func makeWebhookSink(ctx context.Context, u sinkURL, opts map[string]string) (Sink, error) {
@@ -116,8 +131,8 @@ func makeWebhookSink(ctx context.Context, u sinkURL, opts map[string]string) (Si
 
 	sink := &webhookSink{
 		ctx:        ctx,
-		cancelFunc: cancel,
 		authHeader: opts[changefeedbase.OptWebhookAuthHeader],
+		cancelFunc: cancel,
 	}
 
 	var err error
@@ -137,6 +152,7 @@ func makeWebhookSink(ctx context.Context, u sinkURL, opts map[string]string) (Si
 	sinkURLParsed.RawQuery = params.Encode()
 	sink.url = sinkURL{URL: sinkURLParsed}
 
+	sink.setupWorkers()
 	return sink, nil
 }
 
@@ -187,6 +203,64 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 	return client, nil
 }
 
+// workerCount() is the number of CPU's on the machine
+func workerCount() int {
+	return system.NumCPU()
+}
+
+func (s *webhookSink) setupWorkers() {
+	s.eventsChans = make([]chan []byte, numWorkers)
+	s.resultsChan = make(chan error)
+	s.workerGroup = ctxgroup.WithContext(s.ctx)
+	for i := 0; i < numWorkers; i++ {
+		s.eventsChans[i] = make(chan []byte)
+		j := i
+		s.workerGroup.GoCtx(func(ctx context.Context) error {
+			s.workerLoop(s.eventsChans[j])
+			return nil
+		})
+	}
+	s.workerGroup.GoCtx(func(ctx context.Context) error {
+		s.processResultsLoop()
+		return nil
+	})
+}
+
+func (s *webhookSink) workerLoop(workerCh chan []byte) {
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case value := <-workerCh:
+			msg, err := encodePayloadWebhook(value)
+			if err == nil {
+				err = s.sendMessage(s.ctx, msg)
+			}
+			s.resultsChan <- err
+		}
+	}
+}
+
+func (s *webhookSink) processResultsLoop() {
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case err := <-s.resultsChan:
+			s.mu.Lock()
+			if err != nil && s.mu.flushErr == nil {
+				s.mu.flushErr = err
+			}
+			s.mu.inflight--
+			if s.mu.inflight == 0 && s.mu.flushChan != nil {
+				s.mu.flushChan <- struct{}{}
+				s.mu.flushChan = nil
+			}
+			s.mu.Unlock()
+		}
+	}
+}
+
 // Dial is a no-op for this sink since we don't necessarily have
 // a "health check" endpoint to use.
 func (s *webhookSink) Dial() error {
@@ -220,15 +294,29 @@ func (s *webhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
 	return nil
 }
 
-func (s *webhookSink) EmitRow(
-	ctx context.Context, _ TopicDescriptor, _, value []byte, _ hlc.Timestamp,
-) error {
-	j, err := encodePayloadWebhook(value)
-	if err != nil {
-		return err
-	}
+// workerIndex assigns rows each to a worker goroutine based on the hash of its
+// primary key. This is to ensure that each message with the same key gets
+// deterministically assigned to the same worker. Since we have a channel per
+// worker, we can ensure per-worker ordering and therefore guarantee per-key
+// ordering.
+func workerIndex(key []byte) uint32 {
+	return crc32.ChecksumIEEE(key) % uint32(numWorkers)
+}
 
-	return s.sendMessage(ctx, j)
+func (s *webhookSink) EmitRow(
+	ctx context.Context, _ TopicDescriptor, key, value []byte, _ hlc.Timestamp,
+) error {
+	index := workerIndex(key)
+	s.mu.Lock()
+	s.mu.inflight++
+	s.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case s.eventsChans[index] <- value:
+	}
+	return nil
 }
 
 func (s *webhookSink) EmitResolvedTimestamp(
@@ -238,17 +326,52 @@ func (s *webhookSink) EmitResolvedTimestamp(
 	if err != nil {
 		return err
 	}
+	s.mu.Lock()
+	s.mu.inflight++
+	s.mu.Unlock()
 
-	return s.sendMessage(ctx, j)
-}
-
-// Flush() is a no-op for now since calls to EmitRow() are synchronous
-func (s *webhookSink) Flush(ctx context.Context) error {
+	err = s.sendMessage(ctx, j)
+	s.resultsChan <- err
 	return nil
 }
 
+func (s *webhookSink) Flush(ctx context.Context) error {
+	s.mu.Lock()
+	if s.mu.inflight == 0 {
+		defer s.mu.Unlock()
+		err := s.mu.flushErr
+		s.mu.flushErr = nil
+		return err
+	}
+	flushCh := make(chan struct{}, 1)
+	s.mu.flushChan = flushCh
+	s.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-flushCh:
+		s.mu.Lock()
+		err := s.mu.flushErr
+		s.mu.flushErr = nil
+		s.mu.Unlock()
+		return err
+	}
+}
+
 func (s *webhookSink) Close() error {
+	// ignore errors here since we're closing the sink anyway
+	_ = s.Flush(s.ctx)
 	s.cancelFunc()
+	_ = s.workerGroup.Wait()
+	for i := 0; i < len(s.eventsChans); i++ {
+		close(s.eventsChans[i])
+	}
+	s.mu.Lock()
+	if s.mu.flushChan != nil {
+		close(s.mu.flushChan)
+	}
+	s.mu.Unlock()
+	close(s.resultsChan)
 	s.client.CloseIdleConnections()
 	return nil
 }
