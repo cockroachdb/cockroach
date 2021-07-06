@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -25,14 +26,14 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-func registerEngineSwitch(r *testRegistry) {
+func registerEngineSwitch(r registry.Registry) {
 	runEngineSwitch := func(ctx context.Context, t test.Test, c cluster.Cluster, additionalArgs ...string) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)
-		c.Put(ctx, workload, "./workload", loadNode)
-		c.Put(ctx, cockroach, "./cockroach", roachNodes)
-		pebbleArgs := startArgs(append(additionalArgs, "--args=--storage-engine=pebble")...)
-		rocksdbArgs := startArgs(append(additionalArgs, "--args=--storage-engine=rocksdb")...)
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
+		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+		pebbleArgs := option.StartArgs(append(additionalArgs, "--args=--storage-engine=pebble")...)
+		rocksdbArgs := option.StartArgs(append(additionalArgs, "--args=--storage-engine=rocksdb")...)
 		c.Start(ctx, roachNodes, rocksdbArgs)
 		stageDuration := 1 * time.Minute
 		if local {
@@ -55,7 +56,7 @@ func registerEngineSwitch(r *testRegistry) {
 		checkWorkloads := []string{
 			"./workload check tpcc --warehouses=1 --expensive-checks=true {pgurl:1}",
 		}
-		m := newMonitor(ctx, c, roachNodes)
+		m := c.NewMonitor(ctx, t, roachNodes)
 		for _, cmd := range workloads {
 			cmd := cmd // loop-local copy
 			m.Go(func(ctx context.Context) error {
@@ -140,22 +141,20 @@ func registerEngineSwitch(r *testRegistry) {
 	}
 
 	n := 3
-	r.Add(TestSpec{
-		Name:       fmt.Sprintf("engine/switch/nodes=%d", n),
-		Owner:      OwnerStorage,
-		Skip:       "rocksdb removed in 21.1",
-		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(n + 1),
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("engine/switch/nodes=%d", n),
+		Owner:   registry.OwnerStorage,
+		Skip:    "rocksdb removed in 21.1",
+		Cluster: r.MakeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runEngineSwitch(ctx, t, c)
 		},
 	})
-	r.Add(TestSpec{
-		Name:       fmt.Sprintf("engine/switch/encrypted/nodes=%d", n),
-		Owner:      OwnerStorage,
-		Skip:       "rocksdb removed in 21.1",
-		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(n + 1),
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("engine/switch/encrypted/nodes=%d", n),
+		Owner:   registry.OwnerStorage,
+		Skip:    "rocksdb removed in 21.1",
+		Cluster: r.MakeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runEngineSwitch(ctx, t, c, "--encrypt=true")
 		},

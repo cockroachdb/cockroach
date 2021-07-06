@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -65,7 +66,7 @@ var (
 // This test runs one of hibernate's test suite against a single cockroach
 // node.
 
-func registerHibernate(r *testRegistry, opt hibernateOptions) {
+func registerHibernate(r registry.Registry, opt hibernateOptions) {
 	runHibernate := func(
 		ctx context.Context,
 		t test.Test,
@@ -76,7 +77,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
@@ -234,12 +235,11 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		)
 	}
 
-	r.Add(TestSpec{
-		Name:       opt.testName,
-		Owner:      OwnerSQLExperience,
-		MinVersion: "v20.2.0",
-		Cluster:    r.makeClusterSpec(1),
-		Tags:       []string{`default`, `orm`},
+	r.Add(registry.TestSpec{
+		Name:    opt.testName,
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runHibernate(ctx, t, c)
 		},

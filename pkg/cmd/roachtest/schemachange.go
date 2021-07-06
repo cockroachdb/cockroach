@@ -18,28 +18,30 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-func registerSchemaChangeDuringKV(r *testRegistry) {
-	r.Add(TestSpec{
+func registerSchemaChangeDuringKV(r registry.Registry) {
+	r.Add(registry.TestSpec{
 		Name:    `schemachange/during/kv`,
-		Owner:   OwnerSQLSchema,
-		Cluster: r.makeClusterSpec(5),
+		Owner:   registry.OwnerSQLSchema,
+		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup?AUTH=implicit`
 
-			c.Put(ctx, cockroach, "./cockroach")
-			c.Put(ctx, workload, "./workload")
+			c.Put(ctx, t.Cockroach(), "./cockroach")
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 
 			c.Start(ctx, c.All())
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			m := newMonitor(ctx, c, c.All())
+			m := c.NewMonitor(ctx, t, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("loading fixture")
 				if _, err := db.Exec(`RESTORE DATABASE tpch FROM $1`, fixturePath); err != nil {
@@ -61,11 +63,11 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 						t.Fatal(err)
 					}
 					defer l.Close()
-					_ = execCmd(ctx, t.L(), roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
+					_ = c.RunE(ctx, c.Node(node), cmd)
 				}()
 			}
 
-			m = newMonitor(ctx, c, c.All())
+			m = c.NewMonitor(ctx, t, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("running schema change tests")
 				return waitForSchemaChanges(ctx, t.L(), db)
@@ -290,18 +292,20 @@ func findIndexProblem(
 	return nil
 }
 
-func registerSchemaChangeIndexTPCC1000(r *testRegistry) {
-	r.Add(makeIndexAddTpccTest(r.makeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*2))
+func registerSchemaChangeIndexTPCC1000(r registry.Registry) {
+	r.Add(makeIndexAddTpccTest(r.MakeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*2))
 }
 
-func registerSchemaChangeIndexTPCC100(r *testRegistry) {
-	r.Add(makeIndexAddTpccTest(r.makeClusterSpec(5), 100, time.Minute*15))
+func registerSchemaChangeIndexTPCC100(r registry.Registry) {
+	r.Add(makeIndexAddTpccTest(r.MakeClusterSpec(5), 100, time.Minute*15))
 }
 
-func makeIndexAddTpccTest(spec spec.ClusterSpec, warehouses int, length time.Duration) TestSpec {
-	return TestSpec{
+func makeIndexAddTpccTest(
+	spec spec.ClusterSpec, warehouses int, length time.Duration,
+) registry.TestSpec {
+	return registry.TestSpec{
 		Name:    fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -321,24 +325,22 @@ func makeIndexAddTpccTest(spec spec.ClusterSpec, warehouses int, length time.Dur
 				SetupType: usingImport,
 			})
 		},
-		MinVersion: "v19.1.0",
 	}
 }
 
-func registerSchemaChangeBulkIngest(r *testRegistry) {
+func registerSchemaChangeBulkIngest(r registry.Registry) {
 	r.Add(makeSchemaChangeBulkIngestTest(r, 5, 100000000, time.Minute*20))
 }
 
 func makeSchemaChangeBulkIngestTest(
-	r *testRegistry, numNodes, numRows int, length time.Duration,
-) TestSpec {
-	return TestSpec{
+	r registry.Registry, numNodes, numRows int, length time.Duration,
+) registry.TestSpec {
+	return registry.TestSpec{
 		Name:    "schemachange/bulkingest",
-		Owner:   OwnerSQLSchema,
-		Cluster: r.makeClusterSpec(numNodes),
+		Owner:   registry.OwnerSQLSchema,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Timeout: length * 2,
 		// `fixtures import` (with the workload paths) is not supported in 2.1
-		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Configure column a to have sequential ascending values, and columns b and c to be constant.
 			// The payload column will be randomized and thus uncorrelated with the primary key (a, b, c).
@@ -353,10 +355,10 @@ func makeSchemaChangeBulkIngestTest(
 			crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 			workloadNode := c.Node(c.Spec().NodeCount)
 
-			c.Put(ctx, cockroach, "./cockroach")
-			c.Put(ctx, workload, "./workload", workloadNode)
+			c.Put(ctx, t.Cockroach(), "./cockroach")
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 			// TODO (lucy): Remove flag once the faster import is enabled by default
-			c.Start(ctx, crdbNodes, startArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
+			c.Start(ctx, crdbNodes, option.StartArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
 
 			// Don't add another index when importing.
 			cmdWrite := fmt.Sprintf(
@@ -368,7 +370,7 @@ func makeSchemaChangeBulkIngestTest(
 
 			c.Run(ctx, workloadNode, cmdWrite)
 
-			m := newMonitor(ctx, c, crdbNodes)
+			m := c.NewMonitor(ctx, t, crdbNodes)
 
 			indexDuration := length
 			if c.IsLocal() {
@@ -411,16 +413,16 @@ func makeSchemaChangeBulkIngestTest(
 	}
 }
 
-func registerSchemaChangeDuringTPCC1000(r *testRegistry) {
-	r.Add(makeSchemaChangeDuringTPCC(r.makeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*3))
+func registerSchemaChangeDuringTPCC1000(r registry.Registry) {
+	r.Add(makeSchemaChangeDuringTPCC(r.MakeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*3))
 }
 
 func makeSchemaChangeDuringTPCC(
 	spec spec.ClusterSpec, warehouses int, length time.Duration,
-) TestSpec {
-	return TestSpec{
+) registry.TestSpec {
+	return registry.TestSpec{
 		Name:    "schemachange/during/tpcc",
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -470,7 +472,6 @@ func makeSchemaChangeDuringTPCC(
 				SetupType: usingImport,
 			})
 		},
-		MinVersion: "v19.1.0",
 	}
 }
 

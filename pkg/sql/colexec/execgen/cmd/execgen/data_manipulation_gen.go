@@ -30,11 +30,6 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 		replaceWith:         "CopyVal",
 	},
 	{
-		templatePlaceholder: "execgen.COPYSLICE",
-		numArgs:             5,
-		replaceWith:         "CopySlice",
-	},
-	{
 		templatePlaceholder: "execgen.APPENDSLICE",
 		numArgs:             5,
 		replaceWith:         "AppendSlice",
@@ -43,11 +38,6 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 		templatePlaceholder: "execgen.APPENDVAL",
 		numArgs:             2,
 		replaceWith:         "AppendVal",
-	},
-	{
-		templatePlaceholder: "execgen.WINDOW",
-		numArgs:             3,
-		replaceWith:         "Window",
 	},
 	{
 		templatePlaceholder: "execgen.SETVARIABLESIZE",

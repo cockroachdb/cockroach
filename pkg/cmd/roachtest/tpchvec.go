@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -539,14 +540,14 @@ func runTPCHVec(
 	testRun func(ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase),
 ) {
 	firstNode := c.Node(1)
-	c.Put(ctx, cockroach, "./cockroach", c.All())
-	c.Put(ctx, workload, "./workload", firstNode)
+	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", firstNode)
 	c.Start(ctx)
 
 	conn := c.Conn(ctx, 1)
 	disableAutoStats(t, conn)
 	t.Status("restoring TPCH dataset for Scale Factor 1")
-	if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, newMonitor(ctx, c), c.All()); err != nil {
+	if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, c.NewMonitor(ctx, t), c.All()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -563,54 +564,49 @@ func runTPCHVec(
 
 const tpchVecNodeCount = 3
 
-func registerTPCHVec(r *testRegistry) {
-	r.Add(TestSpec{
-		Name:       "tpchvec/perf",
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.makeClusterSpec(tpchVecNodeCount),
-		MinVersion: "v19.2.0",
+func registerTPCHVec(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "tpchvec/perf",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(false /* disableStatsCreation */), baseTestRun)
 		},
 	})
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "tpchvec/disk",
-		Owner:   OwnerSQLQueries,
-		Cluster: r.makeClusterSpec(tpchVecNodeCount),
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		// 19.2 version doesn't have disk spilling nor memory monitoring, so
 		// there is no point in running this config on that version.
-		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecDiskTest{}, baseTestRun)
 		},
 	})
 
-	r.Add(TestSpec{
-		Name:       "tpchvec/smithcmp",
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.makeClusterSpec(tpchVecNodeCount),
-		MinVersion: "v20.1.0",
+	r.Add(registry.TestSpec{
+		Name:    "tpchvec/smithcmp",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecSmithcmpTest{}, smithcmpTestRun)
 		},
 	})
 
-	r.Add(TestSpec{
-		Name:       "tpchvec/perf_no_stats",
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.makeClusterSpec(tpchVecNodeCount),
-		MinVersion: "v20.2.0",
+	r.Add(registry.TestSpec{
+		Name:    "tpchvec/perf_no_stats",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(true /* disableStatsCreation */), baseTestRun)
 		},
 	})
 
-	r.Add(TestSpec{
-		Name:       "tpchvec/bench",
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.makeClusterSpec(tpchVecNodeCount),
-		MinVersion: "v20.2.0",
+	r.Add(registry.TestSpec{
+		Name:    "tpchvec/bench",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Skip: "This config can be used to perform some benchmarking and is not " +
 			"meant to be run on a nightly basis",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

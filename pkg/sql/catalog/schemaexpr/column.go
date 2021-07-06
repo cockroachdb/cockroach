@@ -263,6 +263,10 @@ func replaceColumnVars(
 			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
 		}
+		if col.IsInaccessible() {
+			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
+				"column %q is inaccessible and cannot be referenced", c.ColumnName)
+		}
 		colIDs.Add(col.GetID())
 
 		// Convert to a dummyColumn of the correct type.

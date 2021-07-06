@@ -19,23 +19,25 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-func registerAllocator(r *testRegistry) {
+func registerAllocator(r registry.Registry) {
 	runAllocator := func(ctx context.Context, t test.Test, c cluster.Cluster, start int, maxStdDev float64) {
-		c.Put(ctx, cockroach, "./cockroach")
+		c.Put(ctx, t.Cockroach(), "./cockroach")
 
 		// Start the first `start` nodes and restore a tpch fixture.
-		args := startArgs("--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
+		args := option.StartArgs("--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		c.Start(ctx, c.Range(1, start), args)
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 
-		m := newMonitor(ctx, c, c.Range(1, start))
+		m := c.NewMonitor(ctx, t, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
 			if err := c.RunE(
@@ -62,11 +64,11 @@ func registerAllocator(r *testRegistry) {
 					t.Fatal(err)
 				}
 				defer l.Close()
-				_ = execCmd(ctx, t.L(), roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
+				_ = c.RunE(ctx, c.Node(node), cmd)
 			}()
 		}
 
-		m = newMonitor(ctx, c, c.All())
+		m = c.NewMonitor(ctx, t, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
 			return waitForRebalance(ctx, t.L(), db, maxStdDev)
@@ -74,29 +76,28 @@ func registerAllocator(r *testRegistry) {
 		m.Wait()
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    `replicate/up/1to3`,
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(3),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    `replicate/rebalance/3to5`,
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(5),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
 	})
-	r.Add(TestSpec{
-		Name:       `replicate/wide`,
-		Owner:      OwnerKV,
-		Timeout:    10 * time.Minute,
-		Cluster:    r.makeClusterSpec(9, spec.CPU(1)),
-		MinVersion: "v19.2.0",
-		Run:        runWideReplication,
+	r.Add(registry.TestSpec{
+		Name:    `replicate/wide`,
+		Owner:   registry.OwnerKV,
+		Timeout: 10 * time.Minute,
+		Cluster: r.MakeClusterSpec(9, spec.CPU(1)),
+		Run:     runWideReplication,
 	})
 }
 
@@ -262,11 +263,11 @@ func runWideReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("9-node cluster required")
 	}
 
-	args := startArgs(
+	args := option.StartArgs(
 		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",
 		"--args=--vmodule=replicate_queue=6",
 	)
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, c.All(), args)
 
 	db := c.Conn(ctx, 1)

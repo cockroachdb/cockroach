@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	_ "github.com/lib/pq"
@@ -37,7 +38,7 @@ func runClockMonotonicity(
 	}
 
 	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
 	c.Start(ctx)
@@ -121,7 +122,7 @@ type clockMonotonicityTestCase struct {
 	expectIncreasingWallTime bool
 }
 
-func registerClockMonotonicTests(r *testRegistry) {
+func registerClockMonotonicTests(r registry.Registry) {
 	testCases := []clockMonotonicityTestCase{
 		{
 			name:                     "persistent",
@@ -133,12 +134,12 @@ func registerClockMonotonicTests(r *testRegistry) {
 
 	for i := range testCases {
 		tc := testCases[i]
-		s := TestSpec{
+		s := registry.TestSpec{
 			Name:  "clock/monotonic/" + tc.name,
-			Owner: OwnerKV,
+			Owner: registry.OwnerKV,
 			// These tests muck with NTP, therefor we don't want the cluster reused by
 			// others.
-			Cluster: r.makeClusterSpec(1, spec.ReuseTagged("offset-injector")),
+			Cluster: r.MakeClusterSpec(1, spec.ReuseTagged("offset-injector")),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClockMonotonicity(ctx, t, c, tc)
 			},

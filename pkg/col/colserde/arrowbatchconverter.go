@@ -213,7 +213,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 
 		case typeconv.DatumVecCanonicalTypeFamily:
 			offsets := make([]int32, 0, n+1)
-			datums := vec.Datum().Slice(0 /* start */, n)
+			datums := vec.Datum().Window(0 /* start */, n)
 			// Make a very very rough estimate of the number of bytes we'll have to
 			// allocate for the datums in this vector. This will likely be an
 			// undercount, but the estimate is better than nothing.

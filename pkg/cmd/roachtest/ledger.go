@@ -15,30 +15,31 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerLedger(r *testRegistry) {
+func registerLedger(r registry.Registry) {
 	const nodes = 6
 	// NB: us-central1-a has been causing issues, see:
 	// https://github.com/cockroachdb/cockroach/issues/66184
 	const azs = "us-central1-f,us-central1-b,us-central1-c"
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(azs)),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(azs)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)
 			loadNode := c.Node(nodes + 1)
 
-			c.Put(ctx, cockroach, "./cockroach", roachNodes)
-			c.Put(ctx, workload, "./workload", loadNode)
+			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 			c.Start(ctx, roachNodes)
 
 			t.Status("running workload")
-			m := newMonitor(ctx, c, roachNodes)
+			m := c.NewMonitor(ctx, t, roachNodes)
 			m.Go(func(ctx context.Context) error {
 				concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*32))
 				duration := " --duration=" + ifLocal("10s", "10m")

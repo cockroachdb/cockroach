@@ -18,11 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerPebble(r *testRegistry) {
+func registerPebble(r registry.Registry) {
 	pebble := os.Getenv("PEBBLE_BIN")
 	if pebble == "" {
 		pebble = "./pebble.linux"
@@ -104,13 +105,12 @@ func registerPebble(r *testRegistry) {
 
 	for _, size := range []int{64, 1024} {
 		size := size
-		r.Add(TestSpec{
-			Name:       fmt.Sprintf("pebble/ycsb/size=%d", size),
-			Owner:      OwnerStorage,
-			Timeout:    2 * time.Hour,
-			MinVersion: "v20.1.0",
-			Cluster:    r.makeClusterSpec(5, spec.CPU(16)),
-			Tags:       []string{"pebble"},
+		r.Add(registry.TestSpec{
+			Name:    fmt.Sprintf("pebble/ycsb/size=%d", size),
+			Owner:   registry.OwnerStorage,
+			Timeout: 2 * time.Hour,
+			Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
+			Tags:    []string{"pebble"},
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				run(ctx, t, c, size)
 			},

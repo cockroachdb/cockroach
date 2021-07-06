@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -117,10 +118,10 @@ func setupTPCC(
 		opts.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// NB: workloadNode also needs ./cockroach because
 			// of `./cockroach workload` for usingImport.
-			c.Put(ctx, cockroach, "./cockroach", c.All())
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 			// We still use bare workload, though we could likely replace
 			// those with ./cockroach workload as well.
-			c.Put(ctx, workload, "./workload", workloadNode)
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 			c.Start(ctx, crdbNodes)
 		}
 	}
@@ -216,7 +217,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
 	t.Status("waiting")
-	m := newMonitor(ctx, c, crdbNodes)
+	m := c.NewMonitor(ctx, t, crdbNodes)
 	for i := range workloadInstances {
 		// Make a copy of i for the goroutine.
 		i := i
@@ -239,7 +240,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 	if opts.Chaos != nil {
 		chaos := opts.Chaos()
-		m.Go(chaos.Runner(c, m))
+		m.Go(chaos.Runner(c, t, m))
 	}
 	if opts.During != nil {
 		m.Go(opts.During)
@@ -295,19 +296,18 @@ func maxSupportedTPCCWarehouses(
 	return warehouses
 }
 
-func registerTPCC(r *testRegistry) {
-	headroomSpec := r.makeClusterSpec(4, spec.CPU(16))
-	r.Add(TestSpec{
+func registerTPCC(r registry.Registry) {
+	headroomSpec := r.MakeClusterSpec(4, spec.CPU(16))
+	r.Add(registry.TestSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
 		// running with the max supported warehouses.
-		Name:       "tpcc/headroom/" + headroomSpec.String(),
-		Owner:      OwnerKV,
-		MinVersion: "v19.1.0",
-		Tags:       []string{`default`, `release_qualification`},
-		Cluster:    headroomSpec,
+		Name:    "tpcc/headroom/" + headroomSpec.String(),
+		Owner:   registry.OwnerKV,
+		Tags:    []string{`default`, `release_qualification`},
+		Cluster: headroomSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*TestSpec).Cluster)
+			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
@@ -317,15 +317,15 @@ func registerTPCC(r *testRegistry) {
 			})
 		},
 	})
-	mixedHeadroomSpec := r.makeClusterSpec(5, spec.CPU(16))
+	mixedHeadroomSpec := r.MakeClusterSpec(5, spec.CPU(16))
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		// mixed-headroom is similar to w=headroom, but with an additional
 		// node and on a mixed version cluster which runs its long-running
 		// migrations while TPCC runs. It simulates a real production
 		// deployment in the middle of the migration into a new cluster version.
 		Name:  "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
-		Owner: OwnerKV,
+		Owner: registry.OwnerKV,
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.
 		Tags:    []string{`default`},
@@ -334,7 +334,7 @@ func registerTPCC(r *testRegistry) {
 			crdbNodes := c.Range(1, 4)
 			workloadNode := c.Node(5)
 
-			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*TestSpec).Cluster)
+			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			if local {
 				headroomWarehouses = 10
@@ -405,11 +405,10 @@ func registerTPCC(r *testRegistry) {
 			).run(ctx, t)
 		},
 	})
-	r.Add(TestSpec{
-		Name:       "tpcc-nowait/nodes=3/w=1",
-		Owner:      OwnerKV,
-		MinVersion: "v19.1.0",
-		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
+	r.Add(registry.TestSpec{
+		Name:    "tpcc-nowait/nodes=3/w=1",
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   1,
@@ -419,12 +418,11 @@ func registerTPCC(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(TestSpec{
-		Name:       "weekly/tpcc/headroom",
-		Owner:      OwnerKV,
-		MinVersion: "v19.1.0",
-		Tags:       []string{`weekly`},
-		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
+	r.Add(registry.TestSpec{
+		Name:    "weekly/tpcc/headroom",
+		Owner:   registry.OwnerKV,
+		Tags:    []string{`weekly`},
+		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
 		// Give the test a generous extra 10 hours to load the dataset and
 		// slowly ramp up the load.
 		Timeout: 4*24*time.Hour + 10*time.Hour,
@@ -538,12 +536,11 @@ func registerTPCC(r *testRegistry) {
 
 		for i := range multiRegionTests {
 			tc := multiRegionTests[i]
-			r.Add(TestSpec{
-				Name:       tc.name,
-				Owner:      OwnerMultiRegion,
-				MinVersion: "v21.1.0",
+			r.Add(registry.TestSpec{
+				Name:  tc.name,
+				Owner: registry.OwnerMultiRegion,
 				// Add an extra node which serves as the workload nodes.
-				Cluster: r.makeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
+				Cluster: r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					t.Status(tc.desc)
 					duration := 90 * time.Minute
@@ -601,11 +598,10 @@ func registerTPCC(r *testRegistry) {
 		}
 	}
 
-	r.Add(TestSpec{
-		Name:       "tpcc/w=100/nodes=3/chaos=true",
-		Owner:      OwnerKV,
-		MinVersion: "v19.1.0",
-		Cluster:    r.makeClusterSpec(4),
+	r.Add(registry.TestSpec{
+		Name:    "tpcc/w=100/nodes=3/chaos=true",
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
@@ -629,12 +625,11 @@ func registerTPCC(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(TestSpec{
-		Name:       "tpcc/interleaved/nodes=3/cpu=16/w=500",
-		Owner:      OwnerSQLQueries,
-		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
-		Timeout:    6 * time.Hour,
+	r.Add(registry.TestSpec{
+		Name:    "tpcc/interleaved/nodes=3/cpu=16/w=500",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
+		Timeout: 6 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			skip.WithIssue(t, 53886)
 			runTPCC(ctx, t, c, tpccOptions{
@@ -783,9 +778,9 @@ type tpccBenchSpec struct {
 	// change (i.e. CockroachDB gets faster!).
 	EstimatedMax int
 
-	// MinVersion to pass to testRegistry.Add.
+	// MinVersion to pass to testRegistryImpl.Add.
 	MinVersion string
-	// Tags to pass to testRegistry.Add.
+	// Tags to pass to testRegistryImpl.Add.
 	Tags []string
 }
 
@@ -805,14 +800,14 @@ func (s tpccBenchSpec) partitions() int {
 
 // startOpts returns any extra start options that the spec requires.
 func (s tpccBenchSpec) startOpts() []option.Option {
-	opts := []option.Option{startArgsDontEncrypt}
+	opts := []option.Option{option.StartArgsDontEncrypt}
 	if s.LoadConfig == singlePartitionedLoadgen {
-		opts = append(opts, racks(s.partitions()))
+		opts = append(opts, option.Racks(s.partitions()))
 	}
 	return opts
 }
 
-func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
+func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	nameParts := []string{
 		"tpccbench",
 		fmt.Sprintf("nodes=%d", b.Nodes),
@@ -850,19 +845,18 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 	name := strings.Join(nameParts, "/")
 
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
-	nodes := r.makeClusterSpec(numNodes, opts...)
+	nodes := r.MakeClusterSpec(numNodes, opts...)
 
 	minVersion := b.MinVersion
 	if minVersion == "" {
 		minVersion = "v19.1.0" // needed for import
 	}
 
-	r.Add(TestSpec{
-		Name:       name,
-		Owner:      OwnerKV,
-		Cluster:    nodes,
-		MinVersion: minVersion,
-		Tags:       b.Tags,
+	r.Add(registry.TestSpec{
+		Name:    name,
+		Owner:   registry.OwnerKV,
+		Cluster: nodes,
+		Tags:    b.Tags,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
@@ -987,11 +981,11 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	loadGroups := makeLoadGroups(c, numZones, b.Nodes, numLoadGroups)
 	roachNodes := loadGroups.roachNodes()
 	loadNodes := loadGroups.loadNodes()
-	c.Put(ctx, cockroach, "./cockroach", roachNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 	// Fixture import needs './cockroach workload' on loadNodes[0],
 	// and if we use haproxy (see below) we need it on the others
 	// as well.
-	c.Put(ctx, cockroach, "./cockroach", loadNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", loadNodes)
 	// Don't encrypt in tpccbench tests.
 	c.EncryptDefault(false)
 	c.EncryptAtRandom(false)
@@ -1008,7 +1002,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				t.Fatal("distributed chaos benchmarking not supported")
 			}
 			t.Status("installing haproxy")
-			if err := c.Install(ctx, t.L(), loadNodes, "haproxy"); err != nil {
+			if err := c.Install(ctx, loadNodes, "haproxy"); err != nil {
 				t.Fatal(err)
 			}
 			c.Run(ctx, loadNodes, "./cockroach gen haproxy --insecure --url {pgurl:1}")
@@ -1023,7 +1017,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
 		}
 
-		m := newMonitor(ctx, c, roachNodes)
+		m := c.NewMonitor(ctx, t, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			t.Status("setting up dataset")
 			return loadTPCCBench(ctx, t, c, b, roachNodes, c.Node(loadNodes[0]))
@@ -1106,7 +1100,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		// *abort* the line search and whole tpccbench run. Return the errors
 		// to indicate that the specific warehouse count failed, but that the
 		// line search ought to continue.
-		m := newMonitor(ctx, c, roachNodes)
+		m := c.NewMonitor(ctx, t, roachNodes)
 
 		// If we're running chaos in this configuration, modify this config.
 		if b.Chaos {
@@ -1116,7 +1110,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				Target:  roachNodes.RandNode,
 				Stopper: loadDone,
 			}
-			m.Go(ch.Runner(c, m))
+			m.Go(ch.Runner(c, t, m))
 		}
 		if b.Distribution == multiRegion {
 			rampDur = 3 * time.Minute
@@ -1251,7 +1245,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	}
 }
 
-func registerTPCCBench(r *testRegistry) {
+func registerTPCCBench(r registry.Registry) {
 	specs := []tpccBenchSpec{
 		{
 			Nodes: 3,
@@ -1311,8 +1305,6 @@ func registerTPCCBench(r *testRegistry) {
 
 			LoadWarehouses: 12000,
 			EstimatedMax:   8000,
-
-			MinVersion: "v19.1.0",
 		},
 		// objective 4, key result 2.
 		{

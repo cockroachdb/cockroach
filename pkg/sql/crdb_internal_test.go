@@ -911,17 +911,16 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 			},
 		}
 		var rowIdx int
-		rows := sqlDB.Query(t, `SELECT trace_id, node_id, trace_json, trace_str, jaeger_json from crdb_internal.cluster_inflight_traces WHERE trace_id=$1`, traceID)
+		rows := sqlDB.Query(t, `SELECT trace_id, node_id, trace_str, jaeger_json from crdb_internal.cluster_inflight_traces WHERE trace_id=$1`, traceID)
 		defer rows.Close()
 		for rows.Next() {
 			var traceID, nodeID int
-			var traceJSON, traceStr, jaegarJSON string
-			require.NoError(t, rows.Scan(&traceID, &nodeID, &traceJSON, &traceStr, &jaegarJSON))
+			var traceStr, jaegarJSON string
+			require.NoError(t, rows.Scan(&traceID, &nodeID, &traceStr, &jaegarJSON))
 			require.Less(t, rowIdx, len(expectedRows))
 			expected := expectedRows[rowIdx]
 			require.Equal(t, expected.nodeID, nodeID)
 			require.Equal(t, expected.traceID, traceID)
-			require.NotEmpty(t, traceJSON)
 			require.NotEmpty(t, traceStr)
 			require.NotEmpty(t, jaegarJSON)
 			rowIdx++
