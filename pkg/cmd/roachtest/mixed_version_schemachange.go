@@ -15,19 +15,19 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
-func registerSchemaChangeMixedVersions(r *testRegistry) {
-	r.Add(TestSpec{
+func registerSchemaChangeMixedVersions(r registry.Registry) {
+	r.Add(registry.TestSpec{
 		Name:  "schemachange/mixed-versions",
-		Owner: OwnerSQLSchema,
+		Owner: registry.OwnerSQLSchema,
 		// This tests the work done for 20.1 that made schema changes jobs and in
 		// addition prevented making any new schema changes on a mixed cluster in
 		// order to prevent bugs during upgrades.
-		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(4),
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 100
 			concurrency := 5
@@ -44,7 +44,7 @@ func uploadAndInitSchemaChangeWorkload() versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Stage workload on all nodes as the load node to run workload is chosen
 		// randomly.
-		u.c.Put(ctx, workload, "./workload", u.c.All())
+		u.c.Put(ctx, t.DeprecatedWorkload(), "./workload", u.c.All())
 		u.c.Run(ctx, u.c.All(), "./workload init schemachange")
 	}
 }

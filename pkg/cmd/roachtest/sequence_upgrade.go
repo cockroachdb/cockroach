@@ -15,15 +15,15 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerSequenceUpgrade(r *testRegistry) {
-	r.Add(TestSpec{
-		Name:       "version/sequence-upgrade",
-		Owner:      OwnerSQLSchema,
-		MinVersion: "v21.1.0",
-		Cluster:    r.makeClusterSpec(1),
+func registerSequenceUpgrade(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "version/sequence-upgrade",
+		Owner:   registry.OwnerSQLSchema,
+		Cluster: r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSequenceUpgradeMigration(ctx, t, c)
 		},

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -24,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
+func registerSchemaChangeDatabaseVersionUpgrade(r registry.Registry) {
 	// This test tests 2 loosely related things:
 	// 1. Correctness of database schema changes during the 20.1/20.2 mixed-
 	//    version state, in which 20.2 nodes still use the deprecated database
@@ -32,11 +33,10 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
 	// 2. Ability to use ALTER DATABASE ... CONVERT TO SCHEMA WITH PARENT on
 	//    databases created in 20.1.
 	// TODO (lucy): Remove this test in 21.1.
-	r.Add(TestSpec{
-		Name:       "schemachange/database-version-upgrade",
-		Owner:      OwnerSQLSchema,
-		MinVersion: "v20.2.0",
-		Cluster:    r.makeClusterSpec(3),
+	r.Add(registry.TestSpec{
+		Name:    "schemachange/database-version-upgrade",
+		Owner:   registry.OwnerSQLSchema,
+		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, *t.BuildVersion())
 		},
@@ -59,7 +59,7 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 		// Put and start the binary.
 		args := u.uploadVersion(ctx, t, nodes, v)
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		u.c.Start(ctx, nodes, args, option.StartArgsDontEncrypt, option.RoachprodArgOption{"--sequential=false"})
 	}
 }
 

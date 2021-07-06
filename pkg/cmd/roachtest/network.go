@@ -19,6 +19,7 @@ import (
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	_ "github.com/lib/pq"
@@ -28,7 +29,7 @@ import (
 // correctly. It injects latency between the nodes and verifies that we're not
 // seeing the latency on the client connection running `SELECT 1` on each node.
 func runNetworkSanity(ctx context.Context, t test.Test, origC cluster.Cluster, nodes int) {
-	origC.Put(ctx, cockroach, "./cockroach", origC.All())
+	origC.Put(ctx, t.Cockroach(), "./cockroach", origC.All())
 	c, err := Toxify(ctx, t, origC, origC.All())
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +66,7 @@ func runNetworkSanity(ctx context.Context, t test.Test, origC cluster.Cluster, n
 		}
 	}
 
-	m := newMonitor(ctx, c.Cluster, c.All())
+	m := c.Cluster.NewMonitor(ctx, t, c.All())
 	m.Go(func(ctx context.Context) error {
 		c.Measure(ctx, 1, `SET CLUSTER SETTING trace.debug.enable = true`)
 		c.Measure(ctx, 1, "CREATE DATABASE test")
@@ -100,8 +101,8 @@ select age, message from [ show trace for session ];
 func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nodes int) {
 	n := origC.Spec().NodeCount
 	serverNodes, workerNode := origC.Range(1, n-1), origC.Node(n)
-	origC.Put(ctx, cockroach, "./cockroach", origC.All())
-	origC.Put(ctx, workload, "./workload", origC.All())
+	origC.Put(ctx, t.Cockroach(), "./cockroach", origC.All())
+	origC.Put(ctx, t.DeprecatedWorkload(), "./workload", origC.All())
 
 	c, err := Toxify(ctx, t, origC, serverNodes)
 	if err != nil {
@@ -124,7 +125,7 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 	}
 
 	// Run TPCC, but don't give it the first node (or it basically won't do anything).
-	m := newMonitor(ctx, c.Cluster, serverNodes)
+	m := c.NewMonitor(ctx, t, serverNodes)
 
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus("running tpcc")
@@ -235,21 +236,21 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 	m.Wait()
 }
 
-func registerNetwork(r *testRegistry) {
+func registerNetwork(r registry.Registry) {
 	const numNodes = 4
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("network/sanity/nodes=%d", numNodes),
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(numNodes),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkSanity(ctx, t, c, numNodes)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(numNodes),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/49901#issuecomment-640666646",
 		SkipDetails: `The ordering of steps in the test is:
 

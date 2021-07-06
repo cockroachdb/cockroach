@@ -18,6 +18,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ var rubyPGTestFailureRegex = regexp.MustCompile(`^rspec ./.*# .*`)
 var rubyPGVersion = "v1.2.3"
 
 // This test runs Ruby PG's full test suite against a single cockroach node.
-func registerRubyPG(r *testRegistry) {
+func registerRubyPG(r registry.Registry) {
 	runRubyPGTest := func(
 		ctx context.Context,
 		t test.Test,
@@ -38,7 +39,7 @@ func registerRubyPG(r *testRegistry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
@@ -198,12 +199,11 @@ func registerRubyPG(r *testRegistry) {
 		results.summarizeAll(t, "ruby-pg", blocklistName, expectedFailures, version, rubyPGVersion)
 	}
 
-	r.Add(TestSpec{
-		MinVersion: "v20.1.0",
-		Name:       "ruby-pg",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
-		Tags:       []string{`default`, `orm`},
+	r.Add(registry.TestSpec{
+		Name:    "ruby-pg",
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRubyPGTest(ctx, t, c)
 		},

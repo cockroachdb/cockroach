@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -80,8 +81,8 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 	kafkaNode := c.Node(c.Spec().NodeCount)
-	c.Put(ctx, cockroach, "./cockroach")
-	c.Put(ctx, workload, "./workload", workloadNode)
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	c.Start(ctx, crdbNodes)
 
 	db := c.Conn(ctx, 1)
@@ -131,7 +132,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 		sinkURI = kafka.sinkURL(ctx)
 	}
 
-	m := newMonitor(ctx, c, crdbNodes)
+	m := c.NewMonitor(ctx, t, crdbNodes)
 	workloadCompleteCh := make(chan struct{}, 1)
 
 	workloadStart := timeutil.Now()
@@ -254,7 +255,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 			Target:  crdbNodes.RandNode,
 			Stopper: time.After(chaosDuration),
 		}
-		m.Go(ch.Runner(c, m))
+		m.Go(ch.Runner(c, t, m))
 	}
 	m.Wait()
 
@@ -274,8 +275,8 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.All(), `mkdir -p logs`)
 
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
-	c.Put(ctx, workload, "./workload", workloadNode)
+	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	c.Start(ctx, crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
@@ -333,7 +334,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	t.Status("running workload")
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := newMonitor(workloadCtx, c, crdbNodes)
+	m := c.NewMonitor(workloadCtx, t, crdbNodes)
 	var doneAtomic int64
 	m.Go(func(ctx context.Context) error {
 		err := c.RunE(ctx, workloadNode, `./workload run bank {pgurl:1} --max-rate=10`)
@@ -427,7 +428,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
@@ -558,7 +559,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, crdbNodes)
 
 	kafka := kafkaManager{
@@ -636,11 +637,11 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 }
 
-func registerCDC(r *testRegistry) {
-	r.Add(TestSpec{
+func registerCDC(r registry.Registry) {
+	r.Add(registry.TestSpec{
 		Name:            "cdc/tpcc-1000",
-		Owner:           OwnerCDC,
-		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
+		Owner:           registry.OwnerCDC,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -652,10 +653,10 @@ func registerCDC(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/tpcc-1000/sink=null",
-		Owner:           OwnerCDC,
-		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
+		Owner:           registry.OwnerCDC,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -669,10 +670,10 @@ func registerCDC(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/initial-scan",
-		Owner:           OwnerCDC,
-		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
+		Owner:           registry.OwnerCDC,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -685,10 +686,10 @@ func registerCDC(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/sink-chaos",
 		Owner:           `cdc`,
-		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -701,10 +702,10 @@ func registerCDC(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/crdb-chaos",
 		Owner:           `cdc`,
-		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -719,13 +720,13 @@ func registerCDC(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  "cdc/ledger",
 		Owner: `cdc`,
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -738,10 +739,10 @@ func registerCDC(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
 		Owner:           `cdc`,
-		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -765,7 +766,7 @@ func registerCDC(r *testRegistry) {
 		r.Add(testSpec{
 			Name:            "cdc/webhook-sink",
 			Owner:           OwnerCDC,
-			Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
+			Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 			RequiresLicense: true,
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -780,28 +781,28 @@ func registerCDC(r *testRegistry) {
 			},
 		})
 	*/
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/kafka-auth",
 		Owner:           `cdc`,
-		Cluster:         r.makeClusterSpec(1),
+		Cluster:         r.MakeClusterSpec(1),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/bank",
 		Owner:           `cdc`,
-		Cluster:         r.makeClusterSpec(4),
+		Cluster:         r.MakeClusterSpec(4),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCBank(ctx, t, c)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/schemareg",
 		Owner:           `cdc`,
-		Cluster:         r.makeClusterSpec(1),
+		Cluster:         r.MakeClusterSpec(1),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCSchemaRegistry(ctx, t, c)

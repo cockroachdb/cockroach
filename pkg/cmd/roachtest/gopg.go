@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 )
@@ -29,7 +30,7 @@ var gopgReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)(?:\.(?P<minor>\d+
 var gopgSupportedTag = "v10.9.0"
 
 // This test runs gopg full test suite against a single cockroach node.
-func registerGopg(r *testRegistry) {
+func registerGopg(r registry.Registry) {
 	const (
 		destPath        = `/mnt/data1/go-pg/pg`
 		resultsDirPath  = `~/logs/report/gopg-results`
@@ -46,7 +47,7 @@ func registerGopg(r *testRegistry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, c.All())
 		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {
@@ -148,12 +149,11 @@ func registerGopg(r *testRegistry) {
 		)
 	}
 
-	r.Add(TestSpec{
-		Name:       "gopg",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
-		MinVersion: "v20.2.0",
-		Tags:       []string{`default`, `orm`},
+	r.Add(registry.TestSpec{
+		Name:    "gopg",
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGopg(ctx, t, c)
 		},

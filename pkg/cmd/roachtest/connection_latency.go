@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
@@ -31,13 +32,13 @@ const (
 func runConnectionLatencyTest(
 	ctx context.Context, t test.Test, c cluster.Cluster, numNodes int, numZones int,
 ) {
-	err := c.PutE(ctx, t.L(), cockroach, "./cockroach")
+	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach")
 	require.NoError(t, err)
 
-	err = c.PutE(ctx, t.L(), workload, "./workload")
+	err = c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload")
 	require.NoError(t, err)
 
-	err = c.StartE(ctx, startArgs("--secure"))
+	err = c.StartE(ctx, option.StartArgs("--secure"))
 	require.NoError(t, err)
 
 	certsDir := "certs"
@@ -91,14 +92,13 @@ func runConnectionLatencyTest(
 	}
 }
 
-func registerConnectionLatencyTest(r *testRegistry) {
+func registerConnectionLatencyTest(r registry.Registry) {
 	// Single region test.
 	numNodes := 3
-	r.Add(TestSpec{
-		MinVersion: "v20.1.0",
-		Name:       fmt.Sprintf("connection_latency/nodes=%d", numNodes),
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(numNodes + 1), // Add one for load node.
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("connection_latency/nodes=%d", numNodes),
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(numNodes + 1), // Add one for load node.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numNodes, 1)
 		},
@@ -109,11 +109,10 @@ func registerConnectionLatencyTest(r *testRegistry) {
 	numMultiRegionNodes := 9
 	numZones := len(geoZones)
 	loadNodes := numZones
-	r.Add(TestSpec{
-		MinVersion: "v20.1.0",
-		Name:       fmt.Sprintf("connection_latency/nodes=%d/multiregion", numMultiRegionNodes),
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("connection_latency/nodes=%d/multiregion", numMultiRegionNodes),
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones)
 		},

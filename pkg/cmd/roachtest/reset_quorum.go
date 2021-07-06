@@ -26,14 +26,14 @@ import (
 func runResetQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
 	skip.WithIssue(t, 58165)
 	args := func(attr string) option.Option {
-		return startArgs(
+		return option.StartArgs(
 			"-a=--attrs="+attr,
 			"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms", // speed up replication
 		)
 	}
 	// n1-n5 will be in locality A, n6-n8 in B. We'll pin a single table to B and
 	// let the the nodes in B fail permanently.
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, c.Range(1, 5), args("A"))
 	db := c.Conn(ctx, 1)
 	defer db.Close()

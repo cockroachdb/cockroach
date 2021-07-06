@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -31,16 +32,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerDecommission(r *testRegistry) {
+func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 4
 		duration := time.Hour
 
-		r.Add(TestSpec{
-			Name:       fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
-			Owner:      OwnerKV,
-			MinVersion: "v20.2.0",
-			Cluster:    r.makeClusterSpec(4),
+		r.Add(registry.TestSpec{
+			Name:    fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(4),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if local {
 					duration = 5 * time.Minute
@@ -52,12 +52,11 @@ func registerDecommission(r *testRegistry) {
 	}
 	{
 		numNodes := 6
-		r.Add(TestSpec{
-			Name:       "decommission/randomized",
-			Owner:      OwnerKV,
-			MinVersion: "v20.2.0",
-			Timeout:    10 * time.Minute,
-			Cluster:    r.makeClusterSpec(numNodes),
+		r.Add(registry.TestSpec{
+			Name:    "decommission/randomized",
+			Owner:   registry.OwnerKV,
+			Timeout: 10 * time.Minute,
+			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionRandomized(ctx, t, c)
 			},
@@ -65,11 +64,10 @@ func registerDecommission(r *testRegistry) {
 	}
 	{
 		numNodes := 4
-		r.Add(TestSpec{
-			Name:       "decommission/mixed-versions",
-			Owner:      OwnerKV,
-			MinVersion: "v20.2.0",
-			Cluster:    r.makeClusterSpec(numNodes),
+		r.Add(registry.TestSpec{
+			Name:    "decommission/mixed-versions",
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, *t.BuildVersion())
 			},
@@ -104,11 +102,11 @@ func runDecommission(
 	// node1 is kept pinned (i.e. not decommissioned/restarted), and is the node
 	// through which we run the workload and other queries.
 	pinnedNode := 1
-	c.Put(ctx, cockroach, "./cockroach", c.All())
-	c.Put(ctx, workload, "./workload", c.Node(pinnedNode))
+	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(pinnedNode))
 
 	for i := 1; i <= nodes; i++ {
-		c.Start(ctx, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
+		c.Start(ctx, c.Node(i), option.StartArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
 	}
 	c.Run(ctx, c.Node(pinnedNode), `./workload init kv --drop`)
 
@@ -281,7 +279,7 @@ func runDecommission(
 			if err != nil {
 				return err
 			}
-			sArgs := startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", internalAddrs[0], node))
+			sArgs := option.StartArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", internalAddrs[0], node))
 			if err := c.StartE(ctx, c.Node(node), sArgs); err != nil {
 				return err
 			}
@@ -303,8 +301,8 @@ func runDecommission(
 // those operations. We then fully decommission nodes, verifying it's an
 // irreversible operation.
 func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Cluster) {
-	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
-	c.Put(ctx, cockroach, "./cockroach")
+	args := option.StartArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, args)
 
 	h := newDecommTestHelper(t, c)
@@ -778,7 +776,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 				t.Fatal(err)
 			}
 			joinAddr := internalAddrs[0]
-			c.Start(ctx, c.Node(targetNode), startArgs(
+			c.Start(ctx, c.Node(targetNode), option.StartArgs(
 				fmt.Sprintf("-a=--join %s", joinAddr),
 			))
 		}

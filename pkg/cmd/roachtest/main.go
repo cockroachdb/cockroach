@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -277,7 +278,7 @@ type cliCfg struct {
 	versionsBinaryOverride map[string]string
 }
 
-func runTests(register func(*testRegistry), cfg cliCfg) error {
+func runTests(register func(registry.Registry), cfg cliCfg) error {
 	if cfg.count <= 0 {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
 	}
@@ -289,7 +290,7 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 	cr := newClusterRegistry()
 	runner := newTestRunner(cr, r.buildVersion)
 
-	filter := newFilter(cfg.args)
+	filter := registry.NewTestFilter(cfg.args)
 	clusterType := roachprodCluster
 	if local {
 		clusterType = localCluster
@@ -441,10 +442,12 @@ func testRunnerLogger(
 	return l, teeOpt
 }
 
-func testsToRun(ctx context.Context, r testRegistry, filter *testFilter) []TestSpec {
+func testsToRun(
+	ctx context.Context, r testRegistryImpl, filter *registry.TestFilter,
+) []registry.TestSpec {
 	tests := r.GetTests(ctx, filter)
 
-	var notSkipped []TestSpec
+	var notSkipped []registry.TestSpec
 	for _, s := range tests {
 		if s.Skip == "" {
 			notSkipped = append(notSkipped, s)

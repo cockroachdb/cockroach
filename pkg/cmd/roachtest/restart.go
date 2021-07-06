@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -26,8 +28,8 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	const restartNode = 3
 
 	t.Status("installing cockroach")
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
-	c.Start(ctx, crdbNodes, startArgs(`--args=--vmodule=raft_log_queue=3`))
+	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
+	c.Start(ctx, crdbNodes, option.StartArgs(`--args=--vmodule=raft_log_queue=3`))
 
 	// We don't really need tpcc, we just need a good amount of traffic and a good
 	// amount of data.
@@ -84,13 +86,12 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	}
 }
 
-func registerRestart(r *testRegistry) {
-	r.Add(TestSpec{
+func registerRestart(r registry.Registry) {
+	r.Add(registry.TestSpec{
 		Name:    "restart/down-for-2m",
-		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(3),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(3),
 		// "cockroach workload is only in 19.1+"
-		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRestart(ctx, t, c, 2*time.Minute)
 		},

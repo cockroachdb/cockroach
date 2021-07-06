@@ -15,6 +15,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -22,7 +23,7 @@ var flowableReleaseTagRegex = regexp.MustCompile(`^flowable-(?P<major>\d+)\.(?P<
 
 // This test runs Flowable test suite against a single cockroach node.
 
-func registerFlowable(r *testRegistry) {
+func registerFlowable(r registry.Registry) {
 	runFlowable := func(
 		ctx context.Context,
 		t test.Test,
@@ -33,7 +34,7 @@ func registerFlowable(r *testRegistry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, c.All())
 
 		t.Status("cloning flowable and installing prerequisites")
@@ -99,11 +100,10 @@ func registerFlowable(r *testRegistry) {
 		}
 	}
 
-	r.Add(TestSpec{
-		Name:       "flowable",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
-		MinVersion: "v19.1.0",
+	r.Add(registry.TestSpec{
+		Name:    "flowable",
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runFlowable(ctx, t, c)
 		},
