@@ -299,6 +299,8 @@ func collectLeftAnti_true(
 		//gcassert:bce
 		currentID := HeadIDs[i]
 		if currentID == 0 {
+			// currentID of 0 indicates that ith probing row didn't have a match, so
+			// we include it into the output.
 			{
 				var __retval_0 int
 				{
@@ -388,6 +390,8 @@ func collectLeftAnti_false(
 		//gcassert:bce
 		currentID := HeadIDs[i]
 		if currentID == 0 {
+			// currentID of 0 indicates that ith probing row didn't have a match, so
+			// we include it into the output.
 			{
 				var __retval_0 int
 				{
