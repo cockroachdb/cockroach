@@ -103,13 +103,6 @@ func (v *encryptValue) Type() string {
 	return "string"
 }
 
-func ifLocal(c cluster.Cluster, trueVal, falseVal string) string {
-	if c.IsLocal() {
-		return trueVal
-	}
-	return falseVal
-}
-
 func filepathAbs(path string) (string, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
