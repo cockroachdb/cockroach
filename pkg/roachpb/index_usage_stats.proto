@@ -1,0 +1,61 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto2";
+package cockroach.sql;
+option go_package = "roachpb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+// IndexUsageStatistics represents the index usage statistics per index.
+// N.B. When fields are added to this struct, make sure to update
+// (*IndexUsageStatistics).Add in roachpb/index_usage_stats.go.
+message IndexUsageStatistics {
+  // TotalReadCount is the number of times this index has been read from.
+  optional uint64 total_read_count = 1 [(gogoproto.nullable) = false];
+
+  // LastRead is the timestamp that this index was last being read from.
+  optional google.protobuf.Timestamp last_read = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // TotalRowsRead is the number rows that has read from this index.
+  // TODO(azhng): Currently this field is unused.
+  optional uint64 total_rows_read = 3 [(gogoproto.nullable) = false];
+
+  // TotalWriteCount is the number of times this index has been written to.
+  // TODO(azhng): Currently this field is unused.
+  optional uint64 total_write_count = 4 [(gogoproto.nullable) = false];
+
+  // LastWrite is the timestamp that this index was last being written to.
+  // TODO(azhng): Currently this field is unused.
+  optional google.protobuf.Timestamp last_write = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // TotalRowsWritten is the number rows that have been written to this index.
+  // TODO(azhng): Currently this field is unused.
+  optional uint64 total_rows_written = 6 [(gogoproto.nullable) = false];
+}
+
+// IndexUsageKey uniquely identifies an index. It's a tuple of TableID and a
+// IndexID.
+message IndexUsageKey {
+  // TableID is the ID of the table this index is created on. This is same as
+  // descpb.TableID and is unique within the cluster.
+  optional uint32 table_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableID", (gogoproto.casttype) = "TableID"];
+
+  // IndexID is the ID of the index within the scope of the given table.
+  optional uint32 index_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID" ];
+}
+
+// CollectedIndexUsageStatistics wraps collected index key and its usage
+// statistics.
+message CollectedIndexUsageStatistics {
+  optional IndexUsageKey key = 1 [(gogoproto.nullable) = false];
+  optional IndexUsageStatistics stats = 2 [(gogoproto.nullable) = false];
+}
