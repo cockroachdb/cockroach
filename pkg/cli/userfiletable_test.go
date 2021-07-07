@@ -787,7 +787,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 		url.User(security.RootUser))
 	defer cleanup()
 
-	conn := makeSQLConn(rootURL.String())
+	conn := sqlConnCtx.MakeSQLConn(rootURL.String())
 	defer func() {
 		if err := conn.Close(); err != nil {
 			t.Fatal(err)

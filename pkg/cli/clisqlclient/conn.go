@@ -39,6 +39,11 @@ func init() {
 }
 
 type sqlConn struct {
+	// connCtx links this connection to a connection configuration
+	// context, to be specified by the code that instantiates the
+	// connection.
+	connCtx *Context
+
 	url          string
 	conn         DriverConn
 	reconnecting bool
@@ -67,35 +72,6 @@ type sqlConn struct {
 	// (re)connects.
 	clusterID           string
 	clusterOrganization string
-
-	// isInteractive indicates whether the input is interactive.
-	isInteractive bool
-
-	// enableServerExecutionTimings indicates whether to measure query
-	// latency server-side.
-	// This is implemented as a pointer for now until we properly
-	// support connection reconfiguration in the SQL shell.
-	enableServerExecutionTimings *bool
-
-	// embeddedMode indicates whether to print informational
-	// messages.
-	embeddedMode bool
-
-	// echo indicates whether to print out executed SQL statements.
-	// This is implemented as a pointer for now until we properly
-	// support connection reconfiguration in the SQL shell.
-	echo *bool
-
-	// showTimes indicates whether to print out connection latency.
-	// This is implemented as a pointer for now until we properly
-	// support connection reconfiguration in the SQL shell.
-	showTimes *bool
-
-	// verboseTimings indicates whether to display detailed latency
-	// details on SQL statements.
-	// This is implemented as a pointer for now until we properly
-	// support connection reconfiguration in the SQL shell.
-	verboseTimings *bool
 }
 
 var _ Conn = (*sqlConn)(nil)
@@ -157,7 +133,7 @@ func (c *sqlConn) SetMissingPassword(missing bool) {
 // EnsureConn (re-)establishes the connection to the server.
 func (c *sqlConn) EnsureConn() error {
 	if c.conn == nil {
-		if c.reconnecting && c.isInteractive {
+		if c.reconnecting && c.connCtx.IsInteractive() {
 			fmt.Fprintf(stderr, "warning: connection lost!\n"+
 				"opening new connection: all session settings will be lost\n")
 		}
@@ -221,9 +197,9 @@ func (c *sqlConn) tryEnableServerExecutionTimings() {
 	_, _, _, _, _, _, err := c.getLastQueryStatistics()
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: cannot show server execution timings: %v\n", err)
-		*c.enableServerExecutionTimings = false
+		c.connCtx.EnableServerExecutionTimings = false
 	} else {
-		*c.enableServerExecutionTimings = true
+		c.connCtx.EnableServerExecutionTimings = true
 	}
 }
 
@@ -328,12 +304,12 @@ func toString(v driver.Value) string {
 // the last connection, based on the last known values in the sqlConn
 // struct.
 func (c *sqlConn) checkServerMetadata() error {
-	if !c.isInteractive {
+	if !c.connCtx.IsInteractive() {
 		// Version reporting is just noise if the user is not present to
 		// change their mind upon seeing the information.
 		return nil
 	}
-	if c.embeddedMode {
+	if c.connCtx.EmbeddedMode {
 		// Version reporting is non-actionable if the user does
 		// not have control over how the server and client are run.
 		return nil
@@ -511,7 +487,7 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 	if err := c.EnsureConn(); err != nil {
 		return err
 	}
-	if *c.echo {
+	if c.connCtx.Echo {
 		fmt.Fprintln(stderr, ">", query)
 	}
 	_, err := c.conn.Exec(query, args)
@@ -527,7 +503,7 @@ func (c *sqlConn) Query(query string, args []driver.Value) (Rows, error) {
 	if err := c.EnsureConn(); err != nil {
 		return nil, err
 	}
-	if *c.echo {
+	if c.connCtx.Echo {
 		fmt.Fprintln(stderr, ">", query)
 	}
 	rows, err := c.conn.Query(query, args)
@@ -585,29 +561,10 @@ func (c *sqlConn) silentClose() {
 }
 
 // MakeSQLConn creates a connection object from a connection URL.
-// The booleans passed by reference are parameters that
-// can be changed in the SQL interactive shell after the connection
-// has been created.
-// TODO(knz): This should evolve to become methods on the connection
-// object.
-func MakeSQLConn(
-	url string,
-	isInteractive bool,
-	enableServerExecutionTimings *bool,
-	embeddedMode bool,
-	echo *bool,
-	showTimes *bool,
-	verboseTimings *bool,
-) Conn {
+func (connCtx *Context) MakeSQLConn(url string) Conn {
 	return &sqlConn{
-		url: url,
-
-		isInteractive:                isInteractive,
-		enableServerExecutionTimings: enableServerExecutionTimings,
-		embeddedMode:                 embeddedMode,
-		echo:                         echo,
-		showTimes:                    showTimes,
-		verboseTimings:               verboseTimings,
+		connCtx: connCtx,
+		url:     url,
 	}
 }
 

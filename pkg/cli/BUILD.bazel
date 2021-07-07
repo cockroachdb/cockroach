@@ -6,7 +6,6 @@ go_library(
     srcs = [
         "absolute_fs.go",
         "auth.go",
-        "binding.go",
         "cert.go",
         "cli.go",
         "client_url.go",
