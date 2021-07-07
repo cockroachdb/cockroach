@@ -28,23 +28,29 @@ type Node struct {
 	Status Status
 }
 
-// Element returns the target's element.
-func (n *Node) Element() Element {
-	return n.Target.Element()
+// GetElement returns the target's element.
+func (n *Node) GetElement() Element {
+	return n.Target.GetElement()
+}
+
+// Container represents something which contains an Element.
+// It is implemented by all of the concrete Element types (which return
+// themselves) as well as Node and Target.
+type Container interface {
+	GetElement() Element
 }
 
 // Element represents a logical component of a catalog entry's schema (e.g., an
-// index or column in a table).
+// index or column in a table). It is implemented by Node, Target, and the
+// members of ElementProto.
 type Element interface {
+	Container
 	protoutil.Message
-
-	// getAttribute returns the value of a given attribute of an element.
-	// If the attribute is not defined on the element, nil will be returned.
-	getAttribute(Attribute) attributeValue
+	element()
 }
 
-// Element returns an Element from its wrapper for serialization.
-func (e *ElementProto) Element() Element {
+// GetElement returns an Element from its wrapper for serialization.
+func (e *ElementProto) GetElement() Element {
 	return e.GetValue().(Element)
 }
 
@@ -60,239 +66,75 @@ func NewTarget(dir Target_Direction, elem Element) *Target {
 	return &t
 }
 
-func (e *Column) getAttribute(attribute Attribute) attributeValue {
-	switch attribute {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeColumnID:
-		return (*columnID)(&e.Column.ID)
-	case AttributeElementName:
-		return (*elementName)(&e.Column.Name)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *Column) GetElement() Element { return m }
 
-func (e *PrimaryIndex) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeIndexID:
-		return (*indexID)(&e.Index.ID)
-	case AttributeElementName:
-		return (*elementName)(&e.Index.Name)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *PrimaryIndex) GetElement() Element { return m }
 
-func (e *SecondaryIndex) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeIndexID:
-		return (*indexID)(&e.Index.ID)
-	case AttributeElementName:
-		return (*elementName)(&e.Index.Name)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *SecondaryIndex) GetElement() Element { return m }
 
-func (e *SequenceDependency) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.SequenceID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.TableID)
-	case AttributeColumnID:
-		return (*columnID)(&e.ColumnID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *SequenceDependency) GetElement() Element { return m }
 
-func (e *UniqueConstraint) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeIndexID:
-		return (*indexID)(&e.IndexID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *UniqueConstraint) GetElement() Element { return m }
 
-func (e *CheckConstraint) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeElementName:
-		return (*elementName)(&e.Name)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *CheckConstraint) GetElement() Element { return m }
 
-func (e *Sequence) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.SequenceID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *Sequence) GetElement() Element { return m }
 
-func (e *DefaultExpression) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeColumnID:
-		return (*columnID)(&e.ColumnID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *DefaultExpression) GetElement() Element { return m }
 
-func (e *View) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *View) GetElement() Element { return m }
 
-func (e *TypeReference) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.DescID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.TypeID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *TypeReference) GetElement() Element { return m }
 
-func (e *Table) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *Table) GetElement() Element { return m }
 
-func (e *InboundForeignKey) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.OriginID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.ReferenceID)
-	case AttributeElementName:
-		return (*elementName)(&e.Name)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *InboundForeignKey) GetElement() Element { return m }
 
-func (e *OutboundForeignKey) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.OriginID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.ReferenceID)
-	case AttributeElementName:
-		return (*elementName)(&e.Name)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *OutboundForeignKey) GetElement() Element { return m }
 
-func (e *RelationDependedOnBy) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.DependedOnBy)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *RelationDependedOnBy) GetElement() Element { return m }
 
-func (e *SequenceOwnedBy) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.SequenceID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.OwnerTableID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *SequenceOwnedBy) GetElement() Element { return m }
 
-// getAttributes implements the Element interface
-func (e *Type) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TypeID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *Type) GetElement() Element { return m }
 
-// getAttributes implements the Element interface
-func (e *Schema) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.SchemaID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *Schema) GetElement() Element { return m }
 
-// getAttributes implements the Element interface
-func (e *Database) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.DatabaseID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Container interface.
+func (m *Database) GetElement() Element { return m }
+
+func (m *Column) element()               {}
+func (m *PrimaryIndex) element()         {}
+func (m *SecondaryIndex) element()       {}
+func (m *SequenceDependency) element()   {}
+func (m *UniqueConstraint) element()     {}
+func (m *CheckConstraint) element()      {}
+func (m *Sequence) element()             {}
+func (m *DefaultExpression) element()    {}
+func (m *View) element()                 {}
+func (m *TypeReference) element()        {}
+func (m *Table) element()                {}
+func (m *InboundForeignKey) element()    {}
+func (m *OutboundForeignKey) element()   {}
+func (m *RelationDependedOnBy) element() {}
+func (m *SequenceOwnedBy) element()      {}
+func (m *Type) element()                 {}
+func (m *Schema) element()               {}
+func (m *Database) element()             {}

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scattr"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -2732,7 +2733,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		states[i] = scs.state[i].Status
 		// Depending on the element type either a single descriptor ID
 		// will exist or multiple (i.e. foreign keys).
-		if id := scpb.GetDescID(scs.state[i].Element()); id != descpb.InvalidID {
+		if id := scattr.GetDescID(scs.state[i].GetElement()); id != descpb.InvalidID {
 			descIDSet.Add(id)
 		}
 	}

@@ -5,13 +5,14 @@ package scpb
 
 import (
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
-	io "io"
-	math "math"
-	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -4013,6 +4014,7 @@ func (m *Target) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Column) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
