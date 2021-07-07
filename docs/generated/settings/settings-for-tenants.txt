@@ -106,6 +106,7 @@ sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in by
 sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.
 sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, internal queries which exceed the slow query log threshold are logged to a separate log. Must have the slow query log enabled for this setting to have any effect.
 sql.log.slow_query.latency_threshold	duration	0s	when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node
+sql.metrics.index_usage_stats.enabled	boolean	true	collect per index usage statistics
 sql.metrics.max_mem_reported_stmt_fingerprints	integer	100000	the maximum number of reported statement fingerprints stored in memory
 sql.metrics.max_mem_reported_txn_fingerprints	integer	100000	the maximum number of reported transaction fingerprints stored in memory
 sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of statement fingerprints stored in memory
