@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"io"
 	"os"
 	"strconv"
 	"time"
@@ -214,7 +215,9 @@ func setCliContextDefaults() {
 
 // sqlConnContext captures the connection configuration for all SQL
 // clients. See below for defaults.
-var sqlConnCtx = clisqlclient.Context{}
+var sqlConnCtx = clisqlclient.Context{
+	CliCtx: &cliCtx.Context,
+}
 
 // setSQLConnContextDefaults set the default values in sqlConnCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
@@ -227,7 +230,18 @@ func setSQLConnContextDefaults() {
 	sqlConnCtx.EnableServerExecutionTimings = false
 }
 
-var sqlExecCtx = clisqlclient.ExecContext{}
+var sqlExecCtx = clisqlclient.ExecContext{
+	CliCtx: &cliCtx.Context,
+}
+
+// PrintQueryOutput takes a list of column names and a list of row
+// contents writes a formatted table to 'w'.
+//
+// This binds PrintQueryOutput to this package's common/global
+// CLI configuration, for use by other packages like the CCL CLI.
+func PrintQueryOutput(w io.Writer, cols []string, allRows clisqlclient.RowStrIter) error {
+	return sqlExecCtx.PrintQueryOutput(w, cols, allRows)
+}
 
 // setSQLConnContextDefaults set the default values in sqlConnCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every

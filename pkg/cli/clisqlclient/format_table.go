@@ -630,17 +630,15 @@ func (p *sqlReporter) doneRows(w io.Writer, seenRows int) error {
 // makeReporter instantiates a table formatter. It returns the
 // formatter and a cleanup function that must be called in all cases
 // when the formatting completes.
-func makeReporter(
-	w io.Writer, tableDisplayFormat TableDisplayFormat, tableBorderMode int,
-) (rowReporter, func(), error) {
-	switch tableDisplayFormat {
+func (sqlExecCtx *ExecContext) makeReporter(w io.Writer) (rowReporter, func(), error) {
+	switch sqlExecCtx.TableDisplayFormat {
 	case TableDisplayTable:
-		return newASCIITableReporter(tableBorderMode), nil, nil
+		return newASCIITableReporter(sqlExecCtx.TableBorderMode), nil, nil
 
 	case TableDisplayTSV:
 		fallthrough
 	case TableDisplayCSV:
-		reporter, cleanup := makeCSVReporter(w, tableDisplayFormat)
+		reporter, cleanup := makeCSVReporter(w, sqlExecCtx.TableDisplayFormat)
 		return reporter, cleanup, nil
 
 	case TableDisplayRaw:
@@ -659,20 +657,16 @@ func makeReporter(
 		return &sqlReporter{}, nil, nil
 
 	default:
-		return nil, nil, errors.Errorf("unhandled display format: %d", tableDisplayFormat)
+		return nil, nil, errors.Errorf("unhandled display format: %d", sqlExecCtx.TableDisplayFormat)
 	}
 }
 
 // PrintQueryOutput takes a list of column names and a list of row
 // contents writes a formatted table to 'w'.
-func PrintQueryOutput(
-	w io.Writer,
-	cols []string,
-	allRows RowStrIter,
-	tableDisplayFormat TableDisplayFormat,
-	tableBorderMode int,
+func (sqlExecCtx *ExecContext) PrintQueryOutput(
+	w io.Writer, cols []string, allRows RowStrIter,
 ) error {
-	reporter, cleanup, err := makeReporter(w, tableDisplayFormat, tableBorderMode)
+	reporter, cleanup, err := sqlExecCtx.makeReporter(w)
 	if err != nil {
 		return err
 	}

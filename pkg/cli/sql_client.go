@@ -101,7 +101,7 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (clisqlclient.Conn,
 		log.Infof(context.Background(), "connecting with URL: %s", sqlURL)
 	}
 
-	conn := makeSQLConn(sqlURL)
+	conn := sqlConnCtx.MakeSQLConn(sqlURL)
 	conn.SetMissingPassword(!usePw || !pwdSet)
 
 	return conn, nil

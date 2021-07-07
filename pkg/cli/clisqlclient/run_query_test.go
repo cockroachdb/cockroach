@@ -24,13 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+var testExecCtx = clisqlclient.ExecContext{
+	TableDisplayFormat: clisqlclient.TableDisplayTable,
+}
+
 func runQueryAndFormatResults(
 	conn clisqlclient.Conn, w io.Writer, fn clisqlclient.QueryFn,
 ) (err error) {
-	return clisqlclient.RunQueryAndFormatResults(conn, w, fn,
-		clisqlclient.TableDisplayTable,
-		0, /* tableBorderMode */
-	)
+	return testExecCtx.RunQueryAndFormatResults(conn, w, fn)
 }
 
 func TestRunQuery(t *testing.T) {
@@ -66,7 +67,7 @@ SET
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
-	cols, rows, err := clisqlclient.RunQuery(conn, clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`), false)
+	cols, rows, err := testExecCtx.RunQuery(conn, clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`), false)
 	if err != nil {
 		t.Fatal(err)
 	}

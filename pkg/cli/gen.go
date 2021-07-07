@@ -244,7 +244,7 @@ Output the list of cluster settings known to this binary.
 
 		sliceIter := clisqlclient.NewRowSliceIter(rows, "dddd")
 		cols := []string{"Setting", "Type", "Default", "Description"}
-		return PrintQueryOutput(os.Stdout, cols, sliceIter)
+		return sqlExecCtx.PrintQueryOutput(os.Stdout, cols, sliceIter)
 	},
 }
 

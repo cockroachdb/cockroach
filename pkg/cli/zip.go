@@ -320,7 +320,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			}
 			// Pump the SQL rows directly into the zip writer, to avoid
 			// in-RAM buffering.
-			return runQueryAndFormatResults(conn, w, clisqlclient.MakeQuery(fullQuery))
+			return sqlExecCtx.RunQueryAndFormatResults(conn, w, clisqlclient.MakeQuery(fullQuery))
 		}()
 		if sqlErr != nil {
 			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {

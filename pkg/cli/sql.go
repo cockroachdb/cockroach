@@ -468,7 +468,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 			}
 			optData = append(optData, []string{n, options[n].display(), options[n].description})
 		}
-		err := PrintQueryOutput(os.Stdout,
+		err := sqlExecCtx.PrintQueryOutput(os.Stdout,
 			[]string{"Option", "Value", "Description"},
 			clisqlclient.NewRowSliceIter(optData, "lll" /*align*/))
 		if err != nil {
@@ -1397,7 +1397,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	}
 
 	// Now run the statement/query.
-	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout,
+	c.exitErr = sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout,
 		clisqlclient.MakeQuery(c.concatLines))
 	if c.exitErr != nil {
 		clierror.OutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
@@ -1425,7 +1425,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			if strings.Contains(sqlCtx.autoTrace, "kv") {
 				traceType = "kv"
 			}
-			if err := runQueryAndFormatResults(c.conn, os.Stdout,
+			if err := sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout,
 				clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
 				clierror.OutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
@@ -1661,7 +1661,7 @@ func (c *cliState) runStatements(stmts []string) error {
 					c.exitErr = errors.New("error in client-side command")
 				}
 			} else {
-				c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, clisqlclient.MakeQuery(stmt))
+				c.exitErr = sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, clisqlclient.MakeQuery(stmt))
 			}
 			if c.exitErr != nil {
 				if !sqlCtx.errExit && i < len(stmts)-1 {
@@ -1788,7 +1788,7 @@ func setupSafeUpdates(cmd *cobra.Command, conn clisqlclient.Conn) {
 // decomposition in the first return value. If it is not, the function
 // extracts a help string if available.
 func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
-	cols, rows, err := clisqlclient.RunQuery(c.conn,
+	cols, rows, err := sqlExecCtx.RunQuery(c.conn,
 		clisqlclient.MakeQuery("SHOW SYNTAX "+lex.EscapeSQLString(sql)),
 		true)
 	if err != nil {

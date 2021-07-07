@@ -10,6 +10,8 @@
 
 package clisqlclient
 
+import "github.com/cockroachdb/cockroach/pkg/cli/clicfg"
+
 // ExecContext represents configuration for running SQL query
 // and presenting results to the screen.
 // (Note: the execution of the interactive SQL shell
@@ -19,6 +21,10 @@ package clisqlclient
 // Note: when adding new configuration fields, consider adding
 // them to the most specific configuration context possible.
 type ExecContext struct {
+	// CliCtx links this connection context to a CLI configuration
+	// environment.
+	CliCtx *clicfg.Context
+
 	// TerminalOutput indicates whether output is going to a terminal,
 	// that is, it is not going to a file, another program for automated
 	// processing, etc.: the standard output is a terminal.
@@ -40,4 +46,11 @@ type ExecContext struct {
 
 	// VerboseTimings determines whether to show raw durations when reporting query latencies..
 	VerboseTimings bool
+}
+
+// IsInteractive returns true if the connection configuration
+// is for an interactive session. This exposes the field
+// from clicfg.Context if available.
+func (sqlExecCtx *ExecContext) IsInteractive() bool {
+	return sqlExecCtx.CliCtx != nil && sqlExecCtx.CliCtx.IsInteractive
 }
