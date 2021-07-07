@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"runtime"
@@ -132,7 +133,7 @@ func Toxify(
 		if err != nil {
 			return nil, err
 		}
-		externalAddr, port, err := addrToHostPort(externalAddrs[0])
+		externalAddr, port, err := tc.addrToHostPort(externalAddrs[0])
 		if err != nil {
 			return nil, err
 		}
@@ -145,6 +146,18 @@ func Toxify(
 	}
 
 	return tc, nil
+}
+
+func (*ToxiCluster) addrToHostPort(addr string) (string, int, error) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", 0, err
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return "", 0, err
+	}
+	return host, port, nil
 }
 
 func (tc *ToxiCluster) poisonedPort(port int) int {
@@ -182,7 +195,7 @@ func (tc *ToxiCluster) PoisonedExternalAddr(
 		return nil, err
 	}
 	for _, addr := range extAddrs {
-		host, port, err := addrToHostPort(addr)
+		host, port, err := tc.addrToHostPort(addr)
 		if err != nil {
 			return nil, err
 		}
@@ -244,7 +257,7 @@ func (tc *ToxiCluster) Measure(ctx context.Context, fromNode int, stmt string) t
 	if err != nil {
 		tc.t.Fatal(err)
 	}
-	_, port, err := addrToHostPort(externalAddrs[0])
+	_, port, err := tc.addrToHostPort(externalAddrs[0])
 	if err != nil {
 		tc.t.Fatal(err)
 	}
