@@ -24,11 +24,11 @@ import (
 func makeSQLConn(url string) clisqlclient.Conn {
 	return clisqlclient.MakeSQLConn(url,
 		cliCtx.isInteractive,
-		&sqlCtx.enableServerExecutionTimings,
-		sqlCtx.embeddedMode,
-		&sqlCtx.echo,
-		&sqlCtx.showTimes,
-		&sqlCtx.verboseTimings,
+		&sqlConnCtx.enableServerExecutionTimings,
+		sqlConnCtx.embeddedMode,
+		&sqlConnCtx.echo,
+		&sqlExecCtx.showTimes,
+		&sqlExecCtx.verboseTimings,
 	)
 }
 
@@ -39,8 +39,8 @@ func makeSQLConn(url string) clisqlclient.Conn {
 // package.
 func PrintQueryOutput(w io.Writer, cols []string, allRows clisqlclient.RowStrIter) error {
 	return clisqlclient.PrintQueryOutput(w, cols, allRows,
-		cliCtx.tableDisplayFormat,
-		cliCtx.tableBorderMode,
+		sqlExecCtx.tableDisplayFormat,
+		sqlExecCtx.tableBorderMode,
 	)
 }
 
@@ -53,7 +53,7 @@ func runQueryAndFormatResults(
 	conn clisqlclient.Conn, w io.Writer, fn clisqlclient.QueryFn,
 ) (err error) {
 	return clisqlclient.RunQueryAndFormatResults(conn, w, fn,
-		cliCtx.tableDisplayFormat,
-		cliCtx.tableBorderMode,
+		sqlExecCtx.tableDisplayFormat,
+		sqlExecCtx.tableBorderMode,
 	)
 }
