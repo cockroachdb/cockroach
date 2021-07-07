@@ -402,7 +402,8 @@ type joinReaderOrderingStrategy struct {
 	remoteSpansGenerated bool
 
 	// inputRowIdxToLookedUpRowIndices is a multimap from input row indices to
-	// corresponding looked up row indices. This serves to emit rows in input
+	// corresponding looked up row indices (indexes into the lookedUpRows
+	// container). This serves to emit rows in input
 	// order even though lookups are performed out of order.
 	//
 	// The map is populated in the jrPerformingLookup state. For non partial joins
@@ -413,10 +414,16 @@ type joinReaderOrderingStrategy struct {
 	// right side of a semi/anti join is not used.
 	inputRowIdxToLookedUpRowIndices [][]int
 
-	// lookedUpRowIdx indicates the index of the current lookup row within the
-	// rows returned by a lookup batch.
-	lookedUpRowIdx int
-	lookedUpRows   *rowcontainer.DiskBackedNumberedRowContainer
+	// lookedUpRows buffers looked-up rows for one batch of input rows (i.e.
+	// during one jrPerformingLookup phase). When we move to state jrReadingInput,
+	// lookedUpRows is reset, to be populated by the next lookup phase. The
+	// looked-up rows are used in state jrEmittingRows to actually perform the
+	// joining between input and looked-up rows.
+	//
+	// Each looked-up row can be used multiple times, for multiple input rows with
+	// the same lookup key. Note that the lookup keys are de-duped at the level of
+	// a batch of input rows.
+	lookedUpRows *rowcontainer.DiskBackedNumberedRowContainer
 
 	// emitCursor contains information about where the next row to emit is within
 	// inputRowIdxToLookedUpRowIndices.
@@ -485,6 +492,7 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	ctx context.Context, row rowenc.EncDatumRow, key roachpb.Key,
 ) (joinReaderState, error) {
 	matchingInputRowIndices := s.getMatchingRowIndices(key)
+	var containerIdx int
 	if !s.isPartialJoin {
 		// Replace missing values with nulls to appease the row container.
 		for i := range row {
@@ -492,7 +500,9 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 				row[i].Datum = tree.DNull
 			}
 		}
-		if _, err := s.lookedUpRows.AddRow(ctx, row); err != nil {
+		var err error
+		containerIdx, err = s.lookedUpRows.AddRow(ctx, row)
+		if err != nil {
 			return jrStateUnknown, err
 		}
 	}
@@ -501,7 +511,7 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	for _, inputRowIdx := range matchingInputRowIndices {
 		if !s.isPartialJoin {
 			s.inputRowIdxToLookedUpRowIndices[inputRowIdx] = append(
-				s.inputRowIdxToLookedUpRowIndices[inputRowIdx], s.lookedUpRowIdx)
+				s.inputRowIdxToLookedUpRowIndices[inputRowIdx], containerIdx)
 			continue
 		}
 
@@ -523,7 +533,6 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 			s.inputRowIdxToLookedUpRowIndices[inputRowIdx] = partialJoinSentinel
 		}
 	}
-	s.lookedUpRowIdx++
 
 	return jrPerformingLookup, nil
 }
@@ -546,7 +555,6 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 		if err := s.lookedUpRows.UnsafeReset(ctx); err != nil {
 			return nil, jrStateUnknown, err
 		}
-		s.lookedUpRowIdx = 0
 		return nil, jrReadingInput, nil
 	}
 
