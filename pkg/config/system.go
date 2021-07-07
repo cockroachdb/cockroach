@@ -537,7 +537,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 				return nil
 			}
 
-			zoneVal := s.GetValue(MakeZoneKey(id))
+			zoneVal := s.GetValue(MakeZoneKeyForSystemTenant(id))
 			if zoneVal == nil {
 				continue
 			}

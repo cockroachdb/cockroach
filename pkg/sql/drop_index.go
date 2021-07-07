@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -282,7 +281,9 @@ func (p *planner) dropIndexByName(
 	// necessary for the system tenant, because secondary tenants do not have
 	// zone configs for individual objects.
 	if p.ExecCfg().Codec.ForSystemTenant() {
-		_, zone, _, err := GetZoneConfigInTxn(ctx, p.txn, config.SystemTenantObjectID(tableDesc.ID), nil /* index */, "", false)
+		_, zone, _, err := GetZoneConfigInTxn(
+			ctx, p.txn, p.ExecCfg().Codec, tableDesc.ID, nil /* index */, "", false,
+		)
 		if err != nil {
 			return err
 		}

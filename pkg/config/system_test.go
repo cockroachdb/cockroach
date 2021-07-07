@@ -83,7 +83,7 @@ func tenant(tenID uint64) roachpb.KeyValue {
 
 func zoneConfig(descID config.SystemTenantObjectID, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
 	kv := roachpb.KeyValue{
-		Key: config.MakeZoneKey(descID),
+		Key: config.MakeZoneKeyForSystemTenant(descID),
 	}
 	if err := kv.Value.SetProto(&zonepb.ZoneConfig{SubzoneSpans: spans}); err != nil {
 		panic(err)

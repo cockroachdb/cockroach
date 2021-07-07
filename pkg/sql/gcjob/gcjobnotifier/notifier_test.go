@@ -144,7 +144,7 @@ func expectSend(t *testing.T, ch <-chan struct{}) {
 
 func mkZoneConfigKV(id config.SystemTenantObjectID, ts int64, value string) roachpb.KeyValue {
 	kv := roachpb.KeyValue{
-		Key: config.MakeZoneKey(id),
+		Key: config.MakeZoneKeyForSystemTenant(id),
 		Value: roachpb.Value{
 			Timestamp: hlc.Timestamp{WallTime: ts},
 		},
