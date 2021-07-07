@@ -11,6 +11,7 @@ package engineccl
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -183,6 +184,37 @@ func TestEncryptedFS(t *testing.T) {
 				t.Fatalf("%q: %v", tc, err)
 			}
 		}
+	}
+}
+
+func TestEncryptedFSUnencryptedFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	memFS := vfs.NewMem()
+	require.NoError(t, memFS.MkdirAll("/foo", os.ModeDir))
+
+	fileRegistry := &storage.PebbleFileRegistry{FS: memFS, DBDir: "/foo"}
+	require.NoError(t, fileRegistry.Load())
+
+	keyManager := &StoreKeyManager{fs: memFS, activeKeyFilename: "plain", oldKeyFilename: "plain"}
+	require.NoError(t, keyManager.Load(context.Background()))
+
+	streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
+
+	fs := &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
+
+	var filesCreated []string
+	for i := 0; i < 5; i++ {
+		filename := fmt.Sprintf("file%d", i)
+		f, err := fs.Create(filename)
+		require.NoError(t, err)
+		filesCreated = append(filesCreated, filename)
+		require.NoError(t, f.Close())
+	}
+
+	// The file registry should be empty since we only created unencrypted files.
+	for _, filename := range filesCreated {
+		require.Nil(t, fileRegistry.GetFileEntry(filename))
 	}
 }
 
@@ -378,4 +410,24 @@ func TestPebbleEncryption2(t *testing.T) {
 	addKeyAndValidate("b", "b", "plain", "16v1.key")
 	addKeyAndValidate("c", "c", "16v2.key", "plain")
 	addKeyAndValidate("d", "d", "plain", "16v2.key")
+}
+
+func TestCanRegistryElide(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var entry *enginepb.FileEntry = nil
+	require.True(t, canRegistryElide(entry))
+
+	entry = &enginepb.FileEntry{EnvType: enginepb.EnvType_Store}
+	settings := &enginepbccl.EncryptionSettings{EncryptionType: enginepbccl.EncryptionType_Plaintext}
+	b, err := protoutil.Marshal(settings)
+	require.NoError(t, err)
+	entry.EncryptionSettings = b
+	require.True(t, canRegistryElide(entry))
+
+	settings = &enginepbccl.EncryptionSettings{EncryptionType: enginepbccl.EncryptionType_AES128_CTR}
+	b, err = protoutil.Marshal(settings)
+	require.NoError(t, err)
+	entry.EncryptionSettings = b
+	require.False(t, canRegistryElide(entry))
 }
