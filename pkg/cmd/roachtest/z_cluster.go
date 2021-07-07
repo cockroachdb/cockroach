@@ -1043,39 +1043,28 @@ func (c *clusterImpl) validate(
 	return nil
 }
 
-// All returns a node list containing all of the nodes in the cluster.
+func (c *clusterImpl) lister() option.NodeLister {
+	fatalf := func(string, ...interface{}) {}
+	if c.t != nil { // accommodates poorly set up tests
+		fatalf = c.t.Fatalf
+	}
+	return option.NodeLister{NodeCount: c.spec.NodeCount, Fatalf: fatalf}
+}
+
 func (c *clusterImpl) All() option.NodeListOption {
-	return c.Range(1, c.spec.NodeCount)
+	return c.lister().Range(1, c.spec.NodeCount)
 }
 
-// All returns a node list containing the nodes [begin,end].
 func (c *clusterImpl) Range(begin, end int) option.NodeListOption {
-	if begin < 1 || end > c.spec.NodeCount {
-		c.t.Fatalf("invalid node range: %d-%d (1-%d)", begin, end, c.spec.NodeCount)
-	}
-	r := make(option.NodeListOption, 0, 1+end-begin)
-	for i := begin; i <= end; i++ {
-		r = append(r, i)
-	}
-	return r
+	return c.lister().Range(begin, end)
 }
 
-// All returns a node list containing only the node i.
 func (c *clusterImpl) Nodes(ns ...int) option.NodeListOption {
-	r := make(option.NodeListOption, 0, len(ns))
-	for _, n := range ns {
-		if n < 1 || n > c.spec.NodeCount {
-			c.t.Fatalf("invalid node range: %d (1-%d)", n, c.spec.NodeCount)
-		}
-
-		r = append(r, n)
-	}
-	return r
+	return c.lister().Nodes(ns...)
 }
 
-// All returns a node list containing only the node with id i. IDs are 1-based.
 func (c *clusterImpl) Node(i int) option.NodeListOption {
-	return c.Range(i, i)
+	return c.lister().Node(i)
 }
 
 // FetchLogs downloads the logs from the cluster using `roachprod get`.
