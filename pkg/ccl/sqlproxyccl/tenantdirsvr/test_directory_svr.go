@@ -103,8 +103,13 @@ func New(stopper *stop.Stopper) (*TestDirectoryServer, error) {
 	return dir, nil
 }
 
-// Get a tenant's list of pods and the process information for each
-// pod.
+// Stopper returns the stopper that can be used to shut down the test directory
+// server.
+func (s *TestDirectoryServer) Stopper() *stop.Stopper {
+	return s.stopper
+}
+
+// Get a tenant's list of pods and the process information for each pod.
 func (s *TestDirectoryServer) Get(id roachpb.TenantID) (result map[net.Addr]*Process) {
 	result = make(map[net.Addr]*Process)
 	s.proc.RLock()
