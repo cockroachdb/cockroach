@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euxo pipefail
+
+source "$(dirname "${0}")/teamcity-support.sh"
+
+google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
+generate_ssh_key
+log_into_gcloud
+export ROACHPROD_USER=teamcity
+
+build/builder/mkrelease.sh amd64-linux-gnu build bin/workload bin/roachtest bin/roachprod 
+
+build/teamcity-roachtest-invoke.sh \
+  --cloud=gce \
+  --zones=us-central1-b,us-west1-b,europe-west2-b \
+  --debug="${DEBUG-false}" \
+  --count="${COUNT-16}" \
+  --parallelism="${PARALLELISM-16}" \
+  --cpu-quota="${CPUQUOTA-1024}" \
+  --cluster-id="${TC_BUILD_ID}" \
+  --build-tag="${BUILD_TAG}" \
+  --create-args="--lifetime=36h" \
+  --cockroach="${PWD}/cockroach-linux-2.6.32-gnu-amd64" \
+  --artifacts="${PWD}/artifacts" \
+  "${TESTS}"
