@@ -97,6 +97,7 @@ go_library(
         "//pkg/build",
         "//pkg/ccl/sqlproxyccl",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
+        "//pkg/cli/clicfg",
         "//pkg/cli/clierror",
         "//pkg/cli/cliflags",
         "//pkg/cli/clisqlclient",
