@@ -223,6 +223,7 @@ go_test(
         "blocklist_test.go",
         "drt_test.go",
         "tpcc_test.go",
+        "util_load_group_test.go",
         "z_cluster_test.go",
         "z_test_registry_test.go",
         "z_test_test.go",
