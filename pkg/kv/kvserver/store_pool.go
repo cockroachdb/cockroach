@@ -174,13 +174,13 @@ func LivenessStatus(
 		}
 		return livenesspb.NodeLivenessStatus_DEAD
 	}
-	if !l.Membership.Active() {
-		return livenesspb.NodeLivenessStatus_DECOMMISSIONING
-	}
-	if l.Draining {
-		return livenesspb.NodeLivenessStatus_DRAINING
-	}
 	if l.IsLive(now) {
+		if !l.Membership.Active() {
+			return livenesspb.NodeLivenessStatus_DECOMMISSIONING
+		}
+		if l.Draining {
+			return livenesspb.NodeLivenessStatus_DRAINING
+		}
 		return livenesspb.NodeLivenessStatus_LIVE
 	}
 	return livenesspb.NodeLivenessStatus_UNAVAILABLE
