@@ -730,7 +730,7 @@ func TestLint(t *testing.T) {
 			":!util/tracing/span.go",
 			":!util/tracing/crdbspan.go",
 			":!util/tracing/tracer.go",
-			":!cmd/roachtest/gorm_helpers.go",
+			":!cmd/roachtest/tests/gorm_helpers.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1305,7 +1305,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^sql/logictest/testdata/logic_test/pg_extension$`),
 			stream.GrepNot(`^sql/opt/testutils/opttester/testfixtures/.*`),
 			stream.GrepNot(`^util/timeutil/lowercase_timezones_generated.go$`),
-			stream.GrepNot(`^cmd/roachtest/ruby_pg_blocklist.go$`),
+			stream.GrepNot(`^cmd/roachtest/tests/ruby_pg_blocklist.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkgDir, s)
 			}),
