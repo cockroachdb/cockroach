@@ -22,8 +22,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	_ "github.com/lib/pq" // register postgres driver
 	"github.com/spf13/cobra"
 )
 
@@ -125,9 +127,9 @@ Examples:
 				return err
 			}
 			if !listBench {
-				registerTests(&r)
+				tests.RegisterTests(&r)
 			} else {
-				registerBenchmarks(&r)
+				tests.RegisterBenchmarks(&r)
 			}
 
 			matchedTests := r.List(context.Background(), args)
@@ -160,7 +162,7 @@ failed, it is 10. Any other exit status reports a problem with the test
 runner itself.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runTests(registerTests, cliCfg{
+			return runTests(tests.RegisterTests, cliCfg{
 				args:                   args,
 				count:                  count,
 				cpuQuota:               cpuQuota,
@@ -193,7 +195,7 @@ runner itself.
 		Short:        "run automated benchmarks on cockroach cluster",
 		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runTests(registerBenchmarks, cliCfg{
+			return runTests(tests.RegisterBenchmarks, cliCfg{
 				args:                   args,
 				count:                  count,
 				cpuQuota:               cpuQuota,
