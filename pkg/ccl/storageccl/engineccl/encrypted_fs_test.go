@@ -379,3 +379,23 @@ func TestPebbleEncryption2(t *testing.T) {
 	addKeyAndValidate("c", "c", "16v2.key", "plain")
 	addKeyAndValidate("d", "d", "plain", "16v2.key")
 }
+
+func TestCanRegistryElide(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var entry *enginepb.FileEntry = nil
+	require.True(t, canRegistryElide(entry))
+
+	entry = &enginepb.FileEntry{EnvType: enginepb.EnvType_Store}
+	settings := &enginepbccl.EncryptionSettings{EncryptionType: enginepbccl.EncryptionType_Plaintext}
+	b, err := protoutil.Marshal(settings)
+	require.NoError(t, err)
+	entry.EncryptionSettings = b
+	require.True(t, canRegistryElide(entry))
+
+	settings = &enginepbccl.EncryptionSettings{EncryptionType: enginepbccl.EncryptionType_AES128_CTR}
+	b, err = protoutil.Marshal(settings)
+	require.NoError(t, err)
+	entry.EncryptionSettings = b
+	require.False(t, canRegistryElide(entry))
+}
