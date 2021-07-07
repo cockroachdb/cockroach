@@ -13,33 +13,7 @@ package scpb
 import (
 	"reflect"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
-
-// TestElementAttributeValueTypesMatch ensure that for all elements which
-// have a given Attribute, that the values all have the same type.
-func TestElementAttributeValueTypesMatch(t *testing.T) {
-	typ := reflect.TypeOf((*ElementProto)(nil)).Elem()
-	attributeMap := make(map[Attribute]reflect.Type)
-	for i := 0; i < typ.NumField(); i++ {
-		f := typ.Field(i)
-		elem := reflect.New(f.Type.Elem()).Interface().(Element)
-		for i := 0; i < numAttributes; i++ {
-			attr := attributeOrder[i]
-			av := elem.getAttribute(attr)
-			if av == nil {
-				continue
-			}
-			avt := reflect.TypeOf(av)
-			if exp, ok := attributeMap[attr]; ok {
-				require.Equalf(t, exp, avt, "%v", attr)
-			} else {
-				attributeMap[attr] = avt
-			}
-		}
-	}
-}
 
 func TestGetElement(t *testing.T) {
 	typ := reflect.TypeOf((*ElementProto)(nil)).Elem()
@@ -49,16 +23,5 @@ func TestGetElement(t *testing.T) {
 		if !f.Type.Implements(elementInterfaceType) {
 			t.Errorf("%v does not implement %v", f.Type, elementInterfaceType)
 		}
-	}
-}
-
-// TestAllElementsHaveDescID ensures that all element types do carry an
-// AttributeDescID.
-func TestAllElementsHaveDescID(t *testing.T) {
-	typ := reflect.TypeOf((*ElementProto)(nil)).Elem()
-	for i := 0; i < typ.NumField(); i++ {
-		f := typ.Field(i)
-		elem := reflect.New(f.Type.Elem()).Interface().(Element)
-		require.NotNilf(t, elem.getAttribute(AttributeDescID), "%s", f.Type.Elem())
 	}
 }

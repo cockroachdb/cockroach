@@ -117,12 +117,12 @@ func buildSchemaChangeDepGenFunc(e scpb.Element, deps targetDepRules) depGenFunc
 	return func(g *scgraph.Graph, this *scpb.Target, thisStatus scpb.Status) {
 		for t, matchers := range matchers[thisStatus] {
 			if err := g.ForEachTarget(func(that *scpb.Target) error {
-				if reflect.TypeOf(that.Element()) != t {
+				if reflect.TypeOf(that.GetElement()) != t {
 					return nil
 				}
 				for _, m := range matchers {
 					if m.dirPred(this.Direction, that.Direction) &&
-						m.pred(this.Element(), that.Element()) {
+						m.pred(this.GetElement(), that.GetElement()) {
 						g.AddDepEdge(this, thisStatus, that, m.thatStatus)
 					}
 				}
@@ -188,7 +188,7 @@ func buildSchemaChangeOpGenFunc(e scpb.Element, forward, backwards targetOpRules
 
 	return func(builder *scgraph.Graph, t *scpb.Target, s scpb.Status, flags Params) {
 		cur := s
-		tv := reflect.ValueOf(t.Element())
+		tv := reflect.ValueOf(t.GetElement())
 		flagsV := reflect.ValueOf(flags)
 		predicateArgs := []reflect.Value{tv, flagsV}
 		opsArgs := []reflect.Value{tv}

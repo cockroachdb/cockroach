@@ -40,6 +40,7 @@ go_test(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/parser",
+        "//pkg/sql/schemachanger/scattr",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scgraphviz",

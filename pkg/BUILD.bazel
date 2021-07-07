@@ -257,6 +257,7 @@ ALL_TESTS = [
     "//pkg/sql/rowexec:rowexec_test",
     "//pkg/sql/rowflow:rowflow_test",
     "//pkg/sql/schemachange:schemachange_test",
+    "//pkg/sql/schemachanger/scattr:scattr_test",
     "//pkg/sql/schemachanger/scbuild:scbuild_test",
     "//pkg/sql/schemachanger/scexec:scexec_test",
     "//pkg/sql/schemachanger/scpb:scpb_test",

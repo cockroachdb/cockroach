@@ -5,8 +5,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "scpb",
     srcs = [
-        "attribute.go",
-        "attribute_value.go",
         "elements.go",
         ":gen-attribute-stringer",  # keep
     ],
@@ -14,8 +12,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/lexbase",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -36,12 +32,8 @@ go_proto_library(
 go_test(
     name = "scpb_test",
     size = "small",
-    srcs = [
-        "attribute_test.go",
-        "elements_test.go",
-    ],
+    srcs = ["elements_test.go"],
     embed = [":scpb"],
-    deps = ["@com_github_stretchr_testify//require"],
 )
 
 proto_library(
