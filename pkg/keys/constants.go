@@ -74,8 +74,9 @@ var (
 	LocalAbortSpanSuffix = []byte("abc-")
 	// localRangeFrozenStatusSuffix is DEPRECATED and remains to prevent reuse.
 	localRangeFrozenStatusSuffix = []byte("fzn-")
-	// LocalRangeLastGCSuffix is the suffix for the last GC.
-	LocalRangeLastGCSuffix = []byte("lgc-")
+	// LocalRangeGCThresholdSuffix is the suffix for the GC threshold. It keeps
+	// the lgc- ("last GC") representation for backwards compatibility.
+	LocalRangeGCThresholdSuffix = []byte("lgc-")
 	// LocalRangeAppliedStateSuffix is the suffix for the range applied state
 	// key.
 	LocalRangeAppliedStateSuffix = []byte("rask")

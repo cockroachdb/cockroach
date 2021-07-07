@@ -63,7 +63,7 @@ func declareKeysExport(
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
 	batcheval.DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeGCThresholdKey(header.RangeID)})
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges
