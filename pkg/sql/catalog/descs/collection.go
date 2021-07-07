@@ -34,18 +34,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// MakeCollection constructs a Collection.
-func MakeCollection(
+// makeCollection constructs a Collection.
+func makeCollection(
 	leaseMgr *lease.Manager,
 	settings *cluster.Settings,
-	sessionData *sessiondata.SessionData,
 	hydratedTables *hydratedtables.Cache,
 	virtualSchemas catalog.VirtualSchemas,
+	sessionData *sessiondata.SessionData,
 ) Collection {
-
-	// Allow a nil leaseMgr for testing.
 	codec := keys.SystemSQLCodec
-	if leaseMgr != nil {
+	if leaseMgr != nil { // permitted for testing
 		codec = leaseMgr.Codec()
 	}
 	return Collection{
@@ -57,17 +55,6 @@ func MakeCollection(
 		kv:             makeKVDescriptors(codec),
 		temporary:      makeTemporaryDescriptors(codec, sessionData),
 	}
-}
-
-// NewCollection constructs a new *Collection.
-func NewCollection(
-	settings *cluster.Settings,
-	leaseMgr *lease.Manager,
-	hydratedTables *hydratedtables.Cache,
-	virtualSchemas catalog.VirtualSchemas,
-) *Collection {
-	tc := MakeCollection(leaseMgr, settings, nil, hydratedTables, virtualSchemas)
-	return &tc
 }
 
 // Collection is a collection of descriptors held by a single session that

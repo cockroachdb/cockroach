@@ -2346,9 +2346,8 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	// Sets table descriptor state and waits for that change to propagate to the
 	// lease manager's refresh worker.
 	setTableState := func(expected descpb.DescriptorState, next descpb.DescriptorState) {
-		err := descs.Txn(
-			ctx, s.ClusterSettings(),
-			s.LeaseManager().(*lease.Manager),
+		err := s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.Txn(
+			ctx,
 			s.InternalExecutor().(*sql.InternalExecutor),
 			kvDB,
 			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
@@ -2764,62 +2763,64 @@ CREATE TABLE d1.t2 (name int);
 	require.NoError(t, err)
 
 	// Force the table descriptor into a offline state
-	err = descs.Txn(ctx, s.ClusterSettings(), s.LeaseManager().(*lease.Manager), s.InternalExecutor().(sqlutil.InternalExecutor), s.DB(),
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			_, tableDesc, err := descriptors.GetMutableTableByName(ctx, txn, tree.NewTableNameWithSchema("d1", "public", "t1"), tree.ObjectLookupFlagsWithRequired())
+	cfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	err = cfg.CollectionFactory.Txn(ctx, cfg.InternalExecutor, s.DB(), func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		_, tableDesc, err := descriptors.GetMutableTableByName(ctx, txn, tree.NewTableNameWithSchema("d1", "public", "t1"), tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return err
+		}
+		tableDesc.SetOffline("For unit test")
+		err = descriptors.WriteDesc(ctx, false, tableDesc, txn)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	go func() {
+		err := cfg.CollectionFactory.Txn(ctx, cfg.InternalExecutor, s.DB(), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			close(waitForRqstFilter)
+			mu.Lock()
+			waitForRqstFilter = make(chan chan struct{})
+			txnID = txn.ID()
+			mu.Unlock()
+
+			// Online the descriptor by making it public
+			_, tableDesc, err := descriptors.GetMutableTableByName(ctx, txn,
+				tree.NewTableNameWithSchema("d1", "public", "t1"),
+				tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
+					Required:       true,
+					RequireMutable: true,
+					IncludeOffline: true,
+					AvoidCached:    true,
+				}})
 			if err != nil {
 				return err
 			}
-			tableDesc.SetOffline("For unit test")
+			tableDesc.SetPublic()
 			err = descriptors.WriteDesc(ctx, false, tableDesc, txn)
 			if err != nil {
 				return err
 			}
-			return nil
+			// Allow the select on the table to proceed,
+			// so that it waits on the channel at the appropriate
+			// moment.
+			notify := make(chan struct{})
+			waitForTxn <- notify
+			<-notify
+
+			// Select from an unrelated table
+			_, err = s.InternalExecutor().(sqlutil.InternalExecutor).ExecEx(ctx, "inline-exec", txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				"insert into d1.t2 values (10);")
+			return err
+
 		})
-	require.NoError(t, err)
-
-	go func() {
-		err := descs.Txn(ctx, s.ClusterSettings(), s.LeaseManager().(*lease.Manager),
-			s.InternalExecutor().(sqlutil.InternalExecutor), s.DB(),
-			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-				close(waitForRqstFilter)
-				mu.Lock()
-				waitForRqstFilter = make(chan chan struct{})
-				txnID = txn.ID()
-				mu.Unlock()
-
-				// Online the descriptor by making it public
-				_, tableDesc, err := descriptors.GetMutableTableByName(ctx, txn,
-					tree.NewTableNameWithSchema("d1", "public", "t1"),
-					tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-						Required:       true,
-						RequireMutable: true,
-						IncludeOffline: true,
-						AvoidCached:    true,
-					}})
-				if err != nil {
-					return err
-				}
-				tableDesc.SetPublic()
-				err = descriptors.WriteDesc(ctx, false, tableDesc, txn)
-				if err != nil {
-					return err
-				}
-				// Allow the select on the table to proceed,
-				// so that it waits on the channel at the appropriate
-				// moment.
-				notify := make(chan struct{})
-				waitForTxn <- notify
-				<-notify
-
-				// Select from an unrelated table
-				_, err = s.InternalExecutor().(sqlutil.InternalExecutor).ExecEx(ctx, "inline-exec", txn,
-					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-					"insert into d1.t2 values (10);")
-				return err
-
-			})
 		close(waitForTxn)
 		close(waitForRqstFilter)
 		errorChan <- err

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -58,13 +59,9 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
 
 	db := s0.DB()
+	descriptors := s0.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
+		NewCollection(nil /* sessionData */)
 
-	descriptors := descs.NewCollection(
-		s0.ClusterSettings(),
-		s0.LeaseManager().(*lease.Manager),
-		nil, // hydratedTables
-		nil, // virtualSchemas
-	)
 	// Note this transaction abuses the mechanisms normally required for updating
 	// tables and is just for testing what this test intends to exercise.
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -172,10 +169,8 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
 	tn := tree.MakeTableNameWithSchema("db", "schema", "table")
 
-	err := descs.Txn(
+	err := s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.Txn(
 		ctx,
-		s.ClusterSettings(),
-		s.LeaseManager().(*lease.Manager),
 		s.InternalExecutor().(sqlutil.InternalExecutor),
 		s.DB(),
 		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
@@ -218,8 +213,9 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 	tdb.Exec(t, "CREATE TYPE db.sc.typ AS ENUM ('foo')")
 	lm := s0.LeaseManager().(*lease.Manager)
 	ie := s0.InternalExecutor().(sqlutil.InternalExecutor)
+	cf := s0.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory
 	t.Run("database descriptors", func(t *testing.T) {
-		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+		require.NoError(t, cf.Txn(ctx, ie, s0.DB(), func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			flags := tree.DatabaseLookupFlags{}
@@ -291,7 +287,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 		}))
 	})
 	t.Run("schema descriptors", func(t *testing.T) {
-		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+		require.NoError(t, cf.Txn(ctx, ie, s0.DB(), func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			flags := tree.SchemaLookupFlags{}
@@ -319,7 +315,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 		}))
 	})
 	t.Run("table descriptors", func(t *testing.T) {
-		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+		require.NoError(t, cf.Txn(ctx, ie, s0.DB(), func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			flags := tree.ObjectLookupFlags{}
@@ -343,7 +339,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 		}))
 	})
 	t.Run("type descriptors", func(t *testing.T) {
-		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+		require.NoError(t, cf.Txn(ctx, ie, s0.DB(), func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			flags := tree.ObjectLookupFlags{}
@@ -388,9 +384,9 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 	var tableID descpb.ID
 	row.Scan(&tableID)
 
-	lm := s0.LeaseManager().(*lease.Manager)
 	ie := s0.InternalExecutor().(sqlutil.InternalExecutor)
-	require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+	cf := s0.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory
+	require.NoError(t, cf.Txn(ctx, ie, s0.DB(), func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		// Resolve the descriptor so we can mutate it.
@@ -445,10 +441,8 @@ func TestDistSQLTypeResolver_GetTypeDescriptor_WrongType(t *testing.T) {
 	var id descpb.ID
 	tdb.QueryRow(t, "SELECT $1::regclass::int", "t").Scan(&id)
 
-	err := descs.Txn(
+	err := s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.Txn(
 		ctx,
-		s.ClusterSettings(),
-		s.LeaseManager().(*lease.Manager),
 		s.InternalExecutor().(sqlutil.InternalExecutor),
 		s.DB(),
 		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
@@ -486,10 +480,8 @@ CREATE TABLE test.schema.t(x INT);
 
 	require.NoError(
 		t,
-		descs.Txn(
+		s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.Txn(
 			ctx,
-			s.ClusterSettings(),
-			s.LeaseManager().(*lease.Manager),
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			kvDB,
 			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {

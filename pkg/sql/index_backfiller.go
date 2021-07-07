@@ -128,9 +128,8 @@ func (ib *IndexBackfillPlanner) plan(
 	var evalCtx extendedEvalContext
 	var planCtx *PlanningCtx
 	td := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildExistingMutableTable()
-	if err := descs.Txn(ctx,
-		ib.execCfg.Settings,
-		ib.execCfg.LeaseManager,
+	if err := ib.execCfg.CollectionFactory.Txn(
+		ctx,
 		ib.execCfg.InternalExecutor,
 		ib.execCfg.DB,
 		func(

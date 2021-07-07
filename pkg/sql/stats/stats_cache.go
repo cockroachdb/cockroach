@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -66,9 +65,10 @@ type TableStatisticsCache struct {
 	ClientDB    *kv.DB
 	SQLExecutor sqlutil.InternalExecutor
 	Codec       keys.SQLCodec
+	Settings    *cluster.Settings
 
-	LeaseMgr *lease.Manager
-	Settings *cluster.Settings
+	// Used to resolve descriptors.
+	collectionFactory *descs.CollectionFactory
 
 	// Used when decoding KV from the range feed.
 	datumAlloc rowenc.DatumAlloc
@@ -114,16 +114,16 @@ func NewTableStatisticsCache(
 	db *kv.DB,
 	sqlExecutor sqlutil.InternalExecutor,
 	codec keys.SQLCodec,
-	leaseManager *lease.Manager,
 	settings *cluster.Settings,
 	rangeFeedFactory *rangefeed.Factory,
+	cf *descs.CollectionFactory,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
-		ClientDB:    db,
-		SQLExecutor: sqlExecutor,
-		Codec:       codec,
-		LeaseMgr:    leaseManager,
-		Settings:    settings,
+		ClientDB:          db,
+		SQLExecutor:       sqlExecutor,
+		Codec:             codec,
+		Settings:          settings,
+		collectionFactory: cf,
 	}
 	tableStatsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
 		Policy:      cache.CacheLRU,
@@ -502,20 +502,16 @@ func (sc *TableStatisticsCache) parseStats(
 			// If have types that are not backwards compatible in this way, then we
 			// will need to start writing a timestamp on the stats objects and request
 			// TypeDescriptor's with the timestamp that the stats were recorded with.
-			err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				collection := descs.NewCollection(
-					sc.Settings,
-					sc.LeaseMgr,
-					nil, // hydratedTables
-					nil, // virtualSchemas
-				)
-				defer collection.ReleaseAll(ctx)
-				resolver := descs.NewDistSQLTypeResolver(collection, txn)
+			//
+			// TODO(ajwerner): We now do delete members from enum types. See #67050.
+			if err := sc.collectionFactory.Txn(ctx, sc.SQLExecutor, sc.ClientDB, func(
+				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			) error {
+				resolver := descs.NewDistSQLTypeResolver(descriptors, txn)
 				var err error
 				res.HistogramData.ColumnType, err = resolver.ResolveTypeByOID(ctx, typ.Oid())
 				return err
-			})
-			if err != nil {
+			}); err != nil {
 				return nil, err
 			}
 		}

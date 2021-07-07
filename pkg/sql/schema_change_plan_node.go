@@ -81,8 +81,8 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 			log.Infof(ctx, "schema change waiting for concurrent schema changes on descriptor %d", descID)
 		}
 		blocked := false
-		if err := descs.Txn(
-			ctx, p.ExecCfg().Settings, p.LeaseMgr(), p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
+		if err := p.ExecCfg().CollectionFactory.Txn(
+			ctx, p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
 			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 				txn.SetFixedTimestamp(ctx, now)
 				table, err := descriptors.GetImmutableTableByID(ctx, txn, descID,

@@ -236,6 +236,9 @@ type TestServerInterface interface {
 
 	// MetricsRecorder periodically records node-level and store-level metrics.
 	MetricsRecorder() *status.MetricsRecorder
+
+	// CollectionFactory returns a *descs.CollectionFactory.
+	CollectionFactory() interface{}
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
