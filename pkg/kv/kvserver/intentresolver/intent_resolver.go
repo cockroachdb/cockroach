@@ -837,10 +837,15 @@ func (ir *IntentResolver) ResolveIntent(
 // ResolveIntents synchronously resolves intents according to opts.
 func (ir *IntentResolver) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts ResolveOptions,
-) *roachpb.Error {
+) (pErr *roachpb.Error) {
 	if len(intents) == 0 {
 		return nil
 	}
+	defer func() {
+		if pErr != nil {
+			ir.Metrics.IntentResolutionFailed.Inc(int64(len(intents)))
+		}
+	}()
 	// Avoid doing any work on behalf of expired contexts. See
 	// https://github.com/cockroachdb/cockroach/issues/15997.
 	if err := ctx.Err(); err != nil {

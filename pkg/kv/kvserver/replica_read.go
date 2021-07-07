@@ -168,7 +168,6 @@ func (r *Replica) executeReadOnlyBatch(
 		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
 		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, allowSyncProcessing); err != nil {
 			log.Warningf(ctx, "%v", err)
-			r.store.metrics.ConflictingIntentsResolveRejected.Inc(int64(len(intents)))
 		}
 	}
 
