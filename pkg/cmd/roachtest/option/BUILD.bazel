@@ -4,6 +4,7 @@ go_library(
     name = "option",
     srcs = [
         "node_list_option.go",
+        "node_lister.go",
         "option_interface.go",
         "options.go",
     ],

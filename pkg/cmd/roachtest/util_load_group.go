@@ -10,10 +10,7 @@
 
 package main
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-)
+import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 
 type loadGroup struct {
 	roachNodes option.NodeListOption
@@ -41,7 +38,13 @@ func (lg loadGroupList) loadNodes() option.NodeListOption {
 // makeLoadGroups create a loadGroupList that has an equal number of cockroach
 // nodes per zone. It assumes that numLoadNodes <= numZones and that numZones is
 // divisible by numLoadNodes.
-func makeLoadGroups(c cluster.Cluster, numZones, numRoachNodes, numLoadNodes int) loadGroupList {
+func makeLoadGroups(
+	c interface {
+	Node(int) option.NodeListOption
+	Range(int, int) option.NodeListOption
+},
+	numZones, numRoachNodes, numLoadNodes int,
+) loadGroupList {
 	if numLoadNodes > numZones {
 		panic("cannot have more than one load node per zone")
 	} else if numZones%numLoadNodes != 0 {
