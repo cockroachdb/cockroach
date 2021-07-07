@@ -187,11 +187,11 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 // e.g. that tests ran with -v have the same output as those without.
 func setCLIDefaultsForTests() {
 	initCLIDefaults()
-	cliCtx.terminalOutput = false
-	sqlCtx.showTimes = false
+	sqlExecCtx.terminalOutput = false
+	sqlExecCtx.showTimes = false
 	// Even though we pretend there is no terminal, most tests want
 	// pretty tables.
-	cliCtx.tableDisplayFormat = clisqlclient.TableDisplayTable
+	sqlExecCtx.tableDisplayFormat = clisqlclient.TableDisplayTable
 }
 
 // stopServer stops the test server.

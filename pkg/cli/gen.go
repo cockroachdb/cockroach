@@ -199,7 +199,7 @@ Output the list of cluster settings known to this binary.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wrapCode := func(s string) string {
-			if cliCtx.tableDisplayFormat == clisqlclient.TableDisplayRawHTML {
+			if sqlExecCtx.tableDisplayFormat == clisqlclient.TableDisplayRawHTML {
 				return fmt.Sprintf("<code>%s</code>", s)
 			}
 			return s
