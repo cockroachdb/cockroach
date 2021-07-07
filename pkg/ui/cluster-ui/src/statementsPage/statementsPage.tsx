@@ -428,7 +428,11 @@ export class StatementsPage extends React.Component<
       .filter(c => !c.alwaysShow)
       .map(
         (c): SelectOption => ({
-          label: statisticsColumnLabels[c.name as StatisticTableColumnKeys],
+          label:
+            c.name !== "time"
+              ? statisticsColumnLabels[c.name as StatisticTableColumnKeys]
+              : "Statement " +
+                statisticsColumnLabels[c.name as StatisticTableColumnKeys],
           value: c.name,
           isSelected: isColumnSelected(c),
         }),
