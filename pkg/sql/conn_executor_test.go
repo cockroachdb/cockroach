@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1332,6 +1333,63 @@ ALTER TABLE t1 ADD COLUMN b INT DEFAULT 1`,
 			t.Fatalf("unexpected number of rows returned by last query statistics: %v", err)
 		}
 	}
+}
+
+func TestInjectRetryErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	_, err := db.Exec("SET inject_retry_errors_enabled = 'true'")
+	require.NoError(t, err)
+
+	t.Run("with_savepoints", func(t *testing.T) {
+		// The crdb.ExecuteTx wrapper uses SAVEPOINTs to retry the transaction,
+		// so it will automatically succeed.
+		var txRes, attemptCount int
+		err = crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+			attemptCount++
+			if txErr := tx.QueryRow("SELECT $1::int8", attemptCount).Scan(&txRes); txErr != nil {
+				return txErr
+			}
+			return nil
+		})
+		require.NoError(t, err)
+		// numTxnRetryErrors is set to 3 in conn_executor_exec, so the 4th attempt
+		// should be the one that succeeds.
+		require.Equal(t, 4, txRes)
+	})
+
+	t.Run("without_savepoints", func(t *testing.T) {
+		// Without SAVEPOINTs, the caller must keep track of the retry count
+		// and disable the error injection.
+		var txRes int
+		for attemptCount := 1; attemptCount <= 10; attemptCount++ {
+			tx, err := db.BeginTx(ctx, nil)
+			require.NoError(t, err)
+
+			if attemptCount == 5 {
+				_, err = tx.Exec("SET LOCAL inject_retry_errors_enabled = 'false'")
+				require.NoError(t, err)
+			}
+
+			err = tx.QueryRow("SELECT $1::int8", attemptCount).Scan(&txRes)
+			if err == nil {
+				require.NoError(t, tx.Commit())
+				break
+			}
+			pqErr := (*pq.Error)(nil)
+			require.ErrorAs(t, err, &pqErr)
+			require.Equal(t, "40001", string(pqErr.Code), "expected a transaction retry error code. got %v", pqErr)
+			require.NoError(t, tx.Rollback())
+		}
+		require.Equal(t, 5, txRes)
+	})
 }
 
 // dynamicRequestFilter exposes a filter method which is a

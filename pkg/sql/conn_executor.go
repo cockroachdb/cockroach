@@ -2302,8 +2302,11 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 
 	retriable := errIsRetriable(err)
 	if retriable {
-		rc, canAutoRetry := ex.getRewindTxnCapability()
-
+		var rc rewindCapability
+		var canAutoRetry bool
+		if ex.implicitTxn() || !ex.sessionData().InjectRetryErrorsEnabled {
+			rc, canAutoRetry = ex.getRewindTxnCapability()
+		}
 		if canAutoRetry {
 			ex.extraTxnState.autoRetryReason = err
 		}
