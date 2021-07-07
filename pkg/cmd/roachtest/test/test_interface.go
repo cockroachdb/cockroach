@@ -23,7 +23,14 @@ type Test interface {
 	BuildVersion() *version.Version
 	IsBuildVersion(string) bool // "vXX.YY"
 	Helper()
-	Spec() interface{} // main.TestSpec, TODO(tbg): clean up
+	// Spec() returns the *registry.TestSpec as an interface{}.
+	//
+	// TODO(tbg): cleaning this up is mildly tricky. TestSpec has the Run field
+	// which depends both on `test` (and `cluster`, though this matters less), so
+	// we get cyclic imports. We should split up `Run` off of `TestSpec` and have
+	// `TestSpec` live in `spec` to avoid this problem, but this requires a pass
+	// through all registered roachtests to change how they register the test.
+	Spec() interface{}
 	VersionsBinaryOverride() map[string]string
 	Skip(args ...interface{})
 	Skipf(format string, args ...interface{})
