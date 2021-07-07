@@ -162,3 +162,49 @@ else
   echo "The ${dockerhub_repository}:latest docker image tag was _not_ pushed."
 fi
 tc_end_block "Tag docker image as latest"
+
+
+tc_start_block "Verify docker images"
+
+images=(
+  "${dockerhub_repository}:${build_name}"
+  "${gcr_repository}:${build_name}"
+)
+if [[ -z "$PRE_RELEASE" ]]; then
+  images+=("${dockerhub_repository}:latest-${release_branch}")
+fi
+if [[ -n "${PUBLISH_LATEST}" ]]; then
+  images+=("${dockerhub_repository}:latest")
+fi
+
+errorred=0
+
+for img in "${images[@]}"; do
+  docker rmi "$img"
+  docker pull "$img"
+  output=$(docker run "$img" version)
+  build_type=$(grep "^Build Type:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+  sha=$(grep "^Build Commit ID:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+  build_tag=$(grep "^Build Tag:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+
+  # Build Type should always be "release"
+  if [ "$build_type" != "release" ]; then
+    echo "ERROR: Release type mismatch, expected 'release', got '$build_type'"
+    errorred=1
+  fi
+  if [ "$sha" != "$BUILD_VCS_NUMBER" ]; then
+    echo "ERROR: SHA mismatch, expected '$BUILD_VCS_NUMBER', got '$sha'"
+    errorred=1
+  fi
+  if [ "$build_tag" != "$TC_BUILD_BRANCH" ]; then
+    echo "ERROR: Build tag mismatch, expected '$TC_BUILD_BRANCH', got '$build_tag'"
+    errorred=1
+  fi
+done
+
+if [ $errorred = 1 ]; then
+  echo "ERROR: Docker image verification failed, see logs above"
+  exit 1
+fi
+
+tc_end_block "Verify docker images"
