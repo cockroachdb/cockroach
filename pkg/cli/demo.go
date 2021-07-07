@@ -384,7 +384,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 		}
 	}
 
-	conn := makeSQLConn(c.connURL)
+	conn := sqlConnCtx.MakeSQLConn(c.connURL)
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	return runClient(cmd, conn, cmdIn)

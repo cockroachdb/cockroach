@@ -24,7 +24,9 @@ import (
 
 // RunQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
-func RunQuery(conn Conn, fn QueryFn, showMoreChars bool) ([]string, [][]string, error) {
+func (sqlExecCtx *ExecContext) RunQuery(
+	conn Conn, fn QueryFn, showMoreChars bool,
+) ([]string, [][]string, error) {
 	rows, _, err := fn(conn)
 	if err != nil {
 		return nil, nil, err
@@ -36,8 +38,8 @@ func RunQuery(conn Conn, fn QueryFn, showMoreChars bool) ([]string, [][]string, 
 
 // RunQueryAndFormatResults takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes output to 'w'.
-func RunQueryAndFormatResults(
-	c Conn, w io.Writer, fn QueryFn, tableDisplayFormat TableDisplayFormat, tableBorderMode int,
+func (sqlExecCtx *ExecContext) RunQueryAndFormatResults(
+	c Conn, w io.Writer, fn QueryFn,
 ) (err error) {
 	conn := c.(*sqlConn)
 	startTime := timeutil.Now()
@@ -115,7 +117,7 @@ func RunQueryAndFormatResults(
 		}
 
 		cols := getColumnStrings(rows, true)
-		reporter, cleanup, err := makeReporter(w, tableDisplayFormat, tableBorderMode)
+		reporter, cleanup, err := sqlExecCtx.makeReporter(w)
 		if err != nil {
 			return err
 		}
@@ -132,7 +134,7 @@ func RunQueryAndFormatResults(
 			return err
 		}
 
-		maybeShowTimes(conn, w, isMultiStatementQuery, startTime, queryCompleteTime)
+		sqlExecCtx.maybeShowTimes(conn, w, isMultiStatementQuery, startTime, queryCompleteTime)
 
 		if more, err := rows.NextResultSet(); err != nil {
 			return err
@@ -158,18 +160,18 @@ func handleCopyError(conn *sqlConn, err error) error {
 }
 
 // maybeShowTimes displays the execution time if show_times has been set.
-func maybeShowTimes(
+func (sqlExecCtx *ExecContext) maybeShowTimes(
 	conn *sqlConn, w io.Writer, isMultiStatementQuery bool, startTime,
 	queryCompleteTime time.Time,
 ) {
-	if !*conn.showTimes {
+	if !sqlExecCtx.ShowTimes {
 		return
 	}
 
 	defer func() {
 		// If there was noticeable overhead, let the user know.
 		renderDelay := timeutil.Now().Sub(queryCompleteTime)
-		if renderDelay >= 1*time.Second && conn.isInteractive {
+		if renderDelay >= 1*time.Second && sqlExecCtx.IsInteractive() {
 			fmt.Fprintf(stderr,
 				"\nNote: an additional delay of %s was spent formatting the results.\n"+
 					"You can use \\set display_format to change the formatting.\n",
@@ -184,7 +186,7 @@ func maybeShowTimes(
 	// accurate way to measure them currently. See #48180.
 	if isMultiStatementQuery {
 		// No need to print if no one's watching.
-		if conn.isInteractive {
+		if sqlExecCtx.IsInteractive() {
 			fmt.Fprintf(stderr, "\nNote: timings for multiple statements on a single line are not supported. See %s.\n",
 				build.MakeIssueURL(48180))
 		}
@@ -216,7 +218,7 @@ func maybeShowTimes(
 		precision = 0
 	}
 
-	if *conn.verboseTimings {
+	if sqlExecCtx.VerboseTimings {
 		fmt.Fprintf(&stats, "Time: %s", clientSideQueryLatency)
 	} else {
 		// Simplified displays: human users typically can't
@@ -224,7 +226,7 @@ func maybeShowTimes(
 		fmt.Fprintf(&stats, "Time: %.*f%s", precision, clientSideQueryLatency.Seconds()*multiplier, unit)
 	}
 
-	if !*conn.enableServerExecutionTimings {
+	if !conn.connCtx.EnableServerExecutionTimings {
 		fmt.Fprintln(w, stats.String())
 		return
 	}
@@ -247,7 +249,7 @@ func maybeShowTimes(
 		networkLat = clientSideQueryLatency
 	}
 	otherLat := serviceLat - parseLat - planLat - execLat
-	if *conn.verboseTimings {
+	if sqlExecCtx.VerboseTimings {
 		// Only display schema change latency if the server provided that
 		// information to not confuse users.
 		// TODO(arul): this can be removed in 22.1.
