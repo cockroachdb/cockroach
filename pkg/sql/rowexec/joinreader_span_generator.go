@@ -26,7 +26,10 @@ import (
 // joinReaderSpanGenerator is used by the joinReader to generate spans for
 // looking up into the index.
 type joinReaderSpanGenerator interface {
-	// generateSpans generates spans for the given batch of input rows.
+	// generateSpans generates spans for the given batch of input rows. The spans
+	// are returned in rows order, but there are no duplicates (i.e. if a 2nd row
+	// results in the same spans as a previous row, the results don't include them
+	// a second time).
 	generateSpans(rows []rowenc.EncDatumRow) (roachpb.Spans, error)
 
 	// getMatchingRowIndices returns the indices of the input rows that desire

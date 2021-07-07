@@ -927,9 +927,11 @@ type JoinReaderSpec struct {
 	// to BLOCK when locking_stength is FOR_NONE.
 	LockingWaitPolicy descpb.ScanLockingWaitPolicy `protobuf:"varint,10,opt,name=locking_wait_policy,json=lockingWaitPolicy,enum=cockroach.sql.sqlbase.ScanLockingWaitPolicy" json:"locking_wait_policy"`
 	// Indicates that the join reader should maintain the ordering of the input
-	// stream. This is applicable to both lookup joins and index joins.
-	// Maintaining ordering with lookup joins is expensive. With index joins,
-	// not maintaining ordering allows for optimizations at lower layers.
+	// stream. This is applicable to both lookup joins and index joins. For lookup
+	// joins, maintaining order is expensive because it requires buffering. For
+	// index joins buffering is not required, but still, if ordering is not
+	// required, we'll change the output order to allow for some Pebble
+	// optimizations.
 	MaintainOrdering bool `protobuf:"varint,11,opt,name=maintain_ordering,json=maintainOrdering" json:"maintain_ordering"`
 	// Indicates whether or not this JoinReader is expected to produce any
 	// system columns in its output.
