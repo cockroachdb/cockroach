@@ -48,7 +48,7 @@ func registerNodeJSPostgres(r registry.Registry) {
 
 		user := "testuser"
 		certsDir := "/home/ubuntu/certs"
-		localCertsDir, err := filepathAbs("./certs")
+		localCertsDir, err := filepath.Abs("./certs")
 		require.NoError(t, err)
 
 		err = repeatRunE(ctx, t, c, node, "create sql user",
