@@ -403,6 +403,10 @@ export function selectNodesSummaryValid(state: AdminUIState) {
   return state.cachedData.nodes.valid && state.cachedData.liveness.valid;
 }
 
+export function selectNodesSummaryEmpty(state: AdminUIState) {
+  return !!state.cachedData.nodes.data;
+}
+
 /*
  * clusterNameSelector returns the name of cluster which has to be the same for every node in the cluster.
  * - That is why it is safe to get first non empty cluster name.
