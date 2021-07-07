@@ -501,11 +501,11 @@ func execCmdEx(ctx context.Context, l *logger.Logger, args ...string) cmdRes {
 		}
 
 		if err != nil {
-			err = &withCommandDetails{
-				cause:  err,
-				cmd:    strings.Join(args, " "),
-				stderr: stderrString,
-				stdout: stdoutString,
+			err = &cluster.WithCommandDetails{
+				Wrapped: err,
+				Cmd:     strings.Join(args, " "),
+				Stderr:  stderrString,
+				Stdout:  stdoutString,
 			}
 		}
 	}
@@ -515,44 +515,6 @@ func execCmdEx(ctx context.Context, l *logger.Logger, args ...string) cmdRes {
 		stdout: stdoutString,
 		stderr: stderrString,
 	}
-}
-
-type withCommandDetails struct {
-	cause  error
-	cmd    string
-	stderr string
-	stdout string
-}
-
-var _ error = (*withCommandDetails)(nil)
-var _ errors.Formatter = (*withCommandDetails)(nil)
-
-// Error implements error.
-func (e *withCommandDetails) Error() string { return e.cause.Error() }
-
-// Cause implements causer.
-func (e *withCommandDetails) Cause() error { return e.cause }
-
-// Format implements fmt.Formatter.
-func (e *withCommandDetails) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
-
-// FormatError implements errors.Formatter.
-func (e *withCommandDetails) FormatError(p errors.Printer) error {
-	p.Printf("%s returned", e.cmd)
-	if p.Detail() {
-		p.Printf("stderr:\n%s\nstdout:\n%s", e.stderr, e.stdout)
-	}
-	return e.cause
-}
-
-// GetStderr retrieves the stderr output of a command that
-// returned with an error, or the empty string if there was no stderr.
-func GetStderr(err error) string {
-	var c *withCommandDetails
-	if errors.As(err, &c) {
-		return c.stderr
-	}
-	return ""
 }
 
 // execCmdWithBuffer executes the given command and returns its stdout/stderr
@@ -909,7 +871,7 @@ func (f *clusterFactory) newCluster(
 			break
 		}
 		l.PrintfCtx(ctx, "Failed to create cluster.")
-		if !strings.Contains(GetStderr(err), "already exists") {
+		if !strings.Contains(cluster.GetStderr(err), "already exists") {
 			l.PrintfCtx(ctx, "Cleaning up in case it was partially created.")
 			c.Destroy(ctx, closeLogger, l)
 		} else {
