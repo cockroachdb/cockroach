@@ -39,14 +39,13 @@ func TestTPCCSupportedWarehouses(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
-			r := &testRunner{buildVersion: *test.buildVersion}
 			if test.expected == expectPanic {
 				require.Panics(t, func() {
-					w := maxSupportedTPCCWarehouses(r.buildVersion, test.cloud, test.spec)
+					w := maxSupportedTPCCWarehouses(*test.buildVersion, test.cloud, test.spec)
 					t.Errorf("%s %s got unexpected result %d", test.cloud, &test.spec, w)
 				})
 			} else {
-				require.Equal(t, test.expected, maxSupportedTPCCWarehouses(r.buildVersion, test.cloud, test.spec))
+				require.Equal(t, test.expected, maxSupportedTPCCWarehouses(*test.buildVersion, test.cloud, test.spec))
 			}
 		})
 	}
