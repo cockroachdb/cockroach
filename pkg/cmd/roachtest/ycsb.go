@@ -52,7 +52,7 @@ func registerYCSB(r registry.Registry) {
 		tests.WaitFor3XReplication(t, c.Conn(ctx, 1))
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			sfu := fmt.Sprintf(" --select-for-update=%t", t.IsBuildVersion("v19.2.0"))
 			ramp := " --ramp=" + ifLocal(c, "0s", "2m")

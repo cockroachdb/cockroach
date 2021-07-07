@@ -45,7 +45,7 @@ func registerCopy(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 		c.Start(ctx, c.All())
 
-		m := c.NewMonitor(ctx, t, c.All())
+		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			db := c.Conn(ctx, 1)
 			defer db.Close()

@@ -238,7 +238,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
 	t.Status("waiting")
-	m := c.NewMonitor(ctx, t, crdbNodes)
+	m := c.NewMonitor(ctx, crdbNodes)
 	for i := range workloadInstances {
 		// Make a copy of i for the goroutine.
 		i := i
@@ -1075,7 +1075,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
 		}
 
-		m := c.NewMonitor(ctx, t, roachNodes)
+		m := c.NewMonitor(ctx, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			t.Status("setting up dataset")
 			return loadTPCCBench(ctx, t, c, b, roachNodes, c.Node(loadNodes[0]))
@@ -1158,7 +1158,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		// *abort* the line search and whole tpccbench run. Return the errors
 		// to indicate that the specific warehouse count failed, but that the
 		// line search ought to continue.
-		m := c.NewMonitor(ctx, t, roachNodes)
+		m := c.NewMonitor(ctx, roachNodes)
 
 		// If we're running chaos in this configuration, modify this config.
 		if b.Chaos {
