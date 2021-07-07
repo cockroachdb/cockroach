@@ -1536,7 +1536,7 @@ func TestSupportsPrev(t *testing.T) {
 	}
 	t.Run("pebble", func(t *testing.T) {
 
-		eng := newPebbleInMem(
+		eng := NewInMem(
 			context.Background(),
 			roachpb.Attributes{},
 			1<<20,   /* cacheSize */
@@ -1666,7 +1666,7 @@ func TestScanSeparatedIntents(t *testing.T) {
 	for name, enableSeparatedIntents := range map[string]bool{"interleaved": false, "separated": true} {
 		t.Run(name, func(t *testing.T) {
 			settings := makeSettingsForSeparatedIntents(false, enableSeparatedIntents)
-			eng := newPebbleInMem(
+			eng := NewInMem(
 				ctx,
 				roachpb.Attributes{},
 				1<<20,   /* cacheSize */

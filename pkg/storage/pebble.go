@@ -605,18 +605,21 @@ func newPebbleInMem(
 	ctx context.Context,
 	attrs roachpb.Attributes,
 	cacheSize, storeSize int64,
+	fs vfs.FS,
+	dir string,
 	settings *cluster.Settings,
 ) *Pebble {
 	opts := DefaultPebbleOptions()
 	opts.Cache = pebble.NewCache(cacheSize)
 	defer opts.Cache.Unref()
 
-	opts.FS = vfs.NewMem()
+	opts.FS = fs
 	db, err := NewPebble(
 		ctx,
 		PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Attrs:    attrs,
+				Dir:      dir,
 				MaxSize:  storeSize,
 				Settings: settings,
 			},
