@@ -194,7 +194,7 @@ func (c *sqlConn) EnsureConn() error {
 // SHOW LAST QUERY STATISTICS statements. This allows the CLI client to report
 // server side execution timings instead of timing on the client.
 func (c *sqlConn) tryEnableServerExecutionTimings() {
-	_, _, _, _, _, _, err := c.getLastQueryStatistics()
+	_, _, _, _, _, _, err := c.getLastQueryStatisticsInternal()
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: cannot show server execution timings: %v\n", err)
 		c.connCtx.EnableServerExecutionTimings = false
@@ -405,10 +405,23 @@ func (c *sqlConn) GetServerValue(what, sql string) (driver.Value, string, bool) 
 	return dbVals[0], dbColType, true
 }
 
-// parseLastQueryStatistics runs the "SHOW LAST QUERY STATISTICS" statements,
+func (c *sqlConn) GetLastQueryStatistics() (
+	hasStats bool,
+	parseLat, planLat, execLat, serviceLat, jobsLat time.Duration,
+	providesJobLat bool,
+	err error,
+) {
+	if !c.connCtx.EnableServerExecutionTimings {
+		return false, 0, 0, 0, 0, 0, false, nil
+	}
+	l1, l2, l3, l4, l5, l6, err := c.getLastQueryStatisticsInternal()
+	return err == nil, l1, l2, l3, l4, l5, l6, err
+}
+
+// getLastQueryStatisticsInternal runs the "SHOW LAST QUERY STATISTICS" statements,
 // performs sanity checks, and returns the exec latency and service latency from
 // the sql row parsed as time.Duration.
-func (c *sqlConn) getLastQueryStatistics() (
+func (c *sqlConn) getLastQueryStatisticsInternal() (
 	parseLat, planLat, execLat, serviceLat, jobsLat time.Duration,
 	containsJobLat bool,
 	err error,

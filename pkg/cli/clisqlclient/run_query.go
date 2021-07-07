@@ -39,9 +39,8 @@ func (sqlExecCtx *ExecContext) RunQuery(
 // RunQueryAndFormatResults takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes output to 'w'.
 func (sqlExecCtx *ExecContext) RunQueryAndFormatResults(
-	c Conn, w io.Writer, fn QueryFn,
+	conn Conn, w io.Writer, fn QueryFn,
 ) (err error) {
-	conn := c.(*sqlConn)
 	startTime := timeutil.Now()
 	rows, isMultiStatementQuery, err := fn(conn)
 	if err != nil {
@@ -146,7 +145,7 @@ func (sqlExecCtx *ExecContext) RunQueryAndFormatResults(
 
 // maybeShowTimes displays the execution time if show_times has been set.
 func (sqlExecCtx *ExecContext) maybeShowTimes(
-	conn *sqlConn, w io.Writer, isMultiStatementQuery bool, startTime,
+	conn Conn, w io.Writer, isMultiStatementQuery bool, startTime,
 	queryCompleteTime time.Time,
 ) {
 	if !sqlExecCtx.ShowTimes {
@@ -211,16 +210,15 @@ func (sqlExecCtx *ExecContext) maybeShowTimes(
 		fmt.Fprintf(&stats, "Time: %.*f%s", precision, clientSideQueryLatency.Seconds()*multiplier, unit)
 	}
 
-	if !conn.connCtx.EnableServerExecutionTimings {
+	// If discrete server/network timings are available, also print them.
+	hasStats, parseLat, planLat, execLat, serviceLat, jobsLat, containsJobLat, err := conn.GetLastQueryStatistics()
+	if err != nil {
 		fmt.Fprintln(w, stats.String())
+		fmt.Fprintf(stderr, "\nwarning: %v", err)
 		return
 	}
-
-	// If discrete server/network timings are available, also print them.
-	parseLat, planLat, execLat, serviceLat, jobsLat, containsJobLat, err := conn.getLastQueryStatistics()
-	if err != nil {
-		fmt.Fprint(w, stats.String())
-		fmt.Fprintf(stderr, "\nwarning: %v", err)
+	if !hasStats {
+		fmt.Fprintln(w, stats.String())
 		return
 	}
 
