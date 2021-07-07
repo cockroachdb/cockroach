@@ -507,7 +507,7 @@ func ResolveEncryptedEnvOptions(
 			return nil, nil, err
 		}
 	} else {
-		if err := fileRegistry.checkNoRegistryFile(); err != nil {
+		if err := fileRegistry.CheckNoRegistryFile(); err != nil {
 			return nil, nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
 				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
 		}
