@@ -299,6 +299,7 @@ func (s *Store) maybeThrottleBatch(
 		}
 
 		waited := timeutil.Since(before)
+		s.metrics.ExportRequestProposalTotalDelay.Inc(waited.Nanoseconds())
 		if waited > time.Second {
 			log.Infof(ctx, "Export request was delayed by %v", waited)
 		}
