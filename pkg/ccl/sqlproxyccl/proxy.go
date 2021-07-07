@@ -46,11 +46,10 @@ var SendErrToClient = func(conn net.Conn, err error) {
 			codeClientDisconnected,
 			codeBackendDisconnected,
 			codeAuthFailed,
-			codeProxyRefusedConnection:
+			codeProxyRefusedConnection,
+			codeIdleDisconnect:
 			msg = codeErr.Error()
-		// The rest - the message send back is sanitized.
-		case codeIdleDisconnect:
-			msg = "terminating connection due to idle timeout"
+		// The rest - the message sent back is sanitized.
 		case codeUnexpectedInsecureStartupMessage:
 			msg = "server requires encryption"
 		}
