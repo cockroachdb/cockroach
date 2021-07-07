@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -34,11 +35,6 @@ type CreateRoleNode struct {
 	roleOptions roleoption.List
 	userNameInfo
 }
-
-var userTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "users")
-
-// RoleOptionsTableName represents system.role_options.
-var RoleOptionsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "role_options")
 
 // CreateRole represents a CREATE ROLE statement.
 // Privileges: INSERT on system.users.
@@ -159,7 +155,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		opName,
 		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		fmt.Sprintf(`select "isRole" from %s where username = $1`, userTableName),
+		fmt.Sprintf(`select "isRole" from %s where username = $1`, authentication.UsersTableName),
 		normalizedUsername,
 	)
 	if err != nil {
@@ -178,7 +174,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		params.ctx,
 		opName,
 		params.p.txn,
-		fmt.Sprintf("insert into %s values ($1, $2, $3)", userTableName),
+		fmt.Sprintf("insert into %s values ($1, $2, $3)", authentication.UsersTableName),
 		normalizedUsername,
 		hashedPassword,
 		n.isRole,
@@ -225,6 +221,16 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			qargs...,
 		)
 		if err != nil {
+			return err
+		}
+	}
+
+	if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		// Bump role-related table versions to force a refresh of AuthInfo cache.
+		if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
+			return err
+		}
+		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 			return err
 		}
 	}

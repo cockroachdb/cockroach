@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -323,7 +324,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			params.p.txn,
 			fmt.Sprintf(
 				`DELETE FROM %s WHERE username=$1`,
-				RoleOptionsTableName,
+				authentication.RoleOptionsTableName,
 			),
 			normalizedUsername,
 		)
@@ -332,9 +333,17 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 	}
 
+	// Bump role-related table versions to force a refresh of membership/password
+	// caches.
+	if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
+			return err
+		}
+		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
+			return err
+		}
+	}
 	if numRoleMembershipsDeleted > 0 {
-		// Some role memberships have been deleted, bump role_members table version to
-		// force a refresh of role membership.
 		if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
 			return err
 		}
