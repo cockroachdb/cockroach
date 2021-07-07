@@ -12,8 +12,10 @@ package migrationcluster_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationcluster"
 	"github.com/cockroachdb/cockroach/pkg/migration/nodelivenesstest"
@@ -29,37 +31,47 @@ func TestCluster_IterateRangeDescriptors(t *testing.T) {
 	ctx := context.Background()
 	const numNodes = 1
 
-	params, _ := tests.CreateTestServerParams()
-	server, _, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.Background())
+	for _, splitMeta := range []bool{false, true} {
+		t.Run(fmt.Sprintf("meta-split=%t", splitMeta), func(t *testing.T) {
+			params, _ := tests.CreateTestServerParams()
+			server, _, kvDB := serverutils.StartServer(t, params)
+			defer server.Stopper().Stop(context.Background())
 
-	var numRanges int
-	if err := server.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
-		numRanges = s.ReplicaCount()
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
+			if splitMeta {
+				if _, _, err := server.SplitRange(keys.Meta2Prefix); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-	c := nodelivenesstest.New(numNodes)
-	h := migrationcluster.New(migrationcluster.ClusterConfig{
-		NodeLiveness: c,
-		Dialer:       migrationcluster.NoopDialer{},
-		DB:           kvDB,
-	})
+			var numRanges int
+			if err := server.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+				numRanges = s.ReplicaCount()
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
 
-	for _, blockSize := range []int{1, 5, 10, 50} {
-		var numDescs int
-		init := func() { numDescs = 0 }
-		if err := h.IterateRangeDescriptors(ctx, blockSize, init, func(descriptors ...roachpb.RangeDescriptor) error {
-			numDescs += len(descriptors)
-			return nil
-		}); err != nil {
-			t.Fatal(err)
-		}
+			c := nodelivenesstest.New(numNodes)
+			h := migrationcluster.New(migrationcluster.ClusterConfig{
+				NodeLiveness: c,
+				Dialer:       migrationcluster.NoopDialer{},
+				DB:           kvDB,
+			})
 
-		if numDescs != numRanges {
-			t.Fatalf("expected to find %d ranges, found %d", numRanges+1, numDescs)
-		}
+			for _, blockSize := range []int{1, 5, 10, 50} {
+				var numDescs int
+				init := func() { numDescs = 0 }
+				if err := h.IterateRangeDescriptors(ctx, blockSize, init, func(descriptors ...roachpb.RangeDescriptor) error {
+					numDescs += len(descriptors)
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+
+				if numDescs != numRanges {
+					t.Fatalf("expected to find %d ranges, found %d", numRanges, numDescs)
+				}
+			}
+		})
 	}
 }

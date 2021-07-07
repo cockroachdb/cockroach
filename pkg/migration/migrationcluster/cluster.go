@@ -134,37 +134,50 @@ func (c *Cluster) ForEveryNode(
 func (c *Cluster) IterateRangeDescriptors(
 	ctx context.Context, blockSize int, init func(), fn func(...roachpb.RangeDescriptor) error,
 ) error {
-	if err := c.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return c.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Inform the caller that we're starting a fresh attempt to page in
 		// range descriptors.
 		init()
 
-		// Iterate through meta2 to pull out all the range descriptors.
-		return txn.Iterate(ctx, keys.Meta2Prefix, keys.MetaMax, blockSize,
+		// Iterate through meta{1,2} to pull out all the range descriptors.
+		seenInMeta1 := make(map[roachpb.RangeID]struct{})
+		return txn.Iterate(ctx, keys.MetaMin, keys.MetaMax, blockSize,
 			func(rows []kv.KeyValue) error {
-				descriptors := make([]roachpb.RangeDescriptor, len(rows))
-				for i, row := range rows {
-					if err := row.ValueProto(&descriptors[i]); err != nil {
-						return errors.Wrapf(err,
-							"unable to unmarshal range descriptor from %s",
-							row.Key,
-						)
+				descriptors := make([]roachpb.RangeDescriptor, 0, len(rows))
+
+				for _, row := range rows {
+					var desc roachpb.RangeDescriptor
+					err := row.ValueProto(&desc)
+					if err != nil {
+						return errors.Wrapf(err, "unable to unmarshal range descriptor from %s", row.Key)
+					}
+
+					if _, ok := seenInMeta1[desc.RangeID]; ok {
+						continue
+					}
+
+					// In small enough clusters it's possible for the same range
+					// descriptor to be stored in both meta1 and meta2. This
+					// happens when the first range spans part of the user
+					// keyspace. Consider when r1 is [/Min,
+					// /System/NodeLiveness); we'll store the value in
+					// /meta2/r1.EndKey and in /meta1/KeyMax[1]. We'll then want
+					// to de-duplicate some of these descriptors during our
+					// iteration, checking to see if we've seen them before in
+					// meta1.
+					//
+					// [1]: See kvserver.rangeAddressing.
+					descriptors = append(descriptors, desc)
+					if keys.InMeta1(keys.RangeMetaKey(desc.StartKey)) {
+						seenInMeta1[desc.RangeID] = struct{}{}
 					}
 				}
 
 				// Invoke fn with the current chunk (of size ~blockSize) of
 				// range descriptors.
-				if err := fn(descriptors...); err != nil {
-					return err
-				}
-
-				return nil
+				return fn(descriptors...)
 			})
-	}); err != nil {
-		return err
-	}
-
-	return nil
+	})
 }
 
 // DB provides exposes the underlying *kv.DB instance.

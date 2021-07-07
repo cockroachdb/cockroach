@@ -36,6 +36,7 @@ go_test(
     ],
     embed = [":migrationcluster"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv/kvserver",
         "//pkg/migration/nodelivenesstest",
         "//pkg/roachpb",
