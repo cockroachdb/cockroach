@@ -211,7 +211,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 				t.L(),
 				filepath.Join(t.ArtifactsDir(), "prometheus-snapshot.tar.gz"),
 			); err != nil {
-				shout(ctx, t.L(), os.Stderr, "failed to get prometheus snapshot: %v", err)
+				t.L().Printf("failed to get prometheus snapshot: %v", err)
 			}
 		}()
 
