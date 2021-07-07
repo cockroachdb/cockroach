@@ -89,6 +89,26 @@ func (r *PebbleFileRegistry) Load() error {
 	if err = protoutil.Unmarshal(b, r.mu.currProto); err != nil {
 		return err
 	}
+	// Delete all unnecessary entries to reduce registry size.
+	if err := r.maybeDeleteUnencryptedFileEntries(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *PebbleFileRegistry) maybeDeleteUnencryptedFileEntries() error {
+	newProto := &enginepb.FileRegistry{}
+	proto.Merge(newProto, r.mu.currProto)
+	filesChanged := false
+	for filename, entry := range newProto.Files {
+		if isUnencrypted(entry) {
+			delete(newProto.Files, filename)
+			filesChanged = true
+		}
+	}
+	if filesChanged {
+		return r.writeRegistry(newProto)
+	}
 	return nil
 }
 
@@ -104,7 +124,7 @@ func (r *PebbleFileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
 func (r *PebbleFileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) error {
 	// We choose not to store an entry for unencrypted files since the absence of
 	// a file in the file registry implies that it is unencrypted.
-	if entry != nil && entry.EnvType == enginepb.EnvType_Plaintext {
+	if isUnencrypted(entry) {
 		return r.MaybeDeleteEntry(filename)
 	}
 
@@ -230,4 +250,8 @@ func (r *PebbleFileRegistry) getRegistryCopy() *enginepb.FileRegistry {
 	rv := &enginepb.FileRegistry{}
 	proto.Merge(rv, r.mu.currProto)
 	return rv
+}
+
+func isUnencrypted(entry *enginepb.FileEntry) bool {
+	return entry == nil || entry.EnvType == enginepb.EnvType_Plaintext
 }
