@@ -125,9 +125,9 @@ Examples:
 				return err
 			}
 			if !listBench {
-				registerTests(&r)
+				RegisterTests(&r)
 			} else {
-				registerBenchmarks(&r)
+				RegisterBenchmarks(&r)
 			}
 
 			matchedTests := r.List(context.Background(), args)
@@ -160,7 +160,7 @@ failed, it is 10. Any other exit status reports a problem with the test
 runner itself.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runTests(registerTests, cliCfg{
+			return runTests(RegisterTests, cliCfg{
 				args:                   args,
 				count:                  count,
 				cpuQuota:               cpuQuota,
@@ -193,7 +193,7 @@ runner itself.
 		Short:        "run automated benchmarks on cockroach cluster",
 		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runTests(registerBenchmarks, cliCfg{
+			return runTests(RegisterBenchmarks, cliCfg{
 				args:                   args,
 				count:                  count,
 				cpuQuota:               cpuQuota,

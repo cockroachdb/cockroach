@@ -15,11 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 )
 
-func registerTests(r registry.Registry) {
-	// Helpful shell pipeline to generate the list below:
-	//
-	// grep -h -E 'func register[^(]+\(.registry.Registry\) {' pkg/cmd/roachtest/*.go | grep -E -o 'register[^(]+' | grep -E -v '^register(Tests|Benchmarks)$' | grep -v '^\w*Bench$' | sort -f | awk '{printf "\t%s(r)\n", $0}'
-
+// RegisterTests registers all tests to the Registry. This powers `roachtest run`.
+func RegisterTests(r registry.Registry) {
 	registerAcceptance(r)
 	registerActiveRecord(r)
 	registerAllocator(r)
@@ -120,11 +117,11 @@ func registerTests(r registry.Registry) {
 	registerMultiTenantUpgrade(r)
 }
 
-func registerBenchmarks(r registry.Registry) {
-	// Helpful shell pipeline to generate the list below:
-	//
-	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -v '^registerTests$' | grep '^\w*Bench$' | sort | awk '{printf "\t%s(r)\n", $0}'
-
+// RegisterBenchmarks registers all benchmarks to the registry. This powers `roachtest bench`.
+//
+// TODO(tbg): it's unclear that `roachtest bench` is that useful, perhaps we make everything
+// a roachtest but use a `bench` tag to determine what tests to understand as benchmarks.
+func RegisterBenchmarks(r registry.Registry) {
 	registerIndexesBench(r)
 	registerTPCCBench(r)
 	registerKVBench(r)
