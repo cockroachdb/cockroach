@@ -405,6 +405,14 @@ func (s *notifyFlushSink) Flush(ctx context.Context) error {
 
 var _ Sink = (*notifyFlushSink)(nil)
 
+// feedInjectable is the subset of the
+// TestServerInterface/TestTenantInterface needed for depInjector to
+// work correctly.
+type feedInjectable interface {
+	JobRegistry() interface{}
+	DistSQLServer() interface{}
+}
+
 // depInjector facilitates dependency injection to provide orchestration
 // between test feed and the changefeed itself.
 // A single instance of depInjector should be used per feed factory.
@@ -420,7 +428,7 @@ type depInjector struct {
 }
 
 // newDepInjector configures specified server with necessary hooks and knobs.
-func newDepInjector(s serverutils.TestServerInterface) *depInjector {
+func newDepInjector(s feedInjectable) *depInjector {
 	di := &depInjector{
 		startedJobs: make(map[jobspb.JobID]*jobFeed),
 	}

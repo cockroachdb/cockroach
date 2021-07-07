@@ -1386,7 +1386,7 @@ func (cf *changeFrontier) maybeProtectTimestamp(
 	txn *kv.Txn,
 	resolved hlc.Timestamp,
 ) error {
-	if cf.isSinkless() || !cf.frontier.schemaChangeBoundaryReached() || !cf.shouldProtectBoundaries() {
+	if cf.isSinkless() || cf.isTenant() || !cf.frontier.schemaChangeBoundaryReached() || !cf.shouldProtectBoundaries() {
 		return nil
 	}
 
@@ -1467,6 +1467,12 @@ func (cf *changeFrontier) ConsumerClosed() {
 // have a job.
 func (cf *changeFrontier) isSinkless() bool {
 	return cf.spec.JobID == 0
+}
+
+// isTenant() bool returns true if this changeFrontier is running on a
+// tenant.
+func (cf *changeFrontier) isTenant() bool {
+	return !cf.flowCtx.Codec().ForSystemTenant()
 }
 
 // type to make embedding span.Frontier in schemaChangeFrontier convenient.

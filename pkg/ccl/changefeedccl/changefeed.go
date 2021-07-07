@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -56,6 +57,10 @@ func createProtectedTimestampRecord(
 	resolved hlc.Timestamp,
 	progress *jobspb.ChangefeedProgress,
 ) error {
+	if !codec.ForSystemTenant() {
+		return errors.AssertionFailedf("createProtectedTimestampRecord called on tenant-based changefeed")
+	}
+
 	progress.ProtectedTimestampRecord = uuid.MakeV4()
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v",
 		progress.ProtectedTimestampRecord, resolved)

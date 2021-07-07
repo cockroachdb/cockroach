@@ -320,6 +320,14 @@ type testServerShim struct {
 	sqlServer serverutils.TestTenantInterface
 }
 
+func (t *testServerShim) DistSQLServer() interface{} {
+	return t.sqlServer.DistSQLServer()
+}
+
+func (t *testServerShim) JobRegistry() interface{} {
+	return t.sqlServer.JobRegistry()
+}
+
 func (t *testServerShim) ServingSQLAddr() string {
 	return t.sqlServer.SQLAddr()
 }

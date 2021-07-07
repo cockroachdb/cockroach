@@ -81,6 +81,7 @@ go_library(
         "//pkg/util/bitarray",
         "//pkg/util/bufalloc",
         "//pkg/util/encoding",
+        "//pkg/util/errorutil",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
