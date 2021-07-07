@@ -45,7 +45,7 @@ func (sqlExecCtx *ExecContext) RunQueryAndFormatResults(
 	startTime := timeutil.Now()
 	rows, isMultiStatementQuery, err := fn(conn)
 	if err != nil {
-		return handleCopyError(conn, err)
+		return err
 	}
 	defer func() {
 		closeErr := rows.Close()
@@ -142,21 +142,6 @@ func (sqlExecCtx *ExecContext) RunQueryAndFormatResults(
 			return nil
 		}
 	}
-}
-
-// handleCopyError ensures the user is properly informed when they issue
-// a COPY statement somewhere in their input.
-func handleCopyError(conn *sqlConn, err error) error {
-	if !strings.HasPrefix(err.Error(), "pq: unknown response for simple query: 'G'") {
-		return err
-	}
-
-	// The COPY statement has hosed the connection by putting the
-	// protocol in a state that lib/pq cannot understand any more. Reset
-	// it.
-	_ = conn.Close()
-	conn.reconnecting = true
-	return errors.New("woops! COPY has confused this client! Suggestion: use 'psql' for COPY")
 }
 
 // maybeShowTimes displays the execution time if show_times has been set.
