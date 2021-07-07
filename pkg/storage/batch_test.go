@@ -1100,7 +1100,7 @@ func TestDecodeKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	e := newPebbleInMem(
+	e := NewInMem(
 		context.Background(),
 		roachpb.Attributes{},
 		1<<20,   /* cacheSize */
