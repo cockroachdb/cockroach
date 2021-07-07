@@ -406,7 +406,7 @@ func registerBackup(r registry.Registry) {
 
 			// Use a time slightly in the past to avoid "cannot specify timestamp in the future" errors.
 			tFull := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
-			m = newMonitor(ctx, t, c)
+			m = c.NewMonitor(ctx, t)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`full backup`)
 				_, err := conn.ExecContext(ctx,
