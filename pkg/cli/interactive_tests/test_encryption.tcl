@@ -57,7 +57,9 @@ send "$argv debug encryption-status $storedir --enterprise-encryption=path=$stor
 eexpect "    \"Active\": true,\r\n    \"Type\": \"Plaintext\","
 # Try starting without the encryption flag.
 send "$argv start-single-node --insecure --store=$storedir\r"
-eexpect "encryption was used on this store before, but no encryption flags specified."
+eexpect "node starting"
+interrupt
+eexpect "shutdown completed"
 end_test
 
 start_test "Restart with AES-128."
