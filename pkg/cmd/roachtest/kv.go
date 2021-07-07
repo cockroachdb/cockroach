@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -83,19 +84,19 @@ func registerKV(r registry.Registry) {
 		}
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrencyMultiplier := 64
 			if opts.concMultiplier != 0 {
 				concurrencyMultiplier = opts.concMultiplier
 			}
-			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*concurrencyMultiplier))
+			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*concurrencyMultiplier))
 
 			splits := " --splits=" + strconv.Itoa(computeNumSplits(opts))
 			if opts.duration == 0 {
 				opts.duration = 10 * time.Minute
 			}
-			duration := " --duration=" + ifLocal("10s", opts.duration.String())
+			duration := " --duration=" + ifLocal(c, "10s", opts.duration.String())
 			var readPercent string
 			if opts.spanReads {
 				// SFU makes sense only if we repeat writes to the same key. Here
@@ -107,7 +108,7 @@ func registerKV(r registry.Registry) {
 			} else {
 				readPercent = fmt.Sprintf(" --read-percent=%d", opts.readPercent)
 			}
-			histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
+			histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
 			var batchSize string
 			if opts.batchSize > 0 {
 				batchSize = fmt.Sprintf(" --batch=%d", opts.batchSize)
@@ -271,7 +272,7 @@ func registerKVContention(r registry.Registry) {
 			}
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				// Write to a small number of keys to generate a large amount of
 				// contention. Use a relatively high amount of concurrency and
@@ -322,7 +323,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 				if lastDown {
 					n--
 				}
-				m := c.NewMonitor(ctx, t, c.Range(1, n))
+				m := c.NewMonitor(ctx, c.Range(1, n))
 				m.Go(func(ctx context.Context) error {
 					t.WorkerStatus(cmd)
 					defer t.WorkerStatus()
@@ -334,7 +335,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			waitForFullReplication(t, db)
+			tests.WaitFor3XReplication(t, db)
 
 			qps := func(f func()) float64 {
 
@@ -407,7 +408,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			waitForFullReplication(t, db)
+			tests.WaitFor3XReplication(t, db)
 
 			t.Status("initializing workload")
 
@@ -417,7 +418,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			splitCmd := "./workload run kv --init --max-ops=1 --splits 100 {pgurl:1}"
 			c.Run(ctx, c.Node(nodes+1), splitCmd)
 
-			m := c.NewMonitor(ctx, t, c.Nodes(1, nodes))
+			m := c.NewMonitor(ctx, c.Nodes(1, nodes))
 
 			// specifiedQPS is going to be the --max-rate for the kv workload.
 			const specifiedQPS = 1000
@@ -621,10 +622,10 @@ func registerKVSplits(r registry.Registry) {
 				))
 
 				t.Status("running workload")
-				m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+				m := c.NewMonitor(ctx, c.Range(1, nodes))
 				m.Go(func(ctx context.Context) error {
-					concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-					splits := " --splits=" + ifLocal("2000", fmt.Sprint(item.splits))
+					concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
+					splits := " --splits=" + ifLocal(c, "2000", fmt.Sprint(item.splits))
 					cmd := fmt.Sprintf(
 						"./workload run kv --init --max-ops=1"+
 							concurrency+splits+
@@ -652,7 +653,7 @@ func registerKVScalability(r registry.Registry) {
 			c.Start(ctx, c.Range(1, nodes))
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf("./workload run kv --init --read-percent=%d "+
 					"--splits=1000 --duration=1m "+fmt.Sprintf("--concurrency=%d", i)+
@@ -712,9 +713,9 @@ func registerKVRangeLookups(r registry.Registry) {
 				conns[i].Close()
 			}
 		}()
-		waitForFullReplication(t, conns[0])
+		tests.WaitFor3XReplication(t, conns[0])
 
-		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
 			cmd := "./workload init kv --splits=1000 {pgurl:1}"
@@ -722,7 +723,7 @@ func registerKVRangeLookups(r registry.Registry) {
 				return err
 			}
 			close(doneInit)
-			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
 			duration := " --duration=10m"
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is

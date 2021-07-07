@@ -38,7 +38,7 @@ func registerDiskFull(r registry.Registry) {
 			c.Start(ctx, c.Range(1, nodes))
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
 					"./workload run kv --tolerate-errors --init --read-percent=0"+
@@ -74,7 +74,7 @@ func registerDiskFull(r registry.Registry) {
 					m.ExpectDeath()
 					if err := c.StartE(ctx, c.Node(n)); err == nil {
 						t.Fatalf("node successfully started unexpectedly")
-					} else if strings.Contains(GetStderr(err), "a panic has occurred") {
+					} else if strings.Contains(cluster.GetStderr(err), "a panic has occurred") {
 						t.Fatal(err)
 					}
 				}

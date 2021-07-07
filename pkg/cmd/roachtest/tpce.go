@@ -68,7 +68,7 @@ func registerTPCE(r registry.Registry) {
 			}
 		}()
 
-		m := c.NewMonitor(ctx, t, roachNodes)
+		m := c.NewMonitor(ctx, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			const dockerRun = `sudo docker run cockroachdb/tpc-e:latest`
 

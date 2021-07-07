@@ -135,12 +135,12 @@ func (ch *Chaos) Runner(
 			ch.sendEvent(ChaosEventTypePreShutdown, target)
 			if ch.DrainAndQuit {
 				l.Printf("stopping and draining %v\n", target)
-				if err := c.StopE(ctx, target, option.StopArgs("--sig=15"), withWorkerAction()); err != nil {
+				if err := c.StopE(ctx, target, option.StopArgs("--sig=15"), option.WithWorkerAction()); err != nil {
 					return errors.Wrapf(err, "could not stop node %s", target)
 				}
 			} else {
 				l.Printf("killing %v\n", target)
-				if err := c.StopE(ctx, target, withWorkerAction()); err != nil {
+				if err := c.StopE(ctx, target, option.WithWorkerAction()); err != nil {
 					return errors.Wrapf(err, "could not stop node %s", target)
 				}
 			}
@@ -151,7 +151,7 @@ func (ch *Chaos) Runner(
 				// NB: the roachtest harness checks that at the end of the test,
 				// all nodes that have data also have a running process.
 				l.Printf("restarting %v (chaos is done)\n", target)
-				if err := c.StartE(ctx, target, withWorkerAction()); err != nil {
+				if err := c.StartE(ctx, target, option.WithWorkerAction()); err != nil {
 					return errors.Wrapf(err, "could not restart node %s", target)
 				}
 				return nil
@@ -163,7 +163,7 @@ func (ch *Chaos) Runner(
 				// already canceled.
 				tCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
-				if err := c.StartE(tCtx, target, withWorkerAction()); err != nil {
+				if err := c.StartE(tCtx, target, option.WithWorkerAction()); err != nil {
 					return errors.Wrapf(err, "could not restart node %s", target)
 				}
 				return ctx.Err()
@@ -172,7 +172,7 @@ func (ch *Chaos) Runner(
 			l.Printf("restarting %v after %s of downtime\n", target, downTime)
 			t.Reset(period)
 			ch.sendEvent(ChaosEventTypePreStartup, target)
-			if err := c.StartE(ctx, target, withWorkerAction()); err != nil {
+			if err := c.StartE(ctx, target, option.WithWorkerAction()); err != nil {
 				return errors.Wrapf(err, "could not restart node %s", target)
 			}
 			ch.sendEvent(ChaosEventTypeStartupComplete, target)

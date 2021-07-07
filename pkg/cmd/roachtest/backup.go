@@ -59,7 +59,7 @@ func importBankDataSplit(
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
 
-	if local {
+	if c.IsLocal() {
 		dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 	}
 
@@ -93,7 +93,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 	loadBackupData := func(ctx context.Context, t test.Test, c cluster.Cluster) string {
 		// This aught to be enough since this isn't a performance test.
 		rows := rows15GiB
-		if local {
+		if c.IsLocal() {
 			// Needs to be sufficiently large to give each processor a good chunk of
 			// works so the job doesn't complete immediately.
 			rows = rows5GiB
@@ -146,7 +146,9 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
 // artifact directory and returns a method that when invoked records a tick.
-func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time.Duration) func() {
+func initBulkJobPerfArtifacts(
+	ctx context.Context, t test.Test, testName string, timeout time.Duration,
+) func() {
 	// Register a named histogram to track the total time the bulk job took.
 	// Roachperf uses this information to display information about this
 	// roachtest.
@@ -159,7 +161,7 @@ func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time
 	// Create the stats file where the roachtest will write perf artifacts.
 	// We probably don't want to fail the roachtest if we are unable to
 	// collect perf stats.
-	statsFile := perfArtifactsDir + "/stats.json"
+	statsFile := t.PerfArtifactsDir() + "/stats.json"
 	err := os.MkdirAll(filepath.Dir(statsFile), 0755)
 	if err != nil {
 		log.Errorf(ctx, "%s failed to create perf artifacts directory %s: %s", testName,
@@ -188,13 +190,13 @@ func registerBackup(r registry.Registry) {
 		Cluster: backup2TBSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
-			if local {
+			if c.IsLocal() {
 				rows = 100
 			}
 			dest := importBankData(ctx, rows, t, c)
-			tick := initBulkJobPerfArtifacts(ctx, "backup/2TB", 2*time.Hour)
+			tick := initBulkJobPerfArtifacts(ctx, t, "backup/2TB", 2*time.Hour)
 
-			m := c.NewMonitor(ctx, t)
+			m := c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
 				// Tick once before starting the backup, and once after to capture the
@@ -207,7 +209,7 @@ func registerBackup(r registry.Registry) {
 
 				// Upload the perf artifacts to any one of the nodes so that the test
 				// runner copies it into an appropriate directory path.
-				if err := c.PutE(ctx, t.L(), perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+				if err := c.PutE(ctx, t.L(), t.PerfArtifactsDir(), t.PerfArtifactsDir(), c.Node(1)); err != nil {
 					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 				}
 				return nil
@@ -222,19 +224,19 @@ func registerBackup(r registry.Registry) {
 		Owner:   registry.OwnerBulkIO,
 		Cluster: KMSSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if cloud == spec.GCE {
+			if c.Spec().Cloud == spec.GCE {
 				t.Skip("backupKMS roachtest is only configured to run on AWS", "")
 			}
 
 			// ~10GiB - which is 30Gib replicated.
 			rows := rows30GiB
-			if local {
+			if c.IsLocal() {
 				rows = 100
 			}
 			dest := importBankData(ctx, rows, t, c)
 
 			conn := c.Conn(ctx, 1)
-			m := c.NewMonitor(ctx, t)
+			m := c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				_, err := conn.ExecContext(ctx, `
 					CREATE DATABASE restoreA;
@@ -246,7 +248,7 @@ func registerBackup(r registry.Registry) {
 
 			var kmsURIA, kmsURIB string
 			var err error
-			m = c.NewMonitor(ctx, t)
+			m = c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running encrypted backup`)
 				kmsURIA, err = getAWSKMSURI(KMSRegionAEnvVar, KMSKeyARNAEnvVar)
@@ -267,7 +269,7 @@ func registerBackup(r registry.Registry) {
 			m.Wait()
 
 			// Restore the encrypted BACKUP using each of KMS URI A and B separately.
-			m = c.NewMonitor(ctx, t)
+			m = c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`restore using KMSURIA`)
 				if _, err := conn.ExecContext(ctx,
@@ -349,7 +351,7 @@ func registerBackup(r registry.Registry) {
 			conn := c.Conn(ctx, 1)
 
 			duration := 5 * time.Minute
-			if local {
+			if c.IsLocal() {
 				duration = 5 * time.Second
 			}
 			warehouses := 10
@@ -372,7 +374,7 @@ func registerBackup(r registry.Registry) {
 			}
 			c.Run(ctx, c.Node(1), cmd...)
 
-			m := c.NewMonitor(ctx, t)
+			m := c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				_, err := conn.ExecContext(ctx, `
 					CREATE DATABASE restore_full;
@@ -404,7 +406,7 @@ func registerBackup(r registry.Registry) {
 
 			// Use a time slightly in the past to avoid "cannot specify timestamp in the future" errors.
 			tFull := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
-			m = newMonitor(ctx, t, c)
+			m = c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`full backup`)
 				_, err := conn.ExecContext(ctx,
@@ -423,7 +425,7 @@ func registerBackup(r registry.Registry) {
 			}
 
 			tInc := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
-			m = newMonitor(ctx, t, c)
+			m = c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`incremental backup`)
 				_, err := conn.ExecContext(ctx,
@@ -446,7 +448,7 @@ func registerBackup(r registry.Registry) {
 			})
 			m.Wait()
 
-			m = c.NewMonitor(ctx, t)
+			m = c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`restore full`)
 				if _, err := conn.ExecContext(ctx,

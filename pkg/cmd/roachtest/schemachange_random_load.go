@@ -31,7 +31,7 @@ type randomLoadBenchSpec struct {
 
 func registerSchemaChangeRandomLoad(r registry.Registry) {
 	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
-	if cloud == spec.AWS {
+	if r.MakeClusterSpec(1).Cloud == spec.AWS {
 		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
 	}
 	geoZonesStr := strings.Join(geoZones, ",")
@@ -49,7 +49,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
-			if local {
+			if c.IsLocal() {
 				maxOps = 200
 				concurrency = 2
 			}
@@ -147,7 +147,7 @@ func runSchemaChangeRandomLoad(
 		"./workload run schemachange --verbose=1",
 		"--tolerate-errors=false",
 		// Save the histograms so that they can be reported to https://roachperf.crdb.dev/.
-		" --histograms=" + perfArtifactsDir + "/stats.json",
+		" --histograms=" + t.PerfArtifactsDir() + "/stats.json",
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
 		fmt.Sprintf("--txn-log %s", filepath.Join(string(storeDirectory), "transactions.json")),

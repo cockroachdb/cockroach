@@ -21,13 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 	const nodes = 6
 	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
-	if cloud == spec.AWS {
+	if r.MakeClusterSpec(1).Cloud == spec.AWS {
 		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
 	}
 	geoZonesStr := strings.Join(geoZones, ",")
@@ -48,7 +49,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			conn := c.Conn(ctx, 1)
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, t, roachNodes)
+			m := c.NewMonitor(ctx, roachNodes)
 			m.Go(func(ctx context.Context) error {
 				secondary := " --secondary-indexes=" + strconv.Itoa(secondaryIndexes)
 				initCmd := "./workload init indexes" + secondary + " {pgurl:1}"
@@ -56,7 +57,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 
 				// Set lease preferences so that all leases for the table are
 				// located in the availability zone with the load generator.
-				if !local {
+				if !c.IsLocal() {
 					t.L().Printf("setting lease preferences")
 					if _, err := conn.ExecContext(ctx, fmt.Sprintf(`
 						ALTER TABLE indexes.indexes
@@ -72,7 +73,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 					t.L().Printf("checking replica balance")
 					retryOpts := retry.Options{MaxBackoff: 15 * time.Second}
 					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-						waitForUpdatedReplicationReport(ctx, t, conn)
+						tests.WaitForUpdatedReplicationReport(ctx, t, conn)
 
 						var ok bool
 						if err := conn.QueryRowContext(ctx, `
@@ -122,9 +123,9 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 				}
 
 				payload := " --payload=64"
-				concurrency := ifLocal("", " --concurrency="+strconv.Itoa(conc))
-				duration := " --duration=" + ifLocal("10s", "10m")
-				runCmd := fmt.Sprintf("./workload run indexes --histograms="+perfArtifactsDir+"/stats.json"+
+				concurrency := ifLocal(c, "", " --concurrency="+strconv.Itoa(conc))
+				duration := " --duration=" + ifLocal(c, "10s", "10m")
+				runCmd := fmt.Sprintf("./workload run indexes --histograms="+t.PerfArtifactsDir()+"/stats.json"+
 					payload+concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, loadNode, runCmd)
 				return nil

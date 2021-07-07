@@ -135,7 +135,7 @@ func registerRebalanceLoad(r registry.Registry) {
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if local {
+			if c.IsLocal() {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 			}
@@ -147,7 +147,7 @@ func registerRebalanceLoad(r registry.Registry) {
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if local {
+			if c.IsLocal() {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 			}

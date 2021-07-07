@@ -99,7 +99,7 @@ func registerHotSpotSplits(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/pull/45323.
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if local {
+			if c.IsLocal() {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 			}

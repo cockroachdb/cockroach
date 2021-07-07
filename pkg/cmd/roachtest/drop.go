@@ -38,7 +38,7 @@ func registerDrop(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes), option.StartArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
 
-		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			t.WorkerStatus("importing TPCC fixture")
 			c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
@@ -165,7 +165,7 @@ func registerDrop(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.
-			if local {
+			if c.IsLocal() {
 				numNodes = 4
 				warehouses = 1
 				fmt.Printf("running with w=%d,nodes=%d in local mode\n", warehouses, numNodes)

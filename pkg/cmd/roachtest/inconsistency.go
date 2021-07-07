@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	_ "github.com/lib/pq"
 )
 
@@ -48,7 +49,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		waitForFullReplication(t, db)
+		tests.WaitFor3XReplication(t, db)
 		_, db = db.Close(), nil
 	}
 
@@ -89,7 +90,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"hex:016b1202000174786e2d0000000000000000000000000000000000 "+
 		"hex:120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20302a004a00")
 
-	m := c.NewMonitor(ctx, t)
+	m := c.NewMonitor(ctx)
 	// If the consistency check "fails to fail", the verbose logging will help
 	// determine why.
 	c.Start(ctx, nodes, option.StartArgs("--args='--vmodule=consistency_queue=5,replica_consistency=5,queue=5'"))

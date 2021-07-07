@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
@@ -493,7 +494,7 @@ func (s tpchVecSmithcmpTest) preTestRunHook(
 	s.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 	const smithcmpSHA = "a3f41f5ba9273249c5ecfa6348ea8ee3ac4b77e3"
 	node := c.Node(1)
-	if local && runtime.GOOS != "linux" {
+	if c.IsLocal() && runtime.GOOS != "linux" {
 		t.Fatalf("must run on linux os, found %s", runtime.GOOS)
 	}
 	// This binary has been manually compiled using
@@ -547,7 +548,7 @@ func runTPCHVec(
 	conn := c.Conn(ctx, 1)
 	disableAutoStats(t, conn)
 	t.Status("restoring TPCH dataset for Scale Factor 1")
-	if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, c.NewMonitor(ctx, t), c.All()); err != nil {
+	if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, c.NewMonitor(ctx), c.All()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -556,7 +557,7 @@ func runTPCHVec(
 	}
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
-	waitForFullReplication(t, conn)
+	tests.WaitFor3XReplication(t, conn)
 
 	testRun(ctx, t, c, conn, testCase)
 	testCase.postTestRunHook(ctx, t, c, conn)

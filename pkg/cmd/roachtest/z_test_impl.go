@@ -403,6 +403,10 @@ func (t *testImpl) ArtifactsDir() string {
 	return t.artifactsDir
 }
 
+func (t *testImpl) PerfArtifactsDir() string {
+	return perfArtifactsDir
+}
+
 // IsBuildVersion returns true if the build version is greater than or equal to
 // minVersion. This allows a test to optionally perform additional checks
 // depending on the cockroach version it is running against. Note that the

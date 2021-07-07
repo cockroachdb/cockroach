@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -81,7 +82,7 @@ DROP TABLE test.t;
 }
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
-	predecessorVersion, err := PredecessorVersion(*t.BuildVersion())
+	predecessorVersion, err := tests.PredecessorVersion(*t.BuildVersion())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +229,7 @@ type versionUpgradeTest struct {
 
 func newVersionUpgradeTest(c cluster.Cluster, steps ...versionStep) *versionUpgradeTest {
 	return &versionUpgradeTest{
-		goOS:  ifLocal(runtime.GOOS, "linux"),
+		goOS:  ifLocal(c, runtime.GOOS, "linux"),
 		c:     c,
 		steps: steps,
 	}
@@ -569,7 +570,7 @@ func makeVersionFixtureAndFatal(
 		useLocalBinary = true
 	}
 
-	predecessorVersion, err := PredecessorVersion(*version.MustParse("v" + makeFixtureVersion))
+	predecessorVersion, err := tests.PredecessorVersion(*version.MustParse("v" + makeFixtureVersion))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -666,7 +667,7 @@ func importTPCCStep(
 		}
 		// Use a monitor so that we fail cleanly if the cluster crashes
 		// during import.
-		m := u.c.NewMonitor(ctx, t, crdbNodes)
+		m := u.c.NewMonitor(ctx, crdbNodes)
 		m.Go(func(ctx context.Context) error {
 			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), cmd)
 		})
@@ -685,7 +686,7 @@ func importLargeBankStep(oldV string, rows int, crdbNodes option.NodeListOption)
 
 		// Use a monitor so that we fail cleanly if the cluster crashes
 		// during import.
-		m := u.c.NewMonitor(ctx, t, crdbNodes)
+		m := u.c.NewMonitor(ctx, crdbNodes)
 		m.Go(func(ctx context.Context) error {
 			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), binary, "workload", "fixtures", "import", "bank",
 				"--payload-bytes=10240", "--rows="+fmt.Sprint(rows), "--seed=4", "--db=bigbank")
