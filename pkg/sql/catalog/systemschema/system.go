@@ -387,7 +387,7 @@ CREATE TABLE system.statement_statistics (
     metadata   JSONB NOT NULL,
     statistics JSONB NOT NULL,
 
-    plan BYTES NOT NULL,
+    plan JSONB NOT NULL,
 
     PRIMARY KEY (aggregated_ts, fingerprint_id, plan_hash, app_name, node_id)
       USING HASH WITH BUCKET_COUNT = 8,
@@ -1845,7 +1845,7 @@ var (
 			{Name: "agg_interval", ID: 7, Type: types.Interval, Nullable: false},
 			{Name: "metadata", ID: 8, Type: types.Jsonb, Nullable: false},
 			{Name: "statistics", ID: 9, Type: types.Jsonb, Nullable: false},
-			{Name: "plan", ID: 10, Type: types.Bytes, Nullable: false},
+			{Name: "plan", ID: 10, Type: types.Jsonb, Nullable: false},
 			{
 				Name:        "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
 				ID:          11,
