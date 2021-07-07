@@ -344,7 +344,7 @@ func Example_sql_lex() {
 	c := NewCLITest(TestCLIParams{Insecure: true})
 	defer c.Cleanup()
 
-	conn := makeSQLConn(fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
+	conn := sqlConnCtx.MakeSQLConn(fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
 		security.RootUser, c.ServingSQLAddr()))
 	defer func() {
 		if err := conn.Close(); err != nil {
