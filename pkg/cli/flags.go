@@ -961,6 +961,7 @@ func init() {
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
 
 	}
+
 	// Multi-tenancy proxy command flags.
 	{
 		f := mtStartSQLProxyCmd.Flags()
@@ -982,6 +983,11 @@ func init() {
 	{
 		f := mtTestDirectorySvr.Flags()
 		intFlag(f, &testDirectorySvrContext.port, cliflags.TestDirectoryListenPort)
+	}
+
+	// userfile upload command.
+	{
+		boolFlag(userFileUploadCmd.Flags(), &userfileCtx.recursive, cliflags.Recursive)
 	}
 }
 

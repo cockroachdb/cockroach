@@ -75,6 +75,12 @@ type TestCLIParams struct {
 // generated (temp directory) file path.
 const testTempFilePrefix = "test-temp-prefix-"
 
+// testUserfileUploadTempDirPrefix is a marker to be used as a prefix for the
+// temp directory created in the Example_userfile_upload_recursive() test.
+// It is used to extract the filepath.Base(), i.e. the directory name,
+// from the uniquely generated (temp directory) file path.
+const testUserfileUploadTempDirPrefix = "test-userfile-upload-temp-dir-"
+
 func (c *TestCLI) fail(err interface{}) {
 	if c.t != nil {
 		defer c.logScope.Close(c.t)
@@ -340,14 +346,22 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 		}
 		args = append(args, origArgs[1:]...)
 
-		// `nodelocal upload` CLI tests create test files in unique temp
-		// directories. Given that the expected output for such tests is defined as
-		// a static comment, it is not possible to match against the full file path.
-		// So, we trim the file path upto the sentinel prefix marker, and use only
-		// the file name for comparing against the expected output.
+		// `nodelocal upload` and `userfile upload -r` CLI tests create unique temp
+		// directories with random numbers in their names. Given that the expected
+		// output for such tests is defined as a static comment, it is not possible
+		// to match against the full path. So, we trim the paths as below.
 		if len(origArgs) >= 3 && strings.Contains(origArgs[2], testTempFilePrefix) {
 			splitFilePath := strings.Split(origArgs[2], testTempFilePrefix)
 			origArgs[2] = splitFilePath[1]
+		}
+		if len(origArgs) >= 4 && strings.Contains(origArgs[3], testUserfileUploadTempDirPrefix) {
+			hasTrailingSlash := strings.HasSuffix(origArgs[3], "/")
+			origArgs[3] = filepath.Base(origArgs[3])
+			// Maintain trailing slash because the behavior of `userfile upload -r`
+			// depends on it.
+			if hasTrailingSlash {
+				origArgs[3] += "/"
+			}
 		}
 
 		if !c.omitArgs {

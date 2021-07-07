@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -80,6 +81,278 @@ func Example_userfile_upload() {
 	// successfully uploaded to userfile://defaultdb.public.userfiles_root/test/file3.csv
 }
 
+func createTestDirWithNontrivialSubtree() (string, func() error, error) {
+	tmpDir, err := ioutil.TempDir("", testUserfileUploadTempDirPrefix)
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func() error {
+		return os.RemoveAll(tmpDir)
+	}
+	testDir := filepath.Join(tmpDir, "testdir")
+	err = os.MkdirAll(filepath.Join(testDir, "d1/d11/d111/d1111"), 0755)
+	if err != nil {
+		return "", cleanup, err
+	}
+	err = os.MkdirAll(filepath.Join(testDir, "d2/d21"), 0755)
+	if err != nil {
+		return "", cleanup, err
+	}
+
+	// Create a nontrivial subtree under 'testdir' by creating and writing the
+	// following five files with different contents:
+	// testdir/d1/test-temp-prefix-f1.csv
+	// testdir/d1/d11/test-temp-prefix-f2.csv
+	// testdir/d1/d11/test-temp-prefix-f3.csv
+	// testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// testdir/d2/d21/test-temp-prefix-f5.csv
+	filesRelativePaths := []string{
+		"d1/" + testTempFilePrefix + "f1.csv",
+		"d1/d11/" + testTempFilePrefix + "f2.csv",
+		"d1/d11/" + testTempFilePrefix + "f3.csv",
+		"d1/d11/d111/d1111/" + testTempFilePrefix + "f4.csv",
+		"d2/d21/" + testTempFilePrefix + "f5.csv",
+	}
+	for i, relPath := range filesRelativePaths {
+		contents := fmt.Sprintf("content %d", i+1)
+		if err := ioutil.WriteFile(filepath.Join(testDir, relPath), []byte(contents), 0666); err != nil {
+			return "", cleanup, err
+		}
+	}
+	return testDir, cleanup, nil
+}
+
+func Example_userfile_upload_recursive() {
+	testDir, cleanup, err := createTestDirWithNontrivialSubtree()
+	defer func() {
+		if cleanup != nil {
+			err = errors.CombineErrors(err, cleanup())
+		}
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	for _, withTrailingSlash := range []bool{true, false} {
+		// In the testcase where no destination is specified, we upload to the same
+		// destination, whether or not a trailing slash exists.
+		// Create a new CLITest for each loop iteration to avoid getting a "file
+		// already exists" error due to this conflict.
+		c := NewCLITest(TestCLIParams{})
+
+		srcDir := testDir
+		if withTrailingSlash {
+			srcDir += "/"
+		}
+		c.RunWithArgs([]string{"userfile", "upload", "-r", srcDir, "foo"})
+		c.RunWithArgs([]string{"userfile", "upload", "-r", srcDir, "/foo/bar/"})
+		c.RunWithArgs([]string{"userfile", "upload", "-r", srcDir, "foo/baz/"})
+		// No destination specified, so we use the filepath.Base() of the source,
+		// i.e. "testdir", as the "directory" name.
+		c.RunWithArgs([]string{"userfile", "upload", "-r", srcDir})
+		c.RunWithArgs([]string{"userfile", "upload", "-r", srcDir, "foo/../bar"})
+		c.RunWithArgs([]string{"userfile", "upload", "-r", srcDir, "foo/./bar"})
+		c.RunWithArgs([]string{"userfile", "upload", "-r", "/dir/does/not/exist", "/foo/foo"})
+		c.RunWithArgs([]string{"userfile", "upload", "-r", srcDir, "/foo/À"})
+		// Test fully qualified URI specifying db.schema.tablename_prefix.
+		c.RunWithArgs([]string{"userfile", "upload", "-r", srcDir, "userfile://defaultdb.public.foo/someDir"})
+		// Test URI with no db.schema.tablename_prefix.
+		c.RunWithArgs([]string{"userfile", "upload", "-r", srcDir, "userfile:///someOtherDir"})
+
+		c.Cleanup()
+	}
+
+	// Output:
+	// userfile upload -r testdir/ foo
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir/ /foo/bar/
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/bar/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/bar/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/bar/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/bar/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/bar/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir/ foo/baz/
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/baz/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/baz/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/baz/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/baz/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/baz/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir/
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/testdir/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/testdir/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/testdir/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/testdir/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir/ foo/../bar
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// ERROR: path /foo/../bar/d1/d11/d111/d1111/test-temp-prefix-f4.csv changes after normalization to /bar/d1/d11/d111/d1111/test-temp-prefix-f4.csv. userfile upload does not permit such path constructs
+	// userfile upload -r testdir/ foo/./bar
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// ERROR: path /foo/./bar/d1/d11/d111/d1111/test-temp-prefix-f4.csv changes after normalization to /foo/bar/d1/d11/d111/d1111/test-temp-prefix-f4.csv. userfile upload does not permit such path constructs
+	// userfile upload -r /dir/does/not/exist /foo/foo
+	// ERROR: lstat /dir/does/not/exist: no such file or directory
+	// userfile upload -r testdir/ /foo/À
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/À/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/À/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/À/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/À/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/À/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir/ userfile://defaultdb.public.foo/someDir
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/someDir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/someDir/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/someDir/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/someDir/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/someDir/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir/ userfile:///someOtherDir
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/someOtherDir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/someOtherDir/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/someOtherDir/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/someOtherDir/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/someOtherDir/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir foo
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/testdir/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/testdir/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/testdir/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/testdir/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir /foo/bar/
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/bar/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/bar/testdir/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/bar/testdir/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/bar/testdir/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/bar/testdir/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir foo/baz/
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/baz/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/baz/testdir/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/baz/testdir/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/baz/testdir/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/baz/testdir/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/testdir/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/testdir/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/testdir/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/testdir/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir foo/../bar
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// ERROR: path /foo/../bar/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv changes after normalization to /bar/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv. userfile upload does not permit such path constructs
+	// userfile upload -r testdir foo/./bar
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// ERROR: path /foo/./bar/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv changes after normalization to /foo/bar/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv. userfile upload does not permit such path constructs
+	// userfile upload -r /dir/does/not/exist /foo/foo
+	// ERROR: lstat /dir/does/not/exist: no such file or directory
+	// userfile upload -r testdir /foo/À
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/À/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/À/testdir/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/À/testdir/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/À/testdir/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/foo/À/testdir/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir userfile://defaultdb.public.foo/someDir
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/someDir/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/someDir/testdir/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/someDir/testdir/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/someDir/testdir/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/someDir/testdir/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+	// userfile upload -r testdir userfile:///someOtherDir
+	// uploading: d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/someOtherDir/testdir/d1/d11/d111/d1111/test-temp-prefix-f4.csv
+	// uploading: d1/d11/test-temp-prefix-f2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/someOtherDir/testdir/d1/d11/test-temp-prefix-f2.csv
+	// uploading: d1/d11/test-temp-prefix-f3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/someOtherDir/testdir/d1/d11/test-temp-prefix-f3.csv
+	// uploading: d1/test-temp-prefix-f1.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/someOtherDir/testdir/d1/test-temp-prefix-f1.csv
+	// uploading: d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/someOtherDir/testdir/d2/d21/test-temp-prefix-f5.csv
+	// successfully uploaded all files in the subtree rooted at testdir
+}
+
 func checkUserFileContent(
 	ctx context.Context,
 	t *testing.T,
@@ -96,6 +369,89 @@ func checkUserFileContent(
 	got, err := ioutil.ReadAll(reader)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(got, expectedContent))
+}
+
+func TestUserFileUploadRecursive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
+	c.omitArgs = true
+
+	testDir, cleanup, err := createTestDirWithNontrivialSubtree()
+	defer func() {
+		if cleanup() != nil {
+			err = errors.CombineErrors(err, cleanup())
+		}
+		require.NoError(t, err)
+	}()
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name        string
+		destination string
+	}{
+		{
+			"destination-not-full-URI",
+			"some/path",
+		},
+		{
+			"full-URI",
+			"userfile://defaultdb.public.foo/some/dir",
+		},
+		{
+			"no-host-URI",
+			"userfile:///some/path/to/a/dir",
+		},
+	} {
+		for _, srcWithTrailingSlash := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s_withTrailingSlash=%t", tc.name, srcWithTrailingSlash), func(t *testing.T) {
+				srcDir := testDir
+				if srcWithTrailingSlash {
+					srcDir = testDir + "/"
+				}
+				_, err := c.RunWithCapture(
+					fmt.Sprintf("userfile upload -r %s %s", srcDir, tc.destination))
+				require.NoError(t, err)
+
+				dstDir := tc.destination
+				// In the case of a trailing slash, the destination directory path needs
+				// to be appended with the name of the source directory.
+				if !srcWithTrailingSlash {
+					dstDir = tc.destination + "/" + filepath.Base(testDir)
+				}
+
+				err = filepath.Walk(testDir,
+					func(path string, info os.FileInfo, err error) error {
+						if err != nil {
+							return err
+						}
+						if info.IsDir() {
+							return nil
+						}
+						relPath := strings.TrimPrefix(path, testDir+"/")
+						destinationFileURI := dstDir + "/" + relPath
+						// Construct the destination URI for testcases where a full URI is not
+						// specified.
+						if tc.name == "destination-not-full-URI" {
+							destinationFileURI = constructUserfileDestinationURI("",
+								filepath.Join(dstDir, relPath), security.RootUserName())
+						}
+
+						fileContent, err := ioutil.ReadFile(path)
+						if err != nil {
+							return err
+						}
+						checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
+							destinationFileURI, fileContent)
+						return nil
+					})
+				require.NoError(t, err)
+			})
+		}
+	}
 }
 
 func TestUserFileUpload(t *testing.T) {
