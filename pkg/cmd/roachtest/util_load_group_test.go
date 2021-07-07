@@ -12,21 +12,13 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLoadGroups(t *testing.T) {
-	cfg := &logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
-	logger, err := cfg.NewLogger("" /* path */)
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, tc := range []struct {
 		numZones, numRoachNodes, numLoadNodes int
 		loadGroups                            loadGroupList
@@ -73,8 +65,8 @@ func TestLoadGroups(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%d/%d/%d", tc.numZones, tc.numRoachNodes, tc.numLoadNodes),
 			func(t *testing.T) {
-				c := &clusterImpl{t: testWrapper{T: t}, l: logger, spec: spec.MakeClusterSpec(spec.GCE, "", tc.numRoachNodes+tc.numLoadNodes)}
-				lg := makeLoadGroups(c, tc.numZones, tc.numRoachNodes, tc.numLoadNodes)
+				l := option.NodeLister{NodeCount: tc.numRoachNodes + tc.numLoadNodes, Fatalf: t.Fatalf}
+				lg := makeLoadGroups(l, tc.numZones, tc.numRoachNodes, tc.numLoadNodes)
 				require.EqualValues(t, lg, tc.loadGroups)
 			})
 	}
