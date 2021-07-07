@@ -46,3 +46,11 @@ run_json_test env TZ=America/New_York stdbuf -eL -oL go test \
 	-exec "../../build/teamcity-go-test-precompiled.sh ./pkg/acceptance/acceptance.test" ./pkg/acceptance \
 	-l "$TMPDIR"
 tc_end_block "Run acceptance tests"
+
+tc_start_block "try to make artifact"
+mkdir -p artifacts/acceptance/foo
+echo '<html><body><script>console.log("insert script here in the future")</script></body></html>' > artifacts/test.html
+echo '<html><body><script>console.log("insert script here in the future")</script></body></html>' > artifacts/test
+echo '<html><body><script>console.log("insert script here in the future")</script></body></html>' > artifacts/acceptance/test.html
+echo '<html><body><script>console.log("insert script here in the future")</script></body></html>' > artifacts/acceptance/test
+tc_end_block "try to make artifact"
