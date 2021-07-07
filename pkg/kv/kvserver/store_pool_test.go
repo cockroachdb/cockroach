@@ -1227,7 +1227,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			},
 			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONED,
 		},
-		// Draining (reports as unavailable).
+		// Draining
 		{
 			liveness: livenesspb.Liveness{
 				NodeID: 1,
@@ -1238,6 +1238,31 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Draining: true,
 			},
 			expected: livenesspb.NodeLivenessStatus_DRAINING,
+		},
+		// Decommissioning that is unavailable.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.UnixNano(),
+				},
+				Draining:   false,
+				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
+			},
+			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+		},
+		// Draining that is unavailable.
+		{
+			liveness: livenesspb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.UnixNano(),
+				},
+				Draining: true,
+			},
+			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
 		},
 	} {
 		t.Run("", func(t *testing.T) {
