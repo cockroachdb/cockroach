@@ -72,8 +72,8 @@ func registerInterleaved(r registry.Registry) {
 		// Always init on an east node.
 		c.Run(ctx, cockroachEast.RandNode(), cmdInit)
 
-		duration := " --duration " + ifLocal("10s", "10m")
-		histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
+		duration := " --duration " + ifLocal(c, "10s", "10m")
+		histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
 
 		createCmd := func(locality string, cockroachNodes option.NodeListOption) string {
 			return fmt.Sprintf(
@@ -108,7 +108,7 @@ func registerInterleaved(r registry.Registry) {
 		)
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx, t, cockroachNodes)
+		m := c.NewMonitor(ctx, cockroachNodes)
 
 		runLocality := func(node option.NodeListOption, cmd string) {
 			m.Go(func(ctx context.Context) error {

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
@@ -137,7 +138,7 @@ func setupTPCC(
 		opts.Start(ctx, t, c)
 		db := c.Conn(ctx, 1)
 		defer db.Close()
-		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
+		tests.WaitFor3XReplication(t, c.Conn(ctx, crdbNodes[0]))
 		switch opts.SetupType {
 		case usingExistingData:
 			// Do nothing.
@@ -237,14 +238,14 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
 	t.Status("waiting")
-	m := c.NewMonitor(ctx, t, crdbNodes)
+	m := c.NewMonitor(ctx, crdbNodes)
 	for i := range workloadInstances {
 		// Make a copy of i for the goroutine.
 		i := i
 		m.Go(func(ctx context.Context) error {
 			t.WorkerStatus(fmt.Sprintf("running tpcc idx %d on %s", i, pgURLs[i]))
 			cmd := fmt.Sprintf(
-				"./cockroach workload run tpcc --warehouses=%d --histograms="+perfArtifactsDir+"/stats.json "+
+				"./cockroach workload run tpcc --warehouses=%d --histograms="+t.PerfArtifactsDir()+"/stats.json "+
 					opts.ExtraRunArgs+" --ramp=%s --duration=%s --prometheus-port=%d --pprofport=%d %s %s",
 				opts.Warehouses,
 				rampDuration,
@@ -324,6 +325,7 @@ func maxSupportedTPCCWarehouses(
 }
 
 func registerTPCC(r registry.Registry) {
+	cloud := r.MakeClusterSpec(1).Cloud
 	headroomSpec := r.MakeClusterSpec(4, spec.CPU(16))
 	r.Add(registry.TestSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
@@ -363,7 +365,7 @@ func registerTPCC(r registry.Registry) {
 
 			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
-			if local {
+			if c.IsLocal() {
 				headroomWarehouses = 10
 			}
 
@@ -393,11 +395,11 @@ func registerTPCC(r registry.Registry) {
 			// The full 6.5m import ran into out of disk errors (on 250gb machines),
 			// hence division by two.
 			bankRows := 65104166 / 2
-			if local {
+			if c.IsLocal() {
 				bankRows = 1000
 			}
 
-			oldV, err := PredecessorVersion(*t.BuildVersion())
+			oldV, err := tests.PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -977,7 +979,7 @@ func loadTPCCBench(
 
 	// Load the corresponding fixture.
 	t.L().Printf("restoring tpcc fixture\n")
-	waitForFullReplication(t, db)
+	tests.WaitFor3XReplication(t, db)
 	cmd := tpccImportCmd(b.LoadWarehouses, loadArgs)
 	if err := c.RunE(ctx, roachNodes[:1], cmd); err != nil {
 		return err
@@ -1074,7 +1076,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
 		}
 
-		m := c.NewMonitor(ctx, t, roachNodes)
+		m := c.NewMonitor(ctx, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			t.Status("setting up dataset")
 			return loadTPCCBench(ctx, t, c, b, roachNodes, c.Node(loadNodes[0]))
@@ -1157,7 +1159,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		// *abort* the line search and whole tpccbench run. Return the errors
 		// to indicate that the specific warehouse count failed, but that the
 		// line search ought to continue.
-		m := c.NewMonitor(ctx, t, roachNodes)
+		m := c.NewMonitor(ctx, roachNodes)
 
 		// If we're running chaos in this configuration, modify this config.
 		if b.Chaos {
@@ -1208,7 +1210,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					extraFlags += " --method=simple"
 				}
 				t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
-				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", perfArtifactsDir, warehouses)
+				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", t.PerfArtifactsDir(), warehouses)
 				cmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --active-warehouses=%d "+
 					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s}",
 					b.LoadWarehouses, warehouses, rampDur,

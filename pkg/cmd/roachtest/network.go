@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	_ "github.com/lib/pq"
 )
@@ -39,7 +40,7 @@ func runNetworkSanity(ctx context.Context, t test.Test, origC cluster.Cluster, n
 
 	db := c.Conn(ctx, 1) // unaffected by toxiproxy
 	defer db.Close()
-	waitForFullReplication(t, db)
+	tests.WaitFor3XReplication(t, db)
 
 	// NB: we're generous with latency in this test because we're checking that
 	// the upstream connections aren't affected by latency below, but the fixed
@@ -66,7 +67,7 @@ func runNetworkSanity(ctx context.Context, t test.Test, origC cluster.Cluster, n
 		}
 	}
 
-	m := c.Cluster.NewMonitor(ctx, t, c.All())
+	m := c.Cluster.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
 		c.Measure(ctx, 1, `SET CLUSTER SETTING trace.debug.enable = true`)
 		c.Measure(ctx, 1, "CREATE DATABASE test")
@@ -115,24 +116,24 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
-	waitForFullReplication(t, db)
+	tests.WaitFor3XReplication(t, db)
 
 	duration := time.Hour
-	if local {
+	if c.IsLocal() {
 		// NB: this is really just testing the test with this duration, it won't
 		// be able to detect slow goroutine leaks.
 		duration = 5 * time.Minute
 	}
 
 	// Run TPCC, but don't give it the first node (or it basically won't do anything).
-	m := c.NewMonitor(ctx, t, serverNodes)
+	m := c.NewMonitor(ctx, serverNodes)
 
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus("running tpcc")
 
 		cmd := fmt.Sprintf(
 			"./workload run tpcc --warehouses=%d --wait=false"+
-				" --histograms="+perfArtifactsDir+"/stats.json"+
+				" --histograms="+t.PerfArtifactsDir()+"/stats.json"+
 				" --duration=%s {pgurl:2-%d}",
 			warehouses, duration, c.Spec().NodeCount-1)
 		return c.RunE(ctx, workerNode, cmd)

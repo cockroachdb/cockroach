@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -56,7 +57,7 @@ func (s *backgroundStepper) launch(ctx context.Context, t test.Test, u *versionU
 	if nodes == nil {
 		nodes = u.c.All()
 	}
-	s.m = u.c.NewMonitor(ctx, t, nodes)
+	s.m = u.c.NewMonitor(ctx, nodes)
 	s.m.Go(func(ctx context.Context) error {
 		return s.run(ctx, u)
 	})
@@ -335,7 +336,7 @@ func registerJobsMixedVersions(r registry.Registry) {
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/57230",
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predV, err := PredecessorVersion(*t.BuildVersion())
+			predV, err := tests.PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}

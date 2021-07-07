@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -158,7 +159,7 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 //  * Tenant14{Binary: Cur, Cluster: Cur}: Create tenant 14 and verify it works.
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 14 and make sure it still works.
 func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, v version.Version) {
-	predecessor, err := PredecessorVersion(v)
+	predecessor, err := tests.PredecessorVersion(v)
 	require.NoError(t, err)
 
 	currentBinary := uploadVersion(ctx, t, c, c.All(), "")
@@ -424,10 +425,10 @@ func startTenantServer(
 		// "--certs-dir", "certs",
 		"--insecure",
 		"--tenant-id=" + strconv.Itoa(tenantID),
-		"--http-addr", ifLocal("127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(httpPort),
+		"--http-addr", ifLocal(c, "127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(httpPort),
 		"--kv-addrs", strings.Join(kvAddrs, ","),
 		// Don't bind to external interfaces when running locally.
-		"--sql-addr", ifLocal("127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(sqlPort),
+		"--sql-addr", ifLocal(c, "127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(sqlPort),
 	}
 	if logFlags != "" {
 		args = append(args, logFlags)

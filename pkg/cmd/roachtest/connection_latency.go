@@ -69,7 +69,7 @@ func runConnectionLatencyTest(
 		workloadCmd := fmt.Sprintf(
 			`./workload run connectionlatency %s --user testuser --secure --duration 30s --histograms=%s/stats.json --locality %s`,
 			urlString,
-			perfArtifactsDir,
+			t.PerfArtifactsDir(),
 			locality,
 		)
 		err = c.RunE(ctx, loadNode, workloadCmd)

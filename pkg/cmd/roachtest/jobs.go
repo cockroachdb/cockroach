@@ -43,7 +43,7 @@ func jobSurvivesNodeShutdown(
 
 	jobIDCh := make(chan string, 1)
 
-	m := c.NewMonitor(ctx, t)
+	m := c.NewMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
 		defer close(jobIDCh)
 		t.Status(`running job`)
@@ -131,7 +131,7 @@ func jobSurvivesNodeShutdown(
 	// Let the current tasks finish and use a new monitor for the restart.
 	// This lets us separate the failure modes.
 	m.Wait()
-	m = c.NewMonitor(ctx, t)
+	m = c.NewMonitor(ctx)
 
 	// NB: the roachtest harness checks that at the end of the test, all nodes
 	// that have data also have a running process.

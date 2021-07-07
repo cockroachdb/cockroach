@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 )
 
 func registerYCSB(r registry.Registry) {
@@ -48,17 +49,17 @@ func registerYCSB(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
-		waitForFullReplication(t, c.Conn(ctx, 1))
+		tests.WaitFor3XReplication(t, c.Conn(ctx, 1))
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			sfu := fmt.Sprintf(" --select-for-update=%t", t.IsBuildVersion("v19.2.0"))
-			ramp := " --ramp=" + ifLocal("0s", "2m")
-			duration := " --duration=" + ifLocal("10s", "10m")
+			ramp := " --ramp=" + ifLocal(c, "0s", "2m")
+			duration := " --duration=" + ifLocal(c, "10s", "10m")
 			cmd := fmt.Sprintf(
 				"./workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
-					" --splits=%d --histograms="+perfArtifactsDir+"/stats.json"+sfu+ramp+duration+
+					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+sfu+ramp+duration+
 					" {pgurl:1-%d}",
 				wl, conc, nodes, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)

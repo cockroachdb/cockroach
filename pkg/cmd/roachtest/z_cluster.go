@@ -11,7 +11,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	gosql "database/sql"
 	"encoding/json"
@@ -43,12 +42,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
-	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -104,13 +101,6 @@ func (v *encryptValue) asBool() bool {
 
 func (v *encryptValue) Type() string {
 	return "string"
-}
-
-func ifLocal(trueVal, falseVal string) string {
-	if local {
-		return trueVal
-	}
-	return falseVal
 }
 
 func filepathAbs(path string) (string, error) {
@@ -504,11 +494,11 @@ func execCmdEx(ctx context.Context, l *logger.Logger, args ...string) cmdRes {
 		}
 
 		if err != nil {
-			err = &withCommandDetails{
-				cause:  err,
-				cmd:    strings.Join(args, " "),
-				stderr: stderrString,
-				stdout: stdoutString,
+			err = &cluster.WithCommandDetails{
+				Wrapped: err,
+				Cmd:     strings.Join(args, " "),
+				Stderr:  stderrString,
+				Stdout:  stdoutString,
 			}
 		}
 	}
@@ -518,44 +508,6 @@ func execCmdEx(ctx context.Context, l *logger.Logger, args ...string) cmdRes {
 		stdout: stdoutString,
 		stderr: stderrString,
 	}
-}
-
-type withCommandDetails struct {
-	cause  error
-	cmd    string
-	stderr string
-	stdout string
-}
-
-var _ error = (*withCommandDetails)(nil)
-var _ errors.Formatter = (*withCommandDetails)(nil)
-
-// Error implements error.
-func (e *withCommandDetails) Error() string { return e.cause.Error() }
-
-// Cause implements causer.
-func (e *withCommandDetails) Cause() error { return e.cause }
-
-// Format implements fmt.Formatter.
-func (e *withCommandDetails) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
-
-// FormatError implements errors.Formatter.
-func (e *withCommandDetails) FormatError(p errors.Printer) error {
-	p.Printf("%s returned", e.cmd)
-	if p.Detail() {
-		p.Printf("stderr:\n%s\nstdout:\n%s", e.stderr, e.stdout)
-	}
-	return e.cause
-}
-
-// GetStderr retrieves the stderr output of a command that
-// returned with an error, or the empty string if there was no stderr.
-func GetStderr(err error) string {
-	var c *withCommandDetails
-	if errors.As(err, &c) {
-		return c.stderr
-	}
-	return ""
 }
 
 // execCmdWithBuffer executes the given command and returns its stdout/stderr
@@ -656,21 +608,6 @@ func MachineTypeToCPUs(s string) int {
 type nodeSelector interface {
 	option.Option
 	Merge(option.NodeListOption) option.NodeListOption
-}
-
-// workerAction informs a cluster operation that the callee is a "worker" rather
-// than the test's main goroutine.
-type workerAction struct{}
-
-var _ option.Option = workerAction{}
-
-func (o workerAction) Option() {}
-
-// withWorkerAction creates the workerAction option, informing a cluster
-// operation that the callee is a "worker" rather than the test's main
-// goroutine.
-func withWorkerAction() option.Option {
-	return workerAction{}
 }
 
 // clusterImpl implements cluster.Cluster.
@@ -927,7 +864,7 @@ func (f *clusterFactory) newCluster(
 			break
 		}
 		l.PrintfCtx(ctx, "Failed to create cluster.")
-		if !strings.Contains(GetStderr(err), "already exists") {
+		if !strings.Contains(cluster.GetStderr(err), "already exists") {
 			l.PrintfCtx(ctx, "Cleaning up in case it was partially created.")
 			c.Destroy(ctx, closeLogger, l)
 		} else {
@@ -1746,7 +1683,7 @@ func (c *clusterImpl) setStatusForClusterOpt(operation string, opts ...option.Op
 		if s, ok := o.(nodeSelector); ok {
 			nodes = s.Merge(nodes)
 		}
-		if _, ok := o.(workerAction); ok {
+		if _, ok := o.(option.WorkerAction); ok {
 			worker = true
 		}
 	}
@@ -1765,7 +1702,7 @@ func (c *clusterImpl) setStatusForClusterOpt(operation string, opts ...option.Op
 func (c *clusterImpl) clearStatusForClusterOpt(opts ...option.Option) {
 	worker := false
 	for _, o := range opts {
-		if _, ok := o.(workerAction); ok {
+		if _, ok := o.(option.WorkerAction); ok {
 			worker = true
 		}
 	}
@@ -2331,326 +2268,8 @@ func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Log
 	return nil
 }
 
-func (c *clusterImpl) NewMonitor(
-	ctx context.Context, t test.Test, opts ...option.Option,
-) cluster.Monitor {
-	return newMonitor(ctx, t, c, opts...)
-}
-
-// getDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
-func getDiskUsageInBytes(
-	ctx context.Context, c cluster.Cluster, logger *logger.Logger, nodeIdx int,
-) (int, error) {
-	var out []byte
-	for {
-		var err error
-		// `du` can warn if files get removed out from under it (which
-		// happens during RocksDB compactions, for example). Discard its
-		// stderr to avoid breaking Atoi later.
-		// TODO(bdarnell): Refactor this stack to not combine stdout and
-		// stderr so we don't need to do this (and the Warning check
-		// below).
-		out, err = c.RunWithBuffer(
-			ctx,
-			logger,
-			c.Node(nodeIdx),
-			"du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'",
-		)
-		if err != nil {
-			if ctx.Err() != nil {
-				return 0, ctx.Err()
-			}
-			// If `du` fails, retry.
-			// TODO(bdarnell): is this worth doing? It was originally added
-			// because of the "files removed out from under it" problem, but
-			// that doesn't result in a command failure, just a stderr
-			// message.
-			logger.Printf("retrying disk usage computation after spurious error: %s", err)
-			continue
-		}
-		break
-	}
-
-	str := string(out)
-	// We need this check because sometimes the first line of the roachprod output is a warning
-	// about adding an ip to a list of known hosts.
-	if strings.Contains(str, "Warning") {
-		str = strings.Split(str, "\n")[1]
-	}
-
-	size, err := strconv.Atoi(strings.TrimSpace(str))
-	if err != nil {
-		return 0, err
-	}
-
-	return size * 1024, nil
-}
-
-type monitorImpl struct {
-	t interface {
-		Fatal(...interface{})
-		Failed() bool
-		WorkerStatus(...interface{})
-	}
-	l         *logger.Logger
-	nodes     string
-	ctx       context.Context
-	cancel    func()
-	g         *errgroup.Group
-	expDeaths int32 // atomically
-}
-
-func newMonitor(
-	ctx context.Context,
-	t interface {
-		Fatal(...interface{})
-		Failed() bool
-		WorkerStatus(...interface{})
-		L() *logger.Logger
-	},
-	c cluster.Cluster,
-	opts ...option.Option,
-) *monitorImpl {
-	m := &monitorImpl{
-		t:     t,
-		l:     t.L(),
-		nodes: c.MakeNodes(opts...),
-	}
-	m.ctx, m.cancel = context.WithCancel(ctx)
-	m.g, m.ctx = errgroup.WithContext(m.ctx)
-	return m
-}
-
-// ExpectDeath lets the monitor know that a node is about to be killed, and that
-// this should be ignored.
-func (m *monitorImpl) ExpectDeath() {
-	m.ExpectDeaths(1)
-}
-
-// ExpectDeaths lets the monitor know that a specific number of nodes are about
-// to be killed, and that they should be ignored.
-func (m *monitorImpl) ExpectDeaths(count int32) {
-	atomic.AddInt32(&m.expDeaths, count)
-}
-
-func (m *monitorImpl) ResetDeaths() {
-	atomic.StoreInt32(&m.expDeaths, 0)
-}
-
-var errTestFatal = errors.New("t.Fatal() was called")
-
-func (m *monitorImpl) Go(fn func(context.Context) error) {
-	m.g.Go(func() (err error) {
-		defer func() {
-			r := recover()
-			if r == nil {
-				return
-			}
-			rErr, ok := r.(error)
-			if !ok {
-				rErr = errors.Errorf("recovered panic: %v", r)
-			}
-			// t.{Skip,Fatal} perform a panic(errTestFatal). If we've caught the
-			// errTestFatal sentinel we transform the panic into an error return so
-			// that the wrapped errgroup cancels itself. The "panic" will then be
-			// returned by `m.WaitE()`.
-			//
-			// Note that `t.Fatal` calls `panic(err)`, so this mechanism primarily
-			// enables that use case. But it also offers protection against accidental
-			// panics (NPEs and such) which should not bubble up to the runtime.
-			err = rErr
-		}()
-		// Automatically clear the worker status message when the goroutine exits.
-		defer m.t.WorkerStatus()
-		return fn(m.ctx)
-	})
-}
-
-func (m *monitorImpl) WaitE() error {
-	if m.t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return errors.New("already failed")
-	}
-
-	return errors.Wrap(m.wait(roachprod, "monitor", m.nodes), "monitor failure")
-}
-
-func (m *monitorImpl) Wait() {
-	if m.t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return
-	}
-	if err := m.WaitE(); err != nil {
-		// Note that we used to avoid fataling again if we had already fatal'ed.
-		// However, this error here might be the one to actually report, see:
-		// https://github.com/cockroachdb/cockroach/issues/44436
-		m.t.Fatal(err)
-	}
-}
-
-func (m *monitorImpl) wait(args ...string) error {
-	// It is surprisingly difficult to get the cancellation semantics exactly
-	// right. We need to watch for the "workers" group (m.g) to finish, or for
-	// the monitor command to emit an unexpected node failure, or for the monitor
-	// command itself to exit. We want to capture whichever error happens first
-	// and then cancel the other goroutines. This ordering prevents the usage of
-	// an errgroup.Group for the goroutines below. Consider:
-	//
-	//   g, _ := errgroup.WithContext(m.ctx)
-	//   g.Go(func(context.Context) error {
-	//     defer m.cancel()
-	//     return m.g.Wait()
-	//   })
-	//
-	// Now consider what happens when an error is returned. Before the error
-	// reaches the errgroup, we invoke the cancellation closure which can cause
-	// the other goroutines to wake up and perhaps race and set the errgroup
-	// error first.
-	//
-	// The solution is to implement our own errgroup mechanism here which allows
-	// us to set the error before performing the cancellation.
-
-	var errOnce sync.Once
-	var err error
-	setErr := func(e error) {
-		if e != nil {
-			errOnce.Do(func() {
-				err = e
-			})
-		}
-	}
-
-	// 1. The first goroutine waits for the worker errgroup to exit.
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer func() {
-			m.cancel()
-			wg.Done()
-		}()
-		setErr(errors.Wrap(m.g.Wait(), "monitor task failed"))
-	}()
-
-	setMonitorCmdErr := func(err error) {
-		setErr(errors.Wrap(err, "monitor command failure"))
-	}
-
-	// 2. The second goroutine forks/execs the monitoring command.
-	pipeR, pipeW := io.Pipe()
-	wg.Add(1)
-	go func() {
-		defer func() {
-			_ = pipeW.Close()
-			wg.Done()
-			// NB: we explicitly do not want to call m.cancel() here as we want the
-			// goroutine that is reading the monitoring events to be able to decide
-			// on the error if the monitoring command exits peacefully.
-		}()
-
-		monL, err := m.l.ChildLogger(`MONITOR`)
-		if err != nil {
-			setMonitorCmdErr(err)
-			return
-		}
-		defer monL.Close()
-
-		cmd := exec.CommandContext(m.ctx, args[0], args[1:]...)
-		cmd.Stdout = io.MultiWriter(pipeW, monL.Stdout)
-		cmd.Stderr = monL.Stderr
-		if err := cmd.Run(); err != nil {
-			if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "killed") {
-				// The expected reason for an error is that the monitor was killed due
-				// to the context being canceled. Any other error is an actual error.
-				setMonitorCmdErr(err)
-				return
-			}
-		}
-		// Returning will cause the pipe to be closed which will cause the reader
-		// goroutine to exit and close the monitoring channel.
-	}()
-
-	// 3. The third goroutine reads from the monitoring pipe, watching for any
-	// unexpected death events.
-	wg.Add(1)
-	go func() {
-		defer func() {
-			_ = pipeR.Close()
-			m.cancel()
-			wg.Done()
-		}()
-
-		scanner := bufio.NewScanner(pipeR)
-		for scanner.Scan() {
-			msg := scanner.Text()
-			var id int
-			var s string
-			if n, _ := fmt.Sscanf(msg, "%d: %s", &id, &s); n == 2 {
-				if strings.Contains(s, "dead") && atomic.AddInt32(&m.expDeaths, -1) < 0 {
-					setErr(fmt.Errorf("unexpected node event: %s", msg))
-					return
-				}
-			}
-		}
-	}()
-
-	wg.Wait()
-	return err
-}
-
-// TODO(nvanbenschoten): this function should take a context and be responsive
-// to context cancellation.
-func waitForFullReplication(t test.Test, db *gosql.DB) {
-	t.L().Printf("waiting for up-replication...")
-	tStart := timeutil.Now()
-	for ok := false; !ok; time.Sleep(time.Second) {
-		if err := db.QueryRow(
-			"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
-		).Scan(&ok); err != nil {
-			t.Fatal(err)
-		}
-		if timeutil.Since(tStart) > 30*time.Second {
-			t.L().Printf("still waiting for full replication")
-		}
-	}
-}
-
-func waitForUpdatedReplicationReport(ctx context.Context, t test.Test, db *gosql.DB) {
-	t.L().Printf("waiting for updated replication report...")
-
-	// Temporarily drop the replication report interval down.
-	if _, err := db.ExecContext(
-		ctx, `SET CLUSTER setting kv.replication_reports.interval = '2s'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if _, err := db.ExecContext(
-			ctx, `RESET CLUSTER setting kv.replication_reports.interval`,
-		); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	// Wait for a new report with a timestamp after tStart to ensure
-	// that the report picks up any new tables or zones.
-	tStart := timeutil.Now()
-	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
-		var gen time.Time
-		if err := db.QueryRowContext(
-			ctx, `SELECT generated FROM system.reports_meta ORDER BY 1 DESC LIMIT 1`,
-		).Scan(&gen); err != nil {
-			if !errors.Is(err, gosql.ErrNoRows) {
-				t.Fatal(err)
-			}
-			// No report generated yet.
-		} else if tStart.Before(gen) {
-			// New report generated.
-			return
-		}
-		if timeutil.Since(tStart) > 30*time.Second {
-			t.L().Printf("still waiting for updated replication report")
-		}
-	}
+func (c *clusterImpl) NewMonitor(ctx context.Context, opts ...option.Option) cluster.Monitor {
+	return newMonitor(ctx, c.t, c, opts...)
 }
 
 type loadGroup struct {

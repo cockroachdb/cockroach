@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -30,7 +31,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		startImport := func(c cluster.Cluster) (jobID string, err error) {
 			// partsupp is 11.2 GiB.
 			tableName := "partsupp"
-			if local {
+			if c.IsLocal() {
 				// part is 2.264 GiB.
 				tableName = "part"
 			}
@@ -100,13 +101,13 @@ func registerImportTPCC(r registry.Registry) {
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx, t)
+		m := c.NewMonitor(ctx)
 		dul := NewDiskUsageLogger(t, c)
 		m.Go(dul.Runner)
 		hc := NewHealthChecker(t, c, c.All())
 		m.Go(hc.Runner)
 
-		tick := initBulkJobPerfArtifacts(ctx, testName, timeout)
+		tick := initBulkJobPerfArtifacts(ctx, t, testName, timeout)
 		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
@@ -121,7 +122,7 @@ func registerImportTPCC(r registry.Registry) {
 
 			// Upload the perf artifacts to any one of the nodes so that the test
 			// runner copies it into an appropriate directory path.
-			if err := c.PutE(ctx, t.L(), perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+			if err := c.PutE(ctx, t.L(), t.PerfArtifactsDir(), t.PerfArtifactsDir(), c.Node(1)); err != nil {
 				log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 			}
 			return nil
@@ -180,7 +181,7 @@ func registerImportTPCH(r registry.Registry) {
 			Cluster: r.MakeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				tick := initBulkJobPerfArtifacts(ctx, t.Name(), item.timeout)
+				tick := initBulkJobPerfArtifacts(ctx, t, t.Name(), item.timeout)
 
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
@@ -209,7 +210,7 @@ func registerImportTPCH(r registry.Registry) {
 				}); err != nil {
 					t.Fatal(err)
 				}
-				m := c.NewMonitor(ctx, t)
+				m := c.NewMonitor(ctx)
 				dul := NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
 				hc := NewHealthChecker(t, c, c.All())
@@ -257,7 +258,7 @@ func registerImportTPCH(r registry.Registry) {
 
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
-					if err := c.PutE(ctx, t.L(), perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+					if err := c.PutE(ctx, t.L(), t.PerfArtifactsDir(), t.PerfArtifactsDir(), c.Node(1)); err != nil {
 						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 					}
 					return nil
@@ -307,12 +308,12 @@ func registerImportMixedVersion(r registry.Registry) {
 		// Mixed-version support was added in 21.1.
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predV, err := PredecessorVersion(*t.BuildVersion())
+			predV, err := tests.PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}
 			warehouses := 100
-			if local {
+			if c.IsLocal() {
 				warehouses = 10
 			}
 			runImportMixedVersion(ctx, t, c, warehouses, predV)
@@ -323,7 +324,7 @@ func registerImportMixedVersion(r registry.Registry) {
 func registerImportDecommissioned(r registry.Registry) {
 	runImportDecommissioned := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		warehouses := 100
-		if local {
+		if c.IsLocal() {
 			warehouses = 10
 		}
 

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
@@ -43,7 +44,7 @@ func registerVersion(r registry.Registry) {
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
-		if local {
+		if c.IsLocal() {
 			t.L().Printf("local mode: speeding up test\n")
 			stageDuration = 10 * time.Second
 			buffer = time.Minute
@@ -61,7 +62,7 @@ func registerVersion(r registry.Registry) {
 			"./workload run kv --tolerate-errors --init" + loadDuration + " {pgurl:1-%d}",
 		}
 
-		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		for _, cmd := range workloads {
 			cmd := cmd // loop-local copy
 			m.Go(func(ctx context.Context) error {
@@ -218,7 +219,7 @@ func registerVersion(r registry.Registry) {
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				pred, err := PredecessorVersion(*t.BuildVersion())
+				pred, err := tests.PredecessorVersion(*t.BuildVersion())
 				if err != nil {
 					t.Fatal(err)
 				}

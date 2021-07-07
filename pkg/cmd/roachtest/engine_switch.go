@@ -36,7 +36,7 @@ func registerEngineSwitch(r registry.Registry) {
 		rocksdbArgs := option.StartArgs(append(additionalArgs, "--args=--storage-engine=rocksdb")...)
 		c.Start(ctx, roachNodes, rocksdbArgs)
 		stageDuration := 1 * time.Minute
-		if local {
+		if c.IsLocal() {
 			t.L().Printf("local mode: speeding up test\n")
 			stageDuration = 10 * time.Second
 		}
@@ -56,7 +56,7 @@ func registerEngineSwitch(r registry.Registry) {
 		checkWorkloads := []string{
 			"./workload check tpcc --warehouses=1 --expensive-checks=true {pgurl:1}",
 		}
-		m := c.NewMonitor(ctx, t, roachNodes)
+		m := c.NewMonitor(ctx, roachNodes)
 		for _, cmd := range workloads {
 			cmd := cmd // loop-local copy
 			m.Go(func(ctx context.Context) error {
