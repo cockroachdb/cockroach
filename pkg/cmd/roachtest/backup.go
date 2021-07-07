@@ -224,7 +224,7 @@ func registerBackup(r registry.Registry) {
 		Owner:   registry.OwnerBulkIO,
 		Cluster: KMSSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if cloud == spec.GCE {
+			if c.Spec().Cloud == spec.GCE {
 				t.Skip("backupKMS roachtest is only configured to run on AWS", "")
 			}
 

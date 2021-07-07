@@ -31,7 +31,7 @@ type randomLoadBenchSpec struct {
 
 func registerSchemaChangeRandomLoad(r registry.Registry) {
 	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
-	if cloud == spec.AWS {
+	if r.MakeClusterSpec(1).Cloud == spec.AWS {
 		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
 	}
 	geoZonesStr := strings.Join(geoZones, ",")

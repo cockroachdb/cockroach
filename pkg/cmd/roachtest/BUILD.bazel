@@ -115,6 +115,7 @@ go_library(
         "ts_util.go",
         "typeorm.go",
         "util_disk_usage.go",
+        "util_if_local.go",
         "version.go",
         "versionupgrade.go",
         "ycsb.go",

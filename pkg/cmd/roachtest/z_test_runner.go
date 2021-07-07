@@ -907,7 +907,7 @@ func (r *testRunner) maybePostGithubIssue(
 		branch = b
 	}
 	msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
-		branch, cloud, output)
+		branch, t.Spec().(*registry.TestSpec).Cluster.Cloud, output)
 	artifacts := fmt.Sprintf("/%s", t.Name())
 
 	// Issues posted from roachtest are identifiable as such and
