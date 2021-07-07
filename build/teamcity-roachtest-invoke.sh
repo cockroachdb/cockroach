@@ -2,22 +2,13 @@
 set -euo pipefail
 
 set +e
+# Append any given command-line parameters. If a switch listed below is also
+# passed by the caller, the passed one takes precedence.
 bin/roachtest run \
-  --cloud="${CLOUD}" \
-  --artifacts="${ARTIFACTS}" \
-  --parallelism="${PARALLELISM}" \
-  --cpu-quota="${CPUQUOTA}" \
-  --zones="${ZONES}" \
-  --count="${COUNT-1}" \
-  --debug="${DEBUG-false}" \
-  --build-tag="${BUILD_TAG}" \
-  --cockroach="${COCKROACH_BINARY}" \
+  --teamcity \
   --roachprod="${PWD}/bin/roachprod" \
   --workload="${PWD}/bin/workload" \
-  --teamcity=true \
-  --slack-token="${SLACK_TOKEN}" \
-  --cluster-id="${TC_BUILD_ID}" \
-  "${TESTS}"
+  "$@"
 code=$?
 set -e
 

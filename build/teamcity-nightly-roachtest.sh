@@ -80,8 +80,6 @@ function upload_stats {
 trap upload_stats EXIT
 
 # Set up the parameters for the roachtest invocation.
-
-ARTIFACTS="${artifacts}"
 PARALLELISM=16
 CPUQUOTA=1024
 ZONES=""
@@ -108,22 +106,18 @@ case "${CLOUD}" in
     ;;
 esac
 
-export \
-CLOUD="${CLOUD}" \
-ARTIFACTS="${ARTIFACTS}" \
-PARALLELISM="${PARALLELISM}" \
-CPUQUOTA="${CPUQUOTA}" \
-ZONES="${ZONES}" \
-COUNT="${COUNT-1}" \
-DEBUG="${DEBUG-false}" \
-BUILD_TAG="${BUILD_TAG}" \
-COCKROACH_BINARY="${COCKROACH_BINARY}" \
-SLACK_TOKEN="${SLACK_TOKEN}" \
-TC_BUILD_ID="${TC_BUILD_ID}" \
-TESTS="${TESTS}"
-
 # Teamcity has a 1300 minute timeout that, when reached, kills the process
 # without a stack trace (probably SIGKILL).  We'd love to see a stack trace
 # though, so after 1200 minutes, kill with SIGINT which will allow roachtest to
 # fail tests and cleanup.
-timeout -s INT $((1200*60)) "build/teamcity-nightly-roachtest-invoke.sh"
+timeout -s INT $((1200*60)) "build/teamcity-roachtest-invoke.sh" \
+  --cloud="${CLOUD}" \
+  --count="${COUNT-1}" \
+  --parallelism="${PARALLELISM}" \
+  --cpu-quota="${CPUQUOTA}" \
+  --cluster-id="${TC_BUILD_ID}" \
+  --build-tag="${BUILD_TAG}" \
+  --cockroach="${COCKROACH_BINARY}" \
+  --artifacts="${artifacts}" \
+  --slack-token="${SLACK_TOKEN}" \
+  "${TESTS}"
