@@ -61,6 +61,7 @@ ALL_TESTS = [
     "//pkg/cmd/roachprod/vm:vm_test",
     "//pkg/cmd/roachtest/prometheus:prometheus_test",
     "//pkg/cmd/roachtest/spec:spec_test",
+    "//pkg/cmd/roachtest/tests:tests_test",
     "//pkg/cmd/roachtest:roachtest_test",
     "//pkg/cmd/teamcity-trigger:teamcity-trigger_test",
     "//pkg/cmd/testfilter:testfilter_test",
