@@ -114,6 +114,7 @@ go_library(
         "tpchvec.go",
         "ts_util.go",
         "typeorm.go",
+        "util_disk_usage.go",
         "version.go",
         "versionupgrade.go",
         "ycsb.go",
