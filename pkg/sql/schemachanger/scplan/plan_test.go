@@ -154,10 +154,11 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 	err := plan.Graph.ForEachNode(func(n *scpb.Node) error {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
 			var deps strings.Builder
-			fmt.Fprintf(&deps, "- from: [%s, %s]\n",
-				scattr.ToString(de.From().GetElement()), de.From().Status)
-			fmt.Fprintf(&deps, "  to:   [%s, %s]\n",
-				scattr.ToString(de.To().GetElement()), de.To().Status)
+			deps.WriteString("- from: ")
+			scattr.Format(de.From(), &deps)
+			deps.WriteString("\n  to:   ")
+			scattr.Format(de.To(), &deps)
+			deps.WriteString("\n")
 			sortedDeps = append(sortedDeps, deps.String())
 			return nil
 		})

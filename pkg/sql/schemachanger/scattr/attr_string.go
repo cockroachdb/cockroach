@@ -14,11 +14,13 @@ func _() {
 	_ = x[ColumnID-3]
 	_ = x[Name-4]
 	_ = x[IndexID-5]
+	_ = x[Direction-6]
+	_ = x[Status-7]
 }
 
-const _Attr_name = "TypeDescIDReferencedDescIDColumnIDNameIndexID"
+const _Attr_name = "TypeDescIDReferencedDescIDColumnIDNameIndexIDDirectionStatus"
 
-var _Attr_index = [...]uint8{0, 4, 10, 26, 34, 38, 45}
+var _Attr_index = [...]uint8{0, 4, 10, 26, 34, 38, 45, 54, 60}
 
 func (i Attr) String() string {
 	if i < 0 || i >= Attr(len(_Attr_index)-1) {

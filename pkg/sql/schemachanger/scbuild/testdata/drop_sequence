@@ -5,10 +5,8 @@ CREATE SEQUENCE defaultdb.SQ1
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- DROP Sequence:{DescID: 52}
-  state: PUBLIC
-  details:
-    sequenceId: 52
+- - [DROP, PUBLIC, Sequence: {DescID: 52}]
+  - sequenceId: 52
 
 create-table
 CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
@@ -29,33 +27,23 @@ CREATE TABLE defaultdb.blog_posts3 (id INT PRIMARY KEY, val typ DEFAULT CAST(chr
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- DROP DefaultExpression:{DescID: 53, ColumnID: 2}
-  state: PUBLIC
-  details:
-    columnId: 2
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 53, ColumnID: 2}]
+  - columnId: 2
     tableId: 53
     usesSequenceIDs:
     - 52
-- DROP DefaultExpression:{DescID: 54, ColumnID: 2}
-  state: PUBLIC
-  details:
-    columnId: 2
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 54, ColumnID: 2}]
+  - columnId: 2
     tableId: 54
     usesSequenceIDs:
     - 52
-- DROP DefaultExpression:{DescID: 57, ColumnID: 2}
-  state: PUBLIC
-  details:
-    columnId: 2
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 57, ColumnID: 2}]
+  - columnId: 2
     tableId: 57
     usesSequenceIDs:
     - 52
-- DROP Sequence:{DescID: 52}
-  state: PUBLIC
-  details:
-    sequenceId: 52
-- DROP TypeReference:{DescID: 57, ReferencedDescID: 55}
-  state: PUBLIC
-  details:
-    descriptorId: 57
+- - [DROP, PUBLIC, Sequence: {DescID: 52}]
+  - sequenceId: 52
+- - [DROP, PUBLIC, TypeReference: {DescID: 57, ReferencedDescID: 55}]
+  - descriptorId: 57
     typeId: 55

@@ -32,7 +32,7 @@ func TestGetAttribute(t *testing.T) {
 
 	// Sanity: Validate basic string conversion, equality,
 	// and inequality.
-	expectedStr := `SequenceDependency:{DescID: 3, ReferencedDescID: 1, ColumnID: 2}`
+	expectedStr := `SequenceDependency: {DescID: 3, ReferencedDescID: 1, ColumnID: 2}`
 	require.Equal(t, expectedStr, ToString(seqElem), "Attr string conversion is broken.")
 	require.True(t, Equal(seqElem, seqElem))
 	require.False(t, Equal(seqElem, seqElemDiff))
@@ -40,7 +40,7 @@ func TestGetAttribute(t *testing.T) {
 	// Sanity: Validate type references, then check if type comparisons
 	// work.
 	typeBackRef := &scpb.TypeReference{DescID: 1, TypeID: 3}
-	expectedStr = `TypeReference:{DescID: 1, ReferencedDescID: 3}`
+	expectedStr = `TypeReference: {DescID: 1, ReferencedDescID: 3}`
 	require.Equal(t, expectedStr, ToString(typeBackRef), "Attr string conversion is broken.")
 	require.False(t, Equal(seqElem, typeBackRef))
 	require.False(t, Equal(typeBackRef, seqElem))
@@ -53,7 +53,7 @@ func TestGetAttribute(t *testing.T) {
 }
 
 func BenchmarkCompareElements(b *testing.B) {
-	var elements = []scpb.Element{
+	var elements = []scpb.Container{
 		&scpb.Column{},
 		&scpb.PrimaryIndex{},
 		&scpb.SecondaryIndex{},
@@ -69,6 +69,10 @@ func BenchmarkCompareElements(b *testing.B) {
 		&scpb.InboundForeignKey{},
 		&scpb.RelationDependedOnBy{},
 		&scpb.SequenceOwnedBy{},
+		&scpb.Node{
+			Target: scpb.NewTarget(scpb.Target_ADD, &scpb.Sequence{}),
+		},
+		scpb.NewTarget(scpb.Target_ADD, &scpb.Table{}),
 	}
 	for i := 0; i < int(float64(b.N)/float64(len(elements)*len(elements))); i++ {
 		for _, a := range elements {

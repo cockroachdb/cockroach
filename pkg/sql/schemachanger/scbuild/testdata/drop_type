@@ -5,11 +5,7 @@ CREATE TYPE defaultdb.typ AS ENUM('a')
 build
 DROP TYPE defaultdb.typ
 ----
-- DROP Type:{DescID: 52}
-  state: PUBLIC
-  details:
-    typeId: 52
-- DROP Type:{DescID: 53}
-  state: PUBLIC
-  details:
-    typeId: 53
+- - [DROP, PUBLIC, Type: {DescID: 52}]
+  - typeId: 52
+- - [DROP, PUBLIC, Type: {DescID: 53}]
+  - typeId: 53

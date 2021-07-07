@@ -47,7 +47,7 @@ Stage 1
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- from: [Sequence:{DescID: 52}, PUBLIC]
-  to:   [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT]
-- from: [Sequence:{DescID: 52}, PUBLIC]
-  to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT]
+- from: [DROP, PUBLIC, Sequence: {DescID: 52}]
+  to:   [DROP, ABSENT, DefaultExpression: {DescID: 53, ColumnID: 2}]
+- from: [DROP, PUBLIC, Sequence: {DescID: 52}]
+  to:   [DROP, ABSENT, DefaultExpression: {DescID: 54, ColumnID: 2}]

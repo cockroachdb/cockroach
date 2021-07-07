@@ -148,16 +148,13 @@ func marshalNodes(t *testing.T, nodes scpb.State) string {
 		target := make(map[string]interface{})
 		require.NoError(t, gojson.Unmarshal(buf.Bytes(), &target))
 		entry := strings.Builder{}
-		entry.WriteString("- ")
-		entry.WriteString(node.Target.Direction.String())
-		entry.WriteString(" ")
-		scattr.Format(node.GetElement(), &entry)
+		entry.WriteString("- - ")
+		scattr.Format(node, &entry)
 		entry.WriteString("\n")
-		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.Status.String()), "  "))
-		entry.WriteString(indentText("details:\n", "  "))
 		out, err := yaml.Marshal(target)
 		require.NoError(t, err)
-		entry.WriteString(indentText(string(out), "    "))
+		indented := indentText(string(out), "    ")
+		entry.WriteString(strings.Replace(indented, "    ", "  - ", 1))
 		sortedEntries = append(sortedEntries, entry.String())
 	}
 	// Sort the output buffer of nodes for determinism.
