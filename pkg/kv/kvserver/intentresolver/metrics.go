@@ -26,14 +26,23 @@ var (
 		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaIntentCleanupFailed = metric.Metadata{
+		Name:        "intentresolver.intents.failed",
+		Help:        "Number of intent resolution failures",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics contains the metrics for the IntentResolver.
 type Metrics struct {
 	IntentResolverAsyncThrottled *metric.Counter
 
-	// Counters tracking intent cleanup failures.
+	// Counter tracking intent + transaction record cleanup failures.
 	FinalizedTxnCleanupFailed *metric.Counter
+
+	// Counter tracking intent cleanup failures.
+	IntentResolutionFailed *metric.Counter
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -43,5 +52,6 @@ func makeMetrics() Metrics {
 	return Metrics{
 		IntentResolverAsyncThrottled: metric.NewCounter(metaIntentResolverAsyncThrottled),
 		FinalizedTxnCleanupFailed:    metric.NewCounter(metaFinalizedTxnCleanupFailed),
+		IntentResolutionFailed:       metric.NewCounter(metaIntentCleanupFailed),
 	}
 }

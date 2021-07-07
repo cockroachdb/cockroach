@@ -1073,19 +1073,6 @@ var (
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
 	}
-
-	metaConflictingIntentsResolveRejected = metric.Metadata{
-		Name:        "intents.resolve_conflicting.rejected",
-		Help:        "Number of conflicting intents resolutions rejected",
-		Measurement: "Intent Resolutions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaFinalizedTxnCleanupTimedOut = metric.Metadata{
-		Name:        "intents.finalized_txns.timed_out",
-		Help:        "Number of finalized transaction resolution timeouts",
-		Measurement: "Intent Resolutions",
-		Unit:        metric.Unit_COUNT,
-	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1292,10 +1279,6 @@ type StoreMetrics struct {
 	// Closed timestamp metrics.
 	ClosedTimestampMaxBehindNanos  *metric.Gauge
 	ClosedTimestampFailuresToClose *metric.Gauge
-
-	// Intent cleanup failures
-	ConflictingIntentsResolveRejected *metric.Counter
-	FinalizedTxnCleanupTimedOut       *metric.Counter
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -1655,6 +1638,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
 		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
+		GCResolveFailed:              metric.NewCounter(metaGCResolveFailed),
 		GCTxnIntentsResolveFailed:    metric.NewCounter(metaGCTxnIntentsResolveFailed),
 
 		// Wedge request counters.
@@ -1681,11 +1665,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Closed timestamp metrics.
 		ClosedTimestampMaxBehindNanos:  metric.NewGauge(metaClosedTimestampMaxBehindNanos),
 		ClosedTimestampFailuresToClose: metric.NewGauge(metaClosedTimestampFailuresToClose),
-
-		// Intent leak metrics
-		ConflictingIntentsResolveRejected: metric.NewCounter(metaConflictingIntentsResolveRejected),
-		FinalizedTxnCleanupTimedOut:       metric.NewCounter(metaFinalizedTxnCleanupTimedOut),
-		GCResolveFailed:                   metric.NewCounter(metaGCResolveFailed),
 	}
 	storeRegistry.AddMetricStruct(sm)
 
