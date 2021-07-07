@@ -2275,10 +2275,8 @@ func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Log
 	return nil
 }
 
-func (c *clusterImpl) NewMonitor(
-	ctx context.Context, t test.Test, opts ...option.Option,
-) cluster.Monitor {
-	return newMonitor(ctx, t, c, opts...)
+func (c *clusterImpl) NewMonitor(ctx context.Context, opts ...option.Option) cluster.Monitor {
+	return newMonitor(ctx, c.t, c, opts...)
 }
 
 type loadGroup struct {

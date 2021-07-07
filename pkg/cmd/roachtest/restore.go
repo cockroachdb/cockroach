@@ -391,7 +391,7 @@ func registerRestore(r registry.Registry) {
 				c.EncryptAtRandom(true)
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx)
-				m := c.NewMonitor(ctx, t)
+				m := c.NewMonitor(ctx)
 
 				// Run the disk usage logger in the monitor to guarantee its
 				// having terminated when the test ends.

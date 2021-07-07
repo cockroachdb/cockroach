@@ -132,7 +132,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 	c.Start(ctx, c.All())
 
-	m := c.NewMonitor(ctx, t, c.All())
+	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
@@ -248,7 +248,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	c.Start(ctx, c.All())
 
-	m := c.NewMonitor(ctx, t, c.All())
+	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
 		db := c.Conn(ctx, 1)
 		defer db.Close()

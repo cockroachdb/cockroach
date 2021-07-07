@@ -84,7 +84,7 @@ func registerKV(r registry.Registry) {
 		}
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrencyMultiplier := 64
 			if opts.concMultiplier != 0 {
@@ -272,7 +272,7 @@ func registerKVContention(r registry.Registry) {
 			}
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				// Write to a small number of keys to generate a large amount of
 				// contention. Use a relatively high amount of concurrency and
@@ -323,7 +323,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 				if lastDown {
 					n--
 				}
-				m := c.NewMonitor(ctx, t, c.Range(1, n))
+				m := c.NewMonitor(ctx, c.Range(1, n))
 				m.Go(func(ctx context.Context) error {
 					t.WorkerStatus(cmd)
 					defer t.WorkerStatus()
@@ -418,7 +418,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			splitCmd := "./workload run kv --init --max-ops=1 --splits 100 {pgurl:1}"
 			c.Run(ctx, c.Node(nodes+1), splitCmd)
 
-			m := c.NewMonitor(ctx, t, c.Nodes(1, nodes))
+			m := c.NewMonitor(ctx, c.Nodes(1, nodes))
 
 			// specifiedQPS is going to be the --max-rate for the kv workload.
 			const specifiedQPS = 1000
@@ -622,7 +622,7 @@ func registerKVSplits(r registry.Registry) {
 				))
 
 				t.Status("running workload")
-				m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+				m := c.NewMonitor(ctx, c.Range(1, nodes))
 				m.Go(func(ctx context.Context) error {
 					concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
 					splits := " --splits=" + ifLocal(c, "2000", fmt.Sprint(item.splits))
@@ -653,7 +653,7 @@ func registerKVScalability(r registry.Registry) {
 			c.Start(ctx, c.Range(1, nodes))
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf("./workload run kv --init --read-percent=%d "+
 					"--splits=1000 --duration=1m "+fmt.Sprintf("--concurrency=%d", i)+
@@ -715,7 +715,7 @@ func registerKVRangeLookups(r registry.Registry) {
 		}()
 		tests.WaitFor3XReplication(t, conns[0])
 
-		m := c.NewMonitor(ctx, t, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
 			cmd := "./workload init kv --splits=1000 {pgurl:1}"

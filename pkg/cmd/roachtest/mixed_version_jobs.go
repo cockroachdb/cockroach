@@ -57,7 +57,7 @@ func (s *backgroundStepper) launch(ctx context.Context, t test.Test, u *versionU
 	if nodes == nil {
 		nodes = u.c.All()
 	}
-	s.m = u.c.NewMonitor(ctx, t, nodes)
+	s.m = u.c.NewMonitor(ctx, nodes)
 	s.m.Go(func(ctx context.Context) error {
 		return s.run(ctx, u)
 	})
