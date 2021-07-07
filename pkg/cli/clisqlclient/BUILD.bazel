@@ -5,7 +5,9 @@ go_library(
     srcs = [
         "api.go",
         "conn.go",
+        "context.go",
         "doc.go",
+        "exec_context.go",
         "format_table.go",
         "format_value.go",
         "init_conn_error.go",

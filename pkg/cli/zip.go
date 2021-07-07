@@ -180,11 +180,11 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 	// We're going to use the SQL code, but in non-interactive mode.
 	// Override whatever terminal-driven defaults there may be out there.
-	cliCtx.isInteractive = false
-	sqlExecCtx.terminalOutput = false
-	sqlExecCtx.showTimes = false
+	cliCtx.IsInteractive = false
+	sqlExecCtx.TerminalOutput = false
+	sqlExecCtx.ShowTimes = false
 	// Use a streaming format to avoid accumulating all rows in RAM.
-	sqlExecCtx.tableDisplayFormat = clisqlclient.TableDisplayTSV
+	sqlExecCtx.TableDisplayFormat = clisqlclient.TableDisplayTSV
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
 	if err != nil {
