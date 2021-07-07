@@ -163,9 +163,9 @@ func TestFileRegistryCheckNoFile(t *testing.T) {
 	fileEntry :=
 		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")}
 	registry := &PebbleFileRegistry{FS: mem}
-	require.NoError(t, registry.checkNoRegistryFile())
+	require.NoError(t, registry.CheckNoRegistryFile())
 	require.NoError(t, registry.Load())
 	require.NoError(t, registry.SetFileEntry("/foo", fileEntry))
 	registry = &PebbleFileRegistry{FS: mem}
-	require.Error(t, registry.checkNoRegistryFile())
+	require.Error(t, registry.CheckNoRegistryFile())
 }
