@@ -555,5 +555,5 @@ func guessNodeURL(workingURL string, hostport string) clisqlclient.Conn {
 		u = &url.URL{Host: "invalid"}
 	}
 	u.Host = hostport
-	return makeSQLConn(u.String())
+	return sqlConnCtx.MakeSQLConn(u.String())
 }

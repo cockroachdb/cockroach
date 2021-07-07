@@ -26,15 +26,8 @@ import (
 )
 
 func makeSQLConn(url string) clisqlclient.Conn {
-	bf := false
-	return clisqlclient.MakeSQLConn(url,
-		false, /* isInteractive */
-		&bf,   /* enableServerExecutionTimings */
-		false, /* embeddedMode */
-		&bf,   /* echo */
-		&bf,   /* showTimes */
-		&bf,   /* verboseTimings */
-	)
+	var sqlConnCtx clisqlclient.Context
+	return sqlConnCtx.MakeSQLConn(url)
 }
 
 func TestConnRecover(t *testing.T) {
