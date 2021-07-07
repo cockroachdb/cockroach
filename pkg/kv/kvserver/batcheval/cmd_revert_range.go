@@ -36,7 +36,7 @@ func declareKeysRevertRange(
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(rs.GetRangeID())})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeGCThresholdKey(rs.GetRangeID())})
 }
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].

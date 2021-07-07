@@ -54,7 +54,7 @@ message ReplicaState {
   roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
   roachpb.RaftTruncatedState truncated_state = 5;
-  // gcThreshold is the GC threshold of the Range, typically updated when keys
+  // GCThreshold is the GC threshold of the Range, typically updated when keys
   // are garbage collected. Reads and writes at timestamps <= this time will
   // not be served.
   util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold"];

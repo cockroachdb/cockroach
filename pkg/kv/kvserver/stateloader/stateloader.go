@@ -528,7 +528,7 @@ func (rsl StateLoader) LoadGCThreshold(
 	ctx context.Context, reader storage.Reader,
 ) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
-	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeLastGCKey(),
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeGCThresholdKey(),
 		hlc.Timestamp{}, &t, storage.MVCCGetOptions{})
 	return &t, err
 }
@@ -544,7 +544,7 @@ func (rsl StateLoader) SetGCThreshold(
 		return errors.New("cannot persist nil GCThreshold")
 	}
 	return storage.MVCCPutProto(ctx, readWriter, ms,
-		rsl.RangeLastGCKey(), hlc.Timestamp{}, nil, threshold)
+		rsl.RangeGCThresholdKey(), hlc.Timestamp{}, nil, threshold)
 }
 
 // LoadVersion loads the replica version.

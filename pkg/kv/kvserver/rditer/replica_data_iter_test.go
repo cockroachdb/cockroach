@@ -80,7 +80,7 @@ func createRangeData(
 	}{
 		{keys.AbortSpanKey(desc.RangeID, testTxnID), ts0},
 		{keys.AbortSpanKey(desc.RangeID, testTxnID2), ts0},
-		{keys.RangeLastGCKey(desc.RangeID), ts0},
+		{keys.RangeGCThresholdKey(desc.RangeID), ts0},
 		{keys.RangeAppliedStateKey(desc.RangeID), ts0},
 		{keys.RaftAppliedIndexLegacyKey(desc.RangeID), ts0},
 		{keys.RaftTruncatedStateLegacyKey(desc.RangeID), ts0},

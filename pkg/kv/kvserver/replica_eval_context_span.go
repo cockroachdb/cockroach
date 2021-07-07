@@ -166,7 +166,7 @@ func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
 // not be served.
 func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
-		roachpb.Span{Key: keys.RangeLastGCKey(rec.GetRangeID())},
+		roachpb.Span{Key: keys.RangeGCThresholdKey(rec.GetRangeID())},
 	)
 	return rec.i.GetGCThreshold()
 }
