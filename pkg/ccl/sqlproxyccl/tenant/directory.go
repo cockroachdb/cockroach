@@ -380,7 +380,7 @@ func (d *Directory) updateTenantEntry(ctx context.Context, eventType EventType, 
 	}
 
 	// Ensure that a directory entry exists for this tenant.
-	entry, err := d.getEntry(ctx, roachpb.MakeTenantID(pod.TenantID), true)
+	entry, err := d.getEntry(ctx, roachpb.MakeTenantID(pod.TenantID), true /* allowCreate */)
 	if err != nil {
 		if !grpcutil.IsContextCanceled(err) {
 			// This should only happen in case of a deleted tenant or a transient
@@ -390,18 +390,16 @@ func (d *Directory) updateTenantEntry(ctx context.Context, eventType EventType, 
 		return
 	}
 
-	if entry != nil {
-		// For now, all we care about is the IP addresses of the tenant pod.
-		switch eventType {
-		case ADDED:
-			if entry.AddPodAddr(podAddr) {
-				log.Infof(ctx, "added IP address %s for tenant %d", podAddr, pod.TenantID)
-			}
+	// For now, all we care about is the IP addresses of the tenant pod.
+	switch eventType {
+	case ADDED:
+		if entry.AddPodAddr(podAddr) {
+			log.Infof(ctx, "added IP address %s for tenant %d", podAddr, pod.TenantID)
+		}
 
-		case DELETED:
-			if entry.RemovePodAddr(podAddr) {
-				log.Infof(ctx, "deleted IP address %s for tenant %d", podAddr, pod.TenantID)
-			}
+	case DELETED:
+		if entry.RemovePodAddr(podAddr) {
+			log.Infof(ctx, "deleted IP address %s for tenant %d", podAddr, pod.TenantID)
 		}
 	}
 }

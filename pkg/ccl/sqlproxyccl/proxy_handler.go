@@ -163,10 +163,6 @@ func newProxyHandler(
 		handler.denyListWatcher = denylist.NilWatcher()
 	}
 
-	if options.DrainTimeout != 0 {
-		handler.idleMonitor = idle.NewMonitor(ctx, options.DrainTimeout)
-	}
-
 	handler.throttleService = throttler.NewLocalService(throttler.WithBaseDelay(options.RatelimitBaseDelay))
 	handler.connCache = cache.NewCappedConnCache(maxKnownConnCacheSize)
 
@@ -177,8 +173,22 @@ func newProxyHandler(
 		}
 		// nolint:grpcconnclose
 		stopper.AddCloser(stop.CloserFn(func() { _ = conn.Close() /* nolint:grpcconnclose */ }))
+
+		// If a drain timeout has been specified, then start the idle monitor
+		// and the pod watcher. When a pod enters the DRAINING state, the pod
+		// watcher will set the idle monitor to detect connections without
+		// activity and terminate them.
+		var dirOpts []tenant.DirOption
+		if options.DrainTimeout != 0 {
+			handler.idleMonitor = idle.NewMonitor(ctx, options.DrainTimeout)
+
+			podWatcher := make(chan *tenant.Pod)
+			go handler.startPodWatcher(ctx, podWatcher)
+			dirOpts = append(dirOpts, tenant.PodWatcher(podWatcher))
+		}
+
 		client := tenant.NewDirectoryClient(conn)
-		handler.directory, err = tenant.NewDirectory(ctx, stopper, client)
+		handler.directory, err = tenant.NewDirectory(ctx, stopper, client, dirOpts...)
 		if err != nil {
 			return nil, err
 		}
@@ -346,7 +356,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	// Monitor for idle connection, if requested.
 	if handler.idleMonitor != nil {
 		crdbConn = handler.idleMonitor.DetectIdle(crdbConn, func() {
-			err = newErrorf(codeIdleDisconnect, "idle connection closed")
+			err := newErrorf(codeIdleDisconnect, "idle connection closed")
 			select {
 			case errConnection <- err: /* error reported */
 			default: /* the channel already contains an error */
@@ -405,6 +415,27 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		return nil
 	case <-handler.stopper.ShouldQuiesce():
 		return nil
+	}
+}
+
+// startPodWatcher runs on a background goroutine and listens to pod change
+// notifications. When a pod enters the DRAINING state, connections to that pod
+// are subject to an idle timeout that closes them after a short period of
+// inactivity. If a pod transitions back to the RUNNING state or to the DELETING
+// state, then the idle timeout needs to be cleared.
+func (handler *proxyHandler) startPodWatcher(ctx context.Context, podWatcher chan *tenant.Pod) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case pod := <-podWatcher:
+			if pod.State == tenant.DRAINING {
+				handler.idleMonitor.SetIdleChecks(pod.Addr)
+			} else {
+				// Clear idle checks either for RUNNING or DELETING.
+				handler.idleMonitor.ClearIdleChecks(pod.Addr)
+			}
+		}
 	}
 }
 
