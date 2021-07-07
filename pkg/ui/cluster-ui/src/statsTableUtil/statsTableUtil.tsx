@@ -59,6 +59,30 @@ type StatisticTableTitleType = {
   [key in StatisticTableColumnKeys]: (statType: StatisticType) => JSX.Element;
 };
 
+export function getLabel(
+  key: StatisticTableColumnKeys,
+  statType?: StatisticType,
+): string {
+  if (key !== "time") return statisticsColumnLabels[key];
+
+  switch (statType) {
+    case "transaction":
+      return (
+        contentModifiers.transactionCapital + " " + statisticsColumnLabels[key]
+      );
+    case "statement":
+      return (
+        contentModifiers.statementCapital + " " + statisticsColumnLabels[key]
+      );
+    case "transactionDetails":
+      return (
+        contentModifiers.statementCapital + " " + statisticsColumnLabels[key]
+      );
+    default:
+      return statisticsColumnLabels[key];
+  }
+}
+
 // statisticsTableTitles is a mapping between statistic table columns and functions.
 // Each function provides tooltip information for its respective statistic column.
 // The function parameter is a StatisticType, which represents the type
@@ -86,7 +110,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </>
         }
       >
-        {statisticsColumnLabels.statements}
+        {getLabel("statements")}
       </Tooltip>
     );
   },
@@ -130,7 +154,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </>
         }
       >
-        Execution Count
+        {getLabel("executionCount")}
       </Tooltip>
     );
   },
@@ -151,7 +175,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={<p>Database on which the ${contentModifier} was executed.</p>}
       >
-        {statisticsColumnLabels.database}
+        {getLabel("database")}
       </Tooltip>
     );
   },
@@ -196,7 +220,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </>
         }
       >
-        {statisticsColumnLabels.rowsRead}
+        {getLabel("rowsRead")}
       </Tooltip>
     );
   },
@@ -241,7 +265,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </>
         }
       >
-        {statisticsColumnLabels.bytesRead}
+        {getLabel("bytesRead")}
       </Tooltip>
     );
   },
@@ -286,7 +310,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </>
         }
       >
-        {columnLabel + " Time"}
+        {getLabel("time", statType)}
       </Tooltip>
     );
   },
@@ -331,7 +355,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </>
         }
       >
-        {statisticsColumnLabels.contention}
+        {getLabel("contention")}
       </Tooltip>
     );
   },
@@ -372,7 +396,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </>
         }
       >
-        {statisticsColumnLabels.maxMemUsage}
+        {getLabel("maxMemUsage")}
       </Tooltip>
     );
   },
@@ -421,7 +445,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </>
         }
       >
-        {statisticsColumnLabels.networkBytes}
+        {getLabel("networkBytes")}
       </Tooltip>
     );
   },
@@ -457,7 +481,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </>
         }
       >
-        {statisticsColumnLabels.retries}
+        {getLabel("retries")}
       </Tooltip>
     );
   },
@@ -489,7 +513,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </p>
         }
       >
-        {statisticsColumnLabels.workloadPct}
+        {getLabel("workloadPct")}
       </Tooltip>
     );
   },
@@ -512,7 +536,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           <p>Regions/Nodes in which the ${contentModifier} was executed.</p>
         }
       >
-        {statisticsColumnLabels.regionNodes}
+        {getLabel("regionNodes")}
       </Tooltip>
     );
   },
@@ -536,7 +560,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           </>
         }
       >
-        {statisticsColumnLabels.diagnostics}
+        {getLabel("diagnostics")}
       </Tooltip>
     );
   },

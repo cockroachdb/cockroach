@@ -118,7 +118,7 @@ function makeCommonColumns(
         FixLong(Number(stmt.stats.bytes_read.mean)),
     },
     {
-      name: "statementTime",
+      name: "time",
       title: statisticsTableTitles.time(statType),
       className: cx("statements-table__col-latency"),
       cell: latencyBar,
