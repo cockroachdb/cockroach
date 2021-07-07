@@ -5,8 +5,28 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Get retrieves the value of the attribute from the given element.
-func Get(attr Attr, e scpb.Element) Value {
+// Get retrieves the value of the attribute from the given container.
+func Get(attr Attr, e scpb.Container) Value {
+
+	switch attr {
+	case Status:
+		switch e := e.(type) {
+		case *scpb.Node:
+			return makeStatus(&e.Status)
+		default:
+			return nil
+		}
+
+	case Direction:
+		switch e := e.(type) {
+		case *scpb.Node:
+			return makeDirection(&e.Target.Direction)
+		case *scpb.Target:
+			return makeDirection(&e.Direction)
+		default:
+			return nil
+		}
+	}
 
 	switch e := e.GetElement().(type) {
 

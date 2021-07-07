@@ -89,10 +89,33 @@ func (n name) String() string {
 	lexbase.EncodeEscapedSQLIdent(&buffer, string(n))
 	return buffer.String()
 }
-
 func (n name) compare(other Value) (ok, less, eq bool) {
 	if o, ok := other.(*name); ok {
 		return true, n < *o, n == *o
+	}
+	return false, false, false
+}
+
+type status scpb.Status
+
+func makeStatus(s *scpb.Status) Value { return (*status)(s) }
+
+func (s status) String() string { return scpb.Status(s).String() }
+func (s status) compare(other Value) (ok, less, eq bool) {
+	if o, ok := other.(*status); ok {
+		return true, s < *o, s == *o
+	}
+	return false, false, false
+}
+
+type direction scpb.Target_Direction
+
+func makeDirection(s *scpb.Target_Direction) Value { return (*direction)(s) }
+
+func (d direction) String() string { return scpb.Target_Direction(d).String() }
+func (d direction) compare(other Value) (ok, less, eq bool) {
+	if o, ok := other.(*direction); ok {
+		return true, d < *o, d == *o
 	}
 	return false, false, false
 }

@@ -38,21 +38,27 @@ const (
 	Name
 	// IndexID is the index ID to which this element corresponds.
 	IndexID
+	// Direction is the direction of a Target or Node.
+	Direction
+	// Status is the Status of a Node.
+	Status
 
 	numAttributes int = iota
 )
 
 var attributeOrder = [numAttributes]Attr{
-	0: Type,
-	1: DescID,
-	2: ReferencedDescID,
-	3: ColumnID,
-	4: Name,
-	5: IndexID,
+	Type,
+	DescID,
+	ReferencedDescID,
+	ColumnID,
+	Name,
+	IndexID,
+	Direction,
+	Status,
 }
 
 // Compare compares two elements by their attributes.
-func Compare(a, b scpb.Element) (less, eq bool) {
+func Compare(a, b scpb.Container) (less, eq bool) {
 	for i := 0; i < numAttributes; i++ {
 		less, eq := CompareOn(attributeOrder[i], a, b)
 		if !eq {
@@ -63,13 +69,13 @@ func Compare(a, b scpb.Element) (less, eq bool) {
 }
 
 // Equal returns true if the two elements have identical attributes.
-func Equal(a, b scpb.Element) bool {
+func Equal(a, b scpb.Container) bool {
 	_, eq := Compare(a, b)
 	return eq
 }
 
 // CompareOn compares two elements on a given attribute.
-func CompareOn(attr Attr, a, b scpb.Element) (less, eq bool) {
+func CompareOn(attr Attr, a, b scpb.Container) (less, eq bool) {
 	av, bv := Get(attr, a), Get(attr, b)
 	switch {
 	case av == nil && bv == nil:
@@ -91,15 +97,27 @@ func CompareOn(attr Attr, a, b scpb.Element) (less, eq bool) {
 }
 
 // ToString renders an element's attributes to a string.
-func ToString(e scpb.Element) string {
+func ToString(e scpb.Container) string {
 	var buf strings.Builder
 	Format(e, &buf)
 	return buf.String()
 }
 
 // Format serializes attribute into a writer.
-func Format(e scpb.Element, w io.Writer) {
-	fmt.Fprintf(w, "%s:{", Get(Type, e))
+func Format(e scpb.Container, w io.Writer) {
+	var isContainer bool
+	switch e.(type) {
+	case *scpb.Node, *scpb.Target:
+		isContainer = true
+	}
+	if isContainer {
+		fmt.Fprintf(w, "[%s, ", Get(Direction, e))
+	}
+	if status := Get(Status, e); status != nil {
+		fmt.Fprintf(w, "%s, ", status)
+	}
+	e = e.GetElement()
+	fmt.Fprintf(w, "%s: {", Get(Type, e))
 	var written int
 	for i := 0; i < numAttributes; i++ {
 		attr := attributeOrder[i]
@@ -117,4 +135,7 @@ func Format(e scpb.Element, w io.Writer) {
 		fmt.Fprintf(w, "%s: %s", attr, av)
 	}
 	_, _ = io.WriteString(w, "}")
+	if isContainer {
+		_, _ = io.WriteString(w, "]")
+	}
 }
