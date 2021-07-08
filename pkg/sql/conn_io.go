@@ -457,11 +457,11 @@ func (buf *StmtBuf) translatePosLocked(pos CmdPos) (int, error) {
 	return int(pos - buf.mu.startPos), nil
 }
 
-// ltrim iterates over the buffer forward and removes all commands up to
+// Ltrim iterates over the buffer forward and removes all commands up to
 // (not including) the command at pos.
 //
-// It's illegal to ltrim to a position higher than the current cursor.
-func (buf *StmtBuf) ltrim(ctx context.Context, pos CmdPos) {
+// It's illegal to Ltrim to a position higher than the current cursor.
+func (buf *StmtBuf) Ltrim(ctx context.Context, pos CmdPos) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	if pos < buf.mu.startPos {

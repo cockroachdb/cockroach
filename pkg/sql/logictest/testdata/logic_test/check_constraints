@@ -310,6 +310,33 @@ UPDATE t9 SET a = 7 WHERE a = 4
 statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
 UPDATE t9 SET a = 2 WHERE a = 5
 
+# Check constraints on computed columns.
+
+statement ok
+CREATE TABLE t10 (
+  a INT,
+  b INT AS (a - 1) STORED,
+  CHECK (b > 0)
+);
+
+statement error failed to satisfy CHECK constraint \(b > 0:::INT8\)
+INSERT INTO t10 VALUES (1)
+
+statement error failed to satisfy CHECK constraint \(b > 0:::INT8\)
+UPSERT INTO t10 VALUES (1)
+
+statement ok
+INSERT INTO t10 VALUES (2)
+
+statement ok
+UPSERT INTO t10 VALUES (2)
+
+statement error failed to satisfy CHECK constraint \(b > 0:::INT8\)
+UPDATE t10 SET a = 1
+
+statement ok
+UPDATE t10 SET a = 3
+
 # Regression test for #36293. Make sure we don't panic with a false check
 # constraint.
 statement ok
@@ -349,3 +376,22 @@ CREATE TABLE t51690(x INT, y INT, CHECK(x / y = 1));
 
 statement error pq: division by zero
 INSERT INTO t51690 VALUES (1, 0)
+
+# Regression test for #67100. Inserts should fail when a check constraint always
+# evaluates to false.
+
+statement ok
+CREATE TABLE t67100a (a INT, CHECK (false));
+CREATE TABLE t67100b (a INT, CHECK (true AND 0 > 1));
+
+statement error failed to satisfy CHECK constraint \(false\)
+INSERT INTO t67100a VALUES (1)
+
+statement error failed to satisfy CHECK constraint \(false\)
+UPSERT INTO t67100a VALUES (1)
+
+statement error failed to satisfy CHECK constraint \(true AND \(0:::INT8 > 1:::INT8\)\)
+INSERT INTO t67100b VALUES (1)
+
+statement error failed to satisfy CHECK constraint \(true AND \(0:::INT8 > 1:::INT8\)\)
+UPSERT INTO t67100b VALUES (1)

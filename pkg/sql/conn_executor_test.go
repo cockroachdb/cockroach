@@ -40,12 +40,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgx"
@@ -844,6 +846,89 @@ func TestTrimFlushedStatements(t *testing.T) {
 		}
 	}
 	require.NoError(t, tx.Commit())
+}
+
+func TestTrimSuspendedPortals(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const (
+		// select generates 10 rows of results which the test retrieves using ExecPortal
+		selectStmt = "SELECT generate_series(1, 10)"
+
+		// stmtBufMaxLen is the maximum length the statement buffer should be during
+		// execution
+		stmtBufMaxLen = 2
+
+		// The name of the portal, used to get a handle on the statement buffer
+		portalName = "C_1"
+	)
+
+	ctx := context.Background()
+
+	var stmtBuff *sql.StmtBuf
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				// get a handle to the statement buffer during the Bind phase
+				AfterExecCmd: func(_ context.Context, cmd sql.Command, buf *sql.StmtBuf) {
+					switch tcmd := cmd.(type) {
+					case sql.BindStmt:
+						if tcmd.PortalName == portalName {
+							stmtBuff = buf
+						}
+					default:
+					}
+				},
+			},
+		},
+		Insecure: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Connect to the cluster via the PGWire client.
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), security.RootUser)
+	require.NoError(t, err)
+
+	// setup the portal
+	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
+	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Parse {"Query": "%s"}`, selectStmt)))
+	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Bind {"DestinationPortal": "%s"}`, portalName)))
+
+	// wait for ready
+	until := pgtest.ParseMessages("ReadyForQuery")
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// Execute the portal 10 times
+	for i := 1; i <= 10; i++ {
+
+		// Exec the portal
+		require.NoError(t, p.SendOneLine(fmt.Sprintf(`Execute {"Portal": "%s", "MaxRows": 1}`, portalName)))
+		require.NoError(t, p.SendOneLine(`Sync`))
+
+		// wait for ready
+		msg, _ := p.Until(false /* keepErrMsg */, until...)
+
+		// received messages should include a data row with the correct value
+		received := pgtest.MsgsToJSONWithIgnore(msg, &datadriven.TestData{})
+		require.Equal(t, 1, strings.Count(received, fmt.Sprintf(`"Type":"DataRow","Values":[{"text":"%d"}]`, i)))
+
+		// assert that the stmtBuff never exceeds the expected size
+		stmtBufLen := stmtBuff.Len()
+		if stmtBufLen > stmtBufMaxLen {
+			t.Fatalf("statement buffer grew to %d (> %d) after %dth execution", stmtBufLen, stmtBufMaxLen, i)
+		}
+	}
+
+	// send commit
+	require.NoError(t, p.SendOneLine(`Query {"String": "COMMIT"}`))
+
+	// wait for ready
+	msg, _ := p.Until(false /* keepErrMsg */, until...)
+	received := pgtest.MsgsToJSONWithIgnore(msg, &datadriven.TestData{})
+	require.Equal(t, 1, strings.Count(received, `"Type":"CommandComplete","CommandTag":"COMMIT"`))
+
 }
 
 func TestShowLastQueryStatistics(t *testing.T) {
