@@ -107,6 +107,14 @@ func registerGORM(r registry.Registry) {
 		err = c.RunE(ctx, node, `./cockroach sql -e "CREATE DATABASE gorm" --insecure`)
 		require.NoError(t, err)
 
+		t.Status("downloading go dependencies for tests")
+		err = c.RunE(
+			ctx,
+			node,
+			fmt.Sprintf(`cd %s && go get -u ./... && go mod download`, gormTestPath),
+		)
+		require.NoError(t, err)
+
 		t.Status("running gorm test suite and collecting results")
 
 		// Ignore the error as there will be failing tests.
@@ -114,7 +122,8 @@ func registerGORM(r registry.Registry) {
 			ctx,
 			node,
 			fmt.Sprintf(`cd %s && GORMDIALECT="postgres" 
-PGUSER=root PGPORT=26257 PGSSLMODE=disable go test -v 2>&1 | %s/bin/go-junit-report > %s`, gormTestPath, goPath, resultsPath),
+PGUSER=root PGPORT=26257 PGSSLMODE=disable go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,
+				gormTestPath, goPath, resultsPath),
 		)
 		if err != nil {
 			t.L().Printf("error whilst running tests (may be expected): %#v", err)
