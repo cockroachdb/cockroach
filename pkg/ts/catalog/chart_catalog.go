@@ -910,6 +910,25 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "LockTable"}},
+		Charts: []chartDescription{
+			{
+				Title: "Locks",
+				Metrics: []string{
+					"kv.concurrency.locks",
+					"kv.concurrency.locks_with_wait_queues",
+				},
+			},
+			{
+				Title: "Waiters",
+				Metrics: []string{
+					"kv.concurrency.lock_wait_queue_waiters",
+					"kv.concurrency.max_lock_wait_queue_waiters_for_lock",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{KVTransactionLayer, "Transactions", "TxnWaitQueue"}},
 		Charts: []chartDescription{
 			{
