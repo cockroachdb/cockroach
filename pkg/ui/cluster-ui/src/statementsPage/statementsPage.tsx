@@ -42,6 +42,7 @@ import {
   StatementsSortedTable,
 } from "../statementsTable";
 import {
+  getLabel,
   statisticsColumnLabels,
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
@@ -428,7 +429,7 @@ export class StatementsPage extends React.Component<
       .filter(c => !c.alwaysShow)
       .map(
         (c): SelectOption => ({
-          label: statisticsColumnLabels[c.name as StatisticTableColumnKeys],
+          label: getLabel(c.name as StatisticTableColumnKeys, "statement"),
           value: c.name,
           isSelected: isColumnSelected(c),
         }),
