@@ -366,15 +366,42 @@ func (h *crdbInstallHelper) startNode(
 	}
 
 	nodes := h.c.ServerNodes()
+	if err := func() error {
+		sess, err := h.c.newSession(nodes[nodeIdx])
+		if err != nil {
+			return err
+		}
+		defer sess.Close()
+
+		sess.SetStdin(strings.NewReader(startCmd))
+		var cmd string
+		if h.c.IsLocal() {
+			cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[nodeIdx])
+		}
+		cmd += `cat > cockroach.sh && chmod +x cockroach.sh`
+		if out, err := sess.CombinedOutput(cmd); err != nil {
+			return errors.Wrapf(err, "failed to upload start script: %s", out)
+		}
+
+		return nil
+	}(); err != nil {
+		return "", err
+	}
+
 	sess, err := h.c.newSession(nodes[nodeIdx])
 	if err != nil {
 		return "", err
 	}
 	defer sess.Close()
 
-	out, err := sess.CombinedOutput(startCmd)
+	var cmd string
+	if h.c.IsLocal() {
+		cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[nodeIdx])
+	}
+	cmd += "./cockroach.sh"
+	out, err := sess.CombinedOutput(cmd)
 	if err != nil {
-		return "", errors.Wrapf(err, "~ %s\n%s", startCmd, out)
+		return "", errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
 	return strings.TrimSpace(string(out)), nil
 }

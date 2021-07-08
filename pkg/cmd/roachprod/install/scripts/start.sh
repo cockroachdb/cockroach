@@ -1,42 +1,36 @@
 #!/bin/bash
 set -euo pipefail
 
-mkdir -p {{.LogDir}}
-helper="{{if .Local}}{{.LogDir}}{{else}}${HOME}{{end}}/cockroach-helper.sh"
-verb="{{if .Local}}run{{else}}run-systemd{{end}}"
+local="{{if .Local}}true{{end}}"
 
-# 'EOF' disables parameter substitution in the heredoc.
-cat > "${helper}" << 'EOF' && chmod +x "${helper}" && "${helper}" "${verb}"
-#!/bin/bash
+mkdir -p "{{.LogDir}}"
+
 set -euo pipefail
 
-if [[ "${1}" == "run" ]]; then
-  local="{{if .Local}}true{{end}}"
+if [[ "${local}" == "true" || "${1-}" == "run" ]]; then
   mkdir -p {{.LogDir}}
   echo "cockroach start: $(date), logging to {{.LogDir}}" | tee -a {{.LogDir}}/{roachprod,cockroach.std{out,err}}.log
   {{.KeyCmd}}
-  export ROACHPROD={{.NodeNum}}{{.Tag}} {{.EnvVars}}
+  export ROACHPROD="{{.NodeNum}}{{.Tag}} {{.EnvVars}}"
   background=""
   if [[ "${local}" ]]; then
     background="--background"
   fi
   CODE=0
   {{.Binary}} {{.StartCmd}} {{.Args}} ${background} >> {{.LogDir}}/cockroach.stdout.log 2>> {{.LogDir}}/cockroach.stderr.log || CODE=$?
-  if [[ -z "${local}" || ${CODE} -ne 0 ]]; then
+  if [[ -z "${local}" || "${CODE}" -ne 0 ]]; then
     echo "cockroach exited with code ${CODE}: $(date)" | tee -a {{.LogDir}}/{roachprod,cockroach.{exit,std{out,err}}}.log
   fi
-  exit ${CODE}
+  exit "${CODE}"
 fi
 
-if [[ "${1}" != "run-systemd" ]]; then
-  echo "unsupported: ${1}"
-  exit 1
-fi
+# Set up systemd unit and start it, which will recursively
+# invoke this script but hit the above conditional.
 
 if systemctl is-active -q cockroach; then
   echo "cockroach service already active"
-	echo "To get more information: systemctl status cockroach"
-	exit 1
+  echo "To get more information: systemctl status cockroach"
+  exit 1
 fi
 
 # If cockroach failed, the service still exists; we need to clean it up before
@@ -49,11 +43,11 @@ if [ ! -e ${HOME}/.profile-cockroach ]; then
   cat > ${HOME}/.profile-cockroach <<'EOQ'
 echo ""
 if systemctl is-active -q cockroach; then
-	echo "cockroach is running; see: systemctl status cockroach"
+  echo "cockroach is running; see: systemctl status cockroach"
 elif systemctl is-failed -q cockroach; then
-	echo "cockroach stopped; see: systemctl status cockroach"
+  echo "cockroach stopped; see: systemctl status cockroach"
 else
-	echo "cockroach not started"
+  echo "cockroach not started"
 fi
 echo ""
 EOQ
@@ -72,5 +66,4 @@ sudo systemd-run --unit cockroach \
   -p MemoryMax={{.MemoryMax}} \
   -p LimitCORE=infinity \
   -p LimitNOFILE=65536 \
-	bash $0 run
-EOF
+  bash $0 run
