@@ -77,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -855,6 +856,24 @@ var (
 		Measurement: "Discarded SQL Stats",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaSQLStatsFlushStarted = metric.Metadata{
+		Name:        "sql.stats.flush.count",
+		Help:        "Number of times SQL Stats are flushed to persistent storage",
+		Measurement: "SQL Stats Flush",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSQLStatsFlushFailure = metric.Metadata{
+		Name:        "sql.stats.flush.error",
+		Help:        "Number of errors encountered when flushing SQL Stats",
+		Measurement: "SQL Stats Flush",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSQLStatsFlushDuration = metric.Metadata{
+		Name:        "sql.stats.flush.duration",
+		Help:        "Time took to in nanoseconds to complete SQL Stats flush",
+		Measurement: "SQL Stats Flush",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
@@ -932,6 +951,7 @@ type ExecutorConfig struct {
 	TenantTestingKnobs            *TenantTestingKnobs
 	BackupRestoreTestingKnobs     *BackupRestoreTestingKnobs
 	IndexUsageStatsTestingKnobs   *idxusage.TestingKnobs
+	SQLStatsTestingKnobs          *persistedsqlstats.TestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
