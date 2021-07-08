@@ -831,6 +831,12 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-LOC-TIMEOUT
 	`lock_timeout`: makeCompatIntVar(`lock_timeout`, 0),
 
+	// See https://www.postgresql.org/docs/13/runtime-config-compatible.html
+	// CockroachDB only supports safe_encoding for now. If `client_encoding` is updated to
+	// allow encodings other than UTF8, then the default value of `backslash_quote` should
+	// be changed to `on`.
+	`backslash_quote`: makeCompatStringVar(`backslash_quote`, `safe_encoding`),
+
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
 	`max_identifier_length`: {
