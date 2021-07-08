@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -411,7 +412,7 @@ func registerRestore(r registry.Registry) {
 				// 	})
 				// })
 
-				tick := initBulkJobPerfArtifacts(ctx, t, testName, item.timeout)
+				tick, perfBuf := initBulkJobPerfArtifacts(testName, item.timeout)
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
 					defer hc.Done()
@@ -436,7 +437,8 @@ func registerRestore(r registry.Registry) {
 
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
-					if err := c.PutE(ctx, t.L(), t.PerfArtifactsDir(), t.PerfArtifactsDir(), c.Node(1)); err != nil {
+					dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+					if err := c.PutString(ctx, perfBuf.String(), dest, 755, c.Node(1)); err != nil {
 						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 					}
 					return nil
