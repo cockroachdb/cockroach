@@ -11,10 +11,14 @@
 package jobs_test
 
 import (
+	"archive/zip"
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -49,8 +53,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/types"
 	"github.com/google/go-cmp/cmp"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
@@ -2905,4 +2911,135 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	require.NoError(t, err)
 	registry.TestingNudgeAdoptionQueue()
 	require.Regexp(t, `expected session '\w+' but found NULL`, <-resumed)
+}
+
+func TestMaybeDumpTrace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	ctx := context.Background()
+
+	baseDir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	traceDir := filepath.Join(baseDir, "trace_dir")
+	knobs := base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs, TraceDir: traceDir})
+	defer s.Stopper().Stop(ctx)
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	// The default FormatVersion value in SchemaChangeDetails corresponds to a
+	// pre-20.1 job.
+	rec := jobs.Record{
+		DescriptorIDs: []descpb.ID{1},
+		Details:       jobspb.BackupDetails{},
+		Progress:      jobspb.BackupProgress{},
+	}
+
+	var jobFails bool
+	jobs.RegisterConstructor(jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				span := tracing.SpanFromContext(ctx)
+				span.RecordStructured(&types.StringValue{Value: "boom"})
+				if jobFails {
+					return errors.New("boom")
+				}
+				return nil
+			},
+			TraceRealSpan: true,
+		}
+	})
+
+	expList := []string{"node1-trace.txt", "node1-jaeger.json"}
+	for _, test := range []struct {
+		mode          string
+		dumpOnFail    bool
+		dumpOnSuccess bool
+	}{
+		{
+			mode:          "noDump",
+			dumpOnFail:    false,
+			dumpOnSuccess: false,
+		},
+		{
+			mode:          "onFail",
+			dumpOnFail:    true,
+			dumpOnSuccess: false,
+		},
+		{
+			mode:          "onTerminal",
+			dumpOnFail:    true,
+			dumpOnSuccess: true,
+		},
+	} {
+		for _, jobFails = range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s_jobFails=%t", test.mode, jobFails), func(t *testing.T) {
+				_, err := sqlDB.Exec(`SET CLUSTER SETTING jobs.dumptrace.mode=$1::string`, test.mode)
+				require.NoError(t, err)
+
+				var job *jobs.StartableJob
+				id := registry.MakeJobID()
+				require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+					err = registry.CreateStartableJobWithTxn(ctx, &job, id, txn, rec)
+					return err
+				}))
+				require.NoError(t, job.Start(ctx))
+
+				if jobFails {
+					require.True(t, testutils.IsError(job.AwaitCompletion(ctx), "boom"))
+				} else {
+					require.NoError(t, job.AwaitCompletion(ctx))
+				}
+
+				// Check the configured inflight trace dir for dumped zip files.
+				traceDumpDir := jobs.TestingGetTraceDumpDir(registry)
+				files := make([]string, 0)
+				require.NoError(t, filepath.Walk(traceDumpDir, func(path string, info os.FileInfo, err error) error {
+					if info.IsDir() {
+						return nil
+					}
+					files = append(files, path)
+					return nil
+				}))
+
+				if jobFails {
+					require.Equal(t, test.dumpOnFail, len(files) != 0)
+					if test.dumpOnFail {
+						checkBundle(t, files[0], expList)
+					}
+				} else {
+					require.Equal(t, test.dumpOnSuccess, len(files) != 0)
+					if test.dumpOnSuccess {
+						checkBundle(t, files[0], expList)
+					}
+				}
+
+				// Cleanup files for next iteration of the test.
+				if len(files) != 0 {
+					require.NoError(t, os.Remove(files[0]))
+				}
+			})
+		}
+	}
+}
+
+func checkBundle(t *testing.T, zipFile string, expectedFiles []string) {
+	t.Helper()
+	r, err := zip.OpenReader(zipFile)
+	require.NoError(t, err)
+
+	// Make sure the bundle contains the expected list of files.
+	filesInZip := make([]string, 0)
+	for _, f := range r.File {
+		if f.UncompressedSize64 == 0 {
+			t.Fatalf("file %s is empty", f.Name)
+		}
+		filesInZip = append(filesInZip, f.Name)
+	}
+	sort.Strings(filesInZip)
+	sort.Strings(expectedFiles)
+	if fmt.Sprint(filesInZip) != fmt.Sprint(expectedFiles) {
+		t.Errorf("unexpected list of files:\n  %v\nexpected:\n  %v", filesInZip, expectedFiles)
+	}
 }
