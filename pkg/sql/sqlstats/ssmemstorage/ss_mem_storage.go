@@ -128,7 +128,7 @@ func New(
 // IterateStatementStats iterates through the stored statement statistics
 // stored in this Container.
 func (s *Container) IterateStatementStats(
-	appName string, orderedKey bool, visitor sqlstats.StatementVisitor,
+	ctx context.Context, appName string, orderedKey bool, visitor sqlstats.StatementVisitor,
 ) error {
 	var stmtKeys stmtList
 	s.mu.Lock()
@@ -176,7 +176,7 @@ func (s *Container) IterateStatementStats(
 			Stats: data,
 		}
 
-		err := visitor(&collectedStats)
+		err := visitor(ctx, &collectedStats)
 		if err != nil {
 			return fmt.Errorf("sql stats iteration abort: %s", err)
 		}
@@ -187,7 +187,7 @@ func (s *Container) IterateStatementStats(
 // IterateTransactionStats iterates through the stored transaction statistics
 // stored in this Container.
 func (s *Container) IterateTransactionStats(
-	appName string, orderedKey bool, visitor sqlstats.TransactionVisitor,
+	ctx context.Context, appName string, orderedKey bool, visitor sqlstats.TransactionVisitor,
 ) error {
 	// Retrieve the transaction keys and optionally sort them.
 	var txnKeys txnList
@@ -221,7 +221,7 @@ func (s *Container) IterateTransactionStats(
 		}
 		txnStats.mu.Unlock()
 
-		err := visitor(txnKey, &collectedStats)
+		err := visitor(ctx, txnKey, &collectedStats)
 		if err != nil {
 			return fmt.Errorf("sql stats iteration abort: %s", err)
 		}
