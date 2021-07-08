@@ -27,7 +27,7 @@ func TestMultiIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pebble := newPebbleInMem(
+	pebble := NewInMem(
 		context.Background(),
 		roachpb.Attributes{},
 		1<<20,   /* cacheSize */

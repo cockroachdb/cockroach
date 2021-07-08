@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -430,6 +431,8 @@ func TestPebbleDiskSlowEmit(t *testing.T) {
 		roachpb.Attributes{},
 		1<<20,   /* cacheSize */
 		512<<20, /* storeSize */
+		vfs.NewMem(),
+		"",
 		settings,
 	)
 	defer p.Close()

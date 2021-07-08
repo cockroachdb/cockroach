@@ -85,7 +85,7 @@ func createTestPebbleEngine() Engine {
 }
 
 func createTestPebbleEngineWithSettings(settings *cluster.Settings) Engine {
-	return newPebbleInMem(
+	return NewInMem(
 		context.Background(),
 		roachpb.Attributes{},
 		1<<20,   /* cacheSize */
