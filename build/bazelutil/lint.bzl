@@ -49,7 +49,6 @@ def lint_binary(name, test):
             "//c-deps:libedit_files",
             "//c-deps:libgeos_files",
             "//c-deps:libproj_files",
-            "//c-deps:libroach_files",
             "//pkg/cmd/returncheck",
             "//pkg/cmd/roachvet",
             "//pkg/sql/opt/optgen/cmd/optfmt",
