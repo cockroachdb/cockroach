@@ -808,16 +808,28 @@ func TestBackupRestoreAppend(t *testing.T) {
 				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB())
 			require.NoError(t, err)
 			defer store.Close()
-			files, err := store.ListFiles(ctx, "*/*/*/"+backupManifestName)
-			require.NoError(t, err)
+			var files []string
+			require.NoError(t, store.List(ctx, "/", "", func(f string) error {
+				ok, err := path.Match("*/*/*/"+backupManifestName, f)
+				if ok {
+					files = append(files, f)
+				}
+				return err
+			}))
 			full1 = strings.TrimSuffix(files[0], backupManifestName)
 			full2 = strings.TrimSuffix(files[1], backupManifestName)
 
 			// Find the full-backups written to the specified subdirectories, and within
 			// each also check if we can restore to individual times captured with
 			// incremental backups that were appended to that backup.
-			subdirFiles, err := store.ListFiles(ctx, path.Join("foo", fmt.Sprintf("%s*",
-				specifiedSubdir), backupManifestName))
+			var subdirFiles []string
+			require.NoError(t, store.List(ctx, "foo/", "", func(f string) error {
+				ok, err := path.Match(specifiedSubdir+"*/"+backupManifestName, f)
+				if ok {
+					subdirFiles = append(subdirFiles, f)
+				}
+				return err
+			}))
 			require.NoError(t, err)
 			subdirFull1 = strings.TrimSuffix(strings.TrimPrefix(subdirFiles[0], "foo"),
 				backupManifestName)

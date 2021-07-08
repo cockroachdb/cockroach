@@ -5644,8 +5644,14 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 		// We expect there to be two log files since we have 13 unsupported statements.
 		dirName := fmt.Sprintf("import%d", importJobID)
 		checkFiles := func(expectedFileContent []string, logSubdir string) {
-			files, err := store.ListFiles(ctx, fmt.Sprintf("*/%s/*", logSubdir))
-			require.NoError(t, err)
+			var files []string
+			require.NoError(t, store.List(ctx, "", "", func(f string) error {
+				ok, err := path.Match(fmt.Sprintf("*/%s/*", logSubdir), f)
+				if ok {
+					files = append(files, f)
+				}
+				return err
+			}))
 			for i, file := range files {
 				require.Equal(t, file, path.Join(dirName, logSubdir, fmt.Sprintf("%d.log", i)))
 				content, err := store.ReadFile(ctx, file)
