@@ -547,7 +547,7 @@ func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, e
 			if nextErr != nil {
 				return nil, err
 			}
-			return nil, fmt.Errorf("programming error: %q: expected just 1 row of result, got more", query)
+			return nil, errors.AssertionFailedf("programming error: %q: expected just 1 row of result, got more", query)
 		}
 	}
 
