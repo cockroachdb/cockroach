@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -30,6 +31,33 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+)
+
+// jobDumpTraceMode is the type that represents the mode in which a traceable
+// job will dump a trace zip.
+type jobDumpTraceMode int64
+
+const (
+	// A Traceable job will not dump a trace zip.
+	noDump jobDumpTraceMode = iota
+	// A Traceable job will dump a trace zip on failure.
+	dumpOnFail
+	// A Traceable job will dump a trace zip in any of paused, canceled, failed,
+	// succeeded states.
+	dumpOnStop
+)
+
+var traceableJobDumpTraceMode = settings.RegisterEnumSetting(
+	"jobs.trace.force_dump_mode",
+	"determines the state in which all traceable jobs will dump their cluster wide, inflight, "+
+		"trace recordings. Traces may be dumped never, on fail, "+
+		"or on any status change i.e paused, canceled, failed, succeeded.",
+	"never",
+	map[int64]string{
+		int64(noDump):     "never",
+		int64(dumpOnFail): "onFail",
+		int64(dumpOnStop): "onStop",
+	},
 )
 
 // Job manages logging the progress of long-running system processes, like
