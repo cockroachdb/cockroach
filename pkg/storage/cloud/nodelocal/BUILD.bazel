@@ -24,11 +24,8 @@ go_test(
     srcs = ["nodelocal_storage_test.go"],
     embed = [":nodelocal"],
     deps = [
-        "//pkg/base",
-        "//pkg/blobs",
         "//pkg/security",
         "//pkg/settings/cluster",
-        "//pkg/storage/cloud",
         "//pkg/storage/cloud/cloudtestutils",
         "//pkg/testutils",
         "//pkg/util/leaktest",
