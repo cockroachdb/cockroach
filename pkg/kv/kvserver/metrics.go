@@ -1055,9 +1055,35 @@ var (
 	// TODO(mberhault): metrics for key age, per-key file/bytes counts.
 	metaEncryptionAlgorithm = metric.Metadata{
 		Name:        "rocksdb.encryption.algorithm",
-		Help:        "algorithm in use for encryption-at-rest, see ccl/storageccl/engineccl/enginepbccl/key_registry.proto",
+		Help:        "Algorithm in use for encryption-at-rest, see ccl/storageccl/engineccl/enginepbccl/key_registry.proto",
 		Measurement: "Encryption At Rest",
 		Unit:        metric.Unit_CONST,
+	}
+
+	// Concurrency control metrics.
+	metaConcurrencyLocks = metric.Metadata{
+		Name:        "kv.concurrency.locks",
+		Help:        "Number of active locks held in lock tables. Does not include replicated locks (intents) that are not held in memory",
+		Measurement: "Locks",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyLocksWithWaitQueues = metric.Metadata{
+		Name:        "kv.concurrency.locks_with_wait_queues",
+		Help:        "Number of active locks held in lock tables with active wait-queues",
+		Measurement: "Locks",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyLockWaitQueueWaiters = metric.Metadata{
+		Name:        "kv.concurrency.lock_wait_queue_waiters",
+		Help:        "Number of requests actively waiting in a lock wait-queue",
+		Measurement: "Lock-Queue Waiters",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyMaxLockWaitQueueWaitersForLock = metric.Metadata{
+		Name:        "kv.concurrency.max_lock_wait_queue_waiters_for_lock",
+		Help:        "Maximum number of requests actively waiting in any single lock wait-queue",
+		Measurement: "Lock-Queue Waiters",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Closed timestamp metrics.
@@ -1275,6 +1301,12 @@ type StoreMetrics struct {
 
 	// RangeFeed counts.
 	RangeFeedMetrics *rangefeed.Metrics
+
+	// Concurrency control metrics.
+	Locks                          *metric.Gauge
+	LocksWithWaitQueues            *metric.Gauge
+	LockWaitQueueWaiters           *metric.Gauge
+	MaxLockWaitQueueWaitersForLock *metric.Gauge
 
 	// Closed timestamp metrics.
 	ClosedTimestampMaxBehindNanos  *metric.Gauge
@@ -1661,6 +1693,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// RangeFeed counters.
 		RangeFeedMetrics: rangefeed.NewMetrics(),
+
+		// Concurrency control metrics.
+		Locks:                          metric.NewGauge(metaConcurrencyLocks),
+		LocksWithWaitQueues:            metric.NewGauge(metaConcurrencyLocksWithWaitQueues),
+		LockWaitQueueWaiters:           metric.NewGauge(metaConcurrencyLockWaitQueueWaiters),
+		MaxLockWaitQueueWaitersForLock: metric.NewGauge(metaConcurrencyMaxLockWaitQueueWaitersForLock),
 
 		// Closed timestamp metrics.
 		ClosedTimestampMaxBehindNanos:  metric.NewGauge(metaClosedTimestampMaxBehindNanos),
