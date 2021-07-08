@@ -95,6 +95,11 @@ type TestingKnobs struct {
 	// DrainSleepFn used in testing to override the usual sleep function with
 	// a custom function that counts the number of times the sleep function is called.
 	DrainSleepFn func(time.Duration)
+
+	// EnableNodelocalStorageForTenants enables the nodelocal://
+	// cloudstorage for tenants so that it can be used during
+	// testing.
+	EnableNodelocalStorageForTenants bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
