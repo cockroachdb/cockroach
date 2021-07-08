@@ -119,10 +119,45 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 			t.Fatal(err)
 		}
 
-		sinkDestHost, err := url.Parse(sinkDest.URL())
+		sinkDestHostLocal, err := url.Parse(sinkDest.URL())
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		for i := 1; i <= c.Spec().NodeCount; i++ {
+			t.Status("Addresses for Node ", i)
+			internal, err := c.InternalIP(ctx, c.Node(i))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Status("Internal IP: ", internal)
+			internal, err = c.InternalAddr(ctx, c.Node(i))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Status("Internal Address: ", internal)
+			external, err := c.ExternalIP(ctx, c.Node(i))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Status("External IP: ", external)
+			external, err = c.ExternalAddr(ctx, c.Node(i))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Status("External Address: ", external)
+		}
+
+		ips, err  := c.ExternalIP(ctx, workloadNode)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sinkDestHost, err := url.Parse(fmt.Sprintf("https://%s:%s", ips[0], sinkDestHostLocal.Port()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Status("started mock webhook sink with address ", sinkDestHost)
 
 		params := sinkDestHost.Query()
 		params.Set(changefeedbase.SinkParamCACert, certEncoded)
@@ -776,28 +811,23 @@ func registerCDC(r registry.Registry) {
 			})
 		},
 	})
-	// TODO(ryan min): uncomment once connectivity issue is fixed,
-	// currently fails with "initial scan did not complete" because sink
-	// URI is set as localhost, need to expose it to the other nodes via IP
-	/*
-		r.Add(testSpec{
-			Name:            "cdc/webhook-sink",
-			Owner:           OwnerCDC,
-			Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-			RequiresLicense: true,
-			Run: func(ctx context.Context, t *test, c Cluster) {
-				cdcBasicTest(ctx, t, c, cdcTestArgs{
-					workloadType:             tpccWorkloadType,
-					tpccWarehouseCount:       100,
-					workloadDuration:         "30m",
-					initialScan:              true,
-					whichSink:                webhookSink,
-					targetInitialScanLatency: 30 * time.Minute,
-					targetSteadyLatency:      time.Minute,
-				})
-			},
-		})
-	*/
+	r.Add(registry.TestSpec{
+		Name:            "cdc/webhook-sink",
+		Owner:           registry.OwnerCDC,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       100,
+				workloadDuration:         "30m",
+				initialScan:              true,
+				whichSink:                webhookSink,
+				targetInitialScanLatency: 30 * time.Minute,
+				targetSteadyLatency:      time.Minute,
+			})
+		},
+	})
 	r.Add(registry.TestSpec{
 		Name:            "cdc/kafka-auth",
 		Owner:           `cdc`,
