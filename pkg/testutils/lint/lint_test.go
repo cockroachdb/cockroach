@@ -50,7 +50,6 @@ func init() {
 		for _, dir := range []string{
 			"c-deps/libgeos/lib",
 			"c-deps/libproj/lib",
-			"c-deps/libroach/lib",
 			"external/com_github_knz_go_libedit/unix",
 		} {
 			ldflags = ldflags + " -L" + filepath.Join(runfiles, dir)
