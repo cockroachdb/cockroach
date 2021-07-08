@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -178,8 +177,6 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 	// captured.
 	c.prevStderr = stderr
 	stderr = os.Stdout
-	clisqlclient.TestingSetStderr(os.Stdout)
-	clisqlexec.TestingSetStderr(os.Stdout)
 
 	return c
 }
@@ -234,8 +231,6 @@ func (c *TestCLI) Cleanup() {
 
 	// Restore stderr.
 	stderr = c.prevStderr
-	clisqlclient.TestingSetStderr(c.prevStderr)
-	clisqlexec.TestingSetStderr(c.prevStderr)
 
 	log.Info(context.Background(), "stopping server and cleaning up CLI test")
 
@@ -282,8 +277,6 @@ func captureOutput(f func()) (out string, err error) {
 	}
 	os.Stdout = w
 	stderr = w
-	clisqlclient.TestingSetStderr(w)
-	clisqlexec.TestingSetStderr(w)
 
 	// Send all bytes from piped stdout through the output channel.
 	type captureResult struct {

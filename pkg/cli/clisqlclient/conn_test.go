@@ -12,6 +12,7 @@ package clisqlclient_test
 
 import (
 	"database/sql/driver"
+	"io/ioutil"
 	"net/url"
 	"testing"
 
@@ -26,7 +27,7 @@ import (
 
 func makeSQLConn(url string) clisqlclient.Conn {
 	var sqlConnCtx clisqlclient.Context
-	return sqlConnCtx.MakeSQLConn(url)
+	return sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, url)
 }
 
 func TestConnRecover(t *testing.T) {

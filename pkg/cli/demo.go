@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -384,7 +385,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 		}
 	}
 
-	conn := sqlConnCtx.MakeSQLConn(c.connURL)
+	conn := sqlConnCtx.MakeSQLConn(os.Stdout, stderr, c.connURL)
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	return runClient(cmd, conn, cmdIn)

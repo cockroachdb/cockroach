@@ -39,8 +39,9 @@ func (sqlExecCtx *Context) RunQuery(
 
 // RunQueryAndFormatResults takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes output to 'w'.
+// Errors and warnings, if any, are printed to 'ew'.
 func (sqlExecCtx *Context) RunQueryAndFormatResults(
-	conn clisqlclient.Conn, w io.Writer, fn clisqlclient.QueryFn,
+	conn clisqlclient.Conn, w, ew io.Writer, fn clisqlclient.QueryFn,
 ) (err error) {
 	startTime := timeutil.Now()
 	rows, isMultiStatementQuery, err := fn(conn)
@@ -129,12 +130,12 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 			if cleanup != nil {
 				defer cleanup()
 			}
-			return render(reporter, w, cols, newRowIter(rows, true), completedHook, noRowsHook)
+			return render(reporter, w, ew, cols, newRowIter(rows, true), completedHook, noRowsHook)
 		}(); err != nil {
 			return err
 		}
 
-		sqlExecCtx.maybeShowTimes(conn, w, isMultiStatementQuery, startTime, queryCompleteTime)
+		sqlExecCtx.maybeShowTimes(conn, w, ew, isMultiStatementQuery, startTime, queryCompleteTime)
 
 		if more, err := rows.NextResultSet(); err != nil {
 			return err
@@ -147,7 +148,7 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 // maybeShowTimes displays the execution time if show_times has been set.
 func (sqlExecCtx *Context) maybeShowTimes(
 	conn clisqlclient.Conn,
-	w io.Writer,
+	w, ew io.Writer,
 	isMultiStatementQuery bool,
 	startTime, queryCompleteTime time.Time,
 ) {
@@ -159,7 +160,7 @@ func (sqlExecCtx *Context) maybeShowTimes(
 		// If there was noticeable overhead, let the user know.
 		renderDelay := timeutil.Now().Sub(queryCompleteTime)
 		if renderDelay >= 1*time.Second && sqlExecCtx.IsInteractive() {
-			fmt.Fprintf(stderr,
+			fmt.Fprintf(ew,
 				"\nNote: an additional delay of %s was spent formatting the results.\n"+
 					"You can use \\set display_format to change the formatting.\n",
 				renderDelay)
@@ -174,7 +175,7 @@ func (sqlExecCtx *Context) maybeShowTimes(
 	if isMultiStatementQuery {
 		// No need to print if no one's watching.
 		if sqlExecCtx.IsInteractive() {
-			fmt.Fprintf(stderr, "\nNote: timings for multiple statements on a single line are not supported. See %s.\n",
+			fmt.Fprintf(ew, "\nNote: timings for multiple statements on a single line are not supported. See %s.\n",
 				build.MakeIssueURL(48180))
 		}
 		return
@@ -217,7 +218,7 @@ func (sqlExecCtx *Context) maybeShowTimes(
 	hasStats, parseLat, planLat, execLat, serviceLat, jobsLat, containsJobLat, err := conn.GetLastQueryStatistics()
 	if err != nil {
 		fmt.Fprintln(w, stats.String())
-		fmt.Fprintf(stderr, "\nwarning: %v", err)
+		fmt.Fprintf(ew, "\nwarning: %v", err)
 		return
 	}
 	if !hasStats {

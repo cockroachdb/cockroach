@@ -469,7 +469,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 			}
 			optData = append(optData, []string{n, options[n].display(), options[n].description})
 		}
-		err := sqlExecCtx.PrintQueryOutput(os.Stdout,
+		err := sqlExecCtx.PrintQueryOutput(os.Stdout, stderr,
 			[]string{"Option", "Value", "Description"},
 			clisqlexec.NewRowSliceIter(optData, "lll" /*align*/))
 		if err != nil {
@@ -1398,7 +1398,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	}
 
 	// Now run the statement/query.
-	c.exitErr = sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout,
+	c.exitErr = sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, stderr,
 		clisqlclient.MakeQuery(c.concatLines))
 	if c.exitErr != nil {
 		clierror.OutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
@@ -1426,7 +1426,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			if strings.Contains(sqlCtx.autoTrace, "kv") {
 				traceType = "kv"
 			}
-			if err := sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout,
+			if err := sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, stderr,
 				clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
 				clierror.OutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
@@ -1662,7 +1662,7 @@ func (c *cliState) runStatements(stmts []string) error {
 					c.exitErr = errors.New("error in client-side command")
 				}
 			} else {
-				c.exitErr = sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, clisqlclient.MakeQuery(stmt))
+				c.exitErr = sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, stderr, clisqlclient.MakeQuery(stmt))
 			}
 			if c.exitErr != nil {
 				if !sqlCtx.errExit && i < len(stmts)-1 {
