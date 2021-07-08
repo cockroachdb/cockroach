@@ -1325,8 +1325,8 @@ func (rq *replicateQueue) shedLease(
 		return noSuitableTarget, nil
 	}
 
+	log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
 	if opts.dryRun {
-		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
 		return noTransferDryRun, nil
 	}
 
