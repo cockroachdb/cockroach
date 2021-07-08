@@ -2547,6 +2547,13 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		underreplicatedRangeCount int64
 		overreplicatedRangeCount  int64
 		behindCount               int64
+
+		locks                          int64
+		locksWithWaitQueues            int64
+		lockWaitQueueWaiters           int64
+		maxLockWaitQueueWaitersForLock int64
+
+		minMaxClosedTS hlc.Timestamp
 	)
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
@@ -2556,7 +2563,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 	clusterNodes := s.ClusterNodeCount()
 
-	var minMaxClosedTS hlc.Timestamp
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
 		if metrics.Leader {
@@ -2597,6 +2603,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if wps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
 			averageWritesPerSecond += wps
 		}
+		locks += metrics.LockTableMetrics.Locks
+		locksWithWaitQueues += metrics.LockTableMetrics.LocksWithWaitQueues
+		lockWaitQueueWaiters += metrics.LockTableMetrics.Waiters
+		if w := metrics.LockTableMetrics.TopKLocksByWaiters[0].Waiters; w > maxLockWaitQueueWaitersForLock {
+			maxLockWaitQueueWaitersForLock = w
+		}
 		mc, ok := rep.maxClosed(ctx)
 		if ok && (minMaxClosedTS.IsEmpty() || mc.Less(minMaxClosedTS)) {
 			minMaxClosedTS = mc
@@ -2619,6 +2631,11 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
+
+	s.metrics.Locks.Update(locks)
+	s.metrics.LocksWithWaitQueues.Update(locksWithWaitQueues)
+	s.metrics.LockWaitQueueWaiters.Update(lockWaitQueueWaiters)
+	s.metrics.MaxLockWaitQueueWaitersForLock.Update(maxLockWaitQueueWaitersForLock)
 
 	if !minMaxClosedTS.IsEmpty() {
 		nanos := timeutil.Since(minMaxClosedTS.GoTime()).Nanoseconds()
