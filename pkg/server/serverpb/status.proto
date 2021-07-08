@@ -227,11 +227,24 @@ message RangeInfo {
   repeated roachpb.Lease lease_history = 8 [ (gogoproto.nullable) = false ];
   RangeProblems problems = 9 [ (gogoproto.nullable) = false ];
   RangeStatistics stats = 10 [ (gogoproto.nullable) = false ];
-  kv.kvserver.storagepb.LatchManagerInfo latches_local = 11 [ (gogoproto.nullable) = false ];
-  kv.kvserver.storagepb.LatchManagerInfo latches_global = 12 [ (gogoproto.nullable) = false ];
+  reserved 11, 12;
   kv.kvserver.storagepb.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
   bool ticking = 15;
+  int64 read_latches = 16;
+  int64 write_latches = 17;
+  int64 locks = 18;
+  int64 locks_with_wait_queues = 19;
+  int64 lock_wait_queue_waiters = 20;
+  message LockInfo {
+    string pretty_key = 1;
+    bytes key = 2 [ (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key" ];
+    bool held = 3;
+    int64 waiters = 4;
+    int64 waiting_readers = 5;
+    int64 waiting_writers = 6;
+  }
+  repeated LockInfo top_k_locks_by_wait_queue_waiters = 21 [ (gogoproto.nullable) = false ];
 }
 
 message RangesRequest {
