@@ -284,6 +284,7 @@ go_test(
         "debug_merge_logs_test.go",
         "debug_test.go",
         "decode_test.go",
+        "demo_cluster_test.go",
         "demo_locality_test.go",
         "demo_test.go",
         "doctor_test.go",
