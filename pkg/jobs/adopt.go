@@ -13,6 +13,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -284,6 +285,9 @@ func (r *Registry) runJob(
 	// happens during shutdown.
 	if err != nil && ctx.Err() == nil {
 		log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
+		if _, ok := resumer.(TraceableJob); ok {
+			r.td.MaybeDump(ctx, strconv.Itoa(int(job.ID())), int64(span.TraceID()), r.ex)
+		}
 	}
 	r.unregister(job.ID())
 	return err

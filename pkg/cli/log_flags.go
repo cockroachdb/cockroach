@@ -212,6 +212,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	serverCfg.GoroutineDumpDirName = filepath.Join(outputDirectory, base.GoroutineDumpDir)
 	serverCfg.HeapProfileDirName = filepath.Join(outputDirectory, base.HeapProfileDir)
 	serverCfg.CPUProfileDirName = filepath.Join(outputDirectory, base.CPUProfileDir)
+	serverCfg.JobTraceDirName = filepath.Join(outputDirectory, base.JobTraceDir)
 
 	return nil
 }
