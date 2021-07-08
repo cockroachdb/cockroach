@@ -72,7 +72,7 @@ var migrations = []migration.Migration{
 		spanConfigurationsTokensTableMigration,
 	),
 	migration.NewTenantMigration(
-		"add system.zones table to secondary tenants",
+		"add system.zones table for secondary tenants",
 		toCV(clusterversion.ZonesTableForSecondaryTenants),
 		zonesTableForSecondaryTenants,
 	),

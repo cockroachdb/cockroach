@@ -19,14 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 )
 
-// zonesTableForSecondaryTenants adds system.zones to existing secondary
-// tenants.
+// zonesTableForSecondaryTenants adds system.zones to secondary tenants.
 func zonesTableForSecondaryTenants(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
-	// We don't need to add system.zones for the host tenant as it should already
-	// be present.
 	if d.Codec.ForSystemTenant() {
+		// We don't need to add system.zones for the host tenant as it should already
+		// be present.
 		return nil
 	}
 	return sqlmigrations.CreateSystemTable(

@@ -52,11 +52,12 @@ func _() {
 	_ = x[ExpressionIndexes-41]
 	_ = x[DeleteDeprecatedNamespaceTableDescriptorMigration-42]
 	_ = x[SpanConfigurationsTable-43]
+	_ = x[ZonesTableForSecondaryTenants-44]
 }
 
-const _Key_name = "Start20_2GeospatialTypeAlterColumnTypeGeneralUserDefinedSchemasNoOriginFKIndexesNodeMembershipStatusMinPasswordLengthAbortSpanBytesMaterializedViewsBox2DTypeCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1EmptyArraysInInvertedIndexesUniqueWithoutIndexConstraintsVirtualComputedColumnsCPutInlineReplicaVersionsreplacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationNewSchemaChangerLongRunningMigrationsTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationSeparatedIntentsTracingVerbosityIndependentSemanticsSequencesRegclassImplicitColumnPartitioningMultiRegionFeaturesClosedTimestampsRaftTransportChangefeedsSupportPrimaryIndexChangesForeignKeyRepresentationMigrationPriorReadSummariesNonVotingReplicasProtectedTsMetaPrivilegesMigrationV21_1Start21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationSpanConfigurationsTable"
+const _Key_name = "Start20_2GeospatialTypeAlterColumnTypeGeneralUserDefinedSchemasNoOriginFKIndexesNodeMembershipStatusMinPasswordLengthAbortSpanBytesMaterializedViewsBox2DTypeCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1EmptyArraysInInvertedIndexesUniqueWithoutIndexConstraintsVirtualComputedColumnsCPutInlineReplicaVersionsreplacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationNewSchemaChangerLongRunningMigrationsTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationSeparatedIntentsTracingVerbosityIndependentSemanticsSequencesRegclassImplicitColumnPartitioningMultiRegionFeaturesClosedTimestampsRaftTransportChangefeedsSupportPrimaryIndexChangesForeignKeyRepresentationMigrationPriorReadSummariesNonVotingReplicasProtectedTsMetaPrivilegesMigrationV21_1Start21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationSpanConfigurationsTableZonesTableForSecondaryTenants"
 
-var _Key_index = [...]uint16{0, 9, 23, 45, 63, 80, 100, 117, 131, 148, 157, 177, 189, 194, 203, 231, 260, 282, 292, 307, 353, 403, 419, 440, 478, 520, 536, 572, 589, 615, 634, 663, 700, 733, 751, 768, 802, 807, 816, 831, 860, 877, 894, 943, 966}
+var _Key_index = [...]uint16{0, 9, 23, 45, 63, 80, 100, 117, 131, 148, 157, 177, 189, 194, 203, 231, 260, 282, 292, 307, 353, 403, 419, 440, 478, 520, 536, 572, 589, 615, 634, 663, 700, 733, 751, 768, 802, 807, 816, 831, 860, 877, 894, 943, 966, 995}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {

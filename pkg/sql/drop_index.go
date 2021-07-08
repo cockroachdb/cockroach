@@ -277,34 +277,30 @@ func (p *planner) dropIndexByName(
 		)
 	}
 
-	// Check if requires CCL binary for eventual zone config removal. Only
-	// necessary for the system tenant, because secondary tenants do not have
-	// zone configs for individual objects.
-	if p.ExecCfg().Codec.ForSystemTenant() {
-		_, zone, _, err := GetZoneConfigInTxn(
-			ctx, p.txn, p.ExecCfg().Codec, tableDesc.ID, nil /* index */, "", false,
-		)
-		if err != nil {
-			return err
-		}
+	// Check if requires CCL binary for eventual zone config removal.
+	_, zone, _, err := GetZoneConfigInTxn(
+		ctx, p.txn, p.ExecCfg().Codec, tableDesc.ID, nil /* index */, "", false,
+	)
+	if err != nil {
+		return err
+	}
 
-		for _, s := range zone.Subzones {
-			if s.IndexID != uint32(idx.GetID()) {
-				_, err = GenerateSubzoneSpans(
-					p.ExecCfg().Settings,
-					p.ExecCfg().ClusterID(),
-					p.ExecCfg().Codec,
-					tableDesc,
-					zone.Subzones,
-					false, /* newSubzones */
-				)
-				if sqlerrors.IsCCLRequiredError(err) {
-					return sqlerrors.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
-						"because table %q has at least one remaining index or partition with a zone config",
-						tableDesc.Name))
-				}
-				break
+	for _, s := range zone.Subzones {
+		if s.IndexID != uint32(idx.GetID()) {
+			_, err = GenerateSubzoneSpans(
+				p.ExecCfg().Settings,
+				p.ExecCfg().ClusterID(),
+				p.ExecCfg().Codec,
+				tableDesc,
+				zone.Subzones,
+				false, /* newSubzones */
+			)
+			if sqlerrors.IsCCLRequiredError(err) {
+				return sqlerrors.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
+					"because table %q has at least one remaining index or partition with a zone config",
+					tableDesc.Name))
 			}
+			break
 		}
 	}
 
