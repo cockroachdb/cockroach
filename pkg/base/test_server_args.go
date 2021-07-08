@@ -129,6 +129,9 @@ type TestServerArgs struct {
 
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
+
+	// If set, a TraceDir is initialized at the provided path.
+	TraceDir string
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

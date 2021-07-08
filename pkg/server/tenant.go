@@ -164,6 +164,8 @@ func StartTenant(
 		stopper:              args.stopper,
 		minSampleInterval:    base.DefaultMetricsSampleInterval,
 		goroutineDumpDirName: args.GoroutineDumpDirName,
+		func constructUnexpectedValueError()
+
 		heapProfileDirName:   args.HeapProfileDirName,
 		runtime:              args.runtime,
 	}); err != nil {
