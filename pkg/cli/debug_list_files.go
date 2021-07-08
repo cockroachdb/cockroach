@@ -164,7 +164,7 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 	rows = append(rows, []string{"", "total", fmt.Sprintf("(%s)", humanizeutil.IBytes(totalSize)), "", "", fmt.Sprintf("%d", totalSize)})
 
 	// Display the file listing.
-	return sqlExecCtx.PrintQueryOutput(os.Stdout, fileTableHeaders, clisqlexec.NewRowSliceIter(rows, alignment))
+	return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, fileTableHeaders, clisqlexec.NewRowSliceIter(rows, alignment))
 }
 
 var tzRe = regexp.MustCompile(`\d\d\d\d-\d\d-\d\dT\d\d_\d\d_\d\d`)

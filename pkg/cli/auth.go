@@ -68,7 +68,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		rows := [][]string{
 			{username, fmt.Sprintf("%d", id), hC},
 		}
-		if err := sqlExecCtx.PrintQueryOutput(os.Stdout, cols, clisqlexec.NewRowSliceIter(rows, "ll")); err != nil {
+		if err := sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, cols, clisqlexec.NewRowSliceIter(rows, "ll")); err != nil {
 			return err
 		}
 
@@ -175,7 +175,7 @@ func runLogout(cmd *cobra.Command, args []string) (resErr error) {
             id AS "session ID",
             "revokedAt" AS "revoked"`,
 		username)
-	return sqlExecCtx.RunQueryAndFormatResults(sqlConn, os.Stdout, logoutQuery)
+	return sqlExecCtx.RunQueryAndFormatResults(sqlConn, os.Stdout, stderr, logoutQuery)
 }
 
 var authListCmd = &cobra.Command{
@@ -205,7 +205,7 @@ SELECT username,
        "revokedAt" as "revoked",
        "lastUsedAt" as "last used"
   FROM system.web_sessions`)
-	return sqlExecCtx.RunQueryAndFormatResults(sqlConn, os.Stdout, logoutQuery)
+	return sqlExecCtx.RunQueryAndFormatResults(sqlConn, os.Stdout, stderr, logoutQuery)
 }
 
 var authCmds = []*cobra.Command{
