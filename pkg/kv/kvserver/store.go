@@ -1384,6 +1384,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = s.AnnotateCtx(ctx)
 	log.Event(ctx, "read store identity")
 
+	// Communicate store ID to engine, if it needs it.
+	if logSetter, ok := s.engine.(storage.StoreIDSetter); ok {
+		logSetter.SetStoreID(ctx, int32(s.StoreID()))
+	}
+
 	// Add the store ID to the scanner's AmbientContext before starting it, since
 	// the AmbientContext provided during construction did not include it.
 	// Note that this is just a hacky way of getting around that without
