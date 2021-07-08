@@ -128,10 +128,8 @@ func jobSurvivesNodeShutdown(
 		return nil
 	})
 
-	// Let the current tasks finish and use a new monitor for the restart.
-	// This lets us separate the failure modes.
+	m.ExpectDeath()
 	m.Wait()
-	m = c.NewMonitor(ctx)
 
 	// NB: the roachtest harness checks that at the end of the test, all nodes
 	// that have data also have a running process.
@@ -139,6 +137,4 @@ func jobSurvivesNodeShutdown(
 	if err := c.StartE(ctx, target); err != nil {
 		t.Fatal(errors.Wrapf(err, "could not restart node %s", target))
 	}
-
-	m.Wait()
 }
