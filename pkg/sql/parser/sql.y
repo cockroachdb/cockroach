@@ -79,10 +79,10 @@ func processBinaryQualOp(
 ) (tree.Expr, int) {
   switch op := op.(type) {
   case tree.BinaryOperator:
-    op.IsOperator = true
+    op.IsExplicitOperator = true
     return &tree.BinaryExpr{Operator: op, Left: lhs, Right: rhs}, 0
   case tree.ComparisonOperator:
-    op.IsOperator = true
+    op.IsExplicitOperator = true
     return &tree.ComparisonExpr{Operator: op, Left: lhs, Right: rhs}, 0
   case tree.UnaryOperator:
     // We have a unary operator which have the same symbol as the binary
@@ -92,7 +92,7 @@ func processBinaryQualOp(
       return &tree.ComparisonExpr{
         Operator: tree.ComparisonOperator{
           Symbol: tree.RegMatch,
-          IsOperator: true,
+          IsExplicitOperator: true,
         },
         Left: lhs,
         Right: rhs,
@@ -117,7 +117,7 @@ func processUnaryQualOp(
     return e, code
   }
   if e, ok := e.(*tree.UnaryExpr); ok {
-    e.Operator.IsOperator = true
+    e.Operator.IsExplicitOperator = true
   }
   return e, code
 }
