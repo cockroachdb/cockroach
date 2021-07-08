@@ -1119,7 +1119,10 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
+	t.Run(`webhook`, func(t *testing.T) {
+		skip.WithIssue(t, 67394)
+		webhookTest(testFn)(t)
+	})
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
