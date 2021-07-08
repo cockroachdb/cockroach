@@ -48,6 +48,7 @@ ALL_TESTS = [
     "//pkg/cmd/prereqs:prereqs_test",
     "//pkg/cmd/publish-artifacts:publish-artifacts_test",
     "//pkg/cmd/publish-provisional-artifacts:publish-provisional-artifacts_test",
+    "//pkg/cmd/roachprod/install:install_test",
     "//pkg/cmd/roachprod/vm:vm_test",
     "//pkg/cmd/roachtest:roachtest_test",
     "//pkg/cmd/teamcity-trigger:teamcity-trigger_test",
