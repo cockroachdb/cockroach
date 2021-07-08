@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
@@ -80,7 +81,7 @@ type webhookSink struct {
 }
 
 func makeWebhookSink(
-	ctx context.Context, u sinkURL, opts map[string]string, parallelism int,
+	ctx context.Context, u sinkURL, opts map[string]string, parallelism int, acc mon.BoundAccount,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
@@ -149,7 +150,7 @@ func makeWebhookSink(
 	sinkURLParsed.RawQuery = params.Encode()
 	sink.url = sinkURL{URL: sinkURLParsed}
 
-	sink.inflight = makeInflightTracker()
+	sink.inflight = makeInflightTracker(acc)
 	return sink, nil
 }
 
@@ -223,14 +224,11 @@ func (s *webhookSink) workerLoop(workerCh chan []byte) {
 		select {
 		case <-s.ctx.Done():
 			return
-		case value := <-workerCh:
-			msg, err := encodePayloadWebhook(value)
-			if err == nil {
-				err = s.sendMessage(s.ctx, msg)
-			}
+		case msg := <-workerCh:
+			err := s.sendMessage(s.ctx, msg)
 			s.inflight.maybeSetError(err)
-			// reduce inflight count by one
-			s.inflight.FinishRequest()
+			// reduce inflight count by one and reduce memory counter
+			s.inflight.FinishRequest(s.ctx, int64(len(msg)))
 		}
 	}
 }
@@ -276,24 +274,30 @@ func (s *webhookSink) workerIndex(key []byte) uint32 {
 	return crc32.ChecksumIEEE(key) % uint32(s.parallelism)
 }
 
-// TODO (ryan min): add memory monitoring for inflight messages
 // inflightTracker wraps logic for counting number of inflight messages to
-// track when flushing sink, with error handling functionality. Implemented
-// as a wrapper for WaitGroup under a lock to block additional messages while
-// flushing.
+// track when flushing sink, with error handling and memory monitoring
+// functionality. Implemented as a wrapper for WaitGroup and lock to block
+// additional messages while flushing.
 type inflightTracker struct {
 	inflightGroup sync.WaitGroup
 	errChan       chan error
 	// lock used here to allow flush to block any new messages being enqueued
 	// from EmitRow or EmitResolvedTimestamp
 	flushMu syncutil.Mutex
+	// separate lock used to control memory monitor since we need to hold the
+	// while flushing and decrementing the memory counter at the same time
+	memMu struct {
+		syncutil.Mutex
+		mem mon.BoundAccount
+	}
 }
 
-func makeInflightTracker() *inflightTracker {
+func makeInflightTracker(mem mon.BoundAccount) *inflightTracker {
 	inflight := &inflightTracker{
 		inflightGroup: sync.WaitGroup{},
 		errChan:       make(chan error, 1),
 	}
+	inflight.memMu.mem = mem
 	return inflight
 }
 
@@ -311,42 +315,66 @@ func (i *inflightTracker) maybeSetError(err error) {
 }
 
 // StartRequest enqueues one inflight message to be flushed.
-func (i *inflightTracker) StartRequest() {
+func (i *inflightTracker) StartRequest(ctx context.Context, bytes int64) error {
 	i.flushMu.Lock()
 	defer i.flushMu.Unlock()
 	i.inflightGroup.Add(1)
+	i.memMu.Lock()
+	defer i.memMu.Unlock()
+	err := i.memMu.mem.Grow(ctx, bytes)
+	return err
 }
 
 // FinishRequest tells the inflight tracker one message has been delivered.
-func (i *inflightTracker) FinishRequest() {
+func (i *inflightTracker) FinishRequest(ctx context.Context, bytes int64) {
+	i.memMu.Lock()
+	defer i.memMu.Unlock()
+	i.memMu.mem.Shrink(ctx, bytes)
 	i.inflightGroup.Done()
 }
 
 // Wait waits for all inflight messages to be delivered (inflight = 0) and
 // returns a possible error. New messages delivered via EmitRow and
 // EmitResolvedTimestamp will be blocked until this returns.
-func (i *inflightTracker) Wait() error {
+func (i *inflightTracker) Wait(ctx context.Context) error {
 	i.flushMu.Lock()
 	defer i.flushMu.Unlock()
 	i.inflightGroup.Wait()
 	var err error
 	select {
+	case <-ctx.Done():
+		return ctx.Err()
 	case err = <-i.errChan:
 	default:
 	}
 	return err
 }
 
+func (i *inflightTracker) Close(ctx context.Context) {
+	i.memMu.Lock()
+	defer i.memMu.Unlock()
+	i.memMu.mem.Close(ctx)
+	close(i.errChan)
+}
+
 func (s *webhookSink) EmitRow(
 	ctx context.Context, _ TopicDescriptor, key, value []byte, _ hlc.Timestamp,
 ) error {
-	s.inflight.StartRequest()
+	j, err := encodePayloadWebhook(value)
+	if err != nil {
+		return err
+	}
+
+	err = s.inflight.StartRequest(ctx, int64(len(j)))
+	if err != nil {
+		return err
+	}
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	// Errors resulting from sending the message will be expressed in Flush.
-	case s.eventsChans[s.workerIndex(key)] <- value:
+	case s.eventsChans[s.workerIndex(key)] <- j:
 	}
 	return nil
 }
@@ -358,20 +386,23 @@ func (s *webhookSink) EmitResolvedTimestamp(
 	if err != nil {
 		return err
 	}
-	s.inflight.StartRequest()
+
+	err = s.inflight.StartRequest(ctx, int64(len(j)))
+	if err != nil {
+		return err
+	}
 
 	// do worker logic directly here instead (there's no point using workers for
 	// resolved timestamps since there are no keys and everything must be
-	// inflight order)
+	// in order)
 	err = s.sendMessage(ctx, j)
 	s.inflight.maybeSetError(err)
-	s.inflight.FinishRequest()
+	s.inflight.FinishRequest(ctx, int64(len(j)))
 	return nil
 }
 
-// TODO (ryan min): Account for context cancellation.
 func (s *webhookSink) Flush(ctx context.Context) error {
-	return s.inflight.Wait()
+	return s.inflight.Wait(ctx)
 }
 
 func (s *webhookSink) Close() error {
@@ -379,6 +410,7 @@ func (s *webhookSink) Close() error {
 	_ = s.Flush(s.ctx)
 	s.cancelFunc()
 	_ = s.workerGroup.Wait()
+	s.inflight.Close(s.ctx)
 	for _, eventsChan := range s.eventsChans {
 		close(eventsChan)
 	}
