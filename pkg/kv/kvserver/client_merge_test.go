@@ -88,7 +88,9 @@ func createSplitRanges(
 			lhsDesc.StartKey, rhsDesc.StartKey)
 	}
 
-	return lhsDesc, rhsDesc, nil
+	// NB: return copies of the descriptors as a purely precautionary measure.
+	// Tests have been observed to mutate the returned memory, for example in #67346.
+	return protoutil.Clone(lhsDesc).(*roachpb.RangeDescriptor), protoutil.Clone(rhsDesc).(*roachpb.RangeDescriptor), nil
 }
 
 // TestStoreRangeMergeTwoEmptyRanges tries to merge two empty ranges together.
