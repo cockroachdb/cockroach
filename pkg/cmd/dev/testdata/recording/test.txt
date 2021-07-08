@@ -1,0 +1,86 @@
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --test_output errors
+----
+----
+//pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.2s
+
+Executed 1 out of 1 test: 1 test passes.
+----
+----
+
+bazel query kind(go_test,  //pkg/util/tracing/...)
+----
+//pkg/util/tracing:tracing_test
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --test_output errors
+----
+----
+//pkg/util/tracing:tracing_test                                 [0m[32m(cached) PASSED[0m in 0.2s
+
+Executed 0 out of 1 test: 1 test passes.
+----
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output errors
+----
+----
+//pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.1s
+
+Executed 1 out of 1 test: 1 test passes.
+----
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output all --test_arg -test.v
+----
+----
+==================== Test output for //pkg/util/tracing:tracing_test:
+testing: warning: no tests to run
+PASS
+================================================================================
+//pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.1s
+
+Executed 1 out of 1 test: 1 test passes.
+----
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experimental_remote_downloader=grpc://127.0.0.1:9092 //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output errors
+----
+----
+//pkg/util/tracing:tracing_test                                 [0m[32m(cached) PASSED[0m in 0.0s
+
+Executed 0 out of 1 test: 1 test passes.
+----
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --nocache_test_results --test_filter='TestStartChild*' --test_output errors
+----
+----
+//pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 0.1s
+
+Executed 1 out of 1 test: 1 test passes.
+----
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --run_under stress -maxtime=10s --test_filter='TestStartChild*' --test_output errors
+----
+----
+//pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 12.3s
+
+Executed 1 out of 1 test: 1 test passes.
+----
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --run_under stress -maxtime=10s --test_filter='TestStartChild*' --test_output all --test_arg -test.v
+----
+----
+==================== Test output for //pkg/util/tracing:tracing_test:
+232 runs so far, 0 failures, over 5s
+528 runs so far, 0 failures, over 10s
+528 runs completed, 0 failures, over 10s
+SUCCESS
+================================================================================
+//pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 10.1s
+
+Executed 1 out of 1 test: 1 test passes.
+----
+----
+
