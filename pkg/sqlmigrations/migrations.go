@@ -95,9 +95,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v1.0. Permanent migration.
-		name:        "enable diagnostics reporting",
-		workFn:      optInToDiagnosticsStatReporting,
-		clusterWide: true,
+		name:   "enable diagnostics reporting",
+		workFn: optInToDiagnosticsStatReporting,
 	},
 	{
 		// Introduced in v1.1. Baked into v2.0.
@@ -169,9 +168,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Permanent migration.
-		name:        "initialize cluster.secret",
-		workFn:      initializeClusterSecret,
-		clusterWide: true,
+		name:   "initialize cluster.secret",
+		workFn: initializeClusterSecret,
 	},
 	{
 		// Introduced in v2.0. Repeated in v2.1 below.
@@ -264,8 +262,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v20.1. Baked into v20.2.
-		name:   "add CREATEROLE privilege to admin/root",
-		workFn: nil,
+		name: "add CREATEROLE privilege to admin/root",
 	},
 	{
 		// Introduced in v20.2. Baked into v21.1.
