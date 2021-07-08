@@ -1,25 +1,47 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the Business Source License
+# included in the file licenses/BSL.txt.
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0, included in the file
+# licenses/APL.txt.
 set -euo pipefail
 
-local="{{if .Local}}true{{end}}"
+# These values are substituted in the Go code that uses this.
+LOCAL="{{if .Local}}true{{end}}"
+LOG_DIR='{{printf "%q" .LogDir}}'
+NODE_NUM="{{.NodeNum}}"
+TAG="{{.Tag}}"
+ENV_VARS="{{.EnvVars}}"
+BINARY="{{.Binary}}"
+START_CMD="{{.StartCmd}}"
+KEY_CMD="{{.KeyCmd}}"
+MEMORY_MAX="{{.MemoryMax}}"
+# TODO(during review): couldn't figure this one out - this has both single and
+# double quotes in it and isn't there a general way to do this better?
+# ARGS='{{.Args}}'
 
-mkdir -p "{{.LogDir}}"
+mkdir -p "${LOG_DIR}"
 
-set -euo pipefail
-
-if [[ "${local}" == "true" || "${1-}" == "run" ]]; then
-  mkdir -p {{.LogDir}}
-  echo "cockroach start: $(date), logging to {{.LogDir}}" | tee -a {{.LogDir}}/{roachprod,cockroach.std{out,err}}.log
-  {{.KeyCmd}}
-  export ROACHPROD="{{.NodeNum}}{{.Tag}} {{.EnvVars}}"
+if [[ -n "${LOCAL}" || "${1-}" == "run" ]]; then
+  mkdir -p "${LOG_DIR}"
+  echo "cockroach start: $(date), logging to ${LOG_DIR} | tee -a ${LOG_DIR}/roachprod,cockroach.std{out,err}}.log"
+  if [[ -n "${KEY_CMD}" ]]; then
+    "${KEY_CMD}"
+  fi
+  export ROACHPROD="${NODE_NUM}}${TAG} ${ENV_VARS}"
   background=""
-  if [[ "${local}" ]]; then
+  if [[ -n "${LOCAL}" ]]; then
     background="--background"
   fi
   CODE=0
-  {{.Binary}} {{.StartCmd}} {{.Args}} ${background} >> {{.LogDir}}/cockroach.stdout.log 2>> {{.LogDir}}/cockroach.stderr.log || CODE=$?
-  if [[ -z "${local}" || "${CODE}" -ne 0 ]]; then
-    echo "cockroach exited with code ${CODE}: $(date)" | tee -a {{.LogDir}}/{roachprod,cockroach.{exit,std{out,err}}}.log
+  "${BINARY}" ${START_CMD} {{.Args}} ${background} >> "${LOG_DIR}/cockroach.stdout.log" 2>> "${LOG_DIR}/cockroach.stderr.log" || CODE=$?
+  if [[ -z "${LOCAL}" || "${CODE}" -ne 0 ]]; then
+    echo "cockroach exited with code ${CODE}: $(date)" | tee -a "${LOG_DIR}/{roachprod,cockroach.{exit,std{out,err}}}.log"
   fi
   exit "${CODE}"
 fi
@@ -63,7 +85,7 @@ fi
 sudo systemd-run --unit cockroach \
   --same-dir --uid $(id -u) --gid $(id -g) \
   --service-type=notify -p NotifyAccess=all \
-  -p MemoryMax={{.MemoryMax}} \
+  -p "MemoryMax=${MEMORY_MAX}" \
   -p LimitCORE=infinity \
   -p LimitNOFILE=65536 \
   bash $0 run
