@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -147,8 +148,8 @@ func registerBackupNodeShutdown(r registry.Registry) {
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
 // artifact directory and returns a method that when invoked records a tick.
 func initBulkJobPerfArtifacts(
-	ctx context.Context, t test.Test, testName string, timeout time.Duration,
-) func() {
+	ctx context.Context, testName string, timeout time.Duration,
+) (func(), string) {
 	// Register a named histogram to track the total time the bulk job took.
 	// Roachperf uses this information to display information about this
 	// roachtest.
@@ -161,8 +162,13 @@ func initBulkJobPerfArtifacts(
 	// Create the stats file where the roachtest will write perf artifacts.
 	// We probably don't want to fail the roachtest if we are unable to
 	// collect perf stats.
-	statsFile := t.PerfArtifactsDir() + "/stats.json"
-	err := os.MkdirAll(filepath.Dir(statsFile), 0755)
+	localPerfDir, err := ioutil.TempDir("", "bulk-artifacts")
+	if err != nil {
+		log.Errorf(ctx, "failed to create temp dir with prefix %s: %s", testName, err.Error())
+	}
+	localPerfDir += "/perf"
+	statsFile := localPerfDir + "/perf/stats.json"
+	err = os.MkdirAll(filepath.Dir(statsFile), 0755)
 	if err != nil {
 		log.Errorf(ctx, "%s failed to create perf artifacts directory %s: %s", testName,
 			statsFile, err.Error())
@@ -178,7 +184,7 @@ func initBulkJobPerfArtifacts(
 			_ = jsonEnc.Encode(tick.Snapshot())
 		})
 	}
-	return tick
+	return tick, localPerfDir
 }
 
 func registerBackup(r registry.Registry) {
@@ -194,7 +200,7 @@ func registerBackup(r registry.Registry) {
 				rows = 100
 			}
 			dest := importBankData(ctx, rows, t, c)
-			tick := initBulkJobPerfArtifacts(ctx, t, "backup/2TB", 2*time.Hour)
+			tick, localPerfDir := initBulkJobPerfArtifacts(ctx, "backup/2TB", 2*time.Hour)
 
 			m := c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
@@ -209,7 +215,7 @@ func registerBackup(r registry.Registry) {
 
 				// Upload the perf artifacts to any one of the nodes so that the test
 				// runner copies it into an appropriate directory path.
-				if err := c.PutE(ctx, t.L(), t.PerfArtifactsDir(), t.PerfArtifactsDir(), c.Node(1)); err != nil {
+				if err := c.PutE(ctx, t.L(), localPerfDir, t.PerfArtifactsDir(), c.Node(1)); err != nil {
 					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 				}
 				return nil
