@@ -515,7 +515,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	},
 	{
 		Key:     ZonesTableForSecondaryTenants,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 15},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 16},
 	},
 
 	// Step (2): Add new versions here.
