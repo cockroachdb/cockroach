@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/docs"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -246,7 +245,7 @@ const (
 // printCliHelp prints a short inline help about the CLI.
 func (c *cliState) printCliHelp() {
 	demoHelpStr := ""
-	if demoCtx.transientCluster != nil {
+	if sqlCtx.demoCluster != nil {
 		demoHelpStr = demoCommandsHelp
 	}
 	fmt.Printf(helpMessageFmt,
@@ -551,8 +550,8 @@ func isEndOfStatement(lastTok int) bool {
 // handleDemo handles operations on \demo.
 // This can only be done from `cockroach demo`.
 func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
-	// A transient cluster signifies the presence of `cockroach demo`.
-	if demoCtx.transientCluster == nil {
+	// A demo cluster signifies the presence of `cockroach demo`.
+	if sqlCtx.demoCluster == nil {
 		return c.invalidSyntax(errState, `\demo can only be run with cockroach demo`)
 	}
 
@@ -564,7 +563,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 	//
 	// We parse these commands separately, in the following blocks.
 	if len(cmd) == 1 && cmd[0] == "ls" {
-		demoCtx.transientCluster.listDemoNodes(os.Stdout, false /* justOne */)
+		sqlCtx.demoCluster.ListDemoNodes(os.Stdout, false /* justOne */)
 		return nextState
 	}
 
@@ -587,12 +586,12 @@ func (c *cliState) handleDemoAddNode(cmd []string, nextState, errState cliStateE
 		return c.internalServerError(errState, fmt.Errorf("bad call to handleDemoAddNode"))
 	}
 
-	if err := demoCtx.transientCluster.AddNode(context.Background(), cmd[1]); err != nil {
+	addedNodeID, err := sqlCtx.demoCluster.AddNode(context.Background(), cmd[1])
+	if err != nil {
 		return c.internalServerError(errState, err)
 	}
-	addedNodeID := len(demoCtx.transientCluster.servers)
 	fmt.Printf("node %v has been added with locality \"%s\"\n",
-		addedNodeID, demoCtx.localities[addedNodeID-1].String())
+		addedNodeID, sqlCtx.demoCluster.GetLocality(addedNodeID))
 	return nextState
 }
 
@@ -610,27 +609,29 @@ func (c *cliState) handleDemoNodeCommands(
 		)
 	}
 
+	ctx := context.Background()
+
 	switch cmd[0] {
 	case "shutdown":
-		if err := demoCtx.transientCluster.DrainAndShutdown(roachpb.NodeID(nodeID)); err != nil {
+		if err := sqlCtx.demoCluster.DrainAndShutdown(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been shutdown\n", nodeID)
 		return nextState
 	case "restart":
-		if err := demoCtx.transientCluster.RestartNode(roachpb.NodeID(nodeID)); err != nil {
+		if err := sqlCtx.demoCluster.RestartNode(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been restarted\n", nodeID)
 		return nextState
 	case "recommission":
-		if err := demoCtx.transientCluster.Recommission(roachpb.NodeID(nodeID)); err != nil {
+		if err := sqlCtx.demoCluster.Recommission(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been recommissioned\n", nodeID)
 		return nextState
 	case "decommission":
-		if err := demoCtx.transientCluster.Decommission(roachpb.NodeID(nodeID)); err != nil {
+		if err := sqlCtx.demoCluster.Decommission(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been decommissioned\n", nodeID)

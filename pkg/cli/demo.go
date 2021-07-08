@@ -289,7 +289,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 	if err := c.start(ctx, cmd, gen); err != nil {
 		return checkAndMaybeShout(err)
 	}
-	demoCtx.transientCluster = &c
+	sqlCtx.demoCluster = &c
 
 	checkInteractive(cmdIn)
 
@@ -345,7 +345,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 # Reminder: your changes to data stored in the demo session will not be saved!`)
 
 		var nodeList strings.Builder
-		c.listDemoNodes(&nodeList, true /* justOne */)
+		c.ListDemoNodes(&nodeList, true /* justOne */)
 		printlnUnlessEmbedded(
 			// Only print the server details when the shell is not embedded;
 			// if embedded, the embedding platform owns the network

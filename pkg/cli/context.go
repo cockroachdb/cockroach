@@ -300,6 +300,10 @@ var sqlCtx = struct {
 
 	// The string used to produce the value of fullPrompt.
 	customPromptPattern string
+
+	// demoCluster is the interface to the in-memory cluster for the
+	// `demo` command, if that is the command being run.
+	demoCluster DemoCluster
 }{}
 
 // setSQLContextDefaults set the default values in sqlCtx.  This
@@ -316,6 +320,7 @@ func setSQLContextDefaults() {
 	sqlCtx.checkSyntax = false
 	sqlCtx.autoTrace = ""
 	sqlCtx.customPromptPattern = defaultPromptPattern
+	sqlCtx.demoCluster = nil
 }
 
 // zipCtx captures the command-line parameters of the `zip` command.
@@ -577,7 +582,6 @@ var demoCtx struct {
 	localities                demoLocalityList
 	geoPartitionedReplicas    bool
 	simulateLatency           bool
-	transientCluster          *transientCluster
 	insecure                  bool
 	sqlPort                   int
 	httpPort                  int
@@ -597,7 +601,6 @@ func setDemoContextDefaults() {
 	demoCtx.geoPartitionedReplicas = false
 	demoCtx.disableTelemetry = false
 	demoCtx.disableLicenseAcquisition = false
-	demoCtx.transientCluster = nil
 	demoCtx.insecure = false
 	demoCtx.sqlPort, _ = strconv.Atoi(base.DefaultPort)
 	demoCtx.httpPort, _ = strconv.Atoi(base.DefaultHTTPPort)
