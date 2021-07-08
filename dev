@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -uo pipefail
+
+this_dir=$(cd "$(dirname "$0")" && pwd)
+mkdir -p $this_dir/artifacts
+bazel build //pkg/cmd/dev &> $this_dir/artifacts/dev.log
+status=$?
+if [ $status -eq 0 ]
+then
+    $(bazel info bazel-bin)/pkg/cmd/dev/dev_/dev "$@"
+else
+    echo 'Failed to build pkg/cmd/dev! Got output:'
+    cat $this_dir/artifacts/dev.log
+    exit $status
+fi

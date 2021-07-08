@@ -11,9 +11,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -71,4 +73,12 @@ func parseAddr(addr string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s:%s", ip, port), nil
+}
+
+func (d *dev) getWorkspace(ctx context.Context) (string, error) {
+	out, err := d.exec.CommandContextSilent(ctx, "bazel", "info", "workspace", "--color=no")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
