@@ -242,7 +242,7 @@ func makeNot(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 // TODO(mjibson): add the other operators somewhere.
-var compareOps = [...]tree.ComparisonOperator{
+var compareOps = [...]tree.ComparisonOperatorSymbol{
 	tree.EQ,
 	tree.LT,
 	tree.GT,
@@ -267,7 +267,7 @@ func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool
 	}
 	left := makeScalar(s, typ, refs)
 	right := makeScalar(s, typ, refs)
-	return typedParen(tree.NewTypedComparisonExpr(op, left, right), typ), true
+	return typedParen(tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(op), left, right), typ), true
 }
 
 var vecBinOps = map[tree.BinaryOperatorSymbol]bool{
@@ -614,7 +614,7 @@ func makeIn(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		op = tree.NotIn
 	}
 	return tree.NewTypedComparisonExpr(
-		op,
+		tree.MakeComparisonOperator(op),
 		// Cast any NULLs to a concrete type.
 		castType(makeScalar(s, t, refs), t),
 		rhs,
@@ -626,9 +626,9 @@ func makeStringComparison(s *Smither, typ *types.T, refs colRefs) (tree.TypedExp
 	if s.vectorizable {
 		// Vectorized supports only tree.Like and tree.NotLike.
 		if s.coin() {
-			stringComparison = tree.Like
+			stringComparison = tree.MakeComparisonOperator(tree.Like)
 		} else {
-			stringComparison = tree.NotLike
+			stringComparison = tree.MakeComparisonOperator(tree.NotLike)
 		}
 	}
 	switch typ.Family() {
