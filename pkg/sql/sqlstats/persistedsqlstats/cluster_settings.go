@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/errors"
 )
 
 // SQLStatsFlushInterval is the cluster setting that controls how often the SQL
@@ -24,3 +25,28 @@ var SQLStatsFlushInterval = settings.RegisterDurationSetting(
 	time.Hour,
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 ).WithPublic()
+
+// SQLStatsFlushEnabled is the cluster setting that controls if the sqlstats
+// subsystem persists the statistics into system table.
+var SQLStatsFlushEnabled = settings.RegisterBoolSetting(
+	"sql.stats.flush.enabled",
+	"if set, SQL execution statistics are periodically flushed to disk",
+	true, /* defaultValue */
+).WithPublic()
+
+// SQLStatsFlushJitter specifies the jitter fraction on the interval between
+// attempts to flush SQL Stats.
+//
+// [(1 - SQLStatsFlushJitter) * SQLStatsFlushInterval),
+//  (1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
+var SQLStatsFlushJitter = settings.RegisterFloatSetting(
+	"sql.stats.flush.jitter",
+	"jitter fraction on the duration between sql stats flushes",
+	0.15,
+	func(f float64) error {
+		if f < 0 || f > 1 {
+			return errors.Newf("%f is not in [0, 1]", f)
+		}
+		return nil
+	},
+)
