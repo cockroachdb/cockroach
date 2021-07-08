@@ -72,11 +72,6 @@ func MakeLocalStorageURI(path string) string {
 	return fmt.Sprintf("nodelocal://0/%s", path)
 }
 
-func makeNodeLocalURIWithNodeID(nodeID roachpb.NodeID, path string) string {
-	path = strings.TrimPrefix(path, "/")
-	return fmt.Sprintf("nodelocal://%d/%s", nodeID, path)
-}
-
 // TestingMakeLocalStorage is used by tests.
 func TestingMakeLocalStorage(
 	ctx context.Context,
@@ -154,37 +149,6 @@ func (l *localFileStorage) ReadFileAt(
 		return nil, 0, err
 	}
 	return reader, size, nil
-}
-
-func (l *localFileStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
-
-	pattern := l.base
-	if patternSuffix != "" {
-		if cloud.ContainsGlob(l.base) {
-			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
-		}
-		pattern = joinRelativePath(pattern, patternSuffix)
-	}
-
-	var fileList []string
-	matches, err := l.blobClient.List(ctx, pattern)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to match pattern provided")
-	}
-
-	for _, fileName := range matches {
-		if patternSuffix != "" {
-			if !strings.HasPrefix(fileName, l.base) {
-				// TODO(dt): return a nice rel-path instead of erroring out.
-				return nil, errors.Errorf("pattern matched file outside of base path %q", l.base)
-			}
-			fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(fileName, l.base), "/"))
-		} else {
-			fileList = append(fileList, makeNodeLocalURIWithNodeID(l.cfg.NodeID, fileName))
-		}
-	}
-
-	return fileList, nil
 }
 
 func (l *localFileStorage) List(

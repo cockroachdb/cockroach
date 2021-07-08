@@ -277,10 +277,6 @@ func (es *generatorExternalStorage) Writer(
 	return nil, errors.New("unsupported")
 }
 
-func (es *generatorExternalStorage) ListFiles(ctx context.Context, _ string) ([]string, error) {
-	return nil, errors.New("unsupported")
-}
-
 func (es *generatorExternalStorage) List(
 	ctx context.Context, _, _ string, _ cloud.ListingFn,
 ) error {
