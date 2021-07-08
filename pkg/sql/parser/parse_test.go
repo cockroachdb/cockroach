@@ -365,7 +365,7 @@ func TestParsePrecedence(t *testing.T) {
 		// OPERATOR(pg_catalog.~) should not be error (#66861).
 		{
 			`'a' OPERATOR(pg_catalog.~) 'b'`,
-			&tree.ComparisonExpr{Operator: tree.ComparisonOperator{Symbol: tree.RegMatch, IsOperator: true}, Left: a, Right: b},
+			&tree.ComparisonExpr{Operator: tree.ComparisonOperator{Symbol: tree.RegMatch, IsExplicitOperator: true}, Left: a, Right: b},
 		},
 	}
 	for _, d := range testData {

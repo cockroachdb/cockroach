@@ -355,8 +355,8 @@ func StripParens(expr Expr) Expr {
 // ComparisonOperator represents a binary operator which returns a bool.
 type ComparisonOperator struct {
 	Symbol ComparisonOperatorSymbol
-	// IsOperator is true if OPERATOR(symbol) is used.
-	IsOperator bool
+	// IsExplicitOperator is true if OPERATOR(symbol) is used.
+	IsExplicitOperator bool
 }
 
 // MakeComparisonOperator creates a ComparisonOperator given a symbol.
@@ -365,7 +365,7 @@ func MakeComparisonOperator(symbol ComparisonOperatorSymbol) ComparisonOperator 
 }
 
 func (o ComparisonOperator) String() string {
-	if o.IsOperator {
+	if o.IsExplicitOperator {
 		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
 	}
 	return o.Symbol.String()
@@ -1121,8 +1121,8 @@ func (node *TypedDummy) Eval(*EvalContext) (Datum, error) {
 // BinaryOperator represents a unary operator used in a BinaryExpr.
 type BinaryOperator struct {
 	Symbol BinaryOperatorSymbol
-	// IsOperator is true if OPERATOR(symbol) is used.
-	IsOperator bool
+	// IsExplicitOperator is true if OPERATOR(symbol) is used.
+	IsExplicitOperator bool
 }
 
 // MakeBinaryOperator creates a BinaryOperator given a symbol.
@@ -1131,7 +1131,7 @@ func MakeBinaryOperator(symbol BinaryOperatorSymbol) BinaryOperator {
 }
 
 func (o BinaryOperator) String() string {
-	if o.IsOperator {
+	if o.IsExplicitOperator {
 		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
 	}
 	return o.Symbol.String()
@@ -1295,8 +1295,8 @@ func (node *BinaryExpr) Format(ctx *FmtCtx) {
 // UnaryOperator represents a unary operator used in a UnaryExpr.
 type UnaryOperator struct {
 	Symbol UnaryOperatorSymbol
-	// IsOperator is true if OPERATOR(symbol) is used.
-	IsOperator bool
+	// IsExplicitOperator is true if OPERATOR(symbol) is used.
+	IsExplicitOperator bool
 }
 
 // MakeUnaryOperator creates a UnaryOperator given a symbol.
@@ -1305,7 +1305,7 @@ func MakeUnaryOperator(symbol UnaryOperatorSymbol) UnaryOperator {
 }
 
 func (o UnaryOperator) String() string {
-	if o.IsOperator {
+	if o.IsExplicitOperator {
 		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
 	}
 	return o.Symbol.String()
