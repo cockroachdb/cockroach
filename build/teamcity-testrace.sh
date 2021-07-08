@@ -54,7 +54,6 @@ for pkg in $pkgspec; do
     GOTESTFLAGS=-json \
     PKG="$pkg" \
     TESTTIMEOUT="${TESTTIMEOUT}" \
-    TESTFLAGS="-v $TESTFLAGS" \
-    ENABLE_LIBROACH_ASSERTIONS=1
+    TESTFLAGS="-v $TESTFLAGS"
   tc_end_block "Run ${pkg} under race detector"
 done
