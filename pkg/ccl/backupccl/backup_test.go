@@ -2363,6 +2363,7 @@ CREATE TABLE sc.tb1 (x sc.typ1);
 INSERT INTO sc.tb1 VALUES ('hello');
 CREATE TABLE sc.tb2 (x INT);
 INSERT INTO sc.tb2 VALUES (1);
+CREATE TABLE tb2 (id INT);
 `)
 		{
 			// We have to qualify the table correctly to back it up. d.tb1 resolves
@@ -2398,6 +2399,7 @@ INSERT INTO sc.tb2 VALUES (1);
 			// Check that we can resolve all names through the user defined schema.
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d3.sc.tb1`, [][]string{{"hello"}})
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d3.sc.tb2`, [][]string{{"1"}})
+			_ = sqlDB.Exec(t, `SELECT * FROM d3.tb2`)
 			sqlDB.CheckQueryResults(t, `SELECT 'hello'::d3.sc.typ1`, [][]string{{"hello"}})
 
 			// We shouldn't be able to create a new schema with the same name.

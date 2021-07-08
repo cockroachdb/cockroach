@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -97,6 +98,7 @@ type Registry struct {
 	settings *cluster.Settings
 	execCtx  jobExecCtxMaker
 	metrics  Metrics
+	td       *tracedumper.TraceDumper
 	knobs    TestingKnobs
 
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
@@ -174,6 +176,7 @@ func MakeRegistry(
 	histogramWindowInterval time.Duration,
 	execCtxFn jobExecCtxMaker,
 	preventAdoptionFile string,
+	td *tracedumper.TraceDumper,
 	knobs *TestingKnobs,
 ) *Registry {
 	r := &Registry{
@@ -187,6 +190,7 @@ func MakeRegistry(
 		settings:            settings,
 		execCtx:             execCtxFn,
 		preventAdoptionFile: preventAdoptionFile,
+		td:                  td,
 		adoptionCh:          make(chan adoptionNotice),
 	}
 	if knobs != nil {
@@ -1221,4 +1225,13 @@ func TestingCreateAndStartJob(
 		return nil, err
 	}
 	return rj, nil
+}
+
+// TestingGetTraceDumpDir returns the directory in which jobs might dump their
+// traces after execution.
+func TestingGetTraceDumpDir(r *Registry) string {
+	if r.td == nil {
+		return ""
+	}
+	return tracedumper.TestingGetTraceDumpDir(r.td)
 }
