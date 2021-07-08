@@ -94,7 +94,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "times out")
+	skip.UnderRace(t, "flaky test")
 
 	ctx := context.Background()
 	datadriven.Walk(t, "testdata/", func(t *testing.T, path string) {
