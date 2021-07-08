@@ -216,11 +216,16 @@ message RangeInfo {
   repeated roachpb.Lease lease_history = 8 [ (gogoproto.nullable) = false ];
   RangeProblems problems = 9 [ (gogoproto.nullable) = false ];
   RangeStatistics stats = 10 [ (gogoproto.nullable) = false ];
-  kv.kvserver.storagepb.LatchManagerInfo latches_local = 11 [ (gogoproto.nullable) = false ];
-  kv.kvserver.storagepb.LatchManagerInfo latches_global = 12 [ (gogoproto.nullable) = false ];
+  reserved 11, 12;
   kv.kvserver.storagepb.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
   bool ticking = 15;
+  int64 read_latches = 16;
+  int64 write_latches = 17;
+  int64 locks = 18;
+  int64 locks_with_wait_queues = 19;
+  int64 lock_wait_queue_waiters = 20;
+  int64 max_lock_wait_queue_waiters_for_lock = 21;
 }
 
 message RangesRequest {

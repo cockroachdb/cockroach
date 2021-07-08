@@ -1668,11 +1668,15 @@ func (s *statusServer) rangesHelper(
 				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
 			},
-			LatchesLocal:  metrics.LatchInfoLocal,
-			LatchesGlobal: metrics.LatchInfoGlobal,
-			LeaseStatus:   metrics.LeaseStatus,
-			Quiescent:     metrics.Quiescent,
-			Ticking:       metrics.Ticking,
+			LeaseStatus:                    metrics.LeaseStatus,
+			Quiescent:                      metrics.Quiescent,
+			Ticking:                        metrics.Ticking,
+			ReadLatches:                    metrics.ReadLatches,
+			WriteLatches:                   metrics.WriteLatches,
+			Locks:                          metrics.Locks,
+			LocksWithWaitQueues:            metrics.LocksWithWaitQueues,
+			LockWaitQueueWaiters:           metrics.LockWaitQueueWaiters,
+			MaxLockWaitQueueWaitersForLock: metrics.MaxLockWaitQueueWaitersForLock,
 		}
 	}
 

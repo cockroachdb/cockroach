@@ -105,6 +105,22 @@ global: num=1
    distinguished req: 2
 local: num=0
 
+metrics
+----
+locks: 1
+locksheld: 1
+locksheldbydurability:
+- 0
+- 1
+lockswithreservation: 0
+lockswithwaitqueues: 1
+waiters: 4
+waitingreaders: 2
+waitingwriters: 2
+maxwaitersforlock: 4
+maxwaitingreadersforlock: 2
+maxwaitingwritersforlock: 2
+
 # -------------------------------------------------------------
 # Update lock timestamp to 11,1 - nothing moves
 # -------------------------------------------------------------

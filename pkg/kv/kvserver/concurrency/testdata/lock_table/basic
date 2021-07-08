@@ -244,6 +244,22 @@ global: num=5
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, info: repl epoch: 0, seqs: [0]
 local: num=0
 
+metrics
+----
+locks: 5
+locksheld: 3
+locksheldbydurability:
+- 2
+- 1
+lockswithreservation: 2
+lockswithwaitqueues: 1
+waiters: 1
+waitingreaders: 0
+waitingwriters: 1
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 1
+
 # req5 is again from transaction 1. Since it is reading from b, c, and even though txn1
 # conflicts with the reservation holder since txn1.ts > txn2.ts, reads don't wait for
 # reservations.
@@ -317,6 +333,22 @@ global: num=5
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, info: repl epoch: 0, seqs: [0]
 local: num=0
 
+metrics
+----
+locks: 5
+locksheld: 3
+locksheldbydurability:
+- 2
+- 1
+lockswithreservation: 2
+lockswithwaitqueues: 2
+waiters: 2
+waitingreaders: 0
+waitingwriters: 2
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 1
+
 guard-state r=req6
 ----
 new: state=waitForDistinguished txn=txn2 key="b" held=false guard-access=write
@@ -374,6 +406,22 @@ global: num=5
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, info: repl epoch: 0, seqs: [0]
 local: num=0
 
+metrics
+----
+locks: 5
+locksheld: 3
+locksheldbydurability:
+- 2
+- 1
+lockswithreservation: 2
+lockswithwaitqueues: 3
+waiters: 3
+waitingreaders: 0
+waitingwriters: 3
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 1
+
 # Release a. req4 waits at f.
 release txn=txn3 span=a
 ----
@@ -427,6 +475,22 @@ global: num=5
     req: 4, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 4
 local: num=0
+
+metrics
+----
+locks: 5
+locksheld: 2
+locksheldbydurability:
+- 1
+- 1
+lockswithreservation: 3
+lockswithwaitqueues: 3
+waiters: 3
+waitingreaders: 1
+waitingwriters: 2
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 1
+maxwaitingwritersforlock: 1
 
 # Release f. This will cause req4 to be done waiting.
 
@@ -538,6 +602,22 @@ global: num=4
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
+metrics
+----
+locks: 4
+locksheld: 3
+locksheldbydurability:
+- 2
+- 1
+lockswithreservation: 1
+lockswithwaitqueues: 2
+waiters: 2
+waitingreaders: 0
+waitingwriters: 2
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 1
+
 dequeue r=req4
 ----
 global: num=3
@@ -606,6 +686,22 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
+metrics
+----
+locks: 3
+locksheld: 2
+locksheldbydurability:
+- 1
+- 1
+lockswithreservation: 1
+lockswithwaitqueues: 1
+waiters: 1
+waitingreaders: 0
+waitingwriters: 1
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 1
+
 # Now before req7 can scan again, release the lock at b. This will cause req6 to break the
 # reservation of req7 at c and become doneWaiting too.
 
@@ -656,6 +752,22 @@ global: num=3
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
+
+metrics
+----
+locks: 3
+locksheld: 1
+locksheldbydurability:
+- 0
+- 1
+lockswithreservation: 2
+lockswithwaitqueues: 1
+waiters: 1
+waitingreaders: 0
+waitingwriters: 1
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 1
 
 scan r=req7
 ----
@@ -724,6 +836,22 @@ print
 global: num=0
 local: num=0
 
+metrics
+----
+locks: 0
+locksheld: 0
+locksheldbydurability:
+- 0
+- 0
+lockswithreservation: 0
+lockswithwaitqueues: 0
+waiters: 0
+waitingreaders: 0
+waitingwriters: 0
+maxwaitersforlock: 0
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 0
+
 # All requests have been retired and the lock table is empty.
 # The following tests multiple requests from the same transaction.
 
@@ -754,6 +882,22 @@ global: num=1
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 1, seqs: [0]
 local: num=0
+
+metrics
+----
+locks: 1
+locksheld: 1
+locksheldbydurability:
+- 0
+- 1
+lockswithreservation: 0
+lockswithwaitqueues: 0
+waiters: 0
+waitingreaders: 0
+waitingwriters: 0
+maxwaitersforlock: 0
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 0
 
 new-request r=req10 txn=txn2 ts=8,12 spans=w@c
 ----
@@ -800,6 +944,22 @@ global: num=1
    distinguished req: 10
 local: num=0
 
+metrics
+----
+locks: 1
+locksheld: 1
+locksheldbydurability:
+- 0
+- 1
+lockswithreservation: 0
+lockswithwaitqueues: 1
+waiters: 3
+waitingreaders: 0
+waitingwriters: 3
+maxwaitersforlock: 3
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 3
+
 release txn=txn1 span=c
 ----
 global: num=1
@@ -838,6 +998,22 @@ global: num=1
    distinguished req: 11
 local: num=0
 
+metrics
+----
+locks: 1
+locksheld: 0
+locksheldbydurability:
+- 0
+- 0
+lockswithreservation: 1
+lockswithwaitqueues: 1
+waiters: 2
+waitingreaders: 0
+waitingwriters: 2
+maxwaitersforlock: 2
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 2
+
 acquire r=req10 k=c durability=u
 ----
 global: num=1
@@ -866,6 +1042,22 @@ global: num=1
     active: true req: 11, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 11
 local: num=0
+
+metrics
+----
+locks: 1
+locksheld: 1
+locksheldbydurability:
+- 0
+- 1
+lockswithreservation: 0
+lockswithwaitqueues: 1
+waiters: 1
+waitingreaders: 0
+waitingwriters: 1
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 1
 
 dequeue r=req10
 ----
@@ -918,6 +1110,22 @@ global: num=1
  lock: "c"
   res: req: 11, txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, seq: 0
 local: num=0
+
+metrics
+----
+locks: 1
+locksheld: 0
+locksheldbydurability:
+- 0
+- 0
+lockswithreservation: 1
+lockswithwaitqueues: 0
+waiters: 0
+waitingreaders: 0
+waitingwriters: 0
+maxwaitersforlock: 0
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 0
 
 dequeue r=req11
 ----
@@ -991,6 +1199,22 @@ print
 global: num=0
 local: num=0
 
+metrics
+----
+locks: 0
+locksheld: 0
+locksheldbydurability:
+- 0
+- 0
+lockswithreservation: 0
+lockswithwaitqueues: 0
+waiters: 0
+waitingreaders: 0
+waitingwriters: 0
+maxwaitersforlock: 0
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 0
+
 # Test with distinguished waiter being a later request from the same
 # transaction that eventually grabs a reservation. Triggered a bug
 # in not replacing the distinguished waiter.
@@ -1056,6 +1280,22 @@ global: num=2
    distinguished req: 19
 local: num=0
 
+metrics
+----
+locks: 2
+locksheld: 2
+locksheldbydurability:
+- 0
+- 2
+lockswithreservation: 0
+lockswithwaitqueues: 2
+waiters: 2
+waitingreaders: 0
+waitingwriters: 2
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 1
+
 release txn=txn1 span=c
 ----
 global: num=2
@@ -1084,6 +1324,22 @@ global: num=2
     active: true req: 19, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 19
 local: num=0
+
+metrics
+----
+locks: 2
+locksheld: 1
+locksheldbydurability:
+- 0
+- 1
+lockswithreservation: 1
+lockswithwaitqueues: 1
+waiters: 2
+waitingreaders: 0
+waitingwriters: 2
+maxwaitersforlock: 2
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 2
 
 release txn=txn1 span=d
 ----
@@ -1204,6 +1460,22 @@ global: num=2
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [0]
 local: num=0
 
+metrics
+----
+locks: 2
+locksheld: 2
+locksheldbydurability:
+- 0
+- 2
+lockswithreservation: 0
+lockswithwaitqueues: 1
+waiters: 1
+waitingreaders: 0
+waitingwriters: 1
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 1
+
 new-request r=req23 txn=txn3 ts=10 spans=w@d
 ----
 
@@ -1260,6 +1532,22 @@ global: num=2
     active: false req: 23, txn: 00000000-0000-0000-0000-000000000003
 local: num=0
 
+metrics
+----
+locks: 2
+locksheld: 0
+locksheldbydurability:
+- 0
+- 0
+lockswithreservation: 2
+lockswithwaitqueues: 1
+waiters: 1
+waitingreaders: 0
+waitingwriters: 1
+maxwaitersforlock: 1
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 1
+
 acquire r=req23 k=d durability=u
 ----
 global: num=2
@@ -1294,3 +1582,19 @@ print
 ----
 global: num=0
 local: num=0
+
+metrics
+----
+locks: 0
+locksheld: 0
+locksheldbydurability:
+- 0
+- 0
+lockswithreservation: 0
+lockswithwaitqueues: 0
+waiters: 0
+waitingreaders: 0
+waitingwriters: 0
+maxwaitersforlock: 0
+maxwaitingreadersforlock: 0
+maxwaitingwritersforlock: 0

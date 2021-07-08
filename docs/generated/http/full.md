@@ -571,11 +571,15 @@ Support status: [reserved](#support-status)
 | lease_history | [cockroach.roachpb.Lease](#cockroach.server.serverpb.RaftDebugResponse-cockroach.roachpb.Lease) | repeated |  | [reserved](#support-status) |
 | problems | [RangeProblems](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RangeProblems) |  |  | [reserved](#support-status) |
 | stats | [RangeStatistics](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RangeStatistics) |  |  | [reserved](#support-status) |
-| latches_local | [cockroach.kv.kvserver.storagepb.LatchManagerInfo](#cockroach.server.serverpb.RaftDebugResponse-cockroach.kv.kvserver.storagepb.LatchManagerInfo) |  |  | [reserved](#support-status) |
-| latches_global | [cockroach.kv.kvserver.storagepb.LatchManagerInfo](#cockroach.server.serverpb.RaftDebugResponse-cockroach.kv.kvserver.storagepb.LatchManagerInfo) |  |  | [reserved](#support-status) |
 | lease_status | [cockroach.kv.kvserver.storagepb.LeaseStatus](#cockroach.server.serverpb.RaftDebugResponse-cockroach.kv.kvserver.storagepb.LeaseStatus) |  |  | [reserved](#support-status) |
 | quiescent | [bool](#cockroach.server.serverpb.RaftDebugResponse-bool) |  |  | [reserved](#support-status) |
 | ticking | [bool](#cockroach.server.serverpb.RaftDebugResponse-bool) |  |  | [reserved](#support-status) |
+| read_latches | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) |  |  | [reserved](#support-status) |
+| write_latches | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) |  |  | [reserved](#support-status) |
+| locks | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) |  |  | [reserved](#support-status) |
+| locks_with_wait_queues | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) |  |  | [reserved](#support-status) |
+| lock_wait_queue_waiters | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) |  |  | [reserved](#support-status) |
+| max_lock_wait_queue_waiters_for_lock | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) |  |  | [reserved](#support-status) |
 
 
 
@@ -755,11 +759,15 @@ Support status: [reserved](#support-status)
 | lease_history | [cockroach.roachpb.Lease](#cockroach.server.serverpb.RangesResponse-cockroach.roachpb.Lease) | repeated |  | [reserved](#support-status) |
 | problems | [RangeProblems](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RangeProblems) |  |  | [reserved](#support-status) |
 | stats | [RangeStatistics](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RangeStatistics) |  |  | [reserved](#support-status) |
-| latches_local | [cockroach.kv.kvserver.storagepb.LatchManagerInfo](#cockroach.server.serverpb.RangesResponse-cockroach.kv.kvserver.storagepb.LatchManagerInfo) |  |  | [reserved](#support-status) |
-| latches_global | [cockroach.kv.kvserver.storagepb.LatchManagerInfo](#cockroach.server.serverpb.RangesResponse-cockroach.kv.kvserver.storagepb.LatchManagerInfo) |  |  | [reserved](#support-status) |
 | lease_status | [cockroach.kv.kvserver.storagepb.LeaseStatus](#cockroach.server.serverpb.RangesResponse-cockroach.kv.kvserver.storagepb.LeaseStatus) |  |  | [reserved](#support-status) |
 | quiescent | [bool](#cockroach.server.serverpb.RangesResponse-bool) |  |  | [reserved](#support-status) |
 | ticking | [bool](#cockroach.server.serverpb.RangesResponse-bool) |  |  | [reserved](#support-status) |
+| read_latches | [int64](#cockroach.server.serverpb.RangesResponse-int64) |  |  | [reserved](#support-status) |
+| write_latches | [int64](#cockroach.server.serverpb.RangesResponse-int64) |  |  | [reserved](#support-status) |
+| locks | [int64](#cockroach.server.serverpb.RangesResponse-int64) |  |  | [reserved](#support-status) |
+| locks_with_wait_queues | [int64](#cockroach.server.serverpb.RangesResponse-int64) |  |  | [reserved](#support-status) |
+| lock_wait_queue_waiters | [int64](#cockroach.server.serverpb.RangesResponse-int64) |  |  | [reserved](#support-status) |
+| max_lock_wait_queue_waiters_for_lock | [int64](#cockroach.server.serverpb.RangesResponse-int64) |  |  | [reserved](#support-status) |
 
 
 
@@ -2450,11 +2458,15 @@ Support status: [reserved](#support-status)
 | lease_history | [cockroach.roachpb.Lease](#cockroach.server.serverpb.RangeResponse-cockroach.roachpb.Lease) | repeated |  | [reserved](#support-status) |
 | problems | [RangeProblems](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RangeProblems) |  |  | [reserved](#support-status) |
 | stats | [RangeStatistics](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RangeStatistics) |  |  | [reserved](#support-status) |
-| latches_local | [cockroach.kv.kvserver.storagepb.LatchManagerInfo](#cockroach.server.serverpb.RangeResponse-cockroach.kv.kvserver.storagepb.LatchManagerInfo) |  |  | [reserved](#support-status) |
-| latches_global | [cockroach.kv.kvserver.storagepb.LatchManagerInfo](#cockroach.server.serverpb.RangeResponse-cockroach.kv.kvserver.storagepb.LatchManagerInfo) |  |  | [reserved](#support-status) |
 | lease_status | [cockroach.kv.kvserver.storagepb.LeaseStatus](#cockroach.server.serverpb.RangeResponse-cockroach.kv.kvserver.storagepb.LeaseStatus) |  |  | [reserved](#support-status) |
 | quiescent | [bool](#cockroach.server.serverpb.RangeResponse-bool) |  |  | [reserved](#support-status) |
 | ticking | [bool](#cockroach.server.serverpb.RangeResponse-bool) |  |  | [reserved](#support-status) |
+| read_latches | [int64](#cockroach.server.serverpb.RangeResponse-int64) |  |  | [reserved](#support-status) |
+| write_latches | [int64](#cockroach.server.serverpb.RangeResponse-int64) |  |  | [reserved](#support-status) |
+| locks | [int64](#cockroach.server.serverpb.RangeResponse-int64) |  |  | [reserved](#support-status) |
+| locks_with_wait_queues | [int64](#cockroach.server.serverpb.RangeResponse-int64) |  |  | [reserved](#support-status) |
+| lock_wait_queue_waiters | [int64](#cockroach.server.serverpb.RangeResponse-int64) |  |  | [reserved](#support-status) |
+| max_lock_wait_queue_waiters_for_lock | [int64](#cockroach.server.serverpb.RangeResponse-int64) |  |  | [reserved](#support-status) |
 
 
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,10 +44,16 @@ type ReplicaMetrics struct {
 	Unavailable     bool
 	Underreplicated bool
 	Overreplicated  bool
-	BehindCount     int64
-	LatchInfoLocal  kvserverpb.LatchManagerInfo
-	LatchInfoGlobal kvserverpb.LatchManagerInfo
 	RaftLogTooLarge bool
+	BehindCount     int64
+
+	// Latching and locking counters.
+	ReadLatches                    int64
+	WriteLatches                   int64
+	Locks                          int64
+	LocksWithWaitQueues            int64
+	LockWaitQueueWaiters           int64
+	MaxLockWaitQueueWaitersForLock int64
 }
 
 // Metrics returns the current metrics for the replica.
@@ -67,7 +74,8 @@ func (r *Replica) Metrics(
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
 	r.store.unquiescedReplicas.Unlock()
 
-	latchInfoGlobal, latchInfoLocal := r.concMgr.LatchMetrics()
+	latchMetrics := r.concMgr.LatchMetrics()
+	lockTableMetrics := r.concMgr.LockTableMetrics()
 
 	return calcReplicaMetrics(
 		ctx,
@@ -82,8 +90,8 @@ func (r *Replica) Metrics(
 		r.store.StoreID(),
 		quiescent,
 		ticking,
-		latchInfoLocal,
-		latchInfoGlobal,
+		latchMetrics,
+		lockTableMetrics,
 		raftLogSize,
 		raftLogSizeTrusted,
 	)
@@ -102,8 +110,8 @@ func calcReplicaMetrics(
 	storeID roachpb.StoreID,
 	quiescent bool,
 	ticking bool,
-	latchInfoLocal kvserverpb.LatchManagerInfo,
-	latchInfoGlobal kvserverpb.LatchManagerInfo,
+	latchMetrics concurrency.LatchMetrics,
+	lockTableMetrics concurrency.LockTableMetrics,
 	raftLogSize int64,
 	raftLogSizeTrusted bool,
 ) ReplicaMetrics {
@@ -124,18 +132,22 @@ func calcReplicaMetrics(
 	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated = calcRangeCounter(
 		storeID, desc, leaseStatus, livenessMap, zone.GetNumVoters(), *zone.NumReplicas, clusterNodes)
 
+	const raftLogTooLargeMultiple = 4
+	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple*raftCfg.RaftLogTruncationThreshold) &&
+		raftLogSizeTrusted
+
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
 	if m.Leader {
 		m.BehindCount = calcBehindCount(raftStatus, desc, livenessMap)
 	}
 
-	m.LatchInfoLocal = latchInfoLocal
-	m.LatchInfoGlobal = latchInfoGlobal
-
-	const raftLogTooLargeMultiple = 4
-	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple*raftCfg.RaftLogTruncationThreshold) &&
-		raftLogSizeTrusted
+	m.ReadLatches = latchMetrics.LocalReadCount + latchMetrics.GlobalReadCount
+	m.WriteLatches = latchMetrics.LocalWriteCount + latchMetrics.GlobalWriteCount
+	m.Locks = lockTableMetrics.Locks
+	m.LocksWithWaitQueues = lockTableMetrics.LocksWithWaitQueues
+	m.LockWaitQueueWaiters = lockTableMetrics.Waiters
+	m.MaxLockWaitQueueWaitersForLock = lockTableMetrics.MaxWaitersForLock
 
 	return m
 }
