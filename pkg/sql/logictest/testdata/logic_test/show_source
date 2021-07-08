@@ -27,6 +27,7 @@ WHERE variable != 'optimizer' AND variable != 'crdb_version' AND variable != 'se
 ----
 variable                                              value
 application_name                                      ·
+backslash_quote                                       safe_encoding
 bytea_output                                          hex
 client_encoding                                       UTF8
 client_min_messages                                   notice

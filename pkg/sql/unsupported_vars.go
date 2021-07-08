@@ -64,7 +64,6 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	// "application_name",
 	"array_nulls",
 	"backend_flush_after",
-	"backslash_quote",
 	// "bytea_output",
 	"check_function_bodies",
 	// "client_encoding",
