@@ -145,6 +145,7 @@ go_library(
         "//pkg/sql/sqlinstance/instanceprovider",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slprovider",
+        "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlutil",
         "//pkg/sql/stats",
         "//pkg/sql/stmtdiagnostics",
