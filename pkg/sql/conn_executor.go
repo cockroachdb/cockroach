@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -313,7 +314,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* resetInterval */
 		nil, /* reportedProvider */
 	)
-	sqlStats := sslocal.New(
+	memSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
@@ -328,7 +329,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		Metrics:         metrics,
 		InternalMetrics: makeMetrics(cfg, true /* internal */),
 		pool:            pool,
-		sqlStats:        sqlStats,
 		reportedStats:   reportedSQLStats,
 		reCache:         tree.NewRegexpCache(512),
 		indexUsageStats: idxusage.NewLocalIndexUsageStats(&idxusage.Config{
@@ -338,6 +338,19 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		}),
 	}
 
+	sqlStatsInternalExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
+	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
+		Settings:         s.cfg.Settings,
+		InternalExecutor: &sqlStatsInternalExecutor,
+		KvDB:             cfg.DB,
+		SQLIDContainer:   cfg.NodeID,
+		Knobs:            cfg.SQLStatsTestingKnobs,
+		FlushCounter:     metrics.StatsMetrics.SQLStatsFlushStarted,
+		FailureCounter:   metrics.StatsMetrics.SQLStatsFlushFailure,
+		FlushDuration:    metrics.StatsMetrics.SQLStatsFlushDuration,
+	}, memSQLStats)
+
+	s.sqlStats = persistedSQLStats
 	return s
 }
 
@@ -384,7 +397,12 @@ func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
 			),
 			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(
 				getMetricMeta(MetaReportedSQLStatsMemCurBytes, internal)),
-			DiscardedStatsCount: metric.NewCounter(getMetricMeta(MetaDiscardedSQLStats, internal)),
+			DiscardedStatsCount:  metric.NewCounter(getMetricMeta(MetaDiscardedSQLStats, internal)),
+			SQLStatsFlushStarted: metric.NewCounter(getMetricMeta(MetaSQLStatsFlushStarted, internal)),
+			SQLStatsFlushFailure: metric.NewCounter(getMetricMeta(MetaSQLStatsFlushFailure, internal)),
+			SQLStatsFlushDuration: metric.NewLatency(
+				getMetricMeta(MetaSQLStatsFlushDuration, internal), 6*metricsSampleInterval,
+			),
 		},
 	}
 }
@@ -399,6 +417,11 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// in case the telemetry worker fails.
 	s.sqlStats.Start(ctx, stopper)
 	s.reportedStats.Start(ctx, stopper)
+}
+
+// GetSQLStatsProvider returns the provider for the sqlstats subsystem.
+func (s *Server) GetSQLStatsProvider() sqlstats.Provider {
+	return s.sqlStats
 }
 
 // ResetSQLStats resets the executor's collected sql statistics.
@@ -443,7 +466,7 @@ func (s *Server) GetUnscrubbedStmtStats(
 	ctx context.Context,
 ) ([]roachpb.CollectedStatementStatistics, error) {
 	var stmtStats []roachpb.CollectedStatementStatistics
-	stmtStatsVisitor := func(stat *roachpb.CollectedStatementStatistics) error {
+	stmtStatsVisitor := func(_ context.Context, stat *roachpb.CollectedStatementStatistics) error {
 		stmtStats = append(stmtStats, *stat)
 		return nil
 	}
@@ -463,7 +486,7 @@ func (s *Server) GetUnscrubbedTxnStats(
 	ctx context.Context,
 ) ([]roachpb.CollectedTransactionStatistics, error) {
 	var txnStats []roachpb.CollectedTransactionStatistics
-	txnStatsVisitor := func(_ roachpb.TransactionFingerprintID, stat *roachpb.CollectedTransactionStatistics) error {
+	txnStatsVisitor := func(_ context.Context, _ roachpb.TransactionFingerprintID, stat *roachpb.CollectedTransactionStatistics) error {
 		txnStats = append(txnStats, *stat)
 		return nil
 	}
@@ -491,7 +514,7 @@ func (s *Server) getScrubbedStmtStats(
 	salt := ClusterSecret.Get(&s.cfg.Settings.SV)
 
 	var scrubbedStats []roachpb.CollectedStatementStatistics
-	stmtStatsVisitor := func(stat *roachpb.CollectedStatementStatistics) error {
+	stmtStatsVisitor := func(_ context.Context, stat *roachpb.CollectedStatementStatistics) error {
 		// Scrub the statement itself.
 		scrubbedQueryStr, ok := scrubStmtStatKey(s.cfg.VirtualSchemas, stat.Key.Query)
 
