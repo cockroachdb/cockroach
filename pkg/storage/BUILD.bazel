@@ -8,7 +8,6 @@ go_library(
         "batch.go",
         "disk_map.go",
         "doc.go",
-        "enable_cc.cc",
         "engine.go",
         "engine_key.go",
         "error.go",
@@ -32,43 +31,9 @@ go_library(
         "sst_info.go",
         "sst_iterator.go",
         "sst_writer.go",
-        "stacks.go",
         "temp_dir.go",
         "temp_engine.go",
     ],
-    # List out all the c-dependencies pkg/storage depends on.
-    cdeps = [
-        "@cockroach//c-deps:libroach",
-    ],
-    cgo = True,
-
-    # Pin the clinkopts, we don't have to link libroach directly (which gazelle
-    # would auto-generate through the cgo tags if left unpinned. Those linker
-    # directives are implicitly defined by listing out the appropriate
-    # c-dependencies above.
-    #
-    # keep
-    clinkopts = select({
-        "@io_bazel_rules_go//go/platform:dragonfly": [
-            "-lm",
-        ],
-        "@io_bazel_rules_go//go/platform:freebsd": [
-            "-lm",
-        ],
-        "@io_bazel_rules_go//go/platform:linux": [
-            "-lrt -lm -lpthread",
-            "-lrt -lpthread",
-        ],
-        "@io_bazel_rules_go//go/platform:windows": [
-            "-lshlwapi -lrpcrt4",
-        ],
-        "//conditions:default": [],
-    }),
-    # We do the same for the include directives. By defining the appropriate
-    # c-dependencies above, bazel determines the right ones automagically.
-    #
-    # keep
-    cppopts = [],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage",
     visibility = ["//visibility:public"],
     deps = [
