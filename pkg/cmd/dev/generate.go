@@ -11,8 +11,7 @@
 package main
 
 import (
-	"fmt"
-	"path"
+	"path/filepath"
 
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -68,33 +67,10 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 
 func (d *dev) generateBazel(cmd *cobra.Command) error {
 	ctx := cmd.Context()
-	var err error
-	_, err = d.exec.CommandContext(ctx, "bazel",
-		"run", "//:gazelle", "--color=yes", "--", "update-repos",
-		"-from_file=go.mod", "-build_file_proto_mode=disable_global",
-		"-to_macro=DEPS.bzl%go_deps", "-prune=true",
-	)
+	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
 	}
-
-	cwd, err := d.os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	buffer, err := d.exec.CommandContext(ctx, "bazel",
-		"run", "//pkg/cmd/generate-test-suites", "--color=yes",
-		"--run_under", fmt.Sprintf("cd %s &&", cwd),
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := d.os.WriteFile(path.Join(cwd, "pkg/BUILD.bazel"), buffer); err != nil {
-		return err
-	}
-
-	_, err = d.exec.CommandContext(ctx, "bazel", "run", "@cockroach//:gazelle", "--color=yes")
+	_, err = d.exec.CommandContext(ctx, filepath.Join(workspace, "build", "bazelutil", "bazel-generate.sh"))
 	return err
 }
