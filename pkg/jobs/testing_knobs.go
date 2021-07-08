@@ -54,6 +54,11 @@ type TestingKnobs struct {
 
 	// IntervalOverrides consists of override knobs for job intervals.
 	IntervalOverrides TestingIntervalOverrides
+
+	// AfterJobStateMachine is called once the running instance of the job has
+	// returned from the state machine that transitions it from one state to
+	// another.
+	AfterJobStateMachine func()
 }
 
 // TestingIntervalOverrides contains variables to override the intervals and
