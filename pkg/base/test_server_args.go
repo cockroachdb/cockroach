@@ -264,6 +264,10 @@ type TestTenantArgs struct {
 	// field on the server.Config struct.
 	ExternalIODirConfig ExternalIODirConfig
 
+	// ExternalIODir is used to initialize the same-named field on
+	// the params.Settings struct.
+	ExternalIODir string
+
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running
 	// SET DATABASE=foo, which works even if the database doesn't (yet) exist.

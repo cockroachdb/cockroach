@@ -46,4 +46,8 @@ type TestTenantInterface interface {
 
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
+
+	// TestingKnobs returns the TestingKnobs in use by the test
+	// tenant.
+	TestingKnobs() *base.TestingKnobs
 }

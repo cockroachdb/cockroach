@@ -437,6 +437,14 @@ func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
 	return nil
 }
 
+// TestingKnobs returns the TestingKnobs used by the TestServer.
+func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
+	if ts != nil {
+		return &ts.Cfg.TestingKnobs
+	}
+	return nil
+}
+
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
@@ -462,6 +470,7 @@ func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record
 // serverutils.StartTenant method.
 type TestTenant struct {
 	*SQLServer
+	Cfg      *BaseConfig
 	sqlAddr  string
 	httpAddr string
 }
@@ -499,6 +508,11 @@ func (t *TestTenant) DistSQLServer() interface{} {
 // JobRegistry is part of the TestTenantInterface interface.
 func (t *TestTenant) JobRegistry() interface{} {
 	return t.SQLServer.jobRegistry
+}
+
+// TestingKnobs is part of the TestTenantInterface interface.
+func (t *TestTenant) TestingKnobs() *base.TestingKnobs {
+	return &t.Cfg.TestingKnobs
 }
 
 // SetupIdleMonitor will monitor the active connections and if there are none,
@@ -567,6 +581,8 @@ func (ts *TestServer) StartTenant(
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
 	}
+
+	st.ExternalIODir = params.ExternalIODir
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
 	sqlCfg.ExternalIODirConfig = params.ExternalIODirConfig
@@ -596,7 +612,7 @@ func (ts *TestServer) StartTenant(
 		baseCfg,
 		sqlCfg,
 	)
-	return &TestTenant{SQLServer: sqlServer, sqlAddr: addr, httpAddr: httpAddr}, err
+	return &TestTenant{SQLServer: sqlServer, Cfg: &baseCfg, sqlAddr: addr, httpAddr: httpAddr}, err
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
