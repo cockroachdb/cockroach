@@ -27,6 +27,7 @@ import (
 type dirOptions struct {
 	deterministic bool
 	refreshDelay  time.Duration
+	podWatcher    chan *Pod
 }
 
 // DirOption defines an option that can be passed to tenant.Directory in order
@@ -42,6 +43,18 @@ type DirOption func(opts *dirOptions)
 func RefreshDelay(delay time.Duration) func(opts *dirOptions) {
 	return func(opts *dirOptions) {
 		opts.refreshDelay = delay
+	}
+}
+
+// PodWatcher provides a callback channel to which tenant pod change
+// notifications will be sent by the directory. Notifications will be sent when
+// a tenant pod is created, modified, or destroyed.
+// NOTE: The caller is responsible for handling the notifications by receiving
+// from the channel; if it does not, it may block the background pod watcher
+// goroutine.
+func PodWatcher(podWatcher chan *Pod) func(opts *dirOptions) {
+	return func(opts *dirOptions) {
+		opts.podWatcher = podWatcher
 	}
 }
 
@@ -105,7 +118,7 @@ func NewDirectory(
 		dir.options.refreshDelay = 100 * time.Millisecond
 	}
 
-	// Starts the pod watcher and then returns
+	// Start the pod watcher on a background goroutine.
 	if err := dir.watchPods(ctx, stopper); err != nil {
 		return nil, err
 	}
@@ -264,9 +277,9 @@ func (d *Directory) deleteEntry(tenantID roachpb.TenantID) {
 	delete(d.mut.tenants, tenantID)
 }
 
-// watchPods establishes a watcher that looks for changes to tenant
-// pod addresses. Whenever tenant processes start or terminate, the watcher
-// will get a notification and update the directory to reflect that change.
+// watchPods establishes a watcher that looks for changes to tenant pods.
+// Whenever tenant pods start or terminate, the watcher will get a notification
+// and update the directory to reflect that change.
 func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error {
 	req := WatchPodsRequest{}
 
@@ -333,38 +346,18 @@ func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error 
 				continue
 			}
 
-			podAddr := resp.Addr
-			if podAddr == "" {
-				// Nothing needs to be done if there is no IP address specified.
-				continue
-			}
-
-			// Ensure that a directory entry exists for this tenant.
-			entry, err := d.getEntry(ctx, roachpb.MakeTenantID(resp.TenantID), false)
-			if err != nil {
-				if grpcutil.IsContextCanceled(err) {
+			// If caller is watching pods, send to its channel now.
+			if d.options.podWatcher != nil {
+				select {
+				case d.options.podWatcher <- resp.Pod:
+				case <-ctx.Done():
 					break
 				}
-				// This should only happen in case of a deleted tenant or a transient
-				// error during fetch of tenant metadata (i.e. very rarely).
-				log.Errorf(ctx, "ignoring error getting entry for tenant %d: %v", resp.TenantID, err)
-				continue
 			}
 
-			if entry != nil {
-				// For now, all we care about is the IP addresses of the tenant pod.
-				switch resp.Typ {
-				case ADDED, MODIFIED:
-					if entry.AddPodAddr(podAddr) {
-						log.Infof(ctx, "added IP address %s for tenant %d", podAddr, resp.TenantID)
-					}
-
-				case DELETED:
-					if entry.RemovePodAddr(podAddr) {
-						log.Infof(ctx, "deleted IP address %s for tenant %d", podAddr, resp.TenantID)
-					}
-				}
-			}
+			// Update the directory entry for the tenant with the latest
+			// information about this pod.
+			d.updateTenantEntry(ctx, resp.Typ, resp.Pod)
 		}
 	})
 	if err != nil {
@@ -374,6 +367,41 @@ func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error 
 	// Block until the initial pod watcher client stream is constructed.
 	waitInit.Wait()
 	return err
+}
+
+// updateTenantEntry keeps tenant directory entries up-to-date by handling pod
+// watcher events. When a pod is created, destroyed, or modified, it updates the
+// tenant's entry to reflect that change.
+func (d *Directory) updateTenantEntry(ctx context.Context, eventType EventType, pod *Pod) {
+	podAddr := pod.Addr
+	if podAddr == "" {
+		// Nothing needs to be done if there is no IP address specified.
+		return
+	}
+
+	// Ensure that a directory entry exists for this tenant.
+	entry, err := d.getEntry(ctx, roachpb.MakeTenantID(pod.TenantID), true /* allowCreate */)
+	if err != nil {
+		if !grpcutil.IsContextCanceled(err) {
+			// This should only happen in case of a deleted tenant or a transient
+			// error during fetch of tenant metadata (i.e. very rarely).
+			log.Errorf(ctx, "ignoring error getting entry for tenant %d: %v", pod.TenantID, err)
+		}
+		return
+	}
+
+	// For now, all we care about is the IP addresses of the tenant pod.
+	switch eventType {
+	case ADDED:
+		if entry.AddPodAddr(podAddr) {
+			log.Infof(ctx, "added IP address %s for tenant %d", podAddr, pod.TenantID)
+		}
+
+	case DELETED:
+		if entry.RemovePodAddr(podAddr) {
+			log.Infof(ctx, "deleted IP address %s for tenant %d", podAddr, pod.TenantID)
+		}
+	}
 }
 
 // sleepContext sleeps for the given duration or until the given context is

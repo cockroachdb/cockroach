@@ -488,49 +488,6 @@ func TestDenylistUpdate(t *testing.T) {
 	})
 }
 
-func TestProxyAgainstSecureCRDBWithIdleTimeout(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	te := newTester()
-	defer te.Close()
-
-	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
-	defer sql.Stopper().Stop(ctx)
-
-	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()
-	require.NoError(t, err)
-	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
-	proxyOutgoingTLSConfig.InsecureSkipVerify = true
-
-	idleTimeout, _ := time.ParseDuration("0.5s")
-	originalBackendDial := BackendDial
-	defer testutils.TestingHook(&BackendDial, func(
-		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
-	) (net.Conn, error) {
-		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
-	})()
-
-	s, addr := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{IdleTimeout: idleTimeout})
-
-	url := fmt.Sprintf("postgres://root:admin@%s/?sslmode=require&options=--cluster=dim-dog-28", addr)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-
-		var n int
-		err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
-		require.NoError(t, err)
-		require.EqualValues(t, 1, n)
-
-		time.Sleep(idleTimeout * 2)
-		err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
-		require.EqualError(t, err, "unexpected EOF")
-		require.Equal(t, int64(1), s.metrics.IdleDisconnectCount.Count())
-		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
-	})
-}
-
 func TestDirectoryConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -548,16 +505,18 @@ func TestDirectoryConnect(t *testing.T) {
 	require.NoError(t, err)
 
 	// New test directory server.
-	dirStopper1, tdsAddr := newDirectoryServer(ctx, t, srv, &net.TCPAddr{})
+	tds1, tdsAddr := newDirectoryServer(ctx, t, srv, &net.TCPAddr{})
 
 	// New proxy server using the directory. Define both the directory and the
 	// routing rule so that fallback to the routing rule can be tested.
+	const drainTimeout = 200 * time.Millisecond
 	opts := &ProxyOptions{
 		RoutingRule:   srv.ServingSQLAddr(),
 		DirectoryAddr: tdsAddr.String(),
 		Insecure:      true,
+		DrainTimeout:  drainTimeout,
 	}
-	_, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
+	proxy, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
 
 	t.Run("fallback when tenant not found", func(t *testing.T) {
 		defer testutils.TestingHook(&resolveTCPAddr,
@@ -619,14 +578,14 @@ func TestDirectoryConnect(t *testing.T) {
 	// Stop the directory server and the tenant SQL process started earlier. This
 	// tests whether the proxy can recover when the directory server and a SQL
 	// tenant pod restart.
-	dirStopper1.Stop(ctx)
+	tds1.Stopper().Stop(ctx)
+
+	// Pass the same tdsAddr used to start up the directory server previously,
+	// since it's not allowed to jump to a different address.
+	tds2, _ := newDirectoryServer(ctx, t, srv, tdsAddr)
+	defer tds2.Stopper().Stop(ctx)
 
 	t.Run("successful connection after restart", func(t *testing.T) {
-		// Pass the same tdsAddr used to start up the directory server previously,
-		// since it's not allowed to jump to a different address.
-		dirStopper2, _ := newDirectoryServer(ctx, t, srv, tdsAddr)
-		defer dirStopper2.Stop(ctx)
-
 		// Try to connect through the proxy again. This may take several tries
 		// in order to clear the proxy directory of the old SQL tenant process
 		// address and replace with the new.
@@ -640,6 +599,28 @@ func TestDirectoryConnect(t *testing.T) {
 			require.NoError(t, runTestQuery(ctx, conn))
 			return true
 		}, 30*time.Second, 100*time.Millisecond)
+	})
+
+	t.Run("drain connection", func(t *testing.T) {
+		url := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable&options=--cluster=tenant-cluster-28", addr)
+		te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
+			require.Equal(t, int64(1), proxy.metrics.CurConnCount.Value())
+
+			// Verify that connection is operational.
+			var n int
+			err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, n)
+
+			// Trigger drain of connections and wait for drain timeout.
+			tds2.Drain()
+			time.Sleep(drainTimeout * 5)
+
+			// Connection should be terminated.
+			err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
+			require.EqualError(t, err, "unexpected EOF")
+			require.Equal(t, int64(1), proxy.metrics.IdleDisconnectCount.Count())
+		})
 	})
 }
 
@@ -1009,17 +990,22 @@ func runTestQuery(ctx context.Context, conn *pgx.Conn) error {
 
 func newDirectoryServer(
 	ctx context.Context, t *testing.T, srv serverutils.TestServerInterface, addr *net.TCPAddr,
-) (*stop.Stopper, *net.TCPAddr) {
-	tdsStopper := stop.NewStopper()
+) (*tenantdirsvr.TestDirectoryServer, *net.TCPAddr) {
+	// Start listening on port that the tenant directory server will use.
 	var listener *net.TCPListener
-	var err error
 	require.Eventually(t, func() bool {
+		var err error
 		listener, err = net.ListenTCP("tcp", addr)
 		return err == nil
 	}, 30*time.Second, time.Second)
-	require.NoError(t, err)
+
+	// Create the tenant directory server.
+	tdsStopper := stop.NewStopper()
 	tds, err := tenantdirsvr.New(tdsStopper)
 	require.NoError(t, err)
+
+	// Override the tenant starter function to start a new tenant process using
+	// the TestServerInterface.
 	tds.TenantStarterFunc = func(ctx context.Context, tenantID uint64) (*tenantdirsvr.Process, error) {
 		// Recognize special tenant ID that triggers an error.
 		if tenantID == notFoundTenantID {
@@ -1040,6 +1026,9 @@ func newDirectoryServer(
 		ten.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
 		return &tenantdirsvr.Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
 	}
+
+	// Start serving on a background goroutine.
 	go func() { require.NoError(t, tds.Serve(listener)) }()
-	return tdsStopper, listener.Addr().(*net.TCPAddr)
+
+	return tds, listener.Addr().(*net.TCPAddr)
 }

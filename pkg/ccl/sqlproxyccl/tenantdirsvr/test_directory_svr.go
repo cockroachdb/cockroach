@@ -103,8 +103,13 @@ func New(stopper *stop.Stopper) (*TestDirectoryServer, error) {
 	return dir, nil
 }
 
-// Get a tenant's list of pods and the process information for each
-// pod.
+// Stopper returns the stopper that can be used to shut down the test directory
+// server.
+func (s *TestDirectoryServer) Stopper() *stop.Stopper {
+	return s.stopper
+}
+
+// Get a tenant's list of pods and the process information for each pod.
 func (s *TestDirectoryServer) Get(id roachpb.TenantID) (result map[net.Addr]*Process) {
 	result = make(map[net.Addr]*Process)
 	s.proc.RLock()
@@ -181,6 +186,29 @@ func (s *TestDirectoryServer) WatchPods(
 			}
 		})
 	return err
+}
+
+// Drain sends out DRAINING pod notifications for each process managed by the
+// test directory. This causes the proxy to start enforcing short idle
+// connection timeouts in order to drain the connections to the pod.
+func (s *TestDirectoryServer) Drain() {
+	s.proc.RLock()
+	defer s.proc.RUnlock()
+
+	for tenantID, processByAddr := range s.proc.processByAddrByTenantID {
+		for addr := range processByAddr {
+			s.listen.RLock()
+			defer s.listen.RUnlock()
+			s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
+				Typ: tenant.MODIFIED,
+				Pod: &tenant.Pod{
+					TenantID: tenantID,
+					Addr:     addr.String(),
+					State:    tenant.DRAINING,
+				},
+			})
+		}
+	}
 }
 
 func (s *TestDirectoryServer) notifyEventListenersLocked(req *tenant.WatchPodsResponse) {
@@ -264,9 +292,12 @@ func (s *TestDirectoryServer) registerInstanceLocked(tenantID uint64, process *P
 	s.listen.RLock()
 	defer s.listen.RUnlock()
 	s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-		Typ:      tenant.ADDED,
-		Addr:     process.SQL.String(),
-		TenantID: tenantID,
+		Typ: tenant.ADDED,
+		Pod: &tenant.Pod{
+			TenantID: tenantID,
+			Addr:     process.SQL.String(),
+			State:    tenant.RUNNING,
+		},
 	})
 }
 
@@ -284,9 +315,12 @@ func (s *TestDirectoryServer) deregisterInstance(tenantID uint64, sql net.Addr) 
 		s.listen.RLock()
 		defer s.listen.RUnlock()
 		s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-			Typ:      tenant.DELETED,
-			Addr:     sql.String(),
-			TenantID: tenantID,
+			Typ: tenant.DELETED,
+			Pod: &tenant.Pod{
+				TenantID: tenantID,
+				Addr:     sql.String(),
+				State:    tenant.DELETING,
+			},
 		})
 	}
 }

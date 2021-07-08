@@ -2,23 +2,28 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "idle",
-    srcs = ["idle_disconnect_connection.go"],
+    srcs = [
+        "monitor.go",
+        "monitor_conn.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/idle",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "idle_test",
-    srcs = ["idle_disconnect_connection_test.go"],
+    srcs = [
+        "monitor_conn_test.go",
+        "monitor_test.go",
+    ],
     embed = [":idle"],
     deps = [
         "//pkg/util/leaktest",
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/util/log",
         "@com_github_stretchr_testify//require",
     ],
 )

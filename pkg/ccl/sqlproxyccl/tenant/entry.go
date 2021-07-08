@@ -46,9 +46,9 @@ type tenantEntry struct {
 	// error occurred).
 	initError error
 
-	// pods synchronizes access to information about the tenant's SQL
-	// pods. These fields can be updated over time, so a lock must be
-	// obtained before accessing them.
+	// pods synchronizes access to information about the tenant's SQL pods.
+	// These fields can be updated over time, so a lock must be obtained before
+	// accessing them.
 	pods struct {
 		syncutil.Mutex
 		addrs []string
@@ -253,13 +253,16 @@ func (e *tenantEntry) fetchPodsLocked(
 	ctx context.Context, client DirectoryClient,
 ) (addrs []string, err error) {
 	// List the pods for the given tenant.
+	// TODO(andyk): This races with the pod watcher, which may receive updates
+	// that are newer than what ListPods returns. This could be fixed by adding
+	// version values to the pods in order to detect races.
 	list, err := client.ListPods(ctx, &ListPodsRequest{e.TenantID.ToUint64()})
 	if err != nil {
 		return nil, err
 	}
 
-	// Get updated list of running process pod IP addresses and save it to
-	// the entry.
+	// Get updated list of running process pod IP addresses and save it to the
+	// entry.
 	addrs = make([]string, 0, len(list.Pods))
 	for i := range list.Pods {
 		pod := list.Pods[i]
