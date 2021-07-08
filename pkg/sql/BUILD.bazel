@@ -349,6 +349,7 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqlstats/sslocal",
         "//pkg/sql/sqltelemetry",
