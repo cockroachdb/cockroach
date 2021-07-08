@@ -32,6 +32,8 @@ func (d FakeResumer) ForceRealSpan() bool {
 
 var _ Resumer = FakeResumer{}
 
+func (d FakeResumer) ForceRealSpan() {}
+
 func (d FakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if d.OnResume != nil {
 		if err := d.OnResume(ctx); err != nil {

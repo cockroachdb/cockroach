@@ -13,6 +13,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -52,6 +53,30 @@ const claimQuery = `
  ORDER BY created DESC
     LIMIT $3
 RETURNING id;`
+
+func (r *Registry) maybeDumpTrace(
+	resumerCtx context.Context, resumer Resumer, jobID, traceID int64, jobErr error,
+) {
+	if _, ok := resumer.(TraceableJob); !ok || r.td == nil {
+		return
+	}
+	dumpMode := traceableJobDumpTraceMode.Get(&r.settings.SV)
+	if dumpMode == int64(noDump) {
+		return
+	}
+
+	// If the job has failed, and the dump mode is set to anything except noDump,
+	// then we should dump the trace.
+	if jobErr != nil && resumerCtx.Err() == nil {
+		r.td.MaybeDump(resumerCtx, strconv.Itoa(int(jobID)), traceID, r.ex)
+	}
+
+	// If the job has succeeded, and the dump mode is set to dumpOnTerminal, then
+	// we should dump the trace.
+	if jobErr == nil && resumerCtx.Err() == nil && dumpMode == int64(dumpOnTerminal) {
+		r.td.MaybeDump(resumerCtx, strconv.Itoa(int(jobID)), traceID, r.ex)
+	}
+}
 
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
@@ -294,6 +319,8 @@ func (r *Registry) runJob(
 	if err != nil && ctx.Err() == nil {
 		log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
 	}
+
+	r.maybeDumpTrace(ctx, resumer, int64(job.ID()), int64(span.TraceID()), err)
 	return err
 }
 
