@@ -36,7 +36,9 @@ func TestExecgen(t *testing.T) {
 				return ""
 			}
 			var sb strings.Builder
-			_ = decorator.Fprint(&sb, f)
+			if err := decorator.Fprint(&sb, f); err != nil {
+				return err.Error()
+			}
 			return sb.String()
 		})
 	})
