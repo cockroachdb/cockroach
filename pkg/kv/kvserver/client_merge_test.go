@@ -4890,6 +4890,7 @@ func sendWithTxn(
 func TestStoreBlockTransferLeaseRequestAfterSubsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRaceWithIssue(t, 67346, "data race")
 
 	ctx := context.Background()
 	numNodes := 2
