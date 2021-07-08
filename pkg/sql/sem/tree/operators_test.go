@@ -139,7 +139,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	}
 
 	// Check comparison ops.
-	for op := ComparisonOperator(0); op < NumComparisonOperators; op++ {
+	for op := ComparisonOperatorSymbol(0); op < NumComparisonOperatorSymbols; op++ {
 		for _, impl := range CmpOps[op] {
 			o := impl.(*CmpOp)
 			check(op.String(), o.LeftType, o.RightType, o.Volatility)

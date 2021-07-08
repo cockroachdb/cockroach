@@ -110,11 +110,11 @@ type MutableExpr interface {
 
 // ComparisonOpMap maps from a semantic tree comparison operator type to an
 // optimizer operator type.
-var ComparisonOpMap [tree.NumComparisonOperators]Operator
+var ComparisonOpMap [tree.NumComparisonOperatorSymbols]Operator
 
 // ComparisonOpReverseMap maps from an optimizer operator type to a semantic
 // tree comparison operator type.
-var ComparisonOpReverseMap = map[Operator]tree.ComparisonOperator{
+var ComparisonOpReverseMap = map[Operator]tree.ComparisonOperatorSymbol{
 	EqOp:             tree.EQ,
 	LtOp:             tree.LT,
 	GtOp:             tree.GT,

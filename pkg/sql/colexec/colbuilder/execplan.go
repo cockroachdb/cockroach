@@ -1836,14 +1836,14 @@ func planSelectionOperators(
 		}
 		lTyp := ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
-			switch cmpOp {
+			switch cmpOp.Symbol {
 			case tree.Like, tree.NotLike:
-				negate := cmpOp == tree.NotLike
+				negate := cmpOp.Symbol == tree.NotLike
 				op, err = colexecsel.GetLikeOperator(
 					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate,
 				)
 			case tree.In, tree.NotIn:
-				negate := cmpOp == tree.NotIn
+				negate := cmpOp.Symbol == tree.NotIn
 				datumTuple, ok := tree.AsDTuple(constArg)
 				if !ok || tupleContainsTuples(datumTuple) {
 					// Optimized IN operator is supported only on constant
@@ -1864,7 +1864,7 @@ func planSelectionOperators(
 				// DISTINCT FROM NULL is synonymous with IS NOT NULL (except for
 				// tuples). Therefore, negate when the operator is IS DISTINCT
 				// FROM NULL.
-				negate := cmpOp == tree.IsDistinctFrom
+				negate := cmpOp.Symbol == tree.IsDistinctFrom
 				op = colexec.NewIsNullSelOp(leftOp, leftIdx, negate, false /* isTupleNull */)
 			}
 			if op == nil || err != nil {
@@ -2098,7 +2098,7 @@ func planProjectionOperators(
 				// resultIdx, so we simply create an ordinal referencing that
 				// column.
 				right := tree.NewTypedOrdinalReference(resultIdx, whenTyped.ResolvedType())
-				cmpExpr := tree.NewTypedComparisonExpr(tree.EQ, left, right)
+				cmpExpr := tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(tree.EQ), left, right)
 				caseOps[i], resultIdx, typs, err = planProjectionOperators(
 					ctx, evalCtx, cmpExpr, typs, caseOps[i], acc, factory, releasables,
 				)
@@ -2257,6 +2257,9 @@ func planProjectionExpr(
 			}
 			right = tupleDatum
 		}
+
+		cmpProjOp, isCmpProjOp := projOp.(tree.ComparisonOperator)
+
 		// We have a special case behavior for Is{Not}DistinctFrom before
 		// checking whether the right expression is constant below in order to
 		// extract NULL from the cast expression.
@@ -2265,7 +2268,7 @@ func planProjectionExpr(
 		// creates a cast expression from tree.DNull to the desired type in
 		// order to propagate the type of the null. We need to extract the
 		// constant NULL so that the optimized operator was planned below.
-		if projOp == tree.IsDistinctFrom || projOp == tree.IsNotDistinctFrom {
+		if isCmpProjOp && (cmpProjOp.Symbol == tree.IsDistinctFrom || cmpProjOp.Symbol == tree.IsNotDistinctFrom) {
 			if cast, ok := right.(*tree.CastExpr); ok {
 				if cast.Expr == tree.DNull {
 					right = tree.DNull
@@ -2277,39 +2280,41 @@ func planProjectionExpr(
 			// The projection result will be outputted to a new column which is
 			// appended to the input batch.
 			resultIdx = len(typs)
-			switch projOp {
-			case tree.Like, tree.NotLike:
-				negate := projOp == tree.NotLike
-				op, err = colexecproj.GetLikeProjectionOperator(
-					allocator, evalCtx, input, leftIdx, resultIdx,
-					string(tree.MustBeDString(rConstArg)), negate,
-				)
-			case tree.In, tree.NotIn:
-				negate := projOp == tree.NotIn
-				datumTuple, ok := tree.AsDTuple(rConstArg)
-				if !ok || tupleContainsTuples(datumTuple) {
-					// Optimized IN operator is supported only on constant
-					// expressions that don't contain tuples (because tuples
-					// require special null-handling logic), so we fallback to
-					// the default comparison operator.
-					break
+			if isCmpProjOp {
+				switch cmpProjOp.Symbol {
+				case tree.Like, tree.NotLike:
+					negate := cmpProjOp.Symbol == tree.NotLike
+					op, err = colexecproj.GetLikeProjectionOperator(
+						allocator, evalCtx, input, leftIdx, resultIdx,
+						string(tree.MustBeDString(rConstArg)), negate,
+					)
+				case tree.In, tree.NotIn:
+					negate := cmpProjOp.Symbol == tree.NotIn
+					datumTuple, ok := tree.AsDTuple(rConstArg)
+					if !ok || tupleContainsTuples(datumTuple) {
+						// Optimized IN operator is supported only on constant
+						// expressions that don't contain tuples (because tuples
+						// require special null-handling logic), so we fallback to
+						// the default comparison operator.
+						break
+					}
+					op, err = colexec.GetInProjectionOperator(
+						allocator, typs[leftIdx], input, leftIdx, resultIdx, datumTuple, negate,
+					)
+				case tree.IsDistinctFrom, tree.IsNotDistinctFrom:
+					if right != tree.DNull {
+						// Optimized IsDistinctFrom and IsNotDistinctFrom are
+						// supported only with NULL argument, so we fallback to the
+						// default comparison operator.
+						break
+					}
+					// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we
+					// want to negate when IS DISTINCT FROM is used.
+					negate := cmpProjOp.Symbol == tree.IsDistinctFrom
+					op = colexec.NewIsNullProjOp(
+						allocator, input, leftIdx, resultIdx, negate, false, /* isTupleNull */
+					)
 				}
-				op, err = colexec.GetInProjectionOperator(
-					allocator, typs[leftIdx], input, leftIdx, resultIdx, datumTuple, negate,
-				)
-			case tree.IsDistinctFrom, tree.IsNotDistinctFrom:
-				if right != tree.DNull {
-					// Optimized IsDistinctFrom and IsNotDistinctFrom are
-					// supported only with NULL argument, so we fallback to the
-					// default comparison operator.
-					break
-				}
-				// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we
-				// want to negate when IS DISTINCT FROM is used.
-				negate := projOp == tree.IsDistinctFrom
-				op = colexec.NewIsNullProjOp(
-					allocator, input, leftIdx, resultIdx, negate, false, /* isTupleNull */
-				)
 			}
 			if op == nil || err != nil {
 				// op hasn't been created yet, so let's try the constructor for

@@ -241,7 +241,7 @@ func (b *Builder) buildComparison(
 	}
 
 	operator := opt.ComparisonOpReverseMap[scalar.Op()]
-	return tree.NewTypedComparisonExpr(operator, left, right), nil
+	return tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(operator), left, right), nil
 }
 
 func (b *Builder) buildUnary(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
@@ -410,7 +410,12 @@ func (b *Builder) buildAnyScalar(
 	}
 
 	cmp := opt.ComparisonOpReverseMap[any.Cmp]
-	return tree.NewTypedComparisonExprWithSubOp(tree.Any, cmp, left, right), nil
+	return tree.NewTypedComparisonExprWithSubOp(
+		tree.MakeComparisonOperator(tree.Any),
+		tree.MakeComparisonOperator(cmp),
+		left,
+		right,
+	), nil
 }
 
 func (b *Builder) buildIndirection(
@@ -524,7 +529,12 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	cmp := opt.ComparisonOpReverseMap[any.Cmp]
-	return tree.NewTypedComparisonExprWithSubOp(tree.Any, cmp, scalarExpr, subqueryExpr), nil
+	return tree.NewTypedComparisonExprWithSubOp(
+		tree.MakeComparisonOperator(tree.Any),
+		tree.MakeComparisonOperator(cmp),
+		scalarExpr,
+		subqueryExpr,
+	), nil
 }
 
 func (b *Builder) buildExistsSubquery(

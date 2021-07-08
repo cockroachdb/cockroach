@@ -24,7 +24,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testExprs := []struct {
-		op          ComparisonOperator
+		op          ComparisonOperatorSymbol
 		left, right string
 		cacheCount  int
 	}{
@@ -48,7 +48,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 	}
 	for _, d := range testExprs {
 		expr := &ComparisonExpr{
-			Operator: d.op,
+			Operator: MakeComparisonOperator(d.op),
 			Left:     NewDString(d.left),
 			Right:    NewDString(d.right),
 		}

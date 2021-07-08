@@ -29209,9 +29209,9 @@ func GetProjectionLConstOperator(
 	}
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	leftType, rightType := constType, inputTypes[colIdx]
-	switch op.(type) {
+	switch op := op.(type) {
 	case tree.BinaryOperator:
-		switch op.(tree.BinaryOperator).Symbol {
+		switch op.Symbol {
 		case tree.Bitand:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
