@@ -1697,6 +1697,20 @@ func (s *statusServer) rangesHelper(
 		span.StartKey = desc.StartKey.String()
 		span.EndKey = desc.EndKey.String()
 		state := rep.State(ctx)
+		var topKLocksByWaiters []serverpb.RangeInfo_LockInfo
+		for _, lm := range metrics.LockTableMetrics.TopKLocksByWaiters {
+			if lm.Key == nil {
+				break
+			}
+			topKLocksByWaiters = append(topKLocksByWaiters, serverpb.RangeInfo_LockInfo{
+				PrettyKey:      lm.Key.String(),
+				Key:            lm.Key,
+				Held:           lm.Held,
+				Waiters:        lm.Waiters,
+				WaitingReaders: lm.WaitingReaders,
+				WaitingWriters: lm.WaitingWriters,
+			})
+		}
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     raftState,
@@ -1718,11 +1732,15 @@ func (s *statusServer) rangesHelper(
 				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
 			},
-			LatchesLocal:  metrics.LatchInfoLocal,
-			LatchesGlobal: metrics.LatchInfoGlobal,
-			LeaseStatus:   metrics.LeaseStatus,
-			Quiescent:     metrics.Quiescent,
-			Ticking:       metrics.Ticking,
+			LeaseStatus:                 metrics.LeaseStatus,
+			Quiescent:                   metrics.Quiescent,
+			Ticking:                     metrics.Ticking,
+			ReadLatches:                 metrics.LatchMetrics.ReadCount,
+			WriteLatches:                metrics.LatchMetrics.WriteCount,
+			Locks:                       metrics.LockTableMetrics.Locks,
+			LocksWithWaitQueues:         metrics.LockTableMetrics.LocksWithWaitQueues,
+			LockWaitQueueWaiters:        metrics.LockTableMetrics.Waiters,
+			TopKLocksByWaitQueueWaiters: topKLocksByWaiters,
 		}
 	}
 
