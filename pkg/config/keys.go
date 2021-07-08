@@ -18,19 +18,13 @@ import (
 
 // MakeZoneKeyPrefix returns the key prefix for id's row in the system.zones
 // table.
-func MakeZoneKeyPrefix(id SystemTenantObjectID) roachpb.Key {
-	return keys.SystemSQLCodec.ZoneKeyPrefix(uint32(id))
+func MakeZoneKeyPrefix(codec keys.SQLCodec, id descpb.ID) roachpb.Key {
+	return codec.ZoneKeyPrefix(uint32(id))
 }
 
 // MakeZoneKey returns the key for a given id's entry in the system.zones table.
 func MakeZoneKey(codec keys.SQLCodec, id descpb.ID) roachpb.Key {
 	return codec.ZoneKey(uint32(id))
-}
-
-// MakeZoneKeyForSystemTenant returns the key for the given system tenant ID's
-// entry in the system.zones table.
-func MakeZoneKeyForSystemTenant(id SystemTenantObjectID) roachpb.Key {
-	return MakeZoneKey(keys.SystemSQLCodec, descpb.ID(id))
 }
 
 // DecodeSystemTenantObjectID decodes the object ID for the system-tenant from

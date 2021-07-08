@@ -55,8 +55,8 @@ var errNoZoneConfigApplies = errors.New("no zone config applies")
 // descriptor in order to find its parent. If false, we'll assume that this
 // already is a parent and we'll not decode a descriptor.
 func getZoneConfig(
-	id descpb.ID,
 	codec keys.SQLCodec,
+	id descpb.ID,
 	getKey func(roachpb.Key) (*roachpb.Value, error),
 	getInheritedDefault bool,
 	mayBeTable bool,
@@ -87,7 +87,7 @@ func getZoneConfig(
 	// No zone config for this ID. We need to figure out if it's a table, so we
 	// look up its descriptor.
 	if mayBeTable {
-		if descVal, err := getKey(catalogkeys.MakeDescMetadataKey(codec, descpb.ID(id))); err != nil {
+		if descVal, err := getKey(catalogkeys.MakeDescMetadataKey(codec, id)); err != nil {
 			return 0, nil, 0, nil, err
 		} else if descVal != nil {
 			var desc descpb.Descriptor
@@ -98,8 +98,8 @@ func getZoneConfig(
 			if tableDesc != nil {
 				// This is a table descriptor. Look up its parent database zone config.
 				dbID, zone, _, _, err := getZoneConfig(
-					tableDesc.ParentID,
 					codec,
+					tableDesc.ParentID,
 					getKey,
 					false, /* getInheritedDefault */
 					false /* mayBeTable */)
@@ -115,8 +115,8 @@ func getZoneConfig(
 	// we were trying to retrieve (avoid infinite recursion).
 	if id != keys.RootNamespaceID {
 		rootID, zone, _, _, err := getZoneConfig(
-			keys.RootNamespaceID,
 			codec,
+			keys.RootNamespaceID,
 			getKey,
 			false, /* getInheritedDefault */
 			false /* mayBeTable */)
@@ -163,7 +163,9 @@ func completeZoneConfig(
 		}
 		tableDesc, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
 		if tableDesc != nil {
-			_, dbzone, _, _, err := getZoneConfig(tableDesc.ParentID, codec, getKey, false /* getInheritedDefault */, false /* mayBeTable */)
+			_, dbzone, _, _, err := getZoneConfig(
+				codec, tableDesc.ParentID, getKey, false /* getInheritedDefault */, false, /* mayBeTable */
+			)
 			if err != nil {
 				return err
 			}
@@ -175,7 +177,9 @@ func completeZoneConfig(
 	if cfg.IsComplete() {
 		return nil
 	}
-	_, defaultZone, _, _, err := getZoneConfig(keys.RootNamespaceID, codec, getKey, false /* getInheritedDefault */, false /* mayBeTable */)
+	_, defaultZone, _, _, err := getZoneConfig(
+		codec, keys.RootNamespaceID, getKey, false /* getInheritedDefault */, false, /* mayBeTable */
+	)
 	if err != nil {
 		return err
 	}
@@ -211,7 +215,8 @@ func zoneConfigHook(
 	}
 	const mayBeTable = true
 	zoneID, zone, _, placeholder, err := getZoneConfig(
-		descpb.ID(id), keys.SystemSQLCodec, getKey, false /* getInheritedDefault */, mayBeTable)
+		keys.SystemSQLCodec, descpb.ID(id), getKey, false /* getInheritedDefault */, mayBeTable,
+	)
 	if errors.Is(err, errNoZoneConfigApplies) {
 		return nil, nil, true, nil
 	} else if err != nil {
@@ -247,7 +252,8 @@ func GetZoneConfigInTxn(
 		return kv.Value, nil
 	}
 	zoneID, zone, placeholderID, placeholder, err := getZoneConfig(
-		id, codec, getKey, getInheritedDefault, true /* mayBeTable */)
+		codec, id, getKey, getInheritedDefault, true, /* mayBeTable */
+	)
 	if err != nil {
 		return 0, nil, nil, err
 	}

@@ -680,7 +680,10 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 
-			// TODO(arul): Get rid of this once tenants have access to node localites.
+			// TODO(zcfgs-pod): We want to validate localities being referenced for
+			// secondary tenants as well. Secondary tenant's don't have access to
+			// underlying localities yet, but when that lands, this check should go
+			// away.
 			if params.p.ExecCfg().Codec.ForSystemTenant() {
 				ss, err := params.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(MultitenancyZoneCfgIssueNo)
 				if err != nil {
