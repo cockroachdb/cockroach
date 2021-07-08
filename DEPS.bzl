@@ -71,6 +71,14 @@ def go_deps():
         version = "v0.0.0-20190717042225-c3de453c63f4",
     )
     go_repository(
+        name = "com_github_alessio_shellescape",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/alessio/shellescape",
+        sum = "h1:V7yhSDDn8LP4lc4jS8pFkt0zCnzVJlG5JXy9BVKJUX0=",
+        version = "v1.4.1",
+    )
+
+    go_repository(
         name = "com_github_alexbrainman_sspi",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/alexbrainman/sspi",
