@@ -12,10 +12,8 @@ package os
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recorder"
 	"github.com/cockroachdb/errors/oserror"
@@ -83,30 +81,6 @@ func WithWorkingDir(dir string) func(o *OS) {
 	}
 }
 
-// MkdirAll wraps around os.MkdirAll, creating a directory named path, along
-// with any necessary parents.
-func (o *OS) MkdirAll(path string) error {
-	command := fmt.Sprintf("mkdir %s", path)
-	o.logger.Print(command)
-
-	if o.Recorder == nil || o.Recorder.Recording() {
-		// Do the real thing.
-		if err := os.MkdirAll(path, 0755); err != nil {
-			return err
-		}
-	}
-
-	if o.Recorder == nil {
-		return nil
-	}
-
-	if o.Recording() {
-		return o.record(command, "")
-	}
-	_, err := o.replay(command)
-	return err
-}
-
 // Remove wraps around os.Remove, removing the named file or (empty) directory.
 func (o *OS) Remove(path string) error {
 	command := fmt.Sprintf("rm %s", path)
@@ -139,69 +113,6 @@ func (o *OS) Symlink(to, from string) error {
 	if o.Recorder == nil || o.Recorder.Recording() {
 		// Do the real thing.
 		if err := os.Symlink(to, from); err != nil {
-			return err
-		}
-	}
-
-	if o.Recorder == nil {
-		return nil
-	}
-
-	if o.Recording() {
-		return o.record(command, "")
-	}
-	_, err := o.replay(command)
-	return err
-}
-
-// Getwd wraps around os.Getwd, returning a rooted path name corresponding to
-// the current directory.
-func (o *OS) Getwd() (dir string, err error) {
-	command := "getwd"
-	o.logger.Print(command)
-
-	if o.Recorder == nil || o.Recorder.Recording() {
-		if o.dir != "" {
-			dir = o.dir
-		} else {
-			// Do the real thing.
-			dir, err = os.Getwd()
-			if err != nil {
-				return "", err
-			}
-		}
-	}
-
-	if o.Recorder == nil {
-		return dir, nil
-	}
-
-	// We have to massage the output here to fit into a form that the recorder
-	// understands. The recorder expects outputs to be terminated, so we'll do
-	// that when recording, and we'll strip it back out when replaying from it.
-	if o.Recording() {
-		err := o.record(command, fmt.Sprintf("%s\n", dir))
-		if err != nil {
-			return "", err
-		}
-		return dir, nil
-	}
-	dir, err = o.replay(command)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(dir), nil
-}
-
-// WriteFile wraps around os.Getwd, returning a rooted path name corresponding to
-// the current directory.
-func (o *OS) WriteFile(filename string, data []byte) error {
-	command := fmt.Sprintf("writefile: %s", filename)
-	o.logger.Print(command)
-
-	if o.Recorder == nil || o.Recorder.Recording() {
-		// Do the real thing.
-		if err := ioutil.WriteFile(filename, data, 0644); err != nil {
 			return err
 		}
 	}

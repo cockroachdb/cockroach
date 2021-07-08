@@ -10,7 +10,8 @@
 # https://github.com/github/gitignore/tree/master/Global
 
 artifacts
-/bin
+/bin/*
+!/bin/dev
 /bin.*
 /lib
 /lib.*
