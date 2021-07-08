@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tracedumper",
+    srcs = [
+        "test_helpers.go",
+        "tracedumper.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/tracedumper",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/dumpstore",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing/zipper",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "tracedumper_test",
+    srcs = [
+        "main_test.go",
+        "tracedumper_test.go",
+    ],
+    embed = [":tracedumper"],
+    deps = [
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/dumpstore",
+        "//pkg/sql/sqlutil",
+        "//pkg/sql/tests",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)
