@@ -75,30 +75,32 @@ func (i *InternalInflightTraceZipper) getZipper() *memzipper.Zipper {
 // spans for traceID, from all nodes in the cluster. It converts the recordings
 // into text, and jaegerJSON formats before creating a zip with per-node trace
 // files.
-func (i *InternalInflightTraceZipper) Zip(ctx context.Context, traceID int64) ([]byte, error) {
+func (i *InternalInflightTraceZipper) Zip(
+	ctx context.Context, traceID int64,
+) (zipBytes []byte, retErr error) {
 	it, err := i.ie.QueryIterator(ctx, "internal-zipper", nil, fmt.Sprintf(inflightTracesQuery, traceID))
 	if err != nil {
 		return nil, err
 	}
-	defer it.Close()
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 	var prevNodeID int64
 	isFirstRow := true
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
-		inflightTraceRow, err := i.populateInflightTraceRow(row)
+		traceRow, err := i.populateInflightTraceRow(row)
 		if err != nil {
 			return nil, err
 		}
 
 		if isFirstRow {
-			prevNodeID = inflightTraceRow.nodeID
+			prevNodeID = traceRow.nodeID
 			isFirstRow = false
 		}
 
 		// If the nodeID is the same as that seen in the previous row, then continue
 		// to buffer in the same file.
-		if inflightTraceRow.nodeID != prevNodeID {
+		if traceRow.nodeID != prevNodeID {
 			// If the nodeID is different from that seen in the previous row, create
 			// new files in the zip bundle to hold information for this node.
 			flushAndReset(ctx, prevNodeID, i)
@@ -117,20 +119,23 @@ func (i *InternalInflightTraceZipper) Zip(ctx context.Context, traceID int64) ([
 		// on a node for a given TraceID in a single view, rather than having to
 		// generate different Jaeger files for each tracing.Recording, and going
 		// through the hassle of importing each one and toggling through the tabs.
-		if i.nodeTraceCollection, err = stitchJaegerJSON(i.nodeTraceCollection, inflightTraceRow.jaegerJSON); err != nil {
+		if i.nodeTraceCollection, err = stitchJaegerJSON(i.nodeTraceCollection, traceRow.jaegerJSON); err != nil {
 			return nil, err
 		}
 
-		_, err = i.traceStrBuf.WriteString(fmt.Sprintf("\n\n-- Root Operation: %s --\n\n", inflightTraceRow.rootOpName))
+		_, err = i.traceStrBuf.WriteString(fmt.Sprintf("\n\n-- Root Operation: %s --\n\n", traceRow.rootOpName))
 		if err != nil {
 			return nil, err
 		}
-		_, err = i.traceStrBuf.WriteString(inflightTraceRow.traceStr)
+		_, err = i.traceStrBuf.WriteString(traceRow.traceStr)
 		if err != nil {
 			return nil, err
 		}
 
-		prevNodeID = inflightTraceRow.nodeID
+		prevNodeID = traceRow.nodeID
+	}
+	if err != nil {
+		return nil, err
 	}
 	flushAndReset(ctx, prevNodeID, i)
 	buf, err := i.z.Finalize()
@@ -148,35 +153,35 @@ func (i *InternalInflightTraceZipper) reset() {
 func (i *InternalInflightTraceZipper) populateInflightTraceRow(
 	row tree.Datums,
 ) (inflightTraceRow, error) {
-	var inflightTraceRow inflightTraceRow
+	var traceRow inflightTraceRow
 	if len(row) != 4 {
-		return inflightTraceRow, errors.AssertionFailedf("expected vals to have 4 values but found %d", len(row))
+		return traceRow, errors.AssertionFailedf("expected vals to have 4 values but found %d", len(row))
 	}
 
 	if id, ok := row[0].(*tree.DInt); ok {
-		inflightTraceRow.nodeID = int64(*id)
+		traceRow.nodeID = int64(*id)
 	} else {
-		return inflightTraceRow, errors.Errorf("unexpected value: %T of %v", row[0], row[0])
+		return traceRow, errors.Errorf("unexpected value: %T of %v", row[0], row[0])
 	}
 
 	if rootOpName, ok := row[1].(*tree.DString); ok {
-		inflightTraceRow.rootOpName = string(*rootOpName)
+		traceRow.rootOpName = string(*rootOpName)
 	} else {
-		return inflightTraceRow, errors.Errorf("unexpected value: %T of %v", row[1], row[1])
+		return traceRow, errors.Errorf("unexpected value: %T of %v", row[1], row[1])
 	}
 
 	if traceStr, ok := row[2].(*tree.DString); ok {
-		inflightTraceRow.traceStr = string(*traceStr)
+		traceRow.traceStr = string(*traceStr)
 	} else {
-		return inflightTraceRow, errors.Errorf("unexpected value: %T of %v", row[2], row[2])
+		return traceRow, errors.Errorf("unexpected value: %T of %v", row[2], row[2])
 	}
 
 	if jaegerJSON, ok := row[3].(*tree.DString); ok {
-		inflightTraceRow.jaegerJSON = string(*jaegerJSON)
+		traceRow.jaegerJSON = string(*jaegerJSON)
 	} else {
-		return inflightTraceRow, errors.Errorf("unexpected value: %T of %v", row[3], row[3])
+		return traceRow, errors.Errorf("unexpected value: %T of %v", row[3], row[3])
 	}
-	return inflightTraceRow, nil
+	return traceRow, nil
 }
 
 // MakeInternalExecutorInflightTraceZipper returns an instance of
