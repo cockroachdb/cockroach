@@ -2853,7 +2853,7 @@ func TestImportIntoCSV(t *testing.T) {
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
 			[]string{`'nodelocal://0/data-[0-9][0-9]*'`},
 			` WITH decompress = 'auto'`,
-			`pq: no files matched uri provided`,
+			`pq: no files matched`,
 		},
 		{
 			"import-into-no-glob-wildcard",
@@ -5492,7 +5492,7 @@ func TestImportPgDump(t *testing.T) {
 	}
 
 	t.Run("glob-multi", func(t *testing.T) {
-		sqlDB.ExpectErr(t, "SQL dump files must be imported individually", `IMPORT PGDUMP 'nodelocal://0/*'`)
+		sqlDB.ExpectErr(t, "SQL dump files must be imported individually", `IMPORT PGDUMP 'nodelocal://0/pgdump/*.sql'`)
 	})
 
 	t.Run("target-cols-reordered", func(t *testing.T) {

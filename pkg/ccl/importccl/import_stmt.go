@@ -384,17 +384,35 @@ func importPlanHook(
 			files = filenamePatterns
 		} else {
 			for _, file := range filenamePatterns {
-				if cloud.URINeedsGlobExpansion(file) {
-					s, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, file, p.User())
+				uri, err := url.Parse(file)
+				if err != nil {
+					return err
+				}
+				if strings.Contains(uri.Scheme, "workload") || strings.HasPrefix(uri.Scheme, "http") {
+					files = append(files, file)
+					continue
+				}
+				prefix := cloud.GetPrefixBeforeWildcard(uri.Path)
+				if len(prefix) < len(uri.Path) {
+					pattern := uri.Path[len(prefix):]
+					uri.Path = prefix
+					s, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri.String(), p.User())
 					if err != nil {
 						return err
 					}
-					expandedFiles, err := s.ListFiles(ctx, "")
-					if err != nil {
+					var expandedFiles []string
+					if err := s.List(ctx, "", "", func(s string) error {
+						ok, err := path.Match(pattern, s)
+						if ok {
+							uri.Path = prefix + s
+							expandedFiles = append(expandedFiles, uri.String())
+						}
+						return err
+					}); err != nil {
 						return err
 					}
 					if len(expandedFiles) < 1 {
-						return errors.Errorf(`no files matched uri provided: '%s'`, file)
+						return errors.Errorf(`no files matched %q in prefix %q in uri provided: %q`, pattern, prefix, file)
 					}
 					files = append(files, expandedFiles...)
 				} else {
