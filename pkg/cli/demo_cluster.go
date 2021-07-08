@@ -51,6 +51,35 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// DemoCluster represents a demo cluster.
+type DemoCluster interface {
+	// ListDemoNodes produces a listing of servers on the specified
+	// writer. If justOne is specified, only the first node is listed.
+	ListDemoNodes(w io.Writer, justOne bool)
+
+	// AddNode creates a new node with the given locality string.
+	AddNode(ctx context.Context, localityString string) (newNodeID int32, err error)
+
+	// GetLocality retrieves the locality of the given node.
+	GetLocality(nodeID int32) string
+
+	// NumNodes returns the number of nodes.
+	NumNodes() int
+
+	// DrainAndShutdown shuts down a node gracefully.
+	DrainAndShutdown(ctx context.Context, nodeID int32) error
+
+	// RestartNode starts the given node. The node must be down
+	// prior to the call.
+	RestartNode(ctx context.Context, nodeID int32) error
+
+	// Decommission decommissions the given node.
+	Decommission(ctx context.Context, nodeID int32) error
+
+	// Recommission recommissions the given node.
+	Recommission(ctx context.Context, nodeID int32) error
+}
+
 type transientCluster struct {
 	connURL     string
 	demoDir     string
@@ -639,7 +668,7 @@ func (c *transientCluster) cleanup(ctx context.Context) {
 
 // DrainAndShutdown will gracefully attempt to drain a node in the cluster, and
 // then shut it down.
-func (c *transientCluster) DrainAndShutdown(nodeID roachpb.NodeID) error {
+func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) error {
 	if demoCtx.simulateLatency {
 		return errors.Errorf("shutting down nodes is not supported in --%s configurations", cliflags.Global.Name)
 	}
@@ -657,7 +686,7 @@ func (c *transientCluster) DrainAndShutdown(nodeID roachpb.NodeID) error {
 		return errors.Errorf("node %d is already shut down", nodeID)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	adminClient, finish, err := getAdminClient(ctx, *(c.servers[nodeIndex].Cfg))
@@ -674,7 +703,7 @@ func (c *transientCluster) DrainAndShutdown(nodeID roachpb.NodeID) error {
 }
 
 // Recommission recommissions a given node.
-func (c *transientCluster) Recommission(nodeID roachpb.NodeID) error {
+func (c *transientCluster) Recommission(ctx context.Context, nodeID int32) error {
 	nodeIndex := int(nodeID - 1)
 
 	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
@@ -682,11 +711,11 @@ func (c *transientCluster) Recommission(nodeID roachpb.NodeID) error {
 	}
 
 	req := &serverpb.DecommissionRequest{
-		NodeIDs:          []roachpb.NodeID{nodeID},
+		NodeIDs:          []roachpb.NodeID{roachpb.NodeID(nodeID)},
 		TargetMembership: livenesspb.MembershipStatus_ACTIVE,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	adminClient, finish, err := getAdminClient(ctx, *(c.firstServer.Cfg))
@@ -704,14 +733,14 @@ func (c *transientCluster) Recommission(nodeID roachpb.NodeID) error {
 }
 
 // Decommission decommissions a given node.
-func (c *transientCluster) Decommission(nodeID roachpb.NodeID) error {
+func (c *transientCluster) Decommission(ctx context.Context, nodeID int32) error {
 	nodeIndex := int(nodeID - 1)
 
 	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
 		return errors.Errorf("node %d does not exist", nodeID)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	adminClient, finish, err := getAdminClient(ctx, *(c.firstServer.Cfg))
@@ -725,7 +754,7 @@ func (c *transientCluster) Decommission(nodeID roachpb.NodeID) error {
 	// decommissioned, it has to be marked as decommissioning first.
 	{
 		req := &serverpb.DecommissionRequest{
-			NodeIDs:          []roachpb.NodeID{nodeID},
+			NodeIDs:          []roachpb.NodeID{roachpb.NodeID(nodeID)},
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
 		}
 		_, err = adminClient.Decommission(ctx, req)
@@ -736,7 +765,7 @@ func (c *transientCluster) Decommission(nodeID roachpb.NodeID) error {
 
 	{
 		req := &serverpb.DecommissionRequest{
-			NodeIDs:          []roachpb.NodeID{nodeID},
+			NodeIDs:          []roachpb.NodeID{roachpb.NodeID(nodeID)},
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 		}
 		_, err = adminClient.Decommission(ctx, req)
@@ -751,7 +780,7 @@ func (c *transientCluster) Decommission(nodeID roachpb.NodeID) error {
 // RestartNode will bring back a node in the cluster.
 // The node must have been shut down beforehand.
 // The node will restart, connecting to the same in memory node.
-func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
+func (c *transientCluster) RestartNode(ctx context.Context, nodeID int32) error {
 	nodeIndex := int(nodeID - 1)
 
 	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
@@ -767,7 +796,9 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	if demoCtx.simulateLatency {
 		return errors.Errorf("restarting nodes is not supported in --%s configurations", cliflags.Global.Name)
 	}
-	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID,
+	args := testServerArgsForTransientCluster(
+		c.sockForServer(roachpb.NodeID(nodeID)),
+		roachpb.NodeID(nodeID),
 		c.firstServer.ServingRPCAddr(), c.demoDir,
 		c.sqlFirstPort, c.httpFirstPort, c.stickyEngineRegistry)
 	s, err := server.TestServerFactory.New(args)
@@ -782,7 +813,7 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 		close(readyCh)
 	}
 
-	if err := serv.Start(context.Background()); err != nil {
+	if err := serv.Start(ctx); err != nil {
 		return err
 	}
 
@@ -801,10 +832,12 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 // AddNode create a new node in the cluster and start it.
 // This function uses RestartNode to perform the actual node
 // starting.
-func (c *transientCluster) AddNode(ctx context.Context, localityString string) error {
+func (c *transientCluster) AddNode(
+	ctx context.Context, localityString string,
+) (newNodeID int32, err error) {
 	// TODO(#42243): re-compute the latency mapping for this to work.
 	if demoCtx.simulateLatency {
-		return errors.Errorf("adding nodes is not supported in --%s configurations", cliflags.Global.Name)
+		return 0, errors.Errorf("adding nodes is not supported in --%s configurations", cliflags.Global.Name)
 	}
 
 	// '\demo add' accepts both strings that are quoted and not quoted. To properly make use of
@@ -812,19 +845,19 @@ func (c *transientCluster) AddNode(ctx context.Context, localityString string) e
 	// or that there aren't any quotes in the string.
 	re := regexp.MustCompile(`".+"|'.+'|[^'"]+`)
 	if localityString != re.FindString(localityString) {
-		return errors.Errorf(`Invalid locality (missing " or '): %s`, localityString)
+		return 0, errors.Errorf(`Invalid locality (missing " or '): %s`, localityString)
 	}
 	trimmedString := strings.Trim(localityString, `"'`)
 
 	// Setup locality based on supplied string.
 	var loc roachpb.Locality
 	if err := loc.Set(trimmedString); err != nil {
-		return err
+		return 0, err
 	}
 
 	// Ensure that the cluster is sane before we start messing around with it.
 	if len(demoCtx.localities) != demoCtx.nodes || demoCtx.nodes != len(c.servers) {
-		return errors.Errorf("number of localities specified (%d) must equal number of "+
+		return 0, errors.Errorf("number of localities specified (%d) must equal number of "+
 			"nodes (%d) and number of servers (%d)", len(demoCtx.localities), demoCtx.nodes, len(c.servers))
 	}
 
@@ -833,9 +866,11 @@ func (c *transientCluster) AddNode(ctx context.Context, localityString string) e
 	c.servers = append(c.servers, nil)
 	demoCtx.localities = append(demoCtx.localities, loc)
 	demoCtx.nodes++
-	newNodeID := roachpb.NodeID(demoCtx.nodes)
+	// TODO(knz): this should start the server and then retrieve its node ID
+	// instead of assuming the node ID will always be at the end.
+	nodeID := int32(demoCtx.nodes)
 
-	return c.RestartNode(newNodeID)
+	return nodeID, c.RestartNode(ctx, nodeID)
 }
 
 func maybeWarnMemSize(ctx context.Context) {
@@ -1153,7 +1188,15 @@ func (s unixSocketDetails) String() string {
 	return s.u.ToPQ().String()
 }
 
-func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
+func (c *transientCluster) NumNodes() int {
+	return len(c.servers)
+}
+
+func (c *transientCluster) GetLocality(nodeID int32) string {
+	return demoCtx.localities[nodeID-1].String()
+}
+
+func (c *transientCluster) ListDemoNodes(w io.Writer, justOne bool) {
 	numNodesLive := 0
 	for i, s := range c.servers {
 		if s == nil {
