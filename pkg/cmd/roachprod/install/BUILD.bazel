@@ -13,7 +13,10 @@ go_library(
         "session.go",
         "staging.go",
     ],
-    embedsrcs = ["scripts/download.sh"],
+    embedsrcs = [
+        "scripts/download.sh",
+        "scripts/start.sh",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install",
     visibility = ["//visibility:public"],
     deps = [
