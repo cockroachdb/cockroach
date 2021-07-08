@@ -1,0 +1,7 @@
+dev gen bazel
+----
+bazel run //:gazelle --color=yes -- update-repos -from_file=go.mod -build_file_proto_mode=disable_global -to_macro=DEPS.bzl%go_deps -prune=true
+getwd
+bazel run //pkg/cmd/generate-test-suites --color=yes --run_under cd go/src/github.com/cockroachdb/cockroach &&
+writefile: go/src/github.com/cockroachdb/cockroach/pkg/BUILD.bazel
+bazel run @cockroach//:gazelle --color=yes

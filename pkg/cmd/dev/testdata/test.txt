@@ -1,0 +1,32 @@
+dev test pkg/util/tracing
+----
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --test_output errors
+
+dev test pkg/util/tracing/...
+----
+bazel query kind(go_test,  //pkg/util/tracing/...)
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --test_output errors
+
+dev test pkg/util/tracing -f 'TestStartChild*'
+----
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output errors
+
+dev test pkg/util/tracing -f 'TestStartChild*' -v
+----
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output all --test_arg -test.v
+
+dev test pkg/util/tracing -f 'TestStartChild*' --remote-cache 127.0.0.1:9092
+----
+bazel test --color=yes --experimental_convenience_symlinks=ignore --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experimental_remote_downloader=grpc://127.0.0.1:9092 //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output errors
+
+dev test pkg/util/tracing -f 'TestStartChild*' --ignore-cache
+----
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --nocache_test_results --test_filter='TestStartChild*' --test_output errors
+
+dev test --stress pkg/util/tracing --filter 'TestStartChild*' --timeout=10s
+----
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --run_under stress -maxtime=10s --test_filter='TestStartChild*' --test_output errors
+
+dev test --stress pkg/util/tracing --filter 'TestStartChild*' --timeout=10s -v
+----
+bazel test --color=yes --experimental_convenience_symlinks=ignore //pkg/util/tracing:tracing_test --run_under stress -maxtime=10s --test_filter='TestStartChild*' --test_output all --test_arg -test.v

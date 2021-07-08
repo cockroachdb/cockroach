@@ -123,6 +123,7 @@
 /pkg/cmd/cockroach-short/    @cockroachdb/cli-prs
 /pkg/cmd/compile-build/      @cockroachdb/dev-inf
 /pkg/cmd/cr2pg/              @cockroachdb/sql-experience
+/pkg/cmd/dev/                @cockroachdb/dev-inf
 /pkg/cmd/docgen/             @cockroachdb/docs
 /pkg/cmd/fuzz/               @cockroachdb/test-eng
 /pkg/cmd/generate-binary/    @cockroachdb/sql-experience
