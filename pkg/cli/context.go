@@ -241,7 +241,7 @@ var sqlExecCtx = clisqlexec.Context{
 // This binds PrintQueryOutput to this package's common/global
 // CLI configuration, for use by other packages like the CCL CLI.
 func PrintQueryOutput(w io.Writer, cols []string, allRows clisqlexec.RowStrIter) error {
-	return sqlExecCtx.PrintQueryOutput(w, cols, allRows)
+	return sqlExecCtx.PrintQueryOutput(w, stderr, cols, allRows)
 }
 
 // setSQLConnContextDefaults set the default values in sqlConnCtx.  This

@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -101,7 +102,7 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (clisqlclient.Conn,
 		log.Infof(context.Background(), "connecting with URL: %s", sqlURL)
 	}
 
-	conn := sqlConnCtx.MakeSQLConn(sqlURL)
+	conn := sqlConnCtx.MakeSQLConn(os.Stdout, stderr, sqlURL)
 	conn.SetMissingPassword(!usePw || !pwdSet)
 
 	return conn, nil
