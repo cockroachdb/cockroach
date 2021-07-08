@@ -71,6 +71,12 @@ type sqlConn struct {
 	// (re)connects.
 	clusterID           string
 	clusterOrganization string
+
+	// infow and errw are the streams where informational, error and
+	// warning messages are printed.
+	// Echoed queries, if Echo is enabled, are printed to errw too.
+	// Notices are also printed to errw.
+	infow, errw io.Writer
 }
 
 var _ Conn = (*sqlConn)(nil)
@@ -91,7 +97,7 @@ func wrapConnError(err error) error {
 
 func (c *sqlConn) flushNotices() {
 	for _, notice := range c.pendingNotices {
-		clierror.OutputError(stderr, notice, true /*showSeverity*/, false /*verbose*/)
+		clierror.OutputError(c.errw, notice, true /*showSeverity*/, false /*verbose*/)
 	}
 	c.pendingNotices = nil
 	c.delayNotices = false
@@ -133,7 +139,7 @@ func (c *sqlConn) SetMissingPassword(missing bool) {
 func (c *sqlConn) EnsureConn() error {
 	if c.conn == nil {
 		if c.reconnecting && c.connCtx.IsInteractive() {
-			fmt.Fprintf(stderr, "warning: connection lost!\n"+
+			fmt.Fprintf(c.errw, "warning: connection lost!\n"+
 				"opening new connection: all session settings will be lost\n")
 		}
 		base, err := pq.NewConnector(c.url)
@@ -176,7 +182,7 @@ func (c *sqlConn) EnsureConn() error {
 			if _, err := conn.(DriverConn).Exec(
 				`SET DATABASE = `+tree.NameStringP(&c.dbName), nil,
 			); err != nil {
-				fmt.Fprintf(stderr, "warning: unable to restore current database: %v\n", err)
+				fmt.Fprintf(c.errw, "warning: unable to restore current database: %v\n", err)
 			}
 		}
 		c.conn = conn.(DriverConn)
@@ -195,7 +201,7 @@ func (c *sqlConn) EnsureConn() error {
 func (c *sqlConn) tryEnableServerExecutionTimings() {
 	_, _, _, _, _, _, err := c.getLastQueryStatisticsInternal()
 	if err != nil {
-		fmt.Fprintf(stderr, "warning: cannot show server execution timings: %v\n", err)
+		fmt.Fprintf(c.errw, "warning: cannot show server execution timings: %v\n", err)
 		c.connCtx.EnableServerExecutionTimings = false
 	} else {
 		c.connCtx.EnableServerExecutionTimings = true
@@ -320,7 +326,7 @@ func (c *sqlConn) checkServerMetadata() error {
 	}
 	if err != nil {
 		// It is not an error that the server version cannot be retrieved.
-		fmt.Fprintf(stderr, "warning: unable to retrieve the server's version: %s\n", err)
+		fmt.Fprintf(c.errw, "warning: unable to retrieve the server's version: %s\n", err)
 	}
 
 	// Report the server version only if it the revision has been
@@ -337,18 +343,18 @@ func (c *sqlConn) checkServerMetadata() error {
 		// a version mismatch is the wire protocol and SQL dialect.
 		client := build.GetInfo()
 		if c.serverVersion != client.Tag {
-			fmt.Println("# Client version:", client.Short())
+			fmt.Fprintln(c.infow, "# Client version:", client.Short())
 		} else {
 			isSame = " (same version as client)"
 		}
-		fmt.Printf("# Server version: %s%s\n", c.serverBuild, isSame)
+		fmt.Fprintf(c.infow, "# Server version: %s%s\n", c.serverBuild, isSame)
 
 		sv, err := version.Parse(c.serverVersion)
 		if err == nil {
 			cv, err := version.Parse(client.Tag)
 			if err == nil {
 				if sv.Compare(cv) == -1 { // server ver < client ver
-					fmt.Fprintln(stderr, "\nwarning: server version older than client! "+
+					fmt.Fprintln(c.errw, "\nwarning: server version older than client! "+
 						"proceed with caution; some features may not be available.\n")
 				}
 			}
@@ -364,9 +370,9 @@ func (c *sqlConn) checkServerMetadata() error {
 				old, newClusterID)
 		}
 		c.clusterID = newClusterID
-		fmt.Println("# Cluster ID:", c.clusterID)
+		fmt.Fprintln(c.infow, "# Cluster ID:", c.clusterID)
 		if c.clusterOrganization != "" {
-			fmt.Println("# Organization:", c.clusterOrganization)
+			fmt.Fprintln(c.infow, "# Organization:", c.clusterOrganization)
 		}
 	}
 	// Try to enable server execution timings for the CLI to display if
@@ -382,13 +388,13 @@ func (c *sqlConn) checkServerMetadata() error {
 func (c *sqlConn) GetServerValue(what, sql string) (driver.Value, string, bool) {
 	rows, err := c.Query(sql, nil)
 	if err != nil {
-		fmt.Fprintf(stderr, "warning: error retrieving the %s: %v\n", what, err)
+		fmt.Fprintf(c.errw, "warning: error retrieving the %s: %v\n", what, err)
 		return nil, "", false
 	}
 	defer func() { _ = rows.Close() }()
 
 	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(stderr, "warning: cannot get the %s\n", what)
+		fmt.Fprintf(c.errw, "warning: cannot get the %s\n", what)
 		return nil, "", false
 	}
 
@@ -397,7 +403,7 @@ func (c *sqlConn) GetServerValue(what, sql string) (driver.Value, string, bool) 
 
 	err = rows.Next(dbVals[:])
 	if err != nil {
-		fmt.Fprintf(stderr, "warning: invalid %s: %v\n", what, err)
+		fmt.Fprintf(c.errw, "warning: invalid %s: %v\n", what, err)
 		return nil, "", false
 	}
 
@@ -500,7 +506,7 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 		return err
 	}
 	if c.connCtx.Echo {
-		fmt.Fprintln(stderr, ">", query)
+		fmt.Fprintln(c.errw, ">", query)
 	}
 	_, err := c.conn.Exec(query, args)
 	c.flushNotices()
@@ -516,7 +522,7 @@ func (c *sqlConn) Query(query string, args []driver.Value) (Rows, error) {
 		return nil, err
 	}
 	if c.connCtx.Echo {
-		fmt.Fprintln(stderr, ">", query)
+		fmt.Fprintln(c.errw, ">", query)
 	}
 	rows, err := c.conn.Query(query, args)
 	if errors.Is(err, driver.ErrBadConn) {
@@ -573,10 +579,16 @@ func (c *sqlConn) silentClose() {
 }
 
 // MakeSQLConn creates a connection object from a connection URL.
-func (connCtx *Context) MakeSQLConn(url string) Conn {
+// Server informational messages are printed to 'w'.
+// Errors or warnings, when they do not block an API call, are printed to 'ew'.
+// Echoed queries, when Echo is enabled, are also printed to 'ew'.
+// Server out-of-band notices are also printed to 'ew'.
+func (connCtx *Context) MakeSQLConn(w, ew io.Writer, url string) Conn {
 	return &sqlConn{
 		connCtx: connCtx,
 		url:     url,
+		infow:   w,
+		errw:    ew,
 	}
 }
 

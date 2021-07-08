@@ -10,7 +10,6 @@ go_library(
         "row_strings.go",
         "run_query.go",
         "table_display_format.go",
-        "testutils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli/clisqlexec",
     visibility = ["//visibility:public"],
