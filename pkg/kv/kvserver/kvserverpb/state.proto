@@ -161,9 +161,7 @@ message RangeInfo {
   int64 rangefeed_registrations = 13;
   // TenantID is the ID of the tenant for which this range contains data.
   uint64 tenant_id = 16 [(gogoproto.customname) = "TenantID"];
-  // lock_table contains a textual representation of the contents of the lock
-  // table.
-  string lock_table = 17;
+  reserved 17;
   roachpb.RangeClosedTimestampPolicy closed_timestamp_policy = 18;
   // Closed timestamp info communicated through the side-transport. See also
   // state.raft_closed_timestamp.
@@ -185,11 +183,4 @@ message RangeSideTransportInfo {
   util.hlc.Timestamp central_closed = 3 [(gogoproto.nullable) = false];
   int64 central_lai = 4 [(gogoproto.customname) = "CentralLAI",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb.LAI"];
-}
-
-// LatchManagerInfo is used for reporting status information about a spanlatch
-// manager out through the status server.
-message LatchManagerInfo {
-  int64 read_count = 1;
-  int64 write_count = 2;
 }

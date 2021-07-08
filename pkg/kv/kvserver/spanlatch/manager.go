@@ -16,7 +16,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -559,18 +558,26 @@ func (m *Manager) removeLocked(lg *Guard) {
 	}
 }
 
-// Info returns information about the state of the Manager.
-func (m *Manager) Info() (global, local kvserverpb.LatchManagerInfo) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	global = m.scopes[spanset.SpanGlobal].infoLocked()
-	local = m.scopes[spanset.SpanLocal].infoLocked()
-	return global, local
+// Metrics holds information about the state of a Manager.
+type Metrics struct {
+	ReadCount  int64
+	WriteCount int64
 }
 
-func (sm *scopedManager) infoLocked() kvserverpb.LatchManagerInfo {
-	var info kvserverpb.LatchManagerInfo
-	info.ReadCount = int64(sm.trees[spanset.SpanReadOnly].Len() + sm.readSet.len)
-	info.WriteCount = int64(sm.trees[spanset.SpanReadWrite].Len())
-	return info
+// Metrics returns information about the state of the Manager.
+func (m *Manager) Metrics() Metrics {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	globalReadCount, globalWriteCount := m.scopes[spanset.SpanGlobal].metricsLocked()
+	localReadCount, localWriteCount := m.scopes[spanset.SpanLocal].metricsLocked()
+	return Metrics{
+		ReadCount:  globalReadCount + localReadCount,
+		WriteCount: globalWriteCount + localWriteCount,
+	}
+}
+
+func (sm *scopedManager) metricsLocked() (readCount, writeCount int64) {
+	readCount = int64(sm.trees[spanset.SpanReadOnly].Len() + sm.readSet.len)
+	writeCount = int64(sm.trees[spanset.SpanReadWrite].Len())
+	return readCount, writeCount
 }
