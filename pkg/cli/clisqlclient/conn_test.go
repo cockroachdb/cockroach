@@ -12,7 +12,6 @@ package clisqlclient_test
 
 import (
 	"database/sql/driver"
-	"fmt"
 	"net/url"
 	"testing"
 
@@ -65,7 +64,7 @@ func TestConnRecover(t *testing.T) {
 	// this however.
 	testutils.SucceedsSoon(t, func() error {
 		if sqlRows, err := conn.Query(`SELECT 1`, nil); !errors.Is(err, driver.ErrBadConn) {
-			return fmt.Errorf("expected ErrBadConn, got %v", err)
+			return errors.Newf("expected ErrBadConn, got %v", err)
 		} else if err == nil {
 			if closeErr := sqlRows.Close(); closeErr != nil {
 				t.Fatal(closeErr)
@@ -89,7 +88,7 @@ func TestConnRecover(t *testing.T) {
 	// Ditto from Query().
 	testutils.SucceedsSoon(t, func() error {
 		if err := conn.Exec(`SELECT 1`, nil); !errors.Is(err, driver.ErrBadConn) {
-			return fmt.Errorf("expected ErrBadConn, got %v", err)
+			return errors.Newf("expected ErrBadConn, got %v", err)
 		}
 		return nil
 	})
