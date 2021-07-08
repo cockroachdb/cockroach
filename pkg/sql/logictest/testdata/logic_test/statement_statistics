@@ -1,5 +1,11 @@
 # LogicTest: local !3node-tenant(52763)
 
+# Disable SQL Stats flush to prevents stats from being cleared from the
+# in-memory store.
+
+statement ok
+SET CLUSTER SETTING sql.stats.flush.enabled = false;
+
 # Check that node_statement_statistics report per application
 
 statement ok
