@@ -1,3 +1,6 @@
+data1
+----
+----
 #!/usr/bin/env bash
 #
 # Copyright 2021 The Cockroach Authors.
@@ -14,24 +17,22 @@ set -euo pipefail
 # These values are substituted in the Go code that uses this. We use custom
 # delimiters for the Go text template so that this bash script is valid
 # before template evaluation (so we can use shellcheck).
-LOCAL=#{if .Local#}true#{end#}
-ADVERTISE_FIRST_IP=#{if .AdvertiseFirstIP#}true#{end#}
-LOG_DIR=#{shesc .LogDir#}
-NODE_NUM=#{shesc .NodeNum#}
-TAG=#{shesc .Tag#}
-BINARY=#{shesc .Binary#}
-START_CMD=#{shesc .StartCmd#}
-KEY_CMD=#{.KeyCmd#}
-MEMORY_MAX=#{.MemoryMax#}
+LOCAL=true
+ADVERTISE_FIRST_IP=
+LOG_DIR='./path with spaces/logs/$THIS_DOES_NOT_EVER_GET_EXPANDED'
+NODE_NUM=1
+TAG=tigtag
+BINARY=./cockroach
+START_CMD=start-single-node
+KEY_CMD=echo foo && \
+echo bar $HOME
+MEMORY_MAX=81%
 ARGS=(
-#{range .Args -#}
-#{shesc .#}
-#{end -#}
+'--log "file-defaults: {dir: '"'"'/path with spaces/logs'"'"', exit-on-error: false}"'
 )
 ENV_VARS=(
-#{range .EnvVars -#}
-#{shesc .#}
-#{end -#}
+COCKROACH=foo
+ROCKCOACH=17%
 )
 
 # End of templated code.
@@ -104,3 +105,5 @@ sudo systemd-run --unit cockroach \
   -p LimitCORE=infinity \
   -p LimitNOFILE=65536 \
   bash "${0}" run
+----
+----
