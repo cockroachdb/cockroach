@@ -94,7 +94,8 @@ func runClient(cmd *cobra.Command, conn clisqlclient.Conn, cmdIn *os.File) error
 	// Enable safe updates, unless disabled.
 	setupSafeUpdates(cmd, conn)
 
-	return runInteractive(conn, cmdIn)
+	c := newCliState(&cliCtx.Context, &sqlConnCtx, &sqlExecCtx, &sqlCtx, conn)
+	return c.runInteractive(cmdIn)
 }
 
 // setupSafeUpdates attempts to enable "safe mode" if the session is

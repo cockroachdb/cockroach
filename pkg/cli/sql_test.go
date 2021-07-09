@@ -405,7 +405,8 @@ select '''
 			fmt.Fprintln(stderr, err)
 			return
 		}
-		err := runInteractive(conn, f)
+		c := setupTestCliStateWithConn(conn)
+		err := c.runInteractive(f)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 		}

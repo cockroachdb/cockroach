@@ -261,9 +261,9 @@ func setSQLExecContextDefaults() {
 	sqlExecCtx.VerboseTimings = false
 }
 
-// sqlCtx captures the configuration of the `sql` command.
+// sqlContext captures the configuration of the `sql` command.
 // See below for defaults.
-var sqlCtx = struct {
+type sqlContext struct {
 	// setStmts is a list of \set commands to execute before entering the sql shell.
 	setStmts statementsValue
 
@@ -305,7 +305,9 @@ var sqlCtx = struct {
 	// demoCluster is the interface to the in-memory cluster for the
 	// `demo` command, if that is the command being run.
 	demoCluster democluster.DemoCluster
-}{}
+}
+
+var sqlCtx = sqlContext{}
 
 // setSQLContextDefaults set the default values in sqlCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
