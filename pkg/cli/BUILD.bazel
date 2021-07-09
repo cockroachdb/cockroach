@@ -310,7 +310,10 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/cli/clicfg",
         "//pkg/cli/cliflags",
+        "//pkg/cli/clisqlclient",
+        "//pkg/cli/clisqlexec",
         "//pkg/cli/democluster",
         "//pkg/gossip",
         "//pkg/gossip/resolver",
