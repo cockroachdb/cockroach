@@ -120,6 +120,9 @@ func (r *Replica) updateTimestampCache(
 				key := transactionTombstoneMarker(start, txnID)
 				addToTSCache(key, nil, ts, txnID)
 			}
+		case *roachpb.HeartbeatTxnRequest:
+			key := transactionRecordMarker(start, txnID)
+			addToTSCache(key, nil, ts, txnID)
 		case *roachpb.RecoverTxnRequest:
 			// A successful RecoverTxn request may or may not have finalized the
 			// transaction that it was trying to recover. If so, then we record
@@ -490,6 +493,7 @@ func (r *Replica) CanCreateTxnRecord(
 	// from a transaction's own coordinator can create its transaction record.
 	// However, once a transaction record is written, other concurrent actors
 	// can modify it. This is reflected in the diagram above.
+	recordKey := transactionRecordMarker(txnKey, txnID)
 	tombstoneKey := transactionTombstoneMarker(txnKey, txnID)
 	pushKey := transactionPushMarker(txnKey, txnID)
 
@@ -499,6 +503,13 @@ func (r *Replica) CanCreateTxnRecord(
 	// transaction that hasn't yet written its transaction record.
 	minCommitTS, _ = r.store.tsCache.GetMax(pushKey, nil /* end */)
 
+	// Check the timestamp cache to see if an entry was written for the
+	// txn record.
+	_, recordTxnID := r.store.tsCache.GetMax(recordKey, nil /* end */)
+	if recordTxnID != uuid.Nil {
+		return false, minCommitTS, 0 // FIXME Set a proper reason here
+	}
+
 	// Also look in the timestamp cache to see if there is a tombstone entry for
 	// this transaction, which would indicate this transaction has already been
 	// finalized or was already aborted by a concurrent transaction. If there is
@@ -506,11 +517,11 @@ func (r *Replica) CanCreateTxnRecord(
 	// then the error will be transformed into an ambiguous one higher up.
 	// Otherwise, if the client is still waiting for a result, then this cannot
 	// be a "replay" of any sort.
-	tombstoneTimestamp, tombstomeTxnID := r.store.tsCache.GetMax(tombstoneKey, nil /* end */)
+	tombstoneTimestamp, tombstoneTxnID := r.store.tsCache.GetMax(tombstoneKey, nil /* end */)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
 	if txnMinTS.LessEq(tombstoneTimestamp) {
-		switch tombstomeTxnID {
+		switch tombstoneTxnID {
 		case txnID:
 			// If we find our own transaction ID then an EndTxn request sent by
 			// our coordinator has already been processed. We might be a replay (e.g.
@@ -556,12 +567,18 @@ func transactionTombstoneMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	return append(keys.TransactionKey(key, txnID), []byte("-tmbs")...)
 }
 
-// transactionPushMarker returns the key used by the marker indicating that a
+// transactionPushMarker returns the key used as a marker indicating that a
 // particular txn was pushed before writing its transaction record. It is used
 // as a marker in the timestamp cache indicating that the transaction was pushed
 // in case the push happens before there's a transaction record.
 func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	return append(keys.TransactionKey(key, txnID), []byte("-push")...)
+}
+
+// transactionRecordMarker returns the key used as a marker indicating that a
+// particular txn has written a transaction record.
+func transactionRecordMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
+	return append(keys.TransactionKey(key, txnID), []byte("-rec")...)
 }
 
 // GetCurrentReadSummary returns a new ReadSummary reflecting all reads served
