@@ -2306,6 +2306,17 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{DistributionLayer, "Bulk", "Egress"}},
+		Charts: []chartDescription{
+			{
+				Title: "Export Delays",
+				Metrics: []string{
+					"exportrequest.delay.total",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{StorageLayer, "Storage", "KV"}},
 		Charts: []chartDescription{
 			{

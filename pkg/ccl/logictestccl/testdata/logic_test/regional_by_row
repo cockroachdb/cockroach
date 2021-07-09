@@ -1469,49 +1469,49 @@ LIMIT 1] OFFSET 2
             └── • union all
                 │ columns: (a, b)
                 │ ordering: +a,+b
-                │ estimated row count: 30
+                │ estimated row count: 999,995
                 │
                 ├── • union all
                 │   │ columns: (a, b)
                 │   │ ordering: +a,+b
-                │   │ estimated row count: 20
+                │   │ estimated row count: 666,663
                 │   │
                 │   ├── • filter
                 │   │   │ columns: (a, b)
                 │   │   │ ordering: +a,+b
-                │   │   │ estimated row count: 10
+                │   │   │ estimated row count: 333,332
                 │   │   │ filter: b IS NOT NULL
                 │   │   │
                 │   │   └── • scan
                 │   │         columns: (a, b)
                 │   │         ordering: +a,+b
-                │   │         estimated row count: 10 (<0.01% of the table; stats collected <hidden> ago)
+                │   │         estimated row count: 333,333 (33% of the table; stats collected <hidden> ago)
                 │   │         table: t56201@key_a_b
                 │   │         spans: /"@"/!NULL-/"@"/PrefixEnd
                 │   │
                 │   └── • filter
                 │       │ columns: (a, b)
                 │       │ ordering: +a,+b
-                │       │ estimated row count: 10
+                │       │ estimated row count: 333,332
                 │       │ filter: b IS NOT NULL
                 │       │
                 │       └── • scan
                 │             columns: (a, b)
                 │             ordering: +a,+b
-                │             estimated row count: 10 (<0.01% of the table; stats collected <hidden> ago)
+                │             estimated row count: 333,333 (33% of the table; stats collected <hidden> ago)
                 │             table: t56201@key_a_b
                 │             spans: /"\x80"/!NULL-/"\x80"/PrefixEnd
                 │
                 └── • filter
                     │ columns: (a, b)
                     │ ordering: +a,+b
-                    │ estimated row count: 10
+                    │ estimated row count: 333,332
                     │ filter: b IS NOT NULL
                     │
                     └── • scan
                           columns: (a, b)
                           ordering: +a,+b
-                          estimated row count: 10 (<0.01% of the table; stats collected <hidden> ago)
+                          estimated row count: 333,333 (33% of the table; stats collected <hidden> ago)
                           table: t56201@key_a_b
                           spans: /"\xc0"/!NULL-/"\xc0"/PrefixEnd
 
@@ -1555,31 +1555,31 @@ LIMIT 1] OFFSET 2
                 └── • union all
                     │ columns: (b, crdb_region, rowid)
                     │ ordering: +b
-                    │ estimated row count: 10
+                    │ estimated row count: 333,333
                     │
                     ├── • union all
                     │   │ columns: (b, crdb_region, rowid)
                     │   │ ordering: +b
-                    │   │ estimated row count: 7
+                    │   │ estimated row count: 222,222
                     │   │
                     │   ├── • scan
                     │   │     columns: (b, crdb_region, rowid)
                     │   │     ordering: +b
-                    │   │     estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                    │   │     estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
                     │   │     table: t56201@key_b_partial (partial index)
                     │   │     spans: /"@"/!NULL-/"@"/PrefixEnd
                     │   │
                     │   └── • scan
                     │         columns: (b, crdb_region, rowid)
                     │         ordering: +b
-                    │         estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                    │         estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
                     │         table: t56201@key_b_partial (partial index)
                     │         spans: /"\x80"/!NULL-/"\x80"/PrefixEnd
                     │
                     └── • scan
                           columns: (b, crdb_region, rowid)
                           ordering: +b
-                          estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                          estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
                           table: t56201@key_b_partial (partial index)
                           spans: /"\xc0"/!NULL-/"\xc0"/PrefixEnd
 
@@ -1619,31 +1619,31 @@ LIMIT 1] OFFSET 2
             └── • union all
                 │ columns: (c)
                 │ ordering: +c
-                │ estimated row count: 10
+                │ estimated row count: 333,333
                 │
                 ├── • union all
                 │   │ columns: (c)
                 │   │ ordering: +c
-                │   │ estimated row count: 7
+                │   │ estimated row count: 222,222
                 │   │
                 │   ├── • scan
                 │   │     columns: (c)
                 │   │     ordering: +c
-                │   │     estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                │   │     estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
                 │   │     table: t56201@key_c_partial (partial index)
                 │   │     spans: /"@"-/"@"/PrefixEnd
                 │   │
                 │   └── • scan
                 │         columns: (c)
                 │         ordering: +c
-                │         estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                │         estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
                 │         table: t56201@key_c_partial (partial index)
                 │         spans: /"\x80"-/"\x80"/PrefixEnd
                 │
                 └── • scan
                       columns: (c)
                       ordering: +c
-                      estimated row count: 3 (<0.01% of the table; stats collected <hidden> ago)
+                      estimated row count: 111,111 (11% of the table; stats collected <hidden> ago)
                       table: t56201@key_c_partial (partial index)
                       spans: /"\xc0"-/"\xc0"/PrefixEnd
 

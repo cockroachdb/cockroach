@@ -1051,6 +1051,14 @@ var (
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
+	// Export request counter.
+	metaExportEvalTotalDelay = metric.Metadata{
+		Name:        "exportrequest.delay.total",
+		Help:        "Amount by which evaluation of Export requests was delayed",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
 	// Encryption-at-rest metrics.
 	// TODO(mberhault): metrics for key age, per-key file/bytes counts.
 	metaEncryptionAlgorithm = metric.Metadata{
@@ -1281,6 +1289,9 @@ type StoreMetrics struct {
 	AddSSTableApplicationCopies   *metric.Counter
 	AddSSTableProposalTotalDelay  *metric.Counter
 	AddSSTableProposalEngineDelay *metric.Counter
+
+	// Export request stats.
+	ExportRequestProposalTotalDelay *metric.Counter
 
 	// Encryption-at-rest stats.
 	// EncryptionAlgorithm is an enum representing the cipher in use, so we use a gauge.
@@ -1671,6 +1682,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AddSSTableApplicationCopies:   metric.NewCounter(metaAddSSTableApplicationCopies),
 		AddSSTableProposalTotalDelay:  metric.NewCounter(metaAddSSTableEvalTotalDelay),
 		AddSSTableProposalEngineDelay: metric.NewCounter(metaAddSSTableEvalEngineDelay),
+
+		// ExportRequest proposal.
+		ExportRequestProposalTotalDelay: metric.NewCounter(metaExportEvalTotalDelay),
 
 		// Encryption-at-rest.
 		EncryptionAlgorithm: metric.NewGauge(metaEncryptionAlgorithm),
