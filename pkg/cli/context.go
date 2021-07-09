@@ -272,10 +272,6 @@ type sqlContext struct {
 	// Only valid if inputFile is empty.
 	execStmts statementsValue
 
-	// quitAfterExecStmts tells the shell whether to quit
-	// after processing the execStmts.
-	quitAfterExecStmts bool
-
 	// inputFile is the file to read from.
 	// If empty, os.Stdin is used.
 	// Only valid if execStmts is empty.
@@ -290,6 +286,19 @@ type sqlContext struct {
 	// shell.
 	safeUpdates bool
 
+	// demoCluster is the interface to the in-memory cluster for the
+	// `demo` command, if that is the command being run.
+	demoCluster democlusterapi.DemoCluster
+}
+
+type sqlInternalContext struct {
+	stdout *os.File
+	stderr *os.File
+
+	// quitAfterExecStmts tells the shell whether to quit
+	// after processing the execStmts.
+	quitAfterExecStmts bool
+
 	// Determines whether to stop the client upon encountering an error.
 	errExit bool
 
@@ -302,10 +311,6 @@ type sqlContext struct {
 
 	// The string used to produce the value of fullPrompt.
 	customPromptPattern string
-
-	// demoCluster is the interface to the in-memory cluster for the
-	// `demo` command, if that is the command being run.
-	demoCluster democlusterapi.DemoCluster
 }
 
 var sqlCtx = sqlContext{}
@@ -316,15 +321,9 @@ var sqlCtx = sqlContext{}
 func setSQLContextDefaults() {
 	sqlCtx.setStmts = nil
 	sqlCtx.execStmts = nil
-	sqlCtx.quitAfterExecStmts = false
 	sqlCtx.inputFile = ""
 	sqlCtx.repeatDelay = 0
 	sqlCtx.safeUpdates = false
-	sqlCtx.errExit = false
-	sqlCtx.checkSyntax = false
-	sqlCtx.autoTrace = ""
-	sqlCtx.customPromptPattern = defaultPromptPattern
-	sqlCtx.demoCluster = nil
 }
 
 // zipCtx captures the command-line parameters of the `zip` command.
