@@ -3429,6 +3429,41 @@ may increase either contention or retry errors, or both.`,
 			Volatility: tree.VolatilityImmutable,
 		}),
 
+	"crdb_internal.read_file": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"uri", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				uri := string(tree.MustBeDString(args[0]))
+				content, err := evalCtx.Planner.ExternalReadFile(evalCtx.Ctx(), uri)
+				return tree.NewDBytes(tree.DBytes(content)), err
+			},
+			Info:       "Read the content of a file at an external storage URI",
+			Volatility: tree.VolatilityVolatile,
+		}),
+	"crdb_internal.write_file": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"data", types.Bytes},
+				{"uri", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				data := tree.MustBeDBytes(args[0])
+				uri := string(tree.MustBeDString(args[1]))
+				if err := evalCtx.Planner.ExternalWriteFile(evalCtx.Ctx(), uri, []byte(data)); err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(len(data))), nil
+			},
+			Info:       "Read the content of a file at an external storage URI",
+			Volatility: tree.VolatilityVolatile,
+		}),
+
 	// Enum functions.
 	"enum_first": makeBuiltin(
 		tree.FunctionProperties{NullableArgs: true, Category: categoryEnum},
