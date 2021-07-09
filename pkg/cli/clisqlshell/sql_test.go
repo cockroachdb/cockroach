@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clisqlshell_test
 
 import (
 	"fmt"
@@ -16,11 +16,16 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/security"
 )
 
 func Example_sql() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{`sql`, `-e`, `show application_name`})
@@ -107,7 +112,7 @@ func Example_sql() {
 }
 
 func Example_sql_config() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	// --set changes client-side variables before executing commands.
@@ -157,7 +162,7 @@ func Example_sql_config() {
 }
 
 func Example_sql_watch() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{`sql`, `-e`, `create table d(x int); insert into d values(3)`})
@@ -176,7 +181,7 @@ func Example_sql_watch() {
 }
 
 func Example_misc_table() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
@@ -211,7 +216,7 @@ func Example_in_memory() {
 	if err != nil {
 		panic(err)
 	}
-	c := NewCLITest(TestCLIParams{
+	c := cli.NewCLITest(cli.TestCLIParams{
 		StoreSpecs: []base.StoreSpec{spec},
 	})
 	defer c.Cleanup()
@@ -230,7 +235,7 @@ func Example_in_memory() {
 }
 
 func Example_pretty_print_numerical_strings() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	// All strings in pretty-print output should be aligned to left regardless of their contents
@@ -266,7 +271,7 @@ func Example_pretty_print_numerical_strings() {
 // The input file contains a mix of client-side and
 // server-side commands to ensure that both are supported with -f.
 func Example_read_from_file() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "select 1", "-f", "testdata/inputfile.sql"})
@@ -293,7 +298,7 @@ func Example_read_from_file() {
 
 // Example_includes tests the \i command.
 func Example_includes() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-f", "testdata/i_twolevels1.sql"})
@@ -336,9 +341,10 @@ func Example_includes() {
 
 // Example_sql_lex tests the usage of the lexer in the sql subcommand.
 func Example_sql_lex() {
-	c := NewCLITest(TestCLIParams{Insecure: true})
+	c := cli.NewCLITest(cli.TestCLIParams{Insecure: true})
 	defer c.Cleanup()
 
+	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard,
 		fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
 			security.RootUser, c.ServingSQLAddr()))
@@ -365,8 +371,6 @@ select '''
 		`select 1 as "1";
 -- just a comment without final semicolon`,
 	}
-
-	setCLIDefaultsForTests()
 
 	// We need a temporary file with a name guaranteed to be available.
 	// So open a dummy file.
@@ -406,7 +410,7 @@ select '''
 			return
 		}
 		c := setupTestCliStateWithConn(conn)
-		err := c.runInteractive(f, os.Stdout, os.Stdout)
+		err := c.RunInteractive(f, os.Stdout, os.Stdout)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -434,4 +438,16 @@ select '''
 	// -----
 	//   1
 	// (1 row)
+}
+
+func setupTestCliStateWithConn(conn clisqlclient.Conn) clisqlshell.Shell {
+	cliCtx := &clicfg.Context{}
+	sqlConnCtx := &clisqlclient.Context{CliCtx: cliCtx}
+	sqlExecCtx := &clisqlexec.Context{
+		CliCtx:             cliCtx,
+		TableDisplayFormat: clisqlexec.TableDisplayTable,
+	}
+	sqlCtx := &clisqlshell.Context{}
+	c := clisqlshell.NewShell(cliCtx, sqlConnCtx, sqlExecCtx, sqlCtx, conn)
+	return c
 }
