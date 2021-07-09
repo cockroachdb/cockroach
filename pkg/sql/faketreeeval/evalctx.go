@@ -212,6 +212,14 @@ func (ep *DummyEvalPlanner) MemberOfWithAdminOption(
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+func (*DummyEvalPlanner) ExternalReadFile(ctx context.Context, uri string) ([]byte, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+func (*DummyEvalPlanner) ExternalWriteFile(ctx context.Context, uri string, content []byte) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 var _ tree.EvalPlanner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
