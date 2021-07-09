@@ -240,7 +240,10 @@ type colSorter interface {
 	// init prepares this sorter, given a particular Vec and an order vector,
 	// which must be the same size as the input Vec and will be permuted with
 	// the same swaps as the column.
-	init(ctx context.Context, col coldata.Vec, order []int)
+	init(ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int)
+	// reset releases memory allocated by the colSorter. It should be called
+	// when the colSorter is no longer needed.
+	reset()
 	// sort globally sorts this sorter's column.
 	sort()
 	// sortPartitions sorts this sorter's column once for every partition in the
@@ -329,9 +332,12 @@ func (p *sortOp) sort() {
 		// There is nothing to sort.
 		return
 	}
-	// Allocate p.order and p.workingSpace if it hasn't been allocated yet or the
-	// underlying memory is insufficient.
+	// Allocate p.order if it hasn't been allocated yet or the underlying memory
+	// is insufficient.
 	if p.order == nil || cap(p.order) < spooledTuples {
+		sizeBefore := memsize.Int * int64(cap(p.order))
+		sizeAfter := memsize.Int * int64(spooledTuples)
+		p.allocator.AdjustMemoryUsage(sizeAfter - sizeBefore)
 		p.order = make([]int, spooledTuples)
 	}
 	p.order = p.order[:spooledTuples]
@@ -341,10 +347,15 @@ func (p *sortOp) sort() {
 		p.order[i] = i
 	}
 
+	// TODO(mgartner): Avoid creating new sorters for ever invocation of this
+	// function. Instead, create two slices of sorters, one to use when the
+	// vector does not have nulls, and one to use when it maybe has nulls. The
+	// sorter reset function can be used to clean up the sorters for the next
+	// invocation.
 	for i := range p.orderingCols {
 		inputVec := p.input.getValues(int(p.orderingCols[i].ColIdx))
 		p.sorters[i] = newSingleSorter(p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
-		p.sorters[i].init(p.Ctx, inputVec, p.order)
+		p.sorters[i].init(p.Ctx, p.allocator, inputVec, p.order)
 	}
 
 	// Now, sort each column in turn.
@@ -356,6 +367,7 @@ func (p *sortOp) sort() {
 		// All spooled tuples belong to the same partition, so the first column
 		// doesn't need special treatment - we just globally sort it.
 		p.sorters[0].sort()
+		p.sorters[0].reset()
 		if len(p.sorters) == 1 {
 			// We're done sorting. Transition to emitting.
 			return
@@ -423,6 +435,7 @@ func (p *sortOp) sort() {
 		// For each partition (set of tuples that are identical in all of the sort
 		// columns we've seen so far), sort based on the new column.
 		sorter.sortPartitions(p.scratch.partitions)
+		sorter.reset()
 	}
 }
 
