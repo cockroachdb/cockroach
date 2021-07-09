@@ -158,6 +158,7 @@ go_test(
         "//pkg/sql/rowcontainer",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlutil",
         "//pkg/sql/stats",
         "//pkg/sql/types",

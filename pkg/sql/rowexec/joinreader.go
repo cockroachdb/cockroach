@@ -13,12 +13,14 @@ package rowexec
 import (
 	"context"
 	"sort"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -71,7 +73,16 @@ type joinReader struct {
 	// ProcessorBase.State == StateRunning.
 	runningState joinReaderState
 
-	diskMonitor *mon.BytesMonitor
+	// memAcc is used to account for the memory used by the in-memory data structures
+	// used by the joinReader and different joinReader strategies.
+	memAcc mon.BoundAccount
+
+	// limitedMemMonitor is a limited memory monitor to account for the memory
+	// used by buffered rows in joinReaderOrderingStrategy. If the memory limit is
+	// exceeded, the joinReader will spill to disk. diskMonitor is used to monitor
+	// the disk utilization in this case.
+	limitedMemMonitor *mon.BytesMonitor
+	diskMonitor       *mon.BytesMonitor
 
 	desc      catalog.TableDescriptor
 	index     catalog.Index
@@ -362,6 +373,12 @@ func newJoinReader(
 		}
 	}
 
+	// Initialize memory monitors and bound account for data structures in the joinReader.
+	jr.MemMonitor = execinfra.NewLimitedMonitorNoDiskSpill(
+		flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, flowCtx, "joinreader-mem",
+	)
+	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
+
 	if err := jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), rightCols, readerType); err != nil {
 		return nil, err
 	}
@@ -395,6 +412,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			keyToInputRowIndices: keyToInputRowIndices,
 			numKeyCols:           numKeyCols,
 			lookupCols:           jr.lookupCols,
+			memAcc:               &jr.memAcc,
 		}
 	} else {
 		// Since jr.lookupExpr is set, we need to use either multiSpanGenerator or
@@ -418,6 +436,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 				keyToInputRowIndices,
 				&jr.lookupExpr,
 				tableOrdToIndexOrd,
+				&jr.memAcc,
 			); err != nil {
 				return err
 			}
@@ -432,6 +451,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 				&jr.lookupExpr,
 				&jr.remoteLookupExpr,
 				tableOrdToIndexOrd,
+				&jr.memAcc,
 			); err != nil {
 				return err
 			}
@@ -453,6 +473,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			joinReaderSpanGenerator: generator,
 			isPartialJoin:           jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
 			groupingState:           jr.groupingState,
+			memAcc:                  &jr.memAcc,
 		}
 		return nil
 	}
@@ -462,14 +483,14 @@ func (jr *joinReader) initJoinReaderStrategy(
 	// joinReader will overflow to disk if this limit is not enough.
 	limit := execinfra.GetWorkMemLimit(flowCtx)
 	// Initialize memory monitors and row container for looked up rows.
-	jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, "joinreader-limited")
+	jr.limitedMemMonitor = execinfra.NewLimitedMonitor(ctx, jr.MemMonitor, flowCtx, "joinreader-limited")
 	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "joinreader-disk")
 	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
 		false, /* deDup */
 		typs,
 		jr.EvalCtx,
 		jr.FlowCtx.Cfg.TempStorage,
-		jr.MemMonitor,
+		jr.limitedMemMonitor,
 		jr.diskMonitor,
 	)
 	if limit < mon.DefaultPoolAllocationSize {
@@ -484,6 +505,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		lookedUpRows:                      drc,
 		groupingState:                     jr.groupingState,
 		outputGroupContinuationForLeftRow: jr.outputGroupContinuationForLeftRow,
+		memAcc:                            &jr.memAcc,
 	}
 	return nil
 }
@@ -608,6 +630,9 @@ func (jr *joinReader) readInput() (
 		// Else, returning meta interrupted reading the input batch, so we already
 		// did the reset for this batch.
 	}
+
+	sizeBefore := jr.memUsage()
+
 	// Read the next batch of input rows.
 	for jr.curBatchSizeBytes < jr.batchSizeBytes {
 		row, meta := jr.input.Next()
@@ -616,6 +641,14 @@ func (jr *joinReader) readInput() (
 				jr.MoveToDraining(nil /* err */)
 				return jrStateUnknown, nil, meta
 			}
+
+			// Perform memory accounting.
+			sizeAfter := jr.memUsage()
+			if err := jr.memAcc.Resize(jr.Ctx, sizeBefore, sizeAfter); err != nil {
+				jr.MoveToDraining(err)
+				return jrStateUnknown, nil, meta
+			}
+
 			return jrReadingInput, nil, meta
 		}
 		if row == nil {
@@ -631,6 +664,14 @@ func (jr *joinReader) readInput() (
 		}
 		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(row))
 	}
+
+	// Perform memory accounting.
+	sizeAfter := jr.memUsage()
+	if err := jr.memAcc.Resize(jr.Ctx, sizeBefore, sizeAfter); err != nil {
+		jr.MoveToDraining(err)
+		return jrStateUnknown, nil, jr.DrainHelper()
+	}
+
 	var outRow rowenc.EncDatumRow
 	// Finished reading the input batch.
 	if jr.groupingState != nil {
@@ -815,6 +856,10 @@ func (jr *joinReader) close() {
 			jr.fetcher.Close(jr.Ctx)
 		}
 		jr.strategy.close(jr.Ctx)
+		jr.memAcc.Close(jr.Ctx)
+		if jr.limitedMemMonitor != nil {
+			jr.limitedMemMonitor.Stop(jr.Ctx)
+		}
 		if jr.MemMonitor != nil {
 			jr.MemMonitor.Stop(jr.Ctx)
 		}
@@ -944,6 +989,26 @@ func (jr *joinReader) updateGroupingStateForNonEmptyBatch() {
 			jr.groupingState.setFirstGroupMatched()
 		}
 	}
+}
+
+// memUsage returns the size of the data structures in the joinReader for memory
+// accounting purposes.
+func (jr *joinReader) memUsage() int64 {
+	var size int64
+
+	// Account for scratchInputRows. Slice the full capacity so we can account for
+	// the memory used by rows past the length of scratchInputRows.
+	rows_cap := jr.scratchInputRows[:cap(jr.scratchInputRows)]
+	for i := range rows_cap {
+		size += int64(rows_cap[i].Size())
+	}
+
+	// Account for groupingState.
+	if jr.groupingState != nil {
+		size += int64(cap(jr.groupingState.groupState)) * int64(unsafe.Sizeof(groupState{}))
+		size += int64(cap(jr.groupingState.batchRowToGroupIndex)) * memsize.Int
+	}
+	return size
 }
 
 // inputBatchGroupingState encapsulates the state needed for all the
