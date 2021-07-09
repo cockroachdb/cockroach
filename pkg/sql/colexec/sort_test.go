@@ -156,7 +156,7 @@ func TestSortRandomized(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	nTups := coldata.BatchSize()*2 + 1
 	maxCols := 3
-	// TODO(yuzefovich): randomize types as well.
+	// TODO(yuzefovich/mgartner): randomize types as well.
 	typs := make([]*types.T, maxCols)
 	for i := range typs {
 		typs[i] = types.Int
@@ -339,7 +339,7 @@ func BenchmarkSortUUID(b *testing.B) {
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2} {
-			for _, constAbbrPct := range []int{0, 10, 25, 50, 75, 90, 100} {
+			for _, constAbbrPct := range []int{0, 50, 75, 90, 100} {
 				name := fmt.Sprintf("rows=%d/cols=%d/constAbbrPct=%d", nBatches*coldata.BatchSize(), nCols, constAbbrPct)
 				b.Run(name, func(b *testing.B) {
 					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /

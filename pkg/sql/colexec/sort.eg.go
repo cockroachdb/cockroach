@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -421,17 +423,28 @@ func newSingleSorter(
 }
 
 type sortBoolAscWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortBoolAscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortBoolAscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Bool()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortBoolAscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortBoolAscWithNullsOp) sort() {
@@ -468,10 +481,14 @@ func (s *sortBoolAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -500,17 +517,33 @@ func (s *sortBoolAscWithNullsOp) Len() int {
 }
 
 type sortBytesAscWithNullsOp struct {
-	sortCol       *coldata.Bytes
-	nulls         *coldata.Nulls
-	order         []int
-	cancelChecker colexecutils.CancelChecker
+	allocator          *colmem.Allocator
+	sortCol            *coldata.Bytes
+	abbreviatedSortCol []uint64
+	nulls              *coldata.Nulls
+	order              []int
+	cancelChecker      colexecutils.CancelChecker
 }
 
-func (s *sortBytesAscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortBytesAscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Bytes()
+	s.allocator.AdjustMemoryUsage(memsize.Uint64 * int64(s.sortCol.Len()))
+	s.abbreviatedSortCol = s.sortCol.Abbreviated()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortBytesAscWithNullsOp) reset() {
+	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(s.sortCol.Len()))
+	s.abbreviatedSortCol = nil
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortBytesAscWithNullsOp) sort() {
@@ -547,10 +580,23 @@ func (s *sortBytesAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
+	// If the type can be abbreviated as a uint64, compare the abbreviated
+	// values first. If they are not equal, we are done with the comparison. If
+	// they are equal, we must fallback to a full comparison of the datums.
+	abbr1 := s.abbreviatedSortCol[order1]
+	abbr2 := s.abbreviatedSortCol[order2]
+	if abbr1 != abbr2 {
+		return abbr1 < abbr2
+	}
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -571,17 +617,28 @@ func (s *sortBytesAscWithNullsOp) Len() int {
 }
 
 type sortDecimalAscWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortDecimalAscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortDecimalAscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Decimal()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortDecimalAscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortDecimalAscWithNullsOp) sort() {
@@ -618,10 +675,14 @@ func (s *sortDecimalAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -642,17 +703,28 @@ func (s *sortDecimalAscWithNullsOp) Len() int {
 }
 
 type sortInt16AscWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt16AscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt16AscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int16()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt16AscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt16AscWithNullsOp) sort() {
@@ -689,10 +761,14 @@ func (s *sortInt16AscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -724,17 +800,28 @@ func (s *sortInt16AscWithNullsOp) Len() int {
 }
 
 type sortInt32AscWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt32AscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt32AscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int32()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt32AscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt32AscWithNullsOp) sort() {
@@ -771,10 +858,14 @@ func (s *sortInt32AscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -806,17 +897,28 @@ func (s *sortInt32AscWithNullsOp) Len() int {
 }
 
 type sortInt64AscWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt64AscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt64AscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int64()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt64AscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt64AscWithNullsOp) sort() {
@@ -853,10 +955,14 @@ func (s *sortInt64AscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -888,17 +994,28 @@ func (s *sortInt64AscWithNullsOp) Len() int {
 }
 
 type sortFloat64AscWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortFloat64AscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortFloat64AscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Float64()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortFloat64AscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortFloat64AscWithNullsOp) sort() {
@@ -935,10 +1052,14 @@ func (s *sortFloat64AscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -978,17 +1099,28 @@ func (s *sortFloat64AscWithNullsOp) Len() int {
 }
 
 type sortTimestampAscWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Times
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortTimestampAscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortTimestampAscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Timestamp()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortTimestampAscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortTimestampAscWithNullsOp) sort() {
@@ -1025,10 +1157,14 @@ func (s *sortTimestampAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1056,17 +1192,28 @@ func (s *sortTimestampAscWithNullsOp) Len() int {
 }
 
 type sortIntervalAscWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortIntervalAscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortIntervalAscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Interval()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortIntervalAscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortIntervalAscWithNullsOp) sort() {
@@ -1103,10 +1250,14 @@ func (s *sortIntervalAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1127,17 +1278,28 @@ func (s *sortIntervalAscWithNullsOp) Len() int {
 }
 
 type sortJSONAscWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       *coldata.JSONs
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortJSONAscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortJSONAscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.JSON()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortJSONAscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortJSONAscWithNullsOp) sort() {
@@ -1174,10 +1336,14 @@ func (s *sortJSONAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1204,17 +1370,28 @@ func (s *sortJSONAscWithNullsOp) Len() int {
 }
 
 type sortDatumAscWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.DatumVec
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortDatumAscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortDatumAscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Datum()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortDatumAscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortDatumAscWithNullsOp) sort() {
@@ -1251,10 +1428,14 @@ func (s *sortDatumAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1277,17 +1458,28 @@ func (s *sortDatumAscWithNullsOp) Len() int {
 }
 
 type sortBoolDescWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortBoolDescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortBoolDescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Bool()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortBoolDescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortBoolDescWithNullsOp) sort() {
@@ -1324,10 +1516,14 @@ func (s *sortBoolDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1356,17 +1552,33 @@ func (s *sortBoolDescWithNullsOp) Len() int {
 }
 
 type sortBytesDescWithNullsOp struct {
-	sortCol       *coldata.Bytes
-	nulls         *coldata.Nulls
-	order         []int
-	cancelChecker colexecutils.CancelChecker
+	allocator          *colmem.Allocator
+	sortCol            *coldata.Bytes
+	abbreviatedSortCol []uint64
+	nulls              *coldata.Nulls
+	order              []int
+	cancelChecker      colexecutils.CancelChecker
 }
 
-func (s *sortBytesDescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortBytesDescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Bytes()
+	s.allocator.AdjustMemoryUsage(memsize.Uint64 * int64(s.sortCol.Len()))
+	s.abbreviatedSortCol = s.sortCol.Abbreviated()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortBytesDescWithNullsOp) reset() {
+	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(s.sortCol.Len()))
+	s.abbreviatedSortCol = nil
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortBytesDescWithNullsOp) sort() {
@@ -1403,10 +1615,23 @@ func (s *sortBytesDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
+	// If the type can be abbreviated as a uint64, compare the abbreviated
+	// values first. If they are not equal, we are done with the comparison. If
+	// they are equal, we must fallback to a full comparison of the datums.
+	abbr1 := s.abbreviatedSortCol[order1]
+	abbr2 := s.abbreviatedSortCol[order2]
+	if abbr1 != abbr2 {
+		return abbr1 > abbr2
+	}
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1427,17 +1652,28 @@ func (s *sortBytesDescWithNullsOp) Len() int {
 }
 
 type sortDecimalDescWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortDecimalDescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortDecimalDescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Decimal()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortDecimalDescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortDecimalDescWithNullsOp) sort() {
@@ -1474,10 +1710,14 @@ func (s *sortDecimalDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1498,17 +1738,28 @@ func (s *sortDecimalDescWithNullsOp) Len() int {
 }
 
 type sortInt16DescWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt16DescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt16DescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int16()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt16DescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt16DescWithNullsOp) sort() {
@@ -1545,10 +1796,14 @@ func (s *sortInt16DescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1580,17 +1835,28 @@ func (s *sortInt16DescWithNullsOp) Len() int {
 }
 
 type sortInt32DescWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt32DescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt32DescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int32()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt32DescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt32DescWithNullsOp) sort() {
@@ -1627,10 +1893,14 @@ func (s *sortInt32DescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1662,17 +1932,28 @@ func (s *sortInt32DescWithNullsOp) Len() int {
 }
 
 type sortInt64DescWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt64DescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt64DescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int64()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt64DescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt64DescWithNullsOp) sort() {
@@ -1709,10 +1990,14 @@ func (s *sortInt64DescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1744,17 +2029,28 @@ func (s *sortInt64DescWithNullsOp) Len() int {
 }
 
 type sortFloat64DescWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortFloat64DescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortFloat64DescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Float64()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortFloat64DescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortFloat64DescWithNullsOp) sort() {
@@ -1791,10 +2087,14 @@ func (s *sortFloat64DescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1834,17 +2134,28 @@ func (s *sortFloat64DescWithNullsOp) Len() int {
 }
 
 type sortTimestampDescWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Times
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortTimestampDescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortTimestampDescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Timestamp()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortTimestampDescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortTimestampDescWithNullsOp) sort() {
@@ -1881,10 +2192,14 @@ func (s *sortTimestampDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1912,17 +2227,28 @@ func (s *sortTimestampDescWithNullsOp) Len() int {
 }
 
 type sortIntervalDescWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortIntervalDescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortIntervalDescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Interval()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortIntervalDescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortIntervalDescWithNullsOp) sort() {
@@ -1959,10 +2285,14 @@ func (s *sortIntervalDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -1983,17 +2313,28 @@ func (s *sortIntervalDescWithNullsOp) Len() int {
 }
 
 type sortJSONDescWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       *coldata.JSONs
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortJSONDescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortJSONDescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.JSON()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortJSONDescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortJSONDescWithNullsOp) sort() {
@@ -2030,10 +2371,14 @@ func (s *sortJSONDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2060,17 +2405,28 @@ func (s *sortJSONDescWithNullsOp) Len() int {
 }
 
 type sortDatumDescWithNullsOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.DatumVec
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortDatumDescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortDatumDescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Datum()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortDatumDescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortDatumDescWithNullsOp) sort() {
@@ -2107,10 +2463,14 @@ func (s *sortDatumDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2133,17 +2493,28 @@ func (s *sortDatumDescWithNullsOp) Len() int {
 }
 
 type sortBoolAscOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortBoolAscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortBoolAscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Bool()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortBoolAscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortBoolAscOp) sort() {
@@ -2170,10 +2541,14 @@ func (s *sortBoolAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortBoolAscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2202,17 +2577,33 @@ func (s *sortBoolAscOp) Len() int {
 }
 
 type sortBytesAscOp struct {
-	sortCol       *coldata.Bytes
-	nulls         *coldata.Nulls
-	order         []int
-	cancelChecker colexecutils.CancelChecker
+	allocator          *colmem.Allocator
+	sortCol            *coldata.Bytes
+	abbreviatedSortCol []uint64
+	nulls              *coldata.Nulls
+	order              []int
+	cancelChecker      colexecutils.CancelChecker
 }
 
-func (s *sortBytesAscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortBytesAscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Bytes()
+	s.allocator.AdjustMemoryUsage(memsize.Uint64 * int64(s.sortCol.Len()))
+	s.abbreviatedSortCol = s.sortCol.Abbreviated()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortBytesAscOp) reset() {
+	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(s.sortCol.Len()))
+	s.abbreviatedSortCol = nil
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortBytesAscOp) sort() {
@@ -2239,10 +2630,23 @@ func (s *sortBytesAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortBytesAscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
+	// If the type can be abbreviated as a uint64, compare the abbreviated
+	// values first. If they are not equal, we are done with the comparison. If
+	// they are equal, we must fallback to a full comparison of the datums.
+	abbr1 := s.abbreviatedSortCol[order1]
+	abbr2 := s.abbreviatedSortCol[order2]
+	if abbr1 != abbr2 {
+		return abbr1 < abbr2
+	}
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2263,17 +2667,28 @@ func (s *sortBytesAscOp) Len() int {
 }
 
 type sortDecimalAscOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortDecimalAscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortDecimalAscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Decimal()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortDecimalAscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortDecimalAscOp) sort() {
@@ -2300,10 +2715,14 @@ func (s *sortDecimalAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortDecimalAscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2324,17 +2743,28 @@ func (s *sortDecimalAscOp) Len() int {
 }
 
 type sortInt16AscOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt16AscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt16AscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int16()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt16AscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt16AscOp) sort() {
@@ -2361,10 +2791,14 @@ func (s *sortInt16AscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt16AscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2396,17 +2830,28 @@ func (s *sortInt16AscOp) Len() int {
 }
 
 type sortInt32AscOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt32AscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt32AscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int32()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt32AscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt32AscOp) sort() {
@@ -2433,10 +2878,14 @@ func (s *sortInt32AscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt32AscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2468,17 +2917,28 @@ func (s *sortInt32AscOp) Len() int {
 }
 
 type sortInt64AscOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt64AscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt64AscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int64()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt64AscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt64AscOp) sort() {
@@ -2505,10 +2965,14 @@ func (s *sortInt64AscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt64AscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2540,17 +3004,28 @@ func (s *sortInt64AscOp) Len() int {
 }
 
 type sortFloat64AscOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortFloat64AscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortFloat64AscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Float64()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortFloat64AscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortFloat64AscOp) sort() {
@@ -2577,10 +3052,14 @@ func (s *sortFloat64AscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortFloat64AscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2620,17 +3099,28 @@ func (s *sortFloat64AscOp) Len() int {
 }
 
 type sortTimestampAscOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Times
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortTimestampAscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortTimestampAscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Timestamp()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortTimestampAscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortTimestampAscOp) sort() {
@@ -2657,10 +3147,14 @@ func (s *sortTimestampAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortTimestampAscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2688,17 +3182,28 @@ func (s *sortTimestampAscOp) Len() int {
 }
 
 type sortIntervalAscOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortIntervalAscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortIntervalAscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Interval()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortIntervalAscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortIntervalAscOp) sort() {
@@ -2725,10 +3230,14 @@ func (s *sortIntervalAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortIntervalAscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2749,17 +3258,28 @@ func (s *sortIntervalAscOp) Len() int {
 }
 
 type sortJSONAscOp struct {
+	allocator     *colmem.Allocator
 	sortCol       *coldata.JSONs
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortJSONAscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortJSONAscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.JSON()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortJSONAscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortJSONAscOp) sort() {
@@ -2786,10 +3306,14 @@ func (s *sortJSONAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortJSONAscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2816,17 +3340,28 @@ func (s *sortJSONAscOp) Len() int {
 }
 
 type sortDatumAscOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.DatumVec
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortDatumAscOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortDatumAscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Datum()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortDatumAscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortDatumAscOp) sort() {
@@ -2853,10 +3388,14 @@ func (s *sortDatumAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortDatumAscOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2879,17 +3418,28 @@ func (s *sortDatumAscOp) Len() int {
 }
 
 type sortBoolDescOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortBoolDescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortBoolDescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Bool()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortBoolDescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortBoolDescOp) sort() {
@@ -2916,10 +3466,14 @@ func (s *sortBoolDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortBoolDescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -2948,17 +3502,33 @@ func (s *sortBoolDescOp) Len() int {
 }
 
 type sortBytesDescOp struct {
-	sortCol       *coldata.Bytes
-	nulls         *coldata.Nulls
-	order         []int
-	cancelChecker colexecutils.CancelChecker
+	allocator          *colmem.Allocator
+	sortCol            *coldata.Bytes
+	abbreviatedSortCol []uint64
+	nulls              *coldata.Nulls
+	order              []int
+	cancelChecker      colexecutils.CancelChecker
 }
 
-func (s *sortBytesDescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortBytesDescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Bytes()
+	s.allocator.AdjustMemoryUsage(memsize.Uint64 * int64(s.sortCol.Len()))
+	s.abbreviatedSortCol = s.sortCol.Abbreviated()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortBytesDescOp) reset() {
+	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(s.sortCol.Len()))
+	s.abbreviatedSortCol = nil
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortBytesDescOp) sort() {
@@ -2985,10 +3555,23 @@ func (s *sortBytesDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortBytesDescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
+	// If the type can be abbreviated as a uint64, compare the abbreviated
+	// values first. If they are not equal, we are done with the comparison. If
+	// they are equal, we must fallback to a full comparison of the datums.
+	abbr1 := s.abbreviatedSortCol[order1]
+	abbr2 := s.abbreviatedSortCol[order2]
+	if abbr1 != abbr2 {
+		return abbr1 > abbr2
+	}
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -3009,17 +3592,28 @@ func (s *sortBytesDescOp) Len() int {
 }
 
 type sortDecimalDescOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortDecimalDescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortDecimalDescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Decimal()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortDecimalDescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortDecimalDescOp) sort() {
@@ -3046,10 +3640,14 @@ func (s *sortDecimalDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortDecimalDescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -3070,17 +3668,28 @@ func (s *sortDecimalDescOp) Len() int {
 }
 
 type sortInt16DescOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt16DescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt16DescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int16()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt16DescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt16DescOp) sort() {
@@ -3107,10 +3716,14 @@ func (s *sortInt16DescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt16DescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -3142,17 +3755,28 @@ func (s *sortInt16DescOp) Len() int {
 }
 
 type sortInt32DescOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt32DescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt32DescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int32()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt32DescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt32DescOp) sort() {
@@ -3179,10 +3803,14 @@ func (s *sortInt32DescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt32DescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -3214,17 +3842,28 @@ func (s *sortInt32DescOp) Len() int {
 }
 
 type sortInt64DescOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortInt64DescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortInt64DescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Int64()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortInt64DescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortInt64DescOp) sort() {
@@ -3251,10 +3890,14 @@ func (s *sortInt64DescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt64DescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -3286,17 +3929,28 @@ func (s *sortInt64DescOp) Len() int {
 }
 
 type sortFloat64DescOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortFloat64DescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortFloat64DescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Float64()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortFloat64DescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortFloat64DescOp) sort() {
@@ -3323,10 +3977,14 @@ func (s *sortFloat64DescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortFloat64DescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -3366,17 +4024,28 @@ func (s *sortFloat64DescOp) Len() int {
 }
 
 type sortTimestampDescOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Times
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortTimestampDescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortTimestampDescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Timestamp()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortTimestampDescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortTimestampDescOp) sort() {
@@ -3403,10 +4072,14 @@ func (s *sortTimestampDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortTimestampDescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -3434,17 +4107,28 @@ func (s *sortTimestampDescOp) Len() int {
 }
 
 type sortIntervalDescOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortIntervalDescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortIntervalDescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Interval()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortIntervalDescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortIntervalDescOp) sort() {
@@ -3471,10 +4155,14 @@ func (s *sortIntervalDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortIntervalDescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -3495,17 +4183,28 @@ func (s *sortIntervalDescOp) Len() int {
 }
 
 type sortJSONDescOp struct {
+	allocator     *colmem.Allocator
 	sortCol       *coldata.JSONs
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortJSONDescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortJSONDescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.JSON()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortJSONDescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortJSONDescOp) sort() {
@@ -3532,10 +4231,14 @@ func (s *sortJSONDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortJSONDescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
@@ -3562,17 +4265,28 @@ func (s *sortJSONDescOp) Len() int {
 }
 
 type sortDatumDescOp struct {
+	allocator     *colmem.Allocator
 	sortCol       coldata.DatumVec
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sortDatumDescOp) init(ctx context.Context, col coldata.Vec, order []int) {
+func (s *sortDatumDescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+) {
+	s.allocator = allocator
 	s.sortCol = col.Datum()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortDatumDescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+	s.allocator = nil
 }
 
 func (s *sortDatumDescOp) sort() {
@@ -3599,10 +4313,14 @@ func (s *sortDatumDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortDatumDescOp) Less(i, j int) bool {
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 
 	{
 		var cmpResult int
