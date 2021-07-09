@@ -22,6 +22,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -410,11 +411,6 @@ func (h *crdbInstallHelper) generateStartCmd(
 	nodeIdx int, extraArgs []string, vers *version.Version,
 ) (string, error) {
 
-	tpl, err := template.New("start").Parse(startScript)
-	if err != nil {
-		return "", err
-	}
-
 	args, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
 	if err != nil {
 		return "", err
@@ -429,26 +425,41 @@ func (h *crdbInstallHelper) generateStartCmd(
 		startCmd = "start"
 	}
 	nodes := h.c.ServerNodes()
-	var buf strings.Builder
-	if err := tpl.Execute(&buf, struct {
-		LogDir, KeyCmd, Tag, EnvVars, Binary, StartCmd, Args, MemoryMax string
-		NodeNum                                                         int
-		Local                                                           bool
-	}{
+	return execStartTemplate(startTemplateData{
 		LogDir:    h.c.Impl.LogDir(h.c, nodes[nodeIdx]),
 		KeyCmd:    h.generateKeyCmd(nodeIdx, extraArgs),
 		Tag:       h.c.Tag,
 		EnvVars:   "GOTRACEBACK=crash COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " + h.getEnvVars(),
 		Binary:    cockroachNodeBinary(h.c, nodes[nodeIdx]),
 		StartCmd:  startCmd,
-		Args:      strings.Join(args, " "),
+		Args:      args,
 		MemoryMax: config.MemoryMax,
 		NodeNum:   nodes[nodeIdx],
 		Local:     h.c.IsLocal(),
-	}); err != nil {
+	})
+}
+
+type startTemplateData struct {
+	LogDir, KeyCmd, Tag, EnvVars, Binary, StartCmd, MemoryMax string
+	Args                                                      []string
+	NodeNum                                                   int
+	Local                                                     bool
+}
+
+func execStartTemplate(data startTemplateData) (string, error) {
+	tpl, err := template.New("start").
+		Funcs(template.FuncMap{"shesc": func(i interface{}) string {
+			return shellescape.Quote(fmt.Sprint(i))
+		}}).
+		Delims("#{", "#}").
+		Parse(startScript)
+	if err != nil {
 		return "", err
 	}
-
+	var buf strings.Builder
+	if err := tpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
 	return buf.String(), nil
 }
 
@@ -459,7 +470,7 @@ func (h *crdbInstallHelper) generateStartArgs(
 	nodes := h.c.ServerNodes()
 
 	if h.c.Secure {
-		args = append(args, "--certs-dir="+h.c.Impl.CertsDir(h.c, nodes[nodeIdx]))
+		args = append(args, `--certs-dir`, h.c.Impl.CertsDir(h.c, nodes[nodeIdx]))
 	} else {
 		args = append(args, "--insecure")
 	}
@@ -469,7 +480,7 @@ func (h *crdbInstallHelper) generateStartArgs(
 		for i := 1; i <= StartOpts.StoreCount; i++ {
 			storeDir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx], i)
 			storeDirs = append(storeDirs, storeDir)
-			args = append(args, "--store=path="+storeDir)
+			args = append(args, `--store`, `path=`+storeDir)
 		}
 	} else {
 		storeDir := strings.TrimPrefix(extraArgs[idx], "--store=")
@@ -480,18 +491,18 @@ func (h *crdbInstallHelper) generateStartArgs(
 		// Encryption at rest is turned on for the cluster.
 		for _, storeDir := range storeDirs {
 			// TODO(windchan7): allow key size to be specified through flags.
-			encryptArgs := "--enterprise-encryption=path=%s,key=%s/aes-128.key,old-key=plain"
+			encryptArgs := "path=%s,key=%s/aes-128.key,old-key=plain"
 			encryptArgs = fmt.Sprintf(encryptArgs, storeDir, storeDir)
-			args = append(args, encryptArgs)
+			args = append(args, `--enterprise-encryption`, encryptArgs)
 		}
 	}
 
 	logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
 	if vers.AtLeast(version.MustParse("v21.1.0-alpha.0")) {
 		// Specify exit-on-error=false to work around #62763.
-		args = append(args, `--log \"file-defaults: {dir: '`+logDir+`', exit-on-error: false}\"`)
+		args = append(args, "--log", `file-defaults: {dir: '`+logDir+`', exit-on-error: false}`)
 	} else {
-		args = append(args, "--log-dir="+logDir)
+		args = append(args, `--log-dir`, logDir)
 	}
 
 	if vers.AtLeast(version.MustParse("v1.1.0")) {

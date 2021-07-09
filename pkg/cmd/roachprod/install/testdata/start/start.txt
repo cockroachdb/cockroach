@@ -1,3 +1,6 @@
+data1
+----
+----
 #!/usr/bin/env bash
 #
 # Copyright 2021 The Cockroach Authors.
@@ -14,19 +17,18 @@ set -euo pipefail
 # These values are substituted in the Go code that uses this. We use custom
 # delimiters for the Go text template so that this bash script is valid
 # before template evaluation (so we can use shellcheck).
-LOCAL=#{if .Local#}true#{end#}
-LOG_DIR=#{shesc .LogDir#}
-NODE_NUM=#{shesc .NodeNum#}
-TAG=#{shesc .Tag#}
-ENV_VARS=#{shesc .EnvVars#}
-BINARY=#{shesc Binary#}
-START_CMD=#{shesc .StartCmd#}
-KEY_CMD=#{.KeyCmd#}
-MEMORY_MAX=#{.MemoryMax#}
+LOCAL=true
+LOG_DIR='/path with spaces/logs'
+NODE_NUM=1
+TAG='sa$$y'
+ENV_VARS='COCKROACH=foo ROCKCOACH=17%'
+BINARY=./cockroach
+START_CMD=start-single-node
+KEY_CMD=echo foo && \
+echo bar $HOME
+MEMORY_MAX=81%
 ARGS=(
-#{range .Args -#}
-#{shesc .#}
-#{end -#}
+'--log "file-defaults: {dir: '"'"'/path with spaces/logs'"'"', exit-on-error: false}"'
 )
 
 mkdir -p "${LOG_DIR}"
@@ -35,7 +37,7 @@ if [[ -n "${LOCAL}" || "${1-}" == "run" ]]; then
   mkdir -p "${LOG_DIR}"
   echo "cockroach start: $(date), logging to ${LOG_DIR}" | tee -a "${LOG_DIR}"/{roachprod,cockroach.std{out,err#}.log
   if [[ -n "${KEY_CMD}" ]]; then
-    eval "${KEY_CMD}"
+    "${KEY_CMD}"
   fi
   export ROACHPROD="${NODE_NUM#}${TAG}" ${ENV_VARS}
   background=""
@@ -93,3 +95,5 @@ sudo systemd-run --unit cockroach \
   -p LimitCORE=infinity \
   -p LimitNOFILE=65536 \
   bash $0 run
+----
+----
