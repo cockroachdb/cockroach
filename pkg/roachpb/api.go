@@ -1211,8 +1211,11 @@ func (*AdminMergeRequest) flags() int          { return isAdmin | isAlone }
 func (*AdminTransferLeaseRequest) flags() int  { return isAdmin | isAlone }
 func (*AdminChangeReplicasRequest) flags() int { return isAdmin | isAlone }
 func (*AdminRelocateRangeRequest) flags() int  { return isAdmin | isAlone }
-func (*HeartbeatTxnRequest) flags() int        { return isWrite | isTxn }
 func (*GCRequest) flags() int                  { return isWrite | isRange }
+
+// HeartbeatTxn updates the timestamp cache with transaction records,
+// to avoid checking for them on disk when considering 1PC evaluation.
+func (*HeartbeatTxnRequest) flags() int { return isWrite | isTxn | updatesTSCache }
 
 // PushTxnRequest updates different marker keys in the timestamp cache when
 // pushing a transaction's timestamp and when aborting a transaction.

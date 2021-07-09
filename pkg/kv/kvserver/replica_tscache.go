@@ -120,6 +120,16 @@ func (r *Replica) updateTimestampCache(
 				key := transactionTombstoneMarker(start, txnID)
 				addToTSCache(key, nil, ts, txnID)
 			}
+		case *roachpb.HeartbeatTxnRequest:
+			// HeartbeatTxn requests overload tombstone markers to also act as markers
+			// for written transaction records. This lets potential 1PC transactions
+			// avoid hitting disk to check for records, but means that
+			// CanCreateTxnRecord cannot distinguish between a failure due to an
+			// existing record or one due to a finalized transaction, and so the
+			// returned reason is only valid if the caller already checked that no
+			// transaction record currently exists.
+			key := transactionTombstoneMarker(start, txnID)
+			addToTSCache(key, nil, ts, txnID)
 		case *roachpb.RecoverTxnRequest:
 			// A successful RecoverTxn request may or may not have finalized the
 			// transaction that it was trying to recover. If so, then we record
@@ -359,6 +369,14 @@ func (r *Replica) applyTimestampCache(
 // ever determines that a transaction record must be rejected, it will continue
 // to reject that transaction going forwards.
 //
+// The returned reason is only reliable if the caller has verified that a
+// transaction record does not currently exist. This is due to the overloading of
+// transactionTombstoneMarker to also mark that a transaction heartbeat has
+// created a transaction record, such that calling this with an existing
+// transaction record may return a bogus
+// ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY when the
+// reason is instead that a record already exists.
+//
 // The method performs two critical roles:
 //
 //  1. It protects against replayed requests or new requests from a
@@ -375,6 +393,12 @@ func (r *Replica) applyTimestampCache(
 //     never needs to explicitly create the transaction record for contending
 //     transactions.
 //
+// In addition, it allows potential 1PC transaction to avoid checking for
+// transaction records on disk, by overloading tombstone markers to also mark
+// that HeartbeatTxn has written a transaction record. However, the cache is
+// unable to distinguish between failures due to existing and finalized record,
+// which callers must take into account.
+//
 // This is detailed in the transaction record state machine below:
 //
 //  +----------------------------------------------------+
@@ -388,12 +412,13 @@ func (r *Replica) applyTimestampCache(
 //  | v -> t = forward v by timestamp t                  |
 //  +----------------------------------------------------+
 //
-//                   PushTxn(TIMESTAMP)                                HeartbeatTxn
-//                   then: v1 -> push.ts                             then: update record
-//                       +------+                                        +------+
-//     PushTxn(ABORT)    |      |        HeartbeatTxn                    |      |   PushTxn(TIMESTAMP)
-//    then: v2 -> txn.ts |      v        if: v2 < txn.orig               |      v  then: update record
-//                  +-----------------+  then: txn.ts -> v1      +--------------------+
+//                                                                     HeartbeatTxn
+//                   PushTxn(TIMESTAMP)                              then: update record
+//                   then: v1 -> push.ts                                   v2 -> txn.ts
+//                       +------+        HeartbeatTxn                    +------+
+//     PushTxn(ABORT)    |      |        if: v2 < txn.orig               |      |   PushTxn(TIMESTAMP)
+//    then: v2 -> txn.ts |      v        then: txn.ts -> v1              |      v  then: update record
+//                  +-----------------+        v2 -> txn.ts      +--------------------+
 //             +----|                 |  else: fail              |                    |----+
 //             |    |                 |------------------------->|                    |    |
 //             |    |  no txn record  |                          | txn record written |    |
@@ -506,16 +531,25 @@ func (r *Replica) CanCreateTxnRecord(
 	// then the error will be transformed into an ambiguous one higher up.
 	// Otherwise, if the client is still waiting for a result, then this cannot
 	// be a "replay" of any sort.
-	tombstoneTimestamp, tombstomeTxnID := r.store.tsCache.GetMax(tombstoneKey, nil /* end */)
+	//
+	// Note that this only makes sense when the caller has already verified that
+	// no transaction record exists. This marker is also overloaded to mean that a
+	// heartbeat has written a transaction record.
+	tombstoneTimestamp, tombstoneTxnID := r.store.tsCache.GetMax(tombstoneKey, nil /* end */)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
 	if txnMinTS.LessEq(tombstoneTimestamp) {
-		switch tombstomeTxnID {
+		switch tombstoneTxnID {
 		case txnID:
 			// If we find our own transaction ID then an EndTxn request sent by
 			// our coordinator has already been processed. We might be a replay (e.g.
 			// a DistSender retry), or we raced with an asynchronous abort. Either
 			// way, return an error.
+			//
+			// If the caller has not already verified that no transaction record
+			// exists, then this will also be returned for an existing transaction
+			// record (since the marker is overloaded to also mean that a heartbeat
+			// has written a record), even though the reason indicates otherwise.
 			//
 			// TODO(andrei): We could keep a bit more info in the tscache to return a
 			// different error for COMMITTED transactions. If the EndTxn(commit) was
@@ -552,11 +586,16 @@ func (r *Replica) CanCreateTxnRecord(
 // guard against creating a transaction record after the transaction record has
 // been cleaned up (i.e. by a BeginTxn being evaluated out of order or arriving
 // after another txn Push(Abort)'ed the txn).
+//
+// This is also overloaded to mark that a HeartbeatTxn request has written a
+// transaction record, to avoid checking for that record on disk. Thus, the
+// "tombstone" sense is only valid when the CanCreateTxnRecord caller has
+// already verified that no transaction record exists on disk.
 func transactionTombstoneMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	return append(keys.TransactionKey(key, txnID), []byte("-tmbs")...)
 }
 
-// transactionPushMarker returns the key used by the marker indicating that a
+// transactionPushMarker returns the key used as a marker indicating that a
 // particular txn was pushed before writing its transaction record. It is used
 // as a marker in the timestamp cache indicating that the transaction was pushed
 // in case the push happens before there's a transaction record.
