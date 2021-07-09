@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -163,6 +164,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		if pred != nil {
 			b.updateCardinalityFromFilters(pred, rel)
 		}
+		b.updateCardinalityFromTypes(rel.OutputCols, rel)
 	}
 
 	// Statistics
@@ -640,6 +642,8 @@ func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *pro
 		rel.Cardinality = inputProps.Cardinality.AsLowAs(1)
 		if rel.FuncDeps.HasMax1Row() {
 			rel.Cardinality = rel.Cardinality.Limit(1)
+		} else {
+			b.updateCardinalityFromTypes(groupingCols, rel)
 		}
 	}
 
@@ -761,6 +765,8 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 	rel.Cardinality = b.makeSetCardinality(op, leftProps.Cardinality, rightProps.Cardinality)
 	if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
+	} else {
+		b.updateCardinalityFromTypes(rel.OutputCols, rel)
 	}
 
 	// Statistics
@@ -1950,6 +1956,64 @@ func (b *logicalPropsBuilder) updateCardinalityFromConstraint(
 	if ok && count < math.MaxUint32 {
 		rel.Cardinality = rel.Cardinality.Limit(uint32(count))
 	}
+}
+
+// updateCardinalityFromTypes determines whether a tight cardinality bound
+// can be determined from the types of the given columns. This is possible
+// if any of the columns is a strict key and has a type with a finite set
+// of possible values (e.g., bool or enum type).
+func (b *logicalPropsBuilder) updateCardinalityFromTypes(cols opt.ColSet, rel *props.Relational) {
+	cols.ForEach(func(col opt.ColumnID) {
+		// We need to check if this column is a strict key, since a lax key could
+		// include an arbitrary number of null values.
+		if !rel.FuncDeps.ColsAreStrictKey(opt.MakeColSet(col)) {
+			return
+		}
+
+		md := b.mem.Metadata()
+		count, ok := distinctCountFromType(md, md.ColumnMeta(col).Type)
+		if ok && count < math.MaxUint32 {
+			if !rel.NotNullCols.Contains(col) {
+				// Add one for a possible null value.
+				count++
+			}
+			rel.Cardinality = rel.Cardinality.Limit(uint32(count))
+		}
+	})
+}
+
+// distinctCountFromType calculates the maximum number of distinct values in the
+// given type. Returns the distinct count and ok=true if the type has a finite
+// set of possible values (e.g., bool or enum type), and ok=false otherwise.
+func distinctCountFromType(md *opt.Metadata, typ *types.T) (_ uint64, ok bool) {
+	// TODO(rytaft): Support other limited types such as INT2, BIT(N), VARBIT(N),
+	// CHAR(N), and VARCHAR(N).
+	switch typ.Family() {
+	case types.BoolFamily:
+		// There are maximum two distinct values: true and false.
+		return 2, true
+
+	case types.EnumFamily:
+		typOid := typ.Oid()
+		var hydrated *types.T
+		// Find the hydrated type in the metadata.
+		for _, t := range md.AllUserDefinedTypes() {
+			if t.Oid() == typOid {
+				hydrated = t
+				break
+			}
+		}
+		if hydrated == nil {
+			// This can happen in rare cases if the user defined type is
+			// contained in an array.
+			// TODO(rytaft): This should really be an assertion failure. See #67434.
+			break
+		}
+		// Enum types have a well defined set of values.
+		return uint64(len(hydrated.TypeMeta.EnumData.PhysicalRepresentations)), true
+	}
+
+	return 0, false
 }
 
 // ensureLookupJoinInputProps lazily populates the relational properties that

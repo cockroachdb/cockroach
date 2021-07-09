@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -466,13 +465,15 @@ func (sb *statisticsBuilder) colStatLeaf(
 		if notNullCols.Contains(col) {
 			colStat.NullCount = 0
 		}
-		if sb.md.ColumnMeta(col).Type.Family() == types.BoolFamily {
-			// There are maximum three distinct values: true, false, and null.
-			maxDistinct := float64(2)
+		// Some types (e.g., bool and enum) have a known maximum number of distinct
+		// values.
+		maxDistinct, ok := distinctCountFromType(sb.md, sb.md.ColumnMeta(col).Type)
+		if ok {
 			if colStat.NullCount > 0 {
+				// Add one for the null value.
 				maxDistinct++
 			}
-			colStat.DistinctCount = min(colStat.DistinctCount, maxDistinct)
+			colStat.DistinctCount = min(colStat.DistinctCount, float64(maxDistinct))
 		}
 	} else {
 		distinctCount := 1.0
@@ -3288,6 +3289,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 	// All of the columns that are part of the prefix have a finite number of
 	// distinct values.
 	prefix := c.Prefix(sb.evalCtx)
+	keyCtx := constraint.MakeKeyContext(&c.Columns, sb.evalCtx)
 
 	// If there are any other columns beyond the prefix, we may be able to
 	// determine the number of distinct values for the first one. For example:
@@ -3303,49 +3305,17 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 		countable := true
 		for i := 0; i < c.Spans.Count(); i++ {
 			sp := c.Spans.Get(i)
-			if sp.StartKey().Length() <= col || sp.EndKey().Length() <= col {
-				// We can't determine the distinct count for this column. For example,
-				// the number of distinct values for column b in the constraint
-				// /a/b: [/1/1 - /1] cannot be determined.
+			spanDistinctVals, ok := sp.KeyCount(&keyCtx, col+1)
+			if !ok {
 				countable = false
 				continue
 			}
+			// Subtract 1 from the span distinct count since we started with
+			// distinctCount = 1 above and we increment for each new value below.
+			distinctCount += float64(spanDistinctVals) - 1
+
 			startVal := sp.StartKey().Value(col)
 			endVal := sp.EndKey().Value(col)
-			if startVal.Compare(sb.evalCtx, endVal) != 0 {
-				var start, end float64
-				if startVal.ResolvedType().Family() == types.IntFamily &&
-					endVal.ResolvedType().Family() == types.IntFamily {
-					start = float64(*startVal.(*tree.DInt))
-					end = float64(*endVal.(*tree.DInt))
-				} else if startVal.ResolvedType().Family() == types.DateFamily &&
-					endVal.ResolvedType().Family() == types.DateFamily {
-					startDate := startVal.(*tree.DDate)
-					endDate := endVal.(*tree.DDate)
-					if !startDate.IsFinite() || !endDate.IsFinite() {
-						// One of the boundaries is not finite, so we can't determine the
-						// distinct count for this column.
-						countable = false
-						continue
-					}
-					start = float64(startDate.PGEpochDays())
-					end = float64(endDate.PGEpochDays())
-				} else {
-					// We can't determine the distinct count for this column. For example,
-					// the number of distinct values in the constraint
-					// /a: [/'cherry' - /'mango'] cannot be determined.
-					countable = false
-					continue
-				}
-				// We assume that both start and end boundaries are inclusive. This
-				// should be the case for integer and date columns (due to
-				// normalization by constraint.PreferInclusive).
-				if c.Columns.Get(col).Ascending() {
-					distinctCount += end - start
-				} else {
-					distinctCount += start - end
-				}
-			}
 			if i != 0 && val != nil {
 				compare := startVal.Compare(sb.evalCtx, val)
 				ascending := c.Columns.Get(col).Ascending()

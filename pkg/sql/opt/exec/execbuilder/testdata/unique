@@ -2142,7 +2142,7 @@ vectorized: true
 
 # Test that we use the index when available for the update checks.
 query T
-EXPLAIN (VERBOSE) UPDATE uniq_enum SET r = DEFAULT, s = 'baz', i = 3 WHERE r = 'eu-west'
+EXPLAIN (VERBOSE) UPDATE uniq_enum SET r = DEFAULT, s = 'baz', i = 3 WHERE r = 'eu-west' AND i > 10 AND i <= 20
 ----
 distribution: local
 vectorized: true
@@ -2162,7 +2162,7 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (r, s, i, j, r_new, s_new, i_new, check1)
-│           │ estimated row count: 10 (missing stats)
+│           │ estimated row count: 9 (missing stats)
 │           │ render check1: r_new IN ('us-east', 'us-west', 'eu-west')
 │           │ render r: r
 │           │ render s: s
@@ -2174,7 +2174,7 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (r_new, s_new, i_new, r, s, i, j)
-│               │ estimated row count: 10 (missing stats)
+│               │ estimated row count: 9 (missing stats)
 │               │ render r_new: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
 │               │ render s_new: 'baz'
 │               │ render i_new: 3
@@ -2185,9 +2185,10 @@ vectorized: true
 │               │
 │               └── • scan
 │                     columns: (r, s, i, j)
-│                     estimated row count: 10 (missing stats)
+│                     estimated row count: 9 (missing stats)
 │                     table: uniq_enum@primary
-│                     spans: /"\xc0"-/"\xc0"/PrefixEnd
+│                     spans: /"\xc0"/11-/"\xc0"/20/#
+│                     parallel
 │                     locking strength: for update
 │
 ├── • constraint-check
@@ -2212,11 +2213,11 @@ vectorized: true
 │                   │
 │                   └── • cross join (inner)
 │                       │ columns: (r_new, i_new, "lookup_join_const_col_@17")
-│                       │ estimated row count: 30 (missing stats)
+│                       │ estimated row count: 28 (missing stats)
 │                       │
 │                       ├── • project
 │                       │   │ columns: (r_new, i_new)
-│                       │   │ estimated row count: 10 (missing stats)
+│                       │   │ estimated row count: 9 (missing stats)
 │                       │   │
 │                       │   └── • scan buffer
 │                       │         columns: (r, s, i, j, r_new, s_new, i_new, check1)
@@ -2251,11 +2252,11 @@ vectorized: true
                     │
                     └── • cross join (inner)
                         │ columns: (r_new, s_new, i_new, j, "lookup_join_const_col_@27")
-                        │ estimated row count: 30 (missing stats)
+                        │ estimated row count: 28 (missing stats)
                         │
                         ├── • project
                         │   │ columns: (r_new, s_new, i_new, j)
-                        │   │ estimated row count: 10 (missing stats)
+                        │   │ estimated row count: 9 (missing stats)
                         │   │
                         │   └── • scan buffer
                         │         columns: (r, s, i, j, r_new, s_new, i_new, check1)

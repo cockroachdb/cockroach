@@ -168,15 +168,22 @@ var djangoBlocklists = blocklistsForVersion{
 }
 
 // Maintain that this list is alphabetized.
-var djangoBlocklist21_2 = blocklist{}
+var djangoBlocklist21_2 = djangoBlocklist21_1
 
-var djangoBlocklist21_1 = blocklist{}
+var djangoBlocklist21_1 = djangoBlocklist20_2
 
 var djangoBlocklist20_2 = blocklist{}
 
-var djangoIgnoreList21_2 = djangoIgnoreList21_1
+var djangoIgnoreList21_2 = blocklist{
+	"migrations.test_operations.OperationTests.test_alter_fk_non_fk":  "will be fixed in django-cockroachdb v3.2.2",
+	"schema.tests.SchemaTests.test_alter_field_db_collation":          "will be fixed in django-cockroachdb v3.2.2",
+	"schema.tests.SchemaTests.test_alter_field_type_and_db_collation": "will be fixed in django-cockroachdb v3.2.2",
+}
 
-var djangoIgnoreList21_1 = djangoIgnoreList20_2
+var djangoIgnoreList21_1 = blocklist{
+	"schema.tests.SchemaTests.test_alter_field_db_collation":          "will be fixed in django-cockroachdb v3.2.2",
+	"schema.tests.SchemaTests.test_alter_field_type_and_db_collation": "will be fixed in django-cockroachdb v3.2.2",
+}
 
 var djangoIgnoreList20_2 = blocklist{
 	"expressions.tests.BasicExpressionsTests.test_boolean_expression_combined":   "unknown",
