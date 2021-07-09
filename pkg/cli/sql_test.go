@@ -344,7 +344,7 @@ func Example_sql_lex() {
 			security.RootUser, c.ServingSQLAddr()))
 	defer func() {
 		if err := conn.Close(); err != nil {
-			fmt.Fprintf(stderr, "error closing connection: %v\n", err)
+			fmt.Printf("error closing connection: %v\n", err)
 		}
 	}()
 
@@ -372,7 +372,7 @@ select '''
 	// So open a dummy file.
 	f, err := ioutil.TempFile("", "input")
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		fmt.Println(err)
 		return
 	}
 	// Get the name and close it.
@@ -392,23 +392,23 @@ select '''
 	for _, test := range tests {
 		// Populate the test input.
 		if f, err = os.OpenFile(fname, os.O_WRONLY, 0644); err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Println(err)
 			return
 		}
 		if _, err := f.WriteString(test); err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Println(err)
 			return
 		}
 		f.Close()
 		// Make it available for reading.
 		if f, err = os.Open(fname); err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Println(err)
 			return
 		}
 		c := setupTestCliStateWithConn(conn)
-		err := c.runInteractive(f)
+		err := c.runInteractive(f, os.Stdout, os.Stdout)
 		if err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Println(err)
 		}
 	}
 
