@@ -13,8 +13,8 @@ package democluster
 import (
 	"context"
 	gosql "database/sql"
-	"io"
 
+	democlusterapi "github.com/cockroachdb/cockroach/pkg/cli/democluster/api"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -22,6 +22,8 @@ import (
 
 // DemoCluster represents a demo cluster.
 type DemoCluster interface {
+	democlusterapi.DemoCluster
+
 	// Start starts up the demo cluster.
 	// The runInitialSQL function argument is applied to the first server
 	// before the initialization completes.
@@ -51,33 +53,6 @@ type DemoCluster interface {
 
 	// SetupWorkload initializes the workload generator if defined.
 	SetupWorkload(ctx context.Context, licenseDone <-chan error) error
-
-	// ListDemoNodes produces a listing of servers on the specified
-	// writer. If justOne is specified, only the first node is listed.
-	// Listing is printed to 'w'. Errors/wranings are printed to 'ew'.
-	ListDemoNodes(w, ew io.Writer, justOne bool)
-
-	// AddNode creates a new node with the given locality string.
-	AddNode(ctx context.Context, localityString string) (newNodeID int32, err error)
-
-	// GetLocality retrieves the locality of the given node.
-	GetLocality(nodeID int32) string
-
-	// NumNodes returns the number of nodes.
-	NumNodes() int
-
-	// DrainAndShutdown shuts down a node gracefully.
-	DrainAndShutdown(ctx context.Context, nodeID int32) error
-
-	// RestartNode starts the given node. The node must be down
-	// prior to the call.
-	RestartNode(ctx context.Context, nodeID int32) error
-
-	// Decommission decommissions the given node.
-	Decommission(ctx context.Context, nodeID int32) error
-
-	// Recommission recommissions the given node.
-	Recommission(ctx context.Context, nodeID int32) error
 }
 
 // GetAndApplyLicense is not implemented in order to keep OSS/BSL builds successful.

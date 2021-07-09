@@ -102,6 +102,7 @@ go_library(
         "//pkg/cli/clisqlclient",
         "//pkg/cli/clisqlexec",
         "//pkg/cli/democluster",
+        "//pkg/cli/democluster/api",
         "//pkg/cli/exit",
         "//pkg/cli/syncbench",
         "//pkg/clusterversion",
