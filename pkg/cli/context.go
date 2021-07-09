@@ -199,6 +199,7 @@ func setCliContextDefaults() {
 	// other client commands are non-interactive, regardless of whether
 	// the standard input is a terminal.
 	cliCtx.IsInteractive = false
+	cliCtx.EmbeddedMode = false
 	cliCtx.cmdTimeout = 0 // no timeout
 	cliCtx.clientConnHost = ""
 	cliCtx.clientConnPort = base.DefaultPort
@@ -228,7 +229,6 @@ func setSQLConnContextDefaults() {
 	// See also setCLIDefaultForTests() in cli_test.go.
 	sqlConnCtx.DebugMode = false
 	sqlConnCtx.Echo = false
-	sqlConnCtx.EmbeddedMode = false
 	sqlConnCtx.EnableServerExecutionTimings = false
 }
 

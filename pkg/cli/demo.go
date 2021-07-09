@@ -174,7 +174,7 @@ func checkDemoConfiguration(
 			}
 		} else {
 			demoCtx.NumNodes = 9
-			printlnUnlessEmbedded(
+			cliCtx.PrintlnUnlessEmbedded(
 				// Only explain how the configuration was interpreted if the
 				// user has control over it.
 				`#
@@ -242,14 +242,14 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 	checkInteractive(cmdIn)
 
 	if cliCtx.IsInteractive {
-		printfUnlessEmbedded(`#
+		cliCtx.PrintfUnlessEmbedded(`#
 # Welcome to the CockroachDB demo database!
 #
 # You are connected to a temporary, in-memory CockroachDB cluster of %d node%s.
 `, demoCtx.NumNodes, util.Pluralize(int64(demoCtx.NumNodes)))
 
 		if demoCtx.SimulateLatency {
-			printfUnlessEmbedded(
+			cliCtx.PrintfUnlessEmbedded(
 				`# Communication between nodes will simulate real world latencies.
 #
 # WARNING: the use of --%s is experimental. Some features may not work as expected.
@@ -261,11 +261,11 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 		// Only print details about the telemetry configuration if the
 		// user has control over it.
 		if demoCtx.DisableTelemetry {
-			printlnUnlessEmbedded("#\n# Telemetry and automatic license acquisition disabled by configuration.")
+			cliCtx.PrintlnUnlessEmbedded("#\n# Telemetry and automatic license acquisition disabled by configuration.")
 		} else if demoCtx.DisableLicenseAcquisition {
-			printlnUnlessEmbedded("#\n# Enterprise features disabled by OSS-only build.")
+			cliCtx.PrintlnUnlessEmbedded("#\n# Enterprise features disabled by OSS-only build.")
 		} else {
-			printlnUnlessEmbedded("#\n# This demo session will attempt to enable enterprise features\n" +
+			cliCtx.PrintlnUnlessEmbedded("#\n# This demo session will attempt to enable enterprise features\n" +
 				"# by acquiring a temporary license from Cockroach Labs in the background.\n" +
 				"# To disable this behavior, set the environment variable\n" +
 				"# COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=true.")
@@ -294,7 +294,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 
 		var nodeList strings.Builder
 		c.ListDemoNodes(&nodeList, stderr, true /* justOne */)
-		printlnUnlessEmbedded(
+		cliCtx.PrintlnUnlessEmbedded(
 			// Only print the server details when the shell is not embedded;
 			// if embedded, the embedding platform owns the network
 			// configuration.

@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "context.go",
         "doc.go",
+        "embedded.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli/clicfg",
     visibility = ["//visibility:public"],

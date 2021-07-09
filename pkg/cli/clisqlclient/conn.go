@@ -315,7 +315,7 @@ func (c *sqlConn) checkServerMetadata() error {
 		// change their mind upon seeing the information.
 		return nil
 	}
-	if c.connCtx.EmbeddedMode {
+	if c.connCtx.EmbeddedMode() {
 		// Version reporting is non-actionable if the user does
 		// not have control over how the server and client are run.
 		return nil

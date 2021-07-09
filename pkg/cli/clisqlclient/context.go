@@ -33,12 +33,6 @@ type Context struct {
 	// more verbose (sets echo).
 	DebugMode bool
 
-	// EmbeddedMode, when set, reduces the amount of informational
-	// messages printed out to exclude details that are not under user's
-	// control when the client command is run by a playground
-	// environment.
-	EmbeddedMode bool
-
 	// EnableServerExecutionTimings determines whether to request (and
 	// display) server-side execution timings in the CLI.
 	EnableServerExecutionTimings bool
@@ -49,4 +43,11 @@ type Context struct {
 // from clicfg.Context if available.
 func (sqlConnCtx *Context) IsInteractive() bool {
 	return sqlConnCtx.CliCtx != nil && sqlConnCtx.CliCtx.IsInteractive
+}
+
+// EmbeddedMode returns true if the connection configuration
+// is for an embedded session. This exposes the field
+// from clicfg.Context if available.
+func (sqlConnCtx *Context) EmbeddedMode() bool {
+	return sqlConnCtx.CliCtx != nil && sqlConnCtx.CliCtx.EmbeddedMode
 }
