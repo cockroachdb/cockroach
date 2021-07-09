@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -2315,6 +2316,15 @@ func (s Span) Valid() bool {
 	return true
 }
 
+// SpanOverhead is the overhead of Span in bytes.
+const SpanOverhead = int64(unsafe.Sizeof(Span{}))
+
+// MemUsage returns the size of the Span in bytes for memory accounting
+// purposes.
+func (s Span) MemUsage() int64 {
+	return SpanOverhead + int64(cap(s.Key)) + int64(cap(s.EndKey))
+}
+
 // Spans is a slice of spans.
 type Spans []Span
 
@@ -2333,6 +2343,22 @@ func (a Spans) ContainsKey(key Key) bool {
 	}
 
 	return false
+}
+
+// SpansOverhead is the overhead of Spans in bytes.
+const SpansOverhead = int64(unsafe.Sizeof(Spans{}))
+
+// MemUsage returns the size of the Spans in bytes for memory accounting
+// purposes.
+func (a Spans) MemUsage() int64 {
+	// Slice the full capacity of a so we can account for the memory
+	// used by spans past the length of a.
+	aCap := a[:cap(a)]
+	size := SpansOverhead
+	for i := range aCap {
+		size += aCap[i].MemUsage()
+	}
+	return size
 }
 
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.
