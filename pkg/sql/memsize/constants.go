@@ -37,6 +37,9 @@ const (
 	// Int64 is the in-memory size of an int64 in bytes.
 	Int64 = int64(unsafe.Sizeof(int64(0)))
 
+	// Uint64 is the in-memory size of a uint64 in bytes.
+	Uint64 = int64(unsafe.Sizeof(uint64(0)))
+
 	// Float64 is the in-memory size of a float64 in bytes.
 	Float64 = int64(unsafe.Sizeof(float64(0)))
 
