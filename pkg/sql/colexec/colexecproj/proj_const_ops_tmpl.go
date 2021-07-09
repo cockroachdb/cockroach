@@ -274,9 +274,9 @@ func GetProjection_CONST_SIDEConstOperator(
 	// {{else}}
 	leftType, rightType := inputTypes[colIdx], constType
 	// {{end}}
-	switch op.(type) {
+	switch op := op.(type) {
 	case tree.BinaryOperator:
-		switch op.(tree.BinaryOperator).Symbol {
+		switch op.Symbol {
 		// {{range .BinOps}}
 		case tree._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
@@ -341,7 +341,7 @@ func GetProjection_CONST_SIDEConstOperator(
 			// Tuple comparison has special null-handling semantics, so we will
 			// fallback to the default comparison operator if either of the
 			// input vectors is of a tuple type.
-			switch op {
+			switch op.Symbol {
 			// {{range .CmpOps}}
 			case tree._NAME:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {

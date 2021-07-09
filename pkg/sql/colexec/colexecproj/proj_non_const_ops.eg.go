@@ -61728,9 +61728,9 @@ func GetProjectionOperator(
 	}
 
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
-	switch op.(type) {
+	switch op := op.(type) {
 	case tree.BinaryOperator:
-		switch op.(tree.BinaryOperator).Symbol {
+		switch op.Symbol {
 		case tree.Bitand:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
@@ -63137,7 +63137,7 @@ func GetProjectionOperator(
 			// Tuple comparison has special null-handling semantics, so we will
 			// fallback to the default comparison operator if either of the
 			// input vectors is of a tuple type.
-			switch op {
+			switch op.Symbol {
 			case tree.EQ:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:

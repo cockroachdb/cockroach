@@ -105,7 +105,7 @@ type Operator interface {
 
 var _ Operator = (*UnaryOperator)(nil)
 var _ Operator = (*BinaryOperator)(nil)
-var _ Operator = ComparisonOperator(0)
+var _ Operator = (*ComparisonOperator)(nil)
 
 // SubqueryExpr is an interface used to identify an expression as a subquery.
 // It is implemented by both tree.Subquery and optbuilder.subquery, and is
@@ -352,14 +352,33 @@ func StripParens(expr Expr) Expr {
 	return expr
 }
 
-// ComparisonOperator represents a binary operator.
-type ComparisonOperator int
+// ComparisonOperator represents a binary operator which returns a bool.
+type ComparisonOperator struct {
+	Symbol ComparisonOperatorSymbol
+	// IsExplicitOperator is true if OPERATOR(symbol) is used.
+	IsExplicitOperator bool
+}
+
+// MakeComparisonOperator creates a ComparisonOperator given a symbol.
+func MakeComparisonOperator(symbol ComparisonOperatorSymbol) ComparisonOperator {
+	return ComparisonOperator{Symbol: symbol}
+}
+
+func (o ComparisonOperator) String() string {
+	if o.IsExplicitOperator {
+		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
+	}
+	return o.Symbol.String()
+}
 
 func (ComparisonOperator) operator() {}
 
+// ComparisonOperatorSymbol represents a comparison operator symbol.
+type ComparisonOperatorSymbol int
+
 // ComparisonExpr.Operator
 const (
-	EQ ComparisonOperator = iota
+	EQ ComparisonOperatorSymbol = iota
 	LT
 	GT
 	LE
@@ -403,10 +422,10 @@ const (
 	Some
 	All
 
-	NumComparisonOperators
+	NumComparisonOperatorSymbols
 )
 
-var _ = NumComparisonOperators
+var _ = NumComparisonOperatorSymbols
 
 var comparisonOpName = [...]string{
 	EQ:           "=",
@@ -441,8 +460,8 @@ var comparisonOpName = [...]string{
 	All:               "ALL",
 }
 
-func (i ComparisonOperator) String() string {
-	if i < 0 || i > ComparisonOperator(len(comparisonOpName)-1) {
+func (i ComparisonOperatorSymbol) String() string {
+	if i < 0 || i > ComparisonOperatorSymbol(len(comparisonOpName)-1) {
 		return fmt.Sprintf("ComparisonOp(%d)", i)
 	}
 	return comparisonOpName[i]
@@ -450,13 +469,13 @@ func (i ComparisonOperator) String() string {
 
 // Inverse returns the inverse of this comparison operator if it exists. The
 // second return value is true if it exists, and false otherwise.
-func (i ComparisonOperator) Inverse() (ComparisonOperator, bool) {
+func (i ComparisonOperatorSymbol) Inverse() (ComparisonOperatorSymbol, bool) {
 	inverse, ok := cmpOpsInverse[i]
 	return inverse, ok
 }
 
 // HasSubOperator returns if the ComparisonOperator is used with a sub-operator.
-func (i ComparisonOperator) HasSubOperator() bool {
+func (i ComparisonOperatorSymbol) HasSubOperator() bool {
 	switch i {
 	case Any:
 	case Some:
@@ -485,12 +504,12 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 	// IS and IS NOT are equivalent to IS NOT DISTINCT FROM and IS DISTINCT
 	// FROM, respectively, when the RHS is true or false. We prefer the less
 	// verbose IS and IS NOT in those cases.
-	if node.Operator == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS NOT"
-	} else if node.Operator == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS"
 	}
-	if node.Operator.HasSubOperator() {
+	if node.Operator.Symbol.HasSubOperator() {
 		binExprFmtWithParenAndSubOp(ctx, node.Left, node.SubOperator.String(), opStr, node.Right)
 	} else {
 		binExprFmtWithParen(ctx, node.Left, opStr, node.Right, true)
@@ -563,7 +582,7 @@ func NewTypedIfErrExpr(cond, orElse, errCode TypedExpr) *IfErrExpr {
 func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := FoldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
-	switch node.Operator {
+	switch node.Operator.Symbol {
 	case Any, Some, All:
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = FoldComparisonExpr(node.SubOperator, nil, nil)
@@ -585,7 +604,7 @@ func (node *ComparisonExpr) memoizeFn() {
 		}
 	}
 
-	fn, ok := CmpOps[fOp].LookupImpl(leftRet, rightRet)
+	fn, ok := CmpOps[fOp.Symbol].LookupImpl(leftRet, rightRet)
 	if !ok {
 		panic(errors.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
@@ -1102,8 +1121,8 @@ func (node *TypedDummy) Eval(*EvalContext) (Datum, error) {
 // BinaryOperator represents a unary operator used in a BinaryExpr.
 type BinaryOperator struct {
 	Symbol BinaryOperatorSymbol
-	// IsOperator is true if OPERATOR(symbol) is used.
-	IsOperator bool
+	// IsExplicitOperator is true if OPERATOR(symbol) is used.
+	IsExplicitOperator bool
 }
 
 // MakeBinaryOperator creates a BinaryOperator given a symbol.
@@ -1112,7 +1131,7 @@ func MakeBinaryOperator(symbol BinaryOperatorSymbol) BinaryOperator {
 }
 
 func (o BinaryOperator) String() string {
-	if o.IsOperator {
+	if o.IsExplicitOperator {
 		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
 	}
 	return o.Symbol.String()
@@ -1276,8 +1295,8 @@ func (node *BinaryExpr) Format(ctx *FmtCtx) {
 // UnaryOperator represents a unary operator used in a UnaryExpr.
 type UnaryOperator struct {
 	Symbol UnaryOperatorSymbol
-	// IsOperator is true if OPERATOR(symbol) is used.
-	IsOperator bool
+	// IsExplicitOperator is true if OPERATOR(symbol) is used.
+	IsExplicitOperator bool
 }
 
 // MakeUnaryOperator creates a UnaryOperator given a symbol.
@@ -1286,7 +1305,7 @@ func MakeUnaryOperator(symbol UnaryOperatorSymbol) UnaryOperator {
 }
 
 func (o UnaryOperator) String() string {
-	if o.IsOperator {
+	if o.IsExplicitOperator {
 		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
 	}
 	return o.Symbol.String()

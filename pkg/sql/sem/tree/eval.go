@@ -2011,8 +2011,10 @@ func (op *CmpOp) preferred() bool {
 	return op.isPreferred
 }
 
-func cmpOpFixups(cmpOps map[ComparisonOperator]cmpOpOverload) map[ComparisonOperator]cmpOpOverload {
-	findVolatility := func(op ComparisonOperator, t *types.T) Volatility {
+func cmpOpFixups(
+	cmpOps map[ComparisonOperatorSymbol]cmpOpOverload,
+) map[ComparisonOperatorSymbol]cmpOpOverload {
+	findVolatility := func(op ComparisonOperatorSymbol, t *types.T) Volatility {
 		for _, impl := range cmpOps[EQ] {
 			o := impl.(*CmpOp)
 			if o.LeftType.Equivalent(t) && o.RightType.Equivalent(t) {
@@ -2105,7 +2107,7 @@ func makeIsFn(a, b *types.T, v Volatility) *CmpOp {
 }
 
 // CmpOps contains the comparison operations indexed by operation type.
-var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
+var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 	EQ: {
 		// Single-type comparisons.
 		makeEqFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
@@ -2157,7 +2159,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.AnyTuple,
 			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), EQ), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), MakeComparisonOperator(EQ)), nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -2213,7 +2215,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.AnyTuple,
 			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LT), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), MakeComparisonOperator(LT)), nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -2269,7 +2271,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.AnyTuple,
 			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LE), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), MakeComparisonOperator(LE)), nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -2339,7 +2341,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				if left == DNull || right == DNull {
 					return MakeDBool(left == DNull && right == DNull), nil
 				}
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), IsNotDistinctFrom), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), MakeComparisonOperator(IsNotDistinctFrom)), nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -2672,22 +2674,22 @@ func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bo
 
 // This map contains the inverses for operators in the CmpOps map that have
 // inverses.
-var cmpOpsInverse map[ComparisonOperator]ComparisonOperator
+var cmpOpsInverse map[ComparisonOperatorSymbol]ComparisonOperatorSymbol
 
 func init() {
-	cmpOpsInverse = make(map[ComparisonOperator]ComparisonOperator)
+	cmpOpsInverse = make(map[ComparisonOperatorSymbol]ComparisonOperatorSymbol)
 	for cmpOpIdx := range comparisonOpName {
-		cmpOp := ComparisonOperator(cmpOpIdx)
-		newOp, _, _, _, _ := FoldComparisonExpr(cmpOp, DNull, DNull)
-		if newOp != cmpOp {
-			cmpOpsInverse[newOp] = cmpOp
-			cmpOpsInverse[cmpOp] = newOp
+		cmpOp := ComparisonOperatorSymbol(cmpOpIdx)
+		newOp, _, _, _, _ := FoldComparisonExpr(MakeComparisonOperator(cmpOp), DNull, DNull)
+		if newOp.Symbol != cmpOp {
+			cmpOpsInverse[newOp.Symbol] = cmpOp
+			cmpOpsInverse[cmpOp] = newOp.Symbol
 		}
 	}
 }
 
 func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
-	switch op {
+	switch op.Symbol {
 	case EQ, IsNotDistinctFrom:
 		return MakeDBool(cmp == 0)
 	case LT:
@@ -2704,7 +2706,7 @@ func cmpOpScalarFn(ctx *EvalContext, left, right Datum, op ComparisonOperator) D
 	// be handled differently during SQL comparison evaluation than they should when
 	// ordering Datum values.
 	if left == DNull || right == DNull {
-		switch op {
+		switch op.Symbol {
 		case IsNotDistinctFrom:
 			return MakeDBool((left == DNull) == (right == DNull))
 
@@ -2718,16 +2720,16 @@ func cmpOpScalarFn(ctx *EvalContext, left, right Datum, op ComparisonOperator) D
 }
 
 func cmpOpScalarEQFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, EQ), nil
+	return cmpOpScalarFn(ctx, left, right, MakeComparisonOperator(EQ)), nil
 }
 func cmpOpScalarLTFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, LT), nil
+	return cmpOpScalarFn(ctx, left, right, MakeComparisonOperator(LT)), nil
 }
 func cmpOpScalarLEFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, LE), nil
+	return cmpOpScalarFn(ctx, left, right, MakeComparisonOperator(LE)), nil
 }
 func cmpOpScalarIsFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, IsNotDistinctFrom), nil
+	return cmpOpScalarFn(ctx, left, right, MakeComparisonOperator(IsNotDistinctFrom)), nil
 }
 
 func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) Datum {
@@ -2738,7 +2740,7 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 		// Like with cmpOpScalarFn, check for values that need to be handled
 		// differently than when ordering Datums.
 		if leftElem == DNull || rightElem == DNull {
-			switch op {
+			switch op.Symbol {
 			case EQ:
 				// If either Datum is NULL and the op is EQ, we continue the
 				// comparison and the result is only NULL if the other (non-NULL)
@@ -2826,7 +2828,7 @@ func makeEvalTupleIn(typ *types.T, v Volatility) *CmpOp {
 						sawNull = true
 					} else {
 						// Use the EQ function which properly handles NULLs.
-						if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), EQ); res == DNull {
+						if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), MakeComparisonOperator(EQ)); res == DNull {
 							sawNull = true
 						} else if res == DBoolTrue {
 							return DBoolTrue, nil
@@ -2861,7 +2863,7 @@ func makeEvalTupleIn(typ *types.T, v Volatility) *CmpOp {
 func evalDatumsCmp(
 	ctx *EvalContext, op, subOp ComparisonOperator, fn *CmpOp, left Datum, right Datums,
 ) (Datum, error) {
-	all := op == All
+	all := op.Symbol == All
 	any := !all
 	sawNull := false
 	for _, elem := range right {
@@ -3810,7 +3812,7 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 			if err != nil {
 				return nil, err
 			}
-			d, err := evalComparison(ctx, EQ, val, arg)
+			d, err := evalComparison(ctx, MakeComparisonOperator(EQ), val, arg)
 			if err != nil {
 				return nil, err
 			}
@@ -3958,7 +3960,7 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 
 	op := expr.Operator
-	if op.HasSubOperator() {
+	if op.Symbol.HasSubOperator() {
 		return EvalComparisonExprWithSubOperator(ctx, expr, left, right)
 	}
 
@@ -4202,7 +4204,7 @@ func (expr *NullIfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	cond, err := evalComparison(ctx, EQ, expr1, expr2)
+	cond, err := evalComparison(ctx, MakeComparisonOperator(EQ), expr1, expr2)
 	if err != nil {
 		return nil, err
 	}
@@ -4544,7 +4546,7 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 	}
 	ltype := left.ResolvedType()
 	rtype := right.ResolvedType()
-	if fn, ok := CmpOps[op].LookupImpl(ltype, rtype); ok {
+	if fn, ok := CmpOps[op.Symbol].LookupImpl(ltype, rtype); ok {
 		return fn.Fn(ctx, left, right)
 	}
 	return nil, pgerror.Newf(
@@ -4558,39 +4560,39 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 func FoldComparisonExpr(
 	op ComparisonOperator, left, right Expr,
 ) (newOp ComparisonOperator, newLeft Expr, newRight Expr, flipped bool, not bool) {
-	switch op {
+	switch op.Symbol {
 	case NE:
 		// NE(left, right) is implemented as !EQ(left, right).
-		return EQ, left, right, false, true
+		return MakeComparisonOperator(EQ), left, right, false, true
 	case GT:
 		// GT(left, right) is implemented as LT(right, left)
-		return LT, right, left, true, false
+		return MakeComparisonOperator(LT), right, left, true, false
 	case GE:
 		// GE(left, right) is implemented as LE(right, left)
-		return LE, right, left, true, false
+		return MakeComparisonOperator(LE), right, left, true, false
 	case NotIn:
 		// NotIn(left, right) is implemented as !IN(left, right)
-		return In, left, right, false, true
+		return MakeComparisonOperator(In), left, right, false, true
 	case NotLike:
 		// NotLike(left, right) is implemented as !Like(left, right)
-		return Like, left, right, false, true
+		return MakeComparisonOperator(Like), left, right, false, true
 	case NotILike:
 		// NotILike(left, right) is implemented as !ILike(left, right)
-		return ILike, left, right, false, true
+		return MakeComparisonOperator(ILike), left, right, false, true
 	case NotSimilarTo:
 		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
-		return SimilarTo, left, right, false, true
+		return MakeComparisonOperator(SimilarTo), left, right, false, true
 	case NotRegMatch:
 		// NotRegMatch(left, right) is implemented as !RegMatch(left, right)
-		return RegMatch, left, right, false, true
+		return MakeComparisonOperator(RegMatch), left, right, false, true
 	case NotRegIMatch:
 		// NotRegIMatch(left, right) is implemented as !RegIMatch(left, right)
-		return RegIMatch, left, right, false, true
+		return MakeComparisonOperator(RegIMatch), left, right, false, true
 	case IsDistinctFrom:
 		// IsDistinctFrom(left, right) is implemented as !IsNotDistinctFrom(left, right)
 		// Note: this seems backwards, but IS NOT DISTINCT FROM is an extended
 		// version of IS and IS DISTINCT FROM is an extended version of IS NOT.
-		return IsNotDistinctFrom, left, right, false, true
+		return MakeComparisonOperator(IsNotDistinctFrom), left, right, false, true
 	}
 	return op, left, right, false, false
 }
@@ -5405,9 +5407,9 @@ func PickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) 
 		var eval Datum
 		var err error
 		if greatest {
-			eval, err = evalComparison(ctx, LT, g, d)
+			eval, err = evalComparison(ctx, MakeComparisonOperator(LT), g, d)
 		} else {
-			eval, err = evalComparison(ctx, LT, d, g)
+			eval, err = evalComparison(ctx, MakeComparisonOperator(LT), d, g)
 		}
 		if err != nil {
 			return nil, err

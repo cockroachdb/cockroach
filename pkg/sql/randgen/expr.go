@@ -80,7 +80,7 @@ func isAllowedPartialIndexColType(columnTableDef *tree.ColumnTableDef) bool {
 	}
 }
 
-var cmpOps = []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GE, tree.GT}
+var cmpOps = []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GE, tree.GT}
 
 // randBoolColumnExpr returns a random boolean expression with the given column.
 func randBoolColumnExpr(
@@ -100,7 +100,7 @@ func randBoolColumnExpr(
 	// Otherwise, return a comparison expression with a random comparison
 	// operator, the column as the left side, and an interesting datum as the
 	// right side.
-	op := cmpOps[rng.Intn(len(cmpOps))]
+	op := tree.MakeComparisonOperator(cmpOps[rng.Intn(len(cmpOps))])
 	datum := randInterestingDatum(rng, t)
 	return &tree.ComparisonExpr{Operator: op, Left: varExpr, Right: datum}
 }

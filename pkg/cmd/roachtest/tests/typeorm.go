@@ -70,7 +70,7 @@ func registerTypeORM(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get install make python3 libpq-dev python-dev gcc g++ `+
+			`sudo apt-get install -y make python3 libpq-dev python-dev gcc g++ `+
 				`software-properties-common build-essential`,
 		); err != nil {
 			t.Fatal(err)
@@ -88,7 +88,7 @@ func registerTypeORM(r registry.Registry) {
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "install nodejs and npm", `sudo apt-get install nodejs`,
+			ctx, t, c, node, "install nodejs and npm", `sudo apt-get install -y nodejs`,
 		); err != nil {
 			t.Fatal(err)
 		}

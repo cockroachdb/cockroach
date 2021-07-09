@@ -36,7 +36,7 @@ var BinaryOpName = map[tree.BinaryOperatorSymbol]string{
 
 // ComparisonOpName is a mapping from all comparison operators that are
 // supported by the vectorized engine to their names.
-var ComparisonOpName = map[tree.ComparisonOperator]string{
+var ComparisonOpName = map[tree.ComparisonOperatorSymbol]string{
 	tree.EQ: "EQ",
 	tree.NE: "NE",
 	tree.LT: "LT",

@@ -741,7 +741,7 @@ func (expr *ComparisonExpr) TypeCheck(
 	var cmpOp *CmpOp
 	var alwaysNull bool
 	var err error
-	if expr.Operator.HasSubOperator() {
+	if expr.Operator.Symbol.HasSubOperator() {
 		leftTyped, rightTyped, cmpOp, alwaysNull, err = typeCheckComparisonOpWithSubOperator(
 			ctx,
 			semaCtx,
@@ -1311,16 +1311,16 @@ func (expr *AllColumnsSelector) TypeCheck(
 func (expr *RangeCond) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	leftFromTyped, fromTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, GT, expr.Left, expr.From)
+	leftFromTyped, fromTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, MakeComparisonOperator(GT), expr.Left, expr.From)
 	if err != nil {
 		return nil, err
 	}
-	leftToTyped, toTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, LT, expr.Left, expr.To)
+	leftToTyped, toTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, MakeComparisonOperator(LT), expr.Left, expr.To)
 	if err != nil {
 		return nil, err
 	}
 	// Ensure that the boundaries of the comparison are well typed.
-	_, _, _, _, err = typeCheckComparisonOp(ctx, semaCtx, LT, expr.From, expr.To)
+	_, _, _, _, err = typeCheckComparisonOp(ctx, semaCtx, MakeComparisonOperator(LT), expr.From, expr.To)
 	if err != nil {
 		return nil, err
 	}
@@ -1818,7 +1818,7 @@ func typeCheckComparisonOpWithSubOperator(
 	// Determine the set of comparisons are possible for the sub-operation,
 	// which will be memoized.
 	foldedOp, _, _, _, _ := FoldComparisonExpr(subOp, nil, nil)
-	ops := CmpOps[foldedOp]
+	ops := CmpOps[foldedOp.Symbol]
 
 	var cmpTypeLeft, cmpTypeRight *types.T
 	var leftTyped, rightTyped TypedExpr
@@ -1964,14 +1964,14 @@ func typeCheckComparisonOp(
 	ctx context.Context, semaCtx *SemaContext, op ComparisonOperator, left, right Expr,
 ) (_ TypedExpr, _ TypedExpr, _ *CmpOp, alwaysNull bool, _ error) {
 	foldedOp, foldedLeft, foldedRight, switched, _ := FoldComparisonExpr(op, left, right)
-	ops := CmpOps[foldedOp]
+	ops := CmpOps[foldedOp.Symbol]
 
 	_, leftIsTuple := foldedLeft.(*Tuple)
 	rightTuple, rightIsTuple := foldedRight.(*Tuple)
 
 	_, rightIsSubquery := foldedRight.(SubqueryExpr)
 	switch {
-	case foldedOp == In && rightIsTuple:
+	case foldedOp.Symbol == In && rightIsTuple:
 		sameTypeExprs := make([]Expr, len(rightTuple.Exprs)+1)
 		sameTypeExprs[0] = foldedLeft
 		copy(sameTypeExprs[1:], rightTuple.Exprs)
@@ -2003,7 +2003,7 @@ func typeCheckComparisonOp(
 		}
 		return typedLeft, rightTuple, fn, false, nil
 
-	case foldedOp == In && rightIsSubquery:
+	case foldedOp.Symbol == In && rightIsSubquery:
 		typedLeft, err := foldedLeft.TypeCheck(ctx, semaCtx, types.Any)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)

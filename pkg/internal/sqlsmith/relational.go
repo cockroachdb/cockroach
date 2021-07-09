@@ -235,7 +235,7 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 	for (cond == nil || s.coin()) && len(available) > 0 {
 		v := available[0]
 		available = available[1:]
-		expr := tree.NewTypedComparisonExpr(tree.EQ, v[0], v[1])
+		expr := tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(tree.EQ), v[0], v[1])
 		if cond == nil {
 			cond = expr
 		} else {
@@ -337,7 +337,7 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 		v := cols[0]
 		cols = cols[1:]
 		expr := tree.NewTypedComparisonExpr(
-			tree.EQ,
+			tree.MakeComparisonOperator(tree.EQ),
 			typedParen(v[0].item, v[0].typ),
 			typedParen(v[1].item, v[1].typ),
 		)
@@ -445,7 +445,7 @@ func (s *Smither) randDropBehavior() tree.DropBehavior {
 	return dropBehaviors[s.rnd.Intn(len(dropBehaviors))]
 }
 
-var stringComparisons = []tree.ComparisonOperator{
+var stringComparisons = []tree.ComparisonOperatorSymbol{
 	tree.Like,
 	tree.NotLike,
 	tree.ILike,
@@ -459,7 +459,7 @@ var stringComparisons = []tree.ComparisonOperator{
 }
 
 func (s *Smither) randStringComparison() tree.ComparisonOperator {
-	return stringComparisons[s.rnd.Intn(len(stringComparisons))]
+	return tree.MakeComparisonOperator(stringComparisons[s.rnd.Intn(len(stringComparisons))])
 }
 
 // makeSelectTable returns a TableExpr of the form `(SELECT ...)`, which

@@ -75,7 +75,7 @@ func TestSelLTInt64Int64(t *testing.T) {
 func TestGetSelectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	cmpOp := tree.LT
+	cmpOp := tree.MakeComparisonOperator(tree.LT)
 	var input colexecop.Operator
 	colIdx := 3
 	inputTypes := make([]*types.T, colIdx+1)
@@ -103,7 +103,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	cmpOp := tree.LT
+	cmpOp := tree.MakeComparisonOperator(tree.LT)
 	var input colexecop.Operator
 	colIdx := 3
 	inputTypes := make([]*types.T, colIdx+1)
@@ -132,7 +132,7 @@ func TestGetSelectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ct := types.Int2
-	cmpOp := tree.GE
+	cmpOp := tree.MakeComparisonOperator(tree.GE)
 	var input colexecop.Operator
 	col1Idx := 5
 	col2Idx := 7
@@ -209,7 +209,7 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 		func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
 			constArg := tree.DInt(0)
 			return GetSelectionConstOperator(
-				tree.LT, source, inputTypes, 0, /* colIdx */
+				tree.MakeComparisonOperator(tree.LT), source, inputTypes, 0, /* colIdx */
 				&constArg, nil /* evalCtx */, nil, /* cmpExpr */
 			)
 		},
@@ -223,7 +223,7 @@ func BenchmarkSelLTInt64Int64Op(b *testing.B) {
 		b,
 		func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
 			return GetSelectionOperator(
-				tree.LT, source, inputTypes, 0 /* col1Idx */, 1, /* col2Idx */
+				tree.MakeComparisonOperator(tree.LT), source, inputTypes, 0 /* col1Idx */, 1, /* col2Idx */
 				nil /* evalCtx */, nil, /* cmpExpr */
 			)
 		},
@@ -237,7 +237,7 @@ func BenchmarkSelLTBytesBytesOp(b *testing.B) {
 		b,
 		func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
 			return GetSelectionOperator(
-				tree.LT, source, inputTypes, 0 /* col1Idx */, 1, /* col2Idx */
+				tree.MakeComparisonOperator(tree.LT), source, inputTypes, 0 /* col1Idx */, 1, /* col2Idx */
 				nil /* evalCtx */, nil, /* cmpExpr */
 			)
 		},

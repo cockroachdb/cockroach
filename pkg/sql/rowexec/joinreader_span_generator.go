@@ -318,7 +318,7 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 		return g.fillInIndexColInfos(t.Right.(tree.TypedExpr))
 
 	case *tree.ComparisonExpr:
-		if t.Operator != tree.EQ && t.Operator != tree.In {
+		if t.Operator.Symbol != tree.EQ && t.Operator.Symbol != tree.In {
 			return errors.AssertionFailedf("comparison operator must be EQ or In. Found %s", t.Operator)
 		}
 
