@@ -267,7 +267,16 @@ func GetWorkMemLimit(config *ServerConfig) int64 {
 	}
 	if config.TestingKnobs.ForceDiskSpill {
 		return 1
-	} else if config.TestingKnobs.MemoryLimitBytes != 0 {
+	}
+	return GetWorkMemLimitNoDiskSpill(config)
+}
+
+// GetWorkMemLimitNoDiskSpill returns the number of bytes determining the amount
+// of RAM available to a single processor or operator. This function should be
+// used instead of GetWorkMemLimit if the processor cannot spill to disk,
+// since ServerConfig.TestingKnobs.ForceDiskSpill is ignored by this function.
+func GetWorkMemLimitNoDiskSpill(config *ServerConfig) int64 {
+	if config.TestingKnobs.MemoryLimitBytes != 0 {
 		return config.TestingKnobs.MemoryLimitBytes
 	}
 	return SettingWorkMemBytes.Get(&config.Settings.SV)
