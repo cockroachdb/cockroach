@@ -24,8 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -244,27 +242,6 @@ func maybeShoutError(
 ) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		err := wrapped(cmd, args)
-		return checkAndMaybeShout(err)
+		return clierror.CheckAndMaybeShout(err)
 	}
-}
-
-func checkAndMaybeShout(err error) error {
-	return checkAndMaybeShoutTo(err, log.Ops.Shoutf)
-}
-
-func checkAndMaybeShoutTo(
-	err error, logger func(context.Context, log.Severity, string, ...interface{}),
-) error {
-	if err == nil {
-		return nil
-	}
-	severity := severity.ERROR
-	cause := err
-	var ec *clierror.Error
-	if errors.As(err, &ec) {
-		severity = ec.GetSeverity()
-		cause = ec.Unwrap()
-	}
-	logger(context.Background(), severity, "%v", cause)
-	return err
 }
