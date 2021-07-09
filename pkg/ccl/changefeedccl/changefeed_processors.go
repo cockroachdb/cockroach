@@ -526,16 +526,17 @@ func (ca *changeAggregator) maybeFlush(force bool) error {
 
 	// Iterate spans that have updated timestamp ahead of the last flush timestamp and
 	// emit resolved span records.
-	var err error
+	var batch jobspb.ResolvedSpans
 	ca.frontier.UpdatedEntries(ca.lastFlush, func(s roachpb.Span, ts hlc.Timestamp) span.OpResult {
-		err = ca.emitResolved(s, ts, ca.frontier.boundaryTypeAt(ts))
-		if err != nil {
-			return span.StopMatch
-		}
+		batch.ResolvedSpans = append(batch.ResolvedSpans, jobspb.ResolvedSpan{
+			Span:         s,
+			Timestamp:    ts,
+			BoundaryType: ca.frontier.boundaryTypeAt(ts),
+		})
 		return span.ContinueMatch
 	})
 
-	if err != nil {
+	if err := ca.emitResolved(batch); err != nil {
 		return err
 	}
 
@@ -544,15 +545,8 @@ func (ca *changeAggregator) maybeFlush(force bool) error {
 	return nil
 }
 
-func (ca *changeAggregator) emitResolved(
-	s roachpb.Span, ts hlc.Timestamp, boundary jobspb.ResolvedSpan_BoundaryType,
-) error {
-	var resolvedSpan jobspb.ResolvedSpan
-	resolvedSpan.Span = s
-	resolvedSpan.Timestamp = ts
-	resolvedSpan.BoundaryType = boundary
-
-	resolvedBytes, err := protoutil.Marshal(&resolvedSpan)
+func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
+	resolvedBytes, err := protoutil.Marshal(&batch)
 	if err != nil {
 		return err
 	}
@@ -1181,27 +1175,33 @@ func (cf *changeFrontier) noteResolvedSpan(d rowenc.EncDatum) error {
 	if !ok {
 		return errors.AssertionFailedf(`unexpected datum type %T: %s`, d.Datum, d.Datum)
 	}
-	var resolved jobspb.ResolvedSpan
-	if err := protoutil.Unmarshal([]byte(*raw), &resolved); err != nil {
+	var batch jobspb.ResolvedSpans
+	if err := protoutil.Unmarshal([]byte(*raw), &batch); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err,
 			`unmarshalling resolved span: %x`, raw)
 	}
 
-	// Inserting a timestamp less than the one the changefeed flow started at
-	// could potentially regress the job progress. This is not expected, but it
-	// was a bug at one point, so assert to prevent regressions.
-	//
-	// TODO(dan): This is much more naturally expressed as an assert inside the
-	// job progress update closure, but it currently doesn't pass along the info
-	// we'd need to do it that way.
-	if !resolved.Timestamp.IsEmpty() && resolved.Timestamp.Less(cf.highWaterAtStart) {
-		logcrash.ReportOrPanic(cf.Ctx, &cf.flowCtx.Cfg.Settings.SV,
-			`got a span level timestamp %s for %s that is less than the initial high-water %s`,
-			log.Safe(resolved.Timestamp), resolved.Span, log.Safe(cf.highWaterAtStart))
-		return nil
+	for _, resolved := range batch.ResolvedSpans {
+		// Inserting a timestamp less than the one the changefeed flow started at
+		// could potentially regress the job progress. This is not expected, but it
+		// was a bug at one point, so assert to prevent regressions.
+		//
+		// TODO(dan): This is much more naturally expressed as an assert inside the
+		// job progress update closure, but it currently doesn't pass along the info
+		// we'd need to do it that way.
+		if !resolved.Timestamp.IsEmpty() && resolved.Timestamp.Less(cf.highWaterAtStart) {
+			logcrash.ReportOrPanic(cf.Ctx, &cf.flowCtx.Cfg.Settings.SV,
+				`got a span level timestamp %s for %s that is less than the initial high-water %s`,
+				log.Safe(resolved.Timestamp), resolved.Span, log.Safe(cf.highWaterAtStart))
+			return nil
+		}
+
+		if err := cf.forwardFrontier(resolved); err != nil {
+			return err
+		}
 	}
 
-	return cf.forwardFrontier(resolved)
+	return nil
 }
 
 func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
