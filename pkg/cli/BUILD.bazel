@@ -295,6 +295,7 @@ go_test(
         "node_test.go",
         "nodelocal_test.go",
         "quit_test.go",
+        "sql_internal_test.go",
         "sql_test.go",
         "sqlfmt_test.go",
         "start_test.go",
