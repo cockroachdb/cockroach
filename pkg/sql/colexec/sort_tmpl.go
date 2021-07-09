@@ -131,7 +131,10 @@ func newSingleSorter(
 // {{range .WidthOverloads}}
 
 type sort_TYPE_DIR_HANDLES_NULLSOp struct {
-	sortCol       _GOTYPESLICE
+	sortCol _GOTYPESLICE
+	// {{if .CanAbbreviate}}
+	abbreviatedSortCol []uint64
+	// {{end}}
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker colexecutils.CancelChecker
@@ -139,6 +142,9 @@ type sort_TYPE_DIR_HANDLES_NULLSOp struct {
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(ctx context.Context, col coldata.Vec, order []int) {
 	s.sortCol = col.TemplateType()
+	// {{if .CanAbbreviate}}
+	s.abbreviatedSortCol = s.sortCol.Abbreviated()
+	// {{end}}
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
@@ -191,10 +197,29 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	}
 	// {{end}}
 	// {{end}}
+
+	order1 := s.order[i]
+	order2 := s.order[j]
+
+	// {{if .CanAbbreviate}}
+	// If the type can be abbreviated as a uint64, compare the abbreviated
+	// values first. If they are not equal, we are done with the comparison. If
+	// they are equal, we must fallback to a full comparison of the datums.
+	abbr1 := s.abbreviatedSortCol[order1]
+	abbr2 := s.abbreviatedSortCol[order2]
+	if abbr1 != abbr2 {
+		// {{if eq $dir "Asc"}}
+		return abbr1 < abbr2
+		// {{else if eq $dir "Desc"}}
+		return abbr1 > abbr2
+		// {{end}}
+	}
+	// {{end}}
+
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
+	arg1 := s.sortCol.Get(order1)
+	arg2 := s.sortCol.Get(order2)
 	_ASSIGN_LT(lt, arg1, arg2, _, s.sortCol, s.sortCol)
 	return lt
 }
