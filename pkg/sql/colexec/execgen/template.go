@@ -46,6 +46,10 @@ func replaceTemplateVars(
 	// Collect template arguments.
 	for i, param := range info.templateParams {
 		templateArgs[i] = dst.Clone(call.Args[param.fieldOrdinal]).(dst.Expr)
+		// Clear the decorations so that argument comments are not used in
+		// template function names.
+		templateArgs[i].Decorations().Start.Clear()
+		templateArgs[i].Decorations().End.Clear()
 	}
 	// Remove template vars from callsite.
 	newArgs := make([]dst.Expr, 0, len(call.Args)-len(info.templateParams))

@@ -247,3 +247,34 @@ const _ = "inlined_b"
 const _ = "inlined_c"
 ----
 ----
+
+# Test that comments at call-site are preserved.
+inline
+package main
+
+func a() {
+	// This comment should not be removed.
+  b()
+  // This one too.
+}
+
+// execgen:inline
+func b() {
+  foo = bar
+}
+----
+----
+package main
+
+func a() {
+	// This comment should not be removed.
+	{
+		foo = bar
+	}
+	// This one too.
+}
+
+// execgen:inline
+const _ = "inlined_b"
+----
+----
