@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
@@ -120,6 +121,11 @@ Commands specific to the demo shell (EXPERIMENTAL):
 // across multiple instances of cliState (e.g. across file inclusion
 // with \i).
 type cliState struct {
+	cliCtx     *clicfg.Context
+	sqlConnCtx *clisqlclient.Context
+	sqlExecCtx *clisqlexec.Context
+	sqlCtx     *sqlContext
+
 	conn clisqlclient.Conn
 	// ins is used to read lines if isInteractive is true.
 	ins readline.EditLine
@@ -231,7 +237,7 @@ const (
 // printCliHelp prints a short inline help about the CLI.
 func (c *cliState) printCliHelp() {
 	demoHelpStr := ""
-	if sqlCtx.demoCluster != nil {
+	if c.sqlCtx.demoCluster != nil {
 		demoHelpStr = demoCommandsHelp
 	}
 	fmt.Printf(helpMessageFmt,
@@ -294,43 +300,43 @@ var options = map[string]struct {
 	description               string
 	isBoolean                 bool
 	validDuringMultilineEntry bool
-	set                       func(val string) error
-	reset                     func() error
+	set                       func(c *cliState, val string) error
+	reset                     func(c *cliState) error
 	// display is used to retrieve the current value.
-	display    func() string
+	display    func(c *cliState) string
 	deprecated bool
 }{
 	`auto_trace`: {
 		description:               "automatically run statement tracing on each executed statement",
 		isBoolean:                 false,
 		validDuringMultilineEntry: false,
-		set: func(val string) error {
+		set: func(c *cliState, val string) error {
 			b, err := clisqlclient.ParseBool(val)
 			if err != nil {
-				sqlCtx.autoTrace = "on, " + val
+				c.sqlCtx.autoTrace = "on, " + val
 			} else if b {
-				sqlCtx.autoTrace = "on, on"
+				c.sqlCtx.autoTrace = "on, on"
 			} else {
-				sqlCtx.autoTrace = ""
+				c.sqlCtx.autoTrace = ""
 			}
 			return nil
 		},
-		reset: func() error {
-			sqlCtx.autoTrace = ""
+		reset: func(c *cliState) error {
+			c.sqlCtx.autoTrace = ""
 			return nil
 		},
-		display: func() string {
-			if sqlCtx.autoTrace == "" {
+		display: func(c *cliState) string {
+			if c.sqlCtx.autoTrace == "" {
 				return "off"
 			}
-			return sqlCtx.autoTrace
+			return c.sqlCtx.autoTrace
 		},
 	},
 	`border`: {
 		description:               "the border style for the display format 'table'",
 		isBoolean:                 false,
 		validDuringMultilineEntry: true,
-		set: func(val string) error {
+		set: func(c *cliState, val string) error {
 			v, err := strconv.Atoi(val)
 			if err != nil {
 				return err
@@ -338,98 +344,98 @@ var options = map[string]struct {
 			if v < 0 || v > 3 {
 				return errors.New("only values between 0 and 4 are supported")
 			}
-			sqlExecCtx.TableBorderMode = v
+			c.sqlExecCtx.TableBorderMode = v
 			return nil
 		},
-		display: func() string { return strconv.Itoa(sqlExecCtx.TableBorderMode) },
+		display: func(c *cliState) string { return strconv.Itoa(c.sqlExecCtx.TableBorderMode) },
 	},
 	`display_format`: {
 		description:               "the output format for tabular data (table, csv, tsv, html, sql, records, raw)",
 		isBoolean:                 false,
 		validDuringMultilineEntry: true,
-		set: func(val string) error {
-			return sqlExecCtx.TableDisplayFormat.Set(val)
+		set: func(c *cliState, val string) error {
+			return c.sqlExecCtx.TableDisplayFormat.Set(val)
 		},
-		reset: func() error {
+		reset: func(c *cliState) error {
 			displayFormat := clisqlexec.TableDisplayTSV
-			if sqlExecCtx.TerminalOutput {
+			if c.sqlExecCtx.TerminalOutput {
 				displayFormat = clisqlexec.TableDisplayTable
 			}
-			sqlExecCtx.TableDisplayFormat = displayFormat
+			c.sqlExecCtx.TableDisplayFormat = displayFormat
 			return nil
 		},
-		display: func() string { return sqlExecCtx.TableDisplayFormat.String() },
+		display: func(c *cliState) string { return c.sqlExecCtx.TableDisplayFormat.String() },
 	},
 	`echo`: {
 		description:               "show SQL queries before they are sent to the server",
 		isBoolean:                 true,
 		validDuringMultilineEntry: false,
-		set:                       func(_ string) error { sqlConnCtx.Echo = true; return nil },
-		reset:                     func() error { sqlConnCtx.Echo = false; return nil },
-		display:                   func() string { return strconv.FormatBool(sqlConnCtx.Echo) },
+		set:                       func(c *cliState, _ string) error { c.sqlConnCtx.Echo = true; return nil },
+		reset:                     func(c *cliState) error { c.sqlConnCtx.Echo = false; return nil },
+		display:                   func(c *cliState) string { return strconv.FormatBool(c.sqlConnCtx.Echo) },
 	},
 	`errexit`: {
 		description:               "exit the shell upon a query error",
 		isBoolean:                 true,
 		validDuringMultilineEntry: true,
-		set:                       func(_ string) error { sqlCtx.errExit = true; return nil },
-		reset:                     func() error { sqlCtx.errExit = false; return nil },
-		display:                   func() string { return strconv.FormatBool(sqlCtx.errExit) },
+		set:                       func(c *cliState, _ string) error { c.sqlCtx.errExit = true; return nil },
+		reset:                     func(c *cliState) error { c.sqlCtx.errExit = false; return nil },
+		display:                   func(c *cliState) string { return strconv.FormatBool(c.sqlCtx.errExit) },
 	},
 	`check_syntax`: {
 		description:               "check the SQL syntax before running a query",
 		isBoolean:                 true,
 		validDuringMultilineEntry: false,
-		set:                       func(_ string) error { sqlCtx.checkSyntax = true; return nil },
-		reset:                     func() error { sqlCtx.checkSyntax = false; return nil },
-		display:                   func() string { return strconv.FormatBool(sqlCtx.checkSyntax) },
+		set:                       func(c *cliState, _ string) error { c.sqlCtx.checkSyntax = true; return nil },
+		reset:                     func(c *cliState) error { c.sqlCtx.checkSyntax = false; return nil },
+		display:                   func(c *cliState) string { return strconv.FormatBool(c.sqlCtx.checkSyntax) },
 	},
 	`show_times`: {
 		description:               "display the execution time after each query",
 		isBoolean:                 true,
 		validDuringMultilineEntry: true,
-		set:                       func(_ string) error { sqlExecCtx.ShowTimes = true; return nil },
-		reset:                     func() error { sqlExecCtx.ShowTimes = false; return nil },
-		display:                   func() string { return strconv.FormatBool(sqlExecCtx.ShowTimes) },
+		set:                       func(c *cliState, _ string) error { c.sqlExecCtx.ShowTimes = true; return nil },
+		reset:                     func(c *cliState) error { c.sqlExecCtx.ShowTimes = false; return nil },
+		display:                   func(c *cliState) string { return strconv.FormatBool(c.sqlExecCtx.ShowTimes) },
 	},
 	`show_server_times`: {
 		description:               "display the server execution times for queries (requires show_times to be set)",
 		isBoolean:                 true,
 		validDuringMultilineEntry: true,
-		set:                       func(_ string) error { sqlConnCtx.EnableServerExecutionTimings = true; return nil },
-		reset:                     func() error { sqlConnCtx.EnableServerExecutionTimings = false; return nil },
-		display:                   func() string { return strconv.FormatBool(sqlConnCtx.EnableServerExecutionTimings) },
+		set:                       func(c *cliState, _ string) error { c.sqlConnCtx.EnableServerExecutionTimings = true; return nil },
+		reset:                     func(c *cliState) error { c.sqlConnCtx.EnableServerExecutionTimings = false; return nil },
+		display:                   func(c *cliState) string { return strconv.FormatBool(c.sqlConnCtx.EnableServerExecutionTimings) },
 	},
 	`verbose_times`: {
 		description:               "display execution times with more precision (requires show_times to be set)",
 		isBoolean:                 true,
 		validDuringMultilineEntry: true,
-		set:                       func(_ string) error { sqlExecCtx.VerboseTimings = true; return nil },
-		reset:                     func() error { sqlExecCtx.VerboseTimings = false; return nil },
-		display:                   func() string { return strconv.FormatBool(sqlExecCtx.VerboseTimings) },
+		set:                       func(c *cliState, _ string) error { c.sqlExecCtx.VerboseTimings = true; return nil },
+		reset:                     func(c *cliState) error { c.sqlExecCtx.VerboseTimings = false; return nil },
+		display:                   func(c *cliState) string { return strconv.FormatBool(c.sqlExecCtx.VerboseTimings) },
 	},
 	`smart_prompt`: {
 		description:               "deprecated",
 		isBoolean:                 true,
 		validDuringMultilineEntry: false,
-		set:                       func(_ string) error { return nil },
-		reset:                     func() error { return nil },
-		display:                   func() string { return "false" },
+		set:                       func(c *cliState, _ string) error { return nil },
+		reset:                     func(c *cliState) error { return nil },
+		display:                   func(c *cliState) string { return "false" },
 		deprecated:                true,
 	},
 	`prompt1`: {
 		description:               "prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
 		isBoolean:                 false,
 		validDuringMultilineEntry: true,
-		set: func(val string) error {
-			sqlCtx.customPromptPattern = val
+		set: func(c *cliState, val string) error {
+			c.sqlCtx.customPromptPattern = val
 			return nil
 		},
-		reset: func() error {
-			sqlCtx.customPromptPattern = defaultPromptPattern
+		reset: func(c *cliState) error {
+			c.sqlCtx.customPromptPattern = defaultPromptPattern
 			return nil
 		},
-		display: func() string { return sqlCtx.customPromptPattern },
+		display: func(c *cliState) string { return c.sqlCtx.customPromptPattern },
 	},
 }
 
@@ -452,9 +458,9 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 			if options[n].deprecated {
 				continue
 			}
-			optData = append(optData, []string{n, options[n].display(), options[n].description})
+			optData = append(optData, []string{n, options[n].display(c), options[n].description})
 		}
-		err := sqlExecCtx.PrintQueryOutput(os.Stdout, stderr,
+		err := c.sqlExecCtx.PrintQueryOutput(os.Stdout, stderr,
 			[]string{"Option", "Value", "Description"},
 			clisqlexec.NewRowSliceIter(optData, "lll" /*align*/))
 		if err != nil {
@@ -491,13 +497,13 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	// Run the command.
 	var err error
 	if !opt.isBoolean {
-		err = opt.set(val)
+		err = opt.set(c, val)
 	} else if b, e := clisqlclient.ParseBool(val); e != nil {
 		return c.invalidOptSet(errState, args)
 	} else if b {
-		err = opt.set("true")
+		err = opt.set(c, "true")
 	} else {
-		err = opt.reset()
+		err = opt.reset(c)
 	}
 
 	if err != nil {
@@ -521,7 +527,7 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, args[0])
 	}
-	if err := opt.reset(); err != nil {
+	if err := opt.reset(c); err != nil {
 		fmt.Fprintf(stderr, "\\unset %s: %v\n", args[0], err)
 		c.exitErr = err
 		return errState
@@ -537,7 +543,7 @@ func isEndOfStatement(lastTok int) bool {
 // This can only be done from `cockroach demo`.
 func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	// A demo cluster signifies the presence of `cockroach demo`.
-	if sqlCtx.demoCluster == nil {
+	if c.sqlCtx.demoCluster == nil {
 		return c.invalidSyntax(errState, `\demo can only be run with cockroach demo`)
 	}
 
@@ -549,7 +555,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 	//
 	// We parse these commands separately, in the following blocks.
 	if len(cmd) == 1 && cmd[0] == "ls" {
-		sqlCtx.demoCluster.ListDemoNodes(os.Stdout, stderr, false /* justOne */)
+		c.sqlCtx.demoCluster.ListDemoNodes(os.Stdout, stderr, false /* justOne */)
 		return nextState
 	}
 
@@ -572,12 +578,12 @@ func (c *cliState) handleDemoAddNode(cmd []string, nextState, errState cliStateE
 		return c.internalServerError(errState, fmt.Errorf("bad call to handleDemoAddNode"))
 	}
 
-	addedNodeID, err := sqlCtx.demoCluster.AddNode(context.Background(), cmd[1])
+	addedNodeID, err := c.sqlCtx.demoCluster.AddNode(context.Background(), cmd[1])
 	if err != nil {
 		return c.internalServerError(errState, err)
 	}
 	fmt.Printf("node %v has been added with locality \"%s\"\n",
-		addedNodeID, sqlCtx.demoCluster.GetLocality(addedNodeID))
+		addedNodeID, c.sqlCtx.demoCluster.GetLocality(addedNodeID))
 	return nextState
 }
 
@@ -599,25 +605,25 @@ func (c *cliState) handleDemoNodeCommands(
 
 	switch cmd[0] {
 	case "shutdown":
-		if err := sqlCtx.demoCluster.DrainAndShutdown(ctx, int32(nodeID)); err != nil {
+		if err := c.sqlCtx.demoCluster.DrainAndShutdown(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been shutdown\n", nodeID)
 		return nextState
 	case "restart":
-		if err := sqlCtx.demoCluster.RestartNode(ctx, int32(nodeID)); err != nil {
+		if err := c.sqlCtx.demoCluster.RestartNode(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been restarted\n", nodeID)
 		return nextState
 	case "recommission":
-		if err := sqlCtx.demoCluster.Recommission(ctx, int32(nodeID)); err != nil {
+		if err := c.sqlCtx.demoCluster.Recommission(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been recommissioned\n", nodeID)
 		return nextState
 	case "decommission":
-		if err := sqlCtx.demoCluster.Decommission(ctx, int32(nodeID)); err != nil {
+		if err := c.sqlCtx.demoCluster.Decommission(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been decommissioned\n", nodeID)
@@ -784,7 +790,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	dbName := unknownDbName
 	c.lastKnownTxnStatus = unknownTxnStatus
 
-	wantDbStateInPrompt := rePromptDbState.MatchString(sqlCtx.customPromptPattern)
+	wantDbStateInPrompt := rePromptDbState.MatchString(c.sqlCtx.customPromptPattern)
 	if wantDbStateInPrompt {
 		c.refreshTransactionStatus()
 		// refreshDatabaseName() must be called *after* refreshTransactionStatus(),
@@ -794,7 +800,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		dbName = c.refreshDatabaseName()
 	}
 
-	c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(sqlCtx.customPromptPattern, func(m string) string {
+	c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.sqlCtx.customPromptPattern, func(m string) string {
 		switch m {
 		case "%M":
 			return parsedURL.Host // full host name.
@@ -916,7 +922,7 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 	// Common initialization.
 	c.partialLines = []string{}
 
-	if cliCtx.IsInteractive {
+	if c.cliCtx.IsInteractive {
 		fmt.Println("#\n# Enter \\? for a brief introduction.\n#")
 	}
 
@@ -997,7 +1003,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 		// In any case, process one line.
 
 	case errors.Is(err, readline.ErrInterrupted):
-		if !cliCtx.IsInteractive {
+		if !c.cliCtx.IsInteractive {
 			// Ctrl+C terminates non-interactive shells in all cases.
 			c.exitErr = err
 			return cliStop
@@ -1022,7 +1028,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 	case errors.Is(err, io.EOF):
 		c.atEOF = true
 
-		if cliCtx.IsInteractive {
+		if c.cliCtx.IsInteractive {
 			// In interactive mode, EOF terminates.
 			// exitErr is left to be whatever has set it previously.
 			return cliStop
@@ -1072,7 +1078,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	}
 
 	errState := loopState
-	if sqlCtx.errExit {
+	if c.sqlCtx.errExit {
 		// If exiterr is set, an error in a client-side command also
 		// terminates the shell.
 		errState = cliStop
@@ -1179,7 +1185,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		format := clisqlexec.TableDisplayRecords
 		switch len(cmd) {
 		case 1:
-			if sqlExecCtx.TableDisplayFormat == clisqlexec.TableDisplayRecords {
+			if c.sqlExecCtx.TableDisplayFormat == clisqlexec.TableDisplayRecords {
 				format = clisqlexec.TableDisplayTable
 			}
 		case 2:
@@ -1194,7 +1200,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		default:
 			return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
 		}
-		sqlExecCtx.TableDisplayFormat = format
+		c.sqlExecCtx.TableDisplayFormat = format
 		return loopState
 
 	case `\demo`:
@@ -1253,6 +1259,11 @@ func (c *cliState) runInclude(
 	}()
 
 	newState := cliState{
+		cliCtx:     c.cliCtx,
+		sqlConnCtx: c.sqlConnCtx,
+		sqlExecCtx: c.sqlExecCtx,
+		sqlCtx:     c.sqlCtx,
+
 		conn:       c.conn,
 		includeDir: filepath.Dir(filename),
 		ins:        noLineEditor,
@@ -1319,7 +1330,7 @@ func (c *cliState) doPrepareStatementLine(
 	// Complete input. Remember it in the history.
 	c.addHistory(c.concatLines)
 
-	if !sqlCtx.checkSyntax {
+	if !c.sqlCtx.checkSyntax {
 		return execState
 	}
 
@@ -1339,7 +1350,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			clierror.NewFormattedError(err, false /*showSeverity*/, false /*verbose*/))
 
 		// Stop here if exiterr is set.
-		if sqlCtx.errExit {
+		if c.sqlCtx.errExit {
 			return cliStop
 		}
 
@@ -1352,7 +1363,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 		return contState
 	}
 
-	if !cliCtx.IsInteractive {
+	if !c.cliCtx.IsInteractive {
 		return execState
 	}
 
@@ -1371,13 +1382,13 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	c.lastKnownTxnStatus = " ?"
 
 	// Are we tracing?
-	if sqlCtx.autoTrace != "" {
+	if c.sqlCtx.autoTrace != "" {
 		// Clear the trace by disabling tracing, then restart tracing
 		// with the specified options.
 		c.exitErr = c.conn.Exec("SET tracing = off; SET tracing = "+sqlCtx.autoTrace, nil)
 		if c.exitErr != nil {
 			clierror.OutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-			if sqlCtx.errExit {
+			if c.sqlCtx.errExit {
 				return cliStop
 			}
 			return nextState
@@ -1385,7 +1396,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	}
 
 	// Now run the statement/query.
-	c.exitErr = sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, stderr,
+	c.exitErr = c.sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, stderr,
 		clisqlclient.MakeQuery(c.concatLines))
 	if c.exitErr != nil {
 		clierror.OutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
@@ -1393,7 +1404,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 
 	// If we are tracing, stop tracing and display the trace. We do
 	// this even if there was an error: a trace on errors is useful.
-	if sqlCtx.autoTrace != "" {
+	if c.sqlCtx.autoTrace != "" {
 		// First, disable tracing.
 		if err := c.conn.Exec("SET tracing = off", nil); err != nil {
 			// Print the error for the SET tracing statement. This will
@@ -1410,10 +1421,10 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			// shell.
 		} else {
 			traceType := ""
-			if strings.Contains(sqlCtx.autoTrace, "kv") {
+			if strings.Contains(c.sqlCtx.autoTrace, "kv") {
 				traceType = "kv"
 			}
-			if err := sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, stderr,
+			if err := c.sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, stderr,
 				clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
 				clierror.OutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
@@ -1429,7 +1440,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 		}
 	}
 
-	if c.exitErr != nil && sqlCtx.errExit {
+	if c.exitErr != nil && c.sqlCtx.errExit {
 		return cliStop
 	}
 
@@ -1439,7 +1450,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 func (c *cliState) doDecidePath() cliStateEnum {
 	if len(c.partialLines) == 0 {
 		return cliProcessFirstLine
-	} else if cliCtx.IsInteractive {
+	} else if c.cliCtx.IsInteractive {
 		// In interactive mode, we allow client-side commands to be
 		// issued on intermediate lines.
 		return cliHandleCliCmd
@@ -1448,13 +1459,27 @@ func (c *cliState) doDecidePath() cliStateEnum {
 	return cliPrepareStatementLine
 }
 
-// runInteractive runs the SQL client interactively, presenting
-// a prompt to the user for each statement.
-func runInteractive(conn clisqlclient.Conn, cmdIn *os.File) (exitErr error) {
-	c := cliState{
+// newCliState instantiates a cliState.
+func newCliState(
+	cliCtx *clicfg.Context,
+	sqlConnCtx *clisqlclient.Context,
+	sqlExecCtx *clisqlexec.Context,
+	sqlCtx *sqlContext,
+	conn clisqlclient.Conn,
+) *cliState {
+	return &cliState{
+		cliCtx:     cliCtx,
+		sqlConnCtx: sqlConnCtx,
+		sqlExecCtx: sqlExecCtx,
+		sqlCtx:     sqlCtx,
 		conn:       conn,
 		includeDir: ".",
 	}
+}
+
+// runInteractive runs the SQL client interactively, presenting
+// a prompt to the user for each statement.
+func (c *cliState) runInteractive(cmdIn *os.File) (exitErr error) {
 	return c.doRunShell(cliStart, cmdIn)
 }
 
@@ -1470,12 +1495,12 @@ func (c *cliState) doRunShell(state cliStateEnum, cmdIn *os.File) (exitErr error
 			if err != nil {
 				return err
 			}
-			if len(sqlCtx.execStmts) > 0 {
+			if len(c.sqlCtx.execStmts) > 0 {
 				// Single-line sql; run as simple as possible, without noise on stdout.
-				if err := c.runStatements(sqlCtx.execStmts); err != nil {
+				if err := c.runStatements(c.sqlCtx.execStmts); err != nil {
 					return err
 				}
-				if sqlCtx.quitAfterExecStmts {
+				if c.sqlCtx.quitAfterExecStmts {
 					return nil
 				}
 			}
@@ -1530,34 +1555,34 @@ func (c *cliState) doRunShell(state cliStateEnum, cmdIn *os.File) (exitErr error
 // The returned cleanupFn must be called even when the err return is
 // not nil.
 func (c *cliState) configurePreShellDefaults(cmdIn *os.File) (cleanupFn func(), err error) {
-	if sqlExecCtx.TerminalOutput {
+	if c.sqlExecCtx.TerminalOutput {
 		// If results are shown on a terminal also enable printing of
 		// times by default.
-		sqlExecCtx.ShowTimes = true
+		c.sqlExecCtx.ShowTimes = true
 	}
 
-	if cliCtx.IsInteractive {
+	if c.cliCtx.IsInteractive {
 		// If a human user is providing the input, we want to help them with
 		// what they are entering:
-		sqlCtx.errExit = false // let the user retry failing commands
-		if !sqlConnCtx.DebugMode {
+		c.sqlCtx.errExit = false // let the user retry failing commands
+		if !c.sqlConnCtx.DebugMode {
 			// Also, try to enable syntax checking if supported by the server.
 			// This is a form of client-side error checking to help with large txns.
-			sqlCtx.checkSyntax = true
+			c.sqlCtx.checkSyntax = true
 		}
 	} else {
 		// When running non-interactive, by default we want errors to stop
 		// further processing and we can just let syntax checking to be
 		// done server-side to avoid client-side churn.
-		sqlCtx.errExit = true
-		sqlCtx.checkSyntax = false
+		c.sqlCtx.errExit = true
+		c.sqlCtx.checkSyntax = false
 		// We also don't need (smart) prompts at all.
 	}
 
 	// An interactive readline prompter is comparatively slow at
 	// reading input, so we only use it in interactive mode and when
 	// there is also a terminal on stdout.
-	if cliCtx.IsInteractive && sqlExecCtx.TerminalOutput {
+	if c.cliCtx.IsInteractive && c.sqlExecCtx.TerminalOutput {
 		// The readline initialization is not placed in
 		// the doStart() method because of the defer.
 		c.ins, c.exitErr = readline.InitFiles("cockroach",
@@ -1591,9 +1616,9 @@ func (c *cliState) configurePreShellDefaults(cmdIn *os.File) (cleanupFn func(), 
 		// command-line client.
 
 		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>".
-		sqlCtx.customPromptPattern = defaultPromptPattern
-		if sqlConnCtx.DebugMode {
-			sqlCtx.customPromptPattern = debugPromptPattern
+		c.sqlCtx.customPromptPattern = defaultPromptPattern
+		if c.sqlConnCtx.DebugMode {
+			c.sqlCtx.customPromptPattern = debugPromptPattern
 		}
 
 		c.ins.SetCompleter(c)
@@ -1618,14 +1643,14 @@ func (c *cliState) configurePreShellDefaults(cmdIn *os.File) (cleanupFn func(), 
 
 	// If any --set flags were set through the command line,
 	// synthetize '-e set=xxx' statements for them at the beginning.
-	sqlCtx.quitAfterExecStmts = len(sqlCtx.execStmts) > 0
-	if len(sqlCtx.setStmts) > 0 {
-		setStmts := make([]string, 0, len(sqlCtx.setStmts)+len(sqlCtx.execStmts))
-		for _, s := range sqlCtx.setStmts {
+	c.sqlCtx.quitAfterExecStmts = len(c.sqlCtx.execStmts) > 0
+	if len(c.sqlCtx.setStmts) > 0 {
+		setStmts := make([]string, 0, len(c.sqlCtx.setStmts)+len(c.sqlCtx.execStmts))
+		for _, s := range c.sqlCtx.setStmts {
 			setStmts = append(setStmts, `\set `+s)
 		}
-		sqlCtx.setStmts = nil
-		sqlCtx.execStmts = append(setStmts, sqlCtx.execStmts...)
+		c.sqlCtx.setStmts = nil
+		c.sqlCtx.execStmts = append(setStmts, c.sqlCtx.execStmts...)
 	}
 
 	return cleanupFn, nil
@@ -1649,22 +1674,22 @@ func (c *cliState) runStatements(stmts []string) error {
 					c.exitErr = errors.New("error in client-side command")
 				}
 			} else {
-				c.exitErr = sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, stderr, clisqlclient.MakeQuery(stmt))
+				c.exitErr = c.sqlExecCtx.RunQueryAndFormatResults(c.conn, os.Stdout, stderr, clisqlclient.MakeQuery(stmt))
 			}
 			if c.exitErr != nil {
-				if !sqlCtx.errExit && i < len(stmts)-1 {
+				if !c.sqlCtx.errExit && i < len(stmts)-1 {
 					// Print the error now because we don't get a chance later.
 					clierror.OutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
 				}
-				if sqlCtx.errExit {
+				if c.sqlCtx.errExit {
 					break
 				}
 			}
 		}
 		// If --watch was specified and no error was encountered,
 		// repeat.
-		if sqlCtx.repeatDelay > 0 && c.exitErr == nil {
-			time.Sleep(sqlCtx.repeatDelay)
+		if c.sqlCtx.repeatDelay > 0 && c.exitErr == nil {
+			time.Sleep(c.sqlCtx.repeatDelay)
 			continue
 		}
 		break
@@ -1683,7 +1708,7 @@ func (c *cliState) runStatements(stmts []string) error {
 // decomposition in the first return value. If it is not, the function
 // extracts a help string if available.
 func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
-	cols, rows, err := sqlExecCtx.RunQuery(c.conn,
+	cols, rows, err := c.sqlExecCtx.RunQuery(c.conn,
 		clisqlclient.MakeQuery("SHOW SYNTAX "+lex.EscapeSQLString(sql)),
 		true)
 	if err != nil {
