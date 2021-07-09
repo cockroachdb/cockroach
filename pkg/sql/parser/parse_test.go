@@ -205,8 +205,8 @@ func TestParsePrecedence(t *testing.T) {
 	binary := func(op tree.BinaryOperatorSymbol, left, right tree.Expr) tree.Expr {
 		return &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(op), Left: left, Right: right}
 	}
-	cmp := func(op tree.ComparisonOperator, left, right tree.Expr) tree.Expr {
-		return &tree.ComparisonExpr{Operator: op, Left: left, Right: right}
+	cmp := func(op tree.ComparisonOperatorSymbol, left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(op), Left: left, Right: right}
 	}
 	not := func(expr tree.Expr) tree.Expr {
 		return &tree.NotExpr{Expr: expr}
@@ -221,10 +221,10 @@ func TestParsePrecedence(t *testing.T) {
 		return &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Concat), Left: left, Right: right}
 	}
 	regmatch := func(left, right tree.Expr) tree.Expr {
-		return &tree.ComparisonExpr{Operator: tree.RegMatch, Left: left, Right: right}
+		return &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.RegMatch), Left: left, Right: right}
 	}
 	regimatch := func(left, right tree.Expr) tree.Expr {
-		return &tree.ComparisonExpr{Operator: tree.RegIMatch, Left: left, Right: right}
+		return &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.RegIMatch), Left: left, Right: right}
 	}
 
 	one := tree.NewNumVal(constant.MakeInt64(1), "1", false /* negative */)
@@ -363,7 +363,10 @@ func TestParsePrecedence(t *testing.T) {
 		{`~1+2`, binary(tree.Plus, unary(tree.UnaryComplement, one), two)},
 
 		// OPERATOR(pg_catalog.~) should not be error (#66861).
-		{`'a' OPERATOR(pg_catalog.~) 'b'`, regmatch(a, b)},
+		{
+			`'a' OPERATOR(pg_catalog.~) 'b'`,
+			&tree.ComparisonExpr{Operator: tree.ComparisonOperator{Symbol: tree.RegMatch, IsExplicitOperator: true}, Left: a, Right: b},
+		},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {

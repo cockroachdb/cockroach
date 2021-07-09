@@ -2853,7 +2853,7 @@ func TestImportIntoCSV(t *testing.T) {
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
 			[]string{`'nodelocal://0/data-[0-9][0-9]*'`},
 			` WITH decompress = 'auto'`,
-			`pq: no files matched uri provided`,
+			`pq: no files matched`,
 		},
 		{
 			"import-into-no-glob-wildcard",
@@ -5492,7 +5492,7 @@ func TestImportPgDump(t *testing.T) {
 	}
 
 	t.Run("glob-multi", func(t *testing.T) {
-		sqlDB.ExpectErr(t, "SQL dump files must be imported individually", `IMPORT PGDUMP 'nodelocal://0/*'`)
+		sqlDB.ExpectErr(t, "SQL dump files must be imported individually", `IMPORT PGDUMP 'nodelocal://0/pgdump/*.sql'`)
 	})
 
 	t.Run("target-cols-reordered", func(t *testing.T) {
@@ -5644,8 +5644,14 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 		// We expect there to be two log files since we have 13 unsupported statements.
 		dirName := fmt.Sprintf("import%d", importJobID)
 		checkFiles := func(expectedFileContent []string, logSubdir string) {
-			files, err := store.ListFiles(ctx, fmt.Sprintf("*/%s/*", logSubdir))
-			require.NoError(t, err)
+			var files []string
+			require.NoError(t, store.List(ctx, "", "", func(f string) error {
+				ok, err := path.Match(fmt.Sprintf("*/%s/*", logSubdir), f)
+				if ok {
+					files = append(files, f)
+				}
+				return err
+			}))
 			for i, file := range files {
 				require.Equal(t, file, path.Join(dirName, logSubdir, fmt.Sprintf("%d.log", i)))
 				content, err := store.ReadFile(ctx, file)

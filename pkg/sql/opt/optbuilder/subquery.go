@@ -353,15 +353,15 @@ func (b *Builder) buildMultiRowSubquery(
 	outScope = outScope.replace()
 
 	var cmp opt.Operator
-	switch c.Operator {
+	switch c.Operator.Symbol {
 	case tree.In, tree.NotIn:
 		// <var> = x
 		cmp = opt.EqOp
 
 	case tree.Any, tree.Some, tree.All:
 		// <var> <comp> x
-		cmp = opt.ComparisonOpMap[c.SubOperator]
-		if c.Operator == tree.All {
+		cmp = opt.ComparisonOpMap[c.SubOperator.Symbol]
+		if c.Operator.Symbol == tree.All {
 			// NOT(<var> <comp> x)
 			cmp = opt.NegateOpMap[cmp]
 		}
@@ -377,7 +377,7 @@ func (b *Builder) buildMultiRowSubquery(
 		Cmp:          cmp,
 		OriginalExpr: s.Subquery,
 	})
-	switch c.Operator {
+	switch c.Operator.Symbol {
 	case tree.NotIn, tree.All:
 		// NOT Any(...)
 		out = b.factory.ConstructNot(out)

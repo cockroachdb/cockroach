@@ -232,16 +232,28 @@ func runUserFileGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	glob := conf.Path
-	conf.Path = "/"
+
+	fullPath := conf.Path
+	conf.Path = cloud.GetPrefixBeforeWildcard(fullPath)
+	pattern := fullPath[len(conf.Path):]
+	displayPath := strings.TrimPrefix(conf.Path, "/")
+
 	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.conn.(cloud.SQLConnI))
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	files, err := f.ListFiles(ctx, glob)
-	if err != nil {
+	var files []string
+	if err := f.List(ctx, "", "", func(s string) error {
+		if pattern != "" {
+			if ok, err := path.Match(pattern, s); err != nil || !ok {
+				return err
+			}
+		}
+		files = append(files, s)
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -249,17 +261,14 @@ func runUserFileGet(cmd *cobra.Command, args []string) error {
 		return errors.New("no files matched requested path or path pattern")
 	}
 
-	for _, file := range files {
-		u, err := url.Parse(file)
-		if err != nil {
-			return err
-		}
+	for _, src := range files {
+		file := displayPath + src
 		var fileDest string
 		if len(files) > 1 {
 			// If we matched multiple files, write their name in to dest or cwd.
-			fileDest = filepath.Join(dest, filepath.FromSlash(u.Path))
+			fileDest = filepath.Join(dest, filepath.FromSlash(file))
 		} else {
-			filename := path.Base(u.Path)
+			filename := path.Base(file)
 			// If we matched just one file and do not have explicit dest, write it to
 			// its file name in cwd.
 			if dest == "" {
@@ -279,7 +288,7 @@ func runUserFileGet(cmd *cobra.Command, args []string) error {
 			}
 		}
 		fmt.Printf("downloading %s... ", file)
-		sz, err := downloadUserfile(ctx, f, u.Path, fileDest)
+		sz, err := downloadUserfile(ctx, f, src, fileDest)
 		if err != nil {
 			return err
 		}
@@ -364,17 +373,6 @@ func constructUserfileDestinationURI(source, destination string, user security.S
 }
 
 func constructUserfileListURI(glob string, user security.SQLUsername) string {
-	// User has not specified a glob pattern and so we construct a URI which will
-	// list all the files stored in the UserFileTableStorage.
-	if glob == "" || glob == "*" {
-		userFileURL := url.URL{
-			Scheme: defaultUserfileScheme,
-			Host:   getDefaultQualifiedTableName(user),
-			Path:   "",
-		}
-		return userFileURL.String()
-	}
-
 	// If the destination is a well-formed userfile URI of the form
 	// userfile://db.schema.tablename_prefix/glob/pattern, then we
 	// use that as the final URI.
@@ -428,15 +426,32 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, er
 	if err != nil {
 		return nil, err
 	}
-	prefix := conf.Path
-	conf.Path = ""
+
+	fullPath := conf.Path
+	conf.Path = cloud.GetPrefixBeforeWildcard(fullPath)
+	pattern := fullPath[len(conf.Path):]
+
 	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.conn.(cloud.SQLConnI))
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	return f.ListFiles(ctx, prefix)
+	displayPrefix := strings.TrimPrefix(conf.Path, "/")
+	var res []string
+	if err := f.List(ctx, "", "", func(s string) error {
+		if pattern != "" {
+			ok, err := path.Match(pattern, s)
+			if err != nil || !ok {
+				return err
+			}
+		}
+		res = append(res, displayPrefix+s)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 func downloadUserfile(
@@ -486,32 +501,39 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 		return nil, err
 	}
 
-	// We zero out the path so that we can provide explicit glob patterns to the
-	// ListFiles call below. Explicit glob patterns allows us to use the same
-	// ExternalStorage for both the ListFiles() and Delete() methods.
-	userFileTableConf.FileTableConfig.Path = ""
+	// We truncate the path so that we can open one store to first do a listing
+	// with our actual pattern, then pass the found names to delete them using the
+	// same store.
+	fullPath := userFileTableConf.FileTableConfig.Path
+	userFileTableConf.FileTableConfig.Path = cloud.GetPrefixBeforeWildcard(fullPath)
+	pattern := fullPath[len(userFileTableConf.FileTableConfig.Path):]
+
 	f, err := userfile.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
 		conn.conn.(cloud.SQLConnI))
 	if err != nil {
 		return nil, err
 	}
 
-	userfileParsedURL, err := url.ParseRequestURI(unescapedUserfileListURI)
-	if err != nil {
-		return nil, err
-	}
+	displayRoot := strings.TrimPrefix(userFileTableConf.FileTableConfig.Path, "/")
+	var deleted []string
 
-	files, err := f.ListFiles(ctx, userfileParsedURL.Path)
-	if err != nil {
-		return nil, err
-	}
-
-	for i := range files {
-		if err = f.Delete(ctx, files[i]); err != nil {
-			return files[:i], errors.WithDetailf(err, "deletion failed at %s", files[i])
+	if err := f.List(ctx, "", "", func(s string) error {
+		if pattern != "" {
+			ok, err := path.Match(pattern, s)
+			if err != nil || !ok {
+				return err
+			}
 		}
+		if err := errors.WithDetailf(f.Delete(ctx, s), "deleting %s failed", s); err != nil {
+			return err
+		}
+		deleted = append(deleted, displayRoot+s)
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	return files, nil
+
+	return deleted, nil
 }
 
 func renameUserFile(

@@ -41,24 +41,6 @@ func GetPrefixBeforeWildcard(p string) string {
 	return path.Dir(p[:globIndex])
 }
 
-// URINeedsGlobExpansion checks if URI can be expanded by checking if it contains wildcard characters.
-// This should be used before passing a URI into ListFiles().
-func URINeedsGlobExpansion(uri string) bool {
-	parsedURI, err := url.Parse(uri)
-	if err != nil {
-		return false
-	}
-	// We don't support listing files for workload and http.
-	unsupported := []string{"workload", "http", "https", "experimental-workload"}
-	for _, str := range unsupported {
-		if parsedURI.Scheme == str {
-			return false
-		}
-	}
-
-	return ContainsGlob(parsedURI.Path)
-}
-
 // ContainsGlob indicates if the string contains a glob-matching char.
 func ContainsGlob(str string) bool {
 	return strings.ContainsAny(str, "*?[")

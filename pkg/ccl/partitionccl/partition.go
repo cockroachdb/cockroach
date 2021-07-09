@@ -541,9 +541,11 @@ func selectPartitionExprsByName(
 					typContents[i] = d.ResolvedType()
 				}
 				tupleTyp := types.MakeTuple(typContents)
-				partValueExpr := tree.NewTypedComparisonExpr(tree.EQ,
+				partValueExpr := tree.NewTypedComparisonExpr(
+					tree.MakeComparisonOperator(tree.EQ),
 					tree.NewTypedTuple(tupleTyp, colVars[:len(allDatums)]),
-					tree.NewDTuple(tupleTyp, allDatums...))
+					tree.NewDTuple(tupleTyp, allDatums...),
+				)
 				partValueExprs[len(t.Datums)] = append(partValueExprs[len(t.Datums)], exprAndPartName{
 					expr: partValueExpr,
 					name: name,

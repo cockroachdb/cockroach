@@ -224,7 +224,7 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 			var spanExpr *inverted.SpanExpression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
 				var invertedExpr inverted.Expression
-				switch t.Operator {
+				switch t.Operator.Symbol {
 				case tree.ContainedBy:
 					invertedExpr = getInvertedExprForJSONOrArrayIndexForContainedBy(evalCtx, d)
 				case tree.Contains:
@@ -276,7 +276,7 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 			if d == tree.DNull {
 				return nil, nil
 			}
-			switch t.Operator {
+			switch t.Operator.Symbol {
 			case tree.Contains:
 				return getInvertedExprForJSONOrArrayIndexForContaining(g.evalCtx, d), nil
 

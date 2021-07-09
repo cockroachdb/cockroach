@@ -59343,7 +59343,7 @@ func GetSelectionConstOperator(
 		// Tuple comparison has special null-handling semantics, so we will
 		// fallback to the default comparison operator if either of the
 		// input vectors is of a tuple type.
-		switch cmpOp {
+		switch cmpOp.Symbol {
 		case tree.EQ:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
@@ -60683,7 +60683,7 @@ func GetSelectionOperator(
 		// Tuple comparison has special null-handling semantics, so we will
 		// fallback to the default comparison operator if either of the
 		// input vectors is of a tuple type.
-		switch cmpOp {
+		switch cmpOp.Symbol {
 		case tree.EQ:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:

@@ -219,7 +219,7 @@ func (expr *AndExpr) normalize(v *NormalizeVisitor) TypedExpr {
 }
 
 func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
-	switch expr.Operator {
+	switch expr.Operator.Symbol {
 	case EQ, GE, GT, LE, LT:
 		// We want var nodes (VariableExpr, VarName, etc) to be immediate
 		// children of the comparison expression and not second or third
@@ -301,7 +301,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					op = MakeBinaryOperator(Plus)
 				case Div:
 					op = MakeBinaryOperator(Mult)
-					if expr.Operator != EQ {
+					if expr.Operator.Symbol != EQ {
 						// In this case, we must remember to *flip* the inequality if the
 						// divisor is negative, since we are in effect multiplying both sides
 						// of the inequality by a negative number.
@@ -417,7 +417,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					continue
 				}
 
-			case expr.Operator == EQ && left.Operator.Symbol == JSONFetchVal && v.isConst(left.Right) &&
+			case expr.Operator.Symbol == EQ && left.Operator.Symbol == JSONFetchVal && v.isConst(left.Right) &&
 				v.isConst(expr.Right):
 				// This is a JSONB inverted index normalization, changing things of the form
 				// x->y=z to x @> {y:z} which can be used to build spans for inverted index
@@ -465,7 +465,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					break
 				}
 
-				return NewTypedComparisonExpr(Contains, left.TypedLeft(), typedJ)
+				return NewTypedComparisonExpr(MakeComparisonOperator(Contains), left.TypedLeft(), typedJ)
 			}
 
 			// We've run out of work to do.
@@ -486,7 +486,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			}
 			if len(tupleCopy.D) == 0 {
 				// NULL IN <empty-tuple> is false.
-				if expr.Operator == In {
+				if expr.Operator.Symbol == In {
 					return DBoolFalse
 				}
 				return DBoolTrue
@@ -620,7 +620,7 @@ func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
 		if from == DNull {
 			newLeft = DNull
 		} else {
-			newLeft = NewTypedComparisonExpr(leftCmp, leftFrom, from).normalize(v)
+			newLeft = NewTypedComparisonExpr(MakeComparisonOperator(leftCmp), leftFrom, from).normalize(v)
 			if v.err != nil {
 				return expr
 			}
@@ -628,7 +628,7 @@ func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
 		if to == DNull {
 			newRight = DNull
 		} else {
-			newRight = NewTypedComparisonExpr(rightCmp, leftTo, to).normalize(v)
+			newRight = NewTypedComparisonExpr(MakeComparisonOperator(rightCmp), leftTo, to).normalize(v)
 			if v.err != nil {
 				return expr
 			}
@@ -800,17 +800,17 @@ func (v *NormalizeVisitor) isNumericOne(expr TypedExpr) bool {
 }
 
 func invertComparisonOp(op ComparisonOperator) (ComparisonOperator, error) {
-	switch op {
+	switch op.Symbol {
 	case EQ:
-		return EQ, nil
+		return MakeComparisonOperator(EQ), nil
 	case GE:
-		return LE, nil
+		return MakeComparisonOperator(LE), nil
 	case GT:
-		return LT, nil
+		return MakeComparisonOperator(LT), nil
 	case LE:
-		return GE, nil
+		return MakeComparisonOperator(GE), nil
 	case LT:
-		return GT, nil
+		return MakeComparisonOperator(GT), nil
 	default:
 		return op, errors.AssertionFailedf("unable to invert: %s", op)
 	}

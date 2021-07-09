@@ -88,7 +88,9 @@ func createSplitRanges(
 			lhsDesc.StartKey, rhsDesc.StartKey)
 	}
 
-	return lhsDesc, rhsDesc, nil
+	// NB: return copies of the descriptors as a purely precautionary measure.
+	// Tests have been observed to mutate the returned memory, for example in #67346.
+	return protoutil.Clone(lhsDesc).(*roachpb.RangeDescriptor), protoutil.Clone(rhsDesc).(*roachpb.RangeDescriptor), nil
 }
 
 // TestStoreRangeMergeTwoEmptyRanges tries to merge two empty ranges together.
@@ -4890,7 +4892,6 @@ func sendWithTxn(
 func TestStoreBlockTransferLeaseRequestAfterSubsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRaceWithIssue(t, 67346, "data race")
 
 	ctx := context.Background()
 	numNodes := 2
@@ -4961,31 +4962,33 @@ func setupClusterWithSubsumedRange(
 	require.NoError(t, err)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
 	require.NoError(t, err)
-	add := func(desc *roachpb.RangeDescriptor) {
+	add := func(desc *roachpb.RangeDescriptor) *roachpb.RangeDescriptor {
+		var newDesc roachpb.RangeDescriptor
 		testutils.SucceedsSoon(t, func() error {
-			*desc, err = tc.AddVoters(desc.StartKey.AsRawKey(), tc.Target(1))
+			var err error
+			newDesc, err = tc.AddVoters(desc.StartKey.AsRawKey(), tc.Target(1))
 			if kv.IsExpectedRelocateError(err) {
 				// Retry.
 				return errors.Newf("ChangeReplicas: received error %s", err)
 			}
 			return nil
 		})
-		require.NoError(t, err)
 		require.NoError(t, tc.(*testcluster.TestCluster).WaitForFullReplication())
 		testutils.SucceedsSoon(t, func() error {
-			if count := len(replsForRange(ctx, t, tc, *desc, numNodes)); count != 2 {
-				return errors.Newf("expected %d replicas for range %d; found %d", 2, desc.RangeID, count)
+			if count := len(replsForRange(ctx, t, tc, newDesc, numNodes)); count != 2 {
+				return errors.Newf("expected %d replicas for range %d; found %d", 2, newDesc.RangeID, count)
 			}
 			return nil
 		})
-		require.NoError(t, tc.(*testcluster.TestCluster).WaitForVoters(desc.StartKey.AsRawKey(), tc.Target(1)))
-		require.NoError(t, tc.(*testcluster.TestCluster).WaitForVoters(desc.StartKey.AsRawKey(), tc.Target(0)))
+		require.NoError(t, tc.(*testcluster.TestCluster).WaitForVoters(newDesc.StartKey.AsRawKey(), tc.Target(1)))
+		require.NoError(t, tc.(*testcluster.TestCluster).WaitForVoters(newDesc.StartKey.AsRawKey(), tc.Target(0)))
+		return &newDesc
 	}
 	if numNodes > 1 {
 		// Replicate the involved ranges to at least one other node in case the
 		// TestCluster is a multi-node cluster.
-		add(rhsDesc)
-		add(lhsDesc)
+		rhsDesc = add(rhsDesc)
+		lhsDesc = add(lhsDesc)
 	}
 	errCh := make(chan error)
 	blocker := filter.BlockNextMerge()

@@ -445,7 +445,7 @@ func (b *Builder) buildScalar(
 }
 
 func (b *Builder) hasSubOperator(t *tree.ComparisonExpr) bool {
-	return t.Operator == tree.Any || t.Operator == tree.All || t.Operator == tree.Some
+	return t.Operator.Symbol == tree.Any || t.Operator.Symbol == tree.All || t.Operator.Symbol == tree.Some
 }
 
 func (b *Builder) buildAnyScalar(
@@ -454,14 +454,14 @@ func (b *Builder) buildAnyScalar(
 	left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
 	right := b.buildScalar(t.TypedRight(), inScope, nil, nil, colRefs)
 
-	subop := opt.ComparisonOpMap[t.SubOperator]
+	subop := opt.ComparisonOpMap[t.SubOperator.Symbol]
 
-	if t.Operator == tree.All {
+	if t.Operator.Symbol == tree.All {
 		subop = opt.NegateOpMap[subop]
 	}
 
 	out := b.factory.ConstructAnyScalar(left, right, subop)
-	if t.Operator == tree.All {
+	if t.Operator.Symbol == tree.All {
 		out = b.factory.ConstructNot(out)
 	}
 	return out
@@ -651,7 +651,7 @@ func (b *Builder) checkSubqueryOuterCols(
 func (b *Builder) constructComparison(
 	cmp *tree.ComparisonExpr, left, right opt.ScalarExpr,
 ) opt.ScalarExpr {
-	switch cmp.Operator {
+	switch cmp.Operator.Symbol {
 	case tree.EQ:
 		return b.factory.ConstructEq(left, right)
 	case tree.LT:
