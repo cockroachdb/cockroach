@@ -401,20 +401,21 @@ func (r *Replica) canAttempt1PCEvaluation(
 			ba.Timestamp, ba.Txn.WriteTimestamp)
 	}
 
-	// Check whether the txn record has already been created. If so, we can't
-	// perform a 1PC evaluation because we need to clean up the record during
-	// evaluation.
-	if ok, err := batcheval.HasTxnRecord(ctx, r.store.Engine(), ba.Txn); ok || err != nil {
-		return false, roachpb.NewError(err)
-	}
-
 	// The EndTxn checks whether the txn record can be created, but we're
 	// eliding the EndTxn. So, we'll do the check instead.
-	ok, minCommitTS, reason := r.CanCreateTxnRecord(ctx, ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
+	//
+	// Note that we cannot rely on the returned reason here, since HeartbeatTxn
+	// requests overload the txn record tombstone markers in the timestamp cache
+	// to also mean that a heartbeat has written a record. CanCreateTxnRecord
+	// therefore cannot distinguish between a finalized and non-finalized
+	// transaction, and so the returned reason assumes that the caller has already
+	// checked that no transaction record exists on disk -- we don't check that
+	// here as a performance optimization, and therefore cannot rely on the
+	// reason, so we fall back to 2PC evaluation and let EndTxn do error handling
+	// after checking for the txn record on disk.
+	ok, minCommitTS, _ := r.CanCreateTxnRecord(ctx, ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
 	if !ok {
-		newTxn := ba.Txn.Clone()
-		newTxn.Status = roachpb.ABORTED
-		return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(reason), newTxn)
+		return false, nil
 	}
 	if ba.Timestamp.Less(minCommitTS) {
 		ba.Txn.WriteTimestamp = minCommitTS
