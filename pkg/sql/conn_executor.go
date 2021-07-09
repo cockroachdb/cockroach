@@ -1606,6 +1606,12 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		// Update the cmd and pos in the stmtBuf as limitedCommandResult will have
+		// advanced the position if the the portal is repeatedly executed with a limit
+		cmd, pos, err = ex.stmtBuf.CurCmd()
+		if err != nil {
+			return err
+		}
 
 	case PrepareStmt:
 		ex.curStmtAST = tcmd.AST
@@ -1735,7 +1741,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 
 	if rewindCapability, canRewind := ex.getRewindTxnCapability(); !canRewind {
 		// Trim statements that cannot be retried to reclaim memory.
-		ex.stmtBuf.ltrim(ctx, pos)
+		ex.stmtBuf.Ltrim(ctx, pos)
 	} else {
 		rewindCapability.close()
 	}
@@ -1861,7 +1867,7 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
 			"Was: %d; new value: %d", ex.extraTxnState.txnRewindPos, pos))
 	}
 	ex.extraTxnState.txnRewindPos = pos
-	ex.stmtBuf.ltrim(ctx, pos)
+	ex.stmtBuf.Ltrim(ctx, pos)
 	ex.commitPrepStmtNamespace(ctx)
 	ex.extraTxnState.savepointsAtTxnRewindPos = ex.extraTxnState.savepoints.clone()
 }
