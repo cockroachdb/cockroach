@@ -5,6 +5,7 @@ go_library(
     name = "securitytest",
     srcs = [
         "securitytest.go",
+        "testcerts.go",
         ":embedded",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/security/securitytest",

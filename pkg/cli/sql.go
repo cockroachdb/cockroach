@@ -563,7 +563,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 	//
 	// We parse these commands separately, in the following blocks.
 	if len(cmd) == 1 && cmd[0] == "ls" {
-		sqlCtx.demoCluster.ListDemoNodes(os.Stdout, false /* justOne */)
+		sqlCtx.demoCluster.ListDemoNodes(os.Stdout, stderr, false /* justOne */)
 		return nextState
 	}
 

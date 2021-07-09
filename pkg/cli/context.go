@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -303,7 +304,7 @@ var sqlCtx = struct {
 
 	// demoCluster is the interface to the in-memory cluster for the
 	// `demo` command, if that is the command being run.
-	demoCluster DemoCluster
+	demoCluster democluster.DemoCluster
 }{}
 
 // setSQLContextDefaults set the default values in sqlCtx.  This
@@ -571,39 +572,30 @@ func setConvContextDefaults() {
 
 // demoCtx captures the command-line parameters of the `demo` command.
 // See below for defaults.
-var demoCtx struct {
-	nodes                     int
-	sqlPoolMemorySize         int64
-	cacheSize                 int64
-	disableTelemetry          bool
-	disableLicenseAcquisition bool
-	noExampleDatabase         bool
-	runWorkload               bool
-	localities                demoLocalityList
-	geoPartitionedReplicas    bool
-	simulateLatency           bool
-	insecure                  bool
-	sqlPort                   int
-	httpPort                  int
+var demoCtx = democluster.Context{
+	CliCtx: &cliCtx.Context,
 }
 
 // setDemoContextDefaults set the default values in demoCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
 func setDemoContextDefaults() {
-	demoCtx.nodes = 1
-	demoCtx.sqlPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.cacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.noExampleDatabase = false
-	demoCtx.simulateLatency = false
-	demoCtx.runWorkload = false
-	demoCtx.localities = nil
-	demoCtx.geoPartitionedReplicas = false
-	demoCtx.disableTelemetry = false
-	demoCtx.disableLicenseAcquisition = false
-	demoCtx.insecure = false
-	demoCtx.sqlPort, _ = strconv.Atoi(base.DefaultPort)
-	demoCtx.httpPort, _ = strconv.Atoi(base.DefaultHTTPPort)
+	demoCtx.NumNodes = 1
+	demoCtx.SQLPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
+	demoCtx.CacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
+	demoCtx.NoExampleDatabase = false
+	demoCtx.SimulateLatency = false
+	demoCtx.RunWorkload = false
+	demoCtx.Localities = nil
+	demoCtx.GeoPartitionedReplicas = false
+	demoCtx.DisableTelemetry = false
+	demoCtx.DisableLicenseAcquisition = false
+	demoCtx.DefaultKeySize = defaultKeySize
+	demoCtx.DefaultCALifetime = defaultCALifetime
+	demoCtx.DefaultCertLifetime = defaultCertLifetime
+	demoCtx.Insecure = false
+	demoCtx.SQLPort, _ = strconv.Atoi(base.DefaultPort)
+	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
@@ -226,7 +227,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defCertsDirPath, _ = filepath.Abs(defCertsDirPath)
-	cleanup := createTestCerts(defCertsDirPath)
+	cleanup := securitytest.CreateTestCerts(defCertsDirPath)
 	defer func() { _ = cleanup() }()
 
 	// Prepare a custom certificate directory.
@@ -235,7 +236,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		t.Fatal(err)
 	}
 	testCertsDirPath, _ = filepath.Abs(testCertsDirPath)
-	cleanup2 := createTestCerts(testCertsDirPath)
+	cleanup2 := securitytest.CreateTestCerts(testCertsDirPath)
 	defer func() { _ = cleanup2() }()
 
 	anyCmd := []string{"sql", "quit"}

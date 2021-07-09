@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package democluster
 
 import (
 	"context"
@@ -19,8 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,6 +32,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func newDemoCtx() *Context {
+	return &Context{
+		NumNodes:            1,
+		SQLPoolMemorySize:   128 << 20, // 128MB, chosen to fit 9 nodes on 2GB machine.
+		CacheSize:           64 << 20,  // 64MB, chosen to fit 9 nodes on 2GB machine.
+		DefaultKeySize:      1024,
+		DefaultCALifetime:   24 * time.Hour,
+		DefaultCertLifetime: 2 * time.Hour,
+	}
+}
 
 func TestTestServerArgsForTransientCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -94,11 +108,11 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			demoCtxTemp := demoCtx
-			demoCtx.sqlPoolMemorySize = tc.sqlPoolMemorySize
-			demoCtx.cacheSize = tc.cacheSize
+			demoCtx := newDemoCtx()
+			demoCtx.SQLPoolMemorySize = tc.sqlPoolMemorySize
+			demoCtx.CacheSize = tc.cacheSize
 
-			actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "", 1234, 4567, stickyEnginesRegistry)
+			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "", 1234, 4567, stickyEnginesRegistry)
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
 
@@ -114,9 +128,6 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			actual.StoreSpecs = nil
 
 			assert.Equal(t, tc.expected, actual)
-
-			// Restore demoCtx state after each test.
-			demoCtx = demoCtxTemp
 		})
 	}
 }
@@ -129,19 +140,15 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	// has a very high simulated latency between each node.
 	skip.UnderRace(t)
 
-	// Ensure flags are reset on start, and also make sure
-	// at the end of the test they are reset.
-	TestingReset()
-	defer TestingReset()
-
+	demoCtx := newDemoCtx()
 	// Set up an empty 9-node cluster with simulated latencies.
-	demoCtx.simulateLatency = true
-	demoCtx.nodes = 9
+	demoCtx.SimulateLatency = true
+	demoCtx.NumNodes = 9
 
 	certsDir, err := ioutil.TempDir("", "cli-demo-test")
 	require.NoError(t, err)
 
-	cleanupFunc := createTestCerts(certsDir)
+	cleanupFunc := securitytest.CreateTestCerts(certsDir)
 	defer func() {
 		if err := cleanupFunc(); err != nil {
 			t.Fatal(err)
@@ -152,6 +159,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 
 	// Setup the transient cluster.
 	c := transientCluster{
+		demoCtx:              demoCtx,
 		stopper:              stop.NewStopper(),
 		demoDir:              certsDir,
 		stickyEngineRegistry: server.NewStickyInMemEnginesRegistry(),
@@ -159,13 +167,19 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	// Stop the cluster when the test exits, including when it fails.
 	// This also calls the Stop() method on the stopper, and thus
 	// cancels everything controlled by the stopper.
-	defer c.cleanup(ctx)
+	defer c.Close(ctx)
 
 	// Also ensure the context gets canceled when the stopper
 	// terminates above.
 	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
 
-	require.NoError(t, c.start(ctx, demoCmd, nil /* gen */))
+	require.NoError(t, c.Start(ctx, func(ctx context.Context, s *server.Server, _ bool, adminUser, adminPassword string) error {
+		return s.RunLocalSQL(ctx,
+			func(ctx context.Context, ie *sql.InternalExecutor) error {
+				_, err := ie.Exec(ctx, "admin-user", nil, "CREATE USER $1 WITH PASSWORD $2", adminUser, adminPassword)
+				return err
+			})
+	}))
 
 	for _, tc := range []struct {
 		desc    string
@@ -191,6 +205,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			url, err := c.getNetworkURLForServer(ctx, tc.nodeIdx, true /* includeAppName */)
 			require.NoError(t, err)
+			sqlConnCtx := clisqlclient.Context{}
 			conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, url.ToPQ().String())
 			defer func() {
 				if err := conn.Close(); err != nil {
@@ -208,6 +223,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 			// Attempt to make a query that talks to every node.
 			// This should take at least maxLatency.
 			startTime := timeutil.Now()
+			sqlExecCtx := clisqlexec.Context{}
 			_, _, err = sqlExecCtx.RunQuery(
 				conn,
 				clisqlclient.MakeQuery(`SHOW ALL CLUSTER QUERIES`),

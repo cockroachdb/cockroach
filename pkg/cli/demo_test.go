@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -19,8 +20,7 @@ func Example_demo() {
 	c := NewCLITest(TestCLIParams{NoServer: true})
 	defer c.Cleanup()
 
-	defer func(b bool) { testingForceRandomizeDemoPorts = b }(testingForceRandomizeDemoPorts)
-	testingForceRandomizeDemoPorts = true
+	defer democluster.TestingForceRandomizeDemoPorts()()
 
 	testData := [][]string{
 		{`demo`, `-e`, `show database`},

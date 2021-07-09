@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -79,5 +79,5 @@ func getAndApplyLicense(db *gosql.DB, clusterID uuid.UUID, org string) (bool, er
 func init() {
 	// Set the GetAndApplyLicense function within cockroach demo.
 	// This separation is done to avoid using enterprise features in an OSS/BSL build.
-	cli.GetAndApplyLicense = getAndApplyLicense
+	democluster.GetAndApplyLicense = getAndApplyLicense
 }
