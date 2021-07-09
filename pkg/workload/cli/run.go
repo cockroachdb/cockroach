@@ -84,6 +84,7 @@ var secure = securityFlags.Bool("secure", false,
 		"Running in secure mode expects the relevant certs to have been created for the user in the certs/ directory."+
 		"For example when using root, certs/client.root.crt certs/client.root.key should exist.")
 var user = securityFlags.String("user", "root", "Specify a user to run the workload as")
+var password = securityFlags.String("password", "", "Optionally specify a password for the user")
 
 func init() {
 
@@ -195,16 +196,23 @@ func CmdHelper(
 		if dbFlag := cmd.Flag(`db`); dbFlag != nil {
 			dbOverride = dbFlag.Value.String()
 		}
-		urls := args
 
+		urls := args
 		if len(urls) == 0 {
 			crdbDefaultURL := fmt.Sprintf(`postgres://%s@localhost:26257?sslmode=disable`, *user)
 			if *secure {
-				crdbDefaultURL = fmt.Sprintf(
-					// This URL expects the certs to have been created by the user.
-					`postgres://%s@localhost:26257?sslcert=certs/client.%s.crt&sslkey=certs/client.%s.key&sslrootcert=certs/ca.crt&sslmode=require`,
-					*user, *user, *user)
+				if *password != "" {
+					crdbDefaultURL = fmt.Sprintf(
+						`postgres://%s:%s@localhost:26257?sslmode=require&sslrootcert=certs/ca.crt`,
+						*user, *password)
+				} else {
+					crdbDefaultURL = fmt.Sprintf(
+						// This URL expects the certs to have been created by the user.
+						`postgres://%s@localhost:26257?sslcert=certs/client.%s.crt&sslkey=certs/client.%s.key&sslrootcert=certs/ca.crt&sslmode=require`,
+						*user, *user, *user)
+				}
 			}
+
 			urls = []string{crdbDefaultURL}
 		}
 		dbName, err := workload.SanitizeUrls(gen, dbOverride, urls)
