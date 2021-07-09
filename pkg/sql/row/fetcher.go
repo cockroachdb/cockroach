@@ -51,8 +51,7 @@ type kvBatchFetcher interface {
 	// parameter if there are no more keys in the scan. May return either a slice
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
 	// version - both must be handled by calling code.
-	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
-		batchResponse []byte, origSpan roachpb.Span, err error)
+	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error)
 
 	close(ctx context.Context)
 }
@@ -713,17 +712,44 @@ func (rf *Fetcher) StartScanFrom(ctx context.Context, f kvBatchFetcher) error {
 	return err
 }
 
+// setNextKV sets the next KV to process to the input KV. needsCopy, if true,
+// causes the input kv to be deep copied. needsCopy should be set to true if
+// the input KV is pointing to the last KV of a batch, so that the batch can
+// be garbage collected before fetching the next one.
+// gcassert:inline
+func (rf *Fetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
+	if !needsCopy {
+		rf.kv = kv
+		return
+	}
+
+	// If we've made it to the very last key in the batch, copy out the key
+	// so that the GC can reclaim the large backing slice before we call
+	// NextKV() again.
+	kvCopy := roachpb.KeyValue{}
+	kvCopy.Key = make(roachpb.Key, len(kv.Key))
+	copy(kvCopy.Key, kv.Key)
+	kvCopy.Value.RawBytes = make([]byte, len(kv.Value.RawBytes))
+	copy(kvCopy.Value.RawBytes, kv.Value.RawBytes)
+	kvCopy.Value.Timestamp = kv.Value.Timestamp
+	rf.kv = kvCopy
+}
+
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
 func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
-	var ok bool
+	var moreKVs bool
 
 	for {
-		ok, rf.kv, _, err = rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+		var finalReferenceToBatch bool
+		var kv roachpb.KeyValue
+		moreKVs, kv, finalReferenceToBatch, err = rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 		if err != nil {
 			return false, ConvertFetchError(ctx, rf, err)
 		}
-		rf.kvEnd = !ok
+		rf.setNextKV(kv, finalReferenceToBatch)
+
+		rf.kvEnd = !moreKVs
 		if rf.kvEnd {
 			// No more keys in the scan. We need to transition
 			// rf.rowReadyTable to rf.currentTable for the last
@@ -774,11 +800,11 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 			// it's trying to model is.
 			rf.rowReadyTable = rf.currentTable
 		} else if rf.mustDecodeIndexKey || rf.traceKV {
-			rf.keyRemainingBytes, ok, foundNull, err = rf.ReadIndexKey(rf.kv.Key)
+			rf.keyRemainingBytes, moreKVs, foundNull, err = rf.ReadIndexKey(rf.kv.Key)
 			if err != nil {
 				return false, err
 			}
-			if !ok {
+			if !moreKVs {
 				// The key did not match any of the table
 				// descriptors, which means it's interleaved
 				// data from some other table or index.

@@ -94,7 +94,6 @@ type txnKVFetcher struct {
 	requestSpans roachpb.Spans
 	responses    []roachpb.ResponseUnion
 
-	origSpan         roachpb.Span
 	remainingBatches [][]byte
 	mon              *mon.BytesMonitor
 	acc              mon.BoundAccount
@@ -527,15 +526,29 @@ func popBatch(batches [][]byte) (batch []byte, remainingBatches [][]byte) {
 
 // nextBatch returns the next batch of key/value pairs. If there are none
 // available, a fetch is initiated. When there are no more keys, ok is false.
-// origSpan returns the span that batch was fetched from, and bounds all of the
-// keys returned.
+// atBatchBoundary indicates whether the next call to nextBatch will request
+// another fetch from the KV system.
 func (f *txnKVFetcher) nextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResp []byte, origSpan roachpb.Span, err error) {
+) (ok bool, kvs []roachpb.KeyValue, batchResp []byte, err error) {
+	// The purpose of this loop is to unpack the two-level batch structure that is
+	// returned from the KV layer.
+	//
+	// A particular BatchRequest from fetch will populate the f.responses field
+	// with one response per request in the input BatchRequest. Each response
+	// in the responses field itself can also have a list of "BatchResponses",
+	// each of which is a byte slice containing result data from KV. Since this
+	// function, by contract, returns just a single byte slice at a time, we store
+	// the inner list as state for the next invocation to pop from.
 	if len(f.remainingBatches) > 0 {
+		// Are there remaining data batches? If so, just pop one off from the
+		// list and return it.
 		batchResp, f.remainingBatches = popBatch(f.remainingBatches)
-		return true, nil, batchResp, f.origSpan, nil
+		return true, nil, batchResp, nil
 	}
+	// There are no remaining data batches. Find the first non-empty ResponseUnion
+	// in the list of unprocessed responses from the last BatchResponse we sent,
+	// and process it.
 	for len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
 		f.responses[0] = roachpb.ResponseUnion{}
@@ -548,31 +561,34 @@ func (f *txnKVFetcher) nextBatch(
 			if len(t.BatchResponses) > 0 {
 				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
-			return true, t.Rows, batchResp, origSpan, nil
+			return true, t.Rows, batchResp, nil
 		case *roachpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
 				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
-			return true, t.Rows, batchResp, origSpan, nil
+			return true, t.Rows, batchResp, nil
 		case *roachpb.GetResponse:
 			if t.IntentValue != nil {
-				return false, nil, nil, origSpan,
-					errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
+				return false, nil, nil, errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
 			}
 			if t.Value == nil {
 				// Nothing found in this particular response, let's continue to the next
 				// one.
 				continue
 			}
-			return true, []roachpb.KeyValue{{Key: origSpan.Key, Value: *t.Value}}, nil, origSpan, nil
+			return true, []roachpb.KeyValue{{Key: origSpan.Key, Value: *t.Value}}, nil, nil
 		}
 	}
+	// No more responses from the last BatchRequest. If we are out of keys, we can
+	// return and we're finished with the fetch.
 	if f.fetchEnd {
-		return false, nil, nil, roachpb.Span{}, nil
+		return false, nil, nil, nil
 	}
+	// We have more work to do. Ask the KV layer to continue where it left off.
 	if err := f.fetch(ctx); err != nil {
-		return false, nil, nil, roachpb.Span{}, err
+		return false, nil, nil, err
 	}
+	// We've got more data to process, recurse and process it.
 	return f.nextBatch(ctx)
 }
 
