@@ -11,6 +11,7 @@
 package coldata
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -75,6 +76,19 @@ type Vec interface {
 	Float64() Float64s
 	// Bytes returns a flat Bytes representation.
 	Bytes() *Bytes
+	// AbbreviatedBytes returns a uint64 slice where each uint64 represents the
+	// first eight bytes of each []byte. It is used for byte comparison fast
+	// paths.
+	//
+	// Given Vec v, b = v.Bytes(), and abbr = v.AbbreviatedBytes():
+	//
+	//   - abbr[i] > abbr[j] iff b[i] > b[j]
+	//   - abbr[i] < abbr[j] iff b[i] < b[j]
+	//   - If abbr[i] == abbr[j], it is unknown if b[i] is greater than, less
+	//     than, or equal to b[j]. A full comparison of all bytes in each is
+	//     required.
+	//
+	AbbreviatedBytes() []uint64
 	// Decimal returns an apd.Decimal slice.
 	Decimal() Decimals
 	// Timestamp returns a time.Time slice.
@@ -95,6 +109,10 @@ type Vec interface {
 	// TemplateType returns an []interface{} and is used for operator templates.
 	// Do not call this from normal code - it'll always panic.
 	TemplateType() []interface{}
+
+	// AbbreviatedTemplateType returns an []interface{} and is used for operator
+	// templates. Do not call this from normal code - it'll always panic.
+	AbbreviatedTemplateType() []interface{}
 
 	// Append uses SliceArgs to append elements of a source Vec into this Vec.
 	// It is logically equivalent to:
@@ -253,6 +271,28 @@ func (m *memColumn) Bytes() *Bytes {
 	return m.col.(*Bytes)
 }
 
+func (m *memColumn) AbbreviatedBytes() []uint64 {
+	bytes := m.col.(*Bytes)
+	r := make([]uint64, bytes.Len())
+	for i := range r {
+		b := bytes.Get(i)
+		r[i] = abbreviateBytes(b)
+	}
+	return r
+}
+
+func abbreviateBytes(bs []byte) uint64 {
+	if len(bs) >= 8 {
+		return binary.BigEndian.Uint64(bs)
+	}
+	var v uint64
+	for _, b := range bs {
+		v <<= 8
+		v |= uint64(b)
+	}
+	return v << uint(8*(8-len(bs)))
+}
+
 func (m *memColumn) Decimal() Decimals {
 	return m.col.(Decimals)
 }
@@ -278,6 +318,10 @@ func (m *memColumn) Col() interface{} {
 }
 
 func (m *memColumn) TemplateType() []interface{} {
+	panic("don't call this from non template code")
+}
+
+func (m *memColumn) AbbreviatedTemplateType() []interface{} {
 	panic("don't call this from non template code")
 }
 

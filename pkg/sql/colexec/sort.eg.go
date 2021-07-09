@@ -468,6 +468,7 @@ func (s *sortBoolAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -500,14 +501,16 @@ func (s *sortBoolAscWithNullsOp) Len() int {
 }
 
 type sortBytesAscWithNullsOp struct {
-	sortCol       *coldata.Bytes
-	nulls         *coldata.Nulls
-	order         []int
-	cancelChecker colexecutils.CancelChecker
+	sortCol            *coldata.Bytes
+	abbreviatedSortCol []uint64
+	nulls              *coldata.Nulls
+	order              []int
+	cancelChecker      colexecutils.CancelChecker
 }
 
 func (s *sortBytesAscWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
 	s.sortCol = col.Bytes()
+	s.abbreviatedSortCol = col.AbbreviatedBytes()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
@@ -547,6 +550,18 @@ func (s *sortBytesAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
+	// If the type can be abbreviated as a uint64, compare the abbreviated
+	// values first. If they are not equal, we are done with the comparison. If
+	// they are equal, we must fallback to a full comparison of the datums.
+	a := s.abbreviatedSortCol[s.order[i]]
+	b := s.abbreviatedSortCol[s.order[j]]
+	if a < b {
+		return true
+	} else if a > b {
+		return false
+	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -618,6 +633,7 @@ func (s *sortDecimalAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -689,6 +705,7 @@ func (s *sortInt16AscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -771,6 +788,7 @@ func (s *sortInt32AscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -853,6 +871,7 @@ func (s *sortInt64AscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -935,6 +954,7 @@ func (s *sortFloat64AscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1025,6 +1045,7 @@ func (s *sortTimestampAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1103,6 +1124,7 @@ func (s *sortIntervalAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1174,6 +1196,7 @@ func (s *sortJSONAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1251,6 +1274,7 @@ func (s *sortDatumAscWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1324,6 +1348,7 @@ func (s *sortBoolDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1356,14 +1381,16 @@ func (s *sortBoolDescWithNullsOp) Len() int {
 }
 
 type sortBytesDescWithNullsOp struct {
-	sortCol       *coldata.Bytes
-	nulls         *coldata.Nulls
-	order         []int
-	cancelChecker colexecutils.CancelChecker
+	sortCol            *coldata.Bytes
+	abbreviatedSortCol []uint64
+	nulls              *coldata.Nulls
+	order              []int
+	cancelChecker      colexecutils.CancelChecker
 }
 
 func (s *sortBytesDescWithNullsOp) init(ctx context.Context, col coldata.Vec, order []int) {
 	s.sortCol = col.Bytes()
+	s.abbreviatedSortCol = col.AbbreviatedBytes()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
@@ -1403,6 +1430,18 @@ func (s *sortBytesDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
+	// If the type can be abbreviated as a uint64, compare the abbreviated
+	// values first. If they are not equal, we are done with the comparison. If
+	// they are equal, we must fallback to a full comparison of the datums.
+	a := s.abbreviatedSortCol[s.order[i]]
+	b := s.abbreviatedSortCol[s.order[j]]
+	if a < b {
+		return false
+	} else if a > b {
+		return true
+	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1474,6 +1513,7 @@ func (s *sortDecimalDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1545,6 +1585,7 @@ func (s *sortInt16DescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1627,6 +1668,7 @@ func (s *sortInt32DescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1709,6 +1751,7 @@ func (s *sortInt64DescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1791,6 +1834,7 @@ func (s *sortFloat64DescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1881,6 +1925,7 @@ func (s *sortTimestampDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -1959,6 +2004,7 @@ func (s *sortIntervalDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2030,6 +2076,7 @@ func (s *sortJSONDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2107,6 +2154,7 @@ func (s *sortDatumDescWithNullsOp) Less(i, j int) bool {
 	} else if n2 {
 		return true
 	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2170,6 +2218,7 @@ func (s *sortBoolAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortBoolAscOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2202,14 +2251,16 @@ func (s *sortBoolAscOp) Len() int {
 }
 
 type sortBytesAscOp struct {
-	sortCol       *coldata.Bytes
-	nulls         *coldata.Nulls
-	order         []int
-	cancelChecker colexecutils.CancelChecker
+	sortCol            *coldata.Bytes
+	abbreviatedSortCol []uint64
+	nulls              *coldata.Nulls
+	order              []int
+	cancelChecker      colexecutils.CancelChecker
 }
 
 func (s *sortBytesAscOp) init(ctx context.Context, col coldata.Vec, order []int) {
 	s.sortCol = col.Bytes()
+	s.abbreviatedSortCol = col.AbbreviatedBytes()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
@@ -2239,6 +2290,18 @@ func (s *sortBytesAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortBytesAscOp) Less(i, j int) bool {
+
+	// If the type can be abbreviated as a uint64, compare the abbreviated
+	// values first. If they are not equal, we are done with the comparison. If
+	// they are equal, we must fallback to a full comparison of the datums.
+	a := s.abbreviatedSortCol[s.order[i]]
+	b := s.abbreviatedSortCol[s.order[j]]
+	if a < b {
+		return true
+	} else if a > b {
+		return false
+	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2300,6 +2363,7 @@ func (s *sortDecimalAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortDecimalAscOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2361,6 +2425,7 @@ func (s *sortInt16AscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt16AscOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2433,6 +2498,7 @@ func (s *sortInt32AscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt32AscOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2505,6 +2571,7 @@ func (s *sortInt64AscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt64AscOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2577,6 +2644,7 @@ func (s *sortFloat64AscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortFloat64AscOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2657,6 +2725,7 @@ func (s *sortTimestampAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortTimestampAscOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2725,6 +2794,7 @@ func (s *sortIntervalAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortIntervalAscOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2786,6 +2856,7 @@ func (s *sortJSONAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortJSONAscOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2853,6 +2924,7 @@ func (s *sortDatumAscOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortDatumAscOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2916,6 +2988,7 @@ func (s *sortBoolDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortBoolDescOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -2948,14 +3021,16 @@ func (s *sortBoolDescOp) Len() int {
 }
 
 type sortBytesDescOp struct {
-	sortCol       *coldata.Bytes
-	nulls         *coldata.Nulls
-	order         []int
-	cancelChecker colexecutils.CancelChecker
+	sortCol            *coldata.Bytes
+	abbreviatedSortCol []uint64
+	nulls              *coldata.Nulls
+	order              []int
+	cancelChecker      colexecutils.CancelChecker
 }
 
 func (s *sortBytesDescOp) init(ctx context.Context, col coldata.Vec, order []int) {
 	s.sortCol = col.Bytes()
+	s.abbreviatedSortCol = col.AbbreviatedBytes()
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
@@ -2985,6 +3060,18 @@ func (s *sortBytesDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortBytesDescOp) Less(i, j int) bool {
+
+	// If the type can be abbreviated as a uint64, compare the abbreviated
+	// values first. If they are not equal, we are done with the comparison. If
+	// they are equal, we must fallback to a full comparison of the datums.
+	a := s.abbreviatedSortCol[s.order[i]]
+	b := s.abbreviatedSortCol[s.order[j]]
+	if a < b {
+		return false
+	} else if a > b {
+		return true
+	}
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -3046,6 +3133,7 @@ func (s *sortDecimalDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortDecimalDescOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -3107,6 +3195,7 @@ func (s *sortInt16DescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt16DescOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -3179,6 +3268,7 @@ func (s *sortInt32DescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt32DescOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -3251,6 +3341,7 @@ func (s *sortInt64DescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortInt64DescOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -3323,6 +3414,7 @@ func (s *sortFloat64DescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortFloat64DescOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -3403,6 +3495,7 @@ func (s *sortTimestampDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortTimestampDescOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -3471,6 +3564,7 @@ func (s *sortIntervalDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortIntervalDescOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -3532,6 +3626,7 @@ func (s *sortJSONDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortJSONDescOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
@@ -3599,6 +3694,7 @@ func (s *sortDatumDescOp) sortPartitions(partitions []int) {
 }
 
 func (s *sortDatumDescOp) Less(i, j int) bool {
+
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])

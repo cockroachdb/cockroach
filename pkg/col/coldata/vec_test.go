@@ -11,6 +11,7 @@
 package coldata_test
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
@@ -413,6 +414,36 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 	require.True(t, dst.Nulls().NullAt(3))
 	// 4 wasn't included: it stays null.
 	require.True(t, dst.Nulls().NullAt(4))
+}
+
+func TestAbbreviatedBytes(t *testing.T) {
+	rng, _ := randutil.NewPseudoRand()
+
+	// Create a vector with random bytes values.
+	v := coldata.NewMemColumn(types.Bytes, 250, coldata.StandardColumnFactory)
+	b := v.Bytes()
+	for i := 0; i < b.Len(); i++ {
+		size := rng.Intn(32)
+		b.Set(i, randutil.RandBytes(rng, size))
+	}
+
+	// Ensure that for every i and j:
+	//
+	//  - abbr[i] < abbr[j] iff b.Get(i) < b.Get(j)
+	//  - abbr[i] > abbr[j] iff b.Get(i) > b.Get(j)
+	//
+	abbr := v.AbbreviatedBytes()
+	for i := 0; i < b.Len(); i++ {
+		for j := 0; j < b.Len(); j++ {
+			cmp := bytes.Compare(b.Get(i), b.Get(j))
+			if abbr[i] < abbr[j] && cmp >= 0 {
+				t.Errorf("abbr value of %v should not be less than %v", b.Get(i), b.Get(j))
+			}
+			if abbr[i] > abbr[j] && cmp <= 0 {
+				t.Errorf("abbr value of %v should not be greater than %v", b.Get(i), b.Get(j))
+			}
+		}
+	}
 }
 
 func BenchmarkAppend(b *testing.B) {

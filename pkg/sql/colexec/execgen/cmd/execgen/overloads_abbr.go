@@ -1,0 +1,47 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package main
+
+import "github.com/cockroachdb/cockroach/pkg/sql/types"
+
+// CanAbbreviate returns true if the canonical type family supports abbreviation
+// to a uint64 that can be used for comparison fast paths.
+//
+// For each type for which CanAbbreviate() returns true, a corresponding
+// function must be defined on the Vec interface in the form Abbreviate<TYPE>
+// that returns a []uint64 representing abbreviated values for each datum in the
+// vector. Given datums a and b, the following properties must hold true for the
+// respective abbreviated values abbrA abbrB:
+//
+//   - abbrA > abbrB iff a > b
+//   - abbrA < abbrB iff a < b
+//   - If abbrA == abbrB, it is unknown if a is greater than, less than, or
+//     equal to b. A full comparison of all bytes in each is required.
+//
+// For an example, see Vec.AbbreviateBytes.
+//
+// Abbreviating values to a uint64 helps optimize comparisons for datums that
+// are larger than the size of the system's native pointer (64-bits). If the
+// abbreviated values of two datums are different, there is no need to compare
+// the full value of the datums. This improves comparison performance for two
+// reasons. First, comparing two uint64s is a single CPU instruction. Any datum
+// larger than 64 bits requires multiple instructions for comparison. Second,
+// CPU caches are more efficiently used because the abbreviated values of a
+// vector are packed into a []uint64 of contiguous memory. This increases the
+// chance that two datums can be compared by only fetching information from CPU
+// caches rather than main memory.
+func (b *argWidthOverloadBase) CanAbbreviate() bool {
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		return true
+	}
+	return false
+}
