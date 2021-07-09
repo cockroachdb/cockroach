@@ -437,6 +437,14 @@ func DescriptorsMatchingTargets(
 			}
 
 		case *tree.AllTablesSelector:
+			resolvedSchema, _, err := r.LookupSchema(ctx, currentDatabase, p.SchemaName.String())
+			if err != nil {
+				return ret, err
+			}
+			if resolvedSchema && !p.ExplicitCatalog {
+				return ret, sqlerrors.NewInvalidWildcardError(tree.ErrString(p))
+			}
+
 			found, prefix, err := resolver.ResolveObjectNamePrefix(ctx, r, currentDatabase, searchPath, &p.ObjectNamePrefix)
 			if err != nil {
 				return ret, err

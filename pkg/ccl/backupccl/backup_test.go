@@ -8500,3 +8500,42 @@ DROP INDEX idx_3;
 
 	sqlDB.Exec(t, `BACKUP test.t TO 'nodelocal://1/backup_test' WITH revision_history`)
 }
+
+func TestFailBackupOnUnsupportedAllTablesSelectors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `
+CREATE SCHEMA uds;
+`)
+
+	testCases := []struct {
+		name         string
+		query        string
+		tablePattern string
+	}{
+		{
+			name:         "backup-all-tables-in-schema",
+			query:        "BACKUP public.* INTO $1",
+			tablePattern: "public.*",
+		},
+		{
+			name:         "backup-all-tables-in-user-defined-schema",
+			query:        "BACKUP uds.* INTO $1",
+			tablePattern: "uds.*",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			destination := "nodelocal://0/backup" + tc.name
+			sqlDB.ExpectErr(t,
+				fmt.Sprintf(`pq: failed to resolve targets specified in the BACKUP stmt: "%s" does not match any valid database or schema`, tc.tablePattern),
+				tc.query, destination,
+			)
+		})
+	}
+}
