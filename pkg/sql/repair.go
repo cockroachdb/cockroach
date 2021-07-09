@@ -11,8 +11,10 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
+	"io/ioutil"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -688,4 +691,33 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 		&eventpb.ForceDeleteTableDataEntry{
 			DescriptorID: uint32(descID),
 		})
+}
+
+func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, error) {
+	if err := p.RequireAdminRole(ctx, "network I/O"); err != nil {
+		return nil, err
+	}
+
+	conn, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri, p.User())
+	if err != nil {
+		return nil, err
+	}
+
+	file, err := conn.ReadFile(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	return ioutil.ReadAll(file)
+}
+
+func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []byte) error {
+	if err := p.RequireAdminRole(ctx, "network I/O"); err != nil {
+		return err
+	}
+
+	conn, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri, p.User())
+	if err != nil {
+		return err
+	}
+	return cloud.WriteFile(ctx, conn, "", bytes.NewReader(content))
 }
