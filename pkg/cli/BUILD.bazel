@@ -46,6 +46,7 @@ go_library(
         "quit.go",
         "sql.go",
         "sql_client.go",
+        "sql_shell_cmd.go",
         "sqlfmt.go",
         "start.go",
         "start_jemalloc.go",
