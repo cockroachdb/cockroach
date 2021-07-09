@@ -315,6 +315,11 @@ const (
 	SpanConfigurationsTable
 	// BoundedStaleness adds capabilities to perform bounded staleness reads.
 	BoundedStaleness
+	// SQLStatsCompactionScheduledJob creates a ScheduledJob for SQL Stats
+	// compaction on cluster startup and ensures that there is only one entry for
+	// the schedule.
+	SQLStatsCompactionScheduledJob
+
 	// Step (1): Add new versions here.
 )
 
@@ -546,6 +551,11 @@ var versionsSingleton = keyedVersions{
 		Key:     BoundedStaleness,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 156},
 	},
+	{
+		Key:     SQLStatsCompactionScheduledJob,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 158},
+	},
+
 	// Step (2): Add new versions here.
 }
 
