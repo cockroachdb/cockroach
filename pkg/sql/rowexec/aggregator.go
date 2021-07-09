@@ -189,11 +189,12 @@ const (
 	// hashAggregatorBucketsInitialLen is a guess on how many "items" the
 	// 'buckets' map of hashAggregator has the capacity for initially.
 	hashAggregatorBucketsInitialLen = 8
-	// hashAggregatorSizeOfBucketsItem is a guess on how much space (in bytes)
-	// each item added to 'buckets' map of hashAggregator takes up in the map
-	// (i.e. it is memory internal to the map, orthogonal to "key-value" pair
-	// that we're adding to the map).
-	hashAggregatorSizeOfBucketsItem = 64
+	// mapEntryOverhead is an estimate of the size of each item in a map in
+	// addition to the space occupied by the key and value. This value was
+	// determined empirically using runtime.GC() and runtime.ReadMemStats() to
+	// analyze the memory used by a map. This overhead appears to be independent
+	// of the key and value data types.
+	mapEntryOverhead = 64
 )
 
 // hashAggregator is a specialization of aggregatorBase that must keep track of
@@ -585,7 +586,7 @@ func (ag *hashAggregator) emitRow() (
 		}
 		// Before we create a new 'buckets' map below, we need to "release" the
 		// already accounted for memory of the current map.
-		ag.bucketsAcc.Shrink(ag.Ctx, int64(ag.alreadyAccountedFor)*hashAggregatorSizeOfBucketsItem)
+		ag.bucketsAcc.Shrink(ag.Ctx, int64(ag.alreadyAccountedFor)*mapEntryOverhead)
 		// Note that, for simplicity, we're ignoring the overhead of the slice of
 		// strings.
 		ag.bucketsAcc.Shrink(ag.Ctx, int64(len(ag.buckets))*sizeOfString)
@@ -848,7 +849,7 @@ func (ag *hashAggregator) accumulateRow(row rowenc.EncDatumRow) error {
 		ag.buckets[s] = bucket
 		if len(ag.buckets) == ag.bucketsLenGrowThreshold {
 			toAccountFor := ag.bucketsLenGrowThreshold - ag.alreadyAccountedFor
-			if err := ag.bucketsAcc.Grow(ag.Ctx, int64(toAccountFor)*hashAggregatorSizeOfBucketsItem); err != nil {
+			if err := ag.bucketsAcc.Grow(ag.Ctx, int64(toAccountFor)*mapEntryOverhead); err != nil {
 				return err
 			}
 			ag.alreadyAccountedFor = ag.bucketsLenGrowThreshold
