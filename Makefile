@@ -576,6 +576,7 @@ native-tag := $(subst -,_,$(TARGET_TRIPLE))$(if $(use-stdmalloc),_stdmalloc)
 # directly, so these files are only compiled when building with Make.
 CGO_PKGS := \
 	pkg/cli \
+	pkg/cli/clisqlshell \
 	pkg/server/status \
 	pkg/storage \
 	pkg/ccl/gssapiccl \
