@@ -45,7 +45,7 @@ import { findClosestTimeScale } from "src/redux/timewindow";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
-interface LineGraphProps extends MetricsDataComponentProps {
+export interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
   subtitle?: string;
   legend?: boolean;
@@ -356,6 +356,7 @@ function touPlot(data: formattedSeries[]): uPlot.AlignedData {
 // Once we receive updates to props, we push new data to the
 // uPlot object.
 export class LineGraph extends React.Component<LineGraphProps, {}> {
+  props: any;
   constructor(props: LineGraphProps) {
     super(props);
 
