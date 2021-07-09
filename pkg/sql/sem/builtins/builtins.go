@@ -12,6 +12,7 @@ package builtins
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/md5"
 	cryptorand "crypto/rand"
 	"crypto/sha1"
@@ -22,6 +23,7 @@ import (
 	"hash"
 	"hash/crc32"
 	"hash/fnv"
+	"io/ioutil"
 	"math"
 	"math/rand"
 	"net"
@@ -1069,6 +1071,63 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(res)), nil
 			},
 			Info:       "Decodes `data` using `format` (`hex` / `escape` / `base64`).",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"compress": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"data", types.Bytes}, {"codec", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
+				uncompressedData := []byte(tree.MustBeDBytes(args[0]))
+				codec := string(tree.MustBeDString(args[1]))
+				switch strings.ToUpper(codec) {
+				case "GZIP":
+					gzipBuf := bytes.NewBuffer([]byte{})
+					gz := gzip.NewWriter(gzipBuf)
+					if _, err := gz.Write(uncompressedData); err != nil {
+						return nil, err
+					}
+					if err := gz.Close(); err != nil {
+						return nil, err
+					}
+					return tree.NewDBytes(tree.DBytes(gzipBuf.Bytes())), nil
+				default:
+					return nil, pgerror.New(pgcode.InvalidParameterValue,
+						"only 'gzip' codec is supported for compress()")
+				}
+			},
+			Info:       "Compress `data` with the specified `codec` (`gzip`).",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"decompress": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"data", types.Bytes}, {"codec", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
+				compressedData := []byte(tree.MustBeDBytes(args[0]))
+				codec := string(tree.MustBeDString(args[1]))
+				switch strings.ToUpper(codec) {
+				case "GZIP":
+					r, err := gzip.NewReader(bytes.NewBuffer(compressedData))
+					if err != nil {
+						return nil, errors.Wrap(err, "failed to decompress")
+					}
+					defer r.Close()
+					decompressedBytes, err := ioutil.ReadAll(r)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDBytes(tree.DBytes(decompressedBytes)), nil
+				default:
+					return nil, pgerror.New(pgcode.InvalidParameterValue,
+						"only 'gzip' codec is supported for decompress()")
+				}
+			},
+			Info:       "Decompress `data` with the specified `codec` (`gzip`).",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
