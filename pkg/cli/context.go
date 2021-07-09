@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
+	democlusterapi "github.com/cockroachdb/cockroach/pkg/cli/democluster/api"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -304,7 +305,7 @@ type sqlContext struct {
 
 	// demoCluster is the interface to the in-memory cluster for the
 	// `demo` command, if that is the command being run.
-	demoCluster democluster.DemoCluster
+	demoCluster democlusterapi.DemoCluster
 }
 
 var sqlCtx = sqlContext{}
