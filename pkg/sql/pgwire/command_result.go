@@ -452,6 +452,10 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			// The client wants to see a ready for query message
 			// back. Send it then run the for loop again.
 			r.conn.stmtBuf.AdvanceOne()
+			// Trim old statements to reclaim memory. We need to perform this clean up
+			// here as the conn_executor cleanup is not executed because of the
+			// limitedCommandResult side state machine.
+			r.conn.stmtBuf.Ltrim(ctx, prevPos)
 			// We can hard code InTxnBlock here because we don't
 			// support implicit transactions, so we know we're in
 			// a transaction.
