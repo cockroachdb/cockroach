@@ -72,6 +72,14 @@ func runTerm(cmd *cobra.Command, args []string) (resErr error) {
 
 	if cliCtx.IsInteractive {
 		// The user only gets to see the welcome message on interactive sessions.
+		// Refer to README.md to understand the general design guidelines for
+		// help texts.
+		const welcomeMessage = `#
+# Welcome to the CockroachDB SQL shell.
+# All statements must be terminated by a semicolon.
+# To exit, type: \q.
+#
+`
 		fmt.Print(welcomeMessage)
 	}
 
