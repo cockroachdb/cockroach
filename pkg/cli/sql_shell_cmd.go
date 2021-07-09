@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/errors"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -41,7 +42,7 @@ func checkInteractive(stdin *os.File) {
 	// and we'll also assume that there is no human if the standard
 	// input is not terminal-like -- likely redirected from a file,
 	// etc.
-	cliCtx.IsInteractive = len(sqlCtx.execStmts) == 0 && isatty.IsTerminal(stdin.Fd())
+	cliCtx.IsInteractive = len(sqlCtx.ExecStmts) == 0 && isatty.IsTerminal(stdin.Fd())
 }
 
 // getInputFile establishes where we are reading from.
@@ -50,7 +51,7 @@ func getInputFile() (cmdIn *os.File, closeFn func(), err error) {
 		return os.Stdin, func() {}, nil
 	}
 
-	if len(sqlCtx.execStmts) != 0 {
+	if len(sqlCtx.ExecStmts) != 0 {
 		return nil, nil, errors.Newf("unsupported combination: --%s and --%s", cliflags.Execute.Name, cliflags.File.Name)
 	}
 
@@ -102,8 +103,8 @@ func runClient(cmd *cobra.Command, conn clisqlclient.Conn, cmdIn *os.File) error
 	// Enable safe updates, unless disabled.
 	setupSafeUpdates(cmd, conn)
 
-	c := newCliState(&cliCtx.Context, &sqlConnCtx, &sqlExecCtx, &sqlCtx, conn)
-	return c.runInteractive(cmdIn, os.Stdout, stderr)
+	c := clisqlshell.NewShell(&cliCtx.Context, &sqlConnCtx, &sqlExecCtx, &sqlCtx.Context, conn)
+	return c.RunInteractive(cmdIn, os.Stdout, stderr)
 }
 
 // setupSafeUpdates attempts to enable "safe mode" if the session is

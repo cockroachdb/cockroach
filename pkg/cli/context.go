@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
-	democlusterapi "github.com/cockroachdb/cockroach/pkg/cli/democluster/api"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -262,67 +262,27 @@ func setSQLExecContextDefaults() {
 	sqlExecCtx.VerboseTimings = false
 }
 
-// sqlContext captures the configuration of the `sql` command.
-// See below for defaults.
-type sqlContext struct {
-	// setStmts is a list of \set commands to execute before entering the sql shell.
-	setStmts statementsValue
-
-	// execStmts is a list of statements to execute.
-	// Only valid if inputFile is empty.
-	execStmts statementsValue
+var sqlCtx = struct {
+	clisqlshell.Context
 
 	// inputFile is the file to read from.
 	// If empty, os.Stdin is used.
 	// Only valid if execStmts is empty.
 	inputFile string
 
-	// repeatDelay indicates that the execStmts should be "watched"
-	// at the specified time interval. Zero disables
-	// the watch.
-	repeatDelay time.Duration
-
 	// safeUpdates indicates whether to set sql_safe_updates in the CLI
-	// shell.
+	// Shell.
 	safeUpdates bool
-
-	// demoCluster is the interface to the in-memory cluster for the
-	// `demo` command, if that is the command being run.
-	demoCluster democlusterapi.DemoCluster
-}
-
-type sqlInternalContext struct {
-	stdout *os.File
-	stderr *os.File
-
-	// quitAfterExecStmts tells the shell whether to quit
-	// after processing the execStmts.
-	quitAfterExecStmts bool
-
-	// Determines whether to stop the client upon encountering an error.
-	errExit bool
-
-	// Determines whether to perform client-side syntax checking.
-	checkSyntax bool
-
-	// autoTrace, when non-empty, encloses the executed statements
-	// by suitable SET TRACING and SHOW TRACE FOR SESSION statements.
-	autoTrace string
-
-	// The string used to produce the value of fullPrompt.
-	customPromptPattern string
-}
-
-var sqlCtx = sqlContext{}
+}{}
 
 // setSQLContextDefaults set the default values in sqlCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
 func setSQLContextDefaults() {
-	sqlCtx.setStmts = nil
-	sqlCtx.execStmts = nil
+	sqlCtx.SetStmts = nil
+	sqlCtx.ExecStmts = nil
+	sqlCtx.RepeatDelay = 0
 	sqlCtx.inputFile = ""
-	sqlCtx.repeatDelay = 0
 	sqlCtx.safeUpdates = false
 }
 
@@ -545,7 +505,7 @@ var sqlfmtCtx struct {
 	tabWidth   int
 	noSimplify bool
 	align      bool
-	execStmts  statementsValue
+	execStmts  clisqlshell.StatementsValue
 }
 
 // setSqlfmtContextDefaults set the default values in sqlfmtCtx.  This
