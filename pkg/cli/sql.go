@@ -47,12 +47,6 @@ const (
 	// Refer to README.md to understand the general design guidelines for
 	// help texts.
 
-	welcomeMessage = `#
-# Welcome to the CockroachDB SQL shell.
-# All statements must be terminated by a semicolon.
-# To exit, type: \q.
-#
-`
 	helpMessageFmt = `You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 General
   \q, quit, exit    exit the shell (Ctrl+C/Ctrl+D also supported).
