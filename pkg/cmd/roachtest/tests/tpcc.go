@@ -180,12 +180,14 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 
 	var ep *tpccChaosEventProcessor
+	var p *prometheus.Prometheus
 	if cfg := opts.PrometheusConfig; cfg != nil {
 		if c.IsLocal() {
 			t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
 			return
 		}
-		p, err := prometheus.Init(
+		var err error
+		p, err = prometheus.Init(
 			ctx,
 			*cfg,
 			c,
@@ -203,9 +205,14 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		defer func() {
+			// Use a context that will not time out to avoid the issue where
+			// ctx gets canceled if t.Fatal gets called.
+			snapshotCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
 			if err := p.Snapshot(
-				ctx,
+				snapshotCtx,
 				c,
 				t.L(),
 				filepath.Join(t.ArtifactsDir(), "prometheus-snapshot.tar.gz"),
