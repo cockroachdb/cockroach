@@ -237,7 +237,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 	if err := c.Start(ctx, runInitialSQL); err != nil {
 		return clierror.CheckAndMaybeShout(err)
 	}
-	sqlCtx.demoCluster = c
+	sqlCtx.DemoCluster = c
 
 	checkInteractive(cmdIn)
 

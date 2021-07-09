@@ -82,24 +82,6 @@ func (l *localityList) Set(value string) error {
 // This file contains definitions for data types suitable for use by
 // the flag+pflag packages.
 
-// statementsValue is an implementation of pflag.Value that appends any
-// argument to a slice.
-type statementsValue []string
-
-// Type implements the pflag.Value interface.
-func (s *statementsValue) Type() string { return "statementsValue" }
-
-// String implements the pflag.Value interface.
-func (s *statementsValue) String() string {
-	return strings.Join(*s, ";")
-}
-
-// Set implements the pflag.Value interface.
-func (s *statementsValue) Set(value string) error {
-	*s = append(*s, value)
-	return nil
-}
-
 type dumpMode int
 
 const (
