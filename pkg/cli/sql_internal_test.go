@@ -13,6 +13,9 @@ package cli
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -105,9 +108,8 @@ func TestHandleCliCmdSqlAlias(t *testing.T) {
 		{`\d`, `SHOW TABLES`},
 	}
 
-	var c cliState
 	for _, tt := range clientSideCommandTestsTable {
-		c = setupTestCliState()
+		c := setupTestCliState()
 		c.lastInputLine = tt.commandString
 		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
 
@@ -123,9 +125,8 @@ func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
 
 	clientSideCommandTests := []string{`\d goodarg badarg`, `\dz`}
 
-	var c cliState
 	for _, tt := range clientSideCommandTests {
-		c = setupTestCliState()
+		c := setupTestCliState()
 		c.lastInputLine = tt
 		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
 
@@ -146,8 +147,19 @@ func TestHandleDemoNodeCommandsInvalidNodeName(t *testing.T) {
 	assert.Equal(t, errInvalidSyntax, c.exitErr)
 }
 
-func setupTestCliState() cliState {
-	c := cliState{}
+func setupTestCliState() *cliState {
+	return setupTestCliStateWithConn(nil)
+}
+
+func setupTestCliStateWithConn(conn clisqlclient.Conn) *cliState {
+	cliCtx := &clicfg.Context{}
+	sqlConnCtx := &clisqlclient.Context{CliCtx: cliCtx}
+	sqlExecCtx := &clisqlexec.Context{
+		CliCtx:             cliCtx,
+		TableDisplayFormat: clisqlexec.TableDisplayTable,
+	}
+	sqlCtx := &sqlContext{}
+	c := newCliState(cliCtx, sqlConnCtx, sqlExecCtx, sqlCtx, conn)
 	c.ins = noLineEditor
 	return c
 }
