@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clisqlshell
 
 import (
 	"bufio"
@@ -118,8 +118,8 @@ type cliState struct {
 	cliCtx     *clicfg.Context
 	sqlConnCtx *clisqlclient.Context
 	sqlExecCtx *clisqlexec.Context
-	sqlCtx     *sqlContext
-	iCtx       *sqlInternalContext
+	sqlCtx     *Context
+	iCtx       *internalContext
 
 	conn clisqlclient.Conn
 	// ins is used to read lines if isInteractive is true.
@@ -232,7 +232,7 @@ const (
 // printCliHelp prints a short inline help about the CLI.
 func (c *cliState) printCliHelp() {
 	demoHelpStr := ""
-	if c.sqlCtx.demoCluster != nil {
+	if c.sqlCtx.DemoCluster != nil {
 		demoHelpStr = demoCommandsHelp
 	}
 	fmt.Fprintf(c.iCtx.stdout, helpMessageFmt,
@@ -538,7 +538,7 @@ func isEndOfStatement(lastTok int) bool {
 // This can only be done from `cockroach demo`.
 func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	// A demo cluster signifies the presence of `cockroach demo`.
-	if c.sqlCtx.demoCluster == nil {
+	if c.sqlCtx.DemoCluster == nil {
 		return c.invalidSyntax(errState, `\demo can only be run with cockroach demo`)
 	}
 
@@ -550,7 +550,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 	//
 	// We parse these commands separately, in the following blocks.
 	if len(cmd) == 1 && cmd[0] == "ls" {
-		c.sqlCtx.demoCluster.ListDemoNodes(c.iCtx.stdout, c.iCtx.stderr, false /* justOne */)
+		c.sqlCtx.DemoCluster.ListDemoNodes(c.iCtx.stdout, c.iCtx.stderr, false /* justOne */)
 		return nextState
 	}
 
@@ -573,12 +573,12 @@ func (c *cliState) handleDemoAddNode(cmd []string, nextState, errState cliStateE
 		return c.internalServerError(errState, fmt.Errorf("bad call to handleDemoAddNode"))
 	}
 
-	addedNodeID, err := c.sqlCtx.demoCluster.AddNode(context.Background(), cmd[1])
+	addedNodeID, err := c.sqlCtx.DemoCluster.AddNode(context.Background(), cmd[1])
 	if err != nil {
 		return c.internalServerError(errState, err)
 	}
 	fmt.Fprintf(c.iCtx.stdout, "node %v has been added with locality \"%s\"\n",
-		addedNodeID, c.sqlCtx.demoCluster.GetLocality(addedNodeID))
+		addedNodeID, c.sqlCtx.DemoCluster.GetLocality(addedNodeID))
 	return nextState
 }
 
@@ -600,25 +600,25 @@ func (c *cliState) handleDemoNodeCommands(
 
 	switch cmd[0] {
 	case "shutdown":
-		if err := c.sqlCtx.demoCluster.DrainAndShutdown(ctx, int32(nodeID)); err != nil {
+		if err := c.sqlCtx.DemoCluster.DrainAndShutdown(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Fprintf(c.iCtx.stdout, "node %d has been shutdown\n", nodeID)
 		return nextState
 	case "restart":
-		if err := c.sqlCtx.demoCluster.RestartNode(ctx, int32(nodeID)); err != nil {
+		if err := c.sqlCtx.DemoCluster.RestartNode(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Fprintf(c.iCtx.stdout, "node %d has been restarted\n", nodeID)
 		return nextState
 	case "recommission":
-		if err := c.sqlCtx.demoCluster.Recommission(ctx, int32(nodeID)); err != nil {
+		if err := c.sqlCtx.DemoCluster.Recommission(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Fprintf(c.iCtx.stdout, "node %d has been recommissioned\n", nodeID)
 		return nextState
 	case "decommission":
-		if err := c.sqlCtx.demoCluster.Decommission(ctx, int32(nodeID)); err != nil {
+		if err := c.sqlCtx.DemoCluster.Decommission(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Fprintf(c.iCtx.stdout, "node %d has been decommissioned\n", nodeID)
@@ -1451,20 +1451,20 @@ func (c *cliState) doDecidePath() cliStateEnum {
 	return cliPrepareStatementLine
 }
 
-// newCliState instantiates a cliState.
-func newCliState(
+// NewShell instantiates a cliState.
+func NewShell(
 	cliCtx *clicfg.Context,
 	sqlConnCtx *clisqlclient.Context,
 	sqlExecCtx *clisqlexec.Context,
-	sqlCtx *sqlContext,
+	sqlCtx *Context,
 	conn clisqlclient.Conn,
-) *cliState {
+) Shell {
 	return &cliState{
 		cliCtx:     cliCtx,
 		sqlConnCtx: sqlConnCtx,
 		sqlExecCtx: sqlExecCtx,
 		sqlCtx:     sqlCtx,
-		iCtx: &sqlInternalContext{
+		iCtx: &internalContext{
 			customPromptPattern: defaultPromptPattern,
 		},
 		conn:       conn,
@@ -1472,9 +1472,8 @@ func newCliState(
 	}
 }
 
-// runInteractive runs the SQL client interactively, presenting
-// a prompt to the user for each statement.
-func (c *cliState) runInteractive(cmdIn, cmdOut, cmdErr *os.File) (exitErr error) {
+// RunInteractive implements the Shell interface.
+func (c *cliState) RunInteractive(cmdIn, cmdOut, cmdErr *os.File) (exitErr error) {
 	return c.doRunShell(cliStart, cmdIn, cmdOut, cmdErr)
 }
 
@@ -1490,9 +1489,9 @@ func (c *cliState) doRunShell(state cliStateEnum, cmdIn, cmdOut, cmdErr *os.File
 			if err != nil {
 				return err
 			}
-			if len(c.sqlCtx.execStmts) > 0 {
+			if len(c.sqlCtx.ExecStmts) > 0 {
 				// Single-line sql; run as simple as possible, without noise on stdout.
-				if err := c.runStatements(c.sqlCtx.execStmts); err != nil {
+				if err := c.runStatements(c.sqlCtx.ExecStmts); err != nil {
 					return err
 				}
 				if c.iCtx.quitAfterExecStmts {
@@ -1647,14 +1646,14 @@ func (c *cliState) configurePreShellDefaults(
 
 	// If any --set flags were set through the command line,
 	// synthetize '-e set=xxx' statements for them at the beginning.
-	c.iCtx.quitAfterExecStmts = len(c.sqlCtx.execStmts) > 0
-	if len(c.sqlCtx.setStmts) > 0 {
-		setStmts := make([]string, 0, len(c.sqlCtx.setStmts)+len(c.sqlCtx.execStmts))
-		for _, s := range c.sqlCtx.setStmts {
+	c.iCtx.quitAfterExecStmts = len(c.sqlCtx.ExecStmts) > 0
+	if len(c.sqlCtx.SetStmts) > 0 {
+		setStmts := make([]string, 0, len(c.sqlCtx.SetStmts)+len(c.sqlCtx.ExecStmts))
+		for _, s := range c.sqlCtx.SetStmts {
 			setStmts = append(setStmts, `\set `+s)
 		}
-		c.sqlCtx.setStmts = nil
-		c.sqlCtx.execStmts = append(setStmts, c.sqlCtx.execStmts...)
+		c.sqlCtx.SetStmts = nil
+		c.sqlCtx.ExecStmts = append(setStmts, c.sqlCtx.ExecStmts...)
 	}
 
 	return cleanupFn, nil
@@ -1692,8 +1691,8 @@ func (c *cliState) runStatements(stmts []string) error {
 		}
 		// If --watch was specified and no error was encountered,
 		// repeat.
-		if c.sqlCtx.repeatDelay > 0 && c.exitErr == nil {
-			time.Sleep(c.sqlCtx.repeatDelay)
+		if c.sqlCtx.RepeatDelay > 0 && c.exitErr == nil {
+			time.Sleep(c.sqlCtx.RepeatDelay)
 			continue
 		}
 		break

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clisqlshell
 
 import (
 	"testing"
@@ -94,7 +94,6 @@ func TestIsEndOfStatement(t *testing.T) {
 func TestHandleCliCmdSqlAlias(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	initCLIDefaults()
 
 	clientSideCommandTestsTable := []struct {
 		commandString string
@@ -121,7 +120,6 @@ func TestHandleCliCmdSqlAlias(t *testing.T) {
 func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	initCLIDefaults()
 
 	clientSideCommandTests := []string{`\d goodarg badarg`, `\dz`}
 
@@ -138,7 +136,6 @@ func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
 func TestHandleDemoNodeCommandsInvalidNodeName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	initCLIDefaults()
 
 	demoNodeCommandTests := []string{"shutdown", "*"}
 
@@ -148,18 +145,14 @@ func TestHandleDemoNodeCommandsInvalidNodeName(t *testing.T) {
 }
 
 func setupTestCliState() *cliState {
-	return setupTestCliStateWithConn(nil)
-}
-
-func setupTestCliStateWithConn(conn clisqlclient.Conn) *cliState {
 	cliCtx := &clicfg.Context{}
 	sqlConnCtx := &clisqlclient.Context{CliCtx: cliCtx}
 	sqlExecCtx := &clisqlexec.Context{
 		CliCtx:             cliCtx,
 		TableDisplayFormat: clisqlexec.TableDisplayTable,
 	}
-	sqlCtx := &sqlContext{}
-	c := newCliState(cliCtx, sqlConnCtx, sqlExecCtx, sqlCtx, conn)
+	sqlCtx := &Context{}
+	c := NewShell(cliCtx, sqlConnCtx, sqlExecCtx, sqlCtx, nil).(*cliState)
 	c.ins = noLineEditor
 	return c
 }
