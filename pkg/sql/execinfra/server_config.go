@@ -267,7 +267,16 @@ func GetWorkMemLimit(flowCtx *FlowCtx) int64 {
 	}
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 		return 1
-	} else if flowCtx.Cfg.TestingKnobs.MemoryLimitBytes != 0 {
+	}
+	return GetWorkMemLimitNoDiskSpill(flowCtx)
+}
+
+// GetWorkMemLimitNoDiskSpill returns the number of bytes determining the amount
+// of RAM available to a single processor or operator. This function should be
+// used instead of GetWorkMemLimit if the processor cannot spill to disk,
+// since ServerConfig.TestingKnobs.ForceDiskSpill is ignored by this function.
+func GetWorkMemLimitNoDiskSpill(flowCtx *FlowCtx) int64 {
+	if flowCtx.Cfg.TestingKnobs.MemoryLimitBytes != 0 {
 		return flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
 	}
 	if flowCtx.EvalCtx.SessionData.WorkMemLimit <= 0 {

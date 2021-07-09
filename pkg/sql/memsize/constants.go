@@ -70,4 +70,11 @@ const (
 	// RowsSliceOverhead is the in-memory overhead of a [][][]tree.Datum in
 	// bytes.
 	RowsSliceOverhead = int64(unsafe.Sizeof([][][]tree.Datum{}))
+
+	// MapEntryOverhead is an estimate of the size of each item in a map in
+	// addition to the space occupied by the key and value. This value was
+	// determined empirically using runtime.GC() and runtime.ReadMemStats() to
+	// analyze the memory used by a map. This overhead appears to be independent
+	// of the key and value data types.
+	MapEntryOverhead = 64
 )
