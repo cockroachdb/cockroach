@@ -5362,6 +5362,10 @@ opt_schedule_executor_type:
   {
     $$.val = tree.ScheduledBackupExecutor
   }
+| FOR SQL STATISTICS
+  {
+    $$.val = tree.ScheduledSQLStatsCompactionExecutor
+  }
 
 // %Help: SHOW TRACE - display an execution trace
 // %Category: Misc

@@ -260,7 +260,7 @@ type Server struct {
 	sqlStats *persistedsqlstats.PersistedSQLStats
 
 	// sqlStatsController is the control-plane interface for sqlStats.
-	sqlStatsController *sslocal.Controller
+	sqlStatsController *persistedsqlstats.Controller
 
 	// reportedStats is a pool of stats that is held for reporting, and is
 	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
@@ -325,7 +325,8 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* resetInterval */
 		nil, /* reportedProvider */
 	)
-	reportedSQLStatsController := reportedSQLStats.GetController(cfg.SQLStatusServer)
+	reportedSQLStatsController :=
+		reportedSQLStats.GetController(cfg.SQLStatusServer, cfg.DB, cfg.InternalExecutor)
 	memSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -441,9 +442,9 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.reportedStats.Start(ctx, stopper)
 }
 
-// GetSQLStatsController returns the sqlstats.Controller for current
+// GetSQLStatsController returns the persistedsqlstats.Controller for current
 // sql.Server's SQL Stats.
-func (s *Server) GetSQLStatsController() *sslocal.Controller {
+func (s *Server) GetSQLStatsController() *persistedsqlstats.Controller {
 	return s.sqlStatsController
 }
 
