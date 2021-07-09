@@ -3172,6 +3172,12 @@ type EvalPlanner interface {
 		ctx context.Context,
 		member security.SQLUsername,
 	) (map[security.SQLUsername]bool, error)
+
+	// ExternalReadFile reads the content from an external file URI.
+	ExternalReadFile(ctx context.Context, uri string) ([]byte, error)
+
+	// ExternalWriteFile writes the content to an external file URI.
+	ExternalWriteFile(ctx context.Context, uri string, content []byte) error
 }
 
 // CompactEngineSpanFunc is used to compact an engine key span at the given
