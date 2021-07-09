@@ -114,11 +114,42 @@ func findTimeZoneFunction(typ *types.T) (*tree.FunctionProperties, *tree.Overloa
 	panic(errors.AssertionFailedf("could not find overload for timezone"))
 }
 
+// STDistanceUseSpheroid returns true if the use_spheroid argument of
+// st_distance is not explicitly false. use_spheroid is the third argument of
+// st_distance for the geography overload and it is true by default. The
+// geometry overload does not have a use_spheroid argument, so if either of the
+// first two arguments are geometries, it returns false.
+func (c *CustomFuncs) STDistanceUseSpheroid(args memo.ScalarListExpr) bool {
+	if len(args) < 2 {
+		panic(errors.AssertionFailedf("expected st_distance to have at least two arguments"))
+	}
+	if args[0].DataType().Family() == types.GeometryFamily ||
+		args[1].DataType().Family() == types.GeometryFamily {
+		return false
+	}
+	const useSpheroidIdx = 2
+	if len(args) <= useSpheroidIdx {
+		// The use_spheroid argument is true by default, so return true if it
+		// was not provided.
+		return true
+	}
+	return args[useSpheroidIdx].Op() != opt.FalseOp
+}
+
 // MakeIntersectionFunction returns an ST_Intersects function for the given
 // arguments.
 func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.ScalarExpr {
 	const name = "st_intersects"
+	const useSpheroidIdx = 2
 	resultType := types.Bool
+
+	// We discard the use_spheroid argument, if present, because st_intersects
+	// does not have an overload with a use_spheroid argument. It always uses
+	// sphere-based calculation and never spheroid-based calculation. It is safe
+	// to discard use_spheroid here because it is guaranteed to be false in the
+	// match pattern of FoldEqZeroSTDistance by STDistanceUseSpheroid.
+	args = args[:useSpheroidIdx]
+
 	props, overload, ok := memo.FindFunction(&args, name)
 	if !ok {
 		panic(errors.AssertionFailedf("could not find overload for %s", name))

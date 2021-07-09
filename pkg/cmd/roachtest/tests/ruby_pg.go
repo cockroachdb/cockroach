@@ -139,7 +139,8 @@ func registerRubyPG(r registry.Registry) {
 		}
 
 		// Write the cockroach config into the test suite to use.
-		err = c.PutE(ctx, t.L(), "./pkg/cmd/roachtest/ruby_pg_helpers.rb", "/mnt/data1/ruby-pg/spec/helpers.rb", c.All())
+		rubyPGHelpersFile := "./pkg/cmd/roachtest/tests/ruby_pg_helpers.rb"
+		err = c.PutE(ctx, t.L(), rubyPGHelpersFile, "/mnt/data1/ruby-pg/spec/helpers.rb", c.All())
 		require.NoError(t, err)
 
 		t.Status("running ruby-pg test suite")
