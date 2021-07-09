@@ -280,20 +280,21 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 
 	case opt.LikeOp:
 		if s, ok := tree.AsDString(datum); ok {
-			if i := strings.IndexAny(string(s), "_%"); i >= 0 {
+			str := tree.UnescapePattern(string(s), `\`)
+			if i := strings.IndexAny(str, "_%"); i >= 0 {
 				if i == 0 {
 					// Mask starts with _ or %.
 					c.unconstrained(offset, out)
 					return false
 				}
-				c.makeStringPrefixSpan(offset, string(s[:i]), out)
+				c.makeStringPrefixSpan(offset, str[:i], out)
 				// A mask like ABC% is equivalent to restricting the prefix to ABC.
 				// A mask like ABC%Z requires restricting the prefix, but is a stronger
 				// condition.
 				return (i == len(s)-1) && s[i] == '%'
 			}
 			// No wildcard characters, this is an equality.
-			c.eqSpan(offset, &s, out)
+			c.eqSpan(offset, tree.NewDString(str), out)
 			return true
 		}
 
