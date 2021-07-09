@@ -442,3 +442,38 @@ func b_false() int {
 }
 ----
 ----
+
+# Do not include comment decoration in template function names.
+template
+package main
+
+func a() {
+	b(true /* t */)
+}
+
+// execgen:inline
+// execgen:template<t>
+func b(t bool) int {
+	if t {
+	    return 0
+	} else {
+	    return 1
+	}
+}
+----
+----
+package main
+
+func a() {
+	b_true()
+}
+
+// execgen:inline
+const _ = "template_b"
+
+// execgen:inline
+func b_true() int {
+	return 0
+}
+----
+----
