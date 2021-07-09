@@ -717,7 +717,7 @@ func init() {
 		durationFlag(f, &sqlCtx.repeatDelay, cliflags.Watch)
 		boolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates)
 		boolFlag(f, &sqlConnCtx.DebugMode, cliflags.CliDebugMode)
-		boolFlag(f, &sqlConnCtx.EmbeddedMode, cliflags.EmbeddedMode)
+		boolFlag(f, &cliCtx.EmbeddedMode, cliflags.EmbeddedMode)
 	}
 
 	// Commands that establish a SQL connection.

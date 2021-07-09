@@ -25,4 +25,10 @@ type Context struct {
 	// guidelines for CLI utilities with interactive vs non-interactive
 	// input.
 	IsInteractive bool
+
+	// EmbeddedMode, when set, reduces the amount of informational
+	// messages printed out to exclude details that are not under user's
+	// control when the client command is run by a playground
+	// environment.
+	EmbeddedMode bool
 }
