@@ -8,14 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clierror
 
 import (
 	"context"
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -60,7 +59,7 @@ func TestErrorReporting(t *testing.T) {
 		},
 		{
 			desc: "single cliError",
-			err: clierror.NewErrorWithSeverity(
+			err: NewErrorWithSeverity(
 				errors.New("routine"),
 				exit.UnspecifiedError(),
 				severity.INFO,
@@ -70,8 +69,8 @@ func TestErrorReporting(t *testing.T) {
 		},
 		{
 			desc: "double cliError",
-			err: clierror.NewErrorWithSeverity(
-				clierror.NewErrorWithSeverity(
+			err: NewErrorWithSeverity(
+				NewErrorWithSeverity(
 					errors.New("serious"),
 					exit.UnspecifiedError(),
 					severity.ERROR,
@@ -84,7 +83,7 @@ func TestErrorReporting(t *testing.T) {
 		},
 		{
 			desc: "wrapped cliError",
-			err: fmt.Errorf("some context: %w", clierror.NewErrorWithSeverity(
+			err: fmt.Errorf("some context: %w", NewErrorWithSeverity(
 				errors.New("routine"),
 				exit.UnspecifiedError(),
 				severity.INFO,
@@ -101,7 +100,7 @@ func TestErrorReporting(t *testing.T) {
 			assert.Equal(t, tt.err, checked, "should return error unchanged")
 			assert.Equal(t, tt.wantSeverity, got.Severity, "wrong severity log")
 			assert.Equal(t, channel.SESSIONS, got.Channel, "wrong channel")
-			gotCLI := errors.HasType(got.Err, (*clierror.Error)(nil))
+			gotCLI := errors.HasType(got.Err, (*Error)(nil))
 			if tt.wantCLICause {
 				assert.True(t, gotCLI, "logged cause should be *Error, got %T", got.Err)
 			} else {
