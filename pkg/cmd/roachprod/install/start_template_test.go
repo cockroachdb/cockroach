@@ -20,11 +20,11 @@ import (
 
 func TestExecStartTemplate(t *testing.T) {
 	startData1 := startTemplateData{
-		LogDir: "/path with spaces/logs",
+		LogDir: "./path with spaces/logs/$THIS_DOES_NOT_EVER_GET_EXPANDED",
 		KeyCmd: `echo foo && \
 echo bar $HOME`,
-		Tag:       "sa$$y",
-		EnvVars:   "COCKROACH=foo ROCKCOACH=17%",
+		Tag:       "tigtag",
+		EnvVars:   []string{"COCKROACH=foo", "ROCKCOACH=17%"},
 		Binary:    "./cockroach",
 		StartCmd:  "start-single-node",
 		Args:      []string{`--log "file-defaults: {dir: '/path with spaces/logs', exit-on-error: false}"`},

@@ -49,7 +49,7 @@ func cockroachNodeBinary(c *SyncedCluster, node int) string {
 		return config.Binary
 	}
 	if !c.IsLocal() {
-		return "${HOME}/" + config.Binary
+		return "./" + config.Binary
 	}
 
 	path := filepath.Join(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), node), config.Binary)
@@ -247,7 +247,7 @@ func (Cockroach) NodeDir(c *SyncedCluster, index, storeIndex int) string {
 
 // LogDir implements the ClusterImpl.NodeDir interface.
 func (Cockroach) LogDir(c *SyncedCluster, index int) string {
-	dir := "${HOME}/logs"
+	dir := "logs"
 	if c.IsLocal() {
 		dir = os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/logs", index))
 	}
@@ -256,7 +256,7 @@ func (Cockroach) LogDir(c *SyncedCluster, index int) string {
 
 // CertsDir implements the ClusterImpl.NodeDir interface.
 func (Cockroach) CertsDir(c *SyncedCluster, index int) string {
-	dir := "${HOME}/certs"
+	dir := "certs"
 	if c.IsLocal() {
 		dir = os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/certs", index))
 	}
@@ -411,7 +411,7 @@ func (h *crdbInstallHelper) generateStartCmd(
 	nodeIdx int, extraArgs []string, vers *version.Version,
 ) (string, error) {
 
-	args, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
+	args, advertiseFirstIP, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
 	if err != nil {
 		return "", err
 	}
@@ -426,24 +426,28 @@ func (h *crdbInstallHelper) generateStartCmd(
 	}
 	nodes := h.c.ServerNodes()
 	return execStartTemplate(startTemplateData{
-		LogDir:    h.c.Impl.LogDir(h.c, nodes[nodeIdx]),
-		KeyCmd:    h.generateKeyCmd(nodeIdx, extraArgs),
-		Tag:       h.c.Tag,
-		EnvVars:   "GOTRACEBACK=crash COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " + h.getEnvVars(),
-		Binary:    cockroachNodeBinary(h.c, nodes[nodeIdx]),
-		StartCmd:  startCmd,
-		Args:      args,
-		MemoryMax: config.MemoryMax,
-		NodeNum:   nodes[nodeIdx],
-		Local:     h.c.IsLocal(),
+		LogDir: h.c.Impl.LogDir(h.c, nodes[nodeIdx]),
+		KeyCmd: h.generateKeyCmd(nodeIdx, extraArgs),
+		Tag:    h.c.Tag,
+		EnvVars: append([]string{
+			"GOTRACEBACK=crash",
+			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
+		}, h.getEnvVars()...),
+		Binary:           cockroachNodeBinary(h.c, nodes[nodeIdx]),
+		StartCmd:         startCmd,
+		Args:             args,
+		MemoryMax:        config.MemoryMax,
+		NodeNum:          nodes[nodeIdx],
+		Local:            h.c.IsLocal(),
+		AdvertiseFirstIP: advertiseFirstIP,
 	})
 }
 
 type startTemplateData struct {
-	LogDir, KeyCmd, Tag, EnvVars, Binary, StartCmd, MemoryMax string
-	Args                                                      []string
-	NodeNum                                                   int
-	Local                                                     bool
+	LogDir, KeyCmd, Tag, Binary, StartCmd, MemoryMax string
+	EnvVars, Args                                    []string
+	NodeNum                                          int
+	Local, AdvertiseFirstIP                          bool
 }
 
 func execStartTemplate(data startTemplateData) (string, error) {
@@ -465,7 +469,7 @@ func execStartTemplate(data startTemplateData) (string, error) {
 
 func (h *crdbInstallHelper) generateStartArgs(
 	nodeIdx int, extraArgs []string, vers *version.Version,
-) ([]string, error) {
+) (_ []string, _advertiseFirstIP bool, _ error) {
 	var args []string
 	nodes := h.c.ServerNodes()
 
@@ -547,14 +551,16 @@ func (h *crdbInstallHelper) generateStartArgs(
 		}
 	}
 
+	var advertiseFirstIP bool
 	if h.shouldAdvertisePublicIP() {
 		args = append(args, fmt.Sprintf("--advertise-host=%s", h.c.host(nodeIdx+1)))
 	} else if !h.c.IsLocal() {
 		// Explicitly advertise by IP address so that we don't need to
 		// deal with cross-region name resolution. The `hostname -I`
 		// prints all IP addresses for the host and then we'll select
-		// the first from the list.
-		args = append(args, "--advertise-host=$(hostname -I | awk '{print $1}')")
+		// the first from the list. This has to be done on the server,
+		// so we pass the information that this needs to be done along.
+		advertiseFirstIP = true
 	}
 
 	// Argument template expansion is node specific (e.g. for {store-dir}).
@@ -564,12 +570,12 @@ func (h *crdbInstallHelper) generateStartArgs(
 	for _, arg := range extraArgs {
 		expandedArg, err := e.expand(h.c, arg)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		args = append(args, strings.Split(expandedArg, " ")...)
 	}
 
-	return args, nil
+	return args, advertiseFirstIP, nil
 }
 
 func (h *crdbInstallHelper) initializeCluster(nodeIdx int) (string, error) {
@@ -710,23 +716,14 @@ func (h *crdbInstallHelper) shouldAdvertisePublicIP() bool {
 	return false
 }
 
-func (h *crdbInstallHelper) getEnvVars() string {
-	var buf strings.Builder
+func (h *crdbInstallHelper) getEnvVars() []string {
+	var sl []string
 	for _, v := range os.Environ() {
 		if strings.HasPrefix(v, "COCKROACH_") {
-			if buf.Len() > 0 {
-				buf.WriteString(" ")
-			}
-			buf.WriteString(v)
+			sl = append(sl, v)
 		}
 	}
-	if len(h.c.Env) > 0 {
-		if buf.Len() > 0 {
-			buf.WriteString(" ")
-		}
-		buf.WriteString(h.c.Env)
-	}
-	return buf.String()
+	return sl
 }
 
 func (h *crdbInstallHelper) run(nodeIdx int, cmd string) (string, error) {

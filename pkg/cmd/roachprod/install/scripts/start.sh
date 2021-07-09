@@ -15,11 +15,16 @@ set -euo pipefail
 # delimiters for the Go text template so that this bash script is valid
 # before template evaluation (so we can use shellcheck).
 LOCAL=#{if .Local#}true#{end#}
+ADVERTISE_FIRST_IP=#{if .AdvertiseFirstIP#}true#{end#}
 LOG_DIR=#{shesc .LogDir#}
 NODE_NUM=#{shesc .NodeNum#}
 TAG=#{shesc .Tag#}
-ENV_VARS=#{shesc .EnvVars#}
-BINARY=#{shesc Binary#}
+ENV_VARS=(
+#{range .EnvVars -#}
+#{shesc .#}
+#{end -#}
+)
+BINARY=#{shesc .Binary#}
 START_CMD=#{shesc .StartCmd#}
 KEY_CMD=#{.KeyCmd#}
 MEMORY_MAX=#{.MemoryMax#}
@@ -29,23 +34,28 @@ ARGS=(
 #{end -#}
 )
 
-mkdir -p "${LOG_DIR}"
+# End of templated code.
+
+ENV_VARS+="ROACHPROD=${NODE_NUM}${TAG}"
+if [[ -n "${ADVERTISE_FIRST_IP}" ]]; then
+  ARGS+=("--advertise-host" "$(hostname -I | awk '{print $1}')")
+fi
+
+if [[ -n "${LOCAL}" ]]; then
+  ARGS+=("--background" "true")
+fi
 
 if [[ -n "${LOCAL}" || "${1-}" == "run" ]]; then
   mkdir -p "${LOG_DIR}"
-  echo "cockroach start: $(date), logging to ${LOG_DIR}" | tee -a "${LOG_DIR}"/{roachprod,cockroach.std{out,err#}.log
+  echo "cockroach start: $(date), logging to ${LOG_DIR}" | tee -a "${LOG_DIR}"/{roachprod,cockroach.std{out,err}}.log
   if [[ -n "${KEY_CMD}" ]]; then
     eval "${KEY_CMD}"
   fi
-  export ROACHPROD="${NODE_NUM#}${TAG}" ${ENV_VARS}
-  background=""
-  if [[ -n "${LOCAL}" ]]; then
-    background="--background"
-  fi
+  export "${ENV_VARS[@]}"
   CODE=0
-  "${BINARY}" "${START_CMD}" "${ARGS[@]}" "${background}" >> "${LOG_DIR}/cockroach.stdout.log" 2>> "${LOG_DIR}/cockroach.stderr.log" || CODE="$?"
+  "${BINARY}" "${START_CMD}" "${ARGS[@]}" >> "${LOG_DIR}/cockroach.stdout.log" 2>> "${LOG_DIR}/cockroach.stderr.log" || CODE="$?"
   if [[ -z "${LOCAL}" || "${CODE}" -ne 0 ]]; then
-    echo "cockroach exited with code ${CODE}: $(date)" | tee -a "${LOG_DIR}/{roachprod,cockroach.{exit,std{out,err#}}.log"
+    echo "cockroach exited with code ${CODE}: $(date)" | tee -a "${LOG_DIR}"/{roachprod,cockroach.{exit,std{out,err}}}.log
   fi
   exit "${CODE}"
 fi
@@ -65,8 +75,8 @@ sudo systemctl reset-failed cockroach 2>/dev/null || true
 
 # The first time we run, install a small script that shows some helpful
 # information when we ssh in.
-if [ ! -e ${HOME}/.profile-cockroach ]; then
-  cat > ${HOME}/.profile-cockroach <<'EOQ'
+if [ ! -e "${HOME}/.profile-cockroach" ]; then
+  cat > "${HOME}/.profile-cockroach" <<'EOQ'
 echo ""
 if systemctl is-active -q cockroach; then
   echo "cockroach is running; see: systemctl status cockroach"
@@ -77,7 +87,7 @@ else
 fi
 echo ""
 EOQ
-  echo ". ${HOME}/.profile-cockroach" >> ${HOME}/.profile
+  echo ". ${HOME}/.profile-cockroach" >> "${HOME}/.profile"
 fi
 
 # We run this script (with arg "run") as a service unit. We do not use --user
@@ -87,9 +97,9 @@ fi
 # notifies systemd that it is ready; NotifyAccess=all is needed because this
 # notification doesn't come from the main PID (which is bash).
 sudo systemd-run --unit cockroach \
-  --same-dir --uid $(id -u) --gid $(id -g) \
+  --same-dir --uid "$(id -u)" --gid "$(id -g)" \
   --service-type=notify -p NotifyAccess=all \
   -p "MemoryMax=${MEMORY_MAX}" \
   -p LimitCORE=infinity \
   -p LimitNOFILE=65536 \
-  bash $0 run
+  bash "${0}" run
