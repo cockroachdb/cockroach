@@ -229,14 +229,14 @@ func (c ColumnStatistics) Less(i, j int) bool {
 
 	prev := opt.ColumnID(0)
 	for {
-		nextI, ok := c[i].Cols.Next(prev)
+		nextI, ok := c[i].Cols.Next(prev + 1)
 		if !ok {
 			return false
 		}
 
 		// No need to check if ok since both ColSets are the same length and
 		// so far have had the same elements.
-		nextJ, _ := c[j].Cols.Next(prev)
+		nextJ, _ := c[j].Cols.Next(prev + 1)
 
 		if nextI != nextJ {
 			return nextI < nextJ

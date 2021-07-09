@@ -633,6 +633,13 @@ func (d Duration) String() string {
 	return buf.String()
 }
 
+// ISO8601String returns an ISO 8601 representation ('P1Y2M3DT4H') of a Duration.
+func (d Duration) ISO8601String() string {
+	var buf bytes.Buffer
+	d.FormatWithStyle(&buf, IntervalStyle_ISO_8601)
+	return buf.String()
+}
+
 // StringNanos returns a string representation of a Duration including
 // its hidden nanoseconds value. To be used only by the encoding/decoding
 // packages for pretty printing of on-disk values. The encoded value is

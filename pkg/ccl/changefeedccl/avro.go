@@ -133,8 +133,9 @@ type avroSchemaField struct {
 	// and the value either null or the actual encoded value.
 	// nativeEncoded is a map that's returned by encodeFn.  We allocate
 	// this map once to avoid repeated map allocations.  We simply update
-	// "union key" value.
-	nativeEncoded map[string]interface{}
+	// "union key" value. nativeEncodedSecondaryType supports unions of two types (plus null).
+	nativeEncoded              map[string]interface{}
+	nativeEncodedSecondaryType map[string]interface{}
 }
 
 // avroRecord is our representation of the schema of an avro record. Serializing
@@ -218,6 +219,44 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				return tree.DNull, nil
 			}
 			return decoder(x.(map[string]interface{})[unionKey])
+		}
+	}
+
+	// Handles types that mostly encode to non-strings,
+	// but have special cases like Infinity that encode as strings.
+	setNullableWithStringFallback := func(
+		avroType avroSchemaType,
+		encoder datumToNativeFn,
+		decoder func(interface{}) (tree.Datum, error),
+	) {
+		schema.SchemaType = []avroSchemaType{avroSchemaNull, avroType, avroSchemaString}
+		mainUnionKey := avroUnionKey(avroType)
+		stringUnionKey := avroUnionKey(avroSchemaString)
+		schema.nativeEncoded = map[string]interface{}{mainUnionKey: nil}
+		schema.nativeEncodedSecondaryType = map[string]interface{}{stringUnionKey: nil}
+		schema.encodeDatum = encoder
+
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			if d == tree.DNull {
+				return nil /* value */, nil
+			}
+			encoded, err := encoder(d, schema.nativeEncoded[mainUnionKey])
+			if err != nil {
+				return nil, err
+			}
+			_, isString := encoded.(string)
+			if isString {
+				schema.nativeEncodedSecondaryType[stringUnionKey] = encoded
+				return schema.nativeEncodedSecondaryType, nil
+			}
+			schema.nativeEncoded[mainUnionKey] = encoded
+			return schema.nativeEncoded, nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			if x == nil {
+				return tree.DNull, nil
+			}
+			return decoder(x.(map[string]interface{}))
 		}
 	}
 
@@ -437,6 +476,26 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				return tree.MakeDTimestampTZ(x.(time.Time), time.Microsecond)
 			},
 		)
+	case types.IntervalFamily:
+		setNullable(
+			// This would ideally be the avro Duration logical type
+			// However, the spec is not implemented in most tooling
+			// and is problematic--it requires 32-bit integers
+			// representing months, days, and milliseconds, meaning
+			// it can't encode everything we can with our int64 years.
+			// String encoding is still fairly terse and arguably the
+			// only semantically exact representation.
+			// Using ISO 8601 format (https://en.wikipedia.org/wiki/ISO_8601#Durations)
+			// because it's the tersest of the input formats we support
+			// and isn't golang-specific.
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DInterval).ValueAsISO8601String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.ParseDInterval(x.(string))
+			},
+		)
 	case types.DecimalFamily:
 		if typ.Precision() == 0 {
 			return nil, errors.Errorf(
@@ -445,15 +504,20 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 
 		width := int(typ.Width())
 		prec := int(typ.Precision())
-		setNullable(
-			avroLogicalType{
-				SchemaType:  avroSchemaBytes,
-				LogicalType: `decimal`,
-				Precision:   prec,
-				Scale:       width,
-			},
+		decimalType := avroLogicalType{
+			SchemaType:  avroSchemaBytes,
+			LogicalType: `decimal`,
+			Precision:   prec,
+			Scale:       width,
+		}
+		setNullableWithStringFallback(
+			decimalType,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				dec := d.(*tree.DDecimal).Decimal
+
+				if dec.Form != apd.Finite {
+					return d.String(), nil
+				}
 
 				// If the decimal happens to fit a smaller width than the
 				// column allows, add trailing zeroes so the scale is constant
@@ -478,7 +542,12 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				return &rat, nil
 			},
 			func(x interface{}) (tree.Datum, error) {
-				return &tree.DDecimal{Decimal: ratToDecimal(*x.(*big.Rat), int32(width))}, nil
+				unionMap := x.(map[string]interface{})
+				rat, ok := unionMap[avroUnionKey(decimalType)]
+				if ok {
+					return &tree.DDecimal{Decimal: ratToDecimal(*rat.(*big.Rat), int32(width))}, nil
+				}
+				return tree.ParseDDecimal(unionMap[avroUnionKey(avroSchemaString)].(string))
 			},
 		)
 	case types.UuidFamily:

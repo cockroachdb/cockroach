@@ -290,9 +290,6 @@ func TestAvroSchema(t *testing.T) {
 		case types.AnyFamily, types.OidFamily, types.TupleFamily:
 			// These aren't expected to be needed for changefeeds.
 			return true
-		case types.IntervalFamily:
-			// Implement these as customer demand dictates.
-			return true
 		case types.ArrayFamily:
 			if !randgen.IsAllowedForArray(typ.ArrayContents()) {
 				return true
@@ -424,6 +421,7 @@ func TestAvroSchema(t *testing.T) {
 			`GEOMETRY`:          `["null","bytes"]`,
 			`INET`:              `["null","string"]`,
 			`INT8`:              `["null","long"]`,
+			`INTERVAL`:          `["null","string"]`,
 			`JSONB`:             `["null","string"]`,
 			`STRING`:            `["null","string"]`,
 			`STRING COLLATE fr`: `["null","string"]`,
@@ -435,12 +433,12 @@ func TestAvroSchema(t *testing.T) {
 			`VARBIT`:            `["null",{"type":"array","items":"long"}]`,
 
 			`BIT(3)`:       `["null",{"type":"array","items":"long"}]`,
-			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
+			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2},"string"]`,
 		}
 
 		for _, typ := range append(types.Scalar, types.BoolArray, types.MakeCollatedString(types.String, `fr`), types.MakeBit(3)) {
 			switch typ.Family() {
-			case types.IntervalFamily, types.OidFamily:
+			case types.OidFamily:
 				continue
 			case types.DecimalFamily:
 				typ = types.MakeDecimal(3, 2)
@@ -528,10 +526,27 @@ func TestAvroSchema(t *testing.T) {
 				sql:  `'2019-01-02 03:04:05'`,
 				avro: `{"long.timestamp-micros":1546398245000000}`},
 
+			{sqlType: `INTERVAL`, sql: `NULL`, avro: `null`},
+			{sqlType: `INTERVAL`,
+				sql:  `INTERVAL '1 yr 2 mons 3 d 4 hrs 5 mins 6 secs'`,
+				avro: `{"string":"P1Y2M3DT4H5M6S"}`},
+			{sqlType: `INTERVAL`,
+				sql:  `INTERVAL '1 yr -6 ms'`,
+				avro: `{"string":"P1YT-0.006S"}`},
+
 			{sqlType: `DECIMAL(4,1)`, sql: `NULL`, avro: `null`},
 			{sqlType: `DECIMAL(4,1)`,
 				sql:  `1.2`,
 				avro: `{"bytes.decimal":"\f"}`},
+			{sqlType: `DECIMAL(4,1)`,
+				sql:  `DECIMAL 'Infinity'`,
+				avro: `{"string":"Infinity"}`},
+			{sqlType: `DECIMAL(4,1)`,
+				sql:  `DECIMAL '-Infinity'`,
+				avro: `{"string":"-Infinity"}`},
+			{sqlType: `DECIMAL(4,1)`,
+				sql:  `DECIMAL 'NaN'`,
+				avro: `{"string":"NaN"}`},
 
 			{sqlType: `UUID`, sql: `NULL`, avro: `null`},
 			{sqlType: `UUID`,
@@ -930,6 +945,10 @@ func BenchmarkEncodeTimestamp(b *testing.B) {
 
 func BenchmarkEncodeTimestampTZ(b *testing.B) {
 	benchmarkEncodeType(b, types.TimestampTZ, randEncDatumRow(types.TimestampTZ))
+}
+
+func BenchmarkEncodeInterval(b *testing.B) {
+	benchmarkEncodeType(b, types.Interval, randEncDatumRow(types.Interval))
 }
 
 func BenchmarkEncodeDecimal(b *testing.B) {
