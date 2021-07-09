@@ -168,9 +168,16 @@ var djangoBlocklists = blocklistsForVersion{
 }
 
 // Maintain that this list is alphabetized.
-var djangoBlocklist21_2 = blocklist{}
+var djangoBlocklist21_2 = blocklist{
+	"migrations.test_operations.OperationTests.test_alter_fk_non_fk":  "unknown",
+	"schema.tests.SchemaTests.test_alter_field_db_collation":          "unknown",
+	"schema.tests.SchemaTests.test_alter_field_type_and_db_collation": "unknown",
+}
 
-var djangoBlocklist21_1 = blocklist{}
+var djangoBlocklist21_1 = blocklist{
+	"schema.tests.SchemaTests.test_alter_field_db_collation":          "unknown",
+	"schema.tests.SchemaTests.test_alter_field_type_and_db_collation": "unknown",
+}
 
 var djangoBlocklist20_2 = blocklist{}
 
