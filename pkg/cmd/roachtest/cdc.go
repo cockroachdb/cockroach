@@ -46,6 +46,10 @@ type cdcTestArgs struct {
 	crdbChaos          bool
 	cloudStorageSink   bool
 
+	// preStartStatements are executed after the workload is initialized but before the
+	// changefeed is created.
+	preStartStatements []string
+
 	targetInitialScanLatency time.Duration
 	targetSteadyLatency      time.Duration
 	targetTxnPerSecond       float64
@@ -149,6 +153,13 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			`SET CLUSTER SETTING kv.closed_timestamp.target_duration='10s'`,
 		); err != nil {
 			t.Fatal(err)
+		}
+
+		for _, stmt := range args.preStartStatements {
+			_, err := db.ExecContext(ctx, stmt)
+			if err != nil {
+				t.Fatalf("failed pre-start statement %q: %s", stmt, err.Error())
+			}
 		}
 
 		var targets string
@@ -568,12 +579,17 @@ func registerCDC(r *testRegistry) {
 		Cluster: makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             ledgerWorkloadType,
-				workloadDuration:         "30m",
+				workloadType: ledgerWorkloadType,
+				// TODO(ssd): Range splits cause changefeed latencies to balloon
+				// because of catchup-scan performance. Reducing the test time and
+				// bumping the range_max_bytes avoids the split until we can improve
+				// catchup scan performance.
+				workloadDuration:         "28m",
 				initialScan:              true,
 				targetInitialScanLatency: 10 * time.Minute,
 				targetSteadyLatency:      time.Minute,
 				targetTxnPerSecond:       575,
+				preStartStatements:       []string{"ALTER DATABASE ledger CONFIGURE ZONE USING range_max_bytes = 805306368, range_min_bytes = 134217728"},
 			})
 		},
 	})
