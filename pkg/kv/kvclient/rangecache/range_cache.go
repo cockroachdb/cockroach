@@ -286,6 +286,7 @@ func (et *EvictionToken) clear() {
 //
 // Note that the returned descriptor might have Generation = 0. This means that
 // the descriptor is speculative; it is not know to have committed.
+//gcassert:noescape
 func (et EvictionToken) Desc() *roachpb.RangeDescriptor {
 	if !et.Valid() {
 		return nil

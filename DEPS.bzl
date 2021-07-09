@@ -2329,8 +2329,8 @@ def go_deps():
         name = "com_github_jordanlewis_gcassert",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jordanlewis/gcassert",
-        sum = "h1:d1Ov7s7RbMdHcgE1Eh1CxR+yd2TTKYOCHZf92Tm/fLs=",
-        version = "v0.0.0-20200706043056-bf61eb72ee48",
+        sum = "h1:KwNTE4IGjACJsgij91nIDHGmTG5DZ3kp+39WbM9J6Ys=",
+        version = "v0.0.0-20210709200128-6f44ce040267",
     )
     go_repository(
         name = "com_github_josharian_intern",
