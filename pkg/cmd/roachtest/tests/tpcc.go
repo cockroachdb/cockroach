@@ -590,7 +590,7 @@ func registerTPCC(r registry.Registry) {
 					iter := 0
 					chaosEventCh := make(chan ChaosEvent)
 					runTPCC(ctx, t, c, tpccOptions{
-						Warehouses:     len(regions) * 5,
+						Warehouses:     len(regions) * 20,
 						Duration:       duration,
 						ExtraSetupArgs: partitionArgs,
 						ExtraRunArgs:   `--method=simple --wait=false --tolerate-errors ` + partitionArgs,

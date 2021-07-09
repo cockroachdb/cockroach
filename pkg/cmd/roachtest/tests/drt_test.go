@@ -40,13 +40,16 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 	firstShutdownComplete := startTime.Add(95 * time.Second)
 	scrapeAfterFirstShutdownComplete := firstShutdownComplete.Add(prometheus.DefaultScrapeInterval)
 	firstPreStartup := startTime.Add(180 * time.Second)
+	scrapeBeforeFirstPreStartup := firstPreStartup.Add(-prometheus.DefaultScrapeInterval)
 	firstStartupComplete := startTime.Add(185 * time.Second)
 	scrapeAfterFirstStartupComplete := firstStartupComplete.Add(prometheus.DefaultScrapeInterval)
 
 	secondPreShutdown := startTime.Add(390 * time.Second)
+	scrapeBeforeSecondPreShutdown := secondPreShutdown.Add(-prometheus.DefaultScrapeInterval)
 	secondShutdownComplete := startTime.Add(395 * time.Second)
 	scrapeAfterSecondShutdownComplete := secondShutdownComplete.Add(prometheus.DefaultScrapeInterval)
 	secondPreStartup := startTime.Add(480 * time.Second)
+	scrapeBeforeSecondPreStartup := secondPreStartup.Add(-prometheus.DefaultScrapeInterval)
 	secondStartupComplete := startTime.Add(490 * time.Second)
 
 	metricA := "newOtan"
@@ -88,66 +91,66 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 			mockPromQueries: []expectPromQuery{
 				// Restart region1.
 				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion1), t: firstPreStartup, retVal: 100},
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
 				{q: makeMetric(metricA, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
-				{q: makeMetric(metricA, "error", portRegion1), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 
 				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion2), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
-				{q: makeMetric(metricA, "error", portRegion2), t: firstPreStartup, retVal: 0},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 0},
 
 				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion1), t: firstPreStartup, retVal: 100},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
 				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
-				{q: makeMetric(metricB, "error", portRegion1), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 
 				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion2), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
-				{q: makeMetric(metricB, "error", portRegion2), t: firstPreStartup, retVal: 0},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 0},
 
 				// Shutdown region2.
 				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion1), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 				{q: makeMetric(metricA, "error", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 1000},
-				{q: makeMetric(metricA, "error", portRegion1), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 
 				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion2), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 1000},
-				{q: makeMetric(metricA, "error", portRegion2), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 
 				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion1), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 1000},
-				{q: makeMetric(metricB, "error", portRegion1), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 
 				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion2), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 1000},
-				{q: makeMetric(metricB, "error", portRegion2), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 
 				// Restart region2.
 				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
-				{q: makeMetric(metricA, "success", portRegion1), t: secondPreStartup, retVal: 10000},
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeSecondPreStartup, retVal: 10000},
 				{q: makeMetric(metricA, "error", portRegion1), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
-				{q: makeMetric(metricA, "error", portRegion1), t: secondPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeBeforeSecondPreStartup, retVal: 1000},
 
 				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
-				{q: makeMetric(metricA, "success", portRegion2), t: secondPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeSecondPreStartup, retVal: 1000},
 				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
-				{q: makeMetric(metricA, "error", portRegion2), t: secondPreStartup, retVal: 10000},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeSecondPreStartup, retVal: 10000},
 
 				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
-				{q: makeMetric(metricB, "success", portRegion1), t: secondPreStartup, retVal: 10000},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeSecondPreStartup, retVal: 10000},
 				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
-				{q: makeMetric(metricB, "error", portRegion1), t: secondPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeSecondPreStartup, retVal: 1000},
 
 				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
-				{q: makeMetric(metricB, "success", portRegion2), t: secondPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeSecondPreStartup, retVal: 1000},
 				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
-				{q: makeMetric(metricB, "error", portRegion2), t: secondPreStartup, retVal: 10000},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeSecondPreStartup, retVal: 10000},
 			},
 			workloadInstances: []workloadInstance{
 				{
@@ -177,24 +180,24 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 			mockPromQueries: []expectPromQuery{
 				// Restart region1.
 				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion1), t: firstPreStartup, retVal: 100},
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
 				{q: makeMetric(metricA, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
-				{q: makeMetric(metricA, "error", portRegion1), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 
 				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion2), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
-				{q: makeMetric(metricA, "error", portRegion2), t: firstPreStartup, retVal: 0},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 0},
 
 				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion1), t: firstPreStartup, retVal: 100},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
 				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
-				{q: makeMetric(metricB, "error", portRegion1), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 
 				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion2), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
-				{q: makeMetric(metricB, "error", portRegion2), t: firstPreStartup, retVal: 1000}, // should have had errors during shutdown.
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000}, // should have had errors during shutdown.
 			},
 			workloadInstances: []workloadInstance{
 				{
@@ -208,7 +211,7 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 			},
 			expectedErrors: []string{
 				fmt.Sprintf(
-					`error at from 2020-12-25T00:01:45Z, to 2020-12-25T00:03:00Z on metric %s: expected 0 errors, found from 0.000000, to 1000.000000`,
+					`error at from 2020-12-25T00:01:45Z, to 2020-12-25T00:02:50Z on metric %s: expected 0 errors, found from 0.000000, to 1000.000000`,
 					makeMetric(metricB, "error", portRegion2),
 				),
 			},
@@ -230,22 +233,22 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 			mockPromQueries: []expectPromQuery{
 				// Restart region1.
 				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion1), t: firstPreStartup, retVal: 1000}, // should have had no successes whilst shutdown.
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000}, // should have had no successes whilst shutdown.
 
 				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion2), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
-				{q: makeMetric(metricA, "error", portRegion2), t: firstPreStartup, retVal: 0},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 0},
 
 				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion1), t: firstPreStartup, retVal: 100},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
 				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
-				{q: makeMetric(metricB, "error", portRegion1), t: firstPreStartup, retVal: 10}, // should have had errors whilst shutdown.
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 10}, // should have had errors whilst shutdown.
 
 				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion2), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
-				{q: makeMetric(metricB, "error", portRegion2), t: firstPreStartup, retVal: 0},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 0},
 			},
 			workloadInstances: []workloadInstance{
 				{
@@ -259,11 +262,11 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 			},
 			expectedErrors: []string{
 				fmt.Sprintf(
-					`error at from 2020-12-25T00:01:45Z, to 2020-12-25T00:03:00Z on metric %s: expected successes to not increase, found from 100.000000, to 1000.000000`,
+					`error at from 2020-12-25T00:01:45Z, to 2020-12-25T00:02:50Z on metric %s: expected successes to not increase, found from 100.000000, to 1000.000000`,
 					makeMetric(metricA, "success", portRegion1),
 				),
 				fmt.Sprintf(
-					`error at from 2020-12-25T00:01:45Z, to 2020-12-25T00:03:00Z on metric %s: expected errors, found from 10.000000, to 10.000000`,
+					`error at from 2020-12-25T00:01:45Z, to 2020-12-25T00:02:50Z on metric %s: expected errors, found from 10.000000, to 10.000000`,
 					makeMetric(metricB, "error", portRegion1),
 				),
 			},
@@ -287,43 +290,43 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 			mockPromQueries: []expectPromQuery{
 				// Restart region1.
 				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion1), t: firstPreStartup, retVal: 100},
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
 				{q: makeMetric(metricA, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
-				{q: makeMetric(metricA, "error", portRegion1), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 
 				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion2), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
-				{q: makeMetric(metricA, "error", portRegion2), t: firstPreStartup, retVal: 0},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 0},
 
 				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion1), t: firstPreStartup, retVal: 100},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
 				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
-				{q: makeMetric(metricB, "error", portRegion1), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 
 				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion2), t: firstPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
-				{q: makeMetric(metricB, "error", portRegion2), t: firstPreStartup, retVal: 0},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 0},
 
 				// Shutdown region2.
 				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion1), t: secondPreShutdown, retVal: 100}, // should have had successes as it was not the node shutdown.
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 100}, // should have had successes as it was not the node shutdown.
 
 				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 100},
-				{q: makeMetric(metricA, "success", portRegion2), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 1000},
-				{q: makeMetric(metricA, "error", portRegion2), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 
 				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion1), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 1000},
-				{q: makeMetric(metricB, "error", portRegion1), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 
 				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 100},
-				{q: makeMetric(metricB, "success", portRegion2), t: secondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
 				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 1000},
-				{q: makeMetric(metricB, "error", portRegion2), t: secondPreShutdown, retVal: 10000}, // unexpected errors during restart.
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 10000}, // unexpected errors during restart.
 			},
 			workloadInstances: []workloadInstance{
 				{
@@ -337,11 +340,11 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 			},
 			expectedErrors: []string{
 				fmt.Sprintf(
-					`error at from 2020-12-25T00:03:15Z, to 2020-12-25T00:06:30Z on metric %s: expected successes to be increasing, found from 100.000000, to 100.000000`,
+					`error at from 2020-12-25T00:03:15Z, to 2020-12-25T00:06:20Z on metric %s: expected successes to be increasing, found from 100.000000, to 100.000000`,
 					makeMetric(metricA, "success", portRegion1),
 				),
 				fmt.Sprintf(
-					`error at from 2020-12-25T00:03:15Z, to 2020-12-25T00:06:30Z on metric %s: expected 0 errors, found from 1000.000000, to 10000.000000`,
+					`error at from 2020-12-25T00:03:15Z, to 2020-12-25T00:06:20Z on metric %s: expected 0 errors, found from 1000.000000, to 10000.000000`,
 					makeMetric(metricB, "error", portRegion2),
 				),
 			},
