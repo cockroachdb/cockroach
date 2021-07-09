@@ -5904,7 +5904,7 @@ table's zone configuration this will return NULL.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if evalCtx.SQLStatsController == nil {
-					return nil, errors.AssertionFailedf("sql stats resetter not set")
+					return nil, errors.AssertionFailedf("sql stats controller not set")
 				}
 				ctx := evalCtx.Ctx()
 				if err := evalCtx.SQLStatsController.ResetClusterSQLStats(ctx); err != nil {
@@ -6034,6 +6034,29 @@ table's zone configuration this will return NULL.`,
 				return tree.MakeDBool(true), nil
 			},
 			Info:       `This function deserializes the serialized variables into the current session.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.schedule_sql_stats_compaction": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"session", types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.SQLStatsController == nil {
+					return nil, errors.AssertionFailedf("sql stats controller not set")
+				}
+				ctx := evalCtx.Ctx()
+				if err := evalCtx.SQLStatsController.CreateSQLStatsCompactionSchedule(ctx); err != nil {
+
+					return tree.DNull, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used to start a SQL stats compaction job.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
