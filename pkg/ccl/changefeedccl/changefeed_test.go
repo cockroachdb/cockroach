@@ -567,6 +567,16 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 			`tt: [3]->{"after": {"x": 3, "y": "hiya", "z": "bye"}}`,
 			`tt: [4]->{"after": {"x": 4, "y": "hello", "z": "cya"}}`,
 		})
+
+		// If we rename a value in an existing type, it doesn't count as a change
+		// but the rename is reflected in future changes.
+		sqlDB.Exec(t, `ALTER TYPE t RENAME VALUE 'hi' TO 'yo'`)
+		sqlDB.Exec(t, `UPDATE tt SET z='cya' where x=2`)
+
+		assertPayloads(t, cf, []string{
+			`tt: [2]->{"after": {"x": 2, "y": "yo", "z": "cya"}}`,
+		})
+
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))

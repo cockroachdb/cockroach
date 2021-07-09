@@ -400,6 +400,189 @@ func TestAvroEncoder(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestAvroArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
+		sqlDB.Exec(t,
+			`INSERT INTO foo VALUES 
+			(1, ARRAY[10,20,30]), 
+			(2, NULL), 
+			(3, ARRAY[42, NULL, 42, 43]),
+			(4, ARRAY[]),
+			(5, ARRAY[1,2,3,4,NULL,6]),
+			(6, ARRAY[1,2,3,4,NULL,6,7,NULL,9])`,
+		)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, foo)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"array":[{"long":10},{"long":20},{"long":30}]}}},"before":null}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}},"before":null}`,
+			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"array":[{"long":42},null,{"long":42},{"long":43}]}}},"before":null}`,
+			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"array":[]}}},"before":null}`,
+			`foo: {"a":{"long":5}}->{"after":{"foo":{"a":{"long":5},"b":{"array":[{"long":1},{"long":2},{"long":3},{"long":4},null,{"long":6}]}}},"before":null}`,
+			`foo: {"a":{"long":6}}->{"after":{"foo":{"a":{"long":6},"b":{"array":[{"long":1},{"long":2},{"long":3},{"long":4},null,{"long":6},{"long":7},null,{"long":9}]}}},"before":null}`,
+		})
+
+		sqlDB.Exec(t, `UPDATE foo SET b = ARRAY[0,0,0] where a=1`)
+		sqlDB.Exec(t, `UPDATE foo SET b = ARRAY[0,0,0,0] where a=2`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"array":[{"long":0},{"long":0},{"long":0}]}}},` +
+				`"before":{"foo_before":{"a":{"long":1},"b":{"array":[{"long":10},{"long":20},{"long":30}]}}}}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":{"array":[{"long":0},{"long":0},{"long":0},{"long":0}]}}},` +
+				`"before":{"foo_before":{"a":{"long":2},"b":null}}}`,
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestAvroArrayCap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, ARRAY[])`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, foo)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":0}}->{"after":{"foo":{"a":{"long":0},"b":{"array":[]}}}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (8, ARRAY[null,null,null,null,null,null,null,null])`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":8}}->{"after":{"foo":{"a":{"long":8},"b":{"array":[null,null,null,null,null,null,null,null]}}}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4, ARRAY[null,null,null,null])`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"array":[null,null,null,null]}}}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (5, ARRAY[null,null,null,null,null])`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":5}}->{"after":{"foo":{"a":{"long":5},"b":{"array":[null,null,null,null,null]}}}}`,
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestAvroCollatedString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b string collate "fr-CA")`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'désolée' collate "fr-CA")`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, foo)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"désolée"}}}}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestAvroEnum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b status, c int default 0)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'open')`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, null)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, foo)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"open"},"c":{"long":0}}}}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null,"c":{"long":0}}}}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TYPE status ADD value 'review'`)
+		sqlDB.Exec(t, `INSERT INTO foo values (4, 'review')`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"string":"review"},"c":{"long":0}}}}`,
+		})
+
+		// Renaming an enum type doesn't count as a change itself but gets picked up by the encoder
+		sqlDB.Exec(t, `ALTER TYPE status RENAME value 'open' to 'active'`)
+		sqlDB.Exec(t, `INSERT INTO foo values (3, 'active')`)
+		sqlDB.Exec(t, `UPDATE foo set c=1 where a=1`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"string":"active"},"c":{"long":0}}}}`,
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"active"},"c":{"long":1}}}}`,
+		})
+
+		// Enum can be part of a compound primary key
+		sqlDB.Exec(t, `CREATE TABLE soft_deletes (a INT, b status, c INT default 0, PRIMARY KEY (a,b))`)
+		sqlDB.Exec(t, `INSERT INTO soft_deletes values (0, 'active')`)
+
+		sd := feed(t, f, `CREATE CHANGEFEED FOR soft_deletes `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, sd)
+		assertPayloadsAvro(t, reg, sd, []string{
+			`soft_deletes: {"a":{"long":0},"b":{"string":"active"}}->{"after":{"soft_deletes":{"a":{"long":0},"b":{"string":"active"},"c":{"long":0}}}}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TYPE status RENAME value 'active' to 'open'`)
+		sqlDB.Exec(t, `UPDATE soft_deletes set c=1 where a=0`)
+
+		assertPayloadsAvro(t, reg, sd, []string{
+			`soft_deletes: {"a":{"long":0},"b":{"string":"open"}}->{"after":{"soft_deletes":{"a":{"long":0},"b":{"string":"open"},"c":{"long":1}}}}`,
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestAvroSchemaNaming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

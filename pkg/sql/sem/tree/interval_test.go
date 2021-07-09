@@ -563,6 +563,18 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 			if s3 != test.output {
 				t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
 			}
+
+			// Test that ISO 8601 output format also round-trips
+			s4 := dur.ISO8601String()
+			di2, err := parseDInterval(s4, test.itm)
+			if err != nil {
+				t.Fatalf(`%q: ISO8601String "%s" unrecognized as datum: %v`, test.input, s4, err)
+			}
+			s5 := di2.Duration.String()
+			if s != s5 {
+				t.Fatalf(`%q: repr "%s" does not round-trip, got %s instead`, test.input, s4, s5)
+			}
+
 		})
 	}
 }

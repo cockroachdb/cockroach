@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,7 +40,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/collate"
 )
+
+var testTypes = make(map[string]*types.T)
+var testTypeResolver = tree.MakeTestingMapTypeResolver(testTypes)
+
+func makeTestSemaCtx() tree.SemaContext {
+	testSemaCtx := tree.MakeSemaContext()
+	testSemaCtx.TypeResolver = testTypeResolver
+	return testSemaCtx
+}
 
 func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	ctx := context.Background()
@@ -53,7 +65,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	st := cluster.MakeTestingClusterSettings()
 	const parentID = descpb.ID(keys.MaxReservedDescID + 1)
 	const tableID = descpb.ID(keys.MaxReservedDescID + 2)
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := makeTestSemaCtx()
 	mutDesc, err := importccl.MakeSimpleTableDescriptor(
 		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
@@ -64,7 +76,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := makeTestSemaCtx()
 	evalCtx := &tree.EvalContext{}
 
 	valuesStmt, err := parser.ParseOne(values)
@@ -134,7 +146,7 @@ func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, erro
 	}
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := makeTestSemaCtx()
 	col, _, _, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, &tree.EvalContext{})
 	return col, err
 }
@@ -143,6 +155,37 @@ func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, erro
 // overflow an int64.
 func randTime(rng *rand.Rand) time.Time {
 	return timeutil.Unix(0, rng.Int63())
+}
+
+//Create a thin, in-memory user-defined enum type
+func createEnum(enumLabels tree.EnumValueList, typeName tree.TypeName) *types.T {
+
+	members := make([]descpb.TypeDescriptor_EnumMember, len(enumLabels))
+	physReps := enum.GenerateNEvenlySpacedBytes(len(enumLabels))
+	for i := range enumLabels {
+		members[i] = descpb.TypeDescriptor_EnumMember{
+			LogicalRepresentation:  string(enumLabels[i]),
+			PhysicalRepresentation: physReps[i],
+			Capability:             descpb.TypeDescriptor_EnumMember_ALL,
+		}
+	}
+
+	enumKind := descpb.TypeDescriptor_ENUM
+
+	typeDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
+		Name:        typeName.Type(),
+		ID:          0,
+		Kind:        enumKind,
+		EnumMembers: members,
+		Version:     1,
+	}).BuildCreatedMutableType()
+
+	typ, _ := typeDesc.MakeTypesT(context.Background(), &typeName, nil)
+
+	testTypes[typeName.SQLString()] = typ
+
+	return typ
+
 }
 
 func TestAvroSchema(t *testing.T) {
@@ -172,24 +215,11 @@ func TestAvroSchema(t *testing.T) {
 			values: `(1, 1.23, 4.5)`,
 		},
 	}
-	// Generate a test for each column type with a random datum of that type.
-	for _, typ := range types.OidToType {
-		switch typ.Family() {
-		case types.AnyFamily, types.OidFamily, types.TupleFamily:
-			// These aren't expected to be needed for changefeeds.
-			continue
-		case types.IntervalFamily, types.ArrayFamily, types.BitFamily,
-			types.CollatedStringFamily:
-			// Implement these as customer demand dictates.
-			continue
-		}
-		datum := rowenc.RandDatum(rng, typ, false /* nullOk */)
-		if datum == tree.DNull {
-			// DNull is returned by RandDatum for types.UNKNOWN or if the
-			// column type is unimplemented in RandDatum. In either case, the
-			// correct thing to do is skip this one.
-			continue
-		}
+
+	// Type-specific random logic for when we can't use the randgen library
+	// and/or need to modify the type to add random user-defined values
+	// The returned datum will be nil if we can just use randgen
+	overrideRandGen := func(typ *types.T) (tree.Datum, *types.T) {
 		switch typ.Family() {
 		case types.TimestampFamily:
 			// Truncate to millisecond instead of microsecond because of a bug
@@ -201,31 +231,92 @@ func TestAvroSchema(t *testing.T) {
 			// whose nanosecond representation overflows an
 			// int64, so restrict input to fit.
 			t := randTime(rng).Truncate(time.Millisecond)
-			datum = tree.MustMakeDTimestamp(t, time.Microsecond)
+			return tree.MustMakeDTimestamp(t, time.Microsecond), typ
 		case types.TimestampTZFamily:
 			// See comments above for TimestampFamily.
 			t := randTime(rng).Truncate(time.Millisecond)
-			datum = tree.MustMakeDTimestampTZ(t, time.Microsecond)
+			return tree.MustMakeDTimestampTZ(t, time.Microsecond), typ
 		case types.DecimalFamily:
 			// TODO(dan): Make RandDatum respect Precision and Width instead.
 			// TODO(dan): The precision is really meant to be in [1,10], but it
 			// sure looks like there's an off by one error in the avro library
 			// that makes this test flake if it picks precision of 1.
-			precision := rng.Int31n(10) + 2
-			scale := rng.Int31n(precision + 1)
-			typ = types.MakeDecimal(precision, scale)
+			var precision, scale int32
+			if typ.Precision() < 2 {
+				precision = rng.Int31n(10) + 2
+				scale = rng.Int31n(precision + 1)
+				typ = types.MakeDecimal(precision, scale)
+			} else {
+				precision = typ.Precision()
+				scale = typ.Scale()
+			}
 			coeff := rng.Int63n(int64(math.Pow10(int(precision))))
-			datum = &tree.DDecimal{Decimal: *apd.New(coeff, -scale)}
+			return &tree.DDecimal{Decimal: *apd.New(coeff, -scale)}, typ
 		case types.DateFamily:
 			// TODO(mjibson): goavro mishandles dates whose
 			// nanosecond representation overflows an int64,
 			// so restrict input to fit.
 			var err error
-			datum, err = tree.NewDDateFromTime(randTime(rng))
+			datum, err := tree.NewDDateFromTime(randTime(rng))
 			if err != nil {
 				panic(err)
 			}
+			return datum, typ
 		}
+		return nil, typ
+	}
+
+	// Types we don't support that are present in types.OidToType
+	skipType := func(typ *types.T) bool {
+		switch typ.Family() {
+		case types.AnyFamily, types.OidFamily, types.TupleFamily:
+			// These aren't expected to be needed for changefeeds.
+			return true
+		case types.ArrayFamily:
+			// Backported support, but these tests rely on newer randgen
+			// Tested in encoder_test.go instead
+			return true
+		}
+		return false
+	}
+
+	typesToTest := make([]*types.T, 0, 256)
+
+	for _, typ := range types.OidToType {
+		if skipType(typ) {
+			continue
+		}
+		typesToTest = append(typesToTest, typ)
+		switch typ.Family() {
+		case types.StringFamily:
+			collationTags := collate.Supported()
+			randCollationTag := collationTags[rand.Intn(len(collationTags))]
+			collatedType := types.MakeCollatedString(typ, randCollationTag.String())
+			typesToTest = append(typesToTest, collatedType)
+		}
+	}
+
+	testEnum := createEnum(
+		tree.EnumValueList{tree.EnumValue(`open`), tree.EnumValue(`closed`)},
+		tree.MakeUnqualifiedTypeName(`switch`),
+	)
+
+	typesToTest = append(typesToTest, testEnum)
+
+	// Generate a test for each column type with a random datum of that type.
+	for _, typ := range typesToTest {
+		var datum tree.Datum
+		datum, typ = overrideRandGen(typ)
+		if datum == nil {
+			datum = rowenc.RandDatum(rng, typ, false /* nullOk */)
+		}
+		if datum == tree.DNull {
+			// DNull is returned by RandDatum for types.UNKNOWN or if the
+			// column type is unimplemented in RandDatum. In either case, the
+			// correct thing to do is skip this one.
+			continue
+		}
+
 		serializedDatum := tree.Serialize(datum)
 		// name can be "char" (with quotes), so needs to be escaped.
 		escapedName := fmt.Sprintf("%s_table", strings.Replace(typ.String(), "\"", "", -1))
@@ -299,28 +390,34 @@ func TestAvroSchema(t *testing.T) {
 	// reference.
 	t.Run("type_goldens", func(t *testing.T) {
 		goldens := map[string]string{
-			`BOOL`:         `["null","boolean"]`,
-			`BOX2D`:        `["null","string"]`,
-			`BYTES`:        `["null","bytes"]`,
-			`DATE`:         `["null",{"type":"int","logicalType":"date"}]`,
-			`FLOAT8`:       `["null","double"]`,
-			`GEOGRAPHY`:    `["null","bytes"]`,
-			`GEOMETRY`:     `["null","bytes"]`,
-			`INET`:         `["null","string"]`,
-			`INT8`:         `["null","long"]`,
-			`JSONB`:        `["null","string"]`,
-			`STRING`:       `["null","string"]`,
-			`TIME`:         `["null",{"type":"long","logicalType":"time-micros"}]`,
-			`TIMETZ`:       `["null","string"]`,
-			`TIMESTAMP`:    `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
-			`TIMESTAMPTZ`:  `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
-			`UUID`:         `["null","string"]`,
+			`BOOL`:              `["null","boolean"]`,
+			`BOOL[]`:            `["null",{"type":"array","items":["null","boolean"]}]`,
+			`BOX2D`:             `["null","string"]`,
+			`BYTES`:             `["null","bytes"]`,
+			`DATE`:              `["null",{"type":"int","logicalType":"date"}]`,
+			`FLOAT8`:            `["null","double"]`,
+			`GEOGRAPHY`:         `["null","bytes"]`,
+			`GEOMETRY`:          `["null","bytes"]`,
+			`INET`:              `["null","string"]`,
+			`INT8`:              `["null","long"]`,
+			`INTERVAL`:          `["null","string"]`,
+			`JSONB`:             `["null","string"]`,
+			`STRING`:            `["null","string"]`,
+			`STRING COLLATE fr`: `["null","string"]`,
+			`TIME`:              `["null",{"type":"long","logicalType":"time-micros"}]`,
+			`TIMETZ`:            `["null","string"]`,
+			`TIMESTAMP`:         `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`TIMESTAMPTZ`:       `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`UUID`:              `["null","string"]`,
+			`VARBIT`:            `["null",{"type":"array","items":"long"}]`,
+
+			`BIT(3)`:       `["null",{"type":"array","items":"long"}]`,
 			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
 
-		for _, typ := range types.Scalar {
+		for _, typ := range append(types.Scalar, types.BoolArray, types.MakeCollatedString(types.String, `fr`), types.MakeBit(3)) {
 			switch typ.Family() {
-			case types.IntervalFamily, types.OidFamily, types.BitFamily:
+			case types.OidFamily:
 				continue
 			case types.DecimalFamily:
 				typ = types.MakeDecimal(3, 2)
@@ -329,7 +426,7 @@ func TestAvroSchema(t *testing.T) {
 			colType := typ.SQLString()
 			tableDesc, err := parseTableDesc(`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + colType + `)`)
 			require.NoError(t, err)
-			field, err := columnDescToAvroSchema(tableDesc.PublicColumns()[1].ColumnDesc())
+			field, err := columnToAvroSchema(tableDesc.PublicColumns()[1])
 			require.NoError(t, err)
 			schema, err := json.Marshal(field.SchemaType)
 			require.NoError(t, err)
@@ -408,6 +505,14 @@ func TestAvroSchema(t *testing.T) {
 				sql:  `'2019-01-02 03:04:05'`,
 				avro: `{"long.timestamp-micros":1546398245000000}`},
 
+			{sqlType: `INTERVAL`, sql: `NULL`, avro: `null`},
+			{sqlType: `INTERVAL`,
+				sql:  `INTERVAL '1 yr 2 mons 3 d 4 hrs 5 mins 6 secs'`,
+				avro: `{"string":"P1Y2M3DT4H5M6S"}`},
+			{sqlType: `INTERVAL`,
+				sql:  `INTERVAL '1 yr -6 ms'`,
+				avro: `{"string":"P1YT-0.006S"}`},
+
 			{sqlType: `DECIMAL(4,1)`, sql: `NULL`, avro: `null`},
 			{sqlType: `DECIMAL(4,1)`,
 				sql:  `1.2`,
@@ -442,6 +547,18 @@ func TestAvroSchema(t *testing.T) {
 			{sqlType: `JSONB`,
 				sql:  `'{"b": 1}'`,
 				avro: `{"string":"{\"b\": 1}"}`},
+
+			{sqlType: `VARBIT`, sql: `B'010'`, avro: `{"array":[3,4611686018427387904]}`}, // Take the 3 most significant bits of 1<<62
+
+			{sqlType: `BOOL[]`,
+				sql:  `'{true, true, false, null}'`,
+				avro: `{"array":[{"boolean":true},{"boolean":true},{"boolean":false},null]}`},
+			{sqlType: `VARCHAR COLLATE "fr"`,
+				sql:  `'Bonjour' COLLATE "fr"`,
+				avro: `{"string":"Bonjour"}`},
+			{sqlType: `switch`, // User-defined enum with values "open", "closed"
+				sql:  `'open'`,
+				avro: `{"string":"open"}`},
 		}
 
 		for _, test := range goldens {

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/errors"
@@ -60,6 +61,7 @@ import (
 type avroSchemaType interface{}
 
 const (
+	avroSchemaArray   = `array`
 	avroSchemaBoolean = `boolean`
 	avroSchemaBytes   = `bytes`
 	avroSchemaDouble  = `double`
@@ -76,12 +78,19 @@ type avroLogicalType struct {
 	Scale       int            `json:"scale,omitempty"`
 }
 
+type avroArrayType struct {
+	SchemaType avroSchemaType `json:"type"`
+	Items      avroSchemaType `json:"items"`
+}
+
 func avroUnionKey(t avroSchemaType) string {
 	switch s := t.(type) {
 	case string:
 		return s
 	case avroLogicalType:
 		return avroUnionKey(s.SchemaType) + `.` + s.LogicalType
+	case avroArrayType:
+		return avroUnionKey(s.SchemaType)
 	case *avroRecord:
 		if s.Namespace == "" {
 			return s.Name
@@ -91,6 +100,10 @@ func avroUnionKey(t avroSchemaType) string {
 		panic(errors.AssertionFailedf(`unsupported type %T %v`, t, t))
 	}
 }
+
+// memo is either nil or a previously-returned value
+// that can be safely overwritten to save allocs.
+type datumToNativeFn func(datum tree.Datum, memo interface{}) (interface{}, error)
 
 // avroSchemaField is our representation of the schema of a field in an avro
 // record. Serializing it to JSON gives the standard schema representation.
@@ -103,8 +116,26 @@ type avroSchemaField struct {
 
 	typ *types.T
 
-	encodeFn func(tree.Datum) (interface{}, error)
+	// encodeFn encodes specified tree.Datum as go "native" interface value.
+	// This function may memoize results to save allocations.
+	encodeFn func(datum tree.Datum) (interface{}, error)
+
+	// encodeDatum encodes specified datum as go "native" interface value.
+	// encodeDatum is a low level encoding function -- it should not memoize
+	// on its own, but may use the passed-in memo.
+	encodeDatum datumToNativeFn
+
+	// decodeFn decodes specified go "native" value into tree.Datum.
 	decodeFn func(interface{}) (tree.Datum, error)
+
+	// Avro encoder treats every field as optional -- that is, we always
+	// allow null values.  As such, every value returned by encodeFn is an
+	// avro record represented as a map with a single "union" key (see avroUnionKey())
+	// and the value either null or the actual encoded value.
+	// nativeEncoded is a map that's returned by encodeFn.  We allocate
+	// this map once to avoid repeated map allocations.  We simply update
+	// "union key" value.
+	nativeEncoded map[string]interface{}
 }
 
 // avroRecord is our representation of the schema of an avro record. Serializing
@@ -124,7 +155,11 @@ type avroDataRecord struct {
 
 	colIdxByFieldIdx map[int]int
 	fieldIdxByName   map[string]int
-	alloc            rowenc.DatumAlloc
+	fieldIdxByColIdx map[int]int
+	// Allocate Go native representation once, to avoid repeated map allocation
+	// when encoding.
+	native map[string]interface{}
+	alloc  rowenc.DatumAlloc
 }
 
 // avroMetadata is the `avroEnvelopeRecord` metadata.
@@ -145,262 +180,471 @@ type avroEnvelopeRecord struct {
 	before, after *avroDataRecord
 }
 
-// columnDescToAvroSchema converts a column descriptor into its corresponding
-// avro field schema.
-func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField, error) {
+// typeToAvroSchema converts a database type to an avro field
+func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 	schema := &avroSchemaField{
-		Name:     SQLNameToAvroName(colDesc.Name),
-		Metadata: colDesc.SQLStringNotHumanReadable(),
-		Default:  nil,
-		typ:      colDesc.Type,
+		typ: typ,
 	}
-
-	var avroType avroSchemaType
-	switch colDesc.Type.Family() {
-	case types.IntFamily:
-		avroType = avroSchemaLong
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return int64(*d.(*tree.DInt)), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.NewDInt(tree.DInt(x.(int64))), nil
-		}
-	case types.BoolFamily:
-		avroType = avroSchemaBoolean
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return bool(*d.(*tree.DBool)), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.MakeDBool(tree.DBool(x.(bool))), nil
-		}
-	case types.FloatFamily:
-		avroType = avroSchemaDouble
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return float64(*d.(*tree.DFloat)), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.NewDFloat(tree.DFloat(x.(float64))), nil
-		}
-	case types.Box2DFamily:
-		avroType = avroSchemaString
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return d.(*tree.DBox2D).CartesianBoundingBox.Repr(), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			b, err := geo.ParseCartesianBoundingBox(x.(string))
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewDBox2D(b), nil
-		}
-	case types.GeographyFamily:
-		avroType = avroSchemaBytes
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return []byte(d.(*tree.DGeography).EWKB()), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			g, err := geo.ParseGeographyFromEWKBUnsafe(geopb.EWKB(x.([]byte)))
-			if err != nil {
-				return nil, err
-			}
-			return &tree.DGeography{Geography: g}, nil
-		}
-	case types.GeometryFamily:
-		avroType = avroSchemaBytes
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return []byte(d.(*tree.DGeometry).EWKB()), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			g, err := geo.ParseGeometryFromEWKBUnsafe(geopb.EWKB(x.([]byte)))
-			if err != nil {
-				return nil, err
-			}
-			return &tree.DGeometry{Geometry: g}, nil
-		}
-	case types.StringFamily:
-		avroType = avroSchemaString
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return string(*d.(*tree.DString)), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.NewDString(x.(string)), nil
-		}
-	case types.BytesFamily:
-		avroType = avroSchemaBytes
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return []byte(*d.(*tree.DBytes)), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.NewDBytes(tree.DBytes(x.([]byte))), nil
-		}
-	case types.DateFamily:
-		avroType = avroLogicalType{
-			SchemaType:  avroSchemaInt,
-			LogicalType: `date`,
-		}
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			date := *d.(*tree.DDate)
-			if !date.IsFinite() {
-				return nil, errors.Errorf(
-					`column %s: infinite date not yet supported with avro`, colDesc.Name)
-			}
-			// The avro library requires us to return this as a time.Time.
-			return date.ToTime()
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			// The avro library hands this back as a time.Time.
-			return tree.NewDDateFromTime(x.(time.Time))
-		}
-	case types.TimeFamily:
-		avroType = avroLogicalType{
-			SchemaType:  avroSchemaLong,
-			LogicalType: `time-micros`,
-		}
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			// The avro library requires us to return this as a time.Duration.
-			duration := time.Duration(*d.(*tree.DTime)) * time.Microsecond
-			return duration, nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			// The avro library hands this back as a time.Duration.
-			micros := x.(time.Duration) / time.Microsecond
-			return tree.MakeDTime(timeofday.TimeOfDay(micros)), nil
-		}
-	case types.TimeTZFamily:
-		avroType = avroSchemaString
-		// We cannot encode this as a long, as it does not encode
-		// timezone correctly.
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return d.(*tree.DTimeTZ).TimeTZ.String(), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			d, _, err := tree.ParseDTimeTZ(nil, x.(string), time.Microsecond)
-			return d, err
-		}
-	case types.TimestampFamily:
-		avroType = avroLogicalType{
-			SchemaType:  avroSchemaLong,
-			LogicalType: `timestamp-micros`,
-		}
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return d.(*tree.DTimestamp).Time, nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.MakeDTimestamp(x.(time.Time), time.Microsecond)
-		}
-	case types.TimestampTZFamily:
-		avroType = avroLogicalType{
-			SchemaType:  avroSchemaLong,
-			LogicalType: `timestamp-micros`,
-		}
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return d.(*tree.DTimestampTZ).Time, nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.MakeDTimestampTZ(x.(time.Time), time.Microsecond)
-		}
-	case types.DecimalFamily:
-		if colDesc.Type.Precision() == 0 {
-			return nil, errors.Errorf(
-				`column %s: decimal with no precision not yet supported with avro`, colDesc.Name)
-		}
-		width := int(colDesc.Type.Width())
-		prec := int(colDesc.Type.Precision())
-		avroType = avroLogicalType{
-			SchemaType:  avroSchemaBytes,
-			LogicalType: `decimal`,
-			Precision:   prec,
-			Scale:       width,
-		}
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			dec := d.(*tree.DDecimal).Decimal
-
-			// If the decimal happens to fit a smaller width than the
-			// column allows, add trailing zeroes so the scale is constant
-			if colDesc.Type.Width() > -dec.Exponent {
-				_, err := tree.DecimalCtx.WithPrecision(uint32(prec)).Quantize(&dec, &dec, -int32(width))
-				if err != nil {
-					// This should always be possible without rounding since we're using the column def,
-					// but if it's not, WithPrecision will force it to error.
-					return nil, err
-				}
-			}
-
-			// TODO(dan): For the cases that the avro defined decimal format
-			// would not roundtrip, serialize the decimal as a string. Also
-			// support the unspecified precision/scale case in this branch. We
-			// can't currently do this without surgery to the avro library we're
-			// using and that's too scary leading up to 2.1.0.
-			rat, err := decimalToRat(dec, int32(width))
-			if err != nil {
-				return nil, err
-			}
-			return &rat, nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return &tree.DDecimal{Decimal: ratToDecimal(*x.(*big.Rat), int32(width))}, nil
-		}
-	case types.UuidFamily:
-		// Should be logical type of "uuid", but the avro library doesn't support
-		// that yet.
-		avroType = avroSchemaString
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return d.(*tree.DUuid).UUID.String(), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.ParseDUuidFromString(x.(string))
-		}
-	case types.INetFamily:
-		avroType = avroSchemaString
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return d.(*tree.DIPAddr).IPAddr.String(), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.ParseDIPAddrFromINetString(x.(string))
-		}
-	case types.JsonFamily:
-		avroType = avroSchemaString
-		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return d.(*tree.DJSON).JSON.String(), nil
-		}
-		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.ParseDJSON(x.(string))
-		}
-	default:
-		return nil, errors.Errorf(`column %s: type %s not yet supported with avro`,
-			colDesc.Name, colDesc.Type.SQLString())
-	}
-	schema.SchemaType = avroType
 
 	// Make every field optional by unioning it with null, so that all schema
 	// evolutions for a table are considered "backward compatible" by avro. This
 	// means that the Avro type doesn't mirror the column's nullability, but it
 	// makes it much easier to work with long histories of table data afterward,
 	// especially for things like loading into analytics databases.
-	{
+	setNullable := func(
+		avroType avroSchemaType,
+		encoder datumToNativeFn,
+		decoder func(interface{}) (tree.Datum, error),
+	) {
 		// The default for a union type is the default for the first element of
 		// the union.
 		schema.SchemaType = []avroSchemaType{avroSchemaNull, avroType}
-		encodeFn := schema.encodeFn
-		decodeFn := schema.decodeFn
 		unionKey := avroUnionKey(avroType)
+		schema.nativeEncoded = map[string]interface{}{unionKey: nil}
+		schema.encodeDatum = encoder
+
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			if d == tree.DNull {
-				return goavro.Union(avroSchemaNull, nil), nil
+				return nil /* value */, nil
 			}
-			encoded, err := encodeFn(d)
+			encoded, err := encoder(d, schema.nativeEncoded[unionKey])
 			if err != nil {
 				return nil, err
 			}
-			return goavro.Union(unionKey, encoded), nil
+			schema.nativeEncoded[unionKey] = encoded
+			return schema.nativeEncoded, nil
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			if x == nil {
 				return tree.DNull, nil
 			}
-			return decodeFn(x.(map[string]interface{})[unionKey])
+			return decoder(x.(map[string]interface{})[unionKey])
 		}
 	}
+
+	switch typ.Family() {
+	case types.IntFamily:
+		setNullable(
+			avroSchemaLong,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return int64(*d.(*tree.DInt)), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.NewDInt(tree.DInt(x.(int64))), nil
+			},
+		)
+	case types.BoolFamily:
+		setNullable(
+			avroSchemaBoolean,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return bool(*d.(*tree.DBool)), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.MakeDBool(tree.DBool(x.(bool))), nil
+			},
+		)
+	case types.BitFamily:
+		setNullable(
+			avroArrayType{
+				SchemaType: avroSchemaArray,
+				Items:      avroSchemaLong,
+			},
+			func(d tree.Datum, memo interface{}) (interface{}, error) {
+				uints, lastBitsUsed := d.(*tree.DBitArray).EncodingParts()
+				var signedLongs []interface{}
+				// reuse a previously allocated array if it exists
+				// and is long enough
+				if memo != nil {
+					signedLongs = memo.([]interface{})
+					if len(signedLongs) > len(uints)+1 {
+						signedLongs = signedLongs[:len(uints)+1]
+					}
+				}
+				if signedLongs == nil {
+					signedLongs = make([]interface{}, len(uints)+1)
+				}
+				signedLongs[0] = int64(lastBitsUsed)
+				for idx, word := range uints {
+					signedLongs[idx+1] = int64(word)
+				}
+				return signedLongs, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				arr := x.([]interface{})
+				lastBitsUsed, ints := arr[0], arr[1:]
+				uints := make([]uint64, len(ints))
+				for idx, word := range ints {
+					uints[idx] = uint64(word.(int64))
+				}
+				ba, err := bitarray.FromEncodingParts(uints, uint64(lastBitsUsed.(int64)))
+				return &tree.DBitArray{BitArray: ba}, err
+			},
+		)
+	case types.FloatFamily:
+		setNullable(
+			avroSchemaDouble,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return float64(*d.(*tree.DFloat)), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.NewDFloat(tree.DFloat(x.(float64))), nil
+			},
+		)
+	case types.Box2DFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DBox2D).CartesianBoundingBox.Repr(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				b, err := geo.ParseCartesianBoundingBox(x.(string))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBox2D(b), nil
+			},
+		)
+	case types.GeographyFamily:
+		setNullable(
+			avroSchemaBytes,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return []byte(d.(*tree.DGeography).EWKB()), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				g, err := geo.ParseGeographyFromEWKBUnsafe(geopb.EWKB(x.([]byte)))
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeography{Geography: g}, nil
+			},
+		)
+	case types.GeometryFamily:
+		setNullable(
+			avroSchemaBytes,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return []byte(d.(*tree.DGeometry).EWKB()), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				g, err := geo.ParseGeometryFromEWKBUnsafe(geopb.EWKB(x.([]byte)))
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: g}, nil
+			},
+		)
+	case types.StringFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return string(*d.(*tree.DString)), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.NewDString(x.(string)), nil
+			},
+		)
+	case types.CollatedStringFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DCollatedString).Contents, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.NewDCollatedString(x.(string), typ.Locale(), &tree.CollationEnvironment{})
+			},
+		)
+	case types.BytesFamily:
+		setNullable(
+			avroSchemaBytes,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return []byte(*d.(*tree.DBytes)), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.NewDBytes(tree.DBytes(x.([]byte))), nil
+			},
+		)
+	case types.DateFamily:
+		setNullable(
+			avroLogicalType{
+				SchemaType:  avroSchemaInt,
+				LogicalType: `date`,
+			},
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				date := *d.(*tree.DDate)
+				if !date.IsFinite() {
+					return nil, errors.Errorf(
+						`infinite date not yet supported with avro`)
+				}
+				// The avro library requires us to return this as a time.Time.
+				return date.ToTime()
+			},
+			func(x interface{}) (tree.Datum, error) {
+				// The avro library hands this back as a time.Time.
+				return tree.NewDDateFromTime(x.(time.Time))
+			},
+		)
+	case types.TimeFamily:
+		setNullable(
+			avroLogicalType{
+				SchemaType:  avroSchemaLong,
+				LogicalType: `time-micros`,
+			},
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				// The avro library requires us to return this as a time.Duration.
+				duration := time.Duration(*d.(*tree.DTime)) * time.Microsecond
+				return duration, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				// The avro library hands this back as a time.Duration.
+				micros := x.(time.Duration) / time.Microsecond
+				return tree.MakeDTime(timeofday.TimeOfDay(micros)), nil
+			},
+		)
+	case types.TimeTZFamily:
+		setNullable(
+			avroSchemaString,
+			// We cannot encode this as a long, as it does not encode
+			// timezone correctly.
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DTimeTZ).TimeTZ.String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				d, _, err := tree.ParseDTimeTZ(nil, x.(string), time.Microsecond)
+				return d, err
+			},
+		)
+	case types.TimestampFamily:
+		setNullable(
+			avroLogicalType{
+				SchemaType:  avroSchemaLong,
+				LogicalType: `timestamp-micros`,
+			},
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DTimestamp).Time, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.MakeDTimestamp(x.(time.Time), time.Microsecond)
+			},
+		)
+	case types.TimestampTZFamily:
+		setNullable(
+			avroLogicalType{
+				SchemaType:  avroSchemaLong,
+				LogicalType: `timestamp-micros`,
+			},
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DTimestampTZ).Time, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.MakeDTimestampTZ(x.(time.Time), time.Microsecond)
+			},
+		)
+	case types.IntervalFamily:
+		setNullable(
+			// This would ideally be the avro Duration logical type
+			// However, the spec is not implemented in most tooling
+			// and is problematic--it requires 32-bit integers
+			// representing months, days, and milliseconds, meaning
+			// it can't encode everything we can with our int64 years.
+			// String encoding is still fairly terse and arguably the
+			// only semantically exact representation.
+			// Using ISO 8601 format (https://en.wikipedia.org/wiki/ISO_8601#Durations)
+			// because it's the tersest of the input formats we support
+			// and isn't golang-specific.
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DInterval).ValueAsISO8601String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.ParseDInterval(x.(string))
+			},
+		)
+	case types.DecimalFamily:
+		if typ.Precision() == 0 {
+			return nil, errors.Errorf(
+				`decimal with no precision not yet supported with avro`)
+		}
+
+		width := int(typ.Width())
+		prec := int(typ.Precision())
+		setNullable(
+			avroLogicalType{
+				SchemaType:  avroSchemaBytes,
+				LogicalType: `decimal`,
+				Precision:   prec,
+				Scale:       width,
+			},
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				dec := d.(*tree.DDecimal).Decimal
+
+				// If the decimal happens to fit a smaller width than the
+				// column allows, add trailing zeroes so the scale is constant
+				if typ.Width() > -dec.Exponent {
+					_, err := tree.DecimalCtx.WithPrecision(uint32(prec)).Quantize(&dec, &dec, -int32(width))
+					if err != nil {
+						// This should always be possible without rounding since we're using the column def,
+						// but if it's not, WithPrecision will force it to error.
+						return nil, err
+					}
+				}
+
+				// TODO(dan): For the cases that the avro defined decimal format
+				// would not roundtrip, serialize the decimal as a string. Also
+				// support the unspecified precision/scale case in this branch. We
+				// can't currently do this without surgery to the avro library we're
+				// using and that's too scary leading up to 2.1.0.
+				rat, err := decimalToRat(dec, int32(width))
+				if err != nil {
+					return nil, err
+				}
+				return &rat, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return &tree.DDecimal{Decimal: ratToDecimal(*x.(*big.Rat), int32(width))}, nil
+			},
+		)
+	case types.UuidFamily:
+		// Should be logical type of "uuid", but the avro library doesn't support
+		// that yet.
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DUuid).UUID.String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.ParseDUuidFromString(x.(string))
+			},
+		)
+	case types.INetFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DIPAddr).IPAddr.String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.ParseDIPAddrFromINetString(x.(string))
+			},
+		)
+	case types.JsonFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DJSON).JSON.String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.ParseDJSON(x.(string))
+			},
+		)
+	case types.EnumFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DEnum).LogicalRep, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.MakeDEnumFromLogicalRepresentation(typ, x.(string))
+			},
+		)
+	case types.ArrayFamily:
+		itemSchema, err := typeToAvroSchema(typ.ArrayContents())
+		if err != nil {
+			return nil, errors.Wrapf(err, `could not create item schema for %s`,
+				typ)
+		}
+		itemUnionKey := avroUnionKey(itemSchema.SchemaType.([]avroSchemaType)[1])
+
+		setNullable(
+			avroArrayType{
+				SchemaType: avroSchemaArray,
+				Items:      itemSchema.SchemaType,
+			},
+			func(d tree.Datum, memo interface{}) (interface{}, error) {
+				datumArr := d.(*tree.DArray)
+				var avroArr []interface{}
+				if memo != nil {
+					avroArr = memo.([]interface{})
+					if len(avroArr) > datumArr.Len() {
+						avroArr = avroArr[:datumArr.Len()]
+					}
+				} else {
+					avroArr = make([]interface{}, 0, datumArr.Len())
+				}
+
+				for i, elt := range datumArr.Array {
+					var encoded interface{}
+					if elt == tree.DNull {
+						encoded = nil
+					} else {
+						var encErr error
+						if i < len(avroArr) {
+							encoded, encErr = itemSchema.encodeDatum(elt, avroArr[i].(map[string]interface{})[itemUnionKey])
+						} else {
+							encoded, encErr = itemSchema.encodeDatum(elt, nil)
+						}
+						if encErr != nil {
+							return nil, encErr
+						}
+					}
+
+					if i < len(avroArr) {
+						// We have previously memoized array value.
+						if encoded == nil {
+							avroArr[i] = encoded
+						} else if itemMap, ok := avroArr[i].(map[string]interface{}); ok {
+							// encoded is not nil and previous value wasn't nil either.
+							itemMap[itemUnionKey] = encoded
+						} else {
+							// encoded is not nil, but previous value was.
+							encMap := make(map[string]interface{})
+							encMap[itemUnionKey] = encoded
+							avroArr[i] = encMap
+						}
+					} else {
+						if encoded == nil {
+							avroArr = append(avroArr, encoded)
+						} else {
+							encMap := make(map[string]interface{})
+							encMap[itemUnionKey] = encoded
+							avroArr = append(avroArr, encMap)
+						}
+					}
+				}
+				return avroArr, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				datumArr := tree.NewDArray(itemSchema.typ)
+				avroArr := x.([]interface{})
+				for _, item := range avroArr {
+					itemDatum, err := itemSchema.decodeFn(item)
+					if err != nil {
+						return nil, err
+					}
+					err = datumArr.Append(itemDatum)
+					if err != nil {
+						return nil, err
+					}
+				}
+				return datumArr, nil
+			},
+		)
+
+	default:
+		return nil, errors.Errorf(`type %s not yet supported with avro`,
+			typ.SQLString())
+	}
+
+	return schema, nil
+}
+
+// columnToAvroSchema converts a column descriptor into its corresponding
+// avro field schema.
+func columnToAvroSchema(col catalog.Column) (*avroSchemaField, error) {
+	schema, err := typeToAvroSchema(col.GetType())
+	if err != nil {
+		return nil, errors.Wrapf(err, "column %s", col.GetName())
+	}
+	schema.Name = SQLNameToAvroName(col.GetName())
+	schema.Metadata = col.ColumnDesc().SQLStringNotHumanReadable()
+	schema.Default = nil
 
 	return schema, nil
 }
@@ -422,6 +666,7 @@ func indexToAvroSchema(
 		},
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
+		fieldIdxByColIdx: make(map[int]int),
 	}
 	colIdxByID := catalog.ColumnIDToOrdinalMap(tableDesc.PublicColumns())
 	for _, colID := range indexDesc.ColumnIDs {
@@ -430,11 +675,12 @@ func indexToAvroSchema(
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
 		col := tableDesc.PublicColumns()[colIdx]
-		field, err := columnDescToAvroSchema(col.ColumnDesc())
+		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}
 		schema.colIdxByFieldIdx[len(schema.Fields)] = colIdx
+		schema.fieldIdxByColIdx[colIdx] = len(schema.Fields)
 		schema.fieldIdxByName[field.Name] = len(schema.Fields)
 		schema.Fields = append(schema.Fields, field)
 	}
@@ -474,14 +720,16 @@ func tableToAvroSchema(
 		},
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
+		fieldIdxByColIdx: make(map[int]int),
 	}
 	for _, col := range tableDesc.PublicColumns() {
-		field, err := columnDescToAvroSchema(col.ColumnDesc())
+		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}
 		schema.colIdxByFieldIdx[len(schema.Fields)] = col.Ordinal()
 		schema.fieldIdxByName[field.Name] = len(schema.Fields)
+		schema.fieldIdxByColIdx[col.Ordinal()] = len(schema.Fields)
 		schema.Fields = append(schema.Fields, field)
 	}
 	schemaJSON, err := json.Marshal(schema)
@@ -538,18 +786,23 @@ func (r *avroDataRecord) RowFromBinary(buf []byte) (rowenc.EncDatumRow, error) {
 }
 
 func (r *avroDataRecord) nativeFromRow(row rowenc.EncDatumRow) (interface{}, error) {
-	avroDatums := make(map[string]interface{}, len(row))
+	if r.native == nil {
+		// Note that it's safe to reuse r.native without clearing it because all records will
+		// contain the same complete set of fields.
+		r.native = make(map[string]interface{}, len(r.Fields))
+	}
+
 	for fieldIdx, field := range r.Fields {
 		d := row[r.colIdxByFieldIdx[fieldIdx]]
 		if err := d.EnsureDecoded(field.typ, &r.alloc); err != nil {
 			return nil, err
 		}
 		var err error
-		if avroDatums[field.Name], err = field.encodeFn(d.Datum); err != nil {
+		if r.native[field.Name], err = field.encodeFn(d.Datum); err != nil {
 			return nil, err
 		}
 	}
-	return avroDatums, nil
+	return r.native, nil
 }
 
 func (r *avroDataRecord) rowFromNative(native interface{}) (rowenc.EncDatumRow, error) {
@@ -688,6 +941,16 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 		return nil, errors.AssertionFailedf(`unhandled meta key: %s`, k)
 	}
 	return r.codec.BinaryFromNative(buf, native)
+}
+
+// Refresh the metadata for user-defined types on a cached schema
+// The only user-defined type is enum, so this is usually a no-op
+func (r *avroDataRecord) refreshTypeMetadata(tbl catalog.TableDescriptor) {
+	for _, col := range tbl.UserDefinedTypeColumns() {
+		if fieldIdx, ok := r.fieldIdxByColIdx[col.Ordinal()]; ok {
+			r.Fields[fieldIdx].typ = col.GetType()
+		}
+	}
 }
 
 // decimalToRat converts one of our apd decimals to the format expected by the
