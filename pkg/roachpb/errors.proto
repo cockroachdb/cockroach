@@ -162,14 +162,15 @@ enum TransactionAbortedReason {
   // meantime because the transaction was aborted.
   ABORT_REASON_ABORT_SPAN = 5;
 
-  // A request attempting to create a transaction record encountered a write
-  // timestamp cache entry for the txn key, and the entry identifies this
-  // transaction. This means that the transaction definitely committed or rolled
-  // back before. So, this request is either a delayed replay of some sort, or
-  // it raced with an async abort and lost. If a client gets this
-  // TransactionAbortedError (without it being wrapped in an ambiguous error),
-  // it must be the latter case, and the transaction can be retried.
-  ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY = 6;
+	// A request attempting to create a transaction record encountered a write
+	// timestamp cache entry for the txn key, and the entry identifies this
+	// transaction. This means that the transaction already wrote a transaction
+	// record previously, which may or may not have been removed since. So, this
+	// request is either a delayed replay of some sort, or it raced with an async
+	// abort and lost. If a client gets this TransactionAbortedError (without it
+	// being wrapped in an ambiguous error), it must be the latter case, and the
+	// transaction can be retried.
+	ABORT_REASON_RECORD_ALREADY_WRITTEN_POSSIBLE_REPLAY = 6;
 
   // A request attempting to create a transaction record is not allowed to
   // proceed by the timestamp cache because it cannot be verified that the
