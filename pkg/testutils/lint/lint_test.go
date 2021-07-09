@@ -1953,6 +1953,7 @@ func TestLint(t *testing.T) {
 			"../../sql/colexec/colexecwindow",
 			"../../sql/colfetcher",
 			"../../sql/row",
+			"../../kv/kvclient/rangecache",
 		); err != nil {
 			t.Fatal(err)
 		}
