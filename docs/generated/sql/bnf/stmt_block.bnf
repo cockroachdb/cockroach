@@ -1588,6 +1588,7 @@ for_grantee_clause ::=
 
 opt_schedule_executor_type ::=
 	'FOR' 'BACKUP'
+	| 'FOR' 'SQL' 'STATISTICS'
 
 schedule_state ::=
 	'RUNNING'

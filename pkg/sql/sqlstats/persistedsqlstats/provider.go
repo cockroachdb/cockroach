@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
@@ -82,23 +83,40 @@ type PersistedSQLStats struct {
 	memoryPressureSignal chan struct{}
 
 	lastFlushStarted time.Time
+	jobMonitor       jobMonitor
 }
 
 var _ sqlstats.Provider = &PersistedSQLStats{}
 
 // New returns a new instance of the PersistedSQLStats.
 func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
-	return &PersistedSQLStats{
+	p := &PersistedSQLStats{
 		SQLStats:             memSQLStats,
 		cfg:                  cfg,
 		memoryPressureSignal: make(chan struct{}),
 	}
+
+	p.jobMonitor = jobMonitor{
+		st:           cfg.Settings,
+		ie:           cfg.InternalExecutor,
+		db:           cfg.KvDB,
+		scanInterval: defaultScanInterval,
+		jitterFn:     p.jitterInterval,
+	}
+
+	return p
 }
 
 // Start implements sqlstats.Provider interface.
 func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.SQLStats.Start(ctx, stopper)
 	s.startSQLStatsFlushLoop(ctx, stopper)
+	s.jobMonitor.start(ctx, stopper)
+}
+
+// GetController returns the controller of the PersistedSQLStats.
+func (s *PersistedSQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
+	return NewController(s, server, s.cfg.KvDB, s.cfg.InternalExecutor)
 }
 
 func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper *stop.Stopper) {
@@ -142,12 +160,15 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 //  (1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
 func (s *PersistedSQLStats) nextFlushInterval() time.Duration {
 	baseInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	return s.jitterInterval(baseInterval)
+}
 
+func (s *PersistedSQLStats) jitterInterval(interval time.Duration) time.Duration {
 	jitter := SQLStatsFlushJitter.Get(&s.cfg.Settings.SV)
 	frac := 1 + (2*rand.Float64()-1)*jitter
 
-	flushInterval := time.Duration(frac * float64(baseInterval.Nanoseconds()))
-	return flushInterval
+	jitteredInterval := time.Duration(frac * float64(interval.Nanoseconds()))
+	return jitteredInterval
 }
 
 // GetWriterForApplication implements sqlstats.Provider interface.
