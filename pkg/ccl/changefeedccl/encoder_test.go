@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -229,12 +230,14 @@ func TestEncoders(t *testing.T) {
 			}
 			require.NoError(t, err)
 
+			immutable := &tableDesc.(*tabledesc.Mutable).Immutable
+
 			rowInsert := encodeRow{
 				datums:        row,
 				updated:       ts,
-				tableDesc:     tableDesc,
+				tableDesc:     immutable,
 				prevDatums:    nil,
-				prevTableDesc: tableDesc,
+				prevTableDesc: immutable,
 			}
 			keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
 			require.NoError(t, err)
@@ -248,8 +251,8 @@ func TestEncoders(t *testing.T) {
 				deleted:       true,
 				prevDatums:    row,
 				updated:       ts,
-				tableDesc:     tableDesc,
-				prevTableDesc: tableDesc,
+				tableDesc:     immutable,
+				prevTableDesc: immutable,
 			}
 			keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
 			require.NoError(t, err)

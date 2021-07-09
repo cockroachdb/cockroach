@@ -185,8 +185,7 @@ func TestAvroSchema(t *testing.T) {
 	// Type-specific random logic for when we can't use the randgen library
 	// and/or need to modify the type to add random user-defined values
 	// The returned datum will be nil if we can just use randgen
-	var overrideRandGen func(typ *types.T) (tree.Datum, *types.T)
-	overrideRandGen = func(typ *types.T) (tree.Datum, *types.T) {
+	overrideRandGen := func(typ *types.T) (tree.Datum, *types.T) {
 		switch typ.Family() {
 		case types.TimestampFamily:
 			// Truncate to millisecond instead of microsecond because of a bug
@@ -234,14 +233,10 @@ func TestAvroSchema(t *testing.T) {
 	}
 
 	// Types we don't support that are present in types.OidToType
-	var skipType func(typ *types.T) bool
-	skipType = func(typ *types.T) bool {
+	skipType := func(typ *types.T) bool {
 		switch typ.Family() {
 		case types.AnyFamily, types.OidFamily, types.TupleFamily:
 			// These aren't expected to be needed for changefeeds.
-			return true
-		case types.IntervalFamily:
-			// Implement these as customer demand dictates.
 			return true
 		case types.ArrayFamily:
 			// Backported support, but these tests rely on newer randgen
@@ -366,6 +361,7 @@ func TestAvroSchema(t *testing.T) {
 			`GEOMETRY`:          `["null","bytes"]`,
 			`INET`:              `["null","string"]`,
 			`INT8`:              `["null","long"]`,
+			`INTERVAL`:          `["null","string"]`,
 			`JSONB`:             `["null","string"]`,
 			`STRING`:            `["null","string"]`,
 			`STRING COLLATE fr`: `["null","string"]`,
@@ -382,7 +378,7 @@ func TestAvroSchema(t *testing.T) {
 
 		for _, typ := range append(types.Scalar, types.BoolArray, types.MakeCollatedString(types.String, `fr`), types.MakeBit(3)) {
 			switch typ.Family() {
-			case types.IntervalFamily, types.OidFamily:
+			case types.OidFamily:
 				continue
 			case types.DecimalFamily:
 				typ = types.MakeDecimal(3, 2)
@@ -470,6 +466,14 @@ func TestAvroSchema(t *testing.T) {
 			{sqlType: `TIMESTAMPTZ`,
 				sql:  `'2019-01-02 03:04:05'`,
 				avro: `{"long.timestamp-micros":1546398245000000}`},
+
+			{sqlType: `INTERVAL`, sql: `NULL`, avro: `null`},
+			{sqlType: `INTERVAL`,
+				sql:  `INTERVAL '1 yr 2 mons 3 d 4 hrs 5 mins 6 secs'`,
+				avro: `{"string":"P1Y2M3DT4H5M6S"}`},
+			{sqlType: `INTERVAL`,
+				sql:  `INTERVAL '1 yr -6 ms'`,
+				avro: `{"string":"P1YT-0.006S"}`},
 
 			{sqlType: `DECIMAL(4,1)`, sql: `NULL`, avro: `null`},
 			{sqlType: `DECIMAL(4,1)`,
