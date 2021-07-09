@@ -1826,6 +1826,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+	// The _status/indicators endpoint is not authenticated. Useful for inferring
+	// indicators from metrics for monitoring purposes.
+	s.mux.Handle(statusIndicators, http.HandlerFunc(s.status.handleIndicators))
 
 	// Register debugging endpoints.
 	var debugHandler http.Handler = s.debug

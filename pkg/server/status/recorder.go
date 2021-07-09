@@ -139,6 +139,7 @@ type MetricsRecorder struct {
 		// prometheus text format.
 		prometheusExporter metric.PrometheusExporter
 	}
+
 	// WriteNodeStatus is a potentially long-running method (with a network
 	// round-trip) that requires a mutex to be safe for concurrent usage. We
 	// therefore give it its own mutex to avoid blocking other methods.
@@ -271,6 +272,13 @@ func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
 	}
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+// PrintIndicators would write the indicator data contained with the metric
+// in JSON format to the writer. We will create a new IndicatorsExporter class
+// along the lines of PrometheusExporter to export indicator data as JSON.
+func (mr *MetricsRecorder) PrintIndicators(_ io.Writer) error {
+	return errors.New("unimplemented")
 }
 
 // lockAndPrintAsText grabs the recorder lock and generates the prometheus

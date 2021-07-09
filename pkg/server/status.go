@@ -88,6 +88,9 @@ const (
 	// statusVars exposes prometheus metrics for monitoring consumption.
 	statusVars = statusPrefix + "vars"
 
+	// statusIndicators exposes indicator information for metrics.
+	statusIndicators = statusPrefix + "indicators"
+
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
 
@@ -116,6 +119,7 @@ var (
 type metricMarshaler interface {
 	json.Marshaler
 	PrintAsText(io.Writer) error
+	PrintIndicators(io.Writer) error
 }
 
 func propagateGatewayMetadata(ctx context.Context) context.Context {
@@ -1590,6 +1594,13 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	telemetry.Inc(telemetryPrometheusVars)
 }
 
+func (h varsHandler) handleIndicators(w http.ResponseWriter, r *http.Request) {
+	// handleIndicators will invoke the PrintIndicators method within the metric recorder
+	// to extract indicator information contained with the metric metadata and expose
+	// it through an HTTP endpoint similar the _status/vars prom endpoint.
+	h.metricSource.PrintIndicators(w)
+}
+
 // appendLicenseExpiryMetric computes the seconds until the enterprise licence
 // expires on this clusters. the license expiry metric is computed on-demand
 // since it's not regularly computed as part of running the cluster unless
@@ -1613,6 +1624,10 @@ func (h varsHandler) appendLicenseExpiryMetric(ctx context.Context, w io.Writer)
 
 func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 	varsHandler{s.metricSource, s.st}.handleVars(w, r)
+}
+
+func (s *statusServer) handleIndicators(w http.ResponseWriter, r *http.Request) {
+	varsHandler{s.metricSource, s.st}.handleIndicators(w, r)
 }
 
 // Ranges returns range info for the specified node.
