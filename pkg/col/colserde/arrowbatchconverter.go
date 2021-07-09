@@ -468,7 +468,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			}
 
 		default:
-			var col interface{}
+			var col coldata.Column
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 			case types.IntFamily:
 				switch typ.Width() {
