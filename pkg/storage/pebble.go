@@ -501,13 +501,15 @@ func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) {
 func ResolveEncryptedEnvOptions(
 	cfg *PebbleConfig,
 ) (*PebbleFileRegistry, EncryptionStatsHandler, error) {
+	// TODO(ayang): pass in MinVersion = enginepb.RegistryVersion_Records
+	// when we have upgraded to the most recent version
 	fileRegistry := &PebbleFileRegistry{FS: cfg.Opts.FS, DBDir: cfg.Dir, ReadOnly: cfg.Opts.ReadOnly}
 	if cfg.UseFileRegistry {
 		if err := fileRegistry.Load(); err != nil {
 			return nil, nil, err
 		}
 	} else {
-		if err := fileRegistry.checkNoRegistryFile(); err != nil {
+		if err := fileRegistry.CheckNoRegistryFile(); err != nil {
 			return nil, nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
 				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
 		}
@@ -679,6 +681,7 @@ func (p *Pebble) Close() {
 	}
 	p.closed = true
 	_ = p.db.Close()
+	_ = p.fileRegistry.Shutdown()
 }
 
 // Closed implements the Engine interface.
