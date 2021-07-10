@@ -1509,30 +1509,37 @@ type SessionArgs struct {
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	syncutil.Mutex
-	sessions map[ClusterWideID]registrySession
+	sessions               map[ClusterWideID]registrySession
+	sessionsByPGWireSecret map[uint32]registrySession
 }
 
 // NewSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
 func NewSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{sessions: make(map[ClusterWideID]registrySession)}
+	return &SessionRegistry{
+		sessions:               make(map[ClusterWideID]registrySession),
+		sessionsByPGWireSecret: make(map[uint32]registrySession),
+	}
 }
 
-func (r *SessionRegistry) register(id ClusterWideID, s registrySession) {
+func (r *SessionRegistry) register(id ClusterWideID, pgwireSecretID uint32, s registrySession) {
 	r.Lock()
 	r.sessions[id] = s
+	r.sessionsByPGWireSecret[pgwireSecretID] = s
 	r.Unlock()
 }
 
-func (r *SessionRegistry) deregister(id ClusterWideID) {
+func (r *SessionRegistry) deregister(id ClusterWideID, pgwireSecretID uint32) {
 	r.Lock()
 	delete(r.sessions, id)
+	delete(r.sessionsByPGWireSecret, pgwireSecretID)
 	r.Unlock()
 }
 
 type registrySession interface {
 	user() security.SQLUsername
 	cancelQuery(queryID ClusterWideID) bool
+	cancelCurrentQueries() bool
 	cancelSession()
 	// serialize serializes a Session into a serverpb.Session
 	// that can be served over RPC.
@@ -1557,6 +1564,19 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 	}
 
 	return false, fmt.Errorf("query ID %s not found", queryID)
+}
+
+// CancelQueryByPGWire looks up the associated query in the session registry and
+// cancels it.
+func (r *SessionRegistry) CancelQueryByPGWire(secretID uint32) (bool, error) {
+	r.Lock()
+	defer r.Unlock()
+	if session, ok := r.sessionsByPGWireSecret[secretID]; ok {
+		if session.cancelCurrentQueries() {
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("query for secret ID %d not found", secretID)
 }
 
 // CancelSession looks up the specified session in the session registry and

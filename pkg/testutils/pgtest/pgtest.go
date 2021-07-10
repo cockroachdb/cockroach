@@ -72,16 +72,11 @@ func NewPGTest(ctx context.Context, addr, user string) (*PGTest, error) {
 			foundCrdb = true
 		}
 		if d, ok := msg.(*pgproto3.BackendKeyData); ok {
-			// We inspect the BackendKeyData outside of the loop since we only
-			// want to do the assertions if foundCrdb==true.
 			backendKeyData = d
 		}
 	}
 	if backendKeyData == nil {
 		return nil, errors.Errorf("did not receive BackendKeyData")
-	}
-	if foundCrdb && (backendKeyData.ProcessID != 0 || backendKeyData.SecretKey != 0) {
-		return nil, errors.Errorf("unexpected BackendKeyData: %+v", d)
 	}
 	p.isCockroachDB = foundCrdb
 	success = err == nil
