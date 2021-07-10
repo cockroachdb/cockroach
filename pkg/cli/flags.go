@@ -711,11 +711,11 @@ func init() {
 	// SQL and demo commands.
 	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {
 		f := cmd.Flags()
-		varFlag(f, &sqlCtx.SetStmts, cliflags.Set)
-		varFlag(f, &sqlCtx.ExecStmts, cliflags.Execute)
-		stringFlag(f, &sqlCtx.inputFile, cliflags.File)
-		durationFlag(f, &sqlCtx.RepeatDelay, cliflags.Watch)
-		boolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates)
+		varFlag(f, &sqlCtx.ShellCtx.SetStmts, cliflags.Set)
+		varFlag(f, &sqlCtx.ShellCtx.ExecStmts, cliflags.Execute)
+		stringFlag(f, &sqlCtx.InputFile, cliflags.File)
+		durationFlag(f, &sqlCtx.ShellCtx.RepeatDelay, cliflags.Watch)
+		varFlag(f, &sqlCtx.SafeUpdates, cliflags.SafeUpdates)
 		boolFlag(f, &sqlConnCtx.DebugMode, cliflags.CliDebugMode)
 		boolFlag(f, &cliCtx.EmbeddedMode, cliflags.EmbeddedMode)
 	}
