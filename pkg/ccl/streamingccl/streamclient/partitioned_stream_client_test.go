@@ -72,7 +72,7 @@ INSERT INTO d.t2 VALUES (2);
 
 	client, err := newPartitionedStreamClient(&h.PGUrl)
 	defer func() {
-		require.NoError(t, client.Close())
+		_ = client.Close()
 	}()
 	require.NoError(t, err)
 	expectStreamState := func(streamID streaming.StreamID, status jobs.Status) {
