@@ -124,7 +124,6 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 #   bazel build //pkg/sql/opt:all
 #   bazel build //pkg/sql/colexec:gen-exec
 #   bazel build //pkg/cmd/cockroach-short
-#   bazel build //:libjemalloc
 #   bazel query //pkg/sql/colexec:all
 #   bazel run //:gazelle
 #   bazel run //pkg/cmd/cockroach-short -- demo

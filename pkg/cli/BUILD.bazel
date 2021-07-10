@@ -51,7 +51,6 @@ go_library(
         "sql_util.go",
         "sqlfmt.go",
         "start.go",
-        "start_jemalloc.go",
         "start_unix.go",
         "start_windows.go",
         "statement_diag.go",
@@ -65,31 +64,6 @@ go_library(
         "zip_helpers.go",
         "zip_per_node.go",
         ":gen-keytype-stringer",  # keep
-    ],
-    # keep
-    cdeps = [
-        "@cockroach//c-deps:libjemalloc",
-    ],
-    cgo = True,
-    # keep
-    clinkopts = select({
-        "@io_bazel_rules_go//go/platform:android": [
-            "-lrt -lm -lpthread",
-        ],
-        "@io_bazel_rules_go//go/platform:dragonfly": [
-            "-lm",
-        ],
-        "@io_bazel_rules_go//go/platform:freebsd": [
-            "-lm",
-        ],
-        "@io_bazel_rules_go//go/platform:linux": [
-            "-lrt -lm -lpthread",
-        ],
-        "//conditions:default": [],
-    }),
-    # keep
-    cppopts = [
-        "-DJEMALLOC_NO_DEMANGLE",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli",
     visibility = ["//visibility:public"],

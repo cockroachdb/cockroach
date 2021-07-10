@@ -2,40 +2,6 @@
 load("@rules_foreign_cc//foreign_cc:cmake.bzl", "cmake")
 load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
 
-# Define the build target for libjemalloc.
-configure_make(
-    name = "libjemalloc",
-    autoconf = True,
-    configure_env_vars = select({
-        "//build/toolchains:dev": {"AR": ""},
-        "//conditions:default": {},
-    }),
-    configure_in_place = True,
-    configure_options = [
-        "--enable-prof",
-    ] + select({
-        "@io_bazel_rules_go//go/platform:windows": ["--host=x86_64-w64-mingw32"],
-        "@io_bazel_rules_go//go/platform:darwin": ["--host=x86_64-apple-darwin19"],
-        "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
-        "//conditions:default": [],
-    }),
-    lib_source = "@jemalloc//:all",
-    make_commands = [
-        "make build_lib_static",
-        "mkdir -p libjemalloc/lib",
-    ] + select({
-        "@io_bazel_rules_go//go/platform:windows": ["cp lib/jemalloc.lib libjemalloc/lib"],
-        "//conditions:default": ["cp lib/libjemalloc.a libjemalloc/lib"],
-    }) + [
-        "cp -r include libjemalloc",
-    ],
-    out_static_libs = select({
-        "@io_bazel_rules_go//go/platform:windows": ["jemalloc.lib"],
-        "//conditions:default": ["libjemalloc.a"],
-    }),
-    visibility = ["//visibility:public"],
-)
-
 # Define the build target for libproj.
 cmake(
     name = "libproj",

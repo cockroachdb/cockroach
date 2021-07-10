@@ -284,8 +284,6 @@ func maybeAddProfileSuffix(name string) string {
 		name += heapprofiler.HeapFileNameSuffix
 	case strings.HasPrefix(name, heapprofiler.StatsFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.StatsFileNameSuffix):
 		name += heapprofiler.StatsFileNameSuffix
-	case strings.HasPrefix(name, heapprofiler.JemallocFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.JemallocFileNameSuffix):
-		name += heapprofiler.JemallocFileNameSuffix
 	}
 	return name
 }

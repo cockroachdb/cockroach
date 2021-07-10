@@ -5,7 +5,7 @@ FROM ubuntu:focal-20210119
 # This is the CockroachDB "builder" image, which bundles cross-compiling
 # toolchains that can build CockroachDB on all supported platforms.
 
-# autoconf - c-deps: jemalloc
+# autoconf - c-deps: geos
 # automake - sed build
 # autopoint - sed build
 # bison - CRDB build system

@@ -2456,7 +2456,6 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 	// Initialize a heap profiler if we have an output directory
 	// specified.
 	var heapProfiler *heapprofiler.HeapProfiler
-	var nonGoAllocProfiler *heapprofiler.NonGoAllocProfiler
 	var statsProfiler *heapprofiler.StatsProfiler
 	if cfg.heapProfileDirName != "" {
 		hasValidDumpDir := true
@@ -2475,10 +2474,6 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 			heapProfiler, err = heapprofiler.NewHeapProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
 				return errors.Wrap(err, "starting heap profiler worker")
-			}
-			nonGoAllocProfiler, err = heapprofiler.NewNonGoAllocProfiler(ctx, cfg.heapProfileDirName, cfg.st)
-			if err != nil {
-				return errors.Wrap(err, "starting non-go alloc profiler worker")
 			}
 			statsProfiler, err = heapprofiler.NewStatsProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
@@ -2541,7 +2536,6 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 				}
 				if heapProfiler != nil {
 					heapProfiler.MaybeTakeProfile(ctx, cfg.runtime.GoAllocBytes.Value())
-					nonGoAllocProfiler.MaybeTakeProfile(ctx, cfg.runtime.CgoTotalBytes.Value())
 					statsProfiler.MaybeTakeProfile(ctx, cfg.runtime.RSSBytes.Value(), curStats, cgoStats)
 				}
 			}

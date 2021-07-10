@@ -19,7 +19,7 @@ submodules=($(git submodule foreach --quiet 'echo $path'))
 # parameter expansion below, which prefixes every path in the submodules array
 # with `:(exclude)`, resulting in a final command like:
 #
-#     git ls-files . :(exclude)vendor :(exclude)c-deps/jemalloc...
+#     git ls-files . :(exclude)vendor :(exclude)c-deps/geos...
 #
 git ls-files . "${submodules[@]/#/:(exclude)}"
 

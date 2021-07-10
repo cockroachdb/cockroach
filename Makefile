@@ -486,7 +486,6 @@ override xgo := GOFLAGS= GOOS=$(XGOOS) GOARCH=$(XGOARCH) CC=$(XCC) CXX=$(XCXX) $
 endif
 
 C_DEPS_DIR := $(abspath c-deps)
-JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
 GEOS_SRC_DIR     := $(C_DEPS_DIR)/geos
 PROJ_SRC_DIR     := $(C_DEPS_DIR)/proj
 LIBEDIT_SRC_DIR  := $(C_DEPS_DIR)/libedit
@@ -510,14 +509,12 @@ ifdef host-is-mingw
 BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
 endif
 
-JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
 GEOS_DIR     := $(BUILD_DIR)/geos
 PROJ_DIR     := $(BUILD_DIR)/proj
 LIBEDIT_DIR  := $(BUILD_DIR)/libedit
 LIBROACH_DIR := $(BUILD_DIR)/libroach$(if $(ENABLE_LIBROACH_ASSERTIONS),_assert)
 KRB5_DIR     := $(BUILD_DIR)/krb5
 
-LIBJEMALLOC := $(JEMALLOC_DIR)/lib/libjemalloc.a
 LIBEDIT     := $(LIBEDIT_DIR)/src/.libs/libedit.a
 LIBROACH    := $(LIBROACH_DIR)/libroach.a
 LIBPROJ     := $(PROJ_DIR)/lib/libproj$(if $(target-is-windows),_4_9).a
@@ -535,7 +532,6 @@ endif
 LIBGEOS     := $(DYN_LIB_DIR)/libgeos.$(DYN_EXT)
 
 C_LIBS_COMMON = \
-	$(if $(use-stdmalloc),,$(LIBJEMALLOC)) \
 	$(if $(target-is-windows),,$(LIBEDIT)) \
 	$(LIBPROJ) $(LIBROACH)
 C_LIBS_SHORT = $(C_LIBS_COMMON)
@@ -595,8 +591,8 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo >> $@
 	@echo 'package $(if $($(@D)-package),$($(@D)-package),$(notdir $(@D)))' >> $@
 	@echo >> $@
-	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS))' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(JEMALLOC_DIR)/lib $(LIBEDIT_DIR)/src/.libs $(LIBROACH_DIR) $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
+	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(KRB_CPPFLAGS))' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(LIBEDIT_DIR)/src/.libs $(LIBROACH_DIR) $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
 	@echo 'import "C"' >> $@
 
 vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized
@@ -628,18 +624,6 @@ vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submo
 # only rebuild the affected objects, but in practice dependencies on configure
 # flags are not tracked correctly, and these stale artifacts can cause
 # particularly hard-to-debug errors.
-$(JEMALLOC_SRC_DIR)/configure.ac: | bin/.submodules-initialized
-
-$(JEMALLOC_SRC_DIR)/configure: $(JEMALLOC_SRC_DIR)/configure.ac
-	cd $(JEMALLOC_SRC_DIR) && autoconf
-
-$(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/configure
-	rm -rf $(JEMALLOC_DIR)
-	mkdir -p $(JEMALLOC_DIR)
-	@# NOTE: If you change the configure flags below, bump the version in
-	@# $(C_DEPS_DIR)/jemalloc-rebuild. See above for rationale.
-	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(xconfigure-flags) --enable-prof
-
 $(KRB5_SRC_DIR)/src/configure.in: | bin/.submodules-initialized
 
 $(KRB5_SRC_DIR)/src/configure: $(KRB5_SRC_DIR)/src/configure.in
@@ -720,9 +704,6 @@ $(LIBEDIT_DIR)/Makefile: $(C_DEPS_DIR)/libedit-rebuild $(LIBEDIT_SRC_DIR)/config
 # stats the directory tree in parallel, and can make the up-to-date
 # determination in under 20ms.
 
-$(LIBJEMALLOC): $(JEMALLOC_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
-	@uptodate $@ $(JEMALLOC_SRC_DIR) || $(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static
-
 ifdef is-cross-compile
 ifdef target-is-macos
 geos_require_install_name_tool := 1
@@ -773,9 +754,8 @@ $(LIBKRB5): $(KRB5_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(KRB5_SRC_DIR)/src || $(MAKE) --no-print-directory -C $(KRB5_DIR)
 
 # Convenient names for maintainers. Not used by other targets in the Makefile.
-.PHONY:  libjemalloc libgeos libproj libroach libkrb5
+.PHONY:  libgeos libproj libroach libkrb5
 libedit:     $(LIBEDIT)
-libjemalloc: $(LIBJEMALLOC)
 libgeos:     $(LIBGEOS)
 libproj:     $(LIBPROJ)
 libroach:    $(LIBROACH)
@@ -1667,7 +1647,6 @@ c-deps-fmt:
 
 .PHONY: clean-c-deps
 clean-c-deps:
-	rm -rf $(JEMALLOC_DIR)
 	rm -rf $(GEOS_DIR)
 	rm -rf $(PROJ_DIR)
 	rm -rf $(LIBROACH_DIR)
@@ -1675,7 +1654,6 @@ clean-c-deps:
 
 .PHONY: unsafe-clean-c-deps
 unsafe-clean-c-deps:
-	git -C $(JEMALLOC_SRC_DIR) clean -dxf
 	git -C $(GEOS_SRC_DIR)     clean -dxf
 	git -C $(PROJ_SRC_DIR)     clean -dxf
 	git -C $(LIBROACH_SRC_DIR) clean -dxf
