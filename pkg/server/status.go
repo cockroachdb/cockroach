@@ -2189,11 +2189,30 @@ func (s *statusServer) CancelQuery(
 }
 
 // PGWireCancelQuery responds to a pgwire query cancellation request, and
-// cancels  the target query's associated context and sets a cancellation flag.
+// cancels the target query's associated context and sets a cancellation flag.
 func (s *statusServer) PGWireCancelQuery(
 	ctx context.Context, req *serverpb.PGWireCancelQueryRequest,
 ) (*serverpb.PGWireCancelQueryResponse, error) {
-	var output = &serverpb.PGWireCancelQueryResponse{}
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		// This request needs to be forwarded to another node.
+		ctx = propagateGatewayMetadata(ctx)
+		ctx = s.AnnotateCtx(ctx)
+		statusServer, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return statusServer.PGWireCancelQuery(ctx, req)
+	}
+
+	output := &serverpb.PGWireCancelQueryResponse{}
+	output.Canceled, err = s.sessionRegistry.CancelQueryByPGWire(ctx, req.SecretID)
+	if err != nil {
+		output.Error = err.Error()
+	}
 	return output, nil
 }
 

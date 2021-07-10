@@ -603,7 +603,7 @@ func (h ConnectionHandler) GetParamStatus(ctx context.Context, varName string) s
 // GetPGWireCancelInfo returns the node ID and pgwire secret ID used for
 // query cancellation.
 func (h ConnectionHandler) GetPGWireCancelInfo() (int32, int32) {
-	return h.ex.sessionID.GetNodeID(), int32(h.ex.pgwireSecretID)
+	return int32(h.ex.server.cfg.NodeID.SQLInstanceID()), int32(h.ex.pgwireSecretID)
 }
 
 // ServeConn serves a client connection by reading commands from the stmtBuf

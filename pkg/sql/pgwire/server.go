@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -597,7 +598,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	case versionCancel:
 		// The cancel message is rather peculiar: it is sent without
 		// authentication, always over an unencrypted channel.
-		return handleCancel(conn)
+		s.handleCancel(ctx, conn, &buf)
+		return nil
 
 	case versionGSSENC:
 		// This is a request for an unsupported feature: GSS encryption.
@@ -647,7 +649,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		// Yet, we've found clients in the wild that send the cancel
 		// after the TLS handshake, for example at
 		// https://github.com/cockroachlabs/support/issues/600.
-		return handleCancel(conn)
+		s.handleCancel(ctx, conn, &buf)
+		return nil
 
 	default:
 		// We don't know this protocol.
@@ -703,12 +706,61 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	return nil
 }
 
-func handleCancel(conn net.Conn) error {
-	// Since we don't support this, close the door in the client's
-	// face. Make a note of that use in telemetry.
+// handleCancel handles a pgwire query cancellation request. Note that the
+// request is unauthenticated. To mitigate the security risk (i.e., a
+// malicious actor spamming this endpoint with random data to try to cancel
+// a query), we rely on this part of the specification:
+//
+//   The upshot of all this is that for reasons of both security and efficiency,
+//   the frontend has no direct way to tell whether a cancel request has
+//   succeeded. It must continue to wait for the backend to respond to the
+//   query. Issuing a cancel simply improves the odds that the current query
+//   will finish soon, and improves the odds that it will fail with an error
+//   message instead of succeeding.
+//
+// See https://www.postgresql.org/docs/13/protocol-flow.html#id-1.10.5.7.9
+//
+// Since the protocol is best-effort, we can rate limit the requests and
+// ignore any requests that exceed the rate limit. The rate limit is implemented
+// using a semaphore in sql.SessionRegistry. The most bullet-proof rate limit
+// would be cluster-wide, but in practice a per-node rate limit is fine.
+//
+// Also, this function does not return an error, so the caller (and possible
+// attacker) will not know if the cancellation attempt succeeded. Errors are
+// logged so that an operator can be aware of any possibly malicious requests.
+func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer) {
+	var err error
+	defer func() {
+		if err != nil {
+			log.Ops.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
+		}
+	}()
+
+	var nodeID, secretID uint32
+	nodeID, err = buf.GetUint32()
+	if err != nil {
+		return
+	}
+	secretID, err = buf.GetUint32()
+	if err != nil {
+		return
+	}
+	// The request is forwarded to the appropriate node. We implement the rate
+	// limit in the node to which the request is forwarded. This way, if an
+	// attacker spams all the nodes in the cluster with requests that all go to
+	// the same node, the per-node rate limit will prevent them from having
+	// too many guesses.
+	req := &serverpb.PGWireCancelQueryRequest{
+		NodeId:   fmt.Sprintf("%d", nodeID),
+		SecretID: secretID,
+	}
+	var resp *serverpb.PGWireCancelQueryResponse
+	resp, err = s.execCfg.SQLStatusServer.PGWireCancelQuery(ctx, req)
+	if err == nil && len(resp.Error) > 0 {
+		err = fmt.Errorf(resp.Error)
+	}
 	telemetry.Inc(sqltelemetry.CancelRequestCounter)
 	_ = conn.Close()
-	return nil
 }
 
 // parseClientProvidedSessionParameters reads the incoming k/v pairs
