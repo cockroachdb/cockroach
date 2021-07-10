@@ -17,11 +17,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMakeBackendKeyData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
 	b1 := MakeBackendKeyData(rng, base.SQLInstanceID(1))
 	b2 := MakeBackendKeyData(rng, base.SQLInstanceID(1))
@@ -29,8 +32,9 @@ func TestMakeBackendKeyData(t *testing.T) {
 }
 
 func TestGetSQLInstanceID(t *testing.T) {
-	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	defer leaktest.AfterTest(t)()
 
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
 	t.Run("small id", func(t *testing.T) {
 		for i := 0; i < 1<<11; i++ {
 			b := MakeBackendKeyData(rng, base.SQLInstanceID(i))
