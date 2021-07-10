@@ -579,44 +579,49 @@ func getLocalityInfo(
 	return info, nil
 }
 
-const incBackupSubdirGlob = "[0-9]*/[0-9]*.[0-9][0-9]/"
+const incBackupSubdirGlob = "/[0-9]*/[0-9]*.[0-9][0-9]/"
 
-// findPriorBackupNames finds "appended" incremental backups, as done by
-// findPriorBackupLocations and appends the backup manifest file name to
-// the URI.
-func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestName)
-	if err != nil {
-		return nil, errors.Wrap(err, "reading previous backup layers")
-	}
-	sort.Strings(prev)
-	return prev, nil
-}
+// listingDelimDataSlash is used when listing to find backups and groups all the
+// data sst files in each backup, which start with "data/", into a single result
+// that can be skipped over quickly.
+const listingDelimDataSlash = "data/"
 
-// findPriorBackupLocations finds "appended" incremental backups by searching
+const (
+	// IncludeManifest is a named const that can be passed to FindPriorBackups.
+	IncludeManifest = true
+	// OmitManifest is a named const that can be passed to FindPriorBackups.
+	OmitManifest = false
+)
+
+// FindPriorBackups finds "appended" incremental backups by searching
 // for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
-// Using file-system searching rather than keeping an explicit list allows
-// layers to be manually moved/removed/etc without needing to update/maintain
-// said list.
-func findPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	backupManifestSuffix := backupManifestName
-	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
-	if err != nil {
-		return nil, errors.Wrap(err, "reading previous backup layers")
-	}
-
-	if len(prev) == 0 {
-		// 20.1 nodes and earlier will have an oldBackupManifestName so we check for
-		// that too.
-		backupManifestSuffix = backupOldManifestName
-		prev, err = store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
-		if err != nil {
-			return nil, errors.Wrap(err, "reading previous backup layers")
+// If includeManifest is true the returned paths are to the manifests for the
+// prior backup, otherwise it is just to the backup path.
+func FindPriorBackups(
+	ctx context.Context, store cloud.ExternalStorage, includeManifest bool,
+) ([]string, error) {
+	var prev []string
+	if err := store.List(ctx, "", listingDelimDataSlash, func(p string) error {
+		if ok, err := path.Match(incBackupSubdirGlob+backupManifestName, p); err != nil {
+			return err
+		} else if ok {
+			if !includeManifest {
+				p = strings.TrimSuffix(p, "/"+backupManifestName)
+			}
+			prev = append(prev, p)
+			return nil
 		}
-	}
-
-	for i := range prev {
-		prev[i] = strings.TrimSuffix(prev[i], "/"+backupManifestSuffix)
+		if ok, err := path.Match(incBackupSubdirGlob+backupOldManifestName, p); err != nil {
+			return err
+		} else if ok {
+			if !includeManifest {
+				p = strings.TrimSuffix(p, "/"+backupOldManifestName)
+			}
+			prev = append(prev, p)
+		}
+		return nil
+	}); err != nil {
+		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
 	sort.Strings(prev)
 	return prev, nil
@@ -686,7 +691,7 @@ func resolveBackupManifests(
 	} else {
 		// Since incremental layers were *not* explicitly specified, search for any
 		// automatically created incremental layers inside the base layer.
-		prev, err := findPriorBackupNames(ctx, baseStores[0])
+		prev, err := FindPriorBackups(ctx, baseStores[0], IncludeManifest)
 		if err != nil {
 			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", baseStores[0])
@@ -1000,4 +1005,26 @@ func checkForPreviousBackup(
 // tempCheckpointFileNameForJob returns temporary filename for backup manifest checkpoint.
 func tempCheckpointFileNameForJob(jobID int64) string {
 	return fmt.Sprintf("%s-%d", backupManifestCheckpointName, jobID)
+}
+
+// ListFullBackupsInCollection lists full backup paths in the collection
+// of an export store
+func ListFullBackupsInCollection(
+	ctx context.Context, store cloud.ExternalStorage,
+) ([]string, error) {
+	var backupPaths []string
+	if err := store.List(ctx, "", listingDelimDataSlash, func(f string) error {
+		if ok, err := path.Match("/*/*/*/"+backupManifestName, f); err != nil {
+			return err
+		} else if ok {
+			backupPaths = append(backupPaths, f)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	for i, backupPath := range backupPaths {
+		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupManifestName)
+	}
+	return backupPaths, nil
 }

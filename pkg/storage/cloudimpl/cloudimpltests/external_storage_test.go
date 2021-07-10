@@ -436,6 +436,99 @@ func testListFiles(t *testing.T, storeURI, user string, ie *sql.InternalExecutor
 		}
 	})
 
+	foreach := func(in []string, fn func(string) string) []string {
+		out := make([]string, len(in))
+		for i := range in {
+			out[i] = fn(in[i])
+		}
+		return out
+	}
+
+	t.Run("List", func(t *testing.T) {
+		for _, tc := range []struct {
+			name      string
+			uri       string
+			prefix    string
+			delimiter string
+			expected  []string
+		}{
+			{
+				"root",
+				storeURI,
+				"",
+				"",
+				foreach(fileNames, func(s string) string { return "/" + s }),
+			},
+			{
+				"file-slash-numbers-slash",
+				storeURI,
+				"file/numbers/",
+				"",
+				[]string{"data1.csv", "data2.csv", "data3.csv"},
+			},
+			{
+				"root-slash",
+				storeURI,
+				"/",
+				"",
+				foreach(fileNames, func(s string) string { return s }),
+			},
+			{
+				"file",
+				storeURI,
+				"file",
+				"",
+				foreach(fileNames, func(s string) string { return strings.TrimPrefix(s, "file") }),
+			},
+			{
+				"file-slash",
+				storeURI,
+				"file/",
+				"",
+				foreach(fileNames, func(s string) string { return strings.TrimPrefix(s, "file/") }),
+			},
+			{
+				"slash-f",
+				storeURI,
+				"/f",
+				"",
+				foreach(fileNames, func(s string) string { return strings.TrimPrefix(s, "f") }),
+			},
+			{
+				"nothing",
+				storeURI,
+				"nothing",
+				"",
+				nil,
+			},
+			{
+				"delim-slash-file-slash",
+				storeURI,
+				"file/",
+				"/",
+				[]string{"abc/", "letters/", "numbers/"},
+			},
+			{
+				"delim-data",
+				storeURI,
+				"",
+				"data",
+				[]string{"/file/abc/A.csv", "/file/abc/B.csv", "/file/abc/C.csv", "/file/letters/data", "/file/numbers/data"},
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				s := storeFromURI(ctx, t, tc.uri, clientFactory, user, ie, kvDB)
+				var actual []string
+				require.NoError(t, s.List(ctx, tc.prefix, tc.delimiter, func(f string) error {
+					actual = append(actual, f)
+					return nil
+				}))
+				sort.Strings(actual)
+				require.Equal(t, tc.expected, actual)
+			})
+		}
+	})
+
 	for _, fileName := range fileNames {
 		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB)
 		if err := file.Delete(ctx, fileName); err != nil {
@@ -497,6 +590,16 @@ func TestPutGoogleCloud(t *testing.T) {
 		}
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
 			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit), false, user, nil, nil)
+		testListFiles(t,
+			fmt.Sprintf("gs://%s/%s/%s?%s=%s",
+				bucket,
+				"backup-test-implicit",
+				"listing-test",
+				cloudimpl.AuthParam,
+				cloudimpl.AuthParamImplicit,
+			),
+			security.RootUser, nil, nil,
+		)
 	})
 }
 

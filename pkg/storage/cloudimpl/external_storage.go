@@ -477,3 +477,23 @@ const MaxDelayedRetryAttempts = 3
 // Maximum number of times we can attempt to retry reading from external storage,
 // without making any progress.
 const maxNoProgressReads = 3
+
+// JoinPathPreservingTrailingSlash wraps path.Join but preserves the trailing
+// slash if there was one in the suffix.
+//
+// This is particularly important when the joined path is used as a prefix for
+// listing. When listing, the suffix *after the listed prefix* of each file name
+// is what is returned and, importantly, what is used when grouping using a
+// delimiter. E.g. when using `/` as a delimiter to find what might be called the
+// immediate children in a directory, we pass that directory's path *with a
+// trailing slash* as the prefix, so that the children do not start with a slash
+// and get grouped into nothing. Thus it is important that if we use path.Join
+// to construct the prefix, we always preserve the trailing slash.
+func JoinPathPreservingTrailingSlash(prefix, suffix string) string {
+	out := path.Join(prefix, suffix)
+	// path.Clean removes trailing slashes, so put it back if needed.
+	if strings.HasSuffix(suffix, "/") {
+		out += "/"
+	}
+	return out
+}
