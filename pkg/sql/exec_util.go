@@ -1928,15 +1928,16 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 // cancels it.
 func (r *SessionRegistry) CancelQueryByPGWire(
 	backendKeyData pgwirecancel.BackendKeyData,
-) (bool, error) {
+) (canceled bool, err error) {
 	r.Lock()
 	defer r.Unlock()
 	if session, ok := r.sessionsByBackendKeyData[backendKeyData]; ok {
 		if session.cancelCurrentQueries() {
 			return true, nil
 		}
+		return false, nil
 	}
-	return false, fmt.Errorf("query for BackendKeyData %d not found", backendKeyData)
+	return false, fmt.Errorf("session for BackendKeyData %d not found", backendKeyData)
 }
 
 // CancelSession looks up the specified session in the session registry and

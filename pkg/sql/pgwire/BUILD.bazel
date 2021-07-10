@@ -24,6 +24,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/security",
         "//pkg/security/sessionrevival",
+        "//pkg/server/serverpb",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
