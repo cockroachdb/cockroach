@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
@@ -514,6 +515,19 @@ var errTransactionInProgress = errors.New("there is already a transaction in pro
 
 const sqlTxnName string = "sql txn"
 const metricsSampleInterval = 10 * time.Second
+
+// pgwireCancelSem is a semaphore that limits the number of concurrent
+// calls to the pgwire query cancellation endpoint. This is needed to avoid the
+// risk of a DoS attack by malicious users that attempts to cancel random
+// queries by spamming the request.
+//
+// We hard-code a limit of 256 concurrent pgwire cancel requests (per node).
+// We also add a 1-second penalty for failed cancellation requests, meaning
+// that an attacker needs 1 second per guess. With an attacker randomly
+// guessing the 32-bit secret, it would take 2^24 seconds to hit one query. If
+// we suppose there are 256 concurrent queries actively running on a node,
+// then it takes 2^16 seconds (18 hours) to hit any one of them.
+var pgwireCancelSem = quotapool.NewIntPool("pgwire-cancel", 256)
 
 // Fully-qualified names for metrics.
 var (
@@ -1567,16 +1581,35 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 }
 
 // CancelQueryByPGWire looks up the associated query in the session registry and
-// cancels it.
-func (r *SessionRegistry) CancelQueryByPGWire(secretID uint32) (bool, error) {
+// cancels it. It is rate-limited with a semaphore as per the documentation
+// in sql/pgwire.
+func (r *SessionRegistry) CancelQueryByPGWire(
+	ctx context.Context, secretID uint32,
+) (canceled bool, err error) {
+	var alloc *quotapool.IntAlloc
+	alloc, err = pgwireCancelSem.TryAcquire(ctx, 1)
+	if err != nil {
+		return false, fmt.Errorf("exceeded rate limit of pgwire cancellation requests")
+	}
+	defer func() {
+		// If we acquired the semaphore but the cancellation request failed, then
+		// hold on to the semaphore for longer. This helps mitigate a DoS attack
+		// of random cancellation requests.
+		if !canceled {
+			time.Sleep(1 * time.Second)
+		}
+		alloc.Release()
+	}()
+
 	r.Lock()
 	defer r.Unlock()
 	if session, ok := r.sessionsByPGWireSecret[secretID]; ok {
 		if session.cancelCurrentQueries() {
 			return true, nil
 		}
+		return false, nil
 	}
-	return false, fmt.Errorf("query for secret ID %d not found", secretID)
+	return false, fmt.Errorf("session for secret ID %d not found", secretID)
 }
 
 // CancelSession looks up the specified session in the session registry and

@@ -1550,8 +1550,7 @@ func TestSetSessionArguments(t *testing.T) {
 }
 
 // TestCancelQuery uses the pgwire-level query cancellation protocol provided
-// by lib/pq to make sure that canceling a query has no effect, and makes sure
-// the dummy BackendKeyData does not cause problems.
+// by lib/pq to make sure that canceling a query works correctly.
 func TestCancelQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1580,8 +1579,10 @@ func TestCancelQuery(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	// Cancellation has no effect on ongoing query.
-	if _, err := db.QueryContext(cancelCtx, "select pg_sleep(0)"); err != nil {
+	// Cancellation should stop the query.
+	if _, err := db.QueryContext(cancelCtx, "select pg_sleep(30)"); err == nil {
+		t.Fatal("expected error")
+	} else if err.Error() != "pq: query execution canceled" {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
