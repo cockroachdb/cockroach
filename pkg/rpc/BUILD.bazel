@@ -29,7 +29,7 @@ go_library(
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/server/pgurl",
         "//pkg/settings/cluster",
@@ -90,7 +90,7 @@ go_test(
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
@@ -142,7 +142,7 @@ go_proto_library(
     proto = ":rpc_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

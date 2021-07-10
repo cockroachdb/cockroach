@@ -24,7 +24,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/xform",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",
@@ -68,7 +68,7 @@ go_test(
     embed = [":xform"],
     deps = [
         "//pkg/config/zonepb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",

@@ -11,7 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/log",
@@ -33,7 +33,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":admission"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",

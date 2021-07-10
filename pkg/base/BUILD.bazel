@@ -20,7 +20,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cli/cliflags",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/util",
@@ -55,7 +55,7 @@ go_test(
     ],
     deps = [
         ":base",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/testutils",

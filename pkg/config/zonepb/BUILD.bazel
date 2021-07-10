@@ -14,7 +14,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/opt/cat",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",

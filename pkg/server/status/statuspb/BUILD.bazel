@@ -21,7 +21,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

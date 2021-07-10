@@ -16,7 +16,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/spanset",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -39,7 +39,7 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/spanset",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
