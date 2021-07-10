@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"go.uber.org/atomic"
 )
 
 // tenantEntry is an entry in the tenant directory that records information
@@ -39,28 +40,35 @@ type tenantEntry struct {
 	// called.
 	RefreshDelay time.Duration
 
-	// initialized is set to true once Initialized has been called.
-	initialized bool
-
-	// initError is set to any error that occurs in Initialized (or nil if no
-	// error occurred).
-	initError error
+	// initialized is set to true once Initialized has been successfully called
+	// (i.e. with no resulting error). Access is synchronized via atomics.
+	initialized atomic.Bool
 
 	// pods synchronizes access to information about the tenant's SQL pods.
 	// These fields can be updated over time, so a lock must be obtained before
 	// accessing them.
 	pods struct {
 		syncutil.Mutex
+
+		// addrs is the set of IP:port addresses of the tenant's currently
+		// RUNNING pods.
 		addrs []string
 	}
 
-	// calls synchronizes calls to the K8s API for this tenant (e.g. calls to
-	// RefreshPods). Synchronization is needed to ensure that only one
-	// thread at a time is calling on behalf of a tenant, and that calls are rate
-	// limited to prevent storms.
+	// calls synchronizes calls to the Directory service for this tenant (e.g.
+	// calls to GetTenant or ListPods). Synchronization is needed to ensure that
+	// only one thread at a time is calling on behalf of a tenant, and that
+	// calls are rate limited to prevent storms.
 	calls struct {
 		syncutil.Mutex
+
+		// lastRefresh is the last time the list of pods for the tenant have been
+		// fetched from the server. It's used to rate limit refreshes.
 		lastRefresh time.Time
+
+		// initError is set to any error that occurs in Initialized (or nil if no
+		// error occurred).
+		initError error
 	}
 }
 
@@ -68,34 +76,39 @@ type tenantEntry struct {
 // stores that in the entry. After this is called once, all future calls return
 // the same result (and do nothing).
 func (e *tenantEntry) Initialize(ctx context.Context, client DirectoryClient) error {
+	// If Initialize has already been successfully called, nothing to do.
+	if e.initialized.Load() {
+		return nil
+	}
+
 	// Synchronize multiple threads trying to initialize. Only the first thread
 	// does the initialization.
 	e.calls.Lock()
 	defer e.calls.Unlock()
 
 	// If Initialize has already been called, return any error that occurred.
-	if e.initialized {
-		return e.initError
+	// This also handles the case where multiple thread were waiting on the
+	// above calls lock; all but the first will stop here.
+	if e.initialized.Load() || e.calls.initError != nil {
+		return e.calls.initError
 	}
 
 	tenantResp, err := client.GetTenant(ctx, &GetTenantRequest{TenantID: e.TenantID.ToUint64()})
 	if err != nil {
-		e.initialized = true
-		e.initError = err
+		e.calls.initError = err
 		return err
 	}
 
 	e.ClusterName = tenantResp.ClusterName
 
-	e.initialized = true
+	e.initialized.Store(true)
 	return nil
 }
 
-// RefreshPods makes a synchronous directory server call to fetch the
-// latest information about the tenant's available pods, such as their IP
-// addresses.
+// RefreshPods makes a synchronous directory server call to fetch the latest
+// information about the tenant's available pods, such as their IP addresses.
 func (e *tenantEntry) RefreshPods(ctx context.Context, client DirectoryClient) error {
-	if !e.initialized {
+	if !e.initialized.Load() {
 		return errors.AssertionFailedf("entry for tenant %d is not initialized", e.TenantID)
 	}
 
@@ -116,22 +129,21 @@ func (e *tenantEntry) RefreshPods(ctx context.Context, client DirectoryClient) e
 	return err
 }
 
-// ChoosePodAddr returns the IP address of one of this tenant's available
-// pods. If a tenant has multiple pods, then ChoosePodAddr returns
-// the IP address of one of those pods. If the tenant is suspended and no
-// pods are available, then ChoosePodAddr will trigger resumption of the
-// tenant and return the IP address of the new pod. Note that resuming a
-// tenant requires directory server calls, so ChoosePodAddr can block for
-// some time, until the resumption process is complete. However, if
-// errorIfNoPods is true, then ChoosePodAddr returns an error if there
-// are no pods available rather than blocking.
+// ChoosePodAddr returns the IP address of one of this tenant's available pods.
+// If a tenant has multiple pods, then ChoosePodAddr returns the IP address of
+// one of those pods. If the tenant is suspended and no pods are available, then
+// ChoosePodAddr will trigger resumption of the tenant and return the IP address
+// of the new pod. Note that resuming a tenant requires directory server calls,
+// so ChoosePodAddr can block for some time, until the resumption process is
+// complete. However, if errorIfNoPods is true, then ChoosePodAddr returns an
+// error if there are no pods available rather than blocking.
 //
 // TODO(andyk): Use better load-balancing algorithm once tenants can have more
 // than one pod.
 func (e *tenantEntry) ChoosePodAddr(
 	ctx context.Context, client DirectoryClient, errorIfNoPods bool,
 ) (string, error) {
-	if !e.initialized {
+	if !e.initialized.Load() {
 		return "", errors.AssertionFailedf("entry for tenant %d is not initialized", e.TenantID)
 	}
 
@@ -148,8 +160,8 @@ func (e *tenantEntry) ChoosePodAddr(
 	return addrs[0], nil
 }
 
-// AddPodAddr inserts the given IP address into the tenant's list of pod
-// IPs. If it is already present, then AddPodAddr returns false.
+// AddPodAddr inserts the given IP address into the tenant's list of pod IPs. If
+// it is already present, then AddPodAddr returns false.
 func (e *tenantEntry) AddPodAddr(addr string) bool {
 	e.pods.Lock()
 	defer e.pods.Unlock()
@@ -164,8 +176,8 @@ func (e *tenantEntry) AddPodAddr(addr string) bool {
 	return true
 }
 
-// RemovePodAddr removes the given IP address from the tenant's list of
-// pod addresses. If it was not present, RemovePodAddr returns false.
+// RemovePodAddr removes the given IP address from the tenant's list of pod
+// addresses. If it was not present, RemovePodAddr returns false.
 func (e *tenantEntry) RemovePodAddr(addr string) bool {
 	e.pods.Lock()
 	defer e.pods.Unlock()
@@ -180,18 +192,18 @@ func (e *tenantEntry) RemovePodAddr(addr string) bool {
 	return false
 }
 
-// getPodAddrs gets the current list of pod IP addresses within scope of
-// lock and returns them.
+// getPodAddrs gets the current list of pod IP addresses within scope of lock
+// and returns them.
 func (e *tenantEntry) getPodAddrs() []string {
 	e.pods.Lock()
 	defer e.pods.Unlock()
 	return e.pods.addrs
 }
 
-// ensureTenantPod ensures that at least one SQL process exists for this
-// tenant, and is ready for connection attempts to its IP address. If
-// errorIfNoPods is true, then ensureTenantPod returns an error if
-// there are no pods available rather than blocking.
+// ensureTenantPod ensures that at least one SQL process exists for this tenant,
+// and is ready for connection attempts to its IP address. If errorIfNoPods is
+// true, then ensureTenantPod returns an error if there are no pods available
+// rather than blocking.
 func (e *tenantEntry) ensureTenantPod(
 	ctx context.Context, client DirectoryClient, errorIfNoPods bool,
 ) (addrs []string, err error) {
@@ -244,9 +256,8 @@ func (e *tenantEntry) ensureTenantPod(
 	return addrs, nil
 }
 
-// fetchPodsLocked makes a synchronous directory server call to get the
-// latest information about the tenant's available pods, such as their IP
-// addresses.
+// fetchPodsLocked makes a synchronous directory server call to get the latest
+// information about the tenant's available pods, such as their IP addresses.
 //
 // NOTE: Caller must lock the "calls" mutex before calling fetchPodsLocked.
 func (e *tenantEntry) fetchPodsLocked(
@@ -261,12 +272,13 @@ func (e *tenantEntry) fetchPodsLocked(
 		return nil, err
 	}
 
-	// Get updated list of running process pod IP addresses and save it to the
-	// entry.
+	// Get updated list of RUNNING pod IP addresses and save it to the entry.
 	addrs = make([]string, 0, len(list.Pods))
 	for i := range list.Pods {
 		pod := list.Pods[i]
-		addrs = append(addrs, pod.Addr)
+		if pod.State == RUNNING {
+			addrs = append(addrs, pod.Addr)
+		}
 	}
 
 	// Need to lock in case another thread is reading the IP addresses (e.g. in
@@ -283,8 +295,8 @@ func (e *tenantEntry) fetchPodsLocked(
 }
 
 // canRefreshLocked returns true if it's been at least X milliseconds since the
-// last time the tenant pod information was refreshed. This has the effect
-// of rate limiting RefreshPods calls.
+// last time the tenant pod information was refreshed. This has the effect of
+// rate limiting RefreshPods calls.
 //
 // NOTE: Caller must lock the "calls" mutex before calling canRefreshLocked.
 func (e *tenantEntry) canRefreshLocked() bool {
