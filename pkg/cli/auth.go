@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -72,8 +73,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		checkInteractive(os.Stdin)
-		if cliCtx.IsInteractive {
+		if isatty.IsTerminal(os.Stdin.Fd()) {
 			fmt.Fprintf(stderr, `#
 # Example uses:
 #

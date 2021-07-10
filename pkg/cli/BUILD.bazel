@@ -98,6 +98,7 @@ go_library(
         "//pkg/cli/clicfg",
         "//pkg/cli/clierror",
         "//pkg/cli/cliflags",
+        "//pkg/cli/clisqlcfg",
         "//pkg/cli/clisqlclient",
         "//pkg/cli/clisqlexec",
         "//pkg/cli/clisqlshell",

@@ -198,7 +198,7 @@ func checkDemoConfiguration(
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
-	cmdIn, closeFn, err := getInputFile()
+	closeFn, err := sqlCtx.Open(os.Stdin)
 	if err != nil {
 		return err
 	}
@@ -237,9 +237,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 	if err := c.Start(ctx, runInitialSQL); err != nil {
 		return clierror.CheckAndMaybeShout(err)
 	}
-	sqlCtx.DemoCluster = c
-
-	checkInteractive(cmdIn)
+	sqlCtx.ShellCtx.DemoCluster = c
 
 	if cliCtx.IsInteractive {
 		cliCtx.PrintfUnlessEmbedded(`#
@@ -335,10 +333,13 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 		}
 	}
 
-	conn := sqlConnCtx.MakeSQLConn(os.Stdout, stderr, c.GetConnURL())
+	conn, err := sqlCtx.MakeConn(c.GetConnURL())
+	if err != nil {
+		return err
+	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
-	return runClient(cmd, conn, cmdIn)
+	return sqlCtx.Run(conn)
 }
 
 func waitForLicense(licenseDone <-chan error) error {

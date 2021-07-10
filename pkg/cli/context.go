@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
@@ -262,28 +263,20 @@ func setSQLExecContextDefaults() {
 	sqlExecCtx.VerboseTimings = false
 }
 
-var sqlCtx = struct {
-	clisqlshell.Context
-
-	// inputFile is the file to read from.
-	// If empty, os.Stdin is used.
-	// Only valid if execStmts is empty.
-	inputFile string
-
-	// safeUpdates indicates whether to set sql_safe_updates in the CLI
-	// Shell.
-	safeUpdates bool
-}{}
+var sqlCtx = func() *clisqlcfg.Context {
+	cfg := &clisqlcfg.Context{
+		CliCtx:  &cliCtx.Context,
+		ConnCtx: &sqlConnCtx,
+		ExecCtx: &sqlExecCtx,
+	}
+	return cfg
+}()
 
 // setSQLContextDefaults set the default values in sqlCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
 func setSQLContextDefaults() {
-	sqlCtx.SetStmts = nil
-	sqlCtx.ExecStmts = nil
-	sqlCtx.RepeatDelay = 0
-	sqlCtx.inputFile = ""
-	sqlCtx.safeUpdates = false
+	sqlCtx.LoadDefaults(os.Stdout, stderr)
 }
 
 // zipCtx captures the command-line parameters of the `zip` command.

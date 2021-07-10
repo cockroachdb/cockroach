@@ -711,11 +711,15 @@ func init() {
 	// SQL and demo commands.
 	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {
 		f := cmd.Flags()
-		varFlag(f, &sqlCtx.SetStmts, cliflags.Set)
-		varFlag(f, &sqlCtx.ExecStmts, cliflags.Execute)
-		stringFlag(f, &sqlCtx.inputFile, cliflags.File)
-		durationFlag(f, &sqlCtx.RepeatDelay, cliflags.Watch)
-		boolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates)
+		varFlag(f, &sqlCtx.ShellCtx.SetStmts, cliflags.Set)
+		varFlag(f, &sqlCtx.ShellCtx.ExecStmts, cliflags.Execute)
+		stringFlag(f, &sqlCtx.InputFile, cliflags.File)
+		durationFlag(f, &sqlCtx.ShellCtx.RepeatDelay, cliflags.Watch)
+		varFlag(f, &sqlCtx.SafeUpdates, cliflags.SafeUpdates)
+		// The "safe-updates" flag is tri-valued (true, false, not-specified).
+		// If the flag is specified on the command line, but is not given a value,
+		// then use the value "true".
+		f.Lookup(cliflags.SafeUpdates.Name).NoOptDefVal = "true"
 		boolFlag(f, &sqlConnCtx.DebugMode, cliflags.CliDebugMode)
 		boolFlag(f, &cliCtx.EmbeddedMode, cliflags.EmbeddedMode)
 	}
