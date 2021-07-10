@@ -605,6 +605,11 @@ func (c *sqlConn) fillPassword() error {
 	// Password can be safely encrypted, or the user opted in
 	// manually to non-encryption. All good.
 
+	// Tell the user where we are connecting to, for context.
+	fmt.Fprintf(c.infow, "Connecting to server %q as user %q.\n",
+		connURL.Host,
+		connURL.User.Username())
+
 	pwd, err := security.PromptForPassword()
 	if err != nil {
 		return err
