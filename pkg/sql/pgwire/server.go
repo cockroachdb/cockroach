@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -617,7 +619,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	case versionCancel:
 		// The cancel message is rather peculiar: it is sent without
 		// authentication, always over an unencrypted channel.
-		return handleCancel(conn)
+		s.handleCancel(ctx, conn, &buf)
+		return nil
 
 	case versionGSSENC:
 		// This is a request for an unsupported feature: GSS encryption.
@@ -668,7 +671,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		// Yet, we've found clients in the wild that send the cancel
 		// after the TLS handshake, for example at
 		// https://github.com/cockroachlabs/support/issues/600.
-		return handleCancel(conn)
+		s.handleCancel(ctx, conn, &buf)
+		return nil
 
 	default:
 		// We don't know this protocol.
@@ -727,12 +731,46 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	return nil
 }
 
-func handleCancel(conn net.Conn) error {
-	// Since we don't support this, close the door in the client's
-	// face. Make a note of that use in telemetry.
-	telemetry.Inc(sqltelemetry.CancelRequestCounter)
-	_ = conn.Close()
-	return nil
+// handleCancel handles a pgwire query cancellation request. Note that the
+// request is unauthenticated. To mitigate the security risk (i.e., a
+// malicious actor spamming this endpoint with random data to try to cancel
+// a query), the logic is rate-limited by a semaphore. Refer to the comments
+// in the pgwirecancel package for more information.
+//
+// This function does not return an error, so the caller (and possible
+// attacker) will not know if the cancellation attempt succeeded. Errors are
+// logged so that an operator can be aware of any possibly malicious requests.
+func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer) {
+	var err error
+	defer func() {
+		if err != nil {
+			log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
+		}
+		telemetry.Inc(sqltelemetry.CancelRequestCounter)
+
+		// The connection that issued the cancel is not a SQL session -- it's an
+		// entirely new connection that's created just to send the cancel. There
+		// isn't anything left for the server to do after it handles the
+		// pgwire cancel request.
+		_ = conn.Close()
+	}()
+
+	var backendKeyDataBits uint64
+	backendKeyDataBits, err = buf.GetUint64()
+	if err != nil {
+		return
+	}
+	cancelKey := pgwirecancel.BackendKeyData(backendKeyDataBits)
+	// The request is forwarded to the appropriate node.
+	req := &serverpb.CancelQueryByKeyRequest{
+		SQLInstanceID:  cancelKey.GetSQLInstanceID(),
+		CancelQueryKey: cancelKey,
+	}
+	var resp *serverpb.CancelQueryByKeyResponse
+	resp, err = s.execCfg.SQLStatusServer.CancelQueryByKey(ctx, req)
+	if len(resp.Error) > 0 {
+		err = errors.CombineErrors(err, errors.Newf("error from CancelQueryByKeyResponse: %s", resp.Error))
+	}
 }
 
 // parseClientProvidedSessionParameters reads the incoming k/v pairs
