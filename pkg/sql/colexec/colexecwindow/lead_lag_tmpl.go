@@ -64,7 +64,6 @@ func New_UPPERCASE_NAMEOperator(
 	offsetIdx int,
 	defaultIdx int,
 ) (colexecop.Operator, error) {
-	argType := inputTypes[argIdx]
 	// Allow the direct-access buffer 10% of the available memory. The rest will
 	// be given to the bufferedWindowOp queue. While it is somewhat more important
 	// for the direct-access buffer tuples to be kept in-memory, it only has to
@@ -72,7 +71,7 @@ func New_UPPERCASE_NAMEOperator(
 	// good empirically-supported fraction to use.
 	bufferMemLimit := int64(float64(memoryLimit) * 0.10)
 	buffer := colexecutils.NewSpillingBuffer(
-		bufferAllocator, bufferMemLimit, diskQueueCfg, fdSemaphore, []*types.T{argType}, diskAcc, argIdx)
+		bufferAllocator, bufferMemLimit, diskQueueCfg, fdSemaphore, inputTypes, diskAcc, argIdx)
 	base := _OP_NAMEBase{
 		buffer:          buffer,
 		outputColIdx:    outputColIdx,
@@ -81,6 +80,7 @@ func New_UPPERCASE_NAMEOperator(
 		offsetIdx:       offsetIdx,
 		defaultIdx:      defaultIdx,
 	}
+	argType := inputTypes[argIdx]
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
@@ -227,11 +227,11 @@ func (b *_OP_NAMEBase) Init(ctx context.Context) {
 	}
 }
 
-func (b *_OP_NAMEBase) Close() error {
+func (b *_OP_NAMEBase) Close() {
 	if !b.CloserHelper.Close() {
-		return nil
+		return
 	}
-	return b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(b.EnsureCtx())
 }
 
 // {{/*
@@ -270,9 +270,8 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 			// {{end}}
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
