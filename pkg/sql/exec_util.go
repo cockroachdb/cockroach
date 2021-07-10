@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -1870,30 +1871,39 @@ type SessionArgs struct {
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	syncutil.Mutex
-	sessions map[ClusterWideID]registrySession
+	sessions            map[ClusterWideID]registrySession
+	sessionsByCancelKey map[pgwirecancel.BackendKeyData]registrySession
 }
 
 // NewSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
 func NewSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{sessions: make(map[ClusterWideID]registrySession)}
+	return &SessionRegistry{
+		sessions:            make(map[ClusterWideID]registrySession),
+		sessionsByCancelKey: make(map[pgwirecancel.BackendKeyData]registrySession),
+	}
 }
 
-func (r *SessionRegistry) register(id ClusterWideID, s registrySession) {
+func (r *SessionRegistry) register(
+	id ClusterWideID, queryCancelKey pgwirecancel.BackendKeyData, s registrySession,
+) {
 	r.Lock()
+	defer r.Unlock()
 	r.sessions[id] = s
-	r.Unlock()
+	r.sessionsByCancelKey[queryCancelKey] = s
 }
 
-func (r *SessionRegistry) deregister(id ClusterWideID) {
+func (r *SessionRegistry) deregister(id ClusterWideID, queryCancelKey pgwirecancel.BackendKeyData) {
 	r.Lock()
+	defer r.Unlock()
 	delete(r.sessions, id)
-	r.Unlock()
+	delete(r.sessionsByCancelKey, queryCancelKey)
 }
 
 type registrySession interface {
 	user() security.SQLUsername
 	cancelQuery(queryID ClusterWideID) bool
+	cancelCurrentQueries() bool
 	cancelSession()
 	// serialize serializes a Session into a serverpb.Session
 	// that can be served over RPC.
@@ -1918,6 +1928,21 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 	}
 
 	return false, fmt.Errorf("query ID %s not found", queryID)
+}
+
+// CancelQueryByKey looks up the associated query in the session registry and
+// cancels it.
+func (r *SessionRegistry) CancelQueryByKey(
+	queryCancelKey pgwirecancel.BackendKeyData,
+) (bool, error) {
+	r.Lock()
+	defer r.Unlock()
+	if session, ok := r.sessionsByCancelKey[queryCancelKey]; ok {
+		if session.cancelCurrentQueries() {
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("query for cancel key %d not found", queryCancelKey)
 }
 
 // CancelSession looks up the specified session in the session registry and

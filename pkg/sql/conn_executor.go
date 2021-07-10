@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -686,6 +687,12 @@ func (h ConnectionHandler) GetParamStatus(ctx context.Context, varName string) s
 	return defVal
 }
 
+// GetQueryCancelKey returns the per-session identifier that can be used to
+// cancel a query using the pgwire cancel protocol.
+func (h ConnectionHandler) GetQueryCancelKey() pgwirecancel.BackendKeyData {
+	return h.ex.queryCancelKey
+}
+
 // ServeConn serves a client connection by reading commands from the stmtBuf
 // embedded in the ConnHandler.
 //
@@ -875,6 +882,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds))
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
+	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
@@ -1398,6 +1406,10 @@ type connExecutor struct {
 	// any. This is printed by high-level panic recovery.
 	curStmtAST tree.Statement
 
+	// queryCancelKey is a 64-bit identifier for the session used by the
+	// pgwire cancellation protocol.
+	queryCancelKey pgwirecancel.BackendKeyData
+
 	sessionID ClusterWideID
 
 	// activated determines whether activate() was called already.
@@ -1690,9 +1702,9 @@ func (ex *connExecutor) run(
 	ex.onCancelSession = onCancel
 
 	ex.sessionID = ex.generateID()
-	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
+	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex.queryCancelKey, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
-	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
+	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID, ex.queryCancelKey)
 	for {
 		ex.curStmtAST = nil
 		if err := ctx.Err(); err != nil {
@@ -2855,6 +2867,18 @@ func (ex *connExecutor) cancelQuery(queryID ClusterWideID) bool {
 		return true
 	}
 	return false
+}
+
+// cancelCurrentQueries is part of the registrySession interface.
+func (ex *connExecutor) cancelCurrentQueries() bool {
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
+	canceled := false
+	for _, queryMeta := range ex.mu.ActiveQueries {
+		queryMeta.cancel()
+		canceled = true
+	}
+	return canceled
 }
 
 // cancelSession is part of the registrySession interface.
