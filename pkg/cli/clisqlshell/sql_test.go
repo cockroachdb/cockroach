@@ -279,7 +279,7 @@ func Example_read_from_file() {
 
 	// Output:
 	// sql -e select 1 -f testdata/inputfile.sql
-	// ERROR: unsupported combination: --execute and --file
+	// ERROR: cannot specify both an input file and discrete statements
 	// sql -f testdata/inputfile.sql
 	// SET
 	// CREATE TABLE
