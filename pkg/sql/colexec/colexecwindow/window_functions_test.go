@@ -12,12 +12,16 @@ package colexecwindow
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -602,5 +606,165 @@ func TestWindowFunctions(t *testing.T) {
 
 	for _, m := range monitors {
 		m.Stop(ctx)
+	}
+}
+
+func BenchmarkWindowFunctions(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	const (
+		memLimit        = 64 << 20
+		fdLimit         = 3
+		partitionSize   = 5
+		peerGroupSize   = 3
+		arg1ColIdx      = 0
+		arg2ColIdx      = 1
+		arg3ColIdx      = 2
+		partitionColIdx = 3
+		orderColIdx     = 4
+		peersColIdx     = 5
+		numIntCols      = 4
+		numBoolCols     = 2
+	)
+
+	sourceTypes := []*types.T{
+		types.Int, types.Int, types.Int, // Window function arguments
+		types.Bool, // Partition column
+		types.Int,  // Ordering column
+		types.Bool, // Peer groups column
+	}
+
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
+	defer cleanup()
+	benchMemAccount := testMemMonitor.MakeBoundAccount()
+	defer benchMemAccount.Close(ctx)
+
+	getWindowFn := func(
+		windowFn execinfrapb.WindowerSpec_WindowFunc, source colexecop.Operator, partition, order bool,
+	) (op colexecop.Operator) {
+		var err error
+		outputIdx := len(sourceTypes)
+		benchMemAccount.Clear(ctx)
+		mainAllocator := colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory)
+		bufferAllocator := colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory)
+
+		var orderingCols []execinfrapb.Ordering_Column
+		partitionCol, peersCol := tree.NoColumnIdx, tree.NoColumnIdx
+		if partition {
+			partitionCol = partitionColIdx
+		}
+		if order {
+			peersCol = peersColIdx
+			orderingCols = append(orderingCols, execinfrapb.Ordering_Column{
+				ColIdx:    uint32(orderColIdx),
+				Direction: execinfrapb.Ordering_Column_ASC,
+			})
+		}
+
+		switch windowFn {
+		case execinfrapb.WindowerSpec_ROW_NUMBER:
+			op = NewRowNumberOperator(mainAllocator, source, outputIdx, partitionCol)
+		case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
+			op, err = NewRankOperator(
+				mainAllocator, source, windowFn, orderingCols, outputIdx, partitionCol, peersCol,
+			)
+		case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
+			op, err = NewRelativeRankOperator(
+				mainAllocator, memLimit, queueCfg, colexecop.NewTestingSemaphore(fdLimit), source,
+				sourceTypes, windowFn, orderingCols, outputIdx, partitionColIdx, peersColIdx, testDiskAcc,
+			)
+		case execinfrapb.WindowerSpec_NTILE:
+			op = NewNTileOperator(mainAllocator, memLimit, queueCfg,
+				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
+				outputIdx, partitionCol, arg1ColIdx,
+			)
+		case execinfrapb.WindowerSpec_LAG:
+			op, err = NewLagOperator(
+				mainAllocator, bufferAllocator, memLimit, queueCfg,
+				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
+				outputIdx, partitionCol, arg1ColIdx, arg2ColIdx, arg3ColIdx,
+			)
+		case execinfrapb.WindowerSpec_LEAD:
+			op, err = NewLeadOperator(
+				mainAllocator, bufferAllocator, memLimit, queueCfg,
+				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
+				outputIdx, partitionCol, arg1ColIdx, arg2ColIdx, arg3ColIdx,
+			)
+		}
+		require.NoError(b, err)
+		return op
+	}
+
+	var batch coldata.Batch
+	batchCreator := func(batchLength int) coldata.Batch {
+		const arg1Offset = 5
+		batch, _ = testAllocator.ResetMaybeReallocate(sourceTypes, batch, batchLength, math.MaxInt64)
+		argCol1 := batch.ColVec(arg1ColIdx).Int64()
+		argCol2 := batch.ColVec(arg2ColIdx).Int64()
+		partitionCol := batch.ColVec(partitionColIdx).Bool()
+		orderCol := batch.ColVec(orderColIdx).Int64()
+		peersCol := batch.ColVec(peersColIdx).Bool()
+		for i := 0; i < batchLength; i++ {
+			argCol1[i] = int64(i + arg1Offset)
+			argCol2[i] = 1
+			partitionCol[i] = i%partitionSize == 0
+			orderCol[i] = int64(i / peerGroupSize)
+			peersCol[i] = i%peerGroupSize == 0
+		}
+		batch.ColVec(arg1ColIdx).Nulls().UnsetNulls()
+		batch.ColVec(arg2ColIdx).Nulls().UnsetNulls()
+		batch.ColVec(arg3ColIdx).Nulls().SetNulls()
+		batch.ColVec(partitionColIdx).Nulls().UnsetNulls()
+		batch.ColVec(orderColIdx).Nulls().UnsetNulls()
+		batch.ColVec(peersColIdx).Nulls().UnsetNulls()
+		batch.SetLength(batchLength)
+		return batch
+	}
+
+	windowFns := []execinfrapb.WindowerSpec_WindowFunc{
+		execinfrapb.WindowerSpec_ROW_NUMBER,
+		execinfrapb.WindowerSpec_RANK,
+		execinfrapb.WindowerSpec_DENSE_RANK,
+		execinfrapb.WindowerSpec_PERCENT_RANK,
+		execinfrapb.WindowerSpec_CUME_DIST,
+		execinfrapb.WindowerSpec_NTILE,
+		execinfrapb.WindowerSpec_LAG,
+		execinfrapb.WindowerSpec_LEAD,
+	}
+
+	// The number of rows should be a multiple of coldata.BatchSize().
+	rowsOptions := []int{4 * coldata.BatchSize(), 32 * coldata.BatchSize()}
+
+	for _, windowFn := range windowFns {
+		b.Run(fmt.Sprintf("%v", windowFn), func(b *testing.B) {
+			for _, nRows := range rowsOptions {
+				b.Run(fmt.Sprintf("rows=%d", nRows), func(b *testing.B) {
+					nBatches := nRows / coldata.BatchSize()
+					batch := batchCreator(coldata.BatchSize())
+					b.SetBytes(int64(nRows * (8*numIntCols + numBoolCols)))
+					for _, partitionInput := range []bool{true, false} {
+						b.Run(fmt.Sprintf("partition=%v", partitionInput), func(b *testing.B) {
+							for _, orderInput := range []bool{true, false} {
+								b.Run(fmt.Sprintf("order=%v", orderInput), func(b *testing.B) {
+									b.ResetTimer()
+									for i := 0; i < b.N; i++ {
+										source := colexectestutils.NewFiniteChunksSource(
+											testAllocator, batch, sourceTypes, nBatches, 1,
+										)
+										s := getWindowFn(windowFn, source, partitionInput, orderInput)
+										s.Init(ctx)
+										b.StartTimer()
+										for b := s.Next(); b.Length() != 0; b = s.Next() {
+										}
+										b.StopTimer()
+									}
+								})
+							}
+						})
+					}
+				})
+			}
+		})
 	}
 }
