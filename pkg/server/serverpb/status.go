@@ -22,6 +22,7 @@ type SQLStatusServer interface {
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	ListLocalSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	CancelQuery(context.Context, *CancelQueryRequest) (*CancelQueryResponse, error)
+	CancelQueryByBackendKeyData(context.Context, *CancelQueryByBackendKeyDataRequest) (*CancelQueryByBackendKeyDataResponse, error)
 	CancelSession(context.Context, *CancelSessionRequest) (*CancelSessionResponse, error)
 	ListContentionEvents(context.Context, *ListContentionEventsRequest) (*ListContentionEventsResponse, error)
 	ListLocalContentionEvents(context.Context, *ListContentionEventsRequest) (*ListContentionEventsResponse, error)

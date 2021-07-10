@@ -2082,6 +2082,53 @@ Response returned by target query's gateway node.
 
 
 
+## CancelQueryByBackendKeyData
+
+
+
+CancelQueryByBackendKeyData cancels a SQL query given its pgwire "secret ID".
+It is invoked through the pgwire protocol, so it's not exposed as an
+HTTP endpoint.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for issuing a pgwire query cancel request.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| backend_key_data | [uint64](#cockroach.server.serverpb.CancelQueryByBackendKeyDataRequest-uint64) |  | The BackendKeyData that was generated during session initialization as part of the pgwire protocol. The SQLInstanceID of the gateway node for the query to be canceled is embedded inside, along with random bits. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response returned by target query's gateway node for a pgwire cancel request.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| canceled | [bool](#cockroach.server.serverpb.CancelQueryByBackendKeyDataResponse-bool) |  | Whether the cancellation request succeeded and the query was canceled. | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.CancelQueryByBackendKeyDataResponse-string) |  | Error message (accompanied with canceled = false). | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## ListContentionEvents
 
 `GET /_status/contention_events`
