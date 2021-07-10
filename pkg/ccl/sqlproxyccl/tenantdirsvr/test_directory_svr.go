@@ -200,7 +200,6 @@ func (s *TestDirectoryServer) Drain() {
 			s.listen.RLock()
 			defer s.listen.RUnlock()
 			s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-				Typ: tenant.MODIFIED,
 				Pod: &tenant.Pod{
 					TenantID: tenantID,
 					Addr:     addr.String(),
@@ -292,7 +291,6 @@ func (s *TestDirectoryServer) registerInstanceLocked(tenantID uint64, process *P
 	s.listen.RLock()
 	defer s.listen.RUnlock()
 	s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-		Typ: tenant.ADDED,
 		Pod: &tenant.Pod{
 			TenantID: tenantID,
 			Addr:     process.SQL.String(),
@@ -315,7 +313,6 @@ func (s *TestDirectoryServer) deregisterInstance(tenantID uint64, sql net.Addr) 
 		s.listen.RLock()
 		defer s.listen.RUnlock()
 		s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-			Typ: tenant.DELETED,
 			Pod: &tenant.Pod{
 				TenantID: tenantID,
 				Addr:     sql.String(),

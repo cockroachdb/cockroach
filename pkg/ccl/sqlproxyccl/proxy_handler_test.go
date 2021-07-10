@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -491,7 +490,6 @@ func TestDenylistUpdate(t *testing.T) {
 
 func TestDirectoryConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 67405, "flaky test")
 
 	ctx := context.Background()
 	te := newTester()
@@ -608,19 +606,20 @@ func TestDirectoryConnect(t *testing.T) {
 		te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 			require.Equal(t, int64(1), proxy.metrics.CurConnCount.Value())
 
-			// Verify that connection is operational.
-			var n int
-			err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
-			require.NoError(t, err)
-			require.EqualValues(t, 1, n)
+			// Connection should be terminated after draining.
+			require.Eventually(t, func() bool {
+				var n int
+				err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
+				if err != nil {
+					return true
+				}
+				require.EqualValues(t, 1, n)
 
-			// Trigger drain of connections and wait for drain timeout.
-			tds2.Drain()
-			time.Sleep(drainTimeout * 5)
+				// Trigger drain of connections.
+				tds2.Drain()
+				return false
+			}, 30*time.Second, 5*drainTimeout)
 
-			// Connection should be terminated.
-			err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
-			require.EqualError(t, err, "unexpected EOF")
 			require.Equal(t, int64(1), proxy.metrics.IdleDisconnectCount.Count())
 		})
 	})

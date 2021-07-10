@@ -160,7 +160,7 @@ func (d *Directory) EnsureTenantAddr(
 	addr, err := entry.ChoosePodAddr(ctx, d.client, d.options.deterministic)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			d.deleteEntry(tenantID)
+			d.deleteEntry(entry)
 		}
 	}
 	return addr, err
@@ -253,28 +253,31 @@ func (d *Directory) getEntry(
 	err := entry.Initialize(ctx, d.client)
 	if err != nil {
 		// Remove the entry from the tenants map, since initialization failed.
-		d.mut.Lock()
-		defer d.mut.Unlock()
-
-		// Threads can race to add/remove entries, so ensure that right entry is
-		// removed.
-		existing, ok := d.mut.tenants[tenantID]
-		if ok && entry == existing {
-			delete(d.mut.tenants, tenantID)
+		if d.deleteEntry(entry) {
 			log.Infof(ctx, "error initializing tenant %d: %v", tenantID, err)
 		}
-
 		return nil, err
 	}
 
 	return entry, nil
 }
 
-// deleteEntry removes the directory entry for the given tenant, if it exists.
-func (d *Directory) deleteEntry(tenantID roachpb.TenantID) {
+// deleteEntry removes the given directory entry for the given tenant, if it
+// exists. It returns true if an entry was actually deleted.
+func (d *Directory) deleteEntry(entry *tenantEntry) bool {
+	// Remove the entry from the tenants map, since initialization failed.
 	d.mut.Lock()
 	defer d.mut.Unlock()
-	delete(d.mut.tenants, tenantID)
+
+	// Threads can race to add/remove entries, so ensure that right entry is
+	// removed.
+	existing, ok := d.mut.tenants[entry.TenantID]
+	if ok && entry == existing {
+		delete(d.mut.tenants, entry.TenantID)
+		return true
+	}
+
+	return false
 }
 
 // watchPods establishes a watcher that looks for changes to tenant pods.
@@ -292,9 +295,9 @@ func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error 
 	// 2. call EnsureTenantAddr
 	// 3. wait forever to receive notification about the tenant that just started.
 	//
-	// and the reason why the notification may not ever arrive is because the
-	// watchPods go routine can start listening after the server started the
-	// tenant and sent notification.
+	// The reason why the notification may not ever arrive is because the
+	// watchPods goroutine can start listening after the server started the
+	// tenant and sent notifications.
 	var waitInit sync.WaitGroup
 	waitInit.Add(1)
 
@@ -357,7 +360,7 @@ func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error 
 
 			// Update the directory entry for the tenant with the latest
 			// information about this pod.
-			d.updateTenantEntry(ctx, resp.Typ, resp.Pod)
+			d.updateTenantEntry(ctx, resp.Pod)
 		}
 	})
 	if err != nil {
@@ -372,7 +375,7 @@ func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error 
 // updateTenantEntry keeps tenant directory entries up-to-date by handling pod
 // watcher events. When a pod is created, destroyed, or modified, it updates the
 // tenant's entry to reflect that change.
-func (d *Directory) updateTenantEntry(ctx context.Context, eventType EventType, pod *Pod) {
+func (d *Directory) updateTenantEntry(ctx context.Context, pod *Pod) {
 	podAddr := pod.Addr
 	if podAddr == "" {
 		// Nothing needs to be done if there is no IP address specified.
@@ -390,14 +393,13 @@ func (d *Directory) updateTenantEntry(ctx context.Context, eventType EventType, 
 		return
 	}
 
-	// For now, all we care about is the IP addresses of the tenant pod.
-	switch eventType {
-	case ADDED:
+	if pod.State == RUNNING {
+		// Add addresses of RUNNING pods if they are not already present.
 		if entry.AddPodAddr(podAddr) {
 			log.Infof(ctx, "added IP address %s for tenant %d", podAddr, pod.TenantID)
 		}
-
-	case DELETED:
+	} else {
+		// Remove addresses of DRAINING and DELETING pods.
 		if entry.RemovePodAddr(podAddr) {
 			log.Infof(ctx, "deleted IP address %s for tenant %d", podAddr, pod.TenantID)
 		}
