@@ -237,6 +237,13 @@ func (t *tenantStatusServer) CancelLocalQuery(
 	return output, nil
 }
 
+func (t *tenantStatusServer) CancelQueryByKey(
+	ctx context.Context, request *serverpb.CancelQueryByKeyRequest,
+) (*serverpb.CancelQueryByKeyResponse, error) {
+	var output = &serverpb.CancelQueryByKeyResponse{}
+	return output, nil
+}
+
 func (t *tenantStatusServer) CancelSession(
 	ctx context.Context, request *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
