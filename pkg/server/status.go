@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -2424,13 +2425,52 @@ func (s *statusServer) CancelQuery(
 	return output, nil
 }
 
-// CancelQueryByBackendKeyData responds to a pgwire query cancellation request, and
-// cancels  the target query's associated context and sets a cancellation flag.
+// CancelQueryByBackendKeyData responds to a pgwire query cancellation request,
+// and cancels the target query's associated context and sets a cancellation
+// flag. This endpoint is rate-limited by a semaphore.
 func (s *statusServer) CancelQueryByBackendKeyData(
 	ctx context.Context, req *serverpb.CancelQueryByBackendKeyDataRequest,
-) (*serverpb.CancelQueryByBackendKeyDataResponse, error) {
-	var output = &serverpb.CancelQueryByBackendKeyDataResponse{}
-	return output, nil
+) (resp *serverpb.CancelQueryByBackendKeyDataResponse, retErr error) {
+	sqlInstanceID := req.BackendKeyData.GetSQLInstanceID()
+	local := sqlInstanceID == s.sqlServer.SQLInstanceID()
+	resp = &serverpb.CancelQueryByBackendKeyDataResponse{}
+
+	// Acquiring the semaphore here helps protect both the source and destination
+	// nodes. The source node is protected against an attacker causing too much
+	// inter-node network traffic by spamming cancel requests. The destination
+	// node is protected so that if an attacker spams all the nodes in the cluster
+	// with requests that all go to the same node, this semaphore will prevent
+	// them from having too many guesses.
+	alloc, err := pgwirecancel.CancelSemaphore.TryAcquire(ctx, 1)
+	if err != nil {
+		return nil, status.Errorf(codes.ResourceExhausted, "exceeded rate limit of pgwire cancellation requests")
+	}
+	defer func() {
+		// If we acquired the semaphore but the cancellation request failed, then
+		// hold on to the semaphore for longer. This helps mitigate a DoS attack
+		// of random cancellation requests.
+		if !resp.Canceled {
+			time.Sleep(1 * time.Second)
+		}
+		alloc.Release()
+	}()
+
+	if local {
+		resp.Canceled, err = s.sessionRegistry.CancelQueryByPGWire(req.BackendKeyData)
+		if err != nil {
+			resp.Error = err.Error()
+		}
+		return resp, nil
+	}
+
+	// This request needs to be forwarded to another node.
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	client, err := s.dialNode(ctx, roachpb.NodeID(sqlInstanceID))
+	if err != nil {
+		return nil, err
+	}
+	return client.CancelQueryByBackendKeyData(ctx, req)
 }
 
 // ListContentionEvents returns a list of contention events on all nodes in the
