@@ -37,7 +37,6 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_golang_mock//gomock",  # keep
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",  # keep
