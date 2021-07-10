@@ -97,6 +97,12 @@ func TestWatchPods(t *testing.T) {
 	require.Equal(t, addr, pod.Addr)
 	require.Equal(t, tenant.DRAINING, pod.State)
 
+	// Ensure that all addresses have been cleared from the directory, since
+	// it should only return RUNNING addresses.
+	addrs, err := dir.LookupTenantAddrs(ctx, tenantID)
+	require.NoError(t, err)
+	require.Empty(t, addrs)
+
 	// Now shut the tenant directory down.
 	processes := tds.Get(tenantID)
 	require.NotNil(t, processes)
