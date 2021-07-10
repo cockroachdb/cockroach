@@ -1,5 +1,5 @@
-import { assert, expect } from "chai";
-import { mount, shallow } from "enzyme";
+import { assert } from "chai";
+import { shallow } from "enzyme";
 import React from "react";
 import "src/enzymeInit";
 import * as sinon from "sinon";
@@ -8,6 +8,7 @@ import _ from "lodash";
 
 import { LineGraph, LineGraphProps } from "./index";
 import * as timewindow from "src/redux/timewindow";
+import * as protos from "src/js/protos";
 import { Axis } from "src/views/shared/components/metricQuery";
 import {
   calculateXAxisDomain,
@@ -26,7 +27,7 @@ describe("<LineGraph>", function () {
       </LineGraph>,
     );
 
-  beforeEach(function () {
+  beforeEach(() => {
     mockProps = {
       title: "Test Title",
       subtitle: "Test Subtitle",
@@ -40,7 +41,26 @@ describe("<LineGraph>", function () {
       },
       setTimeRange: timewindow.setTimeRange,
       setTimeScale: timewindow.setTimeScale,
-      history: { location: { pathname: "", search: "" }, push: () => {} },
+      history: {
+        length: 0,
+        action: "PUSH",
+        location: {
+          pathname: "",
+          search: "",
+          state: sinon.spy,
+          hash: "",
+        },
+        push: () => {},
+        replace: () => {},
+        go: () => {},
+        goBack: () => {},
+        goForward: () => {},
+        block: sinon.spy,
+        listen: sinon.spy,
+        createHref: () => {
+          return "";
+        },
+      },
     };
     spy = sinon.spy();
   });
@@ -49,21 +69,23 @@ describe("<LineGraph>", function () {
     const wrapper = linegraph({ ...mockProps });
     const root = wrapper.find(".linegraph");
     assert.equal(root.length, 1);
-  }),
-    it("should set new history", () => {
-      const wrapper = linegraph({
-        ...mockProps,
-        history: { ...mockProps.history, push: spy },
-      });
-      const instance = (wrapper.instance() as unknown) as LineGraph;
-      instance.setNewTimeRange(111111, 222222);
-      assert.isTrue(
-        spy.calledWith({ pathname: "", search: "start=111&end=222" }),
-      );
+  });
+
+  it("should set new history", () => {
+    const wrapper = linegraph({
+      ...mockProps,
+      history: { ...mockProps.history, push: spy },
     });
+    const instance = (wrapper.instance() as any) as LineGraph;
+    instance.setNewTimeRange(111111, 222222);
+    assert.isTrue(
+      spy.calledWith({ pathname: "", search: "start=111&end=222" }),
+    );
+  });
+
   it("should set a new chart on update", () => {
     const wrapper = linegraph({ ...mockProps });
-    const instance = (wrapper.instance() as unknown) as LineGraph;
+    const instance = (wrapper.instance() as any) as LineGraph;
     wrapper.setProps({
       data: {
         results: [
@@ -85,8 +107,13 @@ describe("<LineGraph>", function () {
     const result = _.isEmpty(instance.u);
     assert.equal(result, false);
   });
+
   it("should update the existing chart", () => {
-    const wrapper = linegraph({ ...mockProps });
+    // test setup
+    const wrapper = linegraph({
+      ...mockProps,
+      data: { results: [{}], toJSON: sinon.spy },
+    });
     const instance = (wrapper.instance() as unknown) as LineGraph;
     const mockFn = sinon.spy();
     const mockMetrics = [
@@ -99,29 +126,13 @@ describe("<LineGraph>", function () {
       },
     ];
     const mockAxis = {
+      type: "AxisProps",
       key: ".0",
-      props: { label: "queries", children: [{}], units: 0 },
+      props: { label: "queries", children: [{}], units: 3 },
       _owner: {},
       _store: { validated: false },
     };
-    const mockData = {
-      results: [
-        {
-          datapoints: [
-            {
-              timestamp_nanos: {
-                low: -900000000,
-                high: 900000000,
-                unsigned: false,
-              },
-              value: 0.7,
-            },
-          ],
-        },
-      ],
-    };
-    const mockCurEl = wrapper.find(".linegraph").childAt(0);
-    console.log(mockCurEl);
+    const mockData: protos.cockroach.ts.tspb.TimeSeriesQueryResponse = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse();
     const mockOptions = configureUPlotLineChart(
       mockMetrics,
       mockAxis,
@@ -131,7 +142,8 @@ describe("<LineGraph>", function () {
       () => calculateXAxisDomain(mockProps.timeInfo),
     );
     instance.u = new uPlot(mockOptions);
-    instance.u.setData = sinon.spy();
+    const setDataSpy = sinon.spy(instance.u, "setData");
+    // run test
     wrapper.setProps({
       data: {
         results: [
@@ -150,6 +162,6 @@ describe("<LineGraph>", function () {
         ],
       },
     });
-    assert.isTrue(instance.u.setData.called);
+    assert.isTrue(setDataSpy.called);
   });
 });
