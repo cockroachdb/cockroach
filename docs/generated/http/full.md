@@ -1405,6 +1405,52 @@ Response returned by target query's gateway node.
 
 
 
+## PGWireCancelQuery
+
+`POST /_status/pgwire_cancel_query/{node_id}`
+
+PGWireCancelQuery cancels a SQL query given its pgwire "secret ID".
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for issuing a pgwire query cancel request.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.PGWireCancelQueryRequest-string) |  | ID of gateway node for the query to be canceled.<br><br>TODO(rafi): use [(gogoproto.customname) = "NodeID"] below. Need to figure out how to teach grpc-gateway about custom names. Refer to https://github.com/gogo/protobuf/issues/331.<br><br>node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
+| secret_id | [uint32](#cockroach.server.serverpb.PGWireCancelQueryRequest-uint32) |  | "Secret" ID of query to be canceled. This comes from the BackendKeyData generated during the pgwrite protocol flow. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response returned by target query's gateway node for a pgwire cancel request.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| canceled | [bool](#cockroach.server.serverpb.PGWireCancelQueryResponse-bool) |  | Whether the cancellation request succeeded and the query was canceled. | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.PGWireCancelQueryResponse-string) |  | Error message (accompanied with canceled = false). | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## ListContentionEvents
 
 `GET /_status/contention_events`

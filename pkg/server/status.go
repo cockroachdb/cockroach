@@ -2188,6 +2188,15 @@ func (s *statusServer) CancelQuery(
 	return output, nil
 }
 
+// PGWireCancelQuery responds to a pgwire query cancellation request, and
+// cancels  the target query's associated context and sets a cancellation flag.
+func (s *statusServer) PGWireCancelQuery(
+	ctx context.Context, req *serverpb.PGWireCancelQueryRequest,
+) (*serverpb.PGWireCancelQueryResponse, error) {
+	var output = &serverpb.PGWireCancelQueryResponse{}
+	return output, nil
+}
+
 // ListContentionEvents returns a list of contention events on all nodes in the
 // cluster.
 func (s *statusServer) ListContentionEvents(
