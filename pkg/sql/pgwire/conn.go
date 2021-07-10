@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -351,7 +352,7 @@ func (c *conn) serveImpl(
 		close(dummyCh)
 		procCh = dummyCh
 
-		if err := c.sendReadyForQuery(); err != nil {
+		if err := c.sendReadyForQuery(0 /* queryCancelKey */); err != nil {
 			reserved.Close(ctx)
 			return
 		}
@@ -736,24 +737,19 @@ func (c *conn) sendInitialConnData(
 		return sql.ConnectionHandler{}, err
 	}
 
-	if err := c.sendReadyForQuery(); err != nil {
+	if err := c.sendReadyForQuery(connHandler.GetQueryCancelKey()); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 	return connHandler, nil
 }
 
 // sendReadyForQuery sends the final messages of the connection handshake.
-// This includes a placeholder BackendKeyData message and a ServerMsgReady
+// This includes a BackendKeyData message and a ServerMsgReady
 // message indicating that there is no active transaction.
-func (c *conn) sendReadyForQuery() error {
-	// Send the client a dummy BackendKeyData message. This is necessary for
-	// compatibility with tools that require this message. This information is
-	// normally used by clients to send a CancelRequest message:
-	// https://www.postgresql.org/docs/9.6/static/protocol-flow.html#AEN112861
-	// CockroachDB currently ignores all CancelRequests.
+func (c *conn) sendReadyForQuery(queryCancelKey pgwirecancel.BackendKeyData) error {
+	// Send our BackendKeyData to the client, so they can cancel the connection.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBackendKeyData)
-	c.msgBuilder.putInt32(0)
-	c.msgBuilder.putInt32(0)
+	c.msgBuilder.putInt64(int64(queryCancelKey))
 	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
 		return err
 	}
