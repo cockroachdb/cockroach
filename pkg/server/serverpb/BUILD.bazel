@@ -65,6 +65,7 @@ go_proto_library(
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/contentionpb",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/storage/enginepb",
         "//pkg/ts/catalog",
         "//pkg/util",
