@@ -42,6 +42,7 @@ go_library(
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",  # keep
         "@org_golang_google_grpc//status",
+        "@org_uber_go_atomic//:atomic",
     ],
 )
 
