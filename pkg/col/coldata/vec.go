@@ -19,7 +19,10 @@ import (
 )
 
 // Column is an interface that represents a raw array of a Go native type.
-type Column interface{}
+type Column interface {
+	// Len returns the number of elements in the Column.
+	Len() int
+}
 
 // SliceArgs represents the arguments passed in to Vec.Append and Nulls.set.
 type SliceArgs struct {
@@ -87,10 +90,10 @@ type Vec interface {
 	Datum() DatumVec
 
 	// Col returns the raw, typeless backing storage for this Vec.
-	Col() interface{}
+	Col() Column
 
 	// SetCol sets the member column (in the case of mutable columns).
-	SetCol(interface{})
+	SetCol(Column)
 
 	// TemplateType returns an []interface{} and is used for operator templates.
 	// Do not call this from normal code - it'll always panic.
@@ -225,7 +228,7 @@ func (m *memColumn) IsBytesLike() bool {
 	return false
 }
 
-func (m *memColumn) SetCol(col interface{}) {
+func (m *memColumn) SetCol(col Column) {
 	m.col = col
 }
 
@@ -273,7 +276,7 @@ func (m *memColumn) Datum() DatumVec {
 	return m.col.(DatumVec)
 }
 
-func (m *memColumn) Col() interface{} {
+func (m *memColumn) Col() Column {
 	return m.col
 }
 
@@ -294,37 +297,7 @@ func (m *memColumn) SetNulls(n *Nulls) {
 }
 
 func (m *memColumn) Length() int {
-	switch m.CanonicalTypeFamily() {
-	case types.BoolFamily:
-		return len(m.col.(Bools))
-	case types.BytesFamily:
-		return m.Bytes().Len()
-	case types.IntFamily:
-		switch m.t.Width() {
-		case 16:
-			return len(m.col.(Int16s))
-		case 32:
-			return len(m.col.(Int32s))
-		case 0, 64:
-			return len(m.col.(Int64s))
-		default:
-			panic(fmt.Sprintf("unexpected int width: %d", m.t.Width()))
-		}
-	case types.FloatFamily:
-		return len(m.col.(Float64s))
-	case types.DecimalFamily:
-		return len(m.col.(Decimals))
-	case types.TimestampTZFamily:
-		return len(m.col.(Times))
-	case types.IntervalFamily:
-		return len(m.col.(Durations))
-	case types.JsonFamily:
-		return m.JSON().Len()
-	case typeconv.DatumVecCanonicalTypeFamily:
-		return m.col.(DatumVec).Len()
-	default:
-		panic(fmt.Sprintf("unhandled type %s", m.t))
-	}
+	return m.col.Len()
 }
 
 func (m *memColumn) Capacity() int {
