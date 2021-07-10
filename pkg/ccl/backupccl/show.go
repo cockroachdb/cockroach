@@ -172,7 +172,7 @@ func showBackupPlanHook(
 				KMSInfo: defaultKMSInfo}
 		}
 
-		incPaths, err := findPriorBackupNames(ctx, store)
+		incPaths, err := FindPriorBackups(ctx, store, IncludeManifest)
 		if err != nil {
 			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
 				// If we do not support listing, we have to just assume there are none
@@ -537,12 +537,12 @@ func showBackupsInCollectionPlanHook(
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer store.Close()
-		res, err := store.ListFiles(ctx, "/*/*/*/"+backupManifestName)
+		res, err := ListFullBackupsInCollection(ctx, store)
 		if err != nil {
 			return err
 		}
 		for _, i := range res {
-			resultsCh <- tree.Datums{tree.NewDString(strings.TrimSuffix(i, "/"+backupManifestName))}
+			resultsCh <- tree.Datums{tree.NewDString(i)}
 		}
 		return nil
 	}

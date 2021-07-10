@@ -123,7 +123,7 @@ func resolveDest(
 		if exists {
 			// The backup in the auto-append directory is the full backup.
 			prevBackupURIs = append(prevBackupURIs, defaultURI)
-			priors, err := findPriorBackupLocations(ctx, defaultStore)
+			priors, err := FindPriorBackups(ctx, defaultStore, OmitManifest)
 			for _, prior := range priors {
 				priorURI, err := url.Parse(defaultURI)
 				if err != nil {

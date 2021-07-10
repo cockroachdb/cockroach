@@ -118,6 +118,10 @@ func (s *workloadStorage) ListFiles(_ context.Context, _ string) ([]string, erro
 	return nil, errors.Errorf(`workload storage does not support listing files`)
 }
 
+func (s *workloadStorage) List(_ context.Context, _, _ string, _ cloud.ListingFn) error {
+	return errors.Errorf(`workload storage does not support listing files`)
+}
+
 func (s *workloadStorage) Delete(_ context.Context, _ string) error {
 	return errors.Errorf(`workload storage does not support deletes`)
 }
