@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -209,11 +208,7 @@ func (c *sqlConn) tryEnableServerExecutionTimings() {
 	}
 }
 
-func (c *sqlConn) GetServerMetadata() (
-	nodeID roachpb.NodeID,
-	version, clusterID string,
-	err error,
-) {
+func (c *sqlConn) GetServerMetadata() (nodeID int32, version, clusterID string, err error) {
 	// Retrieve the node ID and server build info.
 	rows, err := c.Query("SELECT * FROM crdb_internal.node_build_info", nil)
 	if errors.Is(err, driver.ErrBadConn) {
@@ -246,7 +241,7 @@ func (c *sqlConn) GetServerMetadata() (
 			if err != nil {
 				return 0, "", "", errors.Newf("incorrect data while retrieving node id: %v", err)
 			}
-			nodeID = roachpb.NodeID(id)
+			nodeID = int32(id)
 
 			// Fields for v1.0 compatibility.
 		case "Distribution":

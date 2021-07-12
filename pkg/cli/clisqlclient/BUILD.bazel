@@ -19,7 +19,6 @@ go_library(
         "//pkg/build",
         "//pkg/cli/clicfg",
         "//pkg/cli/clierror",
-        "//pkg/roachpb",
         "//pkg/security/pprompt",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
