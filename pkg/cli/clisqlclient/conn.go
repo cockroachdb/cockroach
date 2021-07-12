@@ -24,8 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -450,14 +448,14 @@ func (c *sqlConn) getLastQueryStatisticsInternal() (
 		jobsLatencyRaw = toString(vals[4])
 	}
 
-	parsedExecLatency, e1 := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, execLatencyRaw)
-	parsedServiceLatency, e2 := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, serviceLatencyRaw)
-	parsedPlanLatency, e3 := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, planLatencyRaw)
-	parsedParseLatency, e4 := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, parseLatencyRaw)
+	parsedExecLatency, e1 := stringToDuration(execLatencyRaw)
+	parsedServiceLatency, e2 := stringToDuration(serviceLatencyRaw)
+	parsedPlanLatency, e3 := stringToDuration(planLatencyRaw)
+	parsedParseLatency, e4 := stringToDuration(parseLatencyRaw)
 	var e5 error
-	var parsedJobsLatency *tree.DInterval
+	var parsedJobsLatency time.Duration
 	if containsJobLat {
-		parsedJobsLatency, e5 = tree.ParseDInterval(duration.IntervalStyle_POSTGRES, jobsLatencyRaw)
+		parsedJobsLatency, e5 = stringToDuration(jobsLatencyRaw)
 	}
 	if err := errors.CombineErrors(e1,
 		errors.CombineErrors(e2,
@@ -467,15 +465,11 @@ func (c *sqlConn) getLastQueryStatisticsInternal() (
 			errors.Wrap(err, "invalid interval value in SHOW LAST QUERY STATISTICS")
 	}
 
-	if containsJobLat {
-		jobsLat = time.Duration(parsedJobsLatency.Duration.Nanos())
-	}
-
-	return time.Duration(parsedParseLatency.Duration.Nanos()),
-		time.Duration(parsedPlanLatency.Duration.Nanos()),
-		time.Duration(parsedExecLatency.Duration.Nanos()),
-		time.Duration(parsedServiceLatency.Duration.Nanos()),
-		jobsLat,
+	return parsedParseLatency,
+		parsedPlanLatency,
+		parsedExecLatency,
+		parsedServiceLatency,
+		parsedJobsLatency,
 		containsJobLat,
 		nil
 }
