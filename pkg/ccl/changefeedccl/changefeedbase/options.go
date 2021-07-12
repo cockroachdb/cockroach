@@ -26,24 +26,25 @@ type SchemaChangePolicy string
 
 // Constants for the options.
 const (
-	OptAvroSchemaPrefix         = `avro_schema_prefix`
-	OptConfluentSchemaRegistry  = `confluent_schema_registry`
-	OptCursor                   = `cursor`
-	OptEnvelope                 = `envelope`
-	OptFormat                   = `format`
-	OptFullTableName            = `full_table_name`
-	OptKeyInValue               = `key_in_value`
-	OptTopicInValue             = `topic_in_value`
-	OptResolvedTimestamps       = `resolved`
-	OptUpdatedTimestamps        = `updated`
-	OptMVCCTimestamps           = `mvcc_timestamp`
-	OptDiff                     = `diff`
-	OptCompression              = `compression`
-	OptSchemaChangeEvents       = `schema_change_events`
-	OptSchemaChangePolicy       = `schema_change_policy`
-	OptProtectDataFromGCOnPause = `protect_data_from_gc_on_pause`
-	OptWebhookAuthHeader        = `webhook_auth_header`
-	OptWebhookClientTimeout     = `webhook_client_timeout`
+	OptAvroSchemaPrefix          = `avro_schema_prefix`
+	OptConfluentSchemaRegistry   = `confluent_schema_registry`
+	OptCursor                    = `cursor`
+	OptDisableProtectedTimestamp = `disable_protected_timestamp`
+	OptEnvelope                  = `envelope`
+	OptFormat                    = `format`
+	OptFullTableName             = `full_table_name`
+	OptKeyInValue                = `key_in_value`
+	OptTopicInValue              = `topic_in_value`
+	OptResolvedTimestamps        = `resolved`
+	OptUpdatedTimestamps         = `updated`
+	OptMVCCTimestamps            = `mvcc_timestamp`
+	OptDiff                      = `diff`
+	OptCompression               = `compression`
+	OptSchemaChangeEvents        = `schema_change_events`
+	OptSchemaChangePolicy        = `schema_change_policy`
+	OptProtectDataFromGCOnPause  = `protect_data_from_gc_on_pause`
+	OptWebhookAuthHeader         = `webhook_auth_header`
+	OptWebhookClientTimeout      = `webhook_client_timeout`
 
 	// OptSchemaChangeEventClassColumnChange corresponds to all schema change
 	// events which add or remove any column.
@@ -126,25 +127,26 @@ const (
 // ChangefeedOptionExpectValues is used to parse changefeed options using
 // PlanHookState.TypeAsStringOpts().
 var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
-	OptAvroSchemaPrefix:         sql.KVStringOptRequireValue,
-	OptConfluentSchemaRegistry:  sql.KVStringOptRequireValue,
-	OptCursor:                   sql.KVStringOptRequireValue,
-	OptEnvelope:                 sql.KVStringOptRequireValue,
-	OptFormat:                   sql.KVStringOptRequireValue,
-	OptFullTableName:            sql.KVStringOptRequireNoValue,
-	OptKeyInValue:               sql.KVStringOptRequireNoValue,
-	OptTopicInValue:             sql.KVStringOptRequireNoValue,
-	OptResolvedTimestamps:       sql.KVStringOptAny,
-	OptUpdatedTimestamps:        sql.KVStringOptRequireNoValue,
-	OptMVCCTimestamps:           sql.KVStringOptRequireNoValue,
-	OptDiff:                     sql.KVStringOptRequireNoValue,
-	OptCompression:              sql.KVStringOptRequireValue,
-	OptSchemaChangeEvents:       sql.KVStringOptRequireValue,
-	OptSchemaChangePolicy:       sql.KVStringOptRequireValue,
-	OptInitialScan:              sql.KVStringOptRequireNoValue,
-	OptNoInitialScan:            sql.KVStringOptRequireNoValue,
-	OptProtectDataFromGCOnPause: sql.KVStringOptRequireNoValue,
-	OptKafkaSinkConfig:          sql.KVStringOptRequireValue,
-	OptWebhookAuthHeader:        sql.KVStringOptRequireValue,
-	OptWebhookClientTimeout:     sql.KVStringOptRequireValue,
+	OptAvroSchemaPrefix:          sql.KVStringOptRequireValue,
+	OptConfluentSchemaRegistry:   sql.KVStringOptRequireValue,
+	OptCursor:                    sql.KVStringOptRequireValue,
+	OptDisableProtectedTimestamp: sql.KVStringOptRequireNoValue,
+	OptEnvelope:                  sql.KVStringOptRequireValue,
+	OptFormat:                    sql.KVStringOptRequireValue,
+	OptFullTableName:             sql.KVStringOptRequireNoValue,
+	OptKeyInValue:                sql.KVStringOptRequireNoValue,
+	OptTopicInValue:              sql.KVStringOptRequireNoValue,
+	OptResolvedTimestamps:        sql.KVStringOptAny,
+	OptUpdatedTimestamps:         sql.KVStringOptRequireNoValue,
+	OptMVCCTimestamps:            sql.KVStringOptRequireNoValue,
+	OptDiff:                      sql.KVStringOptRequireNoValue,
+	OptCompression:               sql.KVStringOptRequireValue,
+	OptSchemaChangeEvents:        sql.KVStringOptRequireValue,
+	OptSchemaChangePolicy:        sql.KVStringOptRequireValue,
+	OptInitialScan:               sql.KVStringOptRequireNoValue,
+	OptNoInitialScan:             sql.KVStringOptRequireNoValue,
+	OptProtectDataFromGCOnPause:  sql.KVStringOptRequireNoValue,
+	OptKafkaSinkConfig:           sql.KVStringOptRequireValue,
+	OptWebhookAuthHeader:         sql.KVStringOptRequireValue,
+	OptWebhookClientTimeout:      sql.KVStringOptRequireValue,
 }
