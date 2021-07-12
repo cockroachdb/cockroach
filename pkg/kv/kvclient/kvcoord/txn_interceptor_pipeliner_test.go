@@ -1332,6 +1332,81 @@ func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 	require.NotNil(t, br)
 }
 
+// TestTxnPipelinerIgnoresLocksOnUnambiguousFailure tests that when a request
+// returns with an unambiguous error, the locks that it attempted to acquire
+// from the specific request that hit the error (but not any other in the batch)
+// are NOT added to the lock footprint.
+func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
+
+	txn := makeTxnProto()
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	keyD, keyE, keyF := roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
+
+	// Return a ConditionalFailed error for a CPut. The lock spans correspond to
+	// the CPut are not added to the lock footprint, but the lock spans for all
+	// other requests in the batch are.
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.ConditionalPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba.Add(&roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyB, EndKey: keyB.Next()}})
+	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLocking: lock.Exclusive})
+
+	condFailedErr := roachpb.NewError(&roachpb.ConditionFailedError{})
+	condFailedErr.SetErrorIndex(0)
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 3)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.ConditionalPutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[2].GetInner())
+
+		return nil, condFailedErr
+	})
+
+	br, pErr := tp.SendLocked(ctx, ba)
+	require.Nil(t, br)
+	require.Equal(t, condFailedErr, pErr)
+	require.Equal(t, 0, tp.ifWrites.len())
+
+	var expLocks []roachpb.Span
+	expLocks = append(expLocks, roachpb.Span{Key: keyB, EndKey: keyB.Next()})
+	expLocks = append(expLocks, roachpb.Span{Key: keyC, EndKey: keyC.Next()})
+	require.Equal(t, expLocks, tp.lockFootprint.asSlice())
+
+	// Return a WriteIntentError for a Scan. The lock spans correspond to the Scan
+	// are not added to the lock footprint, but the lock spans for all other
+	// requests in the batch are.
+	ba.Requests = nil
+	ba.Add(&roachpb.ConditionalPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}})
+	ba.Add(&roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyE, EndKey: keyE.Next()}})
+	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLocking: lock.Exclusive})
+
+	writeIntentErr := roachpb.NewError(&roachpb.WriteIntentError{})
+	writeIntentErr.SetErrorIndex(2)
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 3)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.ConditionalPutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[2].GetInner())
+
+		return nil, writeIntentErr
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, br)
+	require.Equal(t, writeIntentErr, pErr)
+	require.Equal(t, 0, tp.ifWrites.len())
+
+	expLocks = append(expLocks, roachpb.Span{Key: keyD})
+	expLocks = append(expLocks, roachpb.Span{Key: keyE, EndKey: keyE.Next()})
+	require.Equal(t, expLocks, tp.lockFootprint.asSlice())
+}
+
 // Test that the pipeliners knows how to save and restore its state.
 func TestTxnPipelinerSavepoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
