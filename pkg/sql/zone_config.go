@@ -126,14 +126,6 @@ func getZoneConfig(
 		return rootID, zone, placeholderID, placeholder, nil
 	}
 
-	// TODO(arul): For now, secondary tenants get this static default zone config.
-	//  We probably want to seed system.zones with a default zone configuration
-	//  eventually though.
-	if id == keys.RootNamespaceID && !codec.ForSystemTenant() {
-		defaultZoneConfig := zonepb.DefaultZoneConfig()
-		return keys.RootNamespaceID, &defaultZoneConfig, 0, nil, nil
-	}
-
 	// No descriptor or not a table.
 	return 0, nil, 0, nil, errNoZoneConfigApplies
 }

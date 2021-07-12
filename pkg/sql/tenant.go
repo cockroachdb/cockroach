@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -178,6 +179,15 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 		kvs = append(kvs, tenantSettingKV)
 	}
 
+	{
+		// Seed the tenant with a default zone configuration.
+		tenantZoneConfigKVs, err := generateTenantDefaultZoneConfigKVs(codec)
+		if err != nil {
+			return err
+		}
+		kvs = append(kvs, tenantZoneConfigKVs...)
+	}
+
 	b := p.Txn().NewBatch()
 	for _, kv := range kvs {
 		b.CPut(kv.Key, &kv.Value, nil)
@@ -247,6 +257,44 @@ func generateTenantClusterSettingKV(
 	return roachpb.KeyValue{
 		Key:   kvs[0].Key,
 		Value: kvs[0].Value,
+	}, nil
+}
+
+func generateTenantDefaultZoneConfigKVs(codec keys.SQLCodec) ([]roachpb.KeyValue, error) {
+	defaultZoneConfig := zonepb.DefaultZoneConfig()
+	defaultZoneConfigProto, err := protoutil.Marshal(&defaultZoneConfig)
+	if err != nil {
+		return nil, err
+	}
+	kvs, err := rowenc.EncodePrimaryIndex(
+		codec,
+		systemschema.ZonesTable,
+		systemschema.ZonesTable.GetPrimaryIndex(),
+		catalog.ColumnIDToOrdinalMap(systemschema.ZonesTable.PublicColumns()),
+		[]tree.Datum{
+			tree.NewDInt(keys.RootNamespaceID),                  // id
+			tree.NewDBytes(tree.DBytes(defaultZoneConfigProto)), // config
+		},
+		false, /* includeEmpty */
+	)
+	if err != nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(
+			err, "failed to encode default zone config",
+		)
+	}
+	if len(kvs) != 2 {
+		return nil, errors.AssertionFailedf(
+			"failed to encode default zone config: expected 2 column families, got %d %v", len(kvs), kvs)
+	}
+	return []roachpb.KeyValue{
+		{
+			Key:   kvs[0].Key,
+			Value: kvs[0].Value,
+		},
+		{
+			Key:   kvs[1].Key,
+			Value: kvs[1].Value,
+		},
 	}, nil
 }
 
