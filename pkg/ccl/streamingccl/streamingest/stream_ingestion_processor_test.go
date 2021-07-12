@@ -113,6 +113,10 @@ func (m *mockStreamClient) ConsumePartition(
 	return eventCh, nil, nil
 }
 
+func (m *mockStreamClient) ConsumeGeneration() (chan streamingccl.Event, error) {
+	panic("unimplemented mock method")
+}
+
 // RegisterInterception implements the InterceptableStreamClient interface.
 func (m *mockStreamClient) RegisterInterception(fn streamclient.InterceptFn) {
 	m.mu.Lock()
@@ -137,6 +141,10 @@ func (m *errorStreamClient) ConsumePartition(
 	_ context.Context, _ streamingccl.PartitionAddress, _ hlc.Timestamp,
 ) (chan streamingccl.Event, chan error, error) {
 	return nil, nil, errors.New("this client always returns an error")
+}
+
+func (m *errorStreamClient) ConsumeGeneration() (chan streamingccl.Event, error) {
+	panic("unimplemented mock method")
 }
 
 func TestStreamIngestionProcessor(t *testing.T) {

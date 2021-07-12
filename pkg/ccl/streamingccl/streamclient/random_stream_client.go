@@ -370,6 +370,10 @@ func (m *randomStreamClient) ConsumePartition(
 	return eventCh, nil, nil
 }
 
+func (m *randomStreamClient) ConsumeGeneration() (chan streamingccl.Event, error) {
+	return nil, nil
+}
+
 func rekey(tenantID roachpb.TenantID, k roachpb.Key) roachpb.Key {
 	// Strip old prefix.
 	tenantPrefix := keys.MakeTenantPrefix(tenantID)

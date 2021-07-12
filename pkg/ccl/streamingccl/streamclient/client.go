@@ -30,6 +30,10 @@ type Client interface {
 	// Canceling the context will stop reading the partition and close the event
 	// channel.
 	ConsumePartition(ctx context.Context, address streamingccl.PartitionAddress, startTime hlc.Timestamp) (chan streamingccl.Event, chan error, error)
+
+	// ConsumeGeneration returns a channel on which we can start listening for
+	// GenerationEvents from partitions.
+	ConsumeGeneration() (chan streamingccl.Event, error)
 }
 
 // NewStreamClient creates a new stream client based on the stream

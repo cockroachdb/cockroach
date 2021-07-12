@@ -52,6 +52,10 @@ func (sc testStreamClient) ConsumePartition(
 	return events, nil, nil
 }
 
+func (sc testStreamClient) ConsumeGeneration() (chan streamingccl.Event, error) {
+	panic("unimplemented mock method")
+}
+
 // ExampleClientUsage serves as documentation to indicate how a stream
 // client could be used.
 func ExampleClient() {

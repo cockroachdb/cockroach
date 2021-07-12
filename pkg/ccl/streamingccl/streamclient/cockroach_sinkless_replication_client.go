@@ -23,7 +23,9 @@ import (
 )
 
 // sinklessReplicationClient creates and reads a stream from the source cluster.
-type sinklessReplicationClient struct{}
+type sinklessReplicationClient struct {
+	generationEventCh chan streamingccl.Event
+}
 
 var _ Client = &sinklessReplicationClient{}
 
@@ -85,10 +87,12 @@ func (m *sinklessReplicationClient) ConsumePartition(
 
 	eventCh := make(chan streamingccl.Event)
 	errCh := make(chan error, 1)
+	m.generationEventCh = make(chan streamingccl.Event, 1)
 
 	go func() {
 		defer close(eventCh)
 		defer close(errCh)
+		defer close(m.generationEventCh)
 		defer db.Close()
 		defer rows.Close()
 		for rows.Next() {
@@ -128,6 +132,7 @@ func (m *sinklessReplicationClient) ConsumePartition(
 			if errors.Is(err, driver.ErrBadConn) {
 				select {
 				case eventCh <- streamingccl.MakeGenerationEvent():
+					m.generationEventCh <- streamingccl.MakeGenerationEvent()
 				case <-ctx.Done():
 					errCh <- ctx.Err()
 				}
@@ -139,4 +144,8 @@ func (m *sinklessReplicationClient) ConsumePartition(
 	}()
 
 	return eventCh, errCh, nil
+}
+
+func (m *sinklessReplicationClient) ConsumeGeneration() (chan streamingccl.Event, error) {
+	return m.generationEventCh, nil
 }
