@@ -4,8 +4,10 @@ go_library(
     name = "lexbase",
     srcs = [
         "encode.go",
+        "keywords.go",
         "normalize.go",
         "predicates.go",
+        "tokens.go",
         ":gen-reserved-keywords",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/lexbase",

@@ -17,6 +17,7 @@ go_library(
         "//pkg/ccl/storageccl",
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/streamclient",
+        "//pkg/ccl/streamingccl/streamingutils",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",

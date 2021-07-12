@@ -27,27 +27,9 @@ func init() {
 func doCompleteIngestion(
 	evalCtx *tree.EvalContext, txn *kv.Txn, jobID int, cutoverTimestamp hlc.Timestamp,
 ) error {
-	// Get the job payload for job_id.
-	const jobsQuery = `SELECT progress FROM system.jobs WHERE id=$1 FOR UPDATE`
-	row, err := evalCtx.InternalExecutor.QueryRow(evalCtx.Context,
-		"get-stream-ingestion-job-metadata", txn, jobsQuery, jobID)
+	progress, sp, err := loadJobProgress(evalCtx, txn, jobID)
 	if err != nil {
 		return err
-	}
-	// If an entry does not exist for the provided job_id we return an
-	// error.
-	if row == nil {
-		return errors.Newf("job %d: not found in system.jobs table", jobID)
-	}
-
-	progress, err := jobs.UnmarshalProgress(row[0])
-	if err != nil {
-		return err
-	}
-	var sp *jobspb.Progress_StreamIngest
-	var ok bool
-	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
-		return errors.Newf("job %d: not of expected type StreamIngest", jobID)
 	}
 
 	// Check that the supplied cutover time is a valid one.
@@ -76,6 +58,53 @@ func doCompleteIngestion(
 	// Update the sentinel being polled by the stream ingestion job to
 	// check if a complete has been signaled.
 	sp.StreamIngest.CutoverTime = cutoverTimestamp
+	sp.StreamIngest.CutoverTriggeredBy = jobspb.StreamIngestionProgress_JobCompletion
+	return setJobProgress(evalCtx, txn, jobID, progress)
+}
+
+func DoGenerationSwitchover(evalCtx *tree.EvalContext, txn *kv.Txn, jobID int) error {
+	progress, sp, err := loadJobProgress(evalCtx, txn, jobID)
+	if err != nil {
+		return err
+	}
+
+	hw := progress.GetHighWater()
+	sp.StreamIngest.CutoverTime = *hw
+	sp.StreamIngest.CutoverTriggeredBy = jobspb.StreamIngestionProgress_Generation
+	return setJobProgress(evalCtx, txn, jobID, progress)
+}
+
+func loadJobProgress(
+	evalCtx *tree.EvalContext, txn *kv.Txn, jobID int,
+) (*jobspb.Progress, *jobspb.Progress_StreamIngest, error) {
+	// Get the job payload for job_id.
+	const jobsQuery = `SELECT progress FROM system.jobs WHERE id=$1 FOR UPDATE`
+	row, err := evalCtx.InternalExecutor.QueryRow(evalCtx.Context,
+		"get-stream-ingestion-job-metadata", txn, jobsQuery, jobID)
+	if err != nil {
+		return nil, nil, err
+	}
+	// If an entry does not exist for the provided job_id we return an
+	// error.
+	if row == nil {
+		return nil, nil, errors.Newf("job %d: not found in system.jobs table", jobID)
+	}
+
+	progress, err := jobs.UnmarshalProgress(row[0])
+	if err != nil {
+		return nil, nil, err
+	}
+	var sp *jobspb.Progress_StreamIngest
+	var ok bool
+	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
+		return nil, nil, errors.Newf("job %d: not of expected type StreamIngest", jobID)
+	}
+	return progress, sp, nil
+}
+
+func setJobProgress(
+	evalCtx *tree.EvalContext, txn *kv.Txn, jobID int, progress *jobspb.Progress,
+) error {
 	progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
 	progressBytes, err := protoutil.Marshal(progress)
 	if err != nil {
