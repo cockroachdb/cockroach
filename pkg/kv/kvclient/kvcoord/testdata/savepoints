@@ -368,6 +368,47 @@ subtest end
 
 
 
+subtest rollback_after_write_intent_error
+# Write intent errors are white-listed to allow a rollback to savepoint afterwards.
+# They make their way back up to the kv client when requests are run with an Error
+# wait policy.
+
+# NB: we're going to leak this txn, so write to an otherwise unused key.
+begin
+----
+0 <noignore>
+
+put conflict-key a
+----
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+get conflict-key locking nowait
+----
+(*roachpb.WriteIntentError) conflicting intents on "conflict-key"
+
+rollback x
+----
+0 <noignore>
+
+put conflict-key b nowait
+----
+(*roachpb.WriteIntentError) conflicting intents on "conflict-key"
+
+rollback x
+----
+1 [1-1]
+
+subtest end
+
+
+
 subtest rollback_after_random_err
 # Only CPut errors allow rollbacks after them. Any other error results in the rollback failing.
 

@@ -81,9 +81,10 @@ const (
 	// written. We allow the transaction to continue after such errors; we also
 	// allow RollbackToSavepoint() to be called after such errors. In particular,
 	// this is useful for SQL which wants to allow rolling back to a savepoint
-	// after ConditionFailedErrors (uniqueness violations). With continuing after
-	// errors its important for the coordinator to track the timestamp at which
-	// intents might have been written.
+	// after ConditionFailedErrors (uniqueness violations) and WriteIntentError
+	// (lock not available errors). With continuing after errors its important for
+	// the coordinator to track the timestamp at which intents might have been
+	// written.
 	//
 	// Note that all the lower scores also are unambiguous in this sense, so this
 	// score can be seen as an upper-bound for unambiguous errors.
@@ -132,11 +133,12 @@ func ErrPriority(err error) ErrorPriority {
 			return ErrorScoreTxnAbort
 		}
 		return ErrorScoreTxnRestart
-	case *ConditionFailedError:
+	case *ConditionFailedError, *WriteIntentError:
 		// We particularly care about returning the low ErrorScoreUnambiguousError
-		// because we don't want to transition a transaction that encounters
-		// ConditionFailedError to an error state. More specifically, we want to
-		// allow rollbacks to savepoint after a ConditionFailedError.
+		// because we don't want to transition a transaction that encounters a
+		// ConditionFailedError or a WriteIntentError to an error state. More
+		// specifically, we want to allow rollbacks to savepoint after one of these
+		// errors.
 		return ErrorScoreUnambiguousError
 	}
 	return ErrorScoreNonRetriable
