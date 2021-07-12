@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 // TestProtectedTimestampsDuringImportInto ensures that the timestamp at which
@@ -178,4 +180,63 @@ func getFirstStoreReplica(
 		return nil
 	})
 	return store, repl
+}
+
+func TestImportDisableProtectedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var allowRequest chan struct{}
+	var requestRecvd chan struct{}
+	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+			for _, ru := range ba.Requests {
+				switch ru.GetInner().(type) {
+				case *roachpb.AddSSTableRequest:
+					requestRecvd <- struct{}{}
+					<-allowRequest
+				}
+			}
+			return nil
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 1, params)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	conn := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+
+	requestRecvd = make(chan struct{})
+	allowRequest = make(chan struct{})
+	mkServer := func(method string, handler func(w http.ResponseWriter, r *http.Request)) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == method {
+				handler(w, r)
+			}
+		}))
+	}
+	srv1 := mkServer("GET", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("1,asdfasdfasdfasdf"))
+	})
+	defer srv1.Close()
+	g, _ := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		runner.Exec(t, `IMPORT INTO foo (k, v) CSV DATA ($1) WITH DISABLE_PROTECTED_TIMESTAMP`, srv1.URL)
+		return nil
+	})
+
+	<-requestRecvd
+	runner.CheckQueryResults(t, `SELECT count(*) FROM system.protected_ts_records`, [][]string{{"0"}})
+	close(allowRequest)
+	close(requestRecvd)
+	runner.CheckQueryResultsRetry(t, `SELECT status FROM system.jobs ORDER BY created DESC LIMIT 1`, [][]string{{"succeeded"}})
 }
