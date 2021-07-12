@@ -18,6 +18,7 @@ go_library(
         "//pkg/cli/clicfg",
         "//pkg/cli/clisqlclient",
         "//pkg/sql/lex",
+        "//pkg/sql/lexbase",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/util",
