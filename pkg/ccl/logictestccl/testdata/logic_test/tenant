@@ -44,3 +44,58 @@ SELECT * FROM crdb_internal.cluster_queries
 
 statement ok
 SELECT * FROM crdb_internal.cluster_contention_events
+
+# Selecting from crdb_internal.zones is allowed.
+query IITTTTTTTTTTTT
+SELECT * FROM crdb_internal.zones
+----
+0  0  RANGE default  default  NULL  NULL  NULL  NULL  NULL  range_min_bytes: 134217728
+range_max_bytes: 536870912
+gc:
+  ttlseconds: 90000
+global_reads: null
+num_replicas: 3
+num_voters: null
+constraints: []
+voter_constraints: []
+lease_preferences: []
+  ALTER RANGE default CONFIGURE ZONE USING
+  range_min_bytes = 134217728,
+  range_max_bytes = 536870912,
+  gc.ttlseconds = 90000,
+  num_replicas = 3,
+  constraints = '[]',
+  lease_preferences = '[]'  [16 128 128 128 64 24 128 128 128 128 2 34 4 8 144 191 5 40 3 80 0 88 0 120 1]  range_min_bytes: 134217728
+range_max_bytes: 536870912
+gc:
+  ttlseconds: 90000
+global_reads: null
+num_replicas: 3
+num_voters: null
+constraints: []
+voter_constraints: []
+lease_preferences: []
+  ALTER RANGE default CONFIGURE ZONE USING
+  range_min_bytes = 134217728,
+  range_max_bytes = 536870912,
+  gc.ttlseconds = 90000,
+  num_replicas = 3,
+  constraints = '[]',
+  lease_preferences = '[]'
+
+statement ok
+CREATE TABLE t();
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t
+----
+TABLE t  ALTER TABLE t CONFIGURE ZONE USING
+         range_min_bytes = 134217728,
+         range_max_bytes = 536870912,
+         gc.ttlseconds = 90000,
+         num_replicas = 5,
+         constraints = '[]',
+         lease_preferences = '[]'
