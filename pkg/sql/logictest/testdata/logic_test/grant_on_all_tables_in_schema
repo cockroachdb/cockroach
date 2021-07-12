@@ -1,0 +1,96 @@
+statement ok
+CREATE USER testuser2
+
+statement ok
+CREATE SCHEMA s;
+CREATE SCHEMA s2;
+
+# Granting in a schema with no tables should be okay.
+statement ok
+GRANT SELECT ON ALL TABLES IN SCHEMA s TO testuser
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  relation_name  grantee  privilege_type
+
+statement ok
+CREATE TABLE s.t();
+CREATE TABLE s2.t();
+
+statement ok
+GRANT SELECT ON ALL TABLES IN SCHEMA s TO testuser
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  relation_name  grantee   privilege_type
+test           s            t              testuser  SELECT
+
+statement ok
+GRANT SELECT ON ALL TABLES IN SCHEMA s, s2 TO testuser, testuser2
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  relation_name  grantee    privilege_type
+test           s            t              testuser   SELECT
+test           s            t              testuser2  SELECT
+test           s2           t              testuser   SELECT
+test           s2           t              testuser2  SELECT
+
+statement ok
+GRANT ALL ON ALL TABLES IN SCHEMA s, s2 TO testuser, testuser2
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  relation_name  grantee    privilege_type
+test           s            t              testuser   ALL
+test           s            t              testuser2  ALL
+test           s2           t              testuser   ALL
+test           s2           t              testuser2  ALL
+
+statement ok
+REVOKE SELECT ON ALL TABLES IN SCHEMA s, s2 FROM testuser, testuser2
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  relation_name  grantee    privilege_type
+test           s            t              testuser   CREATE
+test           s            t              testuser   DELETE
+test           s            t              testuser   DROP
+test           s            t              testuser   GRANT
+test           s            t              testuser   INSERT
+test           s            t              testuser   UPDATE
+test           s            t              testuser   ZONECONFIG
+test           s            t              testuser2  CREATE
+test           s            t              testuser2  DELETE
+test           s            t              testuser2  DROP
+test           s            t              testuser2  GRANT
+test           s            t              testuser2  INSERT
+test           s            t              testuser2  UPDATE
+test           s            t              testuser2  ZONECONFIG
+test           s2           t              testuser   CREATE
+test           s2           t              testuser   DELETE
+test           s2           t              testuser   DROP
+test           s2           t              testuser   GRANT
+test           s2           t              testuser   INSERT
+test           s2           t              testuser   UPDATE
+test           s2           t              testuser   ZONECONFIG
+test           s2           t              testuser2  CREATE
+test           s2           t              testuser2  DELETE
+test           s2           t              testuser2  DROP
+test           s2           t              testuser2  GRANT
+test           s2           t              testuser2  INSERT
+test           s2           t              testuser2  UPDATE
+test           s2           t              testuser2  ZONECONFIG
+
+statement ok
+REVOKE ALL ON ALL TABLES IN SCHEMA s, s2 FROM testuser, testuser2
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  relation_name  grantee  privilege_type

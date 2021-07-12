@@ -224,6 +224,38 @@ GRANT ALL ON SCHEMA a.b, c.d TO root -- fully parenthesized
 GRANT ALL ON SCHEMA a.b, c.d TO root -- literals removed
 GRANT ALL ON SCHEMA _._, _._ TO _ -- identifiers removed
 
+parse
+GRANT ALL ON ALL TABLES IN SCHEMA s1 TO root
+----
+GRANT ALL ON ALL TABLES IN SCHEMA s1 TO root
+GRANT ALL ON ALL TABLES IN SCHEMA s1 TO root -- fully parenthesized
+GRANT ALL ON ALL TABLES IN SCHEMA s1 TO root -- literals removed
+GRANT ALL ON ALL TABLES IN SCHEMA _ TO _ -- identifiers removed
+
+parse
+GRANT ALL ON ALL TABLES IN SCHEMA s1, s2 TO root
+----
+GRANT ALL ON ALL TABLES IN SCHEMA s1, s2 TO root
+GRANT ALL ON ALL TABLES IN SCHEMA s1, s2 TO root -- fully parenthesized
+GRANT ALL ON ALL TABLES IN SCHEMA s1, s2 TO root -- literals removed
+GRANT ALL ON ALL TABLES IN SCHEMA _, _ TO _ -- identifiers removed
+
+parse
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA s1, s2 TO root
+----
+GRANT ALL ON ALL TABLES IN SCHEMA s1, s2 TO root -- normalized!
+GRANT ALL ON ALL TABLES IN SCHEMA s1, s2 TO root -- fully parenthesized
+GRANT ALL ON ALL TABLES IN SCHEMA s1, s2 TO root -- literals removed
+GRANT ALL ON ALL TABLES IN SCHEMA _, _ TO _ -- identifiers removed
+
+parse
+GRANT SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 TO root, bar
+----
+GRANT SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 TO root, bar
+GRANT SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 TO root, bar -- fully parenthesized
+GRANT SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 TO root, bar -- literals removed
+GRANT SELECT, UPDATE ON ALL TABLES IN SCHEMA _, _ TO _, _ -- identifiers removed
+
 ## Tables are the default, but can also be specified with
 ## REVOKE x ON TABLE y. However, the stringer does not output TABLE.
 
@@ -416,6 +448,38 @@ REVOKE ALL ON SCHEMA a.b, c.d FROM root -- normalized!
 REVOKE ALL ON SCHEMA a.b, c.d FROM root -- fully parenthesized
 REVOKE ALL ON SCHEMA a.b, c.d FROM root -- literals removed
 REVOKE ALL ON SCHEMA _._, _._ FROM _ -- identifiers removed
+
+parse
+REVOKE ALL ON ALL TABLES IN SCHEMA s1 FROM root
+----
+REVOKE ALL ON ALL TABLES IN SCHEMA s1 FROM root
+REVOKE ALL ON ALL TABLES IN SCHEMA s1 FROM root -- fully parenthesized
+REVOKE ALL ON ALL TABLES IN SCHEMA s1 FROM root -- literals removed
+REVOKE ALL ON ALL TABLES IN SCHEMA _ FROM _ -- identifiers removed
+
+parse
+REVOKE ALL ON ALL TABLES IN SCHEMA s1, s2 FROM root
+----
+REVOKE ALL ON ALL TABLES IN SCHEMA s1, s2 FROM root
+REVOKE ALL ON ALL TABLES IN SCHEMA s1, s2 FROM root -- fully parenthesized
+REVOKE ALL ON ALL TABLES IN SCHEMA s1, s2 FROM root -- literals removed
+REVOKE ALL ON ALL TABLES IN SCHEMA _, _ FROM _ -- identifiers removed
+
+parse
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA s1, s2 FROM root
+----
+REVOKE ALL ON ALL TABLES IN SCHEMA s1, s2 FROM root -- normalized!
+REVOKE ALL ON ALL TABLES IN SCHEMA s1, s2 FROM root -- fully parenthesized
+REVOKE ALL ON ALL TABLES IN SCHEMA s1, s2 FROM root -- literals removed
+REVOKE ALL ON ALL TABLES IN SCHEMA _, _ FROM _ -- identifiers removed
+
+parse
+REVOKE SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 FROM root, bar
+----
+REVOKE SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 FROM root, bar
+REVOKE SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 FROM root, bar -- fully parenthesized
+REVOKE SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 FROM root, bar -- literals removed
+REVOKE SELECT, UPDATE ON ALL TABLES IN SCHEMA _, _ FROM _, _ -- identifiers removed
 
 # Ensure that the support for ON ROLE <namelist> doesn't leak
 # where it should not be recognized.
