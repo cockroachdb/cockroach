@@ -61,24 +61,9 @@ func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 		Auth:           uri.Query().Get(cloud.AuthParam),
 		BillingProject: uri.Query().Get(GoogleBillingProjectParam),
 		Credentials:    uri.Query().Get(CredentialsParam),
-		/* NB: additions here should also update gcsQueryParams() serializer */
 	}
 	conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 	return conf, nil
-}
-
-func gcsQueryParams(conf *roachpb.ExternalStorage_GCS) string {
-	q := make(url.Values)
-	if conf.Auth != "" {
-		q.Set(cloud.AuthParam, conf.Auth)
-	}
-	if conf.Credentials != "" {
-		q.Set(CredentialsParam, conf.Credentials)
-	}
-	if conf.BillingProject != "" {
-		q.Set(GoogleBillingProjectParam, conf.BillingProject)
-	}
-	return q.Encode()
 }
 
 type gcsStorage struct {
@@ -216,60 +201,6 @@ func (g *gcsStorage) ReadFileAt(
 		return nil, 0, err
 	}
 	return r, r.Reader.(*gcs.Reader).Attrs.Size, nil
-}
-
-func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
-	var fileList []string
-	it := g.bucket.Objects(ctx, &gcs.Query{
-		Prefix: cloud.GetPrefixBeforeWildcard(g.prefix),
-	})
-
-	pattern := g.prefix
-	if patternSuffix != "" {
-		if cloud.ContainsGlob(g.prefix) {
-			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
-		}
-		pattern = path.Join(pattern, patternSuffix)
-	}
-
-	ctx, sp := tracing.ChildSpan(ctx, "gcs.ListFiles")
-	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
-	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.ListFiles: %s", pattern)})
-
-	for {
-		attrs, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return nil, errors.Wrap(err, "unable to list files in gcs bucket")
-		}
-
-		matches, errMatch := path.Match(pattern, attrs.Name)
-		if errMatch != nil {
-			continue
-		}
-		if matches {
-			if patternSuffix != "" {
-				if !strings.HasPrefix(attrs.Name, g.prefix) {
-					// TODO(dt): return a nice rel-path instead of erroring out.
-					return nil, errors.New("pattern matched file outside of path")
-				}
-				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(attrs.Name, g.prefix), "/"))
-			} else {
-				gsURL := url.URL{
-					Scheme:   "gs",
-					Host:     attrs.Bucket,
-					Path:     attrs.Name,
-					RawQuery: gcsQueryParams(g.conf),
-				}
-				fileList = append(fileList, gsURL.String())
-			}
-		}
-	}
-
-	return fileList, nil
 }
 
 func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {

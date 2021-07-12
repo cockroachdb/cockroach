@@ -41,11 +41,6 @@ func GetPrefixBeforeWildcard(p string) string {
 	return path.Dir(p[:globIndex])
 }
 
-// ContainsGlob indicates if the string contains a glob-matching char.
-func ContainsGlob(str string) bool {
-	return strings.ContainsAny(str, "*?[")
-}
-
 // RedactKMSURI redacts the Master Key ID and the ExternalStorage secret
 // credentials.
 func RedactKMSURI(kmsURI string) (string, error) {
