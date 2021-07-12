@@ -1149,10 +1149,6 @@ func (ts *TestServer) SplitRangeWithExpiration(
 	splitKey roachpb.Key, expirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	ctx := context.Background()
-	splitRKey, err := keys.Addr(splitKey)
-	if err != nil {
-		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
-	}
 	splitReq := roachpb.AdminSplitRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: splitKey,
@@ -1181,40 +1177,27 @@ func (ts *TestServer) SplitRangeWithExpiration(
 	// non-retryable failures and then wrapped when the full transaction fails.
 	var wrappedMsg string
 	if err := ts.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		scanMeta := func(key roachpb.RKey, reverse bool) (desc roachpb.RangeDescriptor, err error) {
-			var kvs []kv.KeyValue
-			if reverse {
-				// Find the last range that ends at or before key.
-				kvs, err = txn.ReverseScan(
-					ctx, keys.Meta2Prefix, keys.RangeMetaKey(key.Next()), 1, /* one result */
-				)
-			} else {
-				// Find the first range that ends after key.
-				kvs, err = txn.Scan(
-					ctx, keys.RangeMetaKey(key.Next()), keys.Meta2Prefix.PrefixEnd(), 1, /* one result */
-				)
-			}
-			if err != nil {
-				return desc, err
-			}
-			if len(kvs) != 1 {
-				return desc, fmt.Errorf("expected 1 result, got %d", len(kvs))
-			}
-			err = kvs[0].ValueProto(&desc)
-			return desc, err
-		}
+		leftRangeDesc, rightRangeDesc = roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}
 
-		rightRangeDesc, err = scanMeta(splitRKey, false /* reverse */)
+		// Discovering the RHS is easy, but the LHS is more difficult. The easiest way to
+		// get both in one operation is to do a reverse range lookup on splitKey.Next();
+		// we need the .Next() because in reverse mode, the end key of a range is inclusive,
+		// i.e. looking up key `c` will match range [a,c), not [c, d).
+		// The result will be the right descriptor, and the first prefetched result will
+		// be the left neighbor, i.e. the resulting left hand side of the split.
+		rs, more, err := kv.RangeLookup(ctx, txn, splitKey.Next(), roachpb.CONSISTENT, 1, true /* reverse */)
 		if err != nil {
-			wrappedMsg = "could not look up right-hand side descriptor"
 			return err
 		}
-
-		leftRangeDesc, err = scanMeta(splitRKey, true /* reverse */)
-		if err != nil {
-			wrappedMsg = "could not look up left-hand side descriptor"
-			return err
+		if len(rs) == 0 {
+			// This is a bug.
+			return errors.AssertionFailedf("no descriptor found for key %s", splitKey)
 		}
+		if len(more) == 0 {
+			return errors.Errorf("looking up post-split descriptor returned first range: %+v", rs[0])
+		}
+		leftRangeDesc = more[0]
+		rightRangeDesc = rs[0]
 
 		if !leftRangeDesc.EndKey.Equal(rightRangeDesc.StartKey) {
 			return errors.Errorf(
