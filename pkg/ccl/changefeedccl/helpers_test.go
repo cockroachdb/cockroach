@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -62,8 +63,8 @@ func waitForSchemaChange(
 	})
 }
 
-func readNextMessages(f cdctest.TestFeed, numMessages int, stripTs bool) ([]string, error) {
-	var actual []string
+func readNextMessages(f cdctest.TestFeed, numMessages int) ([]cdctest.TestFeedMessage, error) {
+	var actual []cdctest.TestFeedMessage
 	for len(actual) < numMessages {
 		m, err := f.Next()
 		if log.V(1) {
@@ -80,53 +81,137 @@ func readNextMessages(f cdctest.TestFeed, numMessages int, stripTs bool) ([]stri
 			return nil, errors.AssertionFailedf(`expected message`)
 		}
 		if len(m.Key) > 0 || len(m.Value) > 0 {
-			var value []byte
-			if stripTs {
-				var message map[string]interface{}
-				if err := gojson.Unmarshal(m.Value, &message); err != nil {
-					return nil, errors.Newf(`unmarshal: %s: %s`, m.Value, err)
-				}
-				delete(message, "updated")
-				value, err = reformatJSON(message)
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				value = m.Value
-			}
-			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, value))
+			actual = append(actual,
+				cdctest.TestFeedMessage{
+					Topic: m.Topic,
+					Key:   m.Key,
+					Value: m.Value,
+				},
+			)
 		}
 	}
 	return actual, nil
 }
 
-func assertPayloadsBase(t testing.TB, f cdctest.TestFeed, expected []string, stripTs bool) {
-	t.Helper()
-	require.NoError(t, assertPayloadsBaseErr(f, expected, stripTs))
+func stripTsFromPayloads(payloads []cdctest.TestFeedMessage) ([]string, error) {
+	var actual []string
+	for _, m := range payloads {
+		var value []byte
+		var message map[string]interface{}
+		if err := gojson.Unmarshal(m.Value, &message); err != nil {
+			return nil, errors.Newf(`unmarshal: %s: %s`, m.Value, err)
+		}
+		delete(message, "updated")
+		value, err := reformatJSON(message)
+		if err != nil {
+			return nil, err
+		}
+		actual = append(actual, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, value))
+	}
+	return actual, nil
 }
 
-func assertPayloadsBaseErr(f cdctest.TestFeed, expected []string, stripTs bool) error {
-	actual, err := readNextMessages(f, len(expected), stripTs)
+func extractUpdatedFromValue(value []byte) (float64, error) {
+	var updatedRaw struct {
+		Updated string `json:"updated"`
+	}
+	if err := gojson.Unmarshal(value, &updatedRaw); err != nil {
+		return -1, errors.Newf(`unmarshal: %s: %s`, value, err)
+	}
+	updatedVal, err := strconv.ParseFloat(updatedRaw.Updated, 64)
+	if err != nil {
+		return -1, errors.Wrapf(err, "error parsing updated timestamp: %s", updatedRaw.Updated)
+	}
+	return updatedVal, nil
+
+}
+
+func checkPerKeyOrdering(payloads []cdctest.TestFeedMessage) (bool, error) {
+	// map key to list of timestamp, ensure each list is ordered
+	keysToTimestamps := make(map[string][]float64)
+	for _, msg := range payloads {
+		key := string(msg.Key)
+		updatedTimestamp, err := extractUpdatedFromValue(msg.Value)
+		if err != nil {
+			return false, err
+		}
+		if _, ok := keysToTimestamps[key]; !ok {
+			keysToTimestamps[key] = []float64{}
+		}
+		if len(keysToTimestamps[key]) > 0 {
+			if updatedTimestamp < keysToTimestamps[key][len(keysToTimestamps[key])-1] {
+				return false, nil
+			}
+		}
+		keysToTimestamps[key] = append(keysToTimestamps[key], updatedTimestamp)
+	}
+	return true, nil
+}
+
+func assertPayloadsBase(
+	t testing.TB, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
+) {
+	t.Helper()
+	require.NoError(t, assertPayloadsBaseErr(f, expected, stripTs, perKeyOrdered))
+}
+
+func assertPayloadsBaseErr(
+	f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
+) error {
+	actual, err := readNextMessages(f, len(expected))
 	if err != nil {
 		return err
 	}
+
+	var actualFormatted []string
+	for _, m := range actual {
+		actualFormatted = append(actualFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
+	}
+
+	if perKeyOrdered {
+		ordered, err := checkPerKeyOrdering(actual)
+		if err != nil {
+			return err
+		}
+		if !ordered {
+			return errors.Newf("payloads violate CDC per-key ordering guaranteees\n  %s",
+				strings.Join(actualFormatted, "\n  "))
+		}
+	}
+
+	// strip timestamps after checking per-key ordering since check uses timestamps
+	if stripTs {
+		// format again with timestamps stripped
+		actualFormatted, err = stripTsFromPayloads(actual)
+		if err != nil {
+			return nil
+		}
+	}
+
 	sort.Strings(expected)
-	sort.Strings(actual)
-	if !reflect.DeepEqual(expected, actual) {
+	sort.Strings(actualFormatted)
+	if !reflect.DeepEqual(expected, actualFormatted) {
 		return errors.Newf("expected\n  %s\ngot\n  %s",
-			strings.Join(expected, "\n  "), strings.Join(actual, "\n  "))
+			strings.Join(expected, "\n  "), strings.Join(actualFormatted, "\n  "))
 	}
 	return nil
 }
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, false)
+	assertPayloadsBase(t, f, expected, false, false)
 }
 
 func assertPayloadsStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, true)
+	assertPayloadsBase(t, f, expected, true, false)
+}
+
+// assert that the messages received by the sink maintain per-key ordering guarantees. then,
+// strip the timestamp from the messages and compare them to the expected payloads.
+func assertPayloadsPerKeyOrderedStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
+	t.Helper()
+	assertPayloadsBase(t, f, expected, true, true)
 }
 
 func avroToJSON(t testing.TB, reg *cdctest.SchemaRegistry, avroBytes []byte) []byte {
