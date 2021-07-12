@@ -224,14 +224,19 @@ func TestPerformAppend(t *testing.T) {
 
 		beforePerformOperation := testAllocator.Used()
 		testAllocator.PerformOperation(batch1.ColVecs(), func() {
-			batch1.AppendTuples(inputBatch, 0 /* startIdx */, inputBatch.Length())
+			for colIdx, destVec := range batch1.ColVecs() {
+				destVec.Append(coldata.SliceArgs{
+					Src:       inputBatch.ColVec(colIdx),
+					DestIdx:   batch1.Length(),
+					SrcEndIdx: inputBatch.Length(),
+				})
+			}
+			batch1.SetLength(batch1.Length() + inputBatch.Length())
 		})
 		afterPerformOperation := testAllocator.Used()
 
 		beforePerformAppend := afterPerformOperation
-		testAllocator.PerformAppend(batch2, func() {
-			batch2.AppendTuples(inputBatch, 0 /* startIdx */, inputBatch.Length())
-		})
+		batch2.AppendTuples(inputBatch, 0 /* startIdx */, inputBatch.Length())
 		afterPerformAppend := testAllocator.Used()
 
 		performOperationMem := afterPerformOperation - beforePerformOperation
