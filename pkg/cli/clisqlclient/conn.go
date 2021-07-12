@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -610,7 +610,7 @@ func (c *sqlConn) fillPassword() error {
 		connURL.Host,
 		connURL.User.Username())
 
-	pwd, err := security.PromptForPassword()
+	pwd, err := pprompt.PromptForPassword()
 	if err != nil {
 		return err
 	}
