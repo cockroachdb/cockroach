@@ -1290,6 +1290,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 	cf.metrics.FrontierUpdates.Inc(1)
 
+	_, disableProtectedTS := cf.js.job.Details().(jobspb.ChangefeedDetails).Opts[changefeedbase.OptDisableProtectedTimestamp]
 	return cf.js.job.Update(cf.Ctx, nil, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
@@ -1306,7 +1307,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 		// Manage protected timestamps.
 		changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 		if manageProtected {
-			if err := cf.manageProtectedTimestamps(cf.Ctx, changefeedProgress, txn, frontier, isBehind); err != nil {
+			if err := cf.manageProtectedTimestamps(cf.Ctx, changefeedProgress, txn, frontier, isBehind,
+				disableProtectedTS); err != nil {
 				return err
 			}
 		}
@@ -1342,7 +1344,11 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	txn *kv.Txn,
 	resolved hlc.Timestamp,
 	isBehind bool,
+	disableProtectedTS bool,
 ) error {
+	if disableProtectedTS {
+		return nil
+	}
 	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider
 	if err := cf.maybeReleaseProtectedTimestamp(ctx, progress, pts, txn, isBehind); err != nil {
 		return err
