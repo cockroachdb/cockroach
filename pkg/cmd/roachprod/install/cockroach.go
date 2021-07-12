@@ -11,6 +11,7 @@
 package install
 
 import (
+	_ "embed" // required for go:embed
 	"fmt"
 	"log"
 	"os"
@@ -21,12 +22,16 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
+
+//go:embed scripts/start.sh
+var startScript string
 
 // StartOpts TODO(peter): document
 var StartOpts struct {
@@ -44,7 +49,7 @@ func cockroachNodeBinary(c *SyncedCluster, node int) string {
 		return config.Binary
 	}
 	if !c.IsLocal() {
-		return "${HOME}/" + config.Binary
+		return "./" + config.Binary
 	}
 
 	path := filepath.Join(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), node), config.Binary)
@@ -242,7 +247,7 @@ func (Cockroach) NodeDir(c *SyncedCluster, index, storeIndex int) string {
 
 // LogDir implements the ClusterImpl.NodeDir interface.
 func (Cockroach) LogDir(c *SyncedCluster, index int) string {
-	dir := "${HOME}/logs"
+	dir := "logs"
 	if c.IsLocal() {
 		dir = os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/logs", index))
 	}
@@ -251,7 +256,7 @@ func (Cockroach) LogDir(c *SyncedCluster, index int) string {
 
 // CertsDir implements the ClusterImpl.NodeDir interface.
 func (Cockroach) CertsDir(c *SyncedCluster, index int) string {
-	dir := "${HOME}/certs"
+	dir := "certs"
 	if c.IsLocal() {
 		dir = os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/certs", index))
 	}
@@ -362,15 +367,42 @@ func (h *crdbInstallHelper) startNode(
 	}
 
 	nodes := h.c.ServerNodes()
+	if err := func() error {
+		sess, err := h.c.newSession(nodes[nodeIdx])
+		if err != nil {
+			return err
+		}
+		defer sess.Close()
+
+		sess.SetStdin(strings.NewReader(startCmd))
+		var cmd string
+		if h.c.IsLocal() {
+			cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[nodeIdx])
+		}
+		cmd += `cat > cockroach.sh && chmod +x cockroach.sh`
+		if out, err := sess.CombinedOutput(cmd); err != nil {
+			return errors.Wrapf(err, "failed to upload start script: %s", out)
+		}
+
+		return nil
+	}(); err != nil {
+		return "", err
+	}
+
 	sess, err := h.c.newSession(nodes[nodeIdx])
 	if err != nil {
 		return "", err
 	}
 	defer sess.Close()
 
-	out, err := sess.CombinedOutput(startCmd)
+	var cmd string
+	if h.c.IsLocal() {
+		cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[nodeIdx])
+	}
+	cmd += "./cockroach.sh"
+	out, err := sess.CombinedOutput(cmd)
 	if err != nil {
-		return "", errors.Wrapf(err, "~ %s\n%s", startCmd, out)
+		return "", errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -379,88 +411,7 @@ func (h *crdbInstallHelper) generateStartCmd(
 	nodeIdx int, extraArgs []string, vers *version.Version,
 ) (string, error) {
 
-	tpl, err := template.New("start").Parse(`#!/bin/bash
-set -euo pipefail
-
-mkdir -p {{.LogDir}}
-helper="{{if .Local}}{{.LogDir}}{{else}}${HOME}{{end}}/cockroach-helper.sh"
-verb="{{if .Local}}run{{else}}run-systemd{{end}}"
-
-# 'EOF' disables parameter substitution in the heredoc.
-cat > "${helper}" << 'EOF' && chmod +x "${helper}" && "${helper}" "${verb}"
-#!/bin/bash
-set -euo pipefail
-
-if [[ "${1}" == "run" ]]; then
-  local="{{if .Local}}true{{end}}"
-  mkdir -p {{.LogDir}}
-  echo "cockroach start: $(date), logging to {{.LogDir}}" | tee -a {{.LogDir}}/{roachprod,cockroach.std{out,err}}.log
-  {{.KeyCmd}}
-  export ROACHPROD={{.NodeNum}}{{.Tag}} {{.EnvVars}}
-  background=""
-  if [[ "${local}" ]]; then
-    background="--background"
-  fi
-  CODE=0
-  {{.Binary}} {{.StartCmd}} {{.Args}} ${background} >> {{.LogDir}}/cockroach.stdout.log 2>> {{.LogDir}}/cockroach.stderr.log || CODE=$?
-  if [[ -z "${local}" || ${CODE} -ne 0 ]]; then
-    echo "cockroach exited with code ${CODE}: $(date)" | tee -a {{.LogDir}}/{roachprod,cockroach.{exit,std{out,err}}}.log
-  fi
-  exit ${CODE}
-fi
-
-if [[ "${1}" != "run-systemd" ]]; then
-  echo "unsupported: ${1}"
-  exit 1
-fi
-
-if systemctl is-active -q cockroach; then
-  echo "cockroach service already active"
-	echo "To get more information: systemctl status cockroach"
-	exit 1
-fi
-
-# If cockroach failed, the service still exists; we need to clean it up before
-# we can start it again.
-sudo systemctl reset-failed cockroach 2>/dev/null || true
-
-# The first time we run, install a small script that shows some helpful
-# information when we ssh in.
-if [ ! -e ${HOME}/.profile-cockroach ]; then
-  cat > ${HOME}/.profile-cockroach <<'EOQ'
-echo ""
-if systemctl is-active -q cockroach; then
-	echo "cockroach is running; see: systemctl status cockroach"
-elif systemctl is-failed -q cockroach; then
-	echo "cockroach stopped; see: systemctl status cockroach"
-else
-	echo "cockroach not started"
-fi
-echo ""
-EOQ
-  echo ". ${HOME}/.profile-cockroach" >> ${HOME}/.profile
-fi
-
-# We run this script (with arg "run") as a service unit. We do not use --user
-# because memory limiting doesn't work in that mode. Instead we pass the uid and
-# gid that the process will run under.
-# The "notify" service type means that systemd-run waits until cockroach
-# notifies systemd that it is ready; NotifyAccess=all is needed because this
-# notification doesn't come from the main PID (which is bash).
-sudo systemd-run --unit cockroach \
-  --same-dir --uid $(id -u) --gid $(id -g) \
-  --service-type=notify -p NotifyAccess=all \
-  -p MemoryMax={{.MemoryMax}} \
-  -p LimitCORE=infinity \
-  -p LimitNOFILE=65536 \
-	bash $0 run
-EOF
-`)
-	if err != nil {
-		return "", err
-	}
-
-	args, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
+	args, advertiseFirstIP, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
 	if err != nil {
 		return "", err
 	}
@@ -474,37 +425,56 @@ EOF
 		startCmd = "start"
 	}
 	nodes := h.c.ServerNodes()
-	var buf strings.Builder
-	if err := tpl.Execute(&buf, struct {
-		LogDir, KeyCmd, Tag, EnvVars, Binary, StartCmd, Args, MemoryMax string
-		NodeNum                                                         int
-		Local                                                           bool
-	}{
-		LogDir:    h.c.Impl.LogDir(h.c, nodes[nodeIdx]),
-		KeyCmd:    h.generateKeyCmd(nodeIdx, extraArgs),
-		Tag:       h.c.Tag,
-		EnvVars:   "GOTRACEBACK=crash COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " + h.getEnvVars(),
-		Binary:    cockroachNodeBinary(h.c, nodes[nodeIdx]),
-		StartCmd:  startCmd,
-		Args:      strings.Join(args, " "),
-		MemoryMax: config.MemoryMax,
-		NodeNum:   nodes[nodeIdx],
-		Local:     h.c.IsLocal(),
-	}); err != nil {
+	return execStartTemplate(startTemplateData{
+		LogDir: h.c.Impl.LogDir(h.c, nodes[nodeIdx]),
+		KeyCmd: h.generateKeyCmd(nodeIdx, extraArgs),
+		Tag:    h.c.Tag,
+		EnvVars: append([]string{
+			"GOTRACEBACK=crash",
+			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
+		}, h.getEnvVars()...),
+		Binary:           cockroachNodeBinary(h.c, nodes[nodeIdx]),
+		StartCmd:         startCmd,
+		Args:             args,
+		MemoryMax:        config.MemoryMax,
+		NodeNum:          nodes[nodeIdx],
+		Local:            h.c.IsLocal(),
+		AdvertiseFirstIP: advertiseFirstIP,
+	})
+}
+
+type startTemplateData struct {
+	LogDir, KeyCmd, Tag, Binary, StartCmd, MemoryMax string
+	EnvVars, Args                                    []string
+	NodeNum                                          int
+	Local, AdvertiseFirstIP                          bool
+}
+
+func execStartTemplate(data startTemplateData) (string, error) {
+	tpl, err := template.New("start").
+		Funcs(template.FuncMap{"shesc": func(i interface{}) string {
+			return shellescape.Quote(fmt.Sprint(i))
+		}}).
+		Delims("#{", "#}").
+		Parse(startScript)
+	if err != nil {
 		return "", err
 	}
-
+	var buf strings.Builder
+	if err := tpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
 	return buf.String(), nil
 }
 
 func (h *crdbInstallHelper) generateStartArgs(
 	nodeIdx int, extraArgs []string, vers *version.Version,
-) ([]string, error) {
+) (_ []string, _advertiseFirstIP bool, _ error) {
 	var args []string
 	nodes := h.c.ServerNodes()
 
 	if h.c.Secure {
-		args = append(args, "--certs-dir="+h.c.Impl.CertsDir(h.c, nodes[nodeIdx]))
+		args = append(args, `--certs-dir`, h.c.Impl.CertsDir(h.c, nodes[nodeIdx]))
 	} else {
 		args = append(args, "--insecure")
 	}
@@ -514,7 +484,7 @@ func (h *crdbInstallHelper) generateStartArgs(
 		for i := 1; i <= StartOpts.StoreCount; i++ {
 			storeDir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx], i)
 			storeDirs = append(storeDirs, storeDir)
-			args = append(args, "--store=path="+storeDir)
+			args = append(args, `--store`, `path=`+storeDir)
 		}
 	} else {
 		storeDir := strings.TrimPrefix(extraArgs[idx], "--store=")
@@ -525,18 +495,18 @@ func (h *crdbInstallHelper) generateStartArgs(
 		// Encryption at rest is turned on for the cluster.
 		for _, storeDir := range storeDirs {
 			// TODO(windchan7): allow key size to be specified through flags.
-			encryptArgs := "--enterprise-encryption=path=%s,key=%s/aes-128.key,old-key=plain"
+			encryptArgs := "path=%s,key=%s/aes-128.key,old-key=plain"
 			encryptArgs = fmt.Sprintf(encryptArgs, storeDir, storeDir)
-			args = append(args, encryptArgs)
+			args = append(args, `--enterprise-encryption`, encryptArgs)
 		}
 	}
 
 	logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
 	if vers.AtLeast(version.MustParse("v21.1.0-alpha.0")) {
 		// Specify exit-on-error=false to work around #62763.
-		args = append(args, `--log "file-defaults: {dir: '`+logDir+`', exit-on-error: false}"`)
+		args = append(args, "--log", `file-defaults: {dir: '`+logDir+`', exit-on-error: false}`)
 	} else {
-		args = append(args, "--log-dir="+logDir)
+		args = append(args, `--log-dir`, logDir)
 	}
 
 	if vers.AtLeast(version.MustParse("v1.1.0")) {
@@ -581,14 +551,16 @@ func (h *crdbInstallHelper) generateStartArgs(
 		}
 	}
 
+	var advertiseFirstIP bool
 	if h.shouldAdvertisePublicIP() {
 		args = append(args, fmt.Sprintf("--advertise-host=%s", h.c.host(nodeIdx+1)))
 	} else if !h.c.IsLocal() {
 		// Explicitly advertise by IP address so that we don't need to
 		// deal with cross-region name resolution. The `hostname -I`
 		// prints all IP addresses for the host and then we'll select
-		// the first from the list.
-		args = append(args, "--advertise-host=$(hostname -I | awk '{print $1}')")
+		// the first from the list. This has to be done on the server,
+		// so we pass the information that this needs to be done along.
+		advertiseFirstIP = true
 	}
 
 	// Argument template expansion is node specific (e.g. for {store-dir}).
@@ -598,12 +570,12 @@ func (h *crdbInstallHelper) generateStartArgs(
 	for _, arg := range extraArgs {
 		expandedArg, err := e.expand(h.c, arg)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		args = append(args, strings.Split(expandedArg, " ")...)
 	}
 
-	return args, nil
+	return args, advertiseFirstIP, nil
 }
 
 func (h *crdbInstallHelper) initializeCluster(nodeIdx int) (string, error) {
@@ -744,23 +716,14 @@ func (h *crdbInstallHelper) shouldAdvertisePublicIP() bool {
 	return false
 }
 
-func (h *crdbInstallHelper) getEnvVars() string {
-	var buf strings.Builder
+func (h *crdbInstallHelper) getEnvVars() []string {
+	var sl []string
 	for _, v := range os.Environ() {
 		if strings.HasPrefix(v, "COCKROACH_") {
-			if buf.Len() > 0 {
-				buf.WriteString(" ")
-			}
-			buf.WriteString(v)
+			sl = append(sl, v)
 		}
 	}
-	if len(h.c.Env) > 0 {
-		if buf.Len() > 0 {
-			buf.WriteString(" ")
-		}
-		buf.WriteString(h.c.Env)
-	}
-	return buf.String()
+	return sl
 }
 
 func (h *crdbInstallHelper) run(nodeIdx int, cmd string) (string, error) {
