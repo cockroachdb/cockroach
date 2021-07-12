@@ -109,7 +109,8 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 	var args []string
 	args = append(args, "test")
 	args = append(args, "--color=yes")
-	args = append(args, "--experimental_convenience_symlinks=ignore") // don't generate any convenience symlinks
+	args = append(args, "--experimental_convenience_symlinks=ignore")
+	args = append(args, getConfigFlags()...)
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
