@@ -283,6 +283,22 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 	registry := sip.flowCtx.Cfg.JobRegistry
 	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
 	jobID := sip.spec.JobID
+	getStreamIngestProgress := func() (*jobspb.Progress_StreamIngest, *jobspb.Progress, error) {
+		j, err := registry.LoadJob(ctx, jobspb.JobID(jobID))
+		if err != nil {
+			return nil, nil, err
+		}
+		progress := j.Progress()
+		var sp *jobspb.Progress_StreamIngest
+		var ok bool
+		if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
+			return nil, nil, errors.Newf(
+				"unknown progress type %T in stream ingestion" +
+				" job %d",
+				j.Progress().Progress, jobID)
+		}
+		return sp, &progress, nil
+	}
 	defer tick.Stop()
 	for {
 		select {
@@ -291,16 +307,9 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
-			j, err := registry.LoadJob(ctx, jobspb.JobID(jobID))
+			sp, progress, err := getStreamIngestProgress()
 			if err != nil {
 				return err
-			}
-			progress := j.Progress()
-			var sp *jobspb.Progress_StreamIngest
-			var ok bool
-			if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
-				return errors.Newf("unknown progress type %T in stream ingestion job %d",
-					j.Progress().Progress, jobID)
 			}
 			// Job has been signaled to complete.
 			if !sp.StreamIngest.CutoverTime.IsEmpty() {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -20,20 +21,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 type streamIngestionResumer struct {
 	job *jobs.Job
+
+	resultsCh chan error
 }
 
-func ingest(
+func (s *streamIngestionResumer) ingest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	startTime hlc.Timestamp,
 	streamAddress streamingccl.StreamAddress,
-	progress jobspb.Progress,
-	jobID jobspb.JobID,
 ) error {
 	// Initialize a stream client and resolve topology.
 	client, err := streamclient.NewStreamClient(streamAddress)
@@ -45,34 +47,19 @@ func ingest(
 		return err
 	}
 
-	// TODO(adityamaru): If the job is being resumed it is possible that it has
-	// check-pointed a resolved ts up to which all of its processors had ingested
-	// KVs. We can skip to ingesting after this resolved ts. Plumb the
-	// initialHighwatermark to the ingestion processor spec based on what we read
-	// from the job progress.
-	initialHighWater := startTime
-	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-		initialHighWater = *h
-	}
-
-	evalCtx := execCtx.ExtendedEvalContext()
-	dsp := execCtx.DistSQLPlanner()
-
-	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+	eventCh, errCh, err := client.ConsumePartition(ctx, streamingccl.PartitionAddress(streamAddress), startTime)
 	if err != nil {
 		return err
 	}
 
-	// Construct stream ingestion processor specs.
-	streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-		streamAddress, topology, nodes, initialHighWater, jobID)
-	if err != nil {
-		return err
-	}
+	go func() {
+		if err := s.pollEvents(ctx, execCtx, eventCh, errCh); err != nil {
+			close(eventCh)
+			close(errCh)
+		}
+	}()
 
-	// Plan and run the DistSQL flow.
-	return distStreamIngest(ctx, execCtx, nodes, jobID, planCtx, dsp, streamIngestionSpecs,
-		streamIngestionFrontierSpec)
+	return s.planDistFlow(ctx, execCtx, startTime, streamAddress, topology)
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -82,16 +69,38 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 
 	// Start ingesting KVs from the replication stream.
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	err := ingest(resumeCtx, p, details.StartTime, streamAddress, s.job.Progress(), s.job.ID())
+	err := s.ingest(resumeCtx, p, details.StartTime, streamAddress)
 	if err != nil {
 		return err
 	}
 
-	// A nil error is only possible if the job was signaled to cutover and the
-	// processors shut down gracefully, i.e stopped ingesting any additional
-	// events from the replication stream. At this point it is safe to revert to
-	// the cutoff time to leave the cluster in a consistent state.
-	return s.revertToCutoverTimestamp(resumeCtx, execCtx)
+	for {
+		select {
+		case err := <-s.resultsCh:
+			if err != nil {
+				return err
+			}
+			j, err := p.ExecCfg().JobRegistry.LoadJob(resumeCtx, s.job.ID())
+			if err != nil {
+				return err
+			}
+			progress := j.Progress()
+			var sp *jobspb.Progress_StreamIngest
+			var ok bool
+			if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
+				return errors.Newf("unknown progress type %T in stream ingestion job %d",
+					j.Progress().Progress, s.job.ID())
+			}
+
+			if sp.StreamIngest.CutoverTriggeredBy == jobspb.StreamIngestionProgress_JobCompletion {
+				// A nil error is only possible if the job was signaled to cutover and the
+				// processors shut down gracefully, i.e stopped ingesting any additional
+				// events from the replication stream. At this point it is safe to revert to
+				// the cutoff time to leave the cluster in a consistent state.
+				return s.revertToCutoverTimestamp(resumeCtx, execCtx)
+			}
+		}
+	}
 }
 
 // revertToCutoverTimestamp reads the job progress for the cutover time and
@@ -168,6 +177,102 @@ func (s *streamIngestionResumer) revertToCutoverTimestamp(
 // synchronization between the flow tearing down and the job transitioning to a
 // failed/canceled state.
 func (s *streamIngestionResumer) OnFailOrCancel(_ context.Context, _ interface{}) error {
+	return nil
+}
+
+func (s *streamIngestionResumer) pollEvents(
+	ctx context.Context,
+	execCtx interface{},
+	eventCh chan streamingccl.Event,
+	errCh chan error,
+) error {
+	for {
+		select {
+		case event, ok := <-eventCh:
+			if !ok {
+				log.Errorf(ctx, "failed to poll events from client")
+			}
+
+			switch event.Type() {
+			case streamingccl.GenerationEvent:
+				if err := s.onNewGeneration(ctx, execCtx, event); err != nil {
+					return err
+				}
+			default:
+				return errors.Newf("unknown streaming event type %v", event.Type())
+			}
+		case err := <-errCh:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func (s *streamIngestionResumer) onNewGeneration(
+	ctx context.Context,
+	execCtx interface{},
+	event streamingccl.Event,
+) error {
+	topology := event.GetTopology()
+	if topology == nil {
+		return errors.New("generation event expected to have topology")
+	}
+	log.Infof(ctx, "new generation started with topology: %v", topology)
+
+	jobID := int(s.job.ID())
+	progress := s.job.Progress()
+	hw := *progress.GetHighWater()
+
+	p := execCtx.(sql.JobExecContext)
+	evalCtx := p.ExtendedEvalContext().EvalContext
+	txn := p.ExtendedEvalContext().Txn
+	if err := streamingutils.DoGenerationSwitchover(&evalCtx, txn, jobID); err != nil {
+		return err
+	}
+
+	details := s.job.Details().(jobspb.StreamIngestionDetails)
+	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
+	return s.planDistFlow(ctx, p, hw, streamAddress, *topology)
+}
+
+func (s *streamIngestionResumer) planDistFlow(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	startTime hlc.Timestamp,
+	streamAddress streamingccl.StreamAddress,
+	topology streamingccl.Topology,
+) error {
+	// TODO(adityamaru): If the job is being resumed it is possible that it has
+	// check-pointed a resolved ts up to which all of its processors had ingested
+	// KVs. We can skip to ingesting after this resolved ts. Plumb the
+	// initialHighwatermark to the ingestion processor spec based on what we read
+	// from the job progress.
+	initialHighWater := startTime
+	progress := s.job.Progress()
+	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
+		initialHighWater = *h
+	}
+
+	evalCtx := execCtx.ExtendedEvalContext()
+	dsp := execCtx.DistSQLPlanner()
+
+	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+	if err != nil {
+		return err
+	}
+
+	// Construct stream ingestion processor specs.
+	jobID := s.job.ID()
+	streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
+		streamAddress, topology, nodes, initialHighWater, jobID)
+	if err != nil {
+		return err
+	}
+
+	// Plan and run the DistSQL flow.
+	err = distStreamIngest(ctx, execCtx, nodes, jobID, planCtx, dsp, streamIngestionSpecs, streamIngestionFrontierSpec)
+	s.resultsCh <-err
 	return nil
 }
 
