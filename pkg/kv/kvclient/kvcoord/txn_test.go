@@ -725,6 +725,31 @@ func TestTxnContinueAfterCputError(t *testing.T) {
 	require.NoError(t, txn.Commit(ctx))
 }
 
+// Test that a transaction can be used after a locking request returns a
+// WriteIntentError. This is not generally allowed for other errors, but
+// WriteIntentError is special.
+func TestTxnContinueAfterWriteIntentError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s := createTestDB(t)
+	defer s.Stop()
+
+	otherTxn := s.DB.NewTxn(ctx, "lock holder txn")
+	require.NoError(t, otherTxn.Put(ctx, "a", "b"))
+
+	txn := s.DB.NewTxn(ctx, "test txn")
+
+	b := txn.NewBatch()
+	b.Header.WaitPolicy = lock.WaitPolicy_Error
+	b.Put("a", "c")
+	err := txn.Run(ctx, b)
+	require.IsType(t, &roachpb.WriteIntentError{}, err)
+
+	require.NoError(t, txn.Put(ctx, "a'", "c"))
+	require.NoError(t, txn.Commit(ctx))
+}
+
 func TestTxnWaitPolicies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
