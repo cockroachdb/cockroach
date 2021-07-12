@@ -2168,8 +2168,8 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 				return err
 			}
 			// If there are no tables to GC, the zone config needs to be deleted now.
-			if p.ExecCfg().Codec.ForSystemTenant() && len(details.DroppedTables) == 0 {
-				zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(dbID))
+			if len(details.DroppedTables) == 0 {
+				zoneKeyPrefix := config.MakeZoneKeyPrefix(p.ExecCfg().Codec, dbID)
 				if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 					log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 				}
@@ -2480,10 +2480,8 @@ func DeleteTableDescAndZoneConfig(
 		descKey := catalogkeys.MakeDescMetadataKey(codec, tableDesc.GetID())
 		b.Del(descKey)
 		// Delete the zone config entry for this table, if necessary.
-		if codec.ForSystemTenant() {
-			zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(tableDesc.GetID()))
-			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-		}
+		zoneKeyPrefix := config.MakeZoneKeyPrefix(codec, tableDesc.GetID())
+		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		return txn.Run(ctx, b)
 	})
 }
