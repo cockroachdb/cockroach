@@ -179,9 +179,7 @@ func (c *sqlConn) EnsureConn() error {
 		}
 		if c.reconnecting && c.dbName != "" {
 			// Attempt to reset the current database.
-			if _, err := conn.(DriverConn).Exec(
-				`SET DATABASE = `+tree.NameStringP(&c.dbName), nil,
-			); err != nil {
+			if _, err := conn.(DriverConn).Exec(`SET DATABASE = $1`, []driver.Value{c.dbName}); err != nil {
 				fmt.Fprintf(c.errw, "warning: unable to restore current database: %v\n", err)
 			}
 		}
