@@ -330,9 +330,9 @@ statement ok
 CREATE TABLE constraint_db.t6 (
   a INT,
   b INT,
-  c STRING
+  c STRING,
+  INDEX ((a + b))
 );
-CREATE INDEX ON constraint_db.t6 ((a + b));
 CREATE INDEX ON constraint_db.t6 (lower(c), (a + b));
 CREATE UNIQUE INDEX ON constraint_db.t6 (lower(c));
 
@@ -620,9 +620,9 @@ attrelid    relname            attname                   atttypid  attstattarget
 61          t6                 a                         20        0              8       1       0         -1
 61          t6                 b                         20        0              8       2       0         -1
 61          t6                 c                         25        0              -1      3       0         -1
-61          t6                 rowid                     20        0              8       4       0         -1
-4179599057  primary            rowid                     20        0              8       4       0         -1
-4179599058  t6_expr_idx        crdb_internal_idx_expr    20        0              8       5       0         -1
+61          t6                 rowid                     20        0              8       5       0         -1
+4179599057  primary            rowid                     20        0              8       5       0         -1
+4179599058  t6_expr_idx        crdb_internal_idx_expr    20        0              8       4       0         -1
 4179599059  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      6       0         -1
 4179599059  t6_expr_expr1_idx  crdb_internal_idx_expr_2  20        0              8       7       0         -1
 4179599060  t6_expr_key        crdb_internal_idx_expr_3  25        0              -1      8       0         -1
@@ -849,7 +849,7 @@ oid         relname  adrelid  adnum  adbin           adsrc           pg_get_expr
 2186255409  t3       57       4      unique_rowid()  unique_rowid()  unique_rowid()
 581442131   t4       59       4      unique_rowid()  unique_rowid()  unique_rowid()
 4050804964  t5       60       4      unique_rowid()  unique_rowid()  unique_rowid()
-1100914677  t6       61       4      unique_rowid()  unique_rowid()  unique_rowid()
+1100914676  t6       61       5      unique_rowid()  unique_rowid()  unique_rowid()
 2445991680  mv1      62       2      unique_rowid()  unique_rowid()  unique_rowid()
 
 ## pg_catalog.pg_indexes
@@ -3700,7 +3700,7 @@ WHERE n.nspname = 'public'
 2186255409  t3   unique_rowid()
 581442131   t4   unique_rowid()
 4050804964  t5   unique_rowid()
-1100914677  t6   unique_rowid()
+1100914676  t6   unique_rowid()
 2445991680  mv1  unique_rowid()
 
 # Verify that a set database shows tables from that database for a non-root

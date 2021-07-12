@@ -299,6 +299,17 @@ CREATE TABLE y (
   b INT AS (a) STORED
 )
 
+statement ok
+CREATE TABLE x (
+  a INT
+)
+
+statement error expected computed column expression to have type string, but .* has type int
+ALTER TABLE x ADD COLUMN err STRING AS (10::INT) STORED
+
+statement ok
+DROP TABLE x
+
 statement error context-dependent operators are not allowed in computed column
 CREATE TABLE y (
   a TIMESTAMP AS (now()) STORED

@@ -14,7 +14,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -50,7 +49,7 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	desc.KeyColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
 	for _, c := range elems {
 		if c.Expr != nil {
-			return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
+			return errors.AssertionFailedf("index elem expression should have been replaced with a column")
 		}
 		desc.KeyColumnNames = append(desc.KeyColumnNames, string(c.Column))
 		switch c.Direction {
