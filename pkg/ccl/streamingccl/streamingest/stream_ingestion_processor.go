@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingutils"
 	"sort"
 	"sync"
 	"time"
@@ -188,7 +189,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	sip.pollingWaitGroup.Add(1)
 	go func() {
 		defer sip.pollingWaitGroup.Done()
-		err := sip.checkForCutoverSignal(ctx, sip.closePoller)
+		err := sip.checkForCutoverAndGenerationSignal(ctx, sip.closePoller)
 		if err != nil {
 			sip.pollingErr = errors.Wrap(err, "error while polling job for cutover signal")
 		}
@@ -274,9 +275,9 @@ func (sip *streamIngestionProcessor) close() {
 	}
 }
 
-// checkForCutoverSignal periodically loads the job progress to check for the
+// checkForCutoverAndGenerationSignal periodically loads the job progress to check for the
 // sentinel value that signals the ingestion job to complete.
-func (sip *streamIngestionProcessor) checkForCutoverSignal(
+func (sip *streamIngestionProcessor) checkForCutoverAndGenerationSignal(
 	ctx context.Context, stopPoller chan struct{},
 ) error {
 	sv := &sip.flowCtx.Cfg.Settings.SV
@@ -321,6 +322,12 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 				}
 				sip.cutoverCh <- struct{}{}
 				return nil
+			}
+
+			if !sp.StreamIngest.NextGeneration.IsEmpty() {
+				sip.cutoverCh <- struct{}{}
+				jobID := int(j.ID())
+				return streamingutils.DoGenerationSwitchover(sip.EvalCtx, sip.flowCtx.Txn, jobID, hlc.Timestamp{})
 			}
 		}
 	}
