@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
@@ -591,8 +592,9 @@ type sqlReporter struct {
 func (p *sqlReporter) describe(w io.Writer, cols []string) error {
 	fmt.Fprint(w, "CREATE TABLE results (\n")
 	for i, col := range cols {
-		s := tree.Name(col)
-		fmt.Fprintf(w, "  %s STRING", s.String())
+		var colName bytes.Buffer
+		lexbase.EncodeRestrictedSQLIdent(&colName, col, lexbase.EncNoFlags)
+		fmt.Fprint(w, "  %s STRING", colName.String())
 		if i < len(cols)-1 {
 			fmt.Fprint(w, ",")
 		}
