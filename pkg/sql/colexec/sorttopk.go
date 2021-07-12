@@ -168,9 +168,7 @@ func (t *topKSorter) spool() {
 			fromLength = int(remainingRows)
 		}
 		t.firstUnprocessedTupleIdx = fromLength
-		t.allocator.PerformAppend(t.topK, func() {
-			t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
-		})
+		t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
 		remainingRows -= uint64(fromLength)
 		if fromLength == t.inputBatch.Length() {
 			t.inputBatch = t.Input.Next()
