@@ -429,10 +429,8 @@ func (s *chunker) buffer(start int, end int) {
 	if start == end {
 		return
 	}
-	s.allocator.PerformAppend(s.bufferedTuples, func() {
-		s.exportState.numProcessedTuplesFromBatch = end
-		s.bufferedTuples.AppendTuples(s.batch, start, end)
-	})
+	s.exportState.numProcessedTuplesFromBatch = end
+	s.bufferedTuples.AppendTuples(s.batch, start, end)
 }
 
 func (s *chunker) spool() {
