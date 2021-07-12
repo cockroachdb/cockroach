@@ -1213,7 +1213,8 @@ func backupPlanHook(
 			EncryptionInfo:    encryptionInfo,
 			CollectionURI:     collectionURI,
 		}
-		if len(spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
+		if !backupStmt.Options.DisableProtectedTimestamp && len(spans) > 0 &&
+			p.ExecCfg().Codec.ForSystemTenant() {
 			protectedtsID := uuid.MakeV4()
 			backupDetails.ProtectedTimestampRecord = &protectedtsID
 		}

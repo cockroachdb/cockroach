@@ -41,6 +41,7 @@ type BackupOptions struct {
 	Detached                     bool
 	EncryptionKMSURI             StringOrPlaceholderOptList
 	IncludeDeprecatedInterleaves bool
+	DisableProtectedTimestamp    bool
 }
 
 var _ NodeFormatter = &BackupOptions{}
