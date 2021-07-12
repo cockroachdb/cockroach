@@ -41,6 +41,7 @@ type BackupOptions struct {
 	Detached                     bool
 	EncryptionKMSURI             StringOrPlaceholderOptList
 	IncludeDeprecatedInterleaves bool
+	DisableProtectedTimestamp    bool
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -241,6 +242,11 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("include_deprecated_interleaves")
 	}
+
+	if o.DisableProtectedTimestamp {
+		maybeAddSep()
+		ctx.WriteString("disable_protected_timestamp")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -280,6 +286,14 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		}
 	} else {
 		o.IncludeDeprecatedInterleaves = other.IncludeDeprecatedInterleaves
+	}
+
+	if o.DisableProtectedTimestamp {
+		if other.DisableProtectedTimestamp {
+			return errors.New("disable_protected_timestamp option specified multiple times")
+		}
+	} else {
+		o.DisableProtectedTimestamp = other.DisableProtectedTimestamp
 	}
 
 	return nil

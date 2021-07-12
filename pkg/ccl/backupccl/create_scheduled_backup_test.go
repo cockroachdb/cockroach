@@ -324,19 +324,19 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		},
 		{
 			name:      "full-cluster-with-name-arg",
-			query:     `CREATE SCHEDULE $1 FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history, detached RECURRING '@hourly'`,
+			query:     `CREATE SCHEDULE $1 FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history, detached, disable_protected_timestamp RECURRING '@hourly'`,
 			queryArgs: []interface{}{"my_backup_name"},
 			user:      enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "my_backup_name",
-					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
+					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached, disable_protected_timestamp",
 					period:     time.Hour,
 					paused:     true,
 				},
 				{
 					nameRe:     "my_backup_name",
-					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH revision_history, detached",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH revision_history, detached, disable_protected_timestamp",
 					period:     24 * time.Hour,
 					runsNow:    true,
 				},

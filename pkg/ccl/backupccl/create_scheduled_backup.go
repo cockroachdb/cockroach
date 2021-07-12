@@ -234,6 +234,7 @@ func doCreateBackupSchedules(
 			CaptureRevisionHistory:       eval.BackupOptions.CaptureRevisionHistory,
 			Detached:                     true,
 			IncludeDeprecatedInterleaves: eval.BackupOptions.IncludeDeprecatedInterleaves,
+			DisableProtectedTimestamp:    eval.BackupOptions.DisableProtectedTimestamp,
 		},
 		Nested:         true,
 		AppendToLatest: false,

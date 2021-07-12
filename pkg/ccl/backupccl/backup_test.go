@@ -6038,6 +6038,56 @@ func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
 	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".bank`), statsBackup2)
 }
 
+func TestBackupDisableProtectedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var allowRequest chan struct{}
+	var requestRecvd chan struct{}
+	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+			for _, ru := range ba.Requests {
+				switch ru.GetInner().(type) {
+				case *roachpb.ExportRequest:
+					requestRecvd <- struct{}{}
+					<-allowRequest
+				}
+			}
+			return nil
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 3, params)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	conn := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+
+	requestRecvd = make(chan struct{})
+	allowRequest = make(chan struct{})
+	g, _ := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		runner := sqlutils.MakeSQLRunner(conn)
+		runner.Exec(t, `BACKUP TABLE foo TO 'userfile:///foo' WITH DISABLE_PROTECTED_TIMESTAMP`) // create a base backup.
+		return nil
+	})
+
+	<-requestRecvd
+	runner.CheckQueryResults(t, `SELECT count(*) FROM system.protected_ts_records`, [][]string{{"0"}})
+	close(allowRequest)
+	close(requestRecvd)
+	require.NoError(t, g.Wait())
+	runner.CheckQueryResultsRetry(t, `SELECT status FROM system.jobs ORDER BY created DESC LIMIT 1`, [][]string{{"succeeded"}})
+}
+
 // TestProtectedTimestampsDuringBackup ensures that the timestamp at which a
 // table is taken offline is protected during a BACKUP job to ensure that if
 // data can be read for a period longer than the default GC interval.
