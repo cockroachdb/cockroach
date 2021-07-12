@@ -20,7 +20,7 @@ go_library(
         "//pkg/cli/clicfg",
         "//pkg/cli/clierror",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/pprompt",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/util/duration",
