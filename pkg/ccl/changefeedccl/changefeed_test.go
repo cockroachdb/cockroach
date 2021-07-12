@@ -3155,6 +3155,28 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 
 }
 
+func TestChangefeedDisableProtectedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	setStoreKnobs := func(args *base.TestServerArgs) {}
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		_, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		feed, err := f.Feed(`CREATE CHANGEFEED FOR foo WITH resolved, disable_protected_timestamp`)
+		defer feed.Close()
+		require.NoError(t, err)
+		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM system.protected_ts_records`, [][]string{{"0"}})
+	}
+
+	t.Run(`enterprise`, enterpriseTestWithServerArgs(setStoreKnobs, testFn))
+	t.Run(`cloudstorage`, cloudStorageTestWithServerArg(setStoreKnobs, testFn))
+	t.Run(`kafka`, kafkaTestWithServerArgs(setStoreKnobs, testFn))
+	t.Run(`webhook`, webhookTestWithServerArgs(setStoreKnobs, testFn))
+}
+
 // This test ensures that the changefeed attempts to verify its initial protected
 // timestamp record and that when that verification fails, the job is canceled
 // and the record removed.
