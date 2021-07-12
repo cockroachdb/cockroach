@@ -99,6 +99,9 @@ func FormatColumnForDisplay(
 			return "", err
 		}
 		f.WriteString(defExpr)
+		if col.ApplyDefaultOnUpdate() {
+			f.WriteString(" ON UPDATE")
+		}
 	}
 	if col.IsComputed() {
 		f.WriteString(" AS (")

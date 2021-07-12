@@ -6538,7 +6538,11 @@ col_qualification_elem:
   }
 | DEFAULT b_expr
   {
-    $$.val = &tree.ColumnDefault{Expr: $2.expr()}
+    $$.val = &tree.ColumnDefault{Expr: $2.expr(), ApplyOnUpdate: false}
+  }
+| DEFAULT b_expr ON UPDATE
+  {
+    $$.val = &tree.ColumnDefault{Expr: $2.expr(), ApplyOnUpdate: true}
   }
 | REFERENCES table_name opt_name_parens key_match reference_actions
  {
