@@ -485,67 +485,6 @@ func (s *s3Storage) ReadFileAt(
 		cloud.IsResumableHTTPError, s3ErrDelay), size, nil
 }
 
-func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
-	var fileList []string
-
-	pattern := s.prefix
-	if patternSuffix != "" {
-		if cloud.ContainsGlob(s.prefix) {
-			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
-		}
-		pattern = path.Join(pattern, patternSuffix)
-	}
-
-	ctx, sp := tracing.ChildSpan(ctx, "s3.ListFiles")
-	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.ListFiles: %s", pattern)})
-
-	client, err := s.getClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var matchErr error
-	err = client.ListObjectsPagesWithContext(
-		ctx,
-		&s3.ListObjectsInput{
-			Bucket: s.bucket,
-			Prefix: aws.String(cloud.GetPrefixBeforeWildcard(s.prefix)),
-		},
-		func(page *s3.ListObjectsOutput, lastPage bool) bool {
-			for _, fileObject := range page.Contents {
-				matches, err := path.Match(pattern, *fileObject.Key)
-				if err != nil {
-					matchErr = err
-					return false
-				}
-				if matches {
-					if patternSuffix != "" {
-						if !strings.HasPrefix(*fileObject.Key, s.prefix) {
-							// TODO(dt): return a nice rel-path instead of erroring out.
-							matchErr = errors.New("pattern matched file outside of path")
-							return false
-						}
-						fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(*fileObject.Key, s.prefix), "/"))
-					} else {
-
-						fileList = append(fileList, S3URI(*s.bucket, *fileObject.Key, s.conf))
-					}
-				}
-			}
-			return !lastPage
-		},
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, `failed to list s3 bucket`)
-	}
-	if matchErr != nil {
-		return nil, errors.Wrap(matchErr, `failed to list s3 bucket`)
-	}
-
-	return fileList, nil
-}
-
 func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.List")
 	defer sp.Finish()

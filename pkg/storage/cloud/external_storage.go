@@ -83,19 +83,6 @@ type ExternalStorage interface {
 	// the callback is undefined.
 	List(ctx context.Context, prefix, delimiter string, fn ListingFn) error
 
-	// ListFiles returns files that match a globs-style pattern. The returned
-	// results are usually relative to the base path, meaning an ExternalStorage
-	// instance can be initialized with some base path, used to query for files,
-	// then pass those results to its other methods.
-	//
-	// As a special-case, if the passed patternSuffix is empty, the base path used
-	// to initialize the storage connection is treated as a pattern. In this case,
-	// as the connection is not really reusable for interacting with other files
-	// and there is no clear definition of what it would mean to be relative to
-	// that, the results are fully-qualified absolute URIs. The base URI is *only*
-	// allowed to contain globs-patterns when the explicit patternSuffix is "".
-	ListFiles(ctx context.Context, patternSuffix string) ([]string, error)
-
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error
 

@@ -424,7 +424,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <>
             <p>
-              {"Amount of data "}
+              {"Amount of "}
               <Anchor href={readsAndWrites} target="_blank">
                 data transferred over the network
               </Anchor>

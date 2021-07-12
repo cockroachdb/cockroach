@@ -655,6 +655,11 @@ func UserKey(key roachpb.RKey) roachpb.RKey {
 	return buf
 }
 
+// InMeta1 returns true iff a key is in the meta1 range (which includes RKeyMin).
+func InMeta1(k roachpb.RKey) bool {
+	return k.Equal(roachpb.RKeyMin) || bytes.HasPrefix(k, MustAddr(Meta1Prefix))
+}
+
 // validateRangeMetaKey validates that the given key is a valid Range Metadata
 // key. This checks only the constraints common to forward and backwards scans:
 // correct prefix and not exceeding KeyMax.

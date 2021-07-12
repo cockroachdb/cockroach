@@ -47,7 +47,6 @@ func parseAzureURL(
 		Prefix:      uri.Path,
 		AccountName: uri.Query().Get(AzureAccountNameParam),
 		AccountKey:  uri.Query().Get(AzureAccountKeyParam),
-		/* NB: additions here should also update azureQueryParams() serializer */
 	}
 	if conf.AzureConfig.AccountName == "" {
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
@@ -57,17 +56,6 @@ func parseAzureURL(
 	}
 	conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
 	return conf, nil
-}
-
-func azureQueryParams(conf *roachpb.ExternalStorage_Azure) string {
-	q := make(url.Values)
-	if conf.AccountName != "" {
-		q.Set(AzureAccountNameParam, conf.AccountName)
-	}
-	if conf.AccountKey != "" {
-		q.Set(AzureAccountKeyParam, conf.AccountKey)
-	}
-	return q.Encode()
 }
 
 type azureStorage struct {
@@ -185,55 +173,6 @@ func (s *azureStorage) ReadFileAt(
 	reader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: 3})
 
 	return reader, size, nil
-}
-
-func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
-	pattern := s.prefix
-	if patternSuffix != "" {
-		if cloud.ContainsGlob(s.prefix) {
-			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
-		}
-		pattern = path.Join(pattern, patternSuffix)
-	}
-
-	ctx, sp := tracing.ChildSpan(ctx, "azure.ListFiles")
-	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.ListFiles: %s", pattern)})
-
-	var fileList []string
-	response, err := s.container.ListBlobsFlatSegment(ctx,
-		azblob.Marker{},
-		azblob.ListBlobsSegmentOptions{Prefix: cloud.GetPrefixBeforeWildcard(s.prefix)},
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to list files for specified blob")
-	}
-
-	for _, blob := range response.Segment.BlobItems {
-		matches, err := path.Match(pattern, blob.Name)
-		if err != nil {
-			continue
-		}
-		if matches {
-			if patternSuffix != "" {
-				if !strings.HasPrefix(blob.Name, s.prefix) {
-					// TODO(dt): return a nice rel-path instead of erroring out.
-					return nil, errors.New("pattern matched file outside of path")
-				}
-				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(blob.Name, s.prefix), "/"))
-			} else {
-				azureURL := url.URL{
-					Scheme:   "azure",
-					Host:     strings.TrimPrefix(s.container.URL().Path, "/"),
-					Path:     blob.Name,
-					RawQuery: azureQueryParams(s.conf),
-				}
-				fileList = append(fileList, azureURL.String())
-			}
-		}
-	}
-
-	return fileList, nil
 }
 
 func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
