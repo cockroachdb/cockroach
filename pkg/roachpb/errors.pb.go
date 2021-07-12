@@ -769,11 +769,39 @@ func (m *TransactionStatusError) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_TransactionStatusError proto.InternalMessageInfo
 
-// A WriteIntentError indicates that one or more write intent
-// belonging to another transaction were encountered leading to a
-// read/write or write/write conflict. The keys at which the intent
-// was encountered are set, as are the txn records for the intents'
-// transactions.
+// A WriteIntentError indicates that one or more write intents belonging
+// to another transaction were encountered, leading to a read/write or
+// write/write conflict. The keys at which the intents were encountered
+// are set, as are the txn metas for the intents' transactions.
+//
+// WriteIntentErrors are used at two different levels of the system. In
+// both cases, they have the same meaning — that an intent or lock (an
+// intent is a form of replicated lock) is preventing an operation from
+// completing.
+//
+// First, they are returned from MVCC during request evaluation when a
+// request finds a conflicting intent. A WriteIntentError is propagated
+// up through the Replica to the corresponding lock table and passed to
+// its AddDiscoveredLock method. This informs the lock table about the
+// intent(s) and allows the request to handle the conflicts through a
+// combination of waiting and pushing in the concurrency manager. See
+// concurrency_control.go for an explanation and diagram of the flow.
+//
+// Second, WriteIntentErrors are returned from the concurrency manager
+// for intents/locks that conflict with a request and are not handled.
+// This is typically because the request was configured with an Error
+// wait policy instead of a Block wait policy, so it is opting to fail
+// fast on conflicting locks instead of waiting for a lock to be
+// released. These errors make their way back up from KV to SQL, where
+// they are converted to a LockNotAvailable error.
+//
+// Note that the KV client is free to send more requests after a
+// WriteIntentError. This is not generally allowed after other errors
+// because of fears over the ambiguity of the side-effects of failed
+// requests (in particular, the timestamps at which intents might have
+// been written). WriteIntentError is a special case as we ensure
+// there's no ambiguity; the error carries a WriteTimestamp that's the
+// upper bound of the timestamps intents were written at.
 type WriteIntentError struct {
 	Intents []Intent `protobuf:"bytes,1,rep,name=intents" json:"intents"`
 	// The sequence of the lease that the operation which hit this error was
