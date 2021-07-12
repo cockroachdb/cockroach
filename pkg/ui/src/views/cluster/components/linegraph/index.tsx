@@ -356,7 +356,6 @@ function touPlot(data: formattedSeries[]): uPlot.AlignedData {
 // Once we receive updates to props, we push new data to the
 // uPlot object.
 export class LineGraph extends React.Component<LineGraphProps, {}> {
-  props: any;
   constructor(props: LineGraphProps) {
     super(props);
 
