@@ -3167,12 +3167,6 @@ CREATE TABLE crdb_internal.zones (
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if !p.ExecCfg().Codec.ForSystemTenant() {
-			// Don't try to populate crdb_internal.zones if running in a multitenant
-			// configuration.
-			return nil
-		}
-
 		namespace, err := p.getAllNames(ctx)
 		if err != nil {
 			return err
@@ -3232,7 +3226,7 @@ CREATE TABLE crdb_internal.zones (
 			// for secondary tenants.
 			if err := completeZoneConfig(
 				&fullZone,
-				keys.SystemSQLCodec,
+				p.ExtendedEvalContext().Codec,
 				descpb.ID(tree.MustBeDInt(r[0])),
 				getKey,
 			); err != nil {
@@ -3766,9 +3760,7 @@ func addPartitioningRows(
 	// have no ability to partition tables/indexes.
 	// NOTE: we assume the system tenant below by casting object IDs directly to
 	// config.SystemTenantObjectID.
-	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil
-	}
+	// TODO(arul): cleanup the comment above.
 
 	tableID := tree.NewDInt(tree.DInt(table.GetID()))
 	indexID := tree.NewDInt(tree.DInt(index.GetID()))
