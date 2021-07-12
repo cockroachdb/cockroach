@@ -13,7 +13,7 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -49,7 +49,7 @@ WHERE name = %s
 		return nil, err
 	}
 
-	return parse(fmt.Sprintf(showCreateQuery, lex.EscapeSQLString(n.Name.Object())))
+	return parse(fmt.Sprintf(showCreateQuery, lexbase.EscapeSQLString(n.Name.Object())))
 }
 
 func (d *delegator) delegateShowCreateTable(n *tree.ShowCreate) (tree.Statement, error) {
@@ -229,7 +229,7 @@ func (d *delegator) delegateShowCreateAllTables() (tree.Statement, error) {
 	databaseLiteral := d.evalCtx.SessionData.Database
 
 	query := fmt.Sprintf(showCreateAllTablesQuery,
-		lex.EscapeSQLString(databaseLiteral),
+		lexbase.EscapeSQLString(databaseLiteral),
 	)
 
 	return parse(query)
@@ -260,11 +260,11 @@ func (d *delegator) showTableDetails(
 	}
 
 	fullQuery := fmt.Sprintf(query,
-		lex.EscapeSQLString(resName.Catalog()),
-		lex.EscapeSQLString(resName.Table()),
-		lex.EscapeSQLString(resName.String()),
+		lexbase.EscapeSQLString(resName.Catalog()),
+		lexbase.EscapeSQLString(resName.Table()),
+		lexbase.EscapeSQLString(resName.String()),
 		resName.CatalogName.String(), // note: CatalogName.String() != Catalog()
-		lex.EscapeSQLString(resName.Schema()),
+		lexbase.EscapeSQLString(resName.Schema()),
 		dataSource.PostgresDescriptorID(),
 	)
 

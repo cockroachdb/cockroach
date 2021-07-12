@@ -22,7 +22,7 @@ package tree
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 )
 
 // ShowVar represents a SHOW statement.
@@ -544,7 +544,7 @@ func (node *ShowSyntax) Format(ctx *FmtCtx) {
 	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
 		ctx.WriteByte('_')
 	} else {
-		ctx.WriteString(lex.EscapeSQLString(node.Statement))
+		ctx.WriteString(lexbase.EscapeSQLString(node.Statement))
 	}
 }
 

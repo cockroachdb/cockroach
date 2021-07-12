@@ -6,11 +6,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/lex",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sessiondatapb",
-        "//pkg/util/stringencoding",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_x_text//language",
     ],
@@ -22,8 +20,6 @@ go_test(
     srcs = ["encode_test.go"],
     deps = [
         ":lex",
-        "//pkg/sql/lexbase",
-        "//pkg/sql/parser",
         "//pkg/sql/sessiondatapb",
     ],
 )

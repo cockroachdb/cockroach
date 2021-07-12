@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1712,7 +1712,7 @@ func (c *cliState) runStatements(stmts []string) error {
 // extracts a help string if available.
 func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 	cols, rows, err := c.sqlExecCtx.RunQuery(c.conn,
-		clisqlclient.MakeQuery("SHOW SYNTAX "+lex.EscapeSQLString(sql)),
+		clisqlclient.MakeQuery("SHOW SYNTAX "+lexbase.EscapeSQLString(sql)),
 		true)
 	if err != nil {
 		// The query failed with some error. This is not a syntax error
