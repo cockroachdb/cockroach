@@ -36,6 +36,8 @@ To keep your cluster after the roachtest finishes, use the `--debug` flag
 with `roachtest run`. You can use `roachprod` to connect to your cluster and
 examine the state by using `roachprod setup-ssh <cluster name>`. This will print
 out an IP address to connect to using `ssh`. To have `roachtest` reuse an
-existing cluster, pass the `--cluster <clustername` argument to 
+existing cluster, pass the `--cluster <clustername>` argument to 
 `roachtest run`. 
 
+A custom pebble executable can be specified by setting the `$PEBBLE_BIN` environment
+variable.
