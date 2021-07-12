@@ -17,11 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 )
 
+// MaxIngestSettingKey is the setting that controls IngestBatchSize.
+const MaxIngestSettingKey = "kv.bulk_ingest.batch_size"
+
 // IngestBatchSize is a cluster setting that controls the maximum size of the
 // payload in an AddSSTable request.
 var IngestBatchSize = func() *settings.ByteSizeSetting {
 	s := settings.RegisterByteSizeSetting(
-		"kv.bulk_ingest.batch_size",
+		MaxIngestSettingKey,
 		"the maximum size of the payload in an AddSSTable request",
 		16<<20,
 	)
