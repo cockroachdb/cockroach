@@ -25,7 +25,7 @@ import (
 	"unicode"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	apd "github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -1202,7 +1202,7 @@ func (d *DString) Format(ctx *FmtCtx) {
 	if f.HasFlags(fmtRawStrings) {
 		buf.WriteString(string(*d))
 	} else {
-		lex.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
+		lexbase.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
 	}
 }
 
@@ -1278,7 +1278,7 @@ func (*DCollatedString) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(ctx *FmtCtx) {
-	lex.EncodeSQLString(&ctx.Buffer, d.Contents)
+	lexbase.EncodeSQLString(&ctx.Buffer, d.Contents)
 	ctx.WriteString(" COLLATE ")
 	lex.EncodeLocaleName(&ctx.Buffer, d.Locale)
 }
@@ -3339,7 +3339,7 @@ func (d *DJSON) Format(ctx *FmtCtx) {
 	} else {
 		// TODO(knz): This seems incorrect,
 		// see https://github.com/cockroachdb/cockroach/issues/60673
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, s, ctx.flags.EncodeFlags())
+		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, s, ctx.flags.EncodeFlags())
 	}
 }
 
@@ -4620,12 +4620,12 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		ctx.WriteByte('(')
 		d.DInt.Format(ctx)
 		ctx.WriteByte(',')
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncNoFlags)
+		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncNoFlags)
 		ctx.WriteByte(')')
 	} else {
 		// This is used to print the name of pseudo-procedures in e.g.
 		// pg_catalog.pg_type.typinput
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncBareStrings)
+		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncBareStrings)
 	}
 }
 

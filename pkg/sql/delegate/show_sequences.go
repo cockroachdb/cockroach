@@ -13,7 +13,7 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -32,7 +32,7 @@ func (d *delegator) delegateShowSequences(n *tree.ShowSequences) (tree.Statement
 	   WHERE sequence_catalog = %[2]s
 	ORDER BY sequence_name`,
 		name.String(), // note: (tree.Name).String() != string(name)
-		lex.EscapeSQLString(string(name)),
+		lexbase.EscapeSQLString(string(name)),
 	)
 	return parse(getSequencesQuery)
 }

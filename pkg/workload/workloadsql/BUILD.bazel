@@ -9,7 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/workloadsql",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/lex",
+        "//pkg/sql/lexbase",
         "//pkg/util/ctxgroup",
         "//pkg/util/log",
         "//pkg/util/timeutil",

@@ -19,13 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // These must match crdb_internal.zones.
@@ -231,15 +231,15 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 	}
 	if !zone.InheritedConstraints {
 		maybeWriteComma(f)
-		f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
+		f.Printf("\tconstraints = %s", lexbase.EscapeSQLString(constraints))
 	}
 	if !zone.InheritedVoterConstraints() && zone.NumVoters != nil && *zone.NumVoters > 0 {
 		maybeWriteComma(f)
-		f.Printf("\tvoter_constraints = %s", lex.EscapeSQLString(voterConstraints))
+		f.Printf("\tvoter_constraints = %s", lexbase.EscapeSQLString(voterConstraints))
 	}
 	if !zone.InheritedLeasePreferences {
 		maybeWriteComma(f)
-		f.Printf("\tlease_preferences = %s", lex.EscapeSQLString(prefs))
+		f.Printf("\tlease_preferences = %s", lexbase.EscapeSQLString(prefs))
 	}
 	return f.String(), nil
 }
