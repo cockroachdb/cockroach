@@ -1033,16 +1033,22 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`drop_column: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
-			ts := fetchDescVersionModificationTime(t, db, f, `drop_column`, 2)
-			assertPayloads(t, dropColumn, []string{
-				fmt.Sprintf(`drop_column: [1]->{"after": {"a": 1}, "updated": "%s"}`, ts.AsOfSystemTime()),
-				fmt.Sprintf(`drop_column: [2]->{"after": {"a": 2}, "updated": "%s"}`, ts.AsOfSystemTime()),
-			})
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (3)`)
-			assertPayloadsStripTs(t, dropColumn, []string{
-				`drop_column: [3]->{"after": {"a": 3}}`,
+
+			// since the changefeed level backfill (which flushes the sink before
+			// the backfill) occurs before the schema-change backfill for a drop
+			// column, the order in which the sink receives both backfills is
+			// uncertain. the only guarantee here is per-key ordering guarantees,
+			// so we must check both backfills in the same assertion.
+			assertPayloadsPerKeyOrderedStripTs(t, dropColumn, []string{
+				// Changefeed level backfill for DROP COLUMN b.
 				`drop_column: [1]->{"after": {"a": 1}}`,
 				`drop_column: [2]->{"after": {"a": 2}}`,
+				// Schema-change backfill for DROP COLUMN b.
+				`drop_column: [1]->{"after": {"a": 1}}`,
+				`drop_column: [2]->{"after": {"a": 2}}`,
+				// Insert 3 into drop_column
+				`drop_column: [3]->{"after": {"a": 3}}`,
 			})
 		})
 
@@ -1077,13 +1083,13 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			waitForSchemaChange(t, sqlDB, `ALTER TABLE multiple_alters ADD COLUMN d STRING DEFAULT 'dee'`)
 			wg.Done()
 
-			ts := fetchDescVersionModificationTime(t, db, f, `multiple_alters`, 2)
-			// Changefeed level backfill for DROP COLUMN b.
-			assertPayloads(t, multipleAlters, []string{
-				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1}, "updated": "%s"}`, ts.AsOfSystemTime()),
-				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2}, "updated": "%s"}`, ts.AsOfSystemTime()),
-			})
-			assertPayloadsStripTs(t, multipleAlters, []string{
+			// assertions are grouped this way because the sink is flushed prior
+			// to a changefeed level backfill, ensuring all messages are received
+			// at the start of the assertion
+			assertPayloadsPerKeyOrderedStripTs(t, multipleAlters, []string{
+				// Changefeed level backfill for DROP COLUMN b.
+				`multiple_alters: [1]->{"after": {"a": 1}}`,
+				`multiple_alters: [2]->{"after": {"a": 2}}`,
 				// Schema-change backfill for DROP COLUMN b.
 				`multiple_alters: [1]->{"after": {"a": 1}}`,
 				`multiple_alters: [2]->{"after": {"a": 2}}`,
@@ -1091,18 +1097,15 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`multiple_alters: [1]->{"after": {"a": 1}}`,
 				`multiple_alters: [2]->{"after": {"a": 2}}`,
 			})
-			ts = fetchDescVersionModificationTime(t, db, f, `multiple_alters`, 7)
-			// Changefeed level backfill for ADD COLUMN c.
-			assertPayloads(t, multipleAlters, []string{
-				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}, "updated": "%s"}`, ts.AsOfSystemTime()),
-				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}, "updated": "%s"}`, ts.AsOfSystemTime()),
-			})
-			// Schema change level backfill for ADD COLUMN d.
-			assertPayloadsStripTs(t, multipleAlters, []string{
+			assertPayloadsPerKeyOrderedStripTs(t, multipleAlters, []string{
+				// Changefeed level backfill for ADD COLUMN c.
+				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
+				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
+				// Schema change level backfill for ADD COLUMN d.
 				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
 				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
 			})
-			ts = fetchDescVersionModificationTime(t, db, f, `multiple_alters`, 10)
+			ts := fetchDescVersionModificationTime(t, db, f, `multiple_alters`, 10)
 			// Changefeed level backfill for ADD COLUMN d.
 			assertPayloads(t, multipleAlters, []string{
 				// Backfill no-ops for column D (C schema change is complete)
@@ -3909,26 +3912,31 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 			`foo: [1]->{"after": {"a": 1}}`,
 			`foo: [2]->{"after": {"a": 2}}`,
 		}
-		msgs, err := readNextMessages(foo, len(expected), false)
+		msgs, err := readNextMessages(foo, len(expected))
 		require.NoError(t, err)
+
+		var msgsFormatted []string
+		for _, m := range msgs {
+			msgsFormatted = append(msgsFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
+		}
 
 		// Sort the messages by their timestamp.
 		re := regexp.MustCompile(`.*(, "updated": "(\d+\.\d+)")}.*`)
-		getHLC := func(i int) string { return re.FindStringSubmatch(msgs[i])[2] }
+		getHLC := func(i int) string { return re.FindStringSubmatch(msgsFormatted[i])[2] }
 		trimHlC := func(s string) string {
 			indexes := re.FindStringSubmatchIndex(s)
 			return s[:indexes[2]] + s[indexes[3]:]
 		}
-		sort.Slice(msgs, func(i, j int) bool {
+		sort.Slice(msgsFormatted, func(i, j int) bool {
 			a, b := getHLC(i), getHLC(j)
 			if a == b {
-				return msgs[i] < msgs[j]
+				return msgsFormatted[i] < msgsFormatted[j]
 			}
 			return a < b
 		})
 		schemaChangeTS := getHLC(0)
-		stripped := make([]string, len(msgs))
-		for i, m := range msgs {
+		stripped := make([]string, len(msgsFormatted))
+		for i, m := range msgsFormatted {
 			stripped[i] = trimHlC(m)
 		}
 		require.Equal(t, expected, stripped)
@@ -3949,7 +3957,7 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 				schemaChangeTS)
 			defer closeFeed(t, foo)
 			// Observe only the touch writes.
-			assertPayloads(t, foo, msgs[5:])
+			assertPayloads(t, foo, msgsFormatted[5:])
 			// Make sure there are no more messages.
 			{
 				next, err := foo.Next()
@@ -3966,7 +3974,7 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 					" resolved = '100ms', updated, cursor = $1, initial_scan",
 				schemaChangeTS)
 			defer closeFeed(t, foo)
-			assertPayloads(t, foo, msgs)
+			assertPayloads(t, foo, msgsFormatted)
 			// Make sure there are no more messages.
 			{
 				next, err := foo.Next()
