@@ -76,6 +76,7 @@ func NewAppendOnlyBufferedBatch(
 	batch := allocator.NewMemBatchWithFixedCapacity(typs, 0 /* capacity */)
 	return &AppendOnlyBufferedBatch{
 		batch:       batch,
+		allocator:   allocator,
 		colVecs:     batch.ColVecs(),
 		colsToStore: colsToStore,
 	}
@@ -97,6 +98,7 @@ type AppendOnlyBufferedBatch struct {
 	// through the implementation of each method of coldata.Batch interface.
 	batch coldata.Batch
 
+	allocator   *colmem.Allocator
 	length      int
 	colVecs     []coldata.Vec
 	colsToStore []int
@@ -194,22 +196,24 @@ func (b *AppendOnlyBufferedBatch) String() string {
 
 // AppendTuples is a helper method that appends all tuples with indices in range
 // [startIdx, endIdx) from batch (paying attention to the selection vector)
-// into b.
-// NOTE: this does *not* perform memory accounting.
+// into b. The newly allocated memory is registered with the allocator used to
+// create this AppendOnlyBufferedBatch.
 // NOTE: batch must be of non-zero length.
 func (b *AppendOnlyBufferedBatch) AppendTuples(batch coldata.Batch, startIdx, endIdx int) {
-	for _, colIdx := range b.colsToStore {
-		b.colVecs[colIdx].Append(
-			coldata.SliceArgs{
-				Src:         batch.ColVec(colIdx),
-				Sel:         batch.Selection(),
-				DestIdx:     b.length,
-				SrcStartIdx: startIdx,
-				SrcEndIdx:   endIdx,
-			},
-		)
-	}
-	b.length += endIdx - startIdx
+	b.allocator.PerformAppend(b, func() {
+		for _, colIdx := range b.colsToStore {
+			b.colVecs[colIdx].Append(
+				coldata.SliceArgs{
+					Src:         batch.ColVec(colIdx),
+					Sel:         batch.Selection(),
+					DestIdx:     b.length,
+					SrcStartIdx: startIdx,
+					SrcEndIdx:   endIdx,
+				},
+			)
+		}
+		b.length += endIdx - startIdx
+	})
 }
 
 // MaybeAllocateUint64Array makes sure that the passed in array is allocated, of
