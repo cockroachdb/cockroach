@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -613,8 +612,7 @@ func (p *sqlReporter) iter(w, _ io.Writer, _ int, row []string) error {
 
 	fmt.Fprint(w, "INSERT INTO results VALUES (")
 	for i, r := range row {
-		s := tree.DString(r)
-		fmt.Fprintf(w, "%s", s.String())
+		lexbase.EncodeSQLStringWithFlags(w, r, lexbase.EncNoFlags)
 		if i < len(row)-1 {
 			fmt.Fprint(w, ", ")
 		}
