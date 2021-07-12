@@ -14,7 +14,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -54,7 +54,7 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 		ORDER BY table_name, r.start_key
 		`
 		// Note: n.DatabaseName.String() != string(n.DatabaseName)
-		return parse(fmt.Sprintf(dbQuery, n.DatabaseName.String(), lex.EscapeSQLString(string(n.DatabaseName))))
+		return parse(fmt.Sprintf(dbQuery, n.DatabaseName.String(), lexbase.EscapeSQLString(string(n.DatabaseName))))
 	}
 
 	idx, resName, err := cat.ResolveTableIndex(

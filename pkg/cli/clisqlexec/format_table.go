@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -594,7 +593,7 @@ func (p *sqlReporter) describe(w io.Writer, cols []string) error {
 	for i, col := range cols {
 		var colName bytes.Buffer
 		lexbase.EncodeRestrictedSQLIdent(&colName, col, lexbase.EncNoFlags)
-		fmt.Fprint(w, "  %s STRING", colName.String())
+		fmt.Fprintf(w, "  %s STRING", colName.String())
 		if i < len(cols)-1 {
 			fmt.Fprint(w, ",")
 		}
@@ -613,8 +612,9 @@ func (p *sqlReporter) iter(w, _ io.Writer, _ int, row []string) error {
 
 	fmt.Fprint(w, "INSERT INTO results VALUES (")
 	for i, r := range row {
-		s := tree.DString(r)
-		fmt.Fprintf(w, "%s", s.String())
+		var buf bytes.Buffer
+		lexbase.EncodeSQLStringWithFlags(&buf, r, lexbase.EncNoFlags)
+		fmt.Fprint(w, buf.String())
 		if i < len(row)-1 {
 			fmt.Fprint(w, ", ")
 		}

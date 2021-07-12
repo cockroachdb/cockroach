@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -74,7 +74,7 @@ FROM "".information_schema.type_privileges`
 			if err != nil {
 				return nil, err
 			}
-			params = append(params, lex.EscapeSQLString(db))
+			params = append(params, lexbase.EscapeSQLString(db))
 		}
 
 		fmt.Fprint(&source, dbPrivQuery)
@@ -98,7 +98,7 @@ FROM "".information_schema.type_privileges`
 			if schema.ExplicitCatalog {
 				dbName = schema.Catalog()
 			}
-			params = append(params, fmt.Sprintf("(%s,%s)", lex.EscapeSQLString(dbName), lex.EscapeSQLString(schema.Schema())))
+			params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(dbName), lexbase.EscapeSQLString(schema.Schema())))
 		}
 
 		fmt.Fprint(&source, schemaPrivQuery)
@@ -122,8 +122,8 @@ FROM "".information_schema.type_privileges`
 					params,
 					fmt.Sprintf(
 						"(%s, %s)",
-						lex.EscapeSQLString(t.TypeMeta.Name.Schema),
-						lex.EscapeSQLString(t.TypeMeta.Name.Name),
+						lexbase.EscapeSQLString(t.TypeMeta.Name.Schema),
+						lexbase.EscapeSQLString(t.TypeMeta.Name.Name),
 					),
 				)
 			} else {
@@ -131,7 +131,7 @@ FROM "".information_schema.type_privileges`
 					params,
 					fmt.Sprintf(
 						"('pg_catalog', %s)",
-						lex.EscapeSQLString(t.TypeMeta.Name.Name),
+						lexbase.EscapeSQLString(t.TypeMeta.Name.Name),
 					),
 				)
 			}
@@ -140,7 +140,7 @@ FROM "".information_schema.type_privileges`
 		dbNameClause := "true"
 		// If the current database is set, restrict the command to it.
 		if currDB := d.evalCtx.SessionData.Database; currDB != "" {
-			dbNameClause = fmt.Sprintf("database_name = %s", lex.EscapeSQLString(currDB))
+			dbNameClause = fmt.Sprintf("database_name = %s", lexbase.EscapeSQLString(currDB))
 		}
 		fmt.Fprint(&source, typePrivQuery)
 		orderBy = "1,2,3,4,5"
@@ -181,9 +181,9 @@ FROM "".information_schema.type_privileges`
 
 			for i := range allTables {
 				params = append(params, fmt.Sprintf("(%s,%s,%s)",
-					lex.EscapeSQLString(allTables[i].Catalog()),
-					lex.EscapeSQLString(allTables[i].Schema()),
-					lex.EscapeSQLString(allTables[i].Table())))
+					lexbase.EscapeSQLString(allTables[i].Catalog()),
+					lexbase.EscapeSQLString(allTables[i].Schema()),
+					lexbase.EscapeSQLString(allTables[i].Table())))
 			}
 
 			if len(params) == 0 {
@@ -215,7 +215,7 @@ FROM "".information_schema.type_privileges`
 			source.WriteByte(')')
 			// If the current database is set, restrict the command to it.
 			if currDB := d.evalCtx.SessionData.Database; currDB != "" {
-				fmt.Fprintf(&cond, ` WHERE database_name = %s`, lex.EscapeSQLString(currDB))
+				fmt.Fprintf(&cond, ` WHERE database_name = %s`, lexbase.EscapeSQLString(currDB))
 			} else {
 				cond.WriteString(`WHERE true`)
 			}
@@ -225,7 +225,7 @@ FROM "".information_schema.type_privileges`
 	if n.Grantees != nil {
 		params = params[:0]
 		for _, grantee := range n.Grantees.ToStrings() {
-			params = append(params, lex.EscapeSQLString(grantee))
+			params = append(params, lexbase.EscapeSQLString(grantee))
 		}
 		fmt.Fprintf(&cond, ` AND grantee IN (%s)`, strings.Join(params, ","))
 	}

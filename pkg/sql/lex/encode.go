@@ -24,90 +24,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"unicode"
-	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
 )
-
-var mustQuoteMap = map[byte]bool{
-	' ': true,
-	',': true,
-	'{': true,
-	'}': true,
-}
-
-// EncodeSQLString writes a string literal to buf. All unicode and
-// non-printable characters are escaped.
-func EncodeSQLString(buf *bytes.Buffer, in string) {
-	EncodeSQLStringWithFlags(buf, in, lexbase.EncNoFlags)
-}
-
-// EscapeSQLString returns an escaped SQL representation of the given
-// string. This is suitable for safely producing a SQL string valid
-// for input to the parser.
-func EscapeSQLString(in string) string {
-	var buf bytes.Buffer
-	EncodeSQLString(&buf, in)
-	return buf.String()
-}
-
-// EncodeSQLStringWithFlags writes a string literal to buf. All
-// unicode and non-printable characters are escaped. flags controls
-// the output format: if encodeBareString is set, the output string
-// will not be wrapped in quotes if the strings contains no special
-// characters.
-func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags lexbase.EncodeFlags) {
-	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
-	start := 0
-	escapedString := false
-	bareStrings := flags.HasFlags(lexbase.EncBareStrings)
-	// Loop through each unicode code point.
-	for i, r := range in {
-		if i < start {
-			continue
-		}
-		ch := byte(r)
-		if r >= 0x20 && r < 0x7F {
-			if mustQuoteMap[ch] {
-				// We have to quote this string - ignore bareStrings setting
-				bareStrings = false
-			}
-			if !stringencoding.NeedEscape(ch) && ch != '\'' {
-				continue
-			}
-		}
-
-		if !escapedString {
-			buf.WriteString("e'") // begin e'xxx' string
-			escapedString = true
-		}
-		buf.WriteString(in[start:i])
-		ln := utf8.RuneLen(r)
-		if ln < 0 {
-			start = i + 1
-		} else {
-			start = i + ln
-		}
-		stringencoding.EncodeEscapedChar(buf, in, r, ch, i, '\'')
-	}
-
-	quote := !escapedString && !bareStrings
-	if quote {
-		buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
-	}
-	if start < len(in) {
-		buf.WriteString(in[start:])
-	}
-	if escapedString || quote {
-		buf.WriteByte('\'')
-	}
-}
 
 // NormalizeLocaleName returns a normalized locale identifier based on s. The
 // case of the locale is normalized and any dash characters are mapped to
@@ -162,42 +85,6 @@ func LocaleNamesAreEqual(a, b string) bool {
 		}
 	}
 	return true
-}
-
-// EncodeSQLBytes encodes the SQL byte array in 'in' to buf, to a
-// format suitable for re-scanning. We don't use a straightforward hex
-// encoding here with x'...'  because the result would be less
-// compact. We are trading a little more time during the encoding to
-// have a little less bytes on the wire.
-func EncodeSQLBytes(buf *bytes.Buffer, in string) {
-	start := 0
-	buf.WriteString("b'")
-	// Loop over the bytes of the string (i.e., don't use range over unicode
-	// code points).
-	for i, n := 0, len(in); i < n; i++ {
-		ch := in[i]
-		if encodedChar := stringencoding.EncodeMap[ch]; encodedChar != stringencoding.DontEscape {
-			buf.WriteString(in[start:i])
-			buf.WriteByte('\\')
-			buf.WriteByte(encodedChar)
-			start = i + 1
-		} else if ch == '\'' {
-			// We can't just fold this into stringencoding.EncodeMap because
-			// stringencoding.EncodeMap is also used for strings which
-			// aren't quoted with single-quotes
-			buf.WriteString(in[start:i])
-			buf.WriteByte('\\')
-			buf.WriteByte(ch)
-			start = i + 1
-		} else if ch < 0x20 || ch >= 0x7F {
-			buf.WriteString(in[start:i])
-			// Escape non-printable characters.
-			buf.Write(stringencoding.HexMap[ch])
-			start = i + 1
-		}
-	}
-	buf.WriteString(in[start:])
-	buf.WriteByte('\'')
 }
 
 // EncodeByteArrayToRawBytes converts a SQL-level byte array into raw

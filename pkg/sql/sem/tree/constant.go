@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -448,9 +448,9 @@ func (expr *StrVal) RawString() string {
 func (expr *StrVal) Format(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
 	if expr.scannedAsBytes {
-		lex.EncodeSQLBytes(buf, expr.s)
+		lexbase.EncodeSQLBytes(buf, expr.s)
 	} else {
-		lex.EncodeSQLStringWithFlags(buf, expr.s, f.EncodeFlags())
+		lexbase.EncodeSQLStringWithFlags(buf, expr.s, f.EncodeFlags())
 	}
 }
 
