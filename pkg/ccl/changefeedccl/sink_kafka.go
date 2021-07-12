@@ -13,6 +13,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -106,6 +107,8 @@ type saramaConfig struct {
 		Frequency   jsonDuration `json:",omitempty"`
 		MaxMessages int          `json:",omitempty"`
 	}
+
+	RequiredAcks string `json:",omitempty"`
 
 	Version string `json:",omitempty"`
 }
@@ -441,7 +444,28 @@ func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 		}
 		kafka.Version = parsedVersion
 	}
+	if c.RequiredAcks != "" {
+		parsedAcks, err := parseRequiredAcks(c.RequiredAcks)
+		if err != nil {
+			return err
+		}
+		kafka.Producer.RequiredAcks = parsedAcks
+	}
 	return nil
+}
+
+func parseRequiredAcks(a string) (sarama.RequiredAcks, error) {
+	switch a {
+	case "0", "NONE":
+		return sarama.NoResponse, nil
+	case "1", "ONE":
+		return sarama.WaitForLocal, nil
+	case "-1", "ALL":
+		return sarama.WaitForAll, nil
+	default:
+		return sarama.WaitForLocal,
+			fmt.Errorf(`invalid acks value "%s", must be "NONE"/"0", "ONE"/"1", or "ALL"/"-1"`, a)
+	}
 }
 
 func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
