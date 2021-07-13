@@ -59,8 +59,8 @@ func registerTypeORM(r registry.Registry) {
 		t.L().Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
 
 		if err := repeatRunE(
-			ctx, t, c, node, "maybe fix python3-apt",
-			`sudo apt-get install --reinstall -y python3-apt`,
+			ctx, t, c, node, "purge apt-get",
+			`sudo apt-get purge -y command-not-found`,
 		); err != nil {
 			t.Fatal(err)
 		}
