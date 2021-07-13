@@ -706,14 +706,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
-			nodesStatusServer:      serverpb.MakeOptionalNodesStatusServer(sStatus),
-			nodeLiveness:           optionalnodeliveness.MakeContainer(nodeLiveness),
-			gossip:                 gossip.MakeOptionalGossip(g),
-			grpcServer:             grpcServer.Server,
-			nodeIDContainer:        idContainer,
-			externalStorage:        externalStorage,
-			externalStorageFromURI: externalStorageFromURI,
-			isMeta1Leaseholder:     node.stores.IsMeta1Leaseholder,
+			nodesStatusServer:        serverpb.MakeOptionalNodesStatusServer(sStatus),
+			nodeLiveness:             optionalnodeliveness.MakeContainer(nodeLiveness),
+			gossip:                   gossip.MakeOptionalGossip(g),
+			grpcServer:               grpcServer.Server,
+			nodeIDContainer:          idContainer,
+			externalStorage:          externalStorage,
+			externalStorageFromURI:   externalStorageFromURI,
+			isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
+			sqlSQLResponseAdmissionQ: gcoord.GetWorkQueue(admission.SQLSQLResponseWork),
 		},
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,

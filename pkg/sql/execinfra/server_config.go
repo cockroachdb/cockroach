@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -151,6 +152,10 @@ type ServerConfig struct {
 
 	// VirtualSchemas hold the virtual table schemas.
 	VirtualSchemas catalog.VirtualSchemas
+
+	// SQLSQLResponseAdmissionQ is the admission queue to use for
+	// SQLSQLResponseWork.
+	SQLSQLResponseAdmissionQ *admission.WorkQueue
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

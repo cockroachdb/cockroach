@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +53,7 @@ func (c callbackRemoteComponentCreator) newOutbox(
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
-	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID, _ admissionOptions,
 ) (*colrpc.Inbox, error) {
 	return c.newInboxFn(allocator, typs, streamID)
 }
@@ -218,15 +219,17 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
 	f := &flowinfra.FlowBase{
-		FlowCtx: execinfra.FlowCtx{EvalCtx: &evalCtx,
-			NodeID: base.TestingIDContainer,
+		FlowCtx: execinfra.FlowCtx{
+			Cfg:     &execinfra.ServerConfig{},
+			EvalCtx: &evalCtx,
+			NodeID:  base.TestingIDContainer,
 		},
 	}
 	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
 		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, false, &wg, &execinfra.RowChannel{},
 		nil /* batchSyncFlowConsumer */, nil /* nodeDialer */, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-		nil /* fdSemaphore */, descs.DistSQLTypeResolver{},
+		nil /* fdSemaphore */, descs.DistSQLTypeResolver{}, admission.WorkInfo{},
 	)
 
 	_, _, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, nil /* localProcessors */, flowinfra.FuseNormally)

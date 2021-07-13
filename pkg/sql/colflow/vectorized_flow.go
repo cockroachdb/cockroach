@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -208,6 +209,7 @@ func (f *vectorizedFlow) Setup(
 		diskQueueCfg,
 		f.countingSemaphore,
 		flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
+		f.FlowBase.GetAdmissionInfo(),
 	)
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(f.creator)
@@ -449,6 +451,11 @@ type flowCreatorHelper interface {
 	getCancelFlowFn() context.CancelFunc
 }
 
+type admissionOptions struct {
+	admissionQ    *admission.WorkQueue
+	admissionInfo admission.WorkInfo
+}
+
 // remoteComponentCreator is an interface that abstracts the constructors for
 // several components in a remote flow. Mostly for testing purposes.
 type remoteComponentCreator interface {
@@ -460,7 +467,8 @@ type remoteComponentCreator interface {
 		metadataSources []colexecop.MetadataSource,
 		toClose []colexecop.Closer,
 	) (*colrpc.Outbox, error)
-	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+		admissionOpts admissionOptions) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -477,9 +485,13 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator,
+	typs []*types.T,
+	streamID execinfrapb.StreamID,
+	admissionOpts admissionOptions,
 ) (*colrpc.Inbox, error) {
-	return colrpc.NewInbox(allocator, typs, streamID)
+	return colrpc.NewInboxWithAdmissionControl(
+		allocator, typs, streamID, admissionOpts.admissionQ, admissionOpts.admissionInfo)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -508,6 +520,7 @@ type vectorizedFlowCreator struct {
 	flowID            execinfrapb.FlowID
 	exprHelper        *colexecargs.ExprHelper
 	typeResolver      descs.DistSQLTypeResolver
+	admissionInfo     admission.WorkInfo
 
 	// numOutboxes counts how many colrpc.Outbox'es have been set up on this
 	// node. It must be accessed atomically.
@@ -573,6 +586,7 @@ func newVectorizedFlowCreator(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	typeResolver descs.DistSQLTypeResolver,
+	admissionInfo admission.WorkInfo,
 ) *vectorizedFlowCreator {
 	creator := vectorizedFlowCreatorPool.Get().(*vectorizedFlowCreator)
 	*creator = vectorizedFlowCreator{
@@ -589,6 +603,7 @@ func newVectorizedFlowCreator(
 		flowID:                 flowID,
 		exprHelper:             creator.exprHelper,
 		typeResolver:           typeResolver,
+		admissionInfo:          admissionInfo,
 		procIdxQueue:           creator.procIdxQueue,
 		opChains:               creator.opChains,
 		monitors:               creator.monitors,
@@ -881,8 +896,14 @@ func (s *vectorizedFlowCreator) setupInput(
 				latency = 0
 				log.VEventf(ctx, 1, "an error occurred during vectorized planning while getting latency: %v", err)
 			}
-
-			inbox, err := s.remoteComponentCreator.newInbox(colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory), input.ColumnTypes, inputStream.StreamID)
+			inbox, err := s.remoteComponentCreator.newInbox(
+				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
+				input.ColumnTypes,
+				inputStream.StreamID,
+				admissionOptions{
+					admissionQ:    flowCtx.Cfg.SQLSQLResponseAdmissionQ,
+					admissionInfo: s.admissionInfo,
+				})
 
 			if err != nil {
 				return colexecargs.OpWithMetaInfo{}, err
