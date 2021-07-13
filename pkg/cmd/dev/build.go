@@ -12,9 +12,9 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -93,17 +93,12 @@ func (d *dev) build(cmd *cobra.Command, targets []string) (err error) {
 }
 
 func (d *dev) symlinkBinaries(ctx context.Context, targets []string) error {
-	var workspace string
-	{
-		out, err := d.exec.CommandContextSilent(ctx, "bazel", "info", "workspace", "--color=yes")
-		if err != nil {
-			return err
-		}
-		workspace = strings.TrimSpace(string(out))
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
 	}
-
 	// Create the bin directory.
-	if err := d.os.MkdirAll(path.Join(workspace, "bin")); err != nil {
+	if err = d.os.MkdirAll(path.Join(workspace, "bin")); err != nil {
 		return err
 	}
 
@@ -136,53 +131,12 @@ func (d *dev) symlinkBinaries(ctx context.Context, targets []string) error {
 }
 
 func (d *dev) getPathToBin(ctx context.Context, target string) (string, error) {
-	// actionQueryResult is used to unmarshal the results of the bazel action
-	// query.
-	type actionQueryResult struct {
-		Artifacts []struct {
-			ID       string `json:"id"`
-			ExecPath string `json:"execPath"`
-		} `json:"artifacts"`
-
-		Actions []struct {
-			Mnemonic  string   `json:"mnemonic"`
-			OutputIds []string `json:"outputIds"`
-		} `json:"actions"`
-	}
-
-	buf, err := d.exec.CommandContextSilent(ctx, "bazel", "aquery", target, "--output=jsonproto", "--color=yes")
+	out, err := d.exec.CommandContextSilent(ctx, "bazel", "info", "bazel-bin", "--color=no")
 	if err != nil {
 		return "", err
 	}
-
-	var result actionQueryResult
-	if err := json.Unmarshal(buf, &result); err != nil {
-		return "", err
-	}
-
-	const binaryMnemomic = "GoLink"
-	for _, action := range result.Actions {
-		if action.Mnemonic == binaryMnemomic {
-			id := action.OutputIds[0]
-			for _, artifact := range result.Artifacts {
-				if artifact.ID == id {
-					binaryPath := strings.TrimPrefix(artifact.ExecPath, "bazel-out/")
-					var outputPath string
-					{
-						out, err := d.exec.CommandContextSilent(ctx, "bazel", "info", "output_path", "--color=yes")
-						if err != nil {
-							return "", err
-						}
-						outputPath = strings.TrimSpace(string(out))
-					}
-					// This extra wrangling here is to avoid symlinking through `bazel-out`,
-					// given we avoid the convenience symlinks up above.
-					binaryPath = fmt.Sprintf("%s/%s", outputPath, binaryPath)
-					return binaryPath, nil
-				}
-			}
-		}
-	}
-
-	return "", errors.Newf("could not find path to binary %q", target)
+	bazelBin := strings.TrimSpace(string(out))
+	target = strings.TrimPrefix(target, "//")
+	_, filename := filepath.Split(target)
+	return filepath.Join(bazelBin, target, filename+"_", filename), nil
 }
