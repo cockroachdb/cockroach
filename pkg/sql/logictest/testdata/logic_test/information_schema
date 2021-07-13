@@ -1128,6 +1128,7 @@ system         public              migrations                             BASE T
 system         public              join_tokens                            BASE TABLE   YES                 1
 system         public              statement_statistics                   BASE TABLE   YES                 1
 system         public              transaction_statistics                 BASE TABLE   YES                 1
+system         public              tenant_usage                           BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -1326,6 +1327,21 @@ system              public             630200280_20_6_not_null                  
 system              public             630200280_20_7_not_null                                                              system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_8_not_null                                                              system         public        table_statistics                 CHECK            NO             NO
 system              public             primary                                                                              system         public        table_statistics                 PRIMARY KEY      NO             NO
+system              public             630200280_44_10_not_null                                                             system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_11_not_null                                                             system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_12_not_null                                                             system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_13_not_null                                                             system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_1_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_2_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_3_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_4_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_5_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_6_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_7_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_8_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
+system              public             630200280_44_9_not_null                                                              system         public        tenant_usage                     CHECK            NO             NO
+system              public             primary                                                                              system         public        tenant_usage                     PRIMARY KEY      NO             NO
+system              public             op_idx                                                                               system         public        tenant_usage                     UNIQUE           NO             NO
 system              public             630200280_8_1_not_null                                                               system         public        tenants                          CHECK            NO             NO
 system              public             630200280_8_2_not_null                                                               system         public        tenants                          CHECK            NO             NO
 system              public             primary                                                                              system         public        tenants                          PRIMARY KEY      NO             NO
@@ -1498,6 +1514,19 @@ system              public             630200280_43_5_not_null                  
 system              public             630200280_43_6_not_null                                                              agg_interval IS NOT NULL
 system              public             630200280_43_7_not_null                                                              metadata IS NOT NULL
 system              public             630200280_43_8_not_null                                                              statistics IS NOT NULL
+system              public             630200280_44_10_not_null                                                             total_read_bytes IS NOT NULL
+system              public             630200280_44_11_not_null                                                             total_write_requests IS NOT NULL
+system              public             630200280_44_12_not_null                                                             total_write_bytes IS NOT NULL
+system              public             630200280_44_13_not_null                                                             total_sql_pod_cpu_seconds IS NOT NULL
+system              public             630200280_44_1_not_null                                                              tenant_id IS NOT NULL
+system              public             630200280_44_2_not_null                                                              seq IS NOT NULL
+system              public             630200280_44_3_not_null                                                              op_id IS NOT NULL
+system              public             630200280_44_4_not_null                                                              ru_burst_limit IS NOT NULL
+system              public             630200280_44_5_not_null                                                              ru_refill_rate IS NOT NULL
+system              public             630200280_44_6_not_null                                                              ru_current IS NOT NULL
+system              public             630200280_44_7_not_null                                                              current_share_sum IS NOT NULL
+system              public             630200280_44_8_not_null                                                              total_ru_usage IS NOT NULL
+system              public             630200280_44_9_not_null                                                              total_read_requests IS NOT NULL
 system              public             630200280_4_1_not_null                                                               username IS NOT NULL
 system              public             630200280_4_3_not_null                                                               isRole IS NOT NULL
 system              public             630200280_5_1_not_null                                                               id IS NOT NULL
@@ -1571,6 +1600,10 @@ system         public        statement_statistics             node_id           
 system         public        statement_statistics             plan_hash                                                                      system              public             primary
 system         public        table_statistics                 statisticID                                                                    system              public             primary
 system         public        table_statistics                 tableID                                                                        system              public             primary
+system         public        tenant_usage                     op_id                                                                          system              public             op_idx
+system         public        tenant_usage                     seq                                                                            system              public             primary
+system         public        tenant_usage                     tenant_id                                                                      system              public             op_idx
+system         public        tenant_usage                     tenant_id                                                                      system              public             primary
 system         public        tenants                          id                                                                             system              public             primary
 system         public        transaction_statistics           aggregated_ts                                                                  system              public             primary
 system         public        transaction_statistics           app_name                                                                       system              public             primary
@@ -1823,6 +1856,19 @@ system         public        table_statistics                 nullCount         
 system         public        table_statistics                 rowCount                                                                       6
 system         public        table_statistics                 statisticID                                                                    2
 system         public        table_statistics                 tableID                                                                        1
+system         public        tenant_usage                     current_share_sum                                                              7
+system         public        tenant_usage                     op_id                                                                          3
+system         public        tenant_usage                     ru_burst_limit                                                                 4
+system         public        tenant_usage                     ru_current                                                                     6
+system         public        tenant_usage                     ru_refill_rate                                                                 5
+system         public        tenant_usage                     seq                                                                            2
+system         public        tenant_usage                     tenant_id                                                                      1
+system         public        tenant_usage                     total_read_bytes                                                               10
+system         public        tenant_usage                     total_read_requests                                                            9
+system         public        tenant_usage                     total_ru_usage                                                                 8
+system         public        tenant_usage                     total_sql_pod_cpu_seconds                                                      13
+system         public        tenant_usage                     total_write_bytes                                                              12
+system         public        tenant_usage                     total_write_requests                                                           11
 system         public        tenants                          active                                                                         2
 system         public        tenants                          id                                                                             1
 system         public        tenants                          info                                                                           3
@@ -2757,6 +2803,16 @@ NULL     root     system         public              table_statistics           
 NULL     root     system         public              table_statistics                       INSERT          NULL          NO
 NULL     root     system         public              table_statistics                       SELECT          NULL          YES
 NULL     root     system         public              table_statistics                       UPDATE          NULL          NO
+NULL     admin    system         public              tenant_usage                           DELETE          NULL          NO
+NULL     admin    system         public              tenant_usage                           GRANT           NULL          NO
+NULL     admin    system         public              tenant_usage                           INSERT          NULL          NO
+NULL     admin    system         public              tenant_usage                           SELECT          NULL          YES
+NULL     admin    system         public              tenant_usage                           UPDATE          NULL          NO
+NULL     root     system         public              tenant_usage                           DELETE          NULL          NO
+NULL     root     system         public              tenant_usage                           GRANT           NULL          NO
+NULL     root     system         public              tenant_usage                           INSERT          NULL          NO
+NULL     root     system         public              tenant_usage                           SELECT          NULL          YES
+NULL     root     system         public              tenant_usage                           UPDATE          NULL          NO
 NULL     admin    system         public              tenants                                GRANT           NULL          NO
 NULL     admin    system         public              tenants                                SELECT          NULL          YES
 NULL     root     system         public              tenants                                GRANT           NULL          NO
@@ -3303,6 +3359,16 @@ NULL     admin    system         public              transaction_statistics     
 NULL     admin    system         public              transaction_statistics                 SELECT          NULL          YES
 NULL     root     system         public              transaction_statistics                 GRANT           NULL          NO
 NULL     root     system         public              transaction_statistics                 SELECT          NULL          YES
+NULL     admin    system         public              tenant_usage                           DELETE          NULL          NO
+NULL     admin    system         public              tenant_usage                           GRANT           NULL          NO
+NULL     admin    system         public              tenant_usage                           INSERT          NULL          NO
+NULL     admin    system         public              tenant_usage                           SELECT          NULL          YES
+NULL     admin    system         public              tenant_usage                           UPDATE          NULL          NO
+NULL     root     system         public              tenant_usage                           DELETE          NULL          NO
+NULL     root     system         public              tenant_usage                           GRANT           NULL          NO
+NULL     root     system         public              tenant_usage                           INSERT          NULL          NO
+NULL     root     system         public              tenant_usage                           SELECT          NULL          YES
+NULL     root     system         public              tenant_usage                           UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

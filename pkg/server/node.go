@@ -1318,3 +1318,18 @@ func (n *Node) Join(
 		ActiveVersion: &activeVersion.Version,
 	}, nil
 }
+
+// TokenBucketRequestImpl is a hook for CCL code which implements the
+// TokenBucket API.
+var TokenBucketRequestImpl = func(
+	ctx context.Context, db *kv.DB, ex *sql.InternalExecutor, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	return nil, errors.Errorf("token bucket requires a CCL binary")
+}
+
+// TokenBucket is part of the roachpb.InternalServer service.
+func (n *Node) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	return TokenBucketRequestImpl(ctx, n.storeCfg.DB, n.sqlExec, in)
+}

@@ -58,6 +58,18 @@ type Connector interface {
 	// obviates the need for SQL-only tenant processes to join the cluster-wide
 	// gossip network.
 	config.SystemConfigProvider
+
+	// Connector is capable of providing an endpoint for the TokenBucket API.
+	TokenBucketProvider
+}
+
+// TokenBucketProvider supplies an endpoint (to tenants) for the TokenBucket API
+// (defined in roachpb.Internal), used to interact with the tenant cost control
+// token bucket.
+type TokenBucketProvider interface {
+	TokenBucket(
+		ctx context.Context, in *roachpb.TokenBucketRequest,
+	) (*roachpb.TokenBucketResponse, error)
 }
 
 // ConnectorConfig encompasses the configuration required to create a Connector.

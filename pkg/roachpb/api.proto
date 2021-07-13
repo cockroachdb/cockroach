@@ -23,6 +23,7 @@ import "util/hlc/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -2201,6 +2202,72 @@ message GossipSubscriptionEvent {
   kv.kvpb.Error error = 4;
 }
 
+message TokenBucketRequest {
+  message Consumption {
+    double r_u = 1;
+    uint64 read_requests = 2;
+    uint64 read_bytes = 3;
+    uint64 write_requests = 4;
+    uint64 write_bytes = 5;
+    double sql_pod_cpu_seconds = 6 [(gogoproto.customname) = "SQLPodCPUSeconds"];
+  }
+
+  bytes operation_id = 1 [
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+      (gogoproto.nullable) = false,
+      (gogoproto.customname) = "OperationID"
+  ];
+
+  // Amount of requested tokens.
+  double requested_tokens = 2;
+
+  // Previous shares value for the node (equal to NewShares in the previous
+  // request).
+  // 0 if the node just started up.
+  double previous_shares = 3;
+
+  // Timestamp returned by the previous operation; unset if the node just
+  // started up.
+  google.protobuf.Timestamp previous_timestamp = 4 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // New shares value for the node.
+  double new_shares = 5;
+
+  // TargetRequestPeriod configuration knob.
+  google.protobuf.Duration target_request_period = 6 [(gogoproto.nullable) = false,
+                                                      (gogoproto.stdduration) = true];
+
+  // Consumption that occurred since this node's last request.
+  Consumption consumption_since_last_request = 7 [(gogoproto.nullable) = false];
+}
+
+message TokenBucketResponse {
+  // Timestamp (on the host cluser) at which the bucket update became effective.
+  // Used to pass back in the next request.
+  google.protobuf.Timestamp operation_timestamp = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // Amount of tokens granted. In most cases, this is equal to the requested
+  // tokens; the only exception is when TrickleTime would otherwise exceed
+  // TargetRequestPeriod, in which case the number of tokens are reduced.
+  double granted_tokens = 2;
+
+
+  // If zero, the granted tokens can be used immediately, without restriction.
+  // If set, the granted tokens become available at a constant rate over this
+  // time period. E.g. if we are granted 1000 tokens and the trickle duration is
+  // 10 seconds, the tokens become available at a rate of 100tokens/sec for the
+  // next 10 seconds.
+  // TrickleTime is at most the TargetRequestPeriod.
+  google.protobuf.Duration trickle_time = 3 [(gogoproto.nullable) = false,
+                                             (gogoproto.stdduration) = true];
+
+  // Maximum number of unused tokens that we can accumulate over the trickle
+  // time; once we reach the limit we have to start discarding tokens. Used to
+  // limit burst usage for the free tier. Only set if TrickleTime is set.
+  double max_burst_tokens = 4;
+}
+
+
 // JoinNodeRequest is used to specify to the server node what the client's
 // binary version is. If it's not compatible with the rest of the cluster, the
 // join attempt is refused.
@@ -2225,6 +2292,10 @@ service Internal {
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
   rpc ResetQuorum        (ResetQuorumRequest)        returns (ResetQuorumResponse)            {}
+
+  // TokenBucket is used by tenants to obtain Request Units and report
+  // consumption.
+  rpc TokenBucket        (TokenBucketRequest)        returns (TokenBucketResponse)            {}
 
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.
