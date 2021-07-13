@@ -9156,6 +9156,14 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 	deleteReq := &roachpb.DeleteRequest{
 		RequestHeader: rh,
 	}
+	endTxnCommitReq := &roachpb.EndTxnRequest{
+		RequestHeader: rh,
+		Commit:        true,
+	}
+	endTxnAbortReq := &roachpb.EndTxnRequest{
+		RequestHeader: rh,
+		Commit:        true,
+	}
 	hbTxnReq := &roachpb.HeartbeatTxnRequest{
 		RequestHeader: rh,
 		Now:           cfg.Clock.Now(),
@@ -9236,6 +9244,42 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			useTxn: true,
 			req:    deleteReq,
 			// NB: a tombstone intent is written even if no value exists at the key.
+			expProposal: true,
+		},
+		{
+			name:        "end txn (commit) with auto-gc, without existing record",
+			useTxn:      true,
+			req:         endTxnCommitReq,
+			expProposal: false,
+		},
+		{
+			name:        "end txn (abort) with auto-gc, without existing record",
+			useTxn:      true,
+			req:         endTxnAbortReq,
+			expProposal: false,
+		},
+		{
+			name: "end txn (commit) with auto-gc, with existing record",
+			setup: func(ctx context.Context, repl *Replica) *roachpb.Error {
+				return sendReq(ctx, repl, hbTxnReq, txn)
+			},
+			useTxn:      true,
+			req:         endTxnCommitReq,
+			expProposal: true,
+		},
+		{
+			name: "end txn (abort) with auto-gc, with existing record",
+			setup: func(ctx context.Context, repl *Replica) *roachpb.Error {
+				return sendReq(ctx, repl, hbTxnReq, txn)
+			},
+			useTxn:      true,
+			req:         endTxnAbortReq,
+			expProposal: true,
+		},
+		{
+			name:        "heartbeat txn",
+			useTxn:      true,
+			req:         hbTxnReq,
 			expProposal: true,
 		},
 		{
