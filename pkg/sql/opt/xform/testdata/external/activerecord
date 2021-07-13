@@ -143,36 +143,32 @@ sort
       │    │    │    └── fd: (39)-->(66)
       │    │    └── filters
       │    │         └── c.oid:31 != typcollation:66 [outer=(31,66), constraints=(/31: (/NULL - ]; /66: (/NULL - ])]
-      │    ├── left-join (merge)
+      │    ├── left-join (lookup pg_attrdef)
       │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null adrelid:26 adnum:27 adbin:28
-      │    │    ├── left ordering: +1,+6
-      │    │    ├── right ordering: +26,+27
+      │    │    ├── key columns: [25] = [25]
+      │    │    ├── lookup columns are key
       │    │    ├── key: (6)
       │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,26-28), (2)-->(3,6,9,13,20), (27)-->(28)
-      │    │    ├── select
-      │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null
+      │    │    ├── left-join (lookup pg_attrdef@pg_attrdef_adrelid_adnum_index)
+      │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null d.oid:25 adrelid:26 adnum:27
+      │    │    │    ├── key columns: [1 6] = [26 27]
+      │    │    │    ├── lookup columns are key
       │    │    │    ├── key: (6)
-      │    │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20), (2)-->(3,6,9,13,20)
-      │    │    │    ├── ordering: +6 opt(1,17) [actual: +6]
-      │    │    │    ├── scan a
+      │    │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,25-27), (2)-->(3,6,9,13,20), (25)-->(26,27), (26,27)-->(25)
+      │    │    │    ├── select
       │    │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null
-      │    │    │    │    ├── constraint: /1/6: [/numbers/1 - /numbers]
       │    │    │    │    ├── key: (6)
-      │    │    │    │    ├── fd: ()-->(1), (6)-->(2,3,9,13,17,20), (2)-->(3,6,9,13,17,20)
-      │    │    │    │    └── ordering: +6 opt(1,17) [actual: +6]
+      │    │    │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20), (2)-->(3,6,9,13,20)
+      │    │    │    │    ├── scan a
+      │    │    │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null
+      │    │    │    │    │    ├── constraint: /1/6: [/numbers/1 - /numbers]
+      │    │    │    │    │    ├── key: (6)
+      │    │    │    │    │    └── fd: ()-->(1), (6)-->(2,3,9,13,17,20), (2)-->(3,6,9,13,17,20)
+      │    │    │    │    └── filters
+      │    │    │    │         └── NOT attisdropped:17 [outer=(17), constraints=(/17: [/false - /false]; tight), fd=()-->(17)]
       │    │    │    └── filters
-      │    │    │         └── NOT attisdropped:17 [outer=(17), constraints=(/17: [/false - /false]; tight), fd=()-->(17)]
-      │    │    ├── index-join pg_attrdef
-      │    │    │    ├── columns: adrelid:26!null adnum:27!null adbin:28
-      │    │    │    ├── key: (27)
-      │    │    │    ├── fd: ()-->(26), (27)-->(28)
-      │    │    │    ├── ordering: +27 opt(26) [actual: +27]
-      │    │    │    └── scan d@pg_attrdef_adrelid_adnum_index
-      │    │    │         ├── columns: d.oid:25!null adrelid:26!null adnum:27!null
-      │    │    │         ├── constraint: /26/27: [/numbers/1 - /numbers]
-      │    │    │         ├── key: (25)
-      │    │    │         ├── fd: ()-->(26), (25)-->(27), (27)-->(25)
-      │    │    │         └── ordering: +27 opt(26) [actual: +27]
+      │    │    │         ├── adrelid:26 = numbers [outer=(26), constraints=(/26: [/numbers - /numbers]; tight), fd=()-->(26)]
+      │    │    │         └── adnum:27 > 0 [outer=(27), constraints=(/27: [/1 - ]; tight)]
       │    │    └── filters (true)
       │    └── filters
       │         ├── c.oid:31 = attcollation:20 [outer=(20,31), constraints=(/20: (/NULL - ]; /31: (/NULL - ]), fd=(20)==(31), (31)==(20)]
