@@ -182,8 +182,8 @@ def go_deps():
         name = "com_github_aws_aws_sdk_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go",
-        sum = "h1:ASmYIgWuPW1p01Xxch3ygaptshrEe7Vt+CirmwIqMtI=",
-        version = "v1.36.33",
+        sum = "h1:V489lmrdkIQSfF6OAGZZ1Cavcm7eczCm2JcGvX+yHRg=",
+        version = "v1.38.69",
     )
     go_repository(
         name = "com_github_axiomhq_hyperloglog",
