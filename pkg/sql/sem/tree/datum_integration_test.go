@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -406,12 +407,12 @@ func TestParseDIntervalWithTypeMetadata(t *testing.T) {
 		{"1-2 3 4:56:07", year, "1 year"},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDIntervalWithTypeMetadata(td.str, td.dtype)
+		actual, err := tree.ParseDIntervalWithTypeMetadata(duration.IntervalStyle_POSTGRES, td.str, td.dtype)
 		if err != nil {
 			t.Errorf("unexpected error while parsing INTERVAL %s %#v: %s", td.str, td.dtype, err)
 			continue
 		}
-		expected, err := tree.ParseDInterval(td.expected)
+		expected, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, td.expected)
 		if err != nil {
 			t.Errorf("unexpected error while parsing expected value INTERVAL %s: %s", td.expected, err)
 			continue
@@ -428,7 +429,7 @@ func TestParseDDate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := testParseTimeContext(
+	ctx := tree.NewParseTimeContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", -18000)),
 	)
 
@@ -551,7 +552,7 @@ func TestParseDTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := testParseTimeContext(
+	ctx := tree.NewParseTimeContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", -18000)),
 	)
 	// Since ParseDTime shares most of the underlying parsing logic to
@@ -624,7 +625,7 @@ func TestParseDTimeError(t *testing.T) {
 
 func TestParseDTimeTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := testParseTimeContext(
+	ctx := tree.NewParseTimeContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", 18000)),
 	)
 
@@ -702,7 +703,7 @@ func TestParseDTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := testParseTimeContext(
+	ctx := tree.NewParseTimeContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", -18000)),
 	)
 
@@ -786,7 +787,7 @@ func TestParseDTimestampTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	local := time.FixedZone("foo", -18000)
-	ctx := testParseTimeContext(time.Date(2001, time.February, 3, 4, 5, 6, 1000, local))
+	ctx := tree.NewParseTimeContext(time.Date(2001, time.February, 3, 4, 5, 6, 1000, local))
 
 	testData := []struct {
 		str              string
@@ -1176,14 +1177,6 @@ func TestNewDefaultDatum(t *testing.T) {
 			}
 		})
 	}
-}
-
-type testParseTimeContext time.Time
-
-var _ tree.ParseTimeContext = testParseTimeContext{}
-
-func (t testParseTimeContext) GetRelativeParseTime() time.Time {
-	return time.Time(t)
 }
 
 func TestGeospatialSize(t *testing.T) {

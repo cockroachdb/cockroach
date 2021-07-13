@@ -23,11 +23,13 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -425,12 +427,12 @@ func (c *sqlConn) getLastQueryStatistics() (
 			return 0, 0, 0, 0, 0, containsJobLat, err
 		}
 
-		parseLatencyRaw = formatVal(row[0], iter.colTypes[0], false, false)
-		planLatencyRaw = formatVal(row[1], iter.colTypes[1], false, false)
-		execLatencyRaw = formatVal(row[2], iter.colTypes[2], false, false)
-		serviceLatencyRaw = formatVal(row[3], iter.colTypes[3], false, false)
+		parseLatencyRaw = clisqlclient.FormatVal(row[0], iter.colTypes[0], false, false)
+		planLatencyRaw = clisqlclient.FormatVal(row[1], iter.colTypes[1], false, false)
+		execLatencyRaw = clisqlclient.FormatVal(row[2], iter.colTypes[2], false, false)
+		serviceLatencyRaw = clisqlclient.FormatVal(row[3], iter.colTypes[3], false, false)
 		if containsJobLat {
-			jobsLatencyRaw = formatVal(row[4], iter.colTypes[4], false, false)
+			jobsLatencyRaw = clisqlclient.FormatVal(row[4], iter.colTypes[4], false, false)
 		}
 
 		nRows++
@@ -441,13 +443,16 @@ func (c *sqlConn) getLastQueryStatistics() (
 			errors.Newf("unexpected number of rows in SHOW LAST QUERY STATISTICS: %d", nRows)
 	}
 
-	parsedExecLatency, _ := tree.ParseDInterval(execLatencyRaw)
-	parsedServiceLatency, _ := tree.ParseDInterval(serviceLatencyRaw)
-	parsedPlanLatency, _ := tree.ParseDInterval(planLatencyRaw)
-	parsedParseLatency, _ := tree.ParseDInterval(parseLatencyRaw)
+	// This should really be the same as the session's IntervalStyle
+	// but that only effects negative intervals in the magnitude
+	// of days - and all these latencies should be positive.
+	parsedExecLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, execLatencyRaw)
+	parsedServiceLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, serviceLatencyRaw)
+	parsedPlanLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, planLatencyRaw)
+	parsedParseLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, parseLatencyRaw)
 
 	if containsJobLat {
-		parsedJobsLatency, _ := tree.ParseDInterval(jobsLatencyRaw)
+		parsedJobsLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, jobsLatencyRaw)
 		jobsLat = time.Duration(parsedJobsLatency.Duration.Nanos())
 	}
 
@@ -1075,7 +1080,7 @@ func getColumnStrings(rows *sqlRows, showMoreChars bool) []string {
 	srcCols := rows.Columns()
 	cols := make([]string, len(srcCols))
 	for i, c := range srcCols {
-		cols[i] = formatVal(c, "NAME", showMoreChars, showMoreChars)
+		cols[i] = clisqlclient.FormatVal(c, "NAME", showMoreChars, showMoreChars)
 	}
 	return cols
 }
@@ -1114,7 +1119,7 @@ func getNextRowStrings(rows *sqlRows, colTypes []string, showMoreChars bool) ([]
 
 	rowStrings := make([]string, len(cols))
 	for i, v := range vals {
-		rowStrings[i] = formatVal(v, colTypes[i], showMoreChars, showMoreChars)
+		rowStrings[i] = clisqlclient.FormatVal(v, colTypes[i], showMoreChars, showMoreChars)
 	}
 	return rowStrings, nil
 }

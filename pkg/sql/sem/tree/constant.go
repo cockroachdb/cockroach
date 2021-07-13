@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -605,4 +606,8 @@ var dummyTime = time.Date(2000, time.January, 2, 3, 4, 5, 0, time.UTC)
 
 func (dummyParseTimeContext) GetRelativeParseTime() time.Time {
 	return dummyTime
+}
+
+func (dummyParseTimeContext) GetIntervalStyle() duration.IntervalStyle {
+	return duration.IntervalStyle_POSTGRES
 }

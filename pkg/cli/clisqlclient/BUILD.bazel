@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "clisqlclient",
+    srcs = [
+        "doc.go",
+        "sql_format_value.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/clisqlclient",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/lex",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_lib_pq//:pq",
+    ],
+)
+
+go_test(
+    name = "clisqlclient_test",
+    srcs = [
+        "main_test.go",
+        "sql_format_value_test.go",
+    ],
+    deps = [
+        "//pkg/build",
+        "//pkg/cli",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+    ],
+)

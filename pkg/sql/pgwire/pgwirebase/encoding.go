@@ -403,7 +403,7 @@ func DecodeDatum(
 			}
 			return d, nil
 		case oid.T_interval:
-			d, err := tree.ParseDInterval(string(b))
+			d, err := tree.ParseDInterval(evalCtx.GetIntervalStyle(), string(b))
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as interval", b)
 			}

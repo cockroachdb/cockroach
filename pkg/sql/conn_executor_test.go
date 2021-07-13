@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1002,19 +1003,19 @@ ALTER TABLE t1 ADD COLUMN b INT DEFAULT 1`,
 		)
 		require.NoError(t, err, "unexpected error while reading last query statistics")
 
-		parseInterval, err := tree.ParseDInterval(parseLatency)
+		parseInterval, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, parseLatency)
 		require.NoError(t, err)
 
-		planInterval, err := tree.ParseDInterval(planLatency)
+		planInterval, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, planLatency)
 		require.NoError(t, err)
 
-		execInterval, err := tree.ParseDInterval(execLatency)
+		execInterval, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, execLatency)
 		require.NoError(t, err)
 
-		serviceInterval, err := tree.ParseDInterval(serviceLatency)
+		serviceInterval, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, serviceLatency)
 		require.NoError(t, err)
 
-		postCommitJobsInterval, err := tree.ParseDInterval(postCommitJobsLatency)
+		postCommitJobsInterval, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, postCommitJobsLatency)
 		require.NoError(t, err)
 
 		if parseInterval.AsFloat64() <= 0 || parseInterval.AsFloat64() > 1 {

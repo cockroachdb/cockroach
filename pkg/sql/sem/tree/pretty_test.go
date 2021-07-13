@@ -166,8 +166,8 @@ func TestPrettyVerify(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tests := map[string]string{
-		// Verify that INTERVAL is maintained.
-		`SELECT interval '-2µs'`: `SELECT '-00:00:00.000002':::INTERVAL`,
+		// Verify that INTERVAL cast is maintained.
+		`SELECT interval '-2µs'`: `SELECT e'-2\u00B5s'::INTERVAL`,
 	}
 	for orig, pretty := range tests {
 		t.Run(orig, func(t *testing.T) {

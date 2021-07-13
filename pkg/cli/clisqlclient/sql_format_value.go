@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clisqlclient
 
 import (
 	"context"
@@ -37,7 +37,9 @@ func isNotGraphicUnicodeOrTabOrNewline(r rune) bool {
 	return r != '\t' && r != '\n' && !unicode.IsGraphic(r)
 }
 
-func formatVal(
+// FormatVal formats a value retrieved by a SQL driver into a string
+// suitable for displaying to the user.
+func FormatVal(
 	val driver.Value, colType string, showPrintableUnicode bool, showNewLinesAndTabs bool,
 ) string {
 	log.VInfof(context.Background(), 2, "value: go %T, sql %q", val, colType)
@@ -168,7 +170,7 @@ func formatArray(
 		// A parsing failure is not a catastrophe; we can still print out
 		// the array as a byte slice. This will do in many cases.
 		log.VInfof(context.Background(), 1, "unable to parse %q (sql %q) as array: %v", b, colType, err)
-		return formatVal(b, "BYTEA", showPrintableUnicode, showNewLinesAndTabs)
+		return FormatVal(b, "BYTEA", showPrintableUnicode, showNewLinesAndTabs)
 	}
 
 	// We have a go array in "backingArray". Now print it out.
@@ -182,7 +184,7 @@ func formatArray(
 		// Access the i-th element in the backingArray.
 		arrayVal := driver.Value(v.Index(i).Interface())
 		// Format the value recursively into a string.
-		vs := formatVal(arrayVal, colType, showPrintableUnicode, showNewLinesAndTabs)
+		vs := FormatVal(arrayVal, colType, showPrintableUnicode, showNewLinesAndTabs)
 
 		// If the value contains special characters or a comma, enclose in double quotes.
 		// Also escape the special characters.
