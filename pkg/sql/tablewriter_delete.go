@@ -42,8 +42,8 @@ func (*tableDeleter) desc() string { return "deleter" }
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
 // init is part of the tableWriter interface.
-func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, _ *tree.EvalContext) error {
-	td.tableWriterBase.init(txn, td.tableDesc())
+func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, evalCtx *tree.EvalContext) error {
+	td.tableWriterBase.init(txn, td.tableDesc(), evalCtx)
 	return nil
 }
 
