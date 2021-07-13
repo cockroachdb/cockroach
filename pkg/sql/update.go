@@ -174,7 +174,8 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if u.run.tu.currentBatchSize >= u.run.tu.maxBatchSize {
+		if u.run.tu.currentBatchSize >= u.run.tu.maxBatchSize ||
+			u.run.tu.b.ApproximateMutationBytes() >= u.run.tu.maxBatchByteSize {
 			break
 		}
 	}

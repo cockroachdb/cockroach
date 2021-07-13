@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -109,6 +110,9 @@ type tableWriterBase struct {
 	// for a mutation operation. By default, it will be set to 10k but can be
 	// a different value in tests.
 	maxBatchSize int
+	// maxBatchByteSize determines the maximum number of key and value bytes in
+	// the KV batch for a mutation operation.
+	maxBatchByteSize int
 	// currentBatchSize is the size of the current batch. It is updated on
 	// every row() call and is reset once a new batch is started.
 	currentBatchSize int
@@ -123,6 +127,12 @@ type tableWriterBase struct {
 	forceProductionBatchSizes bool
 }
 
+var maxBatchBytes = settings.RegisterByteSizeSetting(
+	"sql.mutations.mutation_batch_byte_size",
+	"byte size - in key and value lengths -- for mutation batches",
+	4<<20,
+)
+
 func (tb *tableWriterBase) init(
 	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *tree.EvalContext,
 ) {
@@ -131,6 +141,11 @@ func (tb *tableWriterBase) init(
 	tb.b = txn.NewBatch()
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionBatchSizes
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
+	batchMaxBytes := int(maxBatchBytes.Default())
+	if evalCtx != nil {
+		batchMaxBytes = int(maxBatchBytes.Get(&evalCtx.Settings.SV))
+	}
+	tb.maxBatchByteSize = mutations.MaxBatchByteSize(batchMaxBytes, tb.forceProductionBatchSizes)
 }
 
 // flushAndStartNewBatch shares the common flushAndStartNewBatch() code between
