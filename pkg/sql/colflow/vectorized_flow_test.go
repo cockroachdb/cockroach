@@ -52,7 +52,7 @@ func (c callbackRemoteComponentCreator) newOutbox(
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
-	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID, _ admissionOptions,
 ) (*colrpc.Inbox, error) {
 	return c.newInboxFn(allocator, typs, streamID)
 }
@@ -218,8 +218,10 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
 	f := &flowinfra.FlowBase{
-		FlowCtx: execinfra.FlowCtx{EvalCtx: &evalCtx,
-			NodeID: base.TestingIDContainer,
+		FlowCtx: execinfra.FlowCtx{
+			Cfg:     &execinfra.ServerConfig{},
+			EvalCtx: &evalCtx,
+			NodeID:  base.TestingIDContainer,
 		},
 	}
 	var wg sync.WaitGroup

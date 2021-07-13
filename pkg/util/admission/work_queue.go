@@ -45,9 +45,18 @@ var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
 		"admission control",
 	false).WithPublic()
 
+// SQLSQLResponseAdmissionControlEnabled controls whether response processing
+// in SQL, for DistSQL requests, is enabled.
+var SQLSQLResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
+	"admission.sql_sql_response.enabled",
+	"when true, work performed by the SQL layer when receiving a DistSQL response is subject "+
+		"to admission control",
+	false).WithPublic()
+
 var admissionControlEnabledSettings = [numWorkKinds]*settings.BoolSetting{
-	KVWork:            KVAdmissionControlEnabled,
-	SQLKVResponseWork: SQLKVResponseAdmissionControlEnabled,
+	KVWork:             KVAdmissionControlEnabled,
+	SQLKVResponseWork:  SQLKVResponseAdmissionControlEnabled,
+	SQLSQLResponseWork: SQLSQLResponseAdmissionControlEnabled,
 }
 
 // WorkPriority represents the priority of work. In an WorkQueue, it is only

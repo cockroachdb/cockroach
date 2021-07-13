@@ -15,12 +15,15 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -181,6 +184,8 @@ type FlowBase struct {
 
 	// spec is the request that produced this flow. Only used for debugging.
 	spec *execinfrapb.FlowSpec
+
+	admissionInfo admission.WorkInfo
 }
 
 // Setup is part of the Flow interface.
@@ -223,12 +228,22 @@ func NewFlowBase(
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 ) *FlowBase {
+	admissionInfo := admission.WorkInfo{TenantID: roachpb.SystemTenantID}
+	if flowCtx.Txn == nil {
+		admissionInfo.Priority = admission.NormalPri
+		admissionInfo.CreateTime = timeutil.Now().UnixNano()
+	} else {
+		h := flowCtx.Txn.AdmissionHeader()
+		admissionInfo.Priority = admission.WorkPriority(h.Priority)
+		admissionInfo.CreateTime = h.CreateTime
+	}
 	base := &FlowBase{
 		FlowCtx:               flowCtx,
 		flowRegistry:          flowReg,
 		rowSyncFlowConsumer:   rowSyncFlowConsumer,
 		batchSyncFlowConsumer: batchSyncFlowConsumer,
 		localProcessors:       localProcessors,
+		admissionInfo:         admissionInfo,
 	}
 	base.status = FlowNotStarted
 	return base

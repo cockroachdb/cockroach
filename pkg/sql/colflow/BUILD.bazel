@@ -37,6 +37,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/mon",

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -449,6 +450,11 @@ type flowCreatorHelper interface {
 	getCancelFlowFn() context.CancelFunc
 }
 
+type admissionOptions struct {
+	admissionQ    *admission.WorkQueue
+	admissionInfo admission.WorkInfo
+}
+
 // remoteComponentCreator is an interface that abstracts the constructors for
 // several components in a remote flow. Mostly for testing purposes.
 type remoteComponentCreator interface {
@@ -460,7 +466,8 @@ type remoteComponentCreator interface {
 		metadataSources []colexecop.MetadataSource,
 		toClose []colexecop.Closer,
 	) (*colrpc.Outbox, error)
-	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+		admissionOpts admissionOptions) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -477,9 +484,13 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator,
+	typs []*types.T,
+	streamID execinfrapb.StreamID,
+	admissionOpts admissionOptions,
 ) (*colrpc.Inbox, error) {
-	return colrpc.NewInbox(allocator, typs, streamID)
+	return colrpc.NewInboxWithAdmissionControl(
+		allocator, typs, streamID, admissionOpts.admissionQ, admissionOpts.admissionInfo)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -859,6 +870,19 @@ func (s *vectorizedFlowCreator) setupInput(
 		return colexecargs.OpWithMetaInfo{}, err
 	}
 
+	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
+	// cluster, where the SQL node is single tenant. The tenant below is used
+	// within SQL (not KV), so using an arbitrary tenant is ok -- we choose to
+	// use SystemTenantID since it is already defined.
+	admissionInfo := admission.WorkInfo{TenantID: roachpb.SystemTenantID}
+	if flowCtx.Txn == nil {
+		admissionInfo.Priority = admission.NormalPri
+		admissionInfo.CreateTime = timeutil.Now().UnixNano()
+	} else {
+		h := flowCtx.Txn.AdmissionHeader()
+		admissionInfo.Priority = admission.WorkPriority(h.Priority)
+		admissionInfo.CreateTime = h.CreateTime
+	}
 	for _, inputStream := range input.Streams {
 		switch inputStream.Type {
 		case execinfrapb.StreamEndpointSpec_LOCAL:
@@ -881,8 +905,14 @@ func (s *vectorizedFlowCreator) setupInput(
 				latency = 0
 				log.VEventf(ctx, 1, "an error occurred during vectorized planning while getting latency: %v", err)
 			}
-
-			inbox, err := s.remoteComponentCreator.newInbox(colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory), input.ColumnTypes, inputStream.StreamID)
+			inbox, err := s.remoteComponentCreator.newInbox(
+				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
+				input.ColumnTypes,
+				inputStream.StreamID,
+				admissionOptions{
+					admissionQ:    flowCtx.Cfg.SQLSQLResponseAdmissionQ,
+					admissionInfo: admissionInfo,
+				})
 
 			if err != nil {
 				return colexecargs.OpWithMetaInfo{}, err
