@@ -591,7 +591,7 @@ func smithcmpTestRun(
 	tc.preTestRunHook(ctx, t, c, conn, version, runConfig.clusterSetups[0])
 	const (
 		configFile = `tpchvec_smithcmp.toml`
-		configURL  = `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/cmd/roachtest/` + configFile
+		configURL  = `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/cmd/roachtest/tests/` + configFile
 	)
 	firstNode := c.Node(1)
 	if err := c.RunE(ctx, firstNode, fmt.Sprintf("curl %s > %s", configURL, configFile)); err != nil {
