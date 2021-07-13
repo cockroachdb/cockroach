@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvclient/rangecache",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/server/serverpb",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/log",

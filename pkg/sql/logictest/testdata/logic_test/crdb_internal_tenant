@@ -75,6 +75,7 @@ crdb_internal  partitions                   table  NULL  NULL  NULL
 crdb_internal  predefined_comments          table  NULL  NULL  NULL
 crdb_internal  ranges                       view   NULL  NULL  NULL
 crdb_internal  ranges_no_leases             table  NULL  NULL  NULL
+crdb_internal  regions                      table  NULL  NULL  NULL
 crdb_internal  schema_changes               table  NULL  NULL  NULL
 crdb_internal  session_trace                table  NULL  NULL  NULL
 crdb_internal  session_variables            table  NULL  NULL  NULL
@@ -370,6 +371,11 @@ FROM crdb_internal.kv_node_status WHERE node_id = 1
 statement error unsupported in multi-tenancy mode
 SELECT node_id, store_id, attrs, used
 FROM crdb_internal.kv_store_status WHERE node_id = 1
+
+query TT
+SELECT * FROM crdb_internal.regions ORDER BY 1
+----
+test  {}
 
 statement ok
 CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1)

@@ -872,6 +872,7 @@ type ExecutorConfig struct {
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
 	SQLStatusServer   serverpb.SQLStatusServer
+	RegionsServer     serverpb.RegionsServer
 	MetricsRecorder   nodeStatusGenerator
 	SessionRegistry   *SessionRegistry
 	SQLLivenessReader sqlliveness.Reader
