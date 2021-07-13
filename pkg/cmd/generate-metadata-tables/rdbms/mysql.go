@@ -16,6 +16,7 @@ package rdbms
 import (
 	gosql "database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	// gosql implementation.
@@ -31,6 +32,13 @@ const mysqlDescribeSchema = `
 	WHERE table_schema = ?
 	ORDER BY table_name, column_name
 `
+
+var mysqlExclusions = []*excludePattern{
+	{
+		pattern: regexp.MustCompile(`innodb_.+`),
+		except:  make(map[string]struct{}),
+	},
+}
 
 type mysqlMetadataConnection struct {
 	*gosql.DB
@@ -51,8 +59,8 @@ func (conn mysqlMetadataConnection) DatabaseVersion() (version string, err error
 	return version, err
 }
 
-func (conn mysqlMetadataConnection) DescribeSchema() (ColumnMetadataList, error) {
-	var metadata ColumnMetadataList
+func (conn mysqlMetadataConnection) DescribeSchema() (*ColumnMetadataList, error) {
+	metadata := &ColumnMetadataList{exclusions: mysqlExclusions}
 	rows, err := conn.Query(mysqlDescribeSchema, conn.catalog)
 	if err != nil {
 		return nil, err
@@ -66,7 +74,7 @@ func (conn mysqlMetadataConnection) DescribeSchema() (ColumnMetadataList, error)
 		}
 		row.tableName = strings.ToLower(row.tableName)
 		row.columnName = strings.ToLower(row.columnName)
-		metadata = append(metadata, row)
+		metadata.data = append(metadata.data, row)
 	}
 
 	return metadata, nil
