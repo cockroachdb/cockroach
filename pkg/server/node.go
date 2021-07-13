@@ -916,12 +916,19 @@ func (n *Node) Batch(
 	var callAdmittedWorkDone bool
 	var tenantID roachpb.TenantID
 	if n.admissionQ != nil {
+		var ok bool
+		tenantID, ok = roachpb.TenantFromContext(ctx)
+		if !ok {
+			tenantID = roachpb.SystemTenantID
+		}
 		bypassAdmission := args.IsAdmin()
-		// TODO(sumeer): properly initialize tenant ID. If non-SystemTenantID sends
-		// a request with source other than AdmissionHeader_FROM_SQL, change it to
-		// FROM_SQL.
-		tenantID = roachpb.SystemTenantID
-		if args.AdmissionHeader.Source == roachpb.AdmissionHeader_OTHER {
+		source := args.AdmissionHeader.Source
+		if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
+			// Request is from a SQL node.
+			bypassAdmission = false
+			source = roachpb.AdmissionHeader_FROM_SQL
+		}
+		if source == roachpb.AdmissionHeader_OTHER {
 			bypassAdmission = true
 		}
 		createTime := args.AdmissionHeader.CreateTime

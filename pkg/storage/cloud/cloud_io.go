@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -325,7 +326,12 @@ func (s *backgroundPipe) Close() error {
 // WriteFile is a helper for writing the content of a Reader to the given path
 // of an ExternalStorage.
 func WriteFile(ctx context.Context, dest ExternalStorage, basename string, src io.Reader) error {
-	ctx, cancel := context.WithCancel(ctx)
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, fmt.Sprintf("%s.WriteFile", dest.Conf().Provider.String()))
+	defer span.Finish()
+
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
 
 	w, err := dest.Writer(ctx, basename)
