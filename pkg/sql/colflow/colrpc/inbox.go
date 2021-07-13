@@ -340,9 +340,11 @@ func (i *Inbox) Next() coldata.Batch {
 		// TODO(yuzefovich): refactor this.
 		const maxBatchMemSize = math.MaxInt64
 		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(i.typs, i.scratch.b, batchLength, maxBatchMemSize)
-		if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
-			colexecerror.InternalError(err)
-		}
+		i.allocator.PerformOperation(i.scratch.b.ColVecs(), func() {
+			if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
+				colexecerror.InternalError(err)
+			}
+		})
 		atomic.AddInt64(&i.statsAtomics.rowsRead, int64(i.scratch.b.Length()))
 		return i.scratch.b
 	}
