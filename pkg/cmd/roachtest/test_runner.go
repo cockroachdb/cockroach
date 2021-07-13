@@ -665,7 +665,12 @@ func (r *testRunner) runTest(
 			}
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
-			r.maybePostGithubIssue(ctx, l, t, stdout, output)
+
+			issueOutput := output
+			if t.timedOut() {
+				issueOutput = "test timed out (see artifacts for details)"
+			}
+			r.maybePostGithubIssue(ctx, l, t, stdout, issueOutput)
 		} else {
 			shout(ctx, l, stdout, "--- PASS: %s (%s)", t.Name(), durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -824,6 +829,7 @@ func (r *testRunner) runTest(
 		// reused since we have a runaway test goroutine that's presumably going
 		// to continue using the cluster.
 		t.printfAndFail(0 /* skip */, "test timed out (%s)", timeout)
+		t.setTimedOut()
 		select {
 		case <-done:
 			if success {
