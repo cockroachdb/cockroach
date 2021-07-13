@@ -119,7 +119,7 @@ go_library(
 
 go_test(
     name = "backupccl_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "backup_cloud_test.go",
         "backup_destination_test.go",
