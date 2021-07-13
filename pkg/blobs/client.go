@@ -193,3 +193,14 @@ func NewBlobClientFactory(
 		return newRemoteClient(blobspb.NewBlobClient(conn)), nil
 	}
 }
+
+// NewLocalOnlyBlobClientFactory returns a BlobClientFactory that only
+// handles requests for the local node, identified by NodeID = 0.
+func NewLocalOnlyBlobClientFactory(externalIODir string) BlobClientFactory {
+	return func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error) {
+		if dialing == 0 {
+			return NewLocalClient(externalIODir)
+		}
+		return nil, errors.Errorf("connecting to remote node not supported")
+	}
+}

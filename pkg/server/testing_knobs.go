@@ -14,6 +14,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -95,6 +96,11 @@ type TestingKnobs struct {
 	// DrainSleepFn used in testing to override the usual sleep function with
 	// a custom function that counts the number of times the sleep function is called.
 	DrainSleepFn func(time.Duration)
+
+	// TenantBlobClientFactory supplies a BlobClientFactory for
+	// use by tenants. By default, tenants have no blob client
+	// factory.
+	TenantBlobClientFactory blobs.BlobClientFactory
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
