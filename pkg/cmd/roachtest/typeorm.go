@@ -53,6 +53,13 @@ func registerTypeORM(r *testRegistry) {
 		c.l.Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
 
 		if err := repeatRunE(
+			ctx, c, node, "purge apt-get",
+			`sudo apt-get purge -y command-not-found`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
