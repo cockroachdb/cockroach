@@ -417,48 +417,46 @@ INSERT INTO interval_parsing VALUES
 query T
 SELECT i FROM intervals ORDER BY pk
 ----
--2 years -11 mons 1 day +04:05:06.123
+-2 years -11 mons +1 day 04:05:06.123
 1 day 04:06:08.123
 2 years 11 mons -2 days +03:25:45.678
 
 query T
 SELECT array_to_string(array_agg(i ORDER BY pk), ' ') FROM intervals
 ----
--2 years -11 mons 1 day +04:05:06.123
-1 day 04:06:08.123
-2 years 11 mons -2 days +03:25:45.678
+-2 years -11 mons +1 day 04:05:06.123 1 day 04:06:08.123 2 years 11 mons -2 days +03:25:45.678
 
 query T
 SELECT (array_agg(i ORDER BY pk))::string FROM intervals
 ----
-{"-2 years -11 mons 1 day +04:05:06.123","1 day 04:06:08.123","2 years 11 mons -2 days +03:25:45.678"}
+{"-2 years -11 mons +1 day 04:05:06.123","1 day 04:06:08.123","2 years 11 mons -2 days +03:25:45.678"}
 
 query T
 SELECT i::string FROM intervals ORDER BY pk
 ----
--2 years -11 mons 1 day +04:05:06.123
+-2 years -11 mons +1 day 04:05:06.123
 1 day 04:06:08.123
 2 years 11 mons -2 days +03:25:45.678
 
 query T
 SELECT (i,) FROM intervals ORDER BY pk
 ----
-("-2 years -11 mons 1 day +04:05:06.123")
+("-2 years -11 mons +1 day 04:05:06.123")
 ("1 day 04:06:08.123")
 ("2 years 11 mons -2 days +03:25:45.678")
 
 query T
 SELECT row_to_json(intervals) FROM intervals ORDER BY pk
 ----
-{"i": "-2 years -11 mons 1 day +04:05:06.123", "pk": 1}
+{"i": "-2 years -11 mons +1 day 04:05:06.123", "pk": 1}
 {"i": "1 day 04:06:08.123", "pk": 2}
 {"i": "2 years 11 mons -2 days +03:25:45.678", "pk": 3}
 
 query TT
 SELECT i, i::INTERVAL FROM interval_parsing ORDER BY pk
 ----
--10 years 22 months 1 day 01:02:03    -8 years -2 mons 1 day +01:02:03
--10 years -22 months 1 day 01:02:03   -11 years -10 mons 1 day +01:02:03
+-10 years 22 months 1 day 01:02:03    -8 years -2 mons +1 day 01:02:03
+-10 years -22 months 1 day 01:02:03   -11 years -10 mons +1 day 01:02:03
 -10 years 22 months -1 day 01:02:03   -8 years -2 mons -1 days +01:02:03
 -10 years 22 months -1 day -01:02:03  -8 years -2 mons -1 days -01:02:03
 
