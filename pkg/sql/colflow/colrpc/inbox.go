@@ -328,7 +328,11 @@ func (i *Inbox) Next() coldata.Batch {
 			// Protect against Deserialization panics by skipping empty messages.
 			continue
 		}
-		atomic.AddInt64(&i.statsAtomics.bytesRead, int64(len(m.Data.RawBytes)))
+		numSerializedBytes := int64(len(m.Data.RawBytes))
+		atomic.AddInt64(&i.statsAtomics.bytesRead, numSerializedBytes)
+		// Update the allocator since we're holding onto the serialized bytes
+		// for now.
+		i.allocator.AdjustMemoryUsage(numSerializedBytes)
 		i.scratch.data = i.scratch.data[:0]
 		batchLength, err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes)
 		// Eagerly throw away the RawBytes memory.
@@ -345,6 +349,10 @@ func (i *Inbox) Next() coldata.Batch {
 				colexecerror.InternalError(err)
 			}
 		})
+		// At this point, we have lost all references to the serialized bytes
+		// (because ArrowToBatch nils out elements in i.scratch.data once
+		// processed), so we update the allocator accordingly.
+		i.allocator.AdjustMemoryUsage(-numSerializedBytes)
 		atomic.AddInt64(&i.statsAtomics.rowsRead, int64(i.scratch.b.Length()))
 		return i.scratch.b
 	}
