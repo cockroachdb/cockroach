@@ -15,12 +15,15 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -181,6 +184,8 @@ type FlowBase struct {
 
 	// spec is the request that produced this flow. Only used for debugging.
 	spec *execinfrapb.FlowSpec
+
+	admissionInfo admission.WorkInfo
 }
 
 // Setup is part of the Flow interface.
@@ -223,12 +228,26 @@ func NewFlowBase(
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 ) *FlowBase {
+	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
+	// cluster, where the SQL node is single tenant. The tenant below is used
+	// within SQL (not KV), so using an arbitrary tenant is ok -- we choose to
+	// use SystemTenantID since it is already defined.
+	admissionInfo := admission.WorkInfo{TenantID: roachpb.SystemTenantID}
+	if flowCtx.Txn == nil {
+		admissionInfo.Priority = admission.NormalPri
+		admissionInfo.CreateTime = timeutil.Now().UnixNano()
+	} else {
+		h := flowCtx.Txn.AdmissionHeader()
+		admissionInfo.Priority = admission.WorkPriority(h.Priority)
+		admissionInfo.CreateTime = h.CreateTime
+	}
 	base := &FlowBase{
 		FlowCtx:               flowCtx,
 		flowRegistry:          flowReg,
 		rowSyncFlowConsumer:   rowSyncFlowConsumer,
 		batchSyncFlowConsumer: batchSyncFlowConsumer,
 		localProcessors:       localProcessors,
+		admissionInfo:         admissionInfo,
 	}
 	base.status = FlowNotStarted
 	return base
@@ -303,6 +322,12 @@ func (f *FlowBase) GetBatchSyncFlowConsumer() execinfra.BatchReceiver {
 // GetLocalProcessors return the execinfra.LocalProcessors of this flow.
 func (f *FlowBase) GetLocalProcessors() []execinfra.LocalProcessor {
 	return f.localProcessors
+}
+
+// GetAdmissionInfo returns the information to use for admission control on
+// responses received from a remote flow.
+func (f *FlowBase) GetAdmissionInfo() admission.WorkInfo {
+	return f.admissionInfo
 }
 
 // StartInternal starts the flow. All processors are started, each in their own
