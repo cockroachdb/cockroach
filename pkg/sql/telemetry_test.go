@@ -11,12 +11,17 @@
 package sql_test
 
 import (
+	gosql "database/sql"
+	"github.com/stretchr/testify/require"
+	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -35,4 +40,42 @@ func TestTelemetry(t *testing.T) {
 		[]base.TestServerArgs{{}},
 		true, /* testTenant */
 	)
+}
+
+func TestTelemetryRecordCockroachShell(t *testing.T) {
+
+	cluster := serverutils.StartNewTestCluster(
+		t,
+		1,
+		base.TestClusterArgs{},
+	)
+
+	pgUrl, cleanupFn := sqlutils.PGUrl(
+		t,
+		cluster.Server(0).ServingSQLAddr(),
+		"TestTelemetryRecordCockroachShell",
+		url.User("root"),
+	)
+	defer cleanupFn()
+	q := pgUrl.Query()
+
+	q.Add("application_name", "$ cockroach sql")
+	pgUrl.RawQuery = q.Encode()
+
+	db, err := gosql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var appName string
+	db.QueryRow("SHOW application_name").Scan(&appName)
+	require.Equal(t,"$ cockroach sql", appName)
+
+	var counter int
+	db.QueryRow(
+		"SELECT usage_count FROM crdb_internal.feature_usage WHERE feature_name = 'sql.connection.cockroach_cli'",
+		).Scan(&counter)
+	require.Equal(t, 1, counter)
+
 }
