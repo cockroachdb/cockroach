@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -134,7 +134,7 @@ func BenchmarkMaterializer(b *testing.B) {
 					}
 					input := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 
-					b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
+					b.SetBytes(int64(nRows * nCols * int(memsize.Int64)))
 					for i := 0; i < b.N; i++ {
 						m := NewMaterializer(
 							flowCtx,
@@ -225,7 +225,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 	}
 	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
 
-	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
+	b.SetBytes(int64(nRows * nCols * int(memsize.Int64)))
 	for i := 0; i < b.N; i++ {
 		m := NewMaterializer(
 			flowCtx,

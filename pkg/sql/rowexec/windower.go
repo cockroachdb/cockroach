@@ -12,10 +12,10 @@ package rowexec
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -422,7 +422,7 @@ func (w *windower) processPartition(
 		evalCtx: evalCtx,
 		rowCopy: make(rowenc.EncDatumRow, len(w.inputTypes)),
 	}
-	usage := sizeOfSliceOfRows + rowSliceOverhead + sizeOfRow*int64(len(w.windowFns))
+	usage := memsize.RowsOverhead + memsize.RowsOverhead + memsize.DatumsOverhead*int64(len(w.windowFns))
 	if err := w.growMemAccount(&w.acc, usage); err != nil {
 		return err
 	}
@@ -525,7 +525,7 @@ func (w *windower) processPartition(
 		builtin := w.builtins[windowFnIdx]
 		builtin.Reset(ctx)
 
-		usage = datumSliceOverhead + sizeOfDatum*int64(partition.Len())
+		usage = memsize.DatumsOverhead + memsize.DatumOverhead*int64(partition.Len())
 		if err := w.growMemAccount(&w.acc, usage); err != nil {
 			return err
 		}
@@ -586,7 +586,7 @@ func (w *windower) processPartition(
 					// We have already accounted for the size of a nil datum prior to
 					// allocating the slice for window values, so we need to keep that in
 					// mind.
-					if err := w.growMemAccount(&w.acc, int64(res.Size())-sizeOfDatum); err != nil {
+					if err := w.growMemAccount(&w.acc, int64(res.Size())-memsize.DatumOverhead); err != nil {
 						return err
 					}
 				}
@@ -602,7 +602,7 @@ func (w *windower) processPartition(
 		prevWindowFn = windowFn
 	}
 
-	if err := w.growMemAccount(&w.acc, sizeOfInt); err != nil {
+	if err := w.growMemAccount(&w.acc, memsize.Int); err != nil {
 		return err
 	}
 	w.partitionSizes = append(w.partitionSizes, w.partition.Len())
@@ -617,7 +617,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 
 	// We don't know how many partitions there are, so we'll be accounting for
 	// this memory right before every append to these slices.
-	usage := sliceOfIntsOverhead + sliceOfRowsSliceOverhead
+	usage := memsize.IntSliceOverhead + memsize.RowsSliceOverhead
 	if err := w.growMemAccount(&w.acc, usage); err != nil {
 		return err
 	}
@@ -807,15 +807,6 @@ func (n *partitionPeerGrouper) InSameGroup(i, j int) (bool, error) {
 	}
 	return true, nil
 }
-
-const sizeOfInt = int64(unsafe.Sizeof(int(0)))
-const sliceOfIntsOverhead = int64(unsafe.Sizeof([]int{}))
-const sizeOfSliceOfRows = int64(unsafe.Sizeof([][]tree.Datum{}))
-const sliceOfRowsSliceOverhead = int64(unsafe.Sizeof([][][]tree.Datum{}))
-const sizeOfRow = int64(unsafe.Sizeof([]tree.Datum{}))
-const rowSliceOverhead = int64(unsafe.Sizeof([][]tree.Datum{}))
-const sizeOfDatum = int64(unsafe.Sizeof(tree.Datum(nil)))
-const datumSliceOverhead = int64(unsafe.Sizeof([]tree.Datum(nil)))
 
 // CreateWindowerSpecFunc creates a WindowerSpec_Func based on the function
 // name or returns an error if unknown function name is provided.

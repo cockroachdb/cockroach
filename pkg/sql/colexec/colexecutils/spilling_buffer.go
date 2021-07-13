@@ -119,7 +119,7 @@ func NewSpillingBuffer(
 	// Memory used by the AppendOnlyBufferedBatch cannot be partially released
 	// (and we would like to keep as many tuples in-memory as possible), so we
 	// must reserve memory for the disk queue and dequeue scratch batch.
-	diskReservedMem := int64(colmem.EstimateBatchSizeBytes(storedTypes, coldata.BatchSize())) +
+	diskReservedMem := colmem.EstimateBatchSizeBytes(storedTypes, coldata.BatchSize()) +
 		int64(diskQueueCfg.BufferSizeBytes)
 	// The SpillingBuffer disk queue always uses
 	// DiskQueueCacheModeClearAndReuseCache since all writes happen before any
