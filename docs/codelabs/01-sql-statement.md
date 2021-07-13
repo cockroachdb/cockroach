@@ -62,7 +62,7 @@ one of the category lists.  If the keyword can ever appear in an identifier
 position, it has to be reserved (which requires that other uses of it, for
 instance as a column name, must be quoted).  Since our new keyword must start
 the statement, it can't be confused for an identifier, so we can safely add it
-to the unreserved keywords list.
+to the unreserved keywords list. Search `unreserved_keyword:` at `pkg/sql/parser/sql.y`, and add `| FROBONICATE` as follows:
 
 ```text
 unreserved_keyword:
@@ -73,16 +73,16 @@ unreserved_keyword:
 
 Now that the lexical analyzer knows about all our keywords, we need to teach the
 parser how to handle our new statement.  There are three places that we need to
-add references: the type list, the statement cases list, and the parsing clause.
+add references: the *type list*, the *statement cases list*, and the *parsing clause*.
 
-Search in the grammar file for `<tree.Statement>`, and you'll find the type list.
-Add a line for our new statement type, something like:
+Search in the grammar file (`pkg/sql/parser/sql.y`) for `<tree.Statement>`, and you'll find the type list.
+Add a line for our new *statement type*, something like:
 
 ```text
 %type <tree.Statement> frobnicate_stmt
 ```
 
-Now search for `stmt:` to find the list of productions for the `stmt` rule.  Add
+Now search for `stmt:` in `pkg/sql/parser/sql.y` to find the list of productions for the `stmt` rule.  Add
 a case for our statement type.
 
 ```text
@@ -92,9 +92,8 @@ stmt:
 ...
 ```
 
-Finally, we need to add a production rule for our statement.  Somewhere below the
-rule for `stmt` (perhaps in alphabetical order?) add our rule.  For now we'll
-leave it unimplemented, but we'll come back and take care of that later.
+Finally, we need to add a *production rule* for our statement.  Search `// %Help: PREPARE` in `pkg/sql/parser/sql.y` and add the following rules
+**above** this line.
 
 ```text
 frobnicate_stmt:
@@ -102,14 +101,16 @@ frobnicate_stmt:
 | FROBNICATE SESSION { return unimplemented(sqllex, "frobnicate session") }
 | FROBNICATE ALL { return unimplemented(sqllex, "frobnicate all") }
 ```
+For now we'll leave it unimplemented, but we'll come back and take care of that later.
 
 This lists the three forms of the expression that we'll allow, separated by the
 pipe character.  Each production also has an implementation in curly braces
 (though in this case the implementation is to error out with an unimplemented
 message).
+message).
 
-One last thing - let's implement the help for our statement right now.  Above the
-production rule, let's add the following comments:
+One last thing - let's implement the *help for our statement* right now.  Above the
+production rule we just added, let's add the following comments:
 
 ```text
 // %Help: FROBNICATE - twiddle the various settings
@@ -123,13 +124,32 @@ need to regenerate the file `sql.go`:
 
 ```text
 ~/go/src/github.com/cockroachdb/cockroach$ make generate
-...
-Type checking sql.y
-Compiling sql.go
-...
 ```
 
-And then compile the project:
+Wait until the command finishes, then open `pkg/sql/parser/sql.go`, search for `frobnicate`, and see if there is
+
+```go
+case 38:
+sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
+//line sql-gen.y:1421
+{
+return unimplemented(sqllex, "frobnicate cluster")
+}
+case 39:
+sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
+//line sql-gen.y:1422
+{
+return unimplemented(sqllex, "frobnicate session")
+}
+case 40:
+sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
+//line sql-gen.y:1423
+{
+return unimplemented(sqllex, "frobnicate all")
+}
+```
+
+Next step is to compile the project:
 
 ```text
 ~/go/src/github.com/cockroachdb/cockroach$ make build
@@ -137,7 +157,7 @@ And then compile the project:
 github.com/cockroachdb/cockroach
 ```
 
-Now, let’s run a single-node Cockroach instance:
+Finally, let’s run a single-node Cockroach instance. Make sure you are at your `cockroachdb/cockroach` directory and
 
 ```text
 $ rm -fr cockroach-data/ && ./cockroach start-single-node --insecure
@@ -150,7 +170,7 @@ In another terminal window, use the `cockroach sql` shell to try out our new
 statement:
 
 ```text
-$ ./cockroach sql --insecure -e "frobnicate cluster"
+$ cockroach sql --insecure -e "frobnicate cluster"
 ERROR: at or near "cluster": syntax error: unimplemented: this syntax
 SQLSTATE: 0A000
 DETAIL: source SQL:
@@ -175,7 +195,7 @@ Notice that the error specifies that the statement is unimplemented.  If we try
 something invalid we'll see a different error:
 
 ```go
-$ ./cockroach sql --insecure -e 'hodgepodge bananas'
+$ cockroach sql --insecure -e 'hodgepodge bananas'
 ERROR: at or near "hodgepodge": syntax error
 SQLSTATE: 42601
 DETAIL: source SQL:
@@ -196,7 +216,7 @@ itself (`StatementReturnType`, `StatementType` and `StatementTag`), one for
 `NodeFormatter` (`Format`), and the standard `fmt.Stringer`.
 
 Make a new file for our statement type: `pkg/sql/sem/tree/frobnicate.go`.  In
-it, put the implementation of our AST node.
+it, put the *format and definition* of our AST node.
 
 ```go
 package tree
@@ -215,9 +235,6 @@ const (
   FrobnicateModeSession
 )
 
-func (node *Frobnicate) StatementReturnType() StatementReturnType { return Ack }
-func (node *Frobnicate) StatementTag() string               { return "FROBNICATE" }
-
 func (node *Frobnicate) Format(ctx *FmtCtx) {
   ctx.WriteString("FROBNICATE ")
   switch node.Mode {
@@ -228,46 +245,37 @@ func (node *Frobnicate) Format(ctx *FmtCtx) {
   case FrobnicateModeSession:
     ctx.WriteString("SESSION")
   }
+} 
 
-  func(node *Frobnicate) String()
-  string{
-    return AsString(node)
-  }
 ```
 
-Now we need to update the parser to return a `Frobnicate` node with the
-appropriate mode type when it encounters our syntax.  But before we do, let's
-write a test for our parser changes.
-
-### Testing the parser
-
-The parser tests are in `pkg/sql/parser/parse_test.go`.  For the most part these
-tests are simply a list of example statements that should parse correctly.  Find
-the right place to stick in the frobnicate cases, and add one for each type:
+To add the *statement and string representation* for our AST tree, open `pkg/sql/sem/tree/stmt.go` and search `// StatementReturnType implements the Statement interface`. Now you have the
+list of implementation for different types of AST. Insert the following by the alphabetical order of the list:
 
 ```go
-// ...
-	{`FROBNICATE CLUSTER`},
-	{`FROBNICATE SESSION`},
-	{`FROBNICATE ALL`},
-// ...
+func (node *Frobnicate) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (node *Frobnicate) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (node *Frobnicate) StatementTag() string               { return "FROBNICATE" }
 ```
 
-Then rebuild and run the tests to watch them fail:
+Then, add the following in alphabetical order
 
-```text
-$ make test
-...
---- FAIL: TestParse (0.00s)
-    parse_test.go:721: FROBNICATE CLUSTER: expected success, but found unimplemented at or near "cluster"
-        FROBNICATE CLUSTER
-...
+```go
+func (n *Frobnicate) String() string									   { return AsString(n) }
 ```
 
-Great, a failing test!  Let's make it pass.
+
+Now we need to update the parser to return a `Frobnicate` node with the
+appropriate mode type when it encounters our syntax.
+
 
 ### Finishing the parser changes
 
+Back to `pkg/sql/parser/sql.y`, search `// %Help: FROBNICATE `, and replace the statements by
 ```text
 frobnicate_stmt:
   FROBNICATE CLUSTER { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeCluster} }
@@ -280,18 +288,11 @@ There are a few other `$` symbols that you can use with yacc.  One of the more
 useful forms refers to node values of sub-productions (for instance, in these
 three statements `$1` would be the token `FROBNICATE`).
 
-Rebuild the project (don't forget to regenerate the parser) and try the test
-one more time:
-
-```text
-$ make test
-```
-
-If we did everything correctly so far, there are no more failing tests!  Now
+``make build`` again this project (don't forget to regenerate the parser). Now
 try out the statement again:
 
 ```text
-$ ./cockroach sql --insecure -e "frobnicate cluster"
+$ cockroach sql --insecure -e "frobnicate cluster"
 Error: pq: unknown statement type: *tree.Frobnicate
 Failed running "sql"
 ```
@@ -331,14 +332,14 @@ import (
 )
 
 func (p *planner) Frobnicate(ctx context.Context, stmt *tree.Frobnicate) (planNode, error) {
-    return nil, AssertionFailedf("We're not quite frobnicating yet...")
+    return nil, errors.AssertionFailedf("We're not quite frobnicating yet...")
 }
 ```
 
 Run `make build` again and give it another go:
 
 ```text
-$ ./cockroach sql --insecure -e "frobnicate cluster"
+$ cockroach sql --insecure -e "frobnicate cluster"
 Error: pq: We're not quite frobnicating yet...
 Failed running "sql"
 ```
@@ -361,8 +362,8 @@ to update the value.  If it's a session setting, we grab the variable from the
 
 Let's start with the session settings, since they're a bit simpler.  Look at the
 implementation of the `varGen` map in `pkg/sql/vars.go`.  
-Most of these settings have a `Set` method. Some of them take a parameter, but 
-it's usually pretty tightly constrained.  The `application_name` setting can be 
+Most of these settings have a `Set` method. Some of them take a parameter, but
+it's usually pretty tightly constrained.  The `application_name` setting can be
 any arbitrary string, but `distsql` needs to be one of a specific set of options.
 
 #### Frobnicating the session
@@ -425,7 +426,8 @@ func (p *planner) randomizeSessionSettings() {
 }
 ```
 
-Now let's wire it up into our statement.
+Now let's wire it up into our statement. Search `func (p *planner) Frobnicate` in `pkg/sql/frobnicate.go` and replace
+the function definition with the following:
 
 ```go
 func (p *planner) Frobnicate(ctx context.Context, stmt *tree.Frobnicate) (planNode, error) {
@@ -468,6 +470,57 @@ Now that we've got the session settings right, maybe we'll want to implement
 frobbing of the cluster settings.  The complete implementation is left as an
 exercise for the reader.
 
+### Testing the parser
+
+The parser tests are in `pkg/sql/parser/testdata`. Under this folder, create a file called `frobnicate`, and add
+the following into this file:
+
+```text
+parse
+FROBNICATE CLUSTER
+----
+
+parse
+FROBNICATE SESSION
+----
+
+parse
+FROBNICATE ALL
+----
+```
+
+Back to the terminal, make sure you are at `~/go/src/github.com/cockroachdb/cockroach`,
+and run `make test PKG=./pkg/sql/parser TESTS=TestParseDatadriven TESTFLAGS="-rewrite" FILES=grant_revoke`.
+The flag `TESTFLAGS="-rewrite"` is meant to automatically rewrite the datadriven test with the output it received.
+
+Wait until the test command finishes, and open `pkg/sql/parser/testdata/frobnicate`, and you would expect:
+
+```text
+parse
+FROBNICATE CLUSTER
+----
+FROBNICATE CLUSTER
+FROBNICATE CLUSTER -- fully parenthesized
+FROBNICATE CLUSTER -- literals removed
+FROBNICATE CLUSTER -- identifiers removed
+
+parse
+FROBNICATE SESSION
+----
+FROBNICATE SESSION
+FROBNICATE SESSION -- fully parenthesized
+FROBNICATE SESSION -- literals removed
+FROBNICATE SESSION -- identifiers removed
+
+parse
+FROBNICATE ALL
+----
+FROBNICATE ALL
+FROBNICATE ALL -- fully parenthesized
+FROBNICATE ALL -- literals removed
+FROBNICATE ALL -- identifiers removed
+```
+
 ### Adding an alias statement
 
 Now that we're regularly frobbing our database, it's going to get tiring having
@@ -509,6 +562,8 @@ it a try, and look below if you need a hint.
 
 That's it!  You've seen how to add new syntax and semantics to the CockroachDB
 SQL parser and execution engine.
+
+[Reference to all file changes in this tutorial](https://github.com/ZhouXing19/cockroach/commit/a3955335119816782da4f86e2962db147e3e95b0)
 
 [CONTRIBUTING.md]: https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md
 [sql-function]: https://github.com/cockroachdb/cockroach/blob/master/docs/codelabs/00-sql-function.md
