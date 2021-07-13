@@ -24,6 +24,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/lex",
         "//pkg/sql/parser",
