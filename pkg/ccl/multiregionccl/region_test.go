@@ -9,6 +9,7 @@
 package multiregionccl_test
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -183,21 +184,9 @@ CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
 				dbRegions = append(dbRegions, region)
 			}
 
-			if len(dbRegions) != len(tc.expectedRegions) {
-				t.Fatalf("unexpected number of regions, expected: %v found %v",
-					tc.expectedRegions,
-					dbRegions,
-				)
-			}
-
-			for i, expectedRegion := range tc.expectedRegions {
-				if expectedRegion != dbRegions[i] {
-					t.Fatalf("unexpected regions, expected: %v found %v",
-						tc.expectedRegions,
-						dbRegions,
-					)
-				}
-			}
+			sort.Strings(tc.expectedRegions)
+			sort.Strings(dbRegions)
+			require.Equal(t, tc.expectedRegions, dbRegions)
 		})
 	}
 }

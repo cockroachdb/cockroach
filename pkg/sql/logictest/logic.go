@@ -694,6 +694,13 @@ var logicTestConfigs = []testClusterConfig{
 		localities:        multiregion9node3region3azsLocalities,
 	},
 	{
+		name:              "multiregion-9node-3region-3azs-tenant",
+		numNodes:          9,
+		overrideAutoStats: "false",
+		localities:        multiregion9node3region3azsLocalities,
+		useTenant:         true,
+	},
+	{
 		name:              "multiregion-9node-3region-3azs-vec-off",
 		numNodes:          9,
 		overrideAutoStats: "false",

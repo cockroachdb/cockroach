@@ -23,29 +23,10 @@ import (
 func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, error) {
 	zonesClause := `
 		SELECT
-			substring(locality, 'region=([^,]*)') AS region,
-			array_remove(
-				array_agg(
-					COALESCE(
-						substring(locality, 'az=([^,]*)'),
-						substring(
-							locality,
-							'availability-zone=([^,]*)'),
-						substring(
-							locality,
-							'zone=([^,]*)'
-						)
-					)
-					ORDER BY locality
-				),
-				NULL
-			)
-				AS zones
-		FROM
-			crdb_internal.kv_node_status
-		GROUP BY
-			region
-	`
+			region, zones
+		FROM crdb_internal.regions
+		ORDER BY region
+`
 	switch n.ShowRegionsFrom {
 	case tree.ShowRegionsFromAllDatabases:
 		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromAllDatabases)

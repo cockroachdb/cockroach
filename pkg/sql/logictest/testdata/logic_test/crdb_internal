@@ -62,6 +62,7 @@ crdb_internal  partitions                   table  NULL  NULL  NULL
 crdb_internal  predefined_comments          table  NULL  NULL  NULL
 crdb_internal  ranges                       view   NULL  NULL  NULL
 crdb_internal  ranges_no_leases             table  NULL  NULL  NULL
+crdb_internal  regions                      table  NULL  NULL  NULL
 crdb_internal  schema_changes               table  NULL  NULL  NULL
 crdb_internal  session_trace                table  NULL  NULL  NULL
 crdb_internal  session_variables            table  NULL  NULL  NULL
@@ -896,3 +897,8 @@ query B
 SELECT is_temporary FROM crdb_internal.create_statements WHERE descriptor_name = 'temp'
 ----
 true
+
+query TT
+SELECT * FROM crdb_internal.regions ORDER BY 1
+----
+test  {}

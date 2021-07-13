@@ -66,6 +66,9 @@ type extendedEvalContext struct {
 	// tenants.
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 
+	// RegionsServer gives access to valid regions in the cluster.
+	RegionsServer serverpb.RegionsServer
+
 	// SQLStatusServer gives access to a subset of the serverpb.Status service
 	// that is available to both system and non-system tenants.
 	SQLStatusServer serverpb.SQLStatusServer
@@ -435,6 +438,7 @@ func internalExtendedEvalCtx(
 		VirtualSchemas:    execCfg.VirtualSchemas,
 		Tracing:           &SessionTracing{},
 		NodesStatusServer: execCfg.NodesStatusServer,
+		RegionsServer:     execCfg.RegionsServer,
 		Descs:             tables,
 		ExecCfg:           execCfg,
 		DistSQLPlanner:    execCfg.DistSQLPlanner,
