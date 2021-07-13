@@ -73,9 +73,10 @@ const (
 
 // When running test with -rewrite-diffs test will pass and re-create pg_catalog_test-diffs.json.
 var (
-	rewriteFlag = flag.Bool("rewrite-diffs", false, "This will re-create the expected diffs file")
-	catalogName = flag.String("catalog", "pg_catalog", "Catalog or namespace, default: pg_catalog")
-	rdbmsName   = flag.String("rdbms", Postgres, "Used to determine which RDBMS to compare, default: postgres")
+	rewriteFlag      = flag.Bool("rewrite-diffs", false, "This will re-create the expected diffs file")
+	catalogName      = flag.String("catalog", "pg_catalog", "Catalog or namespace, default: pg_catalog")
+	rdbmsName        = flag.String("rdbms", Postgres, "Used to determine which RDBMS to compare, default: postgres")
+	testDataFileName = flag.String("test-data-filename", "", "Location to json file to create tables manually / Location to json file used to create tables manually")
 )
 
 // strings used on constants creations and text manipulation.
@@ -1319,19 +1320,13 @@ func readSourcePortion(srcFile *os.File, start, end token.Pos) (string, error) {
 func TestPGCatalog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer func() {
-		r := recover()
-		if err, ok := r.(error); ok {
-			t.Fatal(err)
-		}
-	}()
 
 	if _, codeFixerExists := codeFixers[*catalogName]; *addMissingTables && (*rdbmsName != Postgres || !codeFixerExists) {
 		t.Fatal("--add-missing-tables only work for pg_catalog on postgres rdbms")
 	}
 
 	var sum Summary
-	source := loadTestData(t, TablesMetadataFilename(testdata, *rdbmsName, *catalogName), false)
+	source := loadTestData(t, getTestDataFileName(), false)
 	diffFile := loadTestData(t, expectedDiffsFilename(), true)
 	pgTables := source.PGMetadata
 	diffs := diffFile.PGMetadata
@@ -1394,6 +1389,13 @@ func TestPGCatalog(t *testing.T) {
 		fixPgCatalogGoColumns(pgCode)
 		scf.fixCatalogGo(t, unimplemented)
 	}
+}
+
+func getTestDataFileName() string {
+	if testDataFileName == nil || *testDataFileName == "" {
+		return TablesMetadataFilename(testdata, *rdbmsName, *catalogName)
+	}
+	return *testDataFileName
 }
 
 // TestPGMetadataCanFixCode checks for parts of the code this file is checking with

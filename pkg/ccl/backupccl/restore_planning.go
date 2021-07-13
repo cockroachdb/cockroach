@@ -20,15 +20,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -666,6 +663,7 @@ func allocateDescriptorRewrites(
 						return pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
 					}
 				}
+
 				// Create the table rewrite with the new parent ID. We've done all the
 				// up-front validation that we can.
 				descriptorRewrites[table.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: parentID}
@@ -1654,29 +1652,9 @@ func checkPrivilegesForRestore(
 	return nil
 }
 
-func findNodeOfRegion(nodes []statuspb.NodeStatus, region descpb.RegionName) bool {
-	constraint := zonepb.Constraint{
-		Type:  zonepb.Constraint_REQUIRED,
-		Key:   "region",
-		Value: string(region),
-	}
-	for _, n := range nodes {
-		for _, store := range n.StoreStatuses {
-			if zonepb.StoreMatchesConstraint(store.Desc, constraint) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func checkClusterRegions(
-	ctx context.Context,
-	typesByID map[descpb.ID]*typedesc.Mutable,
-	ss serverpb.OptionalNodesStatusServer,
-	codec keys.SQLCodec,
+	ctx context.Context, p sql.PlanHookState, typesByID map[descpb.ID]*typedesc.Mutable,
 ) error {
-
 	regionSet := make(map[descpb.RegionName]struct{})
 	for _, typ := range typesByID {
 		typeDesc := typedesc.NewBuilder(typ.TypeDesc()).BuildImmutableType()
@@ -1697,25 +1675,14 @@ func checkClusterRegions(
 		return nil
 	}
 
-	var nodeStatusServer serverpb.NodesStatusServer
-	var err error
-	if nodeStatusServer, err = ss.OptionalNodesStatusServer(sql.MultitenancyZoneCfgIssueNo); err != nil {
-		if !codec.ForSystemTenant() {
-			hintMsg := fmt.Sprintf("only the system tenant supports localities check for restore, otherwise option %q is required", restoreOptSkipLocalitiesCheck)
-			return errors.WithHint(err, hintMsg)
-		}
-		return err
-	}
-
-	var nodesResponse *serverpb.NodesResponse
-	nodesResponse, err = nodeStatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	l, err := sql.GetLiveClusterRegions(ctx, p)
 	if err != nil {
 		return err
 	}
 
 	missingRegions := make([]string, 0)
 	for region := range regionSet {
-		if nodeFound := findNodeOfRegion(nodesResponse.Nodes, region); !nodeFound {
+		if !l.IsActive(region) {
 			missingRegions = append(missingRegions, string(region))
 		}
 	}
@@ -1927,7 +1894,7 @@ func doRestorePlan(
 	}
 
 	if !restoreStmt.Options.SkipLocalitiesCheck {
-		if err := checkClusterRegions(ctx, typesByID, p.ExecCfg().NodesStatusServer, p.ExecCfg().Codec); err != nil {
+		if err := checkClusterRegions(ctx, p, typesByID); err != nil {
 			return err
 		}
 	}

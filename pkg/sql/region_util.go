@@ -39,7 +39,8 @@ import (
 // a given cluster.
 type LiveClusterRegions map[descpb.RegionName]struct{}
 
-func (s *LiveClusterRegions) isActive(region descpb.RegionName) bool {
+// IsActive returns whether the given region is a live region.
+func (s *LiveClusterRegions) IsActive(region descpb.RegionName) bool {
 	_, ok := (*s)[region]
 	return ok
 }
@@ -55,10 +56,14 @@ func (s *LiveClusterRegions) toStrings() []string {
 	return ret
 }
 
-// getLiveClusterRegions returns a set of live region names in the cluster.
+func (p *planner) getLiveClusterRegions(ctx context.Context) (LiveClusterRegions, error) {
+	return GetLiveClusterRegions(ctx, p)
+}
+
+// GetLiveClusterRegions returns a set of live region names in the cluster.
 // A region name is deemed active if there is at least one alive node
 // in the cluster in with locality set to a given region.
-func (p *planner) getLiveClusterRegions(ctx context.Context) (LiveClusterRegions, error) {
+func GetLiveClusterRegions(ctx context.Context, p PlanHookState) (LiveClusterRegions, error) {
 	// Non-admin users can't access the crdb_internal.kv_node_status table, which
 	// this query hits, so we must override the user here.
 	override := sessiondata.InternalExecutorOverride{
@@ -68,7 +73,7 @@ func (p *planner) getLiveClusterRegions(ctx context.Context) (LiveClusterRegions
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx,
 		"get_live_cluster_regions",
-		p.txn,
+		p.ExtendedEvalContext().Txn,
 		override,
 		"SELECT region FROM [SHOW REGIONS FROM CLUSTER]",
 	)
@@ -93,7 +98,7 @@ func (p *planner) getLiveClusterRegions(ctx context.Context) (LiveClusterRegions
 func CheckClusterRegionIsLive(
 	liveClusterRegions LiveClusterRegions, region descpb.RegionName,
 ) error {
-	if !liveClusterRegions.isActive(region) {
+	if !liveClusterRegions.IsActive(region) {
 		return errors.WithHintf(
 			pgerror.Newf(
 				pgcode.InvalidName,
