@@ -198,7 +198,7 @@ Output the list of cluster settings known to this binary.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wrapCode := func(s string) string {
-			if cliCtx.tableDisplayFormat == tableDisplayHTML {
+			if cliCtx.tableDisplayFormat == tableDisplayRawHTML {
 				return fmt.Sprintf("<code>%s</code>", s)
 			}
 			return s
@@ -241,20 +241,9 @@ Output the list of cluster settings known to this binary.
 			rows = append(rows, row)
 		}
 
-		reporter, cleanup, err := makeReporter(os.Stdout)
-		if err != nil {
-			return err
-		}
-		if cleanup != nil {
-			defer cleanup()
-		}
-		if hr, ok := reporter.(*htmlReporter); ok {
-			hr.escape = false
-			hr.rowStats = false
-		}
+		sliceIter := NewRowSliceIter(rows, "dddd")
 		cols := []string{"Setting", "Type", "Default", "Description"}
-		return render(reporter, os.Stdout,
-			cols, NewRowSliceIter(rows, "dddd"), nil /* completedHook */, nil /* noRowsHook*/)
+		return PrintQueryOutput(os.Stdout, cols, sliceIter)
 	},
 }
 

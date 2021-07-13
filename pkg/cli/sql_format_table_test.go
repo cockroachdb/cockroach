@@ -216,6 +216,11 @@ func Example_sql_empty_table() {
 	// <thead><tr><th>row</th><th>x</th></tr></thead>
 	// </tbody>
 	// <tfoot><tr><td colspan=2>0 rows</td></tr></tfoot></table>
+	// sql --format=rawhtml -e select * from t.norows
+	// <table>
+	// <thead><tr><th>x</th></tr></thead>
+	// </tbody>
+	// </table>
 	// sql --format=raw -e select * from t.norows
 	// # 1 column
 	// # 0 rows
@@ -251,6 +256,15 @@ func Example_sql_empty_table() {
 	// <tr><td>3</td></tr>
 	// </tbody>
 	// <tfoot><tr><td colspan=1>3 rows</td></tr></tfoot></table>
+	// sql --format=rawhtml -e select * from t.nocols
+	// <table>
+	// <thead><tr></tr></thead>
+	// <tbody>
+	// <tr></tr>
+	// <tr></tr>
+	// <tr></tr>
+	// </tbody>
+	// </table>
 	// sql --format=raw -e select * from t.nocols
 	// # 0 columns
 	// # row 1
@@ -276,6 +290,11 @@ func Example_sql_empty_table() {
 	// <thead><tr><th>row</th></tr></thead>
 	// </tbody>
 	// <tfoot><tr><td colspan=1>0 rows</td></tr></tfoot></table>
+	// sql --format=rawhtml -e select * from t.nocolsnorows
+	// <table>
+	// <thead><tr></tr></thead>
+	// </tbody>
+	// </table>
 	// sql --format=raw -e select * from t.nocolsnorows
 	// # 0 columns
 	// # 0 rows
@@ -607,6 +626,21 @@ func Example_sql_table() {
 	// <tr><td>9</td><td>a	b	c<br/>12	123123213	12313</td><td>tabs</td></tr>
 	// </tbody>
 	// <tfoot><tr><td colspan=3>9 rows</td></tr></tfoot></table>
+	// sql --format=rawhtml -e select * from t.t
+	// <table>
+	// <thead><tr><th>s</th><th>d</th></tr></thead>
+	// <tbody>
+	// <tr><td>foo</td><td>printable ASCII</td></tr>
+	// <tr><td>"foo</td><td>printable ASCII with quotes</td></tr>
+	// <tr><td>\foo</td><td>printable ASCII with backslash</td></tr>
+	// <tr><td>foo<br/>bar</td><td>non-printable ASCII</td></tr>
+	// <tr><td>κόσμε</td><td>printable UTF8</td></tr>
+	// <tr><td>ñ</td><td>printable UTF8 using escapes</td></tr>
+	// <tr><td>\x01</td><td>non-printable UTF8 string</td></tr>
+	// <tr><td>܈85</td><td>UTF8 string with RTL char</td></tr>
+	// <tr><td>a	b	c<br/>12	123123213	12313</td><td>tabs</td></tr>
+	// </tbody>
+	// </table>
 	// sql --format=raw -e select * from t.t
 	// # 2 columns
 	// # row 1
