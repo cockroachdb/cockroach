@@ -109,7 +109,7 @@ func processInboundStreamHelper(
 
 	if firstMsg != nil {
 		if res := processProducerMessage(
-			ctx, stream, dst, &sd, &draining, firstMsg,
+			ctx, f, stream, dst, &sd, &draining, firstMsg,
 		); res.err != nil || res.consumerClosed {
 			sendErrToConsumer(res.err)
 			return res.err
@@ -148,7 +148,7 @@ func processInboundStreamHelper(
 			}
 
 			if res := processProducerMessage(
-				ctx, stream, dst, &sd, &draining, msg,
+				ctx, f, stream, dst, &sd, &draining, msg,
 			); res.err != nil || res.consumerClosed {
 				sendErrToConsumer(res.err)
 				errChan <- res.err
@@ -184,6 +184,7 @@ func sendDrainSignalToStreamProducer(
 // closed), the caller must return the error to the producer.
 func processProducerMessage(
 	ctx context.Context,
+	flowBase *FlowBase,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	dst execinfra.RowReceiver,
 	sd *StreamDecoder,
@@ -199,6 +200,12 @@ func processProducerMessage(
 				// show the tags later.
 				log.FormatWithContextTags(ctx, "decoding error")),
 			consumerClosed: false,
+		}
+	}
+	admissionQ := flowBase.Cfg.SQLSQLResponseAdmissionQ
+	if admissionQ != nil {
+		if _, err := admissionQ.Admit(ctx, flowBase.admissionInfo); err != nil {
+			return processMessageResult{err: err, consumerClosed: false}
 		}
 	}
 	var types []*types.T
