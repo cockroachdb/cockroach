@@ -30,6 +30,7 @@ const InternalAppNamePrefix = ReportableAppNamePrefix + "internal"
 // DelegatedAppNamePrefix should be scrubbed in reporting.
 const DelegatedAppNamePrefix = "$$ "
 
+const InternalSqlAppName = "cockroach sql"
 // Oid for virtual database and table.
 const (
 	CrdbInternalID = math.MaxUint32 - iota
