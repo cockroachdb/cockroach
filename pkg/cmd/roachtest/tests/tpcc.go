@@ -203,9 +203,14 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		defer func() {
+			// Use a context that will not time out to avoid the issue where
+			// ctx gets canceled if t.Fatal gets called.
+			snapshotCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
 			if err := p.Snapshot(
-				ctx,
+				snapshotCtx,
 				c,
 				t.L(),
 				filepath.Join(t.ArtifactsDir(), "prometheus-snapshot.tar.gz"),
@@ -590,7 +595,7 @@ func registerTPCC(r registry.Registry) {
 					iter := 0
 					chaosEventCh := make(chan ChaosEvent)
 					runTPCC(ctx, t, c, tpccOptions{
-						Warehouses:     len(regions) * 5,
+						Warehouses:     len(regions) * 20,
 						Duration:       duration,
 						ExtraSetupArgs: partitionArgs,
 						ExtraRunArgs:   `--method=simple --wait=false --tolerate-errors ` + partitionArgs,

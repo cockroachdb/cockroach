@@ -107,6 +107,23 @@ func (ep *tpccChaosEventProcessor) checkMetrics(
 	successCheckFn func(from, to model.SampleValue) error,
 	errorCheckFn func(from, to model.SampleValue) error,
 ) error {
+	// Add an extra interval to fromTime to account for the first data point
+	// which may include a node not being fully shutdown or restarted.
+	fromTime = fromTime.Add(prometheus.DefaultScrapeInterval)
+	// Similarly, scale back the toTime to account for the data point
+	// potentially already having data of a node which may have already
+	// started restarting or shutting down.
+	toTime = toTime.Add(-prometheus.DefaultScrapeInterval)
+	if !toTime.After(fromTime) {
+		l.PrintfCtx(
+			ctx,
+			"to %s < from %s, skipping",
+			toTime.Format(time.RFC3339),
+			fromTime.Format(time.RFC3339),
+		)
+		return nil
+	}
+
 	for _, check := range []struct {
 		metricType string
 		checkFn    func(from, to model.SampleValue) error
@@ -120,19 +137,6 @@ func (ep *tpccChaosEventProcessor) checkMetrics(
 			checkFn:    errorCheckFn,
 		},
 	} {
-		// Add an extra interval to fromTime to account for the first data point
-		// which may include a node not being fully shutdown or restarted.
-		fromTime := fromTime.Add(prometheus.DefaultScrapeInterval)
-		if !toTime.After(fromTime) {
-			l.PrintfCtx(
-				ctx,
-				"to %s < from %s, skipping",
-				toTime.Format(time.RFC3339),
-				fromTime.Format(time.RFC3339),
-			)
-			continue
-		}
-
 		// Verify all nodes had successes and minimal errors.
 		q := fmt.Sprintf(
 			`workload_tpcc_%s_%s_total{instance="%s:%d"}`,
