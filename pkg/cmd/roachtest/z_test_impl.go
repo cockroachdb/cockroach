@@ -69,8 +69,9 @@ type testImpl struct {
 
 	mu struct {
 		syncutil.RWMutex
-		done   bool
-		failed bool
+		done    bool
+		failed  bool
+		timeout bool // if failed == true, this indicates whether the test timed out
 		// cancel, if set, is called from the t.Fatal() family of functions when the
 		// test is being marked as failed (i.e. when the failed field above is also
 		// set). This is used to cancel the context passed to t.spec.Run(), so async
