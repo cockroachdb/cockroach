@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { connect } from "react-redux";
 import { Link } from "react-router-dom";
 import * as d3 from "d3";
 
@@ -29,22 +30,26 @@ import {
 } from "src/views/shared/components/summaryBar";
 import { Tooltip, Anchor } from "src/components";
 import { howAreCapacityMetricsCalculated } from "src/util/docs";
-
-interface ClusterSummaryProps {
-  nodeSources: string[];
-  nodesSummary: NodesSummary;
-  nodesSummaryValid: boolean;
-}
+import { AdminUIState } from "src/redux/state";
 
 /**
  * ClusterNodeTotals displays a high-level breakdown of the nodes on the cluster
  * and their current liveness status.
  */
-function ClusterNodeTotals(props: ClusterSummaryProps) {
-  if (!props.nodesSummaryValid) {
+
+export interface ClusterNodeTotalsProps {
+  nodesSummary: NodesSummary;
+  nodesSummaryEmpty: boolean;
+}
+
+export const ClusterNodeTotalsComponent: React.FC<ClusterNodeTotalsProps> = ({
+  nodesSummary,
+  nodesSummaryEmpty,
+}) => {
+  if (nodesSummaryEmpty) {
     return null;
   }
-  const { nodeCounts } = props.nodesSummary.nodeSums;
+  const { nodeCounts } = nodesSummary.nodeSums;
   let children: React.ReactNode;
   if (nodeCounts.dead > 0 || nodeCounts.suspect > 0) {
     children = (
@@ -79,7 +84,20 @@ function ClusterNodeTotals(props: ClusterSummaryProps) {
       {children}
     </SummaryStat>
   );
+};
+
+export function selectNodesSummaryEmpty(state: AdminUIState) {
+  return !state.cachedData.nodes.data;
 }
+
+const mapStateToProps = (state: AdminUIState) => ({
+  nodesSummaryEmpty: selectNodesSummaryEmpty(state),
+});
+
+const ClusterNodeTotals = connect(
+  mapStateToProps,
+  {},
+)(ClusterNodeTotalsComponent);
 
 const formatOnePlace = d3.format(".1f");
 const formatPercentage = d3.format(".2%");
@@ -90,6 +108,11 @@ function formatNanosAsMillis(n: number) {
 /**
  * Component which displays the cluster summary bar on the graphs page.
  */
+export interface ClusterSummaryProps {
+  nodeSources: string[];
+  nodesSummary: NodesSummary;
+}
+
 export default function (props: ClusterSummaryProps) {
   // Capacity math used in the summary status section.
   const { capacityUsed, capacityUsable } = props.nodesSummary.nodeSums;
@@ -99,7 +122,7 @@ export default function (props: ClusterSummaryProps) {
     <div>
       <SummaryBar>
         <SummaryLabel>Summary</SummaryLabel>
-        <ClusterNodeTotals {...props} />
+        <ClusterNodeTotals nodesSummary={props.nodesSummary} />
         <SummaryStat
           title={
             <Tooltip

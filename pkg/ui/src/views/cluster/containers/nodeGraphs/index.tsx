@@ -37,7 +37,6 @@ import {
   nodesSummarySelector,
   NodesSummary,
   LivenessStatus,
-  selectNodesSummaryValid,
 } from "src/redux/nodes";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
@@ -95,7 +94,6 @@ const dashboardDropdownOptions = _.map(dashboards, (dashboard, key) => {
 type MapStateToProps = {
   nodesSummary: NodesSummary;
   hoverState: HoverState;
-  nodesSummaryValid: boolean;
 };
 
 type MapDispatchToProps = {
@@ -290,7 +288,6 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
               <ClusterSummaryBar
                 nodesSummary={this.props.nodesSummary}
                 nodeSources={nodeSources}
-                nodesSummaryValid={this.props.nodesSummaryValid}
               />
             </div>
           </div>
@@ -303,7 +300,6 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
 const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   nodesSummary: nodesSummarySelector(state),
   hoverState: hoverStateSelector(state),
-  nodesSummaryValid: selectNodesSummaryValid(state),
 });
 
 const mapDispatchToProps: MapDispatchToProps = {
