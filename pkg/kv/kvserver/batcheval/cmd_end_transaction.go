@@ -202,11 +202,12 @@ func EndTxn(
 
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
-	if ok, err := storage.MVCCGetProto(
+	recordAlreadyExisted, err := storage.MVCCGetProto(
 		ctx, readWriter, key, hlc.Timestamp{}, &existingTxn, storage.MVCCGetOptions{},
-	); err != nil {
+	)
+	if err != nil {
 		return result.Result{}, err
-	} else if !ok {
+	} else if !recordAlreadyExisted {
 		// No existing transaction record was found - create one by writing it
 		// below in updateFinalizedTxn.
 		reply.Txn = h.Txn.Clone()
@@ -251,7 +252,7 @@ func EndTxn(
 					return result.Result{}, err
 				}
 				if err := updateFinalizedTxn(
-					ctx, readWriter, ms, key, args, reply.Txn, externalLocks,
+					ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
 				); err != nil {
 					return result.Result{}, err
 				}
@@ -330,7 +331,9 @@ func EndTxn(
 	if err != nil {
 		return result.Result{}, err
 	}
-	if err := updateFinalizedTxn(ctx, readWriter, ms, key, args, reply.Txn, externalLocks); err != nil {
+	if err := updateFinalizedTxn(
+		ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
+	); err != nil {
 		return result.Result{}, err
 	}
 
@@ -555,11 +558,18 @@ func updateFinalizedTxn(
 	key []byte,
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
+	recordAlreadyExisted bool,
 	externalLocks []roachpb.Span,
 ) error {
 	if txnAutoGC && len(externalLocks) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
+		}
+		if !recordAlreadyExisted {
+			// Nothing to delete, so there's no use writing a deletion tombstone. This
+			// can help avoid sending a proposal through Raft, if nothing else in the
+			// BatchRequest writes.
+			return nil
 		}
 		return storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
