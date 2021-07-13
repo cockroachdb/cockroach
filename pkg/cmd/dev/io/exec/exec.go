@@ -99,7 +99,12 @@ func WithWorkingDir(dir string) func(e *Exec) {
 // CommandContext wraps around exec.CommandContext, executing the named program
 // with the given arguments.
 func (e *Exec) CommandContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	command := fmt.Sprintf("%s %s", name, strings.Join(args, " "))
+	var command string
+	if len(args) > 0 {
+		command = fmt.Sprintf("%s %s", name, strings.Join(args, " "))
+	} else {
+		command = name
+	}
 	e.logger.Print(command)
 
 	var buffer bytes.Buffer
@@ -142,7 +147,12 @@ func (e *Exec) CommandContext(ctx context.Context, name string, args ...string) 
 func (e *Exec) CommandContextSilent(
 	ctx context.Context, name string, args ...string,
 ) ([]byte, error) {
-	command := fmt.Sprintf("%s %s", name, strings.Join(args, " "))
+	var command string
+	if len(args) > 0 {
+		command = fmt.Sprintf("%s %s", name, strings.Join(args, " "))
+	} else {
+		command = name
+	}
 	e.logger.Print(command)
 
 	var buffer bytes.Buffer
