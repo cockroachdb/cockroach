@@ -11,11 +11,21 @@
 /* eslint-disable @typescript-eslint/camelcase */
 import _ from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { FixLong, uniqueLong } from "src/util";
+import Long from "long";
+import { FixLong } from "../fixLong";
+import { uniqueLong } from "../arrays";
+import {
+  collectStatementsTextWithReps,
+  combineStatements,
+  combineTransactionStatsData,
+  getTransactionStatementsByIdInOrder,
+} from "../../transactionsPage/utils";
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type ExecStats = protos.cockroach.sql.IExecStats;
 export type CollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+export type ICollectedTransactionStatistics = protos.cockroach.sql.ICollectedTransactionStatistics;
+export type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 
 export interface NumericStat {
   mean?: number;
@@ -217,6 +227,7 @@ export function flattenStatementStats(
     full_scan: stmt.key.key_data.full_scan,
     failed: stmt.key.key_data.failed,
     node_id: stmt.key.node_id,
+    txnID: stmt.key.key_data.txn_id,
     stats: stmt.stats,
   }));
 }
@@ -238,4 +249,72 @@ export const getSearchParams = (searchParams: string) => {
 // Parameters being used: node_id, implicit_txn and database.
 export function statementKey(stmt: ExecutionStatistics): string {
   return stmt.statement + stmt.implicit_txn + stmt.database;
+}
+
+export interface TransactionSummaryData {
+  fingerprint: string;
+  statements: CollectedStatementStatistics[];
+  stats_data: ICollectedTransactionStatistics[];
+}
+
+// This function returns a key based on all parameters
+// that should be used to group transactions.
+// Parameters being used: fingerprint, app.
+export function transactionKey(txn: Transaction): string {
+  return txn.fingerprint + txn.stats_data.app;
+}
+
+// Aggregates stats for transactions with the same fingerprint
+// and returns a list of Transactions (each Transaction includes
+// the fingerprint, the aggregates stats and the statements list
+// containing their own aggregated stats).
+export function aggregateTransactions(
+  statements: CollectedStatementStatistics[],
+  transactions: Transaction[],
+): Transaction[] {
+  const fullTransactions: Transaction[] = [];
+  transactions.forEach(t => {
+    const orderedStatements = getTransactionStatementsByIdInOrder(
+      t.stats_data.statement_fingerprint_ids,
+      statements,
+    );
+
+    const txn: Transaction = {
+      ...t,
+      fingerprint: collectStatementsTextWithReps(orderedStatements),
+      statements: statements.filter(s =>
+        t.stats_data.statement_fingerprint_ids.some(id => id.eq(s.id)),
+      ),
+    };
+    fullTransactions.push(txn);
+  });
+
+  const statsByTransactionKey: {
+    [transaction: string]: TransactionSummaryData;
+  } = {};
+  fullTransactions.forEach(txn => {
+    const key = transactionKey(txn);
+    if (!(key in statsByTransactionKey)) {
+      statsByTransactionKey[key] = {
+        fingerprint: txn.fingerprint,
+        statements: [],
+        stats_data: [],
+      };
+    }
+    statsByTransactionKey[key].statements = statsByTransactionKey[
+      key
+    ].statements.concat(txn.statements);
+    statsByTransactionKey[key].stats_data.push(txn.stats_data);
+  });
+  const aggregatedTransactions: Transaction[] = [];
+
+  Object.keys(statsByTransactionKey).map(key => {
+    const txn = statsByTransactionKey[key];
+    aggregatedTransactions.push({
+      fingerprint: txn.fingerprint,
+      statements: combineStatements(txn.statements),
+      stats_data: combineTransactionStatsData(txn.stats_data),
+    });
+  });
+  return aggregatedTransactions;
 }

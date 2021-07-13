@@ -43,6 +43,7 @@ type stmtKey struct {
 	failed         bool
 	implicitTxn    bool
 	database       string
+	txnID          string
 }
 
 func (s stmtKey) String() string {
@@ -158,6 +159,7 @@ func (s *Container) IterateStatementStats(
 		vectorized := statementStats.mu.vectorized
 		fullScan := statementStats.mu.fullScan
 		database := statementStats.mu.database
+		txnID := statementStats.mu.txnID
 		statementStats.mu.Unlock()
 
 		collectedStats := roachpb.CollectedStatementStatistics{
@@ -171,6 +173,7 @@ func (s *Container) IterateStatementStats(
 				Failed:      stmtKey.failed,
 				App:         appName,
 				Database:    database,
+				TxnID:       txnID,
 			},
 			ID:    stmtFingerprintID,
 			Stats: data,
@@ -252,7 +255,7 @@ func (s *Container) GetStatementStats(
 	key *roachpb.StatementStatisticsKey,
 ) (*roachpb.CollectedStatementStatistics, error) {
 	statementStats, _, stmtFingerprintID, _, _ := s.getStatsForStmt(
-		key.Query, key.ImplicitTxn, key.Database, key.Failed, false /* createIfNonexistent */)
+		key.Query, key.ImplicitTxn, key.Database, key.TxnID, key.Failed, false /* createIfNonexistent */)
 
 	if statementStats == nil {
 		return nil, errors.Errorf("no stats found for the provided key")
@@ -341,8 +344,12 @@ type stmtStats struct {
 		fullScan bool
 
 		// database records the database from the session the statement
-		// was executed from
+		// was executed from.
 		database string
+
+		// txnID records the transaction id from which the statement is part of
+		// when the statement is part of an explicit transaction
+		txnID string
 
 		data roachpb.StatementStatistics
 	}
@@ -377,7 +384,12 @@ func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
 // stat object is returned or not, we always return the correct stmtFingerprintID
 // for the given stmt.
 func (s *Container) getStatsForStmt(
-	anonymizedStmt string, implicitTxn bool, database string, failed bool, createIfNonexistent bool,
+	anonymizedStmt string,
+	implicitTxn bool,
+	database string,
+	txnID string,
+	failed bool,
+	createIfNonexistent bool,
 ) (
 	stats *stmtStats,
 	key stmtKey,
@@ -392,6 +404,7 @@ func (s *Container) getStatsForStmt(
 		failed:         failed,
 		implicitTxn:    implicitTxn,
 		database:       database,
+		txnID:          txnID,
 	}
 
 	// We first try and see if we can get by without creating a new entry for this
@@ -486,6 +499,7 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
 
+// TODO marylia
 // Clear clears the data stored in this Container.
 func (s *Container) Clear(ctx context.Context) {
 	s.mu.Lock()
@@ -673,6 +687,6 @@ type transactionCounts struct {
 
 func constructStatementFingerprintIDFromStmtKey(key stmtKey) roachpb.StmtFingerprintID {
 	return roachpb.ConstructStatementFingerprintID(
-		key.anonymizedStmt, key.failed, key.implicitTxn, key.database,
+		key.anonymizedStmt, key.failed, key.implicitTxn, key.database, key.txnID,
 	)
 }

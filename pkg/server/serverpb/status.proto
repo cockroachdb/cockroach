@@ -1001,6 +1001,8 @@ message StatementsResponse {
     cockroach.sql.CollectedTransactionStatistics stats_data = 1 [(gogoproto.nullable) = false];
     int32 node_id = 2 [(gogoproto.customname) = "NodeID",
                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    string fingerprint = 3;
+    repeated CollectedStatementStatistics statements = 4 [(gogoproto.nullable) = false];
   }
 
   // Transactions is transaction-level statistics for the collection of

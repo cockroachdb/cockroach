@@ -19,12 +19,13 @@ import (
 // StmtFingerprintID is the type of a Statement's fingerprint ID.
 type StmtFingerprintID uint64
 
-// ConstructStatementFingerprintID constructs an ID by hashing an anonymized query, its database
-// and failure status, and if it was part of an implicit txn. At the time of writing,
-// these are the axis' we use to bucket queries for stats collection
-// (see stmtKey).
+// ConstructStatementFingerprintID constructs an ID by hashing an anonymized query,
+// its database and failure status, and if it was part of implicit txn and the txn
+// id if was part of an explicit txn.
+// At the time of writing, these are the axis' we use to bucket queries for stats
+// collection (see stmtKey).
 func ConstructStatementFingerprintID(
-	anonymizedStmt string, failed bool, implicitTxn bool, database string,
+	anonymizedStmt string, failed bool, implicitTxn bool, database string, txnID string,
 ) StmtFingerprintID {
 	fnv := util.MakeFNV64()
 	for _, c := range anonymizedStmt {
@@ -42,6 +43,11 @@ func ConstructStatementFingerprintID(
 		fnv.Add('I')
 	} else {
 		fnv.Add('E')
+		// If the statements belong to an explicit transaction, we want to add the
+		// transaction id as part of the id, so they can be separated.
+		for _, c := range txnID {
+			fnv.Add(uint64(c))
+		}
 	}
 	return StmtFingerprintID(fnv.Sum())
 }

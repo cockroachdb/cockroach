@@ -88,6 +88,7 @@ func (ex *connExecutor) recordStatementSummary(
 	rowsAffected int,
 	stmtErr error,
 	stats topLevelQueryStats,
+	txnID string,
 ) {
 	phaseTimes := ex.statsCollector.PhaseTimes()
 
@@ -135,6 +136,7 @@ func (ex *connExecutor) recordStatementSummary(
 		FullScan:    flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 		Failed:      stmtErr != nil,
 		Database:    planner.SessionData().Database,
+		TxnID:       txnID,
 	}
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{
@@ -177,6 +179,7 @@ func (ex *connExecutor) recordStatementSummary(
 	// Add the current statement's ID to the hash. We don't track queries issued
 	// by the internal executor, in which case the hash is uninitialized, and
 	// can therefore be safely ignored.
+	// TODO marylia
 	if ex.extraTxnState.transactionStatementsHash.IsInitialized() {
 		ex.extraTxnState.transactionStatementsHash.Add(uint64(stmtFingerprintID))
 	}
