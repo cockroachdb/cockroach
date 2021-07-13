@@ -443,7 +443,7 @@ func (c *sqlConn) getLastQueryStatistics() (
 	}
 
 	// This should really be the same as the session's IntervalStyle
-	// but that only effect negative intervals in the magnitude
+	// but that only effects negative intervals in the magnitude
 	// of days - and all these latencies should be positive.
 	parsedExecLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, execLatencyRaw)
 	parsedServiceLatency, _ := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, serviceLatencyRaw)
