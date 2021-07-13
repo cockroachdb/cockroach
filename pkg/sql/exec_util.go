@@ -90,6 +90,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ClusterOrganization is the organization name.
@@ -1625,8 +1626,33 @@ func truncateStatementStringForTelemetry(stmt string) string {
 func hideNonVirtualTableNameFunc(vt VirtualTabler) func(ctx *tree.FmtCtx, name *tree.TableName) {
 	reformatFn := func(ctx *tree.FmtCtx, tn *tree.TableName) {
 		virtual, err := vt.getVirtualTableEntry(tn)
+
 		if err != nil || virtual == nil {
-			ctx.WriteByte('_')
+			// Current table is non-virtual and therefore needs to be scrubbed (for statement stats) or redacted (for logs).
+			if ctx.HasFlags(tree.FmtMarkRedactionNode) {
+				// The redaction flag is set, redact the table name.
+
+				// Individually format the table name's fields for individual field redaction.
+				ctx.FormatNode(&tn.CatalogName)
+				ctx.WriteByte('.')
+
+				// Check if the table's schema name is 'public', we do not redact the 'public' schema.
+				if tn.ObjectNamePrefix.SchemaName == "public" {
+					ctx.WithFlags(tree.FmtParsable, func() {
+						ctx.FormatNode(&tn.ObjectNamePrefix.SchemaName)
+					})
+				} else {
+					// The table's schema name is not 'public', format schema name normally for redaction.
+					ctx.FormatNode(&tn.ObjectNamePrefix.SchemaName)
+				}
+
+				ctx.WriteByte('.')
+				ctx.FormatNode(&tn.ObjectName)
+			} else {
+				// The redaction flag is not set, this means that we are scrubbing the table for statement stats.
+				// Scrub the table name with '_'.
+				ctx.WriteByte('_')
+			}
 			return
 		}
 		// Virtual table: we want to keep the name; however
@@ -2561,6 +2587,18 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	)
 	f.FormatNode(stmt.AST)
 	return f.CloseAndGetString(), true
+}
+
+func formatStmtKeyAsRedactableString(
+	vt VirtualTabler, rootAST tree.Statement, ann *tree.Annotations,
+) redact.RedactableString {
+	f := tree.NewFmtCtx(
+		tree.FmtAlwaysQualifyTableNames|tree.FmtMarkRedactionNode,
+		tree.FmtAnnotations(ann),
+		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt)))
+	f.FormatNode(rootAST)
+	formattedRedactableStatementString := f.CloseAndGetString()
+	return redact.RedactableString(formattedRedactableStatementString)
 }
 
 // FailedHashedValue is used as a default return value for when HashForReporting
