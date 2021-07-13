@@ -315,7 +315,7 @@ func (a *Allocator) AdjustMemoryUsage(delta int64) {
 		if err := a.acc.Grow(a.ctx, delta); err != nil {
 			colexecerror.InternalError(err)
 		}
-	} else {
+	} else if delta < 0 {
 		a.ReleaseMemory(-delta)
 	}
 }
