@@ -1708,7 +1708,7 @@ func checkClusterRegions(
 	}
 
 	var nodesResponse *serverpb.NodesResponse
-	nodesResponse, err = nodeStatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	nodesResponse, err = nodeStatusServer.ListNodesInternal(ctx, &serverpb.NodesRequest{})
 	if err != nil {
 		return err
 	}

@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	apd "github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -2070,7 +2070,7 @@ func (s *adminServer) DecommissionStatus(
 
 	// If no nodeIDs given, use all nodes.
 	if len(nodeIDs) == 0 {
-		ns, err := s.server.status.Nodes(ctx, &serverpb.NodesRequest{})
+		ns, err := s.server.status.ListNodesInternal(ctx, &serverpb.NodesRequest{})
 		if err != nil {
 			return nil, errors.Wrap(err, "loading node statuses")
 		}
