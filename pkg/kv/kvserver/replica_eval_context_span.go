@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -248,4 +249,9 @@ func (rec *SpanSetReplicaEvalContext) RevokeLease(ctx context.Context, seq roach
 // completes.
 func (rec *SpanSetReplicaEvalContext) WatchForMerge(ctx context.Context) error {
 	return rec.i.WatchForMerge(ctx)
+}
+
+// GetResponseMemoryAccount implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetResponseMemoryAccount() storage.ResponseMemoryAccount {
+	return rec.i.GetResponseMemoryAccount()
 }

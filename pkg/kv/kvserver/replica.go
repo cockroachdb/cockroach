@@ -1866,6 +1866,13 @@ func (r *Replica) markSystemConfigGossipFailed() {
 	r.mu.failureToGossipSystemConfig = true
 }
 
+// GetResponseMemoryAccount implements the batcheval.EvalContext interface.
+func (r *Replica) GetResponseMemoryAccount() storage.ResponseMemoryAccount {
+	// Return an empty account. Places where a real account is needed use a
+	// wrapper for Replica as the EvalContext.
+	return storage.ResponseMemoryAccount{}
+}
+
 func init() {
 	tracing.RegisterTagRemapping("r", "range")
 }

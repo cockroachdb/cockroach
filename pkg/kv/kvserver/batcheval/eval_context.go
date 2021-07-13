@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -127,6 +128,11 @@ type EvalContext interface {
 	// WatchForMerge arranges to block all requests until the in-progress merge
 	// completes. Returns an error if no in-progress merge is detected.
 	WatchForMerge(ctx context.Context) error
+
+	// GetResponseMemoryAccount returns a memory account to be used when
+	// generating BatchResponses. Currently only used for MVCC scans, and only
+	// initialized to be a real account on those paths.
+	GetResponseMemoryAccount() storage.ResponseMemoryAccount
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -256,4 +262,7 @@ func (m *mockEvalCtxImpl) RevokeLease(_ context.Context, seq roachpb.LeaseSequen
 }
 func (m *mockEvalCtxImpl) WatchForMerge(ctx context.Context) error {
 	panic("unimplemented")
+}
+func (m *mockEvalCtxImpl) GetResponseMemoryAccount() storage.ResponseMemoryAccount {
+	return storage.ResponseMemoryAccount{}
 }

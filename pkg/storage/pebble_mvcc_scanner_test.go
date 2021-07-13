@@ -90,7 +90,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		failOnMoreRecent: false,
 	}
 	mvccScanner.init(nil /* txn */, hlc.Timestamp{})
-	_, err = mvccScanner.scan()
+	_, err = mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
 	kvData := mvccScanner.results.finish()
@@ -149,7 +149,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 		ts:      ts,
 	}
 	mvccScanner.init(nil /* txn */, hlc.Timestamp{})
-	_, err := mvccScanner.scan()
+	_, err := mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
 	kvData := mvccScanner.results.finish()
