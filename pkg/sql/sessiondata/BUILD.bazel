@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/sessiondatapb",
+        "//pkg/util/duration",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
     ],

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
@@ -294,7 +295,7 @@ func mustParseDTimestampTZ(t *testing.T, s string) tree.Datum {
 	return d
 }
 func mustParseDInterval(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDInterval(s)
+	d, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, s)
 	if err != nil {
 		t.Fatal(err)
 	}

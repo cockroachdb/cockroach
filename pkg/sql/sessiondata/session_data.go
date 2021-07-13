@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -104,6 +105,14 @@ func (s *SessionData) GetLocation() *time.Location {
 		return time.UTC
 	}
 	return s.Location
+}
+
+// GetIntervalStyle returns the session interval style.
+func (s *SessionData) GetIntervalStyle() duration.IntervalStyle {
+	if s == nil {
+		return duration.IntervalStyle_POSTGRES
+	}
+	return s.DataConversionConfig.IntervalStyle
 }
 
 // LocalOnlySessionData contains session parameters that only influence the

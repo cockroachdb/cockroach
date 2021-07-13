@@ -410,20 +410,28 @@ func (d Duration) encodePostgres(buf *bytes.Buffer) {
 		return true
 	}
 
-	negDays := d.Months < 0 || d.Days < 0
-	if absGE(d.Months, 12) {
-		years := d.Months / 12
+	months := d.Months
+	if absGE(months, 12) {
+		years := months / 12
 		wrote = wrotePrev(wrote, buf)
 		fmt.Fprintf(buf, "%d year%s", years, isPlural(years))
-		d.Months %= 12
+		months %= 12
 	}
-	if d.Months != 0 {
+	if months != 0 {
 		wrote = wrotePrev(wrote, buf)
-		fmt.Fprintf(buf, "%d mon%s", d.Months, isPlural(d.Months))
+		fmt.Fprintf(buf, "%d mon%s", months, isPlural(months))
 	}
+
+	// Keep track of whether the previous unit was negative.
+	// If so, and the next one is positive, add `+` in front of the positive unit.
+	wasNegative := d.Months < 0
 	if d.Days != 0 {
 		wrote = wrotePrev(wrote, buf)
+		if wasNegative && d.Days > 0 {
+			buf.WriteString("+")
+		}
 		fmt.Fprintf(buf, "%d day%s", d.Days, isPlural(d.Days))
+		wasNegative = d.Days < 0
 	}
 
 	if d.nanos == 0 {
@@ -434,7 +442,7 @@ func (d Duration) encodePostgres(buf *bytes.Buffer) {
 
 	if d.nanos/nanosInMicro < 0 {
 		buf.WriteString("-")
-	} else if negDays {
+	} else if wasNegative {
 		buf.WriteString("+")
 	}
 
@@ -453,6 +461,9 @@ func (d Duration) encodeSQLStandard(buf *bytes.Buffer) {
 	hasYearMonth := d.Months != 0
 	hasDayTime := d.Days != 0 || d.nanos != 0
 	hasDay := d.Days != 0
+
+	// A SQL Standard value always has the same sign, and must only
+	// have Year-Month XOR (Days and/or Time) values.
 	sqlStandardValue := !(hasNegative && hasPositive) &&
 		!(hasYearMonth && hasDayTime)
 
@@ -499,9 +510,27 @@ func (d Duration) encodeSQLStandard(buf *bytes.Buffer) {
 			seconds = -seconds
 			micros = -micros
 		}
-		fmt.Fprintf(buf, "%c%d-%d %c%d %c%d:%02d:",
-			yearSign, years, months, daySign, days, secSign, hours, minutes)
-		writeSecondsMicroseconds(buf, seconds, micros)
+		needSpace := false
+		if hasYearMonth {
+			fmt.Fprintf(
+				buf,
+				"%c%d-%d",
+				yearSign, years, months,
+			)
+			needSpace = true
+		}
+		if hasDayTime {
+			if needSpace {
+				buf.WriteString(" ")
+			}
+			fmt.Fprintf(
+				buf,
+				"%c%d %c%d:%02d:",
+				daySign, days,
+				secSign, hours, minutes,
+			)
+			writeSecondsMicroseconds(buf, seconds, micros)
+		}
 	case hasYearMonth:
 		fmt.Fprintf(buf, "%d-%d", years, months)
 	case hasDay:

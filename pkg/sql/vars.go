@@ -814,7 +814,7 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return strings.ToLower(evalCtx.SessionData.DataConversionConfig.IntervalStyle.String())
+			return strings.ToLower(evalCtx.SessionData.GetIntervalStyle().String())
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return strings.ToLower(duration.IntervalStyle_name[int32(intervalStyle.Get(sv))])

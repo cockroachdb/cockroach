@@ -45,6 +45,7 @@ ALL_TESTS = [
     "//pkg/ccl/utilccl:utilccl_test",
     "//pkg/ccl/workloadccl/allccl:allccl_test",
     "//pkg/ccl/workloadccl:workloadccl_test",
+    "//pkg/cli/clisqlclient:clisqlclient_test",
     "//pkg/cli/exit:exit_test",
     "//pkg/cli:cli_test",
     "//pkg/clusterversion:clusterversion_test",

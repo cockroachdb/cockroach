@@ -1238,9 +1238,9 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 		}
 		switch v := d.(type) {
 		case *DString:
-			return ParseDIntervalWithTypeMetadata(string(*v), itm)
+			return ParseDIntervalWithTypeMetadata(ctx.GetIntervalStyle(), string(*v), itm)
 		case *DCollatedString:
-			return ParseDIntervalWithTypeMetadata(v.Contents, itm)
+			return ParseDIntervalWithTypeMetadata(ctx.GetIntervalStyle(), v.Contents, itm)
 		case *DInt:
 			return NewDInterval(duration.FromInt64(int64(*v)), itm), nil
 		case *DFloat:

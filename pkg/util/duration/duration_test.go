@@ -616,6 +616,7 @@ func TestFormat(t *testing.T) {
 			sqlStandard: "0",
 		},
 		// all negative
+
 		// plural
 		{
 			duration:    Duration{Months: -35, Days: -2, nanos: -12345678000000},
@@ -714,7 +715,9 @@ func TestFormat(t *testing.T) {
 			iso8601:     "P-2Y-11MT-0.001S",
 			sqlStandard: "-2-11 +0 -0:00:00.001",
 		},
+
 		// all positive
+
 		// plural
 		{
 			duration:    Duration{Months: 35, Days: 2, nanos: 12345678000000},
@@ -764,12 +767,14 @@ func TestFormat(t *testing.T) {
 			iso8601:     "P2Y11MT0.001S",
 			sqlStandard: "+2-11 +0 +0:00:00.001",
 		},
+
 		// mixed positive and negative units
+
 		// PG prints '+' when a time unit changes the sign compared to the previous
 		// unit, i.e. below CRDB should print +2 days (in 'postgres' style).
 		{
 			duration:    Duration{Months: -35, Days: 2, nanos: -12345678000000},
-			postgres:    "-2 years -11 mons 2 days -03:25:45.678",
+			postgres:    "-2 years -11 mons +2 days -03:25:45.678",
 			iso8601:     "P-2Y-11M2DT-3H-25M-45.678S",
 			sqlStandard: "-2-11 +2 -3:25:45.678",
 		},
@@ -780,10 +785,48 @@ func TestFormat(t *testing.T) {
 			sqlStandard: "+2-11 -2 +3:25:45.678",
 		},
 		{
+			duration:    Duration{Months: -35, Days: 2, nanos: 12345678000000},
+			postgres:    "-2 years -11 mons +2 days 03:25:45.678",
+			iso8601:     "P-2Y-11M2DT3H25M45.678S",
+			sqlStandard: "-2-11 +2 +3:25:45.678",
+		},
+		// no year/month
+		{
+			duration:    Duration{Days: -2, nanos: 12345678000000},
+			postgres:    "-2 days +03:25:45.678",
+			iso8601:     "P-2DT3H25M45.678S",
+			sqlStandard: "-2 +3:25:45.678",
+		},
+		// no days
+		{
+			duration:    Duration{Months: -35, nanos: 12345678000000},
+			postgres:    "-2 years -11 mons +03:25:45.678",
+			iso8601:     "P-2Y-11MT3H25M45.678S",
+			sqlStandard: "-2-11 +0 +3:25:45.678",
+		},
+		{
 			duration:    Duration{Days: -1, nanos: -123456789000000},
 			postgres:    "-1 days -34:17:36.789",
 			iso8601:     "P-1DT-34H-17M-36.789S",
 			sqlStandard: "-1 34:17:36.789",
+		},
+		{
+			duration:    Duration{Months: -12, Days: 3, nanos: -12345678000000},
+			postgres:    "-1 years +3 days -03:25:45.678",
+			iso8601:     "P-1Y3DT-3H-25M-45.678S",
+			sqlStandard: "-1-0 +3 -3:25:45.678",
+		},
+		{
+			duration:    Duration{Months: -12, Days: -3, nanos: 12345678000000},
+			postgres:    "-1 years -3 days +03:25:45.678",
+			iso8601:     "P-1Y-3DT3H25M45.678S",
+			sqlStandard: "-1-0 -3 +3:25:45.678",
+		},
+		{
+			duration:    Duration{Months: -12, Days: -3, nanos: 12345678000000},
+			postgres:    "-1 years -3 days +03:25:45.678",
+			iso8601:     "P-1Y-3DT3H25M45.678S",
+			sqlStandard: "-1-0 -3 +3:25:45.678",
 		},
 	}
 

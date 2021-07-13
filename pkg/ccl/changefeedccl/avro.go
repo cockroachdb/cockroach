@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/errors"
@@ -493,7 +494,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				return d.(*tree.DInterval).ValueAsISO8601String(), nil
 			},
 			func(x interface{}) (tree.Datum, error) {
-				return tree.ParseDInterval(x.(string))
+				return tree.ParseDInterval(duration.IntervalStyle_ISO_8601, x.(string))
 			},
 		)
 	case types.DecimalFamily:

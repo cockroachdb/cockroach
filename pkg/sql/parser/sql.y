@@ -12215,15 +12215,20 @@ iconst64:
 interval_value:
   INTERVAL SCONST opt_interval_qualifier
   {
-    var err error
-    var d tree.Datum
+    var t *types.T
     if $3.val == nil {
-      d, err = tree.ParseDInterval($2)
+      t = types.Interval
     } else {
-      d, err = tree.ParseDIntervalWithTypeMetadata($2, $3.intervalTypeMetadata())
+      t = types.MakeInterval($3.intervalTypeMetadata())
     }
-    if err != nil { return setErr(sqllex, err) }
-    $$.val = d
+    $$.val = &tree.CastExpr{
+      Expr: tree.NewStrVal($2),
+      Type: t,
+      // TODO(#sql-experience): This should be CastPrepend, but
+      // that does not work with parenthesized expressions
+      // (using FmtAlwaysGroupExprs).
+      SyntaxMode: tree.CastShort,
+    }
   }
 | INTERVAL '(' iconst32 ')' SCONST
   {
@@ -12232,12 +12237,16 @@ interval_value:
       sqllex.Error(fmt.Sprintf("precision %d out of range", prec))
       return 1
     }
-    d, err := tree.ParseDIntervalWithTypeMetadata($5, types.IntervalTypeMetadata{
-      Precision: prec,
-      PrecisionIsSet: true,
-    })
-    if err != nil { return setErr(sqllex, err) }
-    $$.val = d
+    $$.val = &tree.CastExpr{
+      Expr: tree.NewStrVal($5),
+      Type: types.MakeInterval(
+        types.IntervalTypeMetadata{Precision: prec, PrecisionIsSet: true},
+      ),
+      // TODO(#sql-experience): This should be CastPrepend, but
+      // that does not work with parenthesized expressions
+      // (using FmtAlwaysGroupExprs).
+      SyntaxMode: tree.CastShort,
+    }
   }
 
 // Name classification hierarchy.
