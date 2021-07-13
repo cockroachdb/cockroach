@@ -323,6 +323,7 @@ const (
 	tableDisplayRecords
 	tableDisplaySQL
 	tableDisplayHTML
+	tableDisplayRawHTML
 	tableDisplayRaw
 	tableDisplayLastFormat
 )
@@ -345,6 +346,8 @@ func (f *tableDisplayFormat) String() string {
 		return "sql"
 	case tableDisplayHTML:
 		return "html"
+	case tableDisplayRawHTML:
+		return "rawhtml"
 	case tableDisplayRaw:
 		return "raw"
 	}
@@ -366,6 +369,8 @@ func (f *tableDisplayFormat) Set(s string) error {
 		*f = tableDisplaySQL
 	case "html":
 		*f = tableDisplayHTML
+	case "rawhtml":
+		*f = tableDisplayRawHTML
 	case "raw":
 		*f = tableDisplayRaw
 	default:
