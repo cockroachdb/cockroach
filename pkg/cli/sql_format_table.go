@@ -645,6 +645,9 @@ func makeReporter(w io.Writer) (rowReporter, func(), error) {
 	case tableDisplayHTML:
 		return &htmlReporter{escape: true, rowStats: true}, nil, nil
 
+	case tableDisplayRawHTML:
+		return &htmlReporter{escape: false, rowStats: false}, nil, nil
+
 	case tableDisplayRecords:
 		return &recordReporter{}, nil, nil
 
