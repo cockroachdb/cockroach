@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -49,7 +50,7 @@ func runTerm(cmd *cobra.Command, args []string) (resErr error) {
 		fmt.Print(welcomeMessage)
 	}
 
-	conn, err := makeSQLClient("cockroach sql", useDefaultDb)
+	conn, err := makeSQLClient(catconstants.InternalSQLAppName, useDefaultDb)
 	if err != nil {
 		return err
 	}
