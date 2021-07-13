@@ -959,12 +959,6 @@ CREATE TABLE public.trewrite (
    FAMILY fam_0_k_ts (k, ts, c)
 )
 
-statement error invalid column rewrites expression
-SET experimental_computed_column_rewrites = "bad"
-
-statement error invalid column rewrites expression
-SET CLUSTER SETTING sql.defaults.experimental_computed_column_rewrites = "bad"
-
 statement ok
 SET experimental_computed_column_rewrites = ""
 
@@ -987,3 +981,47 @@ DROP TABLE trewrite
 
 statement ok
 DROP TABLE trewrite_copy
+
+# Test multiple rewrites.
+statement ok
+SET experimental_computed_column_rewrites = "
+  (ts::STRING) -> ((ts AT TIME ZONE 'utc')::STRING),
+  (mod(fnv32(b::STRING), 4)) -> (mod(fnv32(b), 4)),
+  (str::TIMESTAMP) -> (parse_timestamp(str))
+"
+
+statement ok
+CREATE TABLE trewrite2(
+  k INT PRIMARY KEY,
+  ts TIMESTAMPTZ,
+  b BYTES,
+  str STRING,
+  c1 STRING AS (ts::STRING) STORED,
+  c2 TIMESTAMP AS (str::TIMESTAMP) STORED,
+  c3 INT AS (mod(fnv32(b::STRING), 4)) STORED,
+  FAMILY (k,ts,b,str,c1,c2,c3)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite2]
+----
+CREATE TABLE public.trewrite2 (
+   k INT8 NOT NULL,
+   ts TIMESTAMPTZ NULL,
+   b BYTES NULL,
+   str STRING NULL,
+   c1 STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   c2 TIMESTAMP NULL AS (parse_timestamp(str)) STORED,
+   c3 INT8 NULL AS (mod(fnv32(b), 4:::INT8)) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY fam_0_k_ts_b_str_c1_c2_c3 (k, ts, b, str, c1, c2, c3)
+)
+
+statement ok
+DROP TABLE trewrite2
+
+statement error invalid column rewrites expression
+SET experimental_computed_column_rewrites = "bad"
+
+statement error invalid column rewrites expression
+SET CLUSTER SETTING sql.defaults.experimental_computed_column_rewrites = "bad"

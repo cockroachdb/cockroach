@@ -236,6 +236,10 @@ type TestServerInterface interface {
 
 	// MetricsRecorder periodically records node-level and store-level metrics.
 	MetricsRecorder() *status.MetricsRecorder
+
+	// TestingKnobs returns the TestingKnobs in use by the test
+	// server.
+	TestingKnobs() *base.TestingKnobs
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

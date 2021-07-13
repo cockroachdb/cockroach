@@ -609,7 +609,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 		now := tc.Clock().Now()
 		newThreshold := gc.CalculateThreshold(now, *zone.GC)
-		return gc.Run(ctx, desc, snap, now, newThreshold, intentAgeThreshold, *zone.GC,
+		return gc.Run(ctx, desc, snap, now, newThreshold, gc.RunOptions{IntentAgeThreshold: intentAgeThreshold}, *zone.GC,
 			gc.NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil

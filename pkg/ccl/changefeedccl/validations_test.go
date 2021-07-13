@@ -103,7 +103,7 @@ func TestCatchupScanOrdering(t *testing.T) {
 	// VALUES (5): pq: unimplemented: operation is unsupported in
 	// multi-tenancy mode
 	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn, feedTestNoTenants))
 }
 
 // TODO(dan): This bit is copied from the bank workload. It's
