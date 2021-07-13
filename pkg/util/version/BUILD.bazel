@@ -13,4 +13,5 @@ go_test(
     size = "small",
     srcs = ["version_test.go"],
     embed = [":version"],
+    deps = ["@com_github_stretchr_testify//assert"],
 )
