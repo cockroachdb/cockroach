@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -378,25 +379,24 @@ func (b *Bytes) Len() int {
 }
 
 // FlatBytesOverhead is the overhead of Bytes in bytes.
-const FlatBytesOverhead = unsafe.Sizeof(Bytes{})
-const sizeOfInt32 = unsafe.Sizeof(int32(0))
+const FlatBytesOverhead = int64(unsafe.Sizeof(Bytes{}))
 
 // Size returns the total size of the receiver in bytes.
-func (b *Bytes) Size() uintptr {
+func (b *Bytes) Size() int64 {
 	return FlatBytesOverhead +
-		uintptr(cap(b.data)) +
-		uintptr(cap(b.offsets))*sizeOfInt32
+		int64(cap(b.data)) +
+		int64(cap(b.offsets))*memsize.Int32
 }
 
 // ProportionalSize returns the size of the receiver in bytes that is
 // attributed to only first n out of Len() elements.
-func (b *Bytes) ProportionalSize(n int64) uintptr {
+func (b *Bytes) ProportionalSize(n int64) int64 {
 	if n == 0 {
 		return 0
 	}
 	// It is possible that we have a "window" into the vector that doesn't start
 	// from the offset of 0, so we have to look at the first actual offset.
-	return FlatBytesOverhead + uintptr(len(b.data[b.offsets[0]:b.offsets[n]])) + uintptr(n)*sizeOfInt32
+	return FlatBytesOverhead + int64(len(b.data[b.offsets[0]:b.offsets[n]])) + n*memsize.Int32
 }
 
 // Reset resets the underlying Bytes for reuse.
@@ -482,7 +482,7 @@ func UpdateOffsetsToBeNonDecreasing(v Vec, n int) {
 
 // ProportionalSize calls the method of the same name on bytes-like
 // vectors, panicking if not bytes-like.
-func ProportionalSize(v Vec, length int64) uintptr {
+func ProportionalSize(v Vec, length int64) int64 {
 	family := v.CanonicalTypeFamily()
 	switch family {
 	case types.BytesFamily:
