@@ -95,6 +95,20 @@ func (t *tenantStatusServer) CancelQuery(
 	return output, nil
 }
 
+func (t *tenantStatusServer) PGWireCancelQuery(
+	ctx context.Context, request *serverpb.PGWireCancelQueryRequest,
+) (*serverpb.PGWireCancelQueryResponse, error) {
+	var (
+		output = &serverpb.PGWireCancelQueryResponse{}
+		err    error
+	)
+	output.Canceled, err = t.sessionRegistry.CancelQueryByPGWire(ctx, request.SecretID)
+	if err != nil {
+		output.Error = err.Error()
+	}
+	return output, nil
+}
+
 func (t *tenantStatusServer) CancelSession(
 	ctx context.Context, request *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {

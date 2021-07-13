@@ -317,7 +317,7 @@ func (c *conn) serveImpl(
 		close(dummyCh)
 		procCh = dummyCh
 
-		if err := c.sendReadyForQuery(); err != nil {
+		if err := c.sendReadyForQuery(0 /* nodeID */, 0 /* pgwireSecretID */); err != nil {
 			reserved.Close(ctx)
 			return
 		}
@@ -706,24 +706,23 @@ func (c *conn) sendInitialConnData(
 	if err := c.sendParamStatus("is_superuser", superUserVal); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
-	if err := c.sendReadyForQuery(); err != nil {
+	if err := c.sendReadyForQuery(connHandler.GetPGWireCancelInfo()); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 	return connHandler, nil
 }
 
 // sendReadyForQuery sends the final messages of the connection handshake.
-// This includes a placeholder BackendKeyData message and a ServerMsgReady
+// This includes a BackendKeyData message and a ServerMsgReady
 // message indicating that there is no active transaction.
-func (c *conn) sendReadyForQuery() error {
-	// Send the client a dummy BackendKeyData message. This is necessary for
-	// compatibility with tools that require this message. This information is
-	// normally used by clients to send a CancelRequest message:
-	// https://www.postgresql.org/docs/9.6/static/protocol-flow.html#AEN112861
-	// CockroachDB currently ignores all CancelRequests.
+func (c *conn) sendReadyForQuery(nodeID, pgwireSecretID int32) error {
+	// Send our cancel code and secret to the client, so they can cancel the
+	// connection. The cancel code and secret are both int32's. The cancel code
+	// is supposed to be the connection's PID, but since we don't have one of
+	// those, we use the node ID and a random 32-bit ID.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBackendKeyData)
-	c.msgBuilder.putInt32(0)
-	c.msgBuilder.putInt32(0)
+	c.msgBuilder.putInt32(nodeID)
+	c.msgBuilder.putInt32(pgwireSecretID)
 	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
 		return err
 	}

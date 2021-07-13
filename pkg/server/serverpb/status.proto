@@ -636,6 +636,30 @@ message CancelQueryResponse {
   string error = 2;
 }
 
+// Request object for issuing a pgwire query cancel request.
+message PGWireCancelQueryRequest {
+  // ID of gateway node for the query to be canceled.
+  //
+  // TODO(rafi): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names. Refer to
+  // https://github.com/gogo/protobuf/issues/331.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  // "Secret" ID of query to be canceled. This comes from the BackendKeyData
+  // generated during the pgwrite protocol flow.
+  uint32 secret_id = 2 [(gogoproto.customname) = "SecretID" ];
+}
+
+// Response returned by target query's gateway node for a pgwire cancel request.
+message PGWireCancelQueryResponse {
+  // Whether the cancellation request succeeded and the query was canceled.
+  bool canceled = 1;
+  // Error message (accompanied with canceled = false).
+  string error = 2;
+}
+
 message CancelSessionRequest {
   // TODO(abhimadan): use [(gogoproto.customname) = "NodeID"] below. Need to
   // figure out how to teach grpc-gateway about custom names.
@@ -1182,6 +1206,14 @@ service Status {
     option (google.api.http) = {
       post : "/_status/cancel_query/{node_id}"
 			body: "*"
+    };
+  }
+
+  // PGWireCancelQuery cancels a SQL query given its pgwire "secret ID".
+  rpc PGWireCancelQuery(PGWireCancelQueryRequest) returns (PGWireCancelQueryResponse) {
+    option (google.api.http) = {
+      post : "/_status/pgwire_cancel_query/{node_id}"
+      body: "*"
     };
   }
 
