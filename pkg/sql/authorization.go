@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -375,11 +375,10 @@ func (p *planner) MemberOfWithAdminOption(
 			}
 
 			// Table version remains the same: update map, unlock, return.
-			const sizeOfBool = int64(unsafe.Sizeof(true))
 			sizeOfEntry := int64(len(member.Normalized()))
 			for m := range memberships {
 				sizeOfEntry += int64(len(m.Normalized()))
-				sizeOfEntry += sizeOfBool
+				sizeOfEntry += memsize.Bool
 			}
 			if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfEntry); err != nil {
 				// If there is no memory available to cache the entry, we can still

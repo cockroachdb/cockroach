@@ -15,6 +15,7 @@ import (
 	"math/bits"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -150,8 +151,8 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti colinfo.ColTypeInfo, rowCap
 		// in the chunk and the slice pointing at the chunk.
 		// Note that when there are no columns, we simply track the number of
 		// rows added in c.numRows and don't allocate any memory.
-		c.chunkMemSize = tree.SizeOfDatum * int64(c.rowsPerChunk*c.numCols)
-		c.chunkMemSize += tree.SizeOfDatums
+		c.chunkMemSize = memsize.DatumOverhead * int64(c.rowsPerChunk*c.numCols)
+		c.chunkMemSize += memsize.DatumsOverhead
 	}
 }
 

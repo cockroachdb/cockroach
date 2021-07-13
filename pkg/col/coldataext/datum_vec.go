@@ -12,11 +12,11 @@ package coldataext
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -177,10 +177,8 @@ func (dv *datumVec) UnmarshalTo(i int, b []byte) error {
 	return err
 }
 
-const sizeOfDatum = unsafe.Sizeof(tree.Datum(nil))
-
 // Size implements coldata.DatumVec interface.
-func (dv *datumVec) Size(startIdx int) uintptr {
+func (dv *datumVec) Size(startIdx int) int64 {
 	// Note that we don't account for the overhead of datumVec struct, and the
 	// calculations are such that they are in line with
 	// colmem.EstimateBatchSizeBytes.
@@ -190,8 +188,8 @@ func (dv *datumVec) Size(startIdx int) uintptr {
 	if startIdx < 0 {
 		startIdx = 0
 	}
-	count := uintptr(dv.Cap() - startIdx)
-	size := sizeOfDatum * count
+	count := int64(dv.Cap() - startIdx)
+	size := memsize.DatumOverhead * count
 	if datumSize, variable := tree.DatumTypeSize(dv.t); variable {
 		// The elements in dv.data[max(startIdx,len):cap] range are accounted with
 		// the default datum size for the type. For those in the range
@@ -199,13 +197,13 @@ func (dv *datumVec) Size(startIdx int) uintptr {
 		idx := startIdx
 		for ; idx < len(dv.data); idx++ {
 			if dv.data[idx] != nil {
-				size += dv.data[idx].Size()
+				size += int64(dv.data[idx].Size())
 			}
 		}
 		// Pick up where the loop left off.
-		size += uintptr(dv.Cap()-idx) * datumSize
+		size += int64(dv.Cap()-idx) * int64(datumSize)
 	} else {
-		size += datumSize * count
+		size += int64(datumSize) * count
 	}
 	return size
 }

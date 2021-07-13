@@ -12,7 +12,6 @@ package colexechash
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -304,8 +304,6 @@ func (ht *HashTable) shouldResize(numTuples int) bool {
 	return float64(numTuples)/float64(ht.numBuckets) > ht.loadFactor
 }
 
-const sizeOfUint64 = int64(unsafe.Sizeof(uint64(0)))
-
 // accountForLimitedSlices checks whether we have already accounted for the
 // memory used by the slices that are limited by coldata.BatchSize() in size
 // and adjusts the allocator accordingly if we haven't.
@@ -313,8 +311,7 @@ func (p *hashTableProbeBuffer) accountForLimitedSlices(allocator *colmem.Allocat
 	if p.limitedSlicesAreAccountedFor {
 		return
 	}
-	const sizeOfBool = int64(unsafe.Sizeof(true))
-	internalMemMaxUsed := sizeOfUint64*int64(5*coldata.BatchSize()) + sizeOfBool*int64(2*coldata.BatchSize())
+	internalMemMaxUsed := memsize.Int64*int64(5*coldata.BatchSize()) + memsize.Bool*int64(2*coldata.BatchSize())
 	allocator.AdjustMemoryUsage(internalMemMaxUsed)
 	p.limitedSlicesAreAccountedFor = true
 }
@@ -342,7 +339,7 @@ func (ht *HashTable) buildFromBufferedTuples() {
 	ht.ProbeScratch.accountForLimitedSlices(ht.allocator)
 	// Note that if ht.ProbeScratch.first is nil, it'll have zero capacity.
 	newUint64Count := int64(cap(ht.BuildScratch.First) + cap(ht.ProbeScratch.First) + cap(ht.BuildScratch.Next))
-	ht.allocator.AdjustMemoryUsage(sizeOfUint64 * (newUint64Count - ht.unlimitedSlicesNumUint64AccountedFor))
+	ht.allocator.AdjustMemoryUsage(memsize.Int64 * (newUint64Count - ht.unlimitedSlicesNumUint64AccountedFor))
 	ht.unlimitedSlicesNumUint64AccountedFor = newUint64Count
 }
 

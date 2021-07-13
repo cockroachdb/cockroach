@@ -9,12 +9,11 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/typeconv",
         "//pkg/sql/colexecerror",
+        "//pkg/sql/memsize",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//pkg/util/duration",
         "//pkg/util/mon",
         "//pkg/util/uuid",
-        "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
