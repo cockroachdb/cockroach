@@ -12,11 +12,11 @@ package coldataext
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -177,8 +177,6 @@ func (dv *datumVec) UnmarshalTo(i int, b []byte) error {
 	return err
 }
 
-const sizeOfDatum = unsafe.Sizeof(tree.Datum(nil))
-
 // Size implements coldata.DatumVec interface.
 func (dv *datumVec) Size(startIdx int) uintptr {
 	// Note that we don't account for the overhead of datumVec struct, and the
@@ -191,7 +189,7 @@ func (dv *datumVec) Size(startIdx int) uintptr {
 		startIdx = 0
 	}
 	count := uintptr(dv.Cap() - startIdx)
-	size := sizeOfDatum * count
+	size := uintptr(memsize.DatumOverhead) * count
 	if datumSize, variable := tree.DatumTypeSize(dv.t); variable {
 		// The elements in dv.data[max(startIdx,len):cap] range are accounted with
 		// the default datum size for the type. For those in the range

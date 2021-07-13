@@ -17,14 +17,13 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
-
-const sizeOfInt64 = int64(unsafe.Sizeof(int64(0)))
 
 // mapEntryOverhead is a guess on how much space (in bytes)
 // each item added to a map takes.
@@ -101,7 +100,7 @@ func getTopologicallySortedTableIDs(
 		}
 
 		// Account for memory of map.
-		sizeOfKeyValue := int64(unsafe.Sizeof(tid)) + int64(len(refs))*sizeOfInt64
+		sizeOfKeyValue := int64(unsafe.Sizeof(tid)) + int64(len(refs))*memsize.Int64
 		sizeOfMap += sizeOfKeyValue + mapEntryOverhead
 		if err = acc.Grow(ctx, sizeOfKeyValue+mapEntryOverhead); err != nil {
 			return nil, err
@@ -122,7 +121,7 @@ func getTopologicallySortedTableIDs(
 	var topologicallyOrderedIDs []int64
 
 	// The sort relies on creating a new array for the ids.
-	if err = acc.Grow(ctx, int64(len(ids))*sizeOfInt64); err != nil {
+	if err = acc.Grow(ctx, int64(len(ids))*memsize.Int64); err != nil {
 		return nil, err
 	}
 	seen := make(map[int64]struct{})
@@ -137,7 +136,7 @@ func getTopologicallySortedTableIDs(
 	// Clear memory used by the seen map.
 	sizeOfSeen := len(seen)
 	seen = nil
-	acc.Shrink(ctx, int64(sizeOfSeen)*(sizeOfInt64+mapEntryOverhead))
+	acc.Shrink(ctx, int64(sizeOfSeen)*(memsize.Int64+mapEntryOverhead))
 
 	// The lengths should match. This is also important for memory accounting,
 	// the two arrays should have the same length.
@@ -148,7 +147,7 @@ func getTopologicallySortedTableIDs(
 	}
 
 	// Shrink the memory we used for the original ids array.
-	acc.Shrink(ctx, int64(len(ids))*sizeOfInt64)
+	acc.Shrink(ctx, int64(len(ids))*memsize.Int64)
 	acc.Shrink(ctx, sizeOfMap)
 	return topologicallyOrderedIDs, nil
 }
@@ -226,7 +225,7 @@ func topologicalSort(
 	// Account for memory of map.
 	// The key value entry into the map is only the memory of an int64 since
 	// the value stuct{}{} uses no memory.
-	if err := acc.Grow(ctx, sizeOfInt64+mapEntryOverhead); err != nil {
+	if err := acc.Grow(ctx, memsize.Int64+mapEntryOverhead); err != nil {
 		return err
 	}
 	seen[tid] = struct{}{}

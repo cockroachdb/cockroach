@@ -20,6 +20,7 @@ import (
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -66,12 +67,7 @@ func NewArrowBatchConverter(typs []*types.T) (*ArrowBatchConverter, error) {
 	return c, nil
 }
 
-const (
-	sizeOfInt16   = int(unsafe.Sizeof(int16(0)))
-	sizeOfInt32   = int(unsafe.Sizeof(int32(0)))
-	sizeOfInt64   = int(unsafe.Sizeof(int64(0)))
-	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
-)
+const sizeOfInt64 = int(memsize.Int64)
 
 // BatchToArrow converts the first batch.Length elements of the batch into an
 // arrow []*array.Data. It is assumed that the batch is not larger than
@@ -128,15 +124,15 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			case 16:
 				ints := vec.Int16()[:n]
 				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
-				datumSize = sizeOfInt16
+				datumSize = int(memsize.Int16)
 			case 32:
 				ints := vec.Int32()[:n]
 				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
-				datumSize = sizeOfInt32
+				datumSize = int(memsize.Int32)
 			case 0, 64:
 				ints := vec.Int64()[:n]
 				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
-				datumSize = sizeOfInt64
+				datumSize = int(memsize.Int64)
 			default:
 				panic(fmt.Sprintf("unexpected int width: %d", typ.Width()))
 			}
@@ -144,7 +140,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		case types.FloatFamily:
 			floats := vec.Float64()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
-			datumSize = sizeOfFloat64
+			datumSize = int(memsize.Float64)
 
 		case types.DecimalFamily:
 			offsets := make([]int32, 0, n+1)
@@ -279,8 +275,8 @@ func unsafeCastOffsetsArray(offsetsInt32 []int32, offsetsBytes *[]byte) {
 	int32Header := (*reflect.SliceHeader)(unsafe.Pointer(&offsetsInt32))
 	bytesHeader := (*reflect.SliceHeader)(unsafe.Pointer(offsetsBytes))
 	bytesHeader.Data = int32Header.Data
-	bytesHeader.Len = int32Header.Len * sizeOfInt32
-	bytesHeader.Cap = int32Header.Cap * sizeOfInt32
+	bytesHeader.Len = int32Header.Len * int(memsize.Int32)
+	bytesHeader.Cap = int32Header.Cap * int(memsize.Int32)
 }
 
 // batchToArrowSpecialType checks whether the vector requires special handling
