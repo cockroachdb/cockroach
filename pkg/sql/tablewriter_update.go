@@ -54,7 +54,7 @@ func (tu *tableUpdater) rowForUpdate(
 	traceKV bool,
 ) (tree.Datums, error) {
 	tu.currentBatchSize++
-	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, pm, traceKV)
+	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, pm, traceKV, &tu.currentBatchBytes)
 }
 
 // tableDesc is part of the tableWriter interface.

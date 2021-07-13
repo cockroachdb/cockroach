@@ -212,7 +212,7 @@ func (tu *optTableUpserter) insertNonConflictingRow(
 	overwrite, traceKV bool,
 ) error {
 	// Perform the insert proper.
-	if err := tu.ri.InsertRow(ctx, b, insertRow, pm, overwrite, traceKV); err != nil {
+	if err := tu.ri.InsertRow(ctx, b, insertRow, pm, overwrite, traceKV, &tu.currentBatchBytes); err != nil {
 		return err
 	}
 
@@ -274,7 +274,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 	// Queue the update in KV. This also returns an "update row"
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.
-	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, pm, traceKV)
+	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, pm, traceKV, &tu.currentBatchBytes)
 	if err != nil {
 		return err
 	}

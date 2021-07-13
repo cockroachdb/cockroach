@@ -69,23 +69,25 @@ func MakeInserter(
 // insertCPutFn is used by insertRow when conflicts (i.e. the key already exists)
 // should generate errors.
 func insertCPutFn(
-	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool, currentBatchBytes *int,
 ) {
 	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
 	// client.Batch wrapper instead of inlining it everywhere.
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", *key, value.PrettyPrint())
 	}
+	*currentBatchBytes += len(*key) + value.Size()
 	b.CPut(key, value, nil /* expValue */)
 }
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
 func insertPutFn(
-	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool, currentBatchBytes *int,
 ) {
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", *key, value.PrettyPrint())
 	}
+	*currentBatchBytes += len(*key) + value.Size()
 	b.Put(key, value)
 }
 
@@ -99,11 +101,12 @@ func insertDelFn(ctx context.Context, b putter, key *roachpb.Key, traceKV bool) 
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
 func insertInvertedPutFn(
-	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool, currentBatchBytes *int,
 ) {
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "InitPut %s -> %s", *key, value.PrettyPrint())
 	}
+	*currentBatchBytes += len(*key) + value.Size()
 	b.InitPut(key, value, false)
 }
 
@@ -123,6 +126,7 @@ func (ri *Inserter) InsertRow(
 	pm PartialIndexUpdateHelper,
 	overwrite bool,
 	traceKV bool,
+	currentBatchBytes *int,
 ) error {
 	if len(values) != len(ri.InsertCols) {
 		return errors.Errorf("got %d values but expected %d", len(values), len(ri.InsertCols))
@@ -167,7 +171,7 @@ func (ri *Inserter) InsertRow(
 		&ri.Helper, primaryIndexKey, ri.InsertCols,
 		values, ri.InsertColIDtoRowIndex,
 		ri.marshaled, ri.InsertColIDtoRowIndex,
-		&ri.key, &ri.value, ri.valueBuf, putFn, overwrite, traceKV)
+		&ri.key, &ri.value, ri.valueBuf, putFn, currentBatchBytes, overwrite, traceKV)
 	if err != nil {
 		return err
 	}
@@ -175,7 +179,7 @@ func (ri *Inserter) InsertRow(
 	putFn = insertInvertedPutFn
 	for i := range secondaryIndexEntries {
 		e := &secondaryIndexEntries[i]
-		putFn(ctx, b, &e.Key, &e.Value, traceKV)
+		putFn(ctx, b, &e.Key, &e.Value, traceKV, currentBatchBytes)
 	}
 
 	return nil

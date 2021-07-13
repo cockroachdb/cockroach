@@ -226,6 +226,8 @@ type DatumRowConverter struct {
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
 	FractionFn     func() float32
+
+	unusedBatchSize int
 }
 
 var kvDatumRowConverterBatchSize = util.ConstantWithMetamorphicTestValue(
@@ -500,6 +502,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		pm,
 		true,  /* ignoreConflicts */
 		false, /* traceKV */
+		&c.unusedBatchSize,
 	); err != nil {
 		return errors.Wrap(err, "insert row")
 	}

@@ -115,7 +115,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if d.run.td.currentBatchSize >= d.run.td.maxBatchSize {
+		if d.run.td.currentBatchSize >= d.run.td.maxBatchSize || d.run.td.currentBatchBytes >= d.run.td.maxBatchByteSize {
 			break
 		}
 	}

@@ -102,7 +102,8 @@ func prepareInsertOrUpdateBatch(
 	kvKey *roachpb.Key,
 	kvValue *roachpb.Value,
 	rawValueBuf []byte,
-	putFn func(ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool),
+	putFn func(ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool, currentBatchBytes *int),
+	currentBatchBytes *int,
 	overwrite, traceKV bool,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
@@ -154,7 +155,7 @@ func prepareInsertOrUpdateBatch(
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
-				putFn(ctx, batch, kvKey, &marshaledValues[idx], traceKV)
+				putFn(ctx, batch, kvKey, &marshaledValues[idx], traceKV, currentBatchBytes)
 			}
 
 			continue
@@ -204,7 +205,7 @@ func prepareInsertOrUpdateBatch(
 			// a deep copy so rawValueBuf can be re-used by other calls to the
 			// function.
 			kvValue.SetTuple(rawValueBuf)
-			putFn(ctx, batch, kvKey, kvValue, traceKV)
+			putFn(ctx, batch, kvKey, kvValue, traceKV, currentBatchBytes)
 		}
 
 		// Release reference to roachpb.Key.

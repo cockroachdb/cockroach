@@ -66,6 +66,8 @@ type ColumnBackfiller struct {
 
 	// mon is a memory monitor linked with the ColumnBackfiller on creation.
 	mon *mon.BytesMonitor
+
+	unusedBatchSize int
 }
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
@@ -347,7 +349,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		// case.
 		var pm row.PartialIndexUpdateHelper
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, pm, traceKV,
+			ctx, b, oldValues, updateValues, pm, traceKV, &cb.unusedBatchSize,
 		); err != nil {
 			return roachpb.Key{}, err
 		}

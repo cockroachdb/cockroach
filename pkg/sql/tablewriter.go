@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -111,9 +112,15 @@ type tableWriterBase struct {
 	// for a mutation operation. By default, it will be set to 10k but can be
 	// a different value in tests.
 	maxBatchSize int
+	// maxBatchSize determines the maximum number of key and value bytes in the KV
+	// batch for a mutation operation.
+	maxBatchByteSize int
 	// currentBatchSize is the size of the current batch. It is updated on
 	// every row() call and is reset once a new batch is started.
 	currentBatchSize int
+	// currentBatchBytes is the size of keys and values added to the current batch
+	// updated by row() calls.
+	currentBatchBytes int
 	// lastBatchSize is the size of the last batch. It is set to the value of
 	// currentBatchSize once the batch is flushed or finalized.
 	lastBatchSize int
@@ -125,6 +132,12 @@ type tableWriterBase struct {
 	forceProductionBatchSizes bool
 }
 
+var maxBatchBytes = settings.RegisterIntSetting(
+	"sql.mutations.mutation_batch_byte_size",
+	"byte size - in key and value lengths -- for mutation batches",
+	4<<20,
+)
+
 func (tb *tableWriterBase) init(
 	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *tree.EvalContext,
 ) {
@@ -133,6 +146,7 @@ func (tb *tableWriterBase) init(
 	tb.b = txn.NewBatch()
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionBatchSizes
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
+	tb.maxBatchByteSize = int(maxBatchBytes.Get(&evalCtx.Settings.SV))
 }
 
 // flushAndStartNewBatch shares the common flushAndStartNewBatch() code between
@@ -158,6 +172,7 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	tb.b = tb.txn.NewBatch()
 	tb.lastBatchSize = tb.currentBatchSize
 	tb.currentBatchSize = 0
+	tb.currentBatchBytes = 0
 	return nil
 }
 

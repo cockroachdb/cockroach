@@ -207,6 +207,7 @@ func (ru *Updater) UpdateRow(
 	updateValues []tree.Datum,
 	pm PartialIndexUpdateHelper,
 	traceKV bool,
+	currentBatchBytes *int,
 ) ([]tree.Datum, error) {
 	if len(oldValues) != len(ru.FetchCols) {
 		return nil, errors.Errorf("got %d values but expected %d", len(oldValues), len(ru.FetchCols))
@@ -356,7 +357,7 @@ func (ru *Updater) UpdateRow(
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
-			ctx, batch, ru.newValues, pm, false /* ignoreConflicts */, traceKV,
+			ctx, batch, ru.newValues, pm, false /* ignoreConflicts */, traceKV, currentBatchBytes,
 		); err != nil {
 			return nil, err
 		}
@@ -369,7 +370,7 @@ func (ru *Updater) UpdateRow(
 		&ru.Helper, primaryIndexKey, ru.FetchCols,
 		ru.newValues, ru.FetchColIDtoRowIndex,
 		ru.marshaled, ru.UpdateColIDtoRowIndex,
-		&ru.key, &ru.value, ru.valueBuf, insertPutFn, true /* overwrite */, traceKV)
+		&ru.key, &ru.value, ru.valueBuf, insertPutFn, currentBatchBytes, true /* overwrite */, traceKV)
 	if err != nil {
 		return nil, err
 	}
@@ -495,7 +496,7 @@ func (ru *Updater) UpdateRow(
 			putFn := insertInvertedPutFn
 			// We're adding all of the inverted index entries from the row being updated.
 			for j := range ru.newIndexEntries[i] {
-				putFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+				putFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV, currentBatchBytes)
 			}
 		}
 	}
