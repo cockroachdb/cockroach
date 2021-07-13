@@ -25,6 +25,14 @@ var DefaultIntSize4Counter = telemetry.GetCounterOnce("sql.default_int_size.4")
 // to a non-empty string.
 var ForceSavepointRestartCounter = telemetry.GetCounterOnce("sql.force_savepoint_restart")
 
+// CockroachShellCounter is to be incremented every time a
+//client uses the Cockroach SQL shell to access the sql layer
+var CockroachShellCounter = telemetry.GetCounterOnce("sql.cockroach_cli")
+
+// CockroachCliExec is to be incremented every time a
+//statement is executed via the SQL shell
+var CockroachCliExec = telemetry.GetCounter("sql.cockroach_cli_exec")
+
 // UnimplementedSessionVarValueCounter is to be incremented every time
 // a client attempts to set a compatitibility session var to an
 // unsupported value.

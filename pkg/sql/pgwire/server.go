@@ -822,6 +822,12 @@ func parseClientProvidedSessionParameters(
 		args.SessionDefaults["database"] = catalogkeys.DefaultDatabaseName
 	}
 
+	if appName, ok := args.SessionDefaults["application_name"]; ok {
+		if strings.HasPrefix(appName, "$") {
+			telemetry.Inc(sqltelemetry.CockroachShellCounter)
+		}
+	}
+
 	return args, nil
 }
 
