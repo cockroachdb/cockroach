@@ -86,12 +86,27 @@ var ConfigureOIDC = func(
 	return &noOIDCConfigured{}, nil
 }
 
-var webSessionTimeout = settings.RegisterDurationSetting(
-	"server.web_session_timeout",
-	"the duration that a newly created web session will be valid",
-	7*24*time.Hour,
-	settings.NonNegativeDuration,
-).WithPublic()
+var (
+	webSessionTimeout = settings.RegisterDurationSetting(
+		"server.web_session_timeout",
+		"the duration that a newly created web session will be valid",
+		7*24*time.Hour,
+		settings.NonNegativeDuration,
+	).WithPublic()
+
+	webSessionPurgeTTL = settings.RegisterDurationSetting(
+		"server.web_session.purge_ttl",
+		"if nonzero, entries in system.web_sessions older than this duration are periodically purged",
+		time.Hour,
+	).WithPublic()
+
+	webSessionAutoLogoutTimeout = settings.RegisterDurationSetting(
+		"server.web_session.auto_logout_timeout",
+		"the duration that web sessions will survive before being periodically purged, since they were last used",
+		7*24*time.Hour,
+		settings.NonNegativeDuration,
+	).WithPublic()
+)
 
 type authenticationServer struct {
 	server *Server
@@ -473,19 +488,53 @@ func (s *authenticationServer) newAuthSession(
 
 	expiration := s.server.clock.PhysicalTime().Add(webSessionTimeout.Get(&s.server.st.SV))
 
-	insertSessionStmt := `
+	// Insert the new session and delete old, expired sessions.
+	// TODO(cameron): LIMIT is used here to avoid a very large initial transaction.
+	// However, this may prevent deletion of a large backlog of entries.
+	// This needs to be addressed in a later iteration.
+	// May be useful to look at startupmigrations/migrations for where to implement this.
+	// See: https://github.com/cockroachdb/cockroach/issues/67933
+	sessionStmt := `
+WITH
+	deleted_sessions_from_expired_purge_ttl AS (
+		DELETE FROM system.web_sessions@"web_sessions_expiresAt_idx"
+		WHERE "expiresAt" < $1
+    LIMIT 10
+    RETURNING 1
+	),
+	deleted_sessions_from_revoked_purge_ttl AS (
+		DELETE FROM system.web_sessions@"web_sessions_revokedAt_idx"
+		WHERE "revokedAt" < $1
+    LIMIT 10
+    RETURNING 1
+	),
+	deleted_sessions_from_auto_logout AS (
+		DELETE FROM system.web_sessions@"web_sessions_lastUsedAt_idx"
+		WHERE "lastUsedAt" < $2
+    LIMIT 10
+    RETURNING 1
+	)
 INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt")
-VALUES($1, $2, $3)
+VALUES($3, $4, $5)
 RETURNING id
 `
 	var id int64
+
+	currTime := s.server.clock.PhysicalTime()
+	purgeTTL := webSessionPurgeTTL.Get(&s.server.st.SV)
+	autoLogoutTimeout := webSessionAutoLogoutTimeout.Get(&s.server.st.SV)
+
+	purgeTime := currTime.Add(purgeTTL * time.Duration(-1))
+	autoLogoutTime := currTime.Add(autoLogoutTimeout * time.Duration(-1))
 
 	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 		ctx,
 		"create-auth-session",
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		insertSessionStmt,
+		sessionStmt,
+		purgeTime,
+		autoLogoutTime,
 		hashedSecret,
 		username.Normalized(),
 		expiration,
