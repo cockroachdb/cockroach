@@ -43,7 +43,7 @@ func StartTenant(
 
 	s.execCfg.SQLStatusServer = newTenantStatusServer(
 		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
-		args.sessionRegistry, args.contentionRegistry, baseCfg.Settings, s,
+		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, s,
 	)
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the

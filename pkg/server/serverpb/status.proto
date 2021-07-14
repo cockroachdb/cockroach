@@ -21,6 +21,7 @@ import "roachpb/metadata.proto";
 import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
 import "sql/contentionpb/contention.proto";
+import "sql/execinfrapb/api.proto";
 import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/rocksdb.proto";
@@ -365,7 +366,7 @@ message StacksRequest {
 
 // Represents the type of file.
 // TODO(ridwanmsharif): Add support for log files. They're currently served
-// by an endpoint that parses the log messages, which is not what the 
+// by an endpoint that parses the log messages, which is not what the
 // debug zip client wants.
 enum FileType {
   HEAP = 0;
@@ -649,8 +650,9 @@ message CancelSessionResponse {
 // Request object for ListContentionEvents and ListLocalContentionEvents.
 message ListContentionEventsRequest {}
 
-// An error wrapper object for ListContentionEventsResponse.
-message ListContentionEventsError {
+// An error wrapper object for ListContentionEventsResponse and
+// ListDistSQLFlowsResponse.
+message ListActivityError {
   // ID of node that was being contacted when this error occurred.
   int32 node_id = 1 [
     (gogoproto.customname) = "NodeID",
@@ -667,7 +669,58 @@ message ListContentionEventsResponse {
   cockroach.sql.contentionpb.SerializedRegistry events = 1 [ (gogoproto.nullable) = false ];
 
   // Any errors that occurred during fan-out calls to other nodes.
-  repeated ListContentionEventsError errors = 2 [ (gogoproto.nullable) = false ];
+  repeated ListActivityError errors = 2 [ (gogoproto.nullable) = false ];
+}
+
+// Request object for ListDistSQLFlows and ListLocalDistSQLFlows.
+message ListDistSQLFlowsRequest {}
+
+// DistSQLRemoteFlows describes all DistSQL remote flows that are part of the
+// same physical plan. The gateway node that initiated the execution of the plan
+// isn't included.
+message DistSQLRemoteFlows {
+  enum Status {
+    RUNNING = 0;
+    QUEUED = 1;
+  }
+
+  // Info contains an information about a single DistSQL remote flow.
+  message Info {
+    // NodeID is the node on which this remote flow is either running or queued.
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+    // Timestamp must be in the UTC timezone.
+    google.protobuf.Timestamp timestamp = 2 [
+      (gogoproto.nullable) = false, (gogoproto.stdtime) = true
+    ];
+
+    // Status is the current status of this remote flow.
+    Status status = 3;
+  }
+
+  // FlowID is the unique identifier of the physical plan shared by all remote
+  // flows.
+  bytes flow_id = 1 [(gogoproto.nullable) = false,
+                     (gogoproto.customname) = "FlowID",
+                     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb.FlowID"];
+
+  // Infos contains the information about all remote flows that are part of this
+  // DistSQL physical plan and that haven't finished yet.
+  //
+  // The slice doesn't contain duplicate NodeIDs and is sorted by NodeID in ASC
+  // order.
+  repeated Info infos = 2 [(gogoproto.nullable) = false];
+}
+
+// Response object for ListDistSQLFlows and ListLocalDistSQLFlows.
+message ListDistSQLFlowsResponse {
+  // Flows are ordered by FlowID lexicographically and do not contain
+  // duplicates.
+  repeated DistSQLRemoteFlows flows = 1 [ (gogoproto.nullable) = false ];
+
+  // Any errors that occurred during fan-out calls to other nodes.
+  repeated ListActivityError errors = 2 [ (gogoproto.nullable) = false ];
 }
 
 message SpanStatsRequest {
@@ -1170,6 +1223,29 @@ service Status {
   rpc ListLocalContentionEvents(ListContentionEventsRequest) returns (ListContentionEventsResponse) {
     option (google.api.http) = {
       get : "/_status/local_contention_events"
+    };
+  }
+
+  // ListDistSQLFlows retrieves all of the remote flows of the DistSQL execution
+  // that are currently running or queued on any node in the cluster. The local
+  // flows (those that are running on the same node as the query originated on)
+  // are not included.
+  //
+  // Flows are ordered lexicographically by the flow ID.
+  rpc ListDistSQLFlows(ListDistSQLFlowsRequest) returns (ListDistSQLFlowsResponse) {
+    option (google.api.http) = {
+      get : "/_status/distsql_flows"
+    };
+  }
+
+  // ListLocalDistSQLFlows retrieves all of the remote flows of the DistSQL
+  // execution that are currently running or queued on this node in the cluster.
+  // Queries that originated on this node are not be included.
+  //
+  // Flows are ordered lexicographically by the flow ID.
+  rpc ListLocalDistSQLFlows(ListDistSQLFlowsRequest) returns (ListDistSQLFlowsResponse) {
+    option (google.api.http) = {
+      get : "/_status/local_distsql_flows"
     };
   }
 
