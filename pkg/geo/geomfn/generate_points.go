@@ -24,30 +24,12 @@ import (
 // maxAllowedGridSize is the upper bound limit for a generated grid size.
 const maxAllowedGridSize = 100 * geo.MaxAllowedSplitPoints
 
+// ErrGenerateRandomPointsInvalidPoints is returned if we have a negative number of points
+// or an empty geometry.
+var ErrGenerateRandomPointsInvalidPoints = errors.New("points must be positive and geometry must not be empty")
+
 // GenerateRandomPoints generates provided number of pseudo-random points for the input area.
 func GenerateRandomPoints(g geo.Geometry, nPoints int, rng *rand.Rand) (geo.Geometry, error) {
-	if nPoints < 0 {
-		return geo.Geometry{}, nil
-	}
-	if nPoints > geo.MaxAllowedSplitPoints {
-		return geo.Geometry{}, errors.Newf(
-			"failed to generate random points, too many points to generate: requires %d points, max %d",
-			nPoints,
-			geo.MaxAllowedSplitPoints,
-		)
-	}
-	pointsAsGeometry, err := generateRandomPoints(g, nPoints, rng)
-	if err != nil {
-		return geo.Geometry{}, errors.Wrap(err, "generating random points error")
-	}
-	return pointsAsGeometry, nil
-}
-
-// generateRandomPoints returns a MultiPoint geometry consisting of randomly generated points
-// that are covered by the geometry provided.
-// nPoints is the number of points to return.
-// rng is the random numbers generator.
-func generateRandomPoints(g geo.Geometry, nPoints int, rng *rand.Rand) (geo.Geometry, error) {
 	var generateRandomPointsFunction func(g geo.Geometry, nPoints int, rng *rand.Rand) (*geom.MultiPoint, error)
 	switch g.ShapeType() {
 	case geopb.ShapeType_Polygon:
@@ -57,17 +39,22 @@ func generateRandomPoints(g geo.Geometry, nPoints int, rng *rand.Rand) (geo.Geom
 	default:
 		return geo.Geometry{}, errors.Newf("unsupported type: %v", g.ShapeType().String())
 	}
-	// This is to be checked once we know Geometry type is supported,
-	// so that we can keep consistency with PostGIS implementation.
-	if nPoints == 0 {
-		return geo.Geometry{}, nil
+	if nPoints <= 0 {
+		return geo.Geometry{}, ErrGenerateRandomPointsInvalidPoints
+	}
+	if nPoints > geo.MaxAllowedSplitPoints {
+		return geo.Geometry{}, errors.Newf(
+			"failed to generate random points, too many points to generate: requires %d points, max %d",
+			nPoints,
+			geo.MaxAllowedSplitPoints,
+		)
 	}
 	empty, err := IsEmpty(g)
 	if err != nil {
 		return geo.Geometry{}, errors.Wrap(err, "could not check if geometry is empty")
 	}
 	if empty {
-		return geo.Geometry{}, nil
+		return geo.Geometry{}, ErrGenerateRandomPointsInvalidPoints
 	}
 	mpt, err := generateRandomPointsFunction(g, nPoints, rng)
 	if err != nil {
