@@ -152,18 +152,18 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	// Set the memory limit in such a manner that at least 2 batches of distinct
 	// tuples are emitted by the in-memory unordered distinct before the
 	// spilling occurs.
-	nBatchesOutputByInMemoryOp := 2 + rng.Intn(2)
-	memoryLimitBytes := int64(nBatchesOutputByInMemoryOp * batchMemEstimate)
+	nBatchesOutputByInMemoryOp := 2 + rng.Int63n(2)
+	memoryLimitBytes := nBatchesOutputByInMemoryOp * batchMemEstimate
 	if memoryLimitBytes < mon.DefaultPoolAllocationSize {
 		memoryLimitBytes = mon.DefaultPoolAllocationSize
-		nBatchesOutputByInMemoryOp = int(memoryLimitBytes) / batchMemEstimate
+		nBatchesOutputByInMemoryOp = memoryLimitBytes / batchMemEstimate
 	}
 	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimitBytes
 
 	// Calculate the total number of distinct batches at least twice as large
 	// as for the in-memory operator in order to make sure that the external
 	// distinct has enough work to do.
-	nDistinctBatches := nBatchesOutputByInMemoryOp * (2 + rng.Intn(2))
+	nDistinctBatches := int(nBatchesOutputByInMemoryOp * (2 + rng.Int63n(2)))
 	newTupleProbability := rng.Float64()
 	nTuples := int(float64(nDistinctBatches*coldata.BatchSize()) / newTupleProbability)
 	const maxNumTuples = 25000

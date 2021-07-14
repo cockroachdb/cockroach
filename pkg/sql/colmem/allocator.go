@@ -12,16 +12,13 @@ package colmem
 
 import (
 	"context"
-	"time"
-	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -42,7 +39,7 @@ type Allocator struct {
 }
 
 func selVectorSize(capacity int) int64 {
-	return int64(capacity * sizeOfInt)
+	return int64(capacity) * memsize.Int
 }
 
 func getVecMemoryFootprint(vec coldata.Vec) int64 {
@@ -51,15 +48,15 @@ func getVecMemoryFootprint(vec coldata.Vec) int64 {
 	}
 	switch vec.CanonicalTypeFamily() {
 	case types.BytesFamily:
-		return int64(vec.Bytes().Size())
+		return vec.Bytes().Size()
 	case types.DecimalFamily:
-		return int64(sizeOfDecimals(vec.Decimal(), 0 /* startIdx */))
+		return sizeOfDecimals(vec.Decimal(), 0 /* startIdx */)
 	case types.JsonFamily:
-		return int64(vec.JSON().Size())
+		return vec.JSON().Size()
 	case typeconv.DatumVecCanonicalTypeFamily:
-		return int64(vec.Datum().Size(0 /* startIdx */))
+		return vec.Datum().Size(0 /* startIdx */)
 	}
-	return int64(EstimateBatchSizeBytes([]*types.T{vec.Type()}, vec.Capacity()))
+	return EstimateBatchSizeBytes([]*types.T{vec.Type()}, vec.Capacity())
 }
 
 func getVecsMemoryFootprint(vecs []coldata.Vec) int64 {
@@ -102,7 +99,7 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 	}
 	for _, vec := range b.ColVecs() {
 		if vec.IsBytesLike() {
-			proportionalBatchMemSize += int64(coldata.ProportionalSize(vec, length))
+			proportionalBatchMemSize += coldata.ProportionalSize(vec, length)
 		} else {
 			proportionalBatchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
 		}
@@ -126,7 +123,7 @@ func NewAllocator(
 // Note: consider whether you want the dynamic batch size behavior (in which
 // case you should be using ResetMaybeReallocate).
 func (a *Allocator) NewMemBatchWithFixedCapacity(typs []*types.T, capacity int) coldata.Batch {
-	estimatedMemoryUsage := selVectorSize(capacity) + int64(EstimateBatchSizeBytes(typs, capacity))
+	estimatedMemoryUsage := selVectorSize(capacity) + EstimateBatchSizeBytes(typs, capacity)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -211,7 +208,7 @@ func (a *Allocator) ResetMaybeReallocate(
 // NOTE: consider whether you should be using MaybeAppendColumn,
 // NewMemBatchWith*, or ResetMaybeReallocate methods.
 func (a *Allocator) NewMemColumn(t *types.T, capacity int) coldata.Vec {
-	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]*types.T{t}, capacity))
+	estimatedMemoryUsage := EstimateBatchSizeBytes([]*types.T{t}, capacity)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -256,7 +253,7 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				// Unfortunately, the present vector is not of sufficient
 				// capacity, so we need to replace it.
 				oldMemUsage := getVecMemoryFootprint(presentVec)
-				newEstimatedMemoryUsage := int64(EstimateBatchSizeBytes([]*types.T{t}, desiredCapacity))
+				newEstimatedMemoryUsage := EstimateBatchSizeBytes([]*types.T{t}, desiredCapacity)
 				if err := a.acc.Grow(a.ctx, newEstimatedMemoryUsage-oldMemUsage); err != nil {
 					colexecerror.InternalError(err)
 				}
@@ -283,7 +280,7 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 			t, colIdx, width,
 		))
 	}
-	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]*types.T{t}, desiredCapacity))
+	estimatedMemoryUsage := EstimateBatchSizeBytes([]*types.T{t}, desiredCapacity)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -317,9 +314,9 @@ func (a *Allocator) PerformAppend(batch coldata.Batch, operation func()) {
 		case types.DecimalFamily:
 			// Don't add the size of the existing decimals to the 'before' cost, since
 			// they are guaranteed not to be modified by an append operation.
-			before += int64(sizeOfDecimals(dest.Decimal(), prevLength))
+			before += sizeOfDecimals(dest.Decimal(), prevLength)
 		case typeconv.DatumVecCanonicalTypeFamily:
-			before += int64(dest.Datum().Size(prevLength))
+			before += dest.Datum().Size(prevLength)
 		default:
 			before += getVecMemoryFootprint(dest)
 		}
@@ -329,9 +326,9 @@ func (a *Allocator) PerformAppend(batch coldata.Batch, operation func()) {
 	for _, dest := range batch.ColVecs() {
 		switch dest.CanonicalTypeFamily() {
 		case types.DecimalFamily:
-			after += int64(sizeOfDecimals(dest.Decimal(), prevLength))
+			after += sizeOfDecimals(dest.Decimal(), prevLength)
 		case typeconv.DatumVecCanonicalTypeFamily:
-			after += int64(dest.Datum().Size(prevLength))
+			after += dest.Datum().Size(prevLength)
 		default:
 			after += getVecMemoryFootprint(dest)
 		}
@@ -368,57 +365,44 @@ func (a *Allocator) ReleaseMemory(size int64) {
 	a.acc.Shrink(a.ctx, size)
 }
 
-const (
-	sizeOfBool     = int(unsafe.Sizeof(true))
-	sizeOfInt      = int(unsafe.Sizeof(int(0)))
-	sizeOfInt16    = int(unsafe.Sizeof(int16(0)))
-	sizeOfInt32    = int(unsafe.Sizeof(int32(0)))
-	sizeOfInt64    = int(unsafe.Sizeof(int64(0)))
-	sizeOfFloat64  = int(unsafe.Sizeof(float64(0)))
-	sizeOfTime     = int(unsafe.Sizeof(time.Time{}))
-	sizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
-	sizeOfDatum    = int(unsafe.Sizeof(tree.Datum(nil)))
-	sizeOfDecimal  = unsafe.Sizeof(apd.Decimal{})
-)
-
 // sizeOfDecimals returns the size of the given decimals slice. It only accounts
 // for the size of the decimal objects starting from the given index. For that
 // reason, sizeOfDecimals is relatively cheap when startIdx >= length, and
 // expensive when startIdx < length (with a maximum at startIdx = 0).
-func sizeOfDecimals(decimals coldata.Decimals, startIdx int) uintptr {
+func sizeOfDecimals(decimals coldata.Decimals, startIdx int) int64 {
 	if startIdx >= cap(decimals) {
 		return 0
 	}
 	if startIdx >= len(decimals) {
-		return uintptr(cap(decimals)-startIdx) * sizeOfDecimal
+		return int64(cap(decimals)-startIdx) * memsize.Decimal
 	}
 	if startIdx < 0 {
 		startIdx = 0
 	}
 	// Account for the allocated memory beyond the length of the slice.
-	size := uintptr(cap(decimals)-len(decimals)) * sizeOfDecimal
+	size := int64(cap(decimals)-len(decimals)) * memsize.Decimal
 	for i := startIdx; i < decimals.Len(); i++ {
-		size += tree.SizeOfDecimal(&decimals[i])
+		size += int64(tree.SizeOfDecimal(&decimals[i]))
 	}
 	return size
 }
 
 // SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
 // coldata.BatchSize() length.
-var SizeOfBatchSizeSelVector = coldata.BatchSize() * sizeOfInt
+var SizeOfBatchSizeSelVector = int64(coldata.BatchSize()) * memsize.Int
 
 // EstimateBatchSizeBytes returns an estimated amount of bytes needed to
 // store a batch in memory that has column types vecTypes.
 // WARNING: This only is correct for fixed width types, and returns an
 // estimate for non fixed width types. In future it might be possible to
 // remove the need for estimation by specifying batch sizes in terms of bytes.
-func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
+func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 	if batchLength == 0 {
 		return 0
 	}
 	// acc represents the number of bytes to represent a row in the batch
 	// (excluding any Bytes vectors, those are tracked separately).
-	acc := 0
+	var acc int64
 	numBytesVectors := 0
 	// We will track Uuid vectors separately because they use smaller initial
 	// allocation factor.
@@ -426,7 +410,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 	for _, t := range vecTypes {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 		case types.BoolFamily:
-			acc += sizeOfBool
+			acc += memsize.Bool
 		case types.BytesFamily:
 			if t.Family() == types.UuidFamily {
 				numUUIDVectors++
@@ -436,14 +420,14 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 		case types.IntFamily:
 			switch t.Width() {
 			case 16:
-				acc += sizeOfInt16
+				acc += memsize.Int16
 			case 32:
-				acc += sizeOfInt32
+				acc += memsize.Int32
 			default:
-				acc += sizeOfInt64
+				acc += memsize.Int64
 			}
 		case types.FloatFamily:
-			acc += sizeOfFloat64
+			acc += memsize.Float64
 		case types.DecimalFamily:
 			// Similar to byte arrays, we can't tell how much space is used
 			// to hold the arbitrary precision decimal objects.
@@ -456,9 +440,9 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			// timestamps, so if we were to include that in the estimation, we would
 			// significantly overestimate.
 			// TODO(yuzefovich): figure out whether the caching does take place.
-			acc += sizeOfTime
+			acc += memsize.Time
 		case types.IntervalFamily:
-			acc += sizeOfDuration
+			acc += memsize.Duration
 		case types.JsonFamily:
 			numBytesVectors++
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -470,7 +454,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			// getVecMemoryFootprint.
 			// Note: keep the calculation here in line with datumVec.Size.
 			implementationSize, _ := tree.DatumTypeSize(t)
-			acc += int(implementationSize) + sizeOfDatum
+			acc += int64(implementationSize) + memsize.DatumOverhead
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
 		}
@@ -483,12 +467,12 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 	// accordingly. We also account for the overhead and for the additional
 	// offset value that are needed for Bytes vectors (to be in line with
 	// coldata.Bytes.Size() method).
-	var bytesVectorsSize int
+	var bytesVectorsSize int64
 	// Add the overhead.
-	bytesVectorsSize += (numBytesVectors + numUUIDVectors) * (int(coldata.FlatBytesOverhead))
+	bytesVectorsSize += int64(numBytesVectors+numUUIDVectors) * coldata.FlatBytesOverhead
 	// Add the data for both Bytes and Uuids.
-	bytesVectorsSize += (numBytesVectors*coldata.BytesInitialAllocationFactor + numUUIDVectors*uuid.Size) * batchLength
+	bytesVectorsSize += int64(numBytesVectors*coldata.BytesInitialAllocationFactor+numUUIDVectors*uuid.Size) * int64(batchLength)
 	// Add the offsets.
-	bytesVectorsSize += (numBytesVectors + numUUIDVectors) * sizeOfInt32 * (batchLength + 1)
-	return acc*batchLength + bytesVectorsSize
+	bytesVectorsSize += int64(numBytesVectors+numUUIDVectors) * memsize.Int32 * int64(batchLength+1)
+	return acc*int64(batchLength) + bytesVectorsSize
 }

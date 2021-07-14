@@ -20,6 +20,7 @@ import (
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -66,13 +67,6 @@ func NewArrowBatchConverter(typs []*types.T) (*ArrowBatchConverter, error) {
 	return c, nil
 }
 
-const (
-	sizeOfInt16   = int(unsafe.Sizeof(int16(0)))
-	sizeOfInt32   = int(unsafe.Sizeof(int32(0)))
-	sizeOfInt64   = int(unsafe.Sizeof(int64(0)))
-	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
-)
-
 // BatchToArrow converts the first batch.Length elements of the batch into an
 // arrow []*array.Data. It is assumed that the batch is not larger than
 // coldata.BatchSize(). The returned []*array.Data may only be used until the
@@ -116,7 +110,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			// data slice that we are casting to bytes.
 			dataHeader *reflect.SliceHeader
 			// datumSize is the size of one datum that we are casting to a byte slice.
-			datumSize int
+			datumSize int64
 		)
 
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
@@ -135,15 +129,15 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			case 16:
 				ints := vec.Int16()[:n]
 				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
-				datumSize = sizeOfInt16
+				datumSize = memsize.Int16
 			case 32:
 				ints := vec.Int32()[:n]
 				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
-				datumSize = sizeOfInt32
+				datumSize = memsize.Int32
 			case 0, 64:
 				ints := vec.Int64()[:n]
 				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
-				datumSize = sizeOfInt64
+				datumSize = memsize.Int64
 			default:
 				panic(fmt.Sprintf("unexpected int width: %d", typ.Width()))
 			}
@@ -151,7 +145,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		case types.FloatFamily:
 			floats := vec.Float64()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
-			datumSize = sizeOfFloat64
+			datumSize = memsize.Float64
 
 		case types.DecimalFamily:
 			offsets := make([]int32, 0, n+1)
@@ -174,7 +168,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		case types.IntervalFamily:
 			offsets := make([]int32, 0, n+1)
 			intervals := vec.Interval()[:n]
-			intervalSize := sizeOfInt64 * 3
+			intervalSize := int(memsize.Int64) * 3
 			// TODO(jordan): we could right-size this values slice by counting up the
 			// number of nulls in the nulls bitmap first, and subtracting from n.
 			values = make([]byte, intervalSize*n)
@@ -189,9 +183,9 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 					return nil, err
 				}
 				curSlice := values[intervalSize*curNonNullInterval : intervalSize*(curNonNullInterval+1)]
-				binary.LittleEndian.PutUint64(curSlice[0:sizeOfInt64], uint64(nanos))
-				binary.LittleEndian.PutUint64(curSlice[sizeOfInt64:sizeOfInt64*2], uint64(months))
-				binary.LittleEndian.PutUint64(curSlice[sizeOfInt64*2:sizeOfInt64*3], uint64(days))
+				binary.LittleEndian.PutUint64(curSlice[0:memsize.Int64], uint64(nanos))
+				binary.LittleEndian.PutUint64(curSlice[memsize.Int64:memsize.Int64*2], uint64(months))
+				binary.LittleEndian.PutUint64(curSlice[memsize.Int64*2:memsize.Int64*3], uint64(days))
 				curNonNullInterval++
 			}
 			values = values[:intervalSize*curNonNullInterval]
@@ -248,8 +242,8 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		if values == nil {
 			valuesHeader := (*reflect.SliceHeader)(unsafe.Pointer(&values))
 			valuesHeader.Data = dataHeader.Data
-			valuesHeader.Len = dataHeader.Len * datumSize
-			valuesHeader.Cap = dataHeader.Cap * datumSize
+			valuesHeader.Len = dataHeader.Len * int(datumSize)
+			valuesHeader.Cap = dataHeader.Cap * int(datumSize)
 		}
 
 		var arrowBitmap []byte
@@ -286,8 +280,8 @@ func unsafeCastOffsetsArray(offsetsInt32 []int32, offsetsBytes *[]byte) {
 	int32Header := (*reflect.SliceHeader)(unsafe.Pointer(&offsetsInt32))
 	bytesHeader := (*reflect.SliceHeader)(unsafe.Pointer(offsetsBytes))
 	bytesHeader.Data = int32Header.Data
-	bytesHeader.Len = int32Header.Len * sizeOfInt32
-	bytesHeader.Cap = int32Header.Cap * sizeOfInt32
+	bytesHeader.Len = int32Header.Len * int(memsize.Int32)
+	bytesHeader.Cap = int32Header.Cap * int(memsize.Int32)
 }
 
 // ArrowToBatch converts []*array.Data to a coldata.Batch. There must not be
@@ -413,9 +407,9 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 					intervalBytes := bytes[offsets[i]:offsets[i+1]]
 					var err error
 					vecArr[i], err = duration.Decode(
-						int64(binary.LittleEndian.Uint64(intervalBytes[0:sizeOfInt64])),
-						int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64:sizeOfInt64*2])),
-						int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64*2:sizeOfInt64*3])),
+						int64(binary.LittleEndian.Uint64(intervalBytes[0:memsize.Int64])),
+						int64(binary.LittleEndian.Uint64(intervalBytes[memsize.Int64:memsize.Int64*2])),
+						int64(binary.LittleEndian.Uint64(intervalBytes[memsize.Int64*2:memsize.Int64*3])),
 					)
 					if err != nil {
 						return err
