@@ -702,7 +702,7 @@ func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIn
 			ib.added = append(ib.added, idx)
 			for i := range ib.cols {
 				id := ib.cols[i].GetID()
-				if colIDs.Contains(id) && i < len(desc.PublicColumns()) {
+				if colIDs.Contains(id) && i < len(desc.PublicColumns()) && !ib.cols[i].IsVirtual() {
 					valNeededForCol.Add(i)
 				}
 			}
