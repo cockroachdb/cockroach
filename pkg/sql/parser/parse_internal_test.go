@@ -118,7 +118,7 @@ func TestScanOneStmt(t *testing.T) {
 
 	for _, tc := range testData {
 		var p Parser
-		p.scanner.init(tc.sql)
+		p.scanner.Init(tc.sql)
 
 		var result []stmt
 		for {
