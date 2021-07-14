@@ -269,6 +269,9 @@ const (
 	// SQLInstancesTable adds the system table for storing SQL instance information
 	// per tenant.
 	SQLInstancesTable
+	// AlterSystemWebSessionsCreateIndexes creates indexes on the columns revokedAt and
+	// lastUsedAt for the system.web_sessions table.
+	AlterSystemWebSessionsCreateIndexes
 
 	// Step (1): Add new versions here.
 )
@@ -434,7 +437,10 @@ var versionsSingleton = keyedVersions{
 		Key:     SQLInstancesTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 122},
 	},
-
+	{
+		Key:     AlterSystemWebSessionsCreateIndexes,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
+	},
 	// Step (2): Add new versions here.
 }
 
