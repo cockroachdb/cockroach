@@ -519,22 +519,47 @@ func (p *planner) getQualifiedTableName(
 			Required:       true,
 			IncludeOffline: true,
 			IncludeDropped: true,
+			AvoidCached:    true,
 		})
 	if err != nil {
 		return nil, err
 	}
+	// Get the schema name. Use some specialized logic to deal with descriptors
+	// from other temporary schemas.
+	//
+	// TODO(ajwerner): We shouldn't need this temporary logic if we properly
+	// tracked all descriptors as we read them and made them available in the
+	// collection. We should only be hitting this edge case when dropping a
+	// database, in which case we've already read all of the temporary schema
+	// information from the namespace table.
+	var schemaName tree.Name
 	schemaID := desc.GetParentSchemaID()
 	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID,
 		tree.SchemaLookupFlags{
 			IncludeOffline: true,
 			IncludeDropped: true,
+			AvoidCached:    true,
 		})
-	if err != nil {
-		return nil, err
+	switch {
+	case err == nil:
+		schemaName = tree.Name(resolvedSchema.Name)
+	case desc.IsTemporary() && errors.Is(err, catalog.ErrDescriptorNotFound):
+		// We've lost track of the session which owned this schema, but we
+		// can come up with a name that is also going to be unique and
+		// informative and looks like a pg_temp_<session_id> name.
+		schemaName = tree.Name(fmt.Sprintf("pg_temp_%d", schemaID))
+	default:
+		return nil, errors.Wrapf(err,
+			"resolving schema name for %s.[%d].%s",
+			tree.Name(dbDesc.GetName()),
+			schemaID,
+			tree.Name(desc.GetName()),
+		)
 	}
+
 	tbName := tree.MakeTableNameWithSchema(
 		tree.Name(dbDesc.GetName()),
-		tree.Name(resolvedSchema.Name),
+		schemaName,
 		tree.Name(desc.GetName()),
 	)
 	return &tbName, nil
