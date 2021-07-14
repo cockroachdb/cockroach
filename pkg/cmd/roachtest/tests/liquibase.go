@@ -12,13 +12,14 @@ package tests
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-var supportedLiquibaseHarnessTag = "liquibase-test-harness-1.0.1"
+var supportedLiquibaseHarnessCommit = "05a91da4869b68f9e3a47c033f856acfb9f01106"
 
 // This test runs the Liquibase test harness against a single cockroach node.
 func registerLiquibase(r registry.Registry) {
@@ -76,15 +77,13 @@ func registerLiquibase(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatGitCloneE(
-			ctx,
-			t,
-			c,
-			"https://github.com/liquibase/liquibase-test-harness.git",
-			"/mnt/data1/liquibase-test-harness",
-			supportedLiquibaseHarnessTag,
-			node,
-		); err != nil {
+		// TODO(richardjcai): When liquibase-test-harness 1.0.3 is released and tagged,
+		//    use the tag version instead of the commit.
+		if err = c.RunE(ctx, node, "cd /mnt/data1/ && git clone https://github.com/liquibase/liquibase-test-harness.git"); err != nil {
+			t.Fatal(err)
+		}
+		if err = c.RunE(ctx, node, fmt.Sprintf("cd /mnt/data1/liquibase-test-harness/ && git checkout %s",
+			supportedLiquibaseHarnessCommit)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -92,8 +91,12 @@ func registerLiquibase(r registry.Registry) {
 		// The script executes the cockroach binary from /cockroach/cockroach.sh
 		// so we symlink that here.
 		t.Status("creating database/user used by tests")
-		c.Run(ctx, node, `sudo mkdir /cockroach && sudo ln -sf /home/ubuntu/cockroach /cockroach/cockroach.sh`)
-		c.Run(ctx, node, `/mnt/data1/liquibase-test-harness/src/test/resources/docker/setup_db.sh localhost`)
+		if err = c.RunE(ctx, node, `sudo mkdir /cockroach && sudo ln -sf /home/ubuntu/cockroach /cockroach/cockroach.sh`); err != nil {
+			t.Fatal(err)
+		}
+		if err = c.RunE(ctx, node, `/mnt/data1/liquibase-test-harness/src/test/resources/docker/setup_db.sh localhost`); err != nil {
+			t.Fatal(err)
+		}
 
 		t.Status("running liquibase test harness")
 		// All tests are expected to pass, so this should not error.
