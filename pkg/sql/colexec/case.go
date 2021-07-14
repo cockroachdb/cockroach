@@ -88,7 +88,7 @@ func NewCaseOp(
 	typ *types.T,
 ) colexecop.Operator {
 	// We internally use two selection vectors, origSel and prevSel.
-	allocator.AdjustMemoryUsage(int64(2 * colmem.SizeOfBatchSizeSelVector))
+	allocator.AdjustMemoryUsage(2 * colmem.SizeOfBatchSizeSelVector)
 	return &caseOp{
 		allocator: allocator,
 		buffer:    buffer.(*bufferOp),

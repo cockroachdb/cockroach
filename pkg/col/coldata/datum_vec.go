@@ -54,5 +54,5 @@ type DatumVec interface {
 	// startIdx < length (with a maximum at zero). A nonzero startIdx should only
 	// be used when elements before startIdx are guaranteed not to have been
 	// modified.
-	Size(startIdx int) uintptr
+	Size(startIdx int) int64
 }
