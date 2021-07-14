@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -44,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1853,6 +1856,133 @@ func doRestorePlan(
 		}
 	}
 
+	// If we have a default primary region, append the multi-region type enums
+	// as appropriate.
+	databaseModifiers := make(map[descpb.ID]*jobspb.RestoreDetails_DatabaseModifier)
+	if defaultPrimaryRegion := descpb.RegionName(
+		sql.DefaultPrimaryRegion.Get(&p.ExecCfg().Settings.SV),
+	); defaultPrimaryRegion != "" {
+		if err := multiregionccl.CheckClusterSupportsMultiRegion(
+			&p.ExtendedEvalContext().EvalContext,
+			p.ExecCfg(),
+		); err != nil {
+			return errors.WithHintf(
+				err,
+				"try disable the default PRIMARY REGION by using SET CLUSTER SETTING %s = ''",
+				sql.DefaultPrimaryRegionClusterSettingName,
+			)
+		}
+
+		l, err := sql.GetLiveClusterRegions(ctx, p)
+		if err != nil {
+			return err
+		}
+		if err := sql.CheckClusterRegionIsLive(
+			l,
+			defaultPrimaryRegion,
+		); err != nil {
+			return errors.WithHintf(
+				err,
+				"set the default PRIMARY REGION to a region that exists using SET CLUSTER SETTING %s = ''",
+				sql.DefaultPrimaryRegionClusterSettingName,
+			)
+		}
+
+		var maxSeenID descpb.ID
+		for _, desc := range sqlDescs {
+			if desc.GetID() > maxSeenID {
+				maxSeenID = desc.GetID()
+			}
+		}
+
+		shouldRestoreDatabaseIDs := make(map[descpb.ID]struct{})
+		for _, db := range restoreDBs {
+			shouldRestoreDatabaseIDs[db.GetID()] = struct{}{}
+		}
+
+		for _, desc := range sqlDescs {
+			switch desc := desc.(type) {
+			case *dbdesc.Mutable:
+				if _, ok := shouldRestoreDatabaseIDs[desc.GetID()]; !ok {
+					continue
+				}
+				if !desc.IsMultiRegion() {
+					p.BufferClientNotice(
+						ctx,
+						pgnotice.Newf(
+							"setting the PRIMARY REGION as %s on database %s",
+							defaultPrimaryRegion,
+							desc.GetName(),
+						),
+					)
+
+					// Allocate the region enum ID.
+					regionEnumID := maxSeenID + 1
+					regionEnumArrayID := maxSeenID + 2
+					maxSeenID += 2
+
+					// Assign the multi-region configuration to the database descriptor.
+					sg, err := sql.TranslateSurvivalGoal(tree.SurvivalGoalDefault)
+					if err != nil {
+						return err
+					}
+					regionConfig := multiregion.MakeRegionConfig(
+						[]descpb.RegionName{defaultPrimaryRegion},
+						defaultPrimaryRegion,
+						sg,
+						regionEnumID,
+					)
+					if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
+						return err
+					}
+					if err := desc.SetInitialMultiRegionConfig(&regionConfig); err != nil {
+						return err
+					}
+
+					// Create the multi-region enums.
+					regionLabels := make(tree.EnumValueList, 0, len(regionConfig.Regions()))
+					for _, regionName := range regionConfig.Regions() {
+						regionLabels = append(regionLabels, tree.EnumValue(regionName))
+					}
+					sc := schemadesc.GetPublicSchema()
+					regionEnum, err := sql.CreateEnumTypeDesc(
+						p.RunParams(ctx),
+						regionConfig.RegionEnumID(),
+						regionLabels,
+						desc,
+						sc,
+						tree.NewQualifiedTypeName(desc.GetName(), tree.PublicSchema, tree.RegionEnum),
+						sql.EnumTypeMultiRegion,
+					)
+					if err != nil {
+						return err
+					}
+					regionEnum.ArrayTypeID = regionEnumArrayID
+					regionArrayEnum, err := sql.CreateEnumArrayTypeDesc(
+						p.RunParams(ctx),
+						regionEnum,
+						desc,
+						sc.GetID(),
+						regionEnumArrayID,
+						"_"+tree.RegionEnum,
+					)
+					if err != nil {
+						return err
+					}
+					// Append the enums to sqlDescs.
+					sqlDescs = append(sqlDescs, regionEnum, regionArrayEnum)
+					databaseModifiers[desc.GetID()] = &jobspb.RestoreDetails_DatabaseModifier{
+						ExtraTypeDescs: []*descpb.TypeDescriptor{
+							&regionEnum.TypeDescriptor,
+							&regionArrayEnum.TypeDescriptor,
+						},
+						RegionConfig: desc.GetRegionConfig(),
+					}
+				}
+			}
+		}
+	}
+
 	if err := maybeUpgradeDescriptors(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
 		return err
 	}
@@ -1995,6 +2125,7 @@ func doRestorePlan(
 			DescriptorCoverage: restoreStmt.DescriptorCoverage,
 			Encryption:         encryption,
 			RevalidateIndexes:  revalidateIndexes,
+			DatabaseModifiers:  databaseModifiers,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}
