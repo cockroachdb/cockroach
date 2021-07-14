@@ -262,7 +262,7 @@ func checkDemoConfiguration(
 	return gen, nil
 }
 
-func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
+func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 	cmdIn, closeFn, err := getInputFile()
 	if err != nil {
 		return err
@@ -385,7 +385,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	}
 
 	conn := makeSQLConn(c.connURL)
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	return runClient(cmd, conn, cmdIn)
 }

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -280,7 +281,11 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 			url, err := c.getNetworkURLForServer(ctx, tc.nodeIdx, true /* includeAppName */)
 			require.NoError(t, err)
 			conn := makeSQLConn(url.ToPQ().String())
-			defer conn.Close()
+			defer func() {
+				if err := conn.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}()
 			// Find the maximum latency in the cluster from the current node.
 			var maxLatency time.Duration
 			for _, latencyMS := range regionToRegionToLatency[tc.region] {
@@ -292,9 +297,9 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 			// Attempt to make a query that talks to every node.
 			// This should take at least maxLatency.
 			startTime := timeutil.Now()
-			_, _, err = runQuery(
+			_, _, err = clisqlclient.RunQuery(
 				conn,
-				makeQuery(`SHOW ALL CLUSTER QUERIES`),
+				clisqlclient.MakeQuery(`SHOW ALL CLUSTER QUERIES`),
 				false,
 			)
 			totalDuration := timeutil.Since(startTime)

@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -91,12 +92,12 @@ atomic, and all deletions prior to the first failure will occur.
 	Aliases: []string{"rm"},
 }
 
-func runUserFileDelete(cmd *cobra.Command, args []string) error {
+func runUserFileDelete(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	glob := args[0]
 
@@ -113,12 +114,12 @@ func runUserFileDelete(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runUserFileList(cmd *cobra.Command, args []string) error {
+func runUserFileList(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	var glob string
 	if len(args) > 0 {
@@ -138,7 +139,7 @@ func runUserFileList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func uploadUserFileRecursive(conn *sqlConn, srcDir, dstDir string) error {
+func uploadUserFileRecursive(conn clisqlclient.Conn, srcDir, dstDir string) error {
 	srcHasTrailingSlash := strings.HasSuffix(srcDir, "/")
 	var err error
 	srcDir, err = filepath.Abs(srcDir)
@@ -184,12 +185,12 @@ func uploadUserFileRecursive(conn *sqlConn, srcDir, dstDir string) error {
 	return nil
 }
 
-func runUserFileUpload(cmd *cobra.Command, args []string) error {
+func runUserFileUpload(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	source := args[0]
 
@@ -215,12 +216,12 @@ func runUserFileUpload(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runUserFileGet(cmd *cobra.Command, args []string) error {
+func runUserFileGet(cmd *cobra.Command, args []string) (resErr error) {
 	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 	ctx := context.Background()
 
 	var dest string
@@ -238,7 +239,7 @@ func runUserFileGet(cmd *cobra.Command, args []string) error {
 	pattern := fullPath[len(conf.Path):]
 	displayPath := strings.TrimPrefix(conf.Path, "/")
 
-	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.conn.(cloud.SQLConnI))
+	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.GetDriverConn().(cloud.SQLConnI))
 	if err != nil {
 		return err
 	}
@@ -394,13 +395,13 @@ func constructUserfileListURI(glob string, user security.SQLUsername) string {
 }
 
 func getUserfileConf(
-	ctx context.Context, conn *sqlConn, glob string,
+	ctx context.Context, conn clisqlclient.Conn, glob string,
 ) (roachpb.ExternalStorage_FileTable, error) {
-	if err := conn.ensureConn(); err != nil {
+	if err := conn.EnsureConn(); err != nil {
 		return roachpb.ExternalStorage_FileTable{}, err
 	}
 
-	connURL, err := url.Parse(conn.url)
+	connURL, err := url.Parse(conn.GetURL())
 	if err != nil {
 		return roachpb.ExternalStorage_FileTable{}, err
 	}
@@ -421,7 +422,7 @@ func getUserfileConf(
 
 }
 
-func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, error) {
+func listUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]string, error) {
 	conf, err := getUserfileConf(ctx, conn, glob)
 	if err != nil {
 		return nil, err
@@ -431,7 +432,7 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, er
 	conf.Path = cloud.GetPrefixBeforeWildcard(fullPath)
 	pattern := fullPath[len(conf.Path):]
 
-	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.conn.(cloud.SQLConnI))
+	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.GetDriverConn().(cloud.SQLConnI))
 	if err != nil {
 		return nil, err
 	}
@@ -478,12 +479,12 @@ func downloadUserfile(
 	return io.Copy(localFile, remoteFile)
 }
 
-func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, error) {
-	if err := conn.ensureConn(); err != nil {
+func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]string, error) {
+	if err := conn.EnsureConn(); err != nil {
 		return nil, err
 	}
 
-	connURL, err := url.Parse(conn.url)
+	connURL, err := url.Parse(conn.GetURL())
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +510,7 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 	pattern := fullPath[len(userFileTableConf.FileTableConfig.Path):]
 
 	f, err := userfile.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
-		conn.conn.(cloud.SQLConnI))
+		conn.GetDriverConn().(cloud.SQLConnI))
 	if err != nil {
 		return nil, err
 	}
@@ -537,19 +538,19 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 }
 
 func renameUserFile(
-	ctx context.Context, conn *sqlConn, oldFilename,
+	ctx context.Context, conn clisqlclient.Conn, oldFilename,
 	newFilename, qualifiedTableName string,
 ) error {
-	if err := conn.ensureConn(); err != nil {
+	if err := conn.EnsureConn(); err != nil {
 		return err
 	}
 
-	ex := conn.conn.(driver.ExecerContext)
+	ex := conn.GetDriverConn()
 	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
 		return err
 	}
 
-	stmt, err := conn.conn.Prepare(fmt.Sprintf(`UPDATE %s SET filename=$1 WHERE filename=$2`,
+	stmt, err := conn.GetDriverConn().Prepare(fmt.Sprintf(`UPDATE %s SET filename=$1 WHERE filename=$2`,
 		qualifiedTableName+fileTableNameSuffix))
 	if err != nil {
 		return err
@@ -584,7 +585,7 @@ func renameUserFile(
 // This method returns the complete userfile URI representation to which the
 // file is uploaded to.
 func uploadUserFile(
-	ctx context.Context, conn *sqlConn, source, destination string,
+	ctx context.Context, conn clisqlclient.Conn, source, destination string,
 ) (string, error) {
 	reader, err := openUserFile(source)
 	if err != nil {
@@ -592,16 +593,16 @@ func uploadUserFile(
 	}
 	defer reader.Close()
 
-	if err := conn.ensureConn(); err != nil {
+	if err := conn.EnsureConn(); err != nil {
 		return "", err
 	}
 
-	ex := conn.conn.(driver.ExecerContext)
+	ex := conn.GetDriverConn()
 	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
 		return "", err
 	}
 
-	connURL, err := url.Parse(conn.url)
+	connURL, err := url.Parse(conn.GetURL())
 	if err != nil {
 		return "", err
 	}
@@ -631,7 +632,7 @@ func uploadUserFile(
 	if err != nil {
 		return "", err
 	}
-	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(unescapedUserfileURL, sql.CrdbInternalName,
+	stmt, err := conn.GetDriverConn().Prepare(sql.CopyInFileStmt(unescapedUserfileURL, sql.CrdbInternalName,
 		sql.UserFileUploadTable))
 	if err != nil {
 		return "", err

@@ -23,7 +23,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	apd "github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -99,12 +101,12 @@ Run the doctor tool system data from a live cluster specified by --url.
 `,
 		Args: cobra.NoArgs,
 		RunE: MaybeDecorateGRPCError(
-			func(cmd *cobra.Command, args []string) error {
+			func(cmd *cobra.Command, args []string) (resErr error) {
 				sqlConn, err := makeSQLClient("cockroach doctor", useSystemDb)
 				if err != nil {
 					return errors.Wrap(err, "could not establish connection to cluster")
 				}
-				defer sqlConn.Close()
+				defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
 				descs, ns, jobs, err := fromCluster(sqlConn, cliCtx.cmdTimeout)
 				if err != nil {
 					return err
@@ -145,10 +147,8 @@ func runDoctor(
 			context.Background(), descTable, namespaceTable, jobsTable, debugCtx.verbose, out)
 		if err == nil {
 			if !valid {
-				return &cliError{
-					exitCode: exit.DoctorValidationFailed(),
-					cause:    errors.New("validation failed"),
-				}
+				return clierror.NewError(errors.New("validation failed"),
+					exit.DoctorValidationFailed())
 			}
 			fmt.Fprintln(out, "No problems found!")
 		}
@@ -158,18 +158,17 @@ func runDoctor(
 	if err == nil {
 		return nil
 	}
-	return &cliError{
+	return clierror.NewError(
+		errors.Wrapf(err, "doctor command %q failed", commandName),
 		// Note: we are using "unspecified" here because the error
 		// return does not distinguish errors like connection errors
 		// etc, from errors during extraction.
-		exitCode: exit.UnspecifiedError(),
-		cause:    errors.Wrapf(err, "doctor command %q failed", commandName),
-	}
+		exit.UnspecifiedError())
 }
 
 // fromCluster collects system table data from a live cluster.
 func fromCluster(
-	sqlConn *sqlConn, timeout time.Duration,
+	sqlConn clisqlclient.Conn, timeout time.Duration,
 ) (
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
@@ -463,7 +462,7 @@ func tableMap(in io.Reader, fn func(string) error) error {
 
 // selectRowsMap applies `fn` to all rows returned from a select statement.
 func selectRowsMap(
-	conn *sqlConn, stmt string, vals []driver.Value, fn func([]driver.Value) error,
+	conn clisqlclient.Conn, stmt string, vals []driver.Value, fn func([]driver.Value) error,
 ) error {
 	rows, err := conn.Query(stmt, nil)
 	if err != nil {

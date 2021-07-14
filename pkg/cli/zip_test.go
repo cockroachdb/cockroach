@@ -466,7 +466,11 @@ func TestZipRetries(t *testing.T) {
 			RawQuery: "sslmode=disable",
 		}
 		sqlConn := makeSQLConn(sqlURL.String())
-		defer sqlConn.Close()
+		defer func() {
+			if err := sqlConn.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
 
 		zr := zipCtx.newZipReporter("test")
 		zc := debugZipContext{
