@@ -22,7 +22,5 @@ import (
 func joinTokensTableMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
-	return sqlmigrations.CreateSystemTable(
-		ctx, d.DB, d.Codec, d.Settings, systemschema.JoinTokensTable,
-	)
+	return sqlmigrations.CreateSystemTable(ctx, d.DB, d.Codec, systemschema.JoinTokensTable)
 }

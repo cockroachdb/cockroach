@@ -686,17 +686,13 @@ func migrationKey(codec keys.SQLCodec, migration migrationDescriptor) roachpb.Ke
 }
 
 func createSystemTable(ctx context.Context, r runner, desc catalog.TableDescriptor) error {
-	return CreateSystemTable(ctx, r.db, r.codec, r.settings, desc)
+	return CreateSystemTable(ctx, r.db, r.codec, desc)
 }
 
 // CreateSystemTable is a function to inject a new system table. If the table
 // already exists, ths function is a no-op.
 func CreateSystemTable(
-	ctx context.Context,
-	db DB,
-	codec keys.SQLCodec,
-	settings *cluster.Settings,
-	desc catalog.TableDescriptor,
+	ctx context.Context, db DB, codec keys.SQLCodec, desc catalog.TableDescriptor,
 ) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
