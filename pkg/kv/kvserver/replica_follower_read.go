@@ -71,7 +71,7 @@ func (r *Replica) canServeFollowerRead(
 		ts.Forward(ba.Txn.MaxTimestamp)
 	}
 
-	maxClosed, _ := r.maxClosed(ctx)
+	maxClosed, _ := r.maxClosed()
 	canServeFollowerRead := ts.LessEq(maxClosed)
 	tsDiff := ts.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
@@ -107,18 +107,25 @@ func (r *Replica) canServeFollowerRead(
 	return nil
 }
 
-// maxClosed returns the maximum closed timestamp for this range.
-// It is computed as the most recent of the known closed timestamp for the
-// current lease holder for this range as tracked by the closed timestamp
-// subsystem and the start time of the current lease. It is safe to use the
-// start time of the current lease because leasePostApply bumps the timestamp
-// cache forward to at least the new lease start time. Using this combination
-// allows the closed timestamp mechanism to be robust to lease transfers.
+// maxClosed returns the maximum closed timestamp for this range. It is computed
+// as the most recent of the known closed timestamp for the current lease holder
+// for this range as tracked by the closed timestamp subsystem.
+//
 // If the ok return value is false, the Replica is a member of a range which
 // uses an expiration-based lease. Expiration-based leases do not support the
 // closed timestamp subsystem. A zero-value timestamp will be returned if ok
 // is false.
-func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
+//
+// NB: It is unsafe to use the start time of the current lease as a lower bound
+// on `maxClosed()` because, even though `leasePostApply()` bumps the timestamp
+// cache forward to at least the new lease start time, the range may have been
+// in the middle of a merge when the lease transfer occurred. Since
+// `SubsumeRequest` is not a replicated command, other replicas do not have
+// access to the subsumption time. We choose to be pessimistic here and allow
+// closed timestamp state to be temporarily reset after a lease transfer, in
+// order to avoid potentially serving follower reads past the subsumption time
+// of a range.
+func (r *Replica) maxClosed() (_ hlc.Timestamp, ok bool) {
 	r.mu.RLock()
 	lai := r.mu.state.LeaseAppliedIndex
 	lease := *r.mu.state.Lease
@@ -129,7 +136,6 @@ func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
 	}
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
 		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai))
-	maxClosed.Forward(lease.Start)
 	maxClosed.Forward(initialMaxClosed)
 	return maxClosed, true
 }

@@ -290,7 +290,7 @@ func (r *Replica) LastAssignedLeaseIndex() uint64 {
 
 // MaxClosed returns the maximum closed timestamp known to the Replica.
 func (r *Replica) MaxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
-	return r.maxClosed(ctx)
+	return r.maxClosed()
 }
 
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
