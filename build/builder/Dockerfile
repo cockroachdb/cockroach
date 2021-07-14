@@ -196,12 +196,14 @@ RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-
 # NB: care needs to be taken when updating this version because earlier
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-chech.sh.
+COPY cve-2021-34558.patch /tmp/
 RUN apt-get install -y --no-install-recommends golang \
  && curl -fsSL https://storage.googleapis.com/golang/go1.13.14.src.tar.gz -o golang.tar.gz \
  && echo '197333e97290e9ea8796f738d61019dcba1c377c2f3961fd6a114918ecc7ab06 golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
+ && patch -p2 < /tmp/cve-2021-34558.patch \
  && GOROOT_BOOTSTRAP=$(go env GOROOT) CC=clang CXX=clang++ ./make.bash
 
 ENV GOPATH /go
