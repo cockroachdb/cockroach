@@ -315,7 +315,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 			case <-time.After(10 * time.Second):
 			case <-fatalTrigger:
 			}
-			exitFunc(exit.FatalError(), nil)
+			exitFunc(exit.FatalError, nil)
 			close(exitCalled)
 		}()
 	}

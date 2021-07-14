@@ -143,7 +143,7 @@ func TestErrorReporting(t *testing.T) {
 		{
 			desc: "single cliError",
 			err: &cliError{
-				exitCode: exit.UnspecifiedError(),
+				exitCode: exit.UnspecifiedError,
 				severity: severity.INFO,
 				cause:    errors.New("routine"),
 			},
@@ -153,10 +153,10 @@ func TestErrorReporting(t *testing.T) {
 		{
 			desc: "double cliError",
 			err: &cliError{
-				exitCode: exit.UnspecifiedError(),
+				exitCode: exit.UnspecifiedError,
 				severity: severity.INFO,
 				cause: &cliError{
-					exitCode: exit.UnspecifiedError(),
+					exitCode: exit.UnspecifiedError,
 					severity: severity.ERROR,
 					cause:    errors.New("serious"),
 				},
@@ -167,7 +167,7 @@ func TestErrorReporting(t *testing.T) {
 		{
 			desc: "wrapped cliError",
 			err: fmt.Errorf("some context: %w", &cliError{
-				exitCode: exit.UnspecifiedError(),
+				exitCode: exit.UnspecifiedError,
 				severity: severity.INFO,
 				cause:    errors.New("routine"),
 			}),

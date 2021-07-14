@@ -18,26 +18,24 @@ import (
 )
 
 // Code represents an exit code.
-type Code struct {
-	code int
-}
+type Code int
 
 // String implements the fmt.Stringer interface.
-func (c Code) String() string { return fmt.Sprint(c.code) }
+func (c Code) String() string { return fmt.Sprint(int(c)) }
 
 // Format implements the fmt.Formatter interface.
 func (c Code) Format(s fmt.State, verb rune) {
 	_, f := redact.MakeFormat(s, verb)
-	fmt.Fprintf(s, f, c.code)
+	fmt.Fprintf(s, f, int(c))
 }
 
 // SafeValue implements the redact.SafeValue interface.
 func (c Code) SafeValue() {}
 
-var _ redact.SafeValue = Code{}
+var _ redact.SafeValue = Code(0)
 
 // WithCode terminates the process and sets its exit status code to
 // the provided code.
 func WithCode(code Code) {
-	os.Exit(code.code)
+	os.Exit(int(code))
 }

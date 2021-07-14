@@ -38,7 +38,7 @@ func (l *stderrSink) output(_ bool, b []byte) error {
 
 // exitCode implements the logSink interface.
 func (l *stderrSink) exitCode() exit.Code {
-	return exit.LoggingStderrUnavailable()
+	return exit.LoggingStderrUnavailable
 }
 
 // emergencyOutput implements the logSink interface.

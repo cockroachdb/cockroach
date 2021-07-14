@@ -77,7 +77,7 @@ func HandleErrs(
 			if hint != "" {
 				cmd.Println("Hint:", hint)
 			}
-			exit.WithCode(exit.UnspecifiedError())
+			exit.WithCode(exit.UnspecifiedError)
 		}
 	}
 }

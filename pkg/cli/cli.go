@@ -58,7 +58,7 @@ func Main() {
 	cmdName := commandName(cmd)
 
 	err := doMain(cmd, cmdName)
-	errCode := exit.Success()
+	errCode := exit.Success
 	if err != nil {
 		// Display the error and its details/hints.
 		cliOutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
@@ -68,7 +68,7 @@ func Main() {
 
 		// Finally, extract the error code, as optionally specified
 		// by the sub-command.
-		errCode = exit.UnspecifiedError()
+		errCode = exit.UnspecifiedError
 		var cliErr *cliError
 		if errors.As(err, &cliErr) {
 			errCode = cliErr.exitCode
@@ -256,7 +256,7 @@ func init() {
 		}
 		fmt.Fprintln(c.OutOrStderr()) // provide a line break between usage and error
 		return &cliError{
-			exitCode: exit.CommandLineFlagError(),
+			exitCode: exit.CommandLineFlagError,
 			cause:    err,
 		}
 	})
