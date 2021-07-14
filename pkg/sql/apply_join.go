@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -243,18 +244,38 @@ func runPlanInsidePlan(
 	)
 	defer recv.Release()
 
-	if !params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRunSubqueries(
-		params.ctx,
-		params.p,
-		params.extendedEvalCtx.copy,
-		plan.subqueryPlans,
-		recv,
-		true, /* maybeDistribute */
-	) {
-		if err := rowResultWriter.Err(); err != nil {
-			return err
+	if len(plan.subqueryPlans) != 0 {
+		// We currently don't support cases when both the "inner" and the
+		// "outer" plans have subqueries due to limitations of how we're
+		// propagating the results of the subqueries.
+		if len(params.p.curPlan.subqueryPlans) != 0 {
+			return unimplemented.NewWithIssue(66447, `apply joins with subqueries in the "inner" and "outer" contexts are not supported`)
 		}
-		return recv.commErr
+		// Right now curPlan.subqueryPlans are the subqueries from the "outer"
+		// plan (and we know there are none given the check above). If parts of
+		// the "inner" plan refer to the subqueries, we know that they must
+		// refer to the "inner" subqueries. To allow for that to happen we have
+		// to manually replace the subqueries on the planner's curPlan and
+		// restore the original state before exiting.
+		oldSubqueries := params.p.curPlan.subqueryPlans
+		params.p.curPlan.subqueryPlans = plan.subqueryPlans
+		defer func() {
+			params.p.curPlan.subqueryPlans = oldSubqueries
+		}()
+
+		if !params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRunSubqueries(
+			params.ctx,
+			params.p,
+			params.extendedEvalCtx.copy,
+			plan.subqueryPlans,
+			recv,
+			true, /* maybeDistribute */
+		) {
+			if err := rowResultWriter.Err(); err != nil {
+				return err
+			}
+			return recv.commErr
+		}
 	}
 
 	// Make a copy of the EvalContext so it can be safely modified.
