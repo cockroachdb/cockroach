@@ -27,8 +27,6 @@ import (
 func (n *Node) startAssertEngineHealth(
 	ctx context.Context, engines []storage.Engine, settings *cluster.Settings,
 ) {
-	maxSyncDuration := storage.MaxSyncDuration.Get(&settings.SV)
-	fatalOnExceeded := storage.MaxSyncDurationFatalOnExceeded.Get(&settings.SV)
 	_ = n.stopper.RunAsyncTask(ctx, "engine-health", func(ctx context.Context) {
 		t := timeutil.NewTimer()
 		t.Reset(0)
@@ -38,6 +36,8 @@ func (n *Node) startAssertEngineHealth(
 			case <-t.C:
 				t.Read = true
 				t.Reset(10 * time.Second)
+				maxSyncDuration := storage.MaxSyncDuration.Get(&settings.SV)
+				fatalOnExceeded := storage.MaxSyncDurationFatalOnExceeded.Get(&settings.SV)
 				n.assertEngineHealth(ctx, engines, maxSyncDuration, fatalOnExceeded)
 			case <-n.stopper.ShouldQuiesce():
 				return
