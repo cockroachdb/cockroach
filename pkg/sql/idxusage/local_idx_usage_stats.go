@@ -221,6 +221,16 @@ func (s *LocalIndexUsageStats) ForEach(options IteratorOptions, visitor StatsVis
 	return nil
 }
 
+func (s *LocalIndexUsageStats) batchInsert(otherStats []roachpb.CollectedIndexUsageStatistics) {
+	for _, newStats := range otherStats {
+		tableIndexStats := s.getStatsForTableID(newStats.Key.TableID, true /* createIfNotExists */)
+		stats := tableIndexStats.getStatsForIndexID(newStats.Key.IndexID, true /* createIfNotExists */)
+		stats.Lock()
+		stats.Add(&newStats.Stats)
+		stats.Unlock()
+	}
+}
+
 func (s *LocalIndexUsageStats) clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -356,7 +366,7 @@ func (s *LocalIndexUsageStats) startStatsIngestionLoop(ctx context.Context, stop
 			case payload := <-s.statsChan:
 				s.insertIndexUsage(&payload)
 				if s.testingKnobs != nil && s.testingKnobs.OnIndexUsageStatsProcessedCallback != nil {
-					s.testingKnobs.OnIndexUsageStatsProcessedCallback()
+					s.testingKnobs.OnIndexUsageStatsProcessedCallback(payload.key)
 				}
 			case <-stopper.ShouldQuiesce():
 				return
