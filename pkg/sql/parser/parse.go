@@ -26,14 +26,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	NewNumValFn = func(a constant.Value, s string, b bool) interface{} { return tree.NewNumVal(a, s, b) }
-	NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
+	scanner.NewNumValFn = func(a constant.Value, s string, b bool) interface{} { return tree.NewNumVal(a, s, b) }
+	scanner.NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
 }
 
 // Statement is the result of parsing a single statement. It contains the AST
@@ -85,7 +86,7 @@ func (stmts Statements) StringWithFlags(flags tree.FmtFlags) string {
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner    scanner
+	scanner    scanner.Scanner
 	lexer      lexer
 	parserImpl sqlParserImpl
 	tokBuf     [8]sqlSymType
@@ -138,7 +139,7 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 
 	// Scan the first token.
 	for {
-		p.scanner.scan(&lval)
+		p.scanner.Scan(&lval)
 		if lval.id == 0 {
 			return "", nil, true
 		}
@@ -153,12 +154,12 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	tokens = append(tokens, lval)
 	for {
 		if lval.id == ERROR {
-			return p.scanner.in[startPos:], tokens, true
+			return p.scanner.In()[startPos:], tokens, true
 		}
-		posBeforeScan := p.scanner.pos
-		p.scanner.scan(&lval)
+		posBeforeScan := p.scanner.Pos()
+		p.scanner.Scan(&lval)
 		if lval.id == 0 || lval.id == ';' {
-			return p.scanner.in[startPos:posBeforeScan], tokens, (lval.id == 0)
+			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0)
 		}
 		lval.pos -= startPos
 		tokens = append(tokens, lval)
@@ -167,8 +168,8 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 
 func (p *Parser) parseWithDepth(depth int, sql string, nakedIntType *types.T) (Statements, error) {
 	stmts := Statements(p.stmtBuf[:0])
-	p.scanner.init(sql)
-	defer p.scanner.cleanup()
+	p.scanner.Init(sql)
+	defer p.scanner.Cleanup()
 	for {
 		sql, tokens, done := p.scanOneStmt()
 		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
@@ -267,8 +268,8 @@ func ParseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
 // statements.
 func HasMultipleStatements(sql string) bool {
 	var p Parser
-	p.scanner.init(sql)
-	defer p.scanner.cleanup()
+	p.scanner.Init(sql)
+	defer p.scanner.Cleanup()
 	count := 0
 	for {
 		_, _, done := p.scanOneStmt()
