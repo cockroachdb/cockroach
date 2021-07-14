@@ -42,8 +42,3 @@ func maybeRerunBackground() (bool, error) {
 func disableOtherPermissionBits() {
 	// No-op on windows, which does not support umask.
 }
-
-func useUnixSocketsInDemo() bool {
-	// No unix sockets on windows.
-	return false
-}

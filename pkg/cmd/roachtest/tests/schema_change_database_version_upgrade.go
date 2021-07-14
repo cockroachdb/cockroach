@@ -43,17 +43,6 @@ func registerSchemaChangeDatabaseVersionUpgrade(r registry.Registry) {
 	})
 }
 
-func createDBStep(node int, name string) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, node)
-		_, err := db.ExecContext(ctx,
-			fmt.Sprintf(`CREATE DATABASE %s`, name))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Put and start the binary.

@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -57,42 +58,33 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (clisqlclient.Conn,
 		return nil, err
 	}
 
+	// Set a connection timeout if none is provided already.
+	sqlCtx.ConnectTimeout, err = strconv.Atoi(sqlConnTimeout)
+	if err != nil {
+		return nil, err
+	}
+
 	if defaultMode == useSystemDb {
 		// Override the target database. This is because the current
 		// database can influence the output of CLI commands, and in the
 		// case where the database is missing it will default server-wise to
 		// `defaultdb` which may not exist.
-		baseURL.WithDefaultDatabase("system")
+		sqlCtx.Database = "system"
 	}
 
 	// If there is no user in the URL already, fill in the default user.
-	baseURL.WithDefaultUsername(security.RootUser)
+	sqlCtx.User = security.RootUser
+
+	// If there is no application name already, use the provided one.
+	sqlCtx.ApplicationName = catconstants.ReportableAppNamePrefix + appName
 
 	// How we're going to authenticate.
-	usePw, pwdSet, _ := baseURL.GetAuthnPassword()
-	if usePw {
+	usePw, _, _ := baseURL.GetAuthnPassword()
+	if usePw && cliCtx.Insecure {
 		// There's a password already configured.
-
 		// In insecure mode, we don't want the user to get the mistaken
 		// idea that a password is worth anything.
-		if cliCtx.Insecure {
-			return nil, errors.Errorf("password authentication not enabled in insecure mode")
-		}
-	}
-
-	// Load the application name. It's not a command-line flag, so
-	// anything already in the URL should take priority.
-	if prevAppName := baseURL.GetOption("application_name"); prevAppName == "" && appName != "" {
-		_ = baseURL.SetOption("application_name", catconstants.ReportableAppNamePrefix+appName)
-	}
-
-	// Set a connection timeout if none is provided already. This
-	// ensures that if the server was not initialized or there is some
-	// network issue, the client will not be left to hang forever.
-	//
-	// This is a lib/pq feature.
-	if baseURL.GetOption("connect_timeout") == "" {
-		_ = baseURL.SetOption("connect_timeout", sqlConnTimeout)
+		return nil, errors.Errorf("password authentication not enabled in insecure mode")
 	}
 
 	sqlURL := baseURL.ToPQ().String()
@@ -101,8 +93,5 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (clisqlclient.Conn,
 		log.Infof(context.Background(), "connecting with URL: %s", sqlURL)
 	}
 
-	conn := sqlConnCtx.MakeSQLConn(sqlURL)
-	conn.SetMissingPassword(!usePw || !pwdSet)
-
-	return conn, nil
+	return sqlCtx.MakeConn(sqlURL)
 }

@@ -48,6 +48,8 @@ ALL_TESTS = [
     "//pkg/cli/clierror:clierror_test",
     "//pkg/cli/clisqlclient:clisqlclient_test",
     "//pkg/cli/clisqlexec:clisqlexec_test",
+    "//pkg/cli/clisqlshell:clisqlshell_test",
+    "//pkg/cli/democluster:democluster_test",
     "//pkg/cli/exit:exit_test",
     "//pkg/cli:cli_test",
     "//pkg/clusterversion:clusterversion_test",

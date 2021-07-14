@@ -79,55 +79,8 @@ func (l *localityList) Set(value string) error {
 	return nil
 }
 
-// type used to implement parsing a list of localities for the cockroach demo command.
-type demoLocalityList []roachpb.Locality
-
-// Type implements the pflag.Value interface.
-func (l *demoLocalityList) Type() string { return "demoLocalityList" }
-
-// String implements the pflag.Value interface.
-func (l *demoLocalityList) String() string {
-	s := ""
-	for _, loc := range []roachpb.Locality(*l) {
-		s += loc.String()
-	}
-	return s
-}
-
-// Set implements the pflag.Value interface.
-func (l *demoLocalityList) Set(value string) error {
-	*l = []roachpb.Locality{}
-	locs := strings.Split(value, ":")
-	for _, value := range locs {
-		parsedLoc := &roachpb.Locality{}
-		if err := parsedLoc.Set(value); err != nil {
-			return err
-		}
-		*l = append(*l, *parsedLoc)
-	}
-	return nil
-}
-
 // This file contains definitions for data types suitable for use by
 // the flag+pflag packages.
-
-// statementsValue is an implementation of pflag.Value that appends any
-// argument to a slice.
-type statementsValue []string
-
-// Type implements the pflag.Value interface.
-func (s *statementsValue) Type() string { return "statementsValue" }
-
-// String implements the pflag.Value interface.
-func (s *statementsValue) String() string {
-	return strings.Join(*s, ";")
-}
-
-// Set implements the pflag.Value interface.
-func (s *statementsValue) Set(value string) error {
-	*s = append(*s, value)
-	return nil
-}
 
 type dumpMode int
 

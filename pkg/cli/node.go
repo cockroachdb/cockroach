@@ -76,7 +76,7 @@ func runLsNodes(cmd *cobra.Command, args []string) (resErr error) {
 		return err
 	}
 
-	return sqlExecCtx.PrintQueryOutput(os.Stdout, lsNodesColumnHeaders,
+	return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, lsNodesColumnHeaders,
 		clisqlexec.NewRowSliceIter(rows, "r"))
 }
 
@@ -133,7 +133,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 	}
 
 	sliceIter := clisqlexec.NewRowSliceIter(rows, getStatusNodeAlignment())
-	return sqlExecCtx.PrintQueryOutput(os.Stdout, getStatusNodeHeaders(), sliceIter)
+	return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, getStatusNodeHeaders(), sliceIter)
 }
 
 func runStatusNodeInner(
@@ -533,7 +533,7 @@ signaling the affected nodes to participate in the cluster again.
 }
 
 func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
-	return sqlExecCtx.PrintQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
+	return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, decommissionNodesColumnHeaders,
 		clisqlexec.NewRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
 }
 

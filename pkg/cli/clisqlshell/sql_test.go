@@ -8,24 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli
+package clisqlshell_test
 
 import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/assert"
 )
 
 func Example_sql() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{`sql`, `-e`, `show application_name`})
@@ -112,7 +112,7 @@ func Example_sql() {
 }
 
 func Example_sql_config() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	// --set changes client-side variables before executing commands.
@@ -162,7 +162,7 @@ func Example_sql_config() {
 }
 
 func Example_sql_watch() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{`sql`, `-e`, `create table d(x int); insert into d values(3)`})
@@ -181,7 +181,7 @@ func Example_sql_watch() {
 }
 
 func Example_misc_table() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
@@ -216,7 +216,7 @@ func Example_in_memory() {
 	if err != nil {
 		panic(err)
 	}
-	c := NewCLITest(TestCLIParams{
+	c := cli.NewCLITest(cli.TestCLIParams{
 		StoreSpecs: []base.StoreSpec{spec},
 	})
 	defer c.Cleanup()
@@ -235,7 +235,7 @@ func Example_in_memory() {
 }
 
 func Example_pretty_print_numerical_strings() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	// All strings in pretty-print output should be aligned to left regardless of their contents
@@ -271,7 +271,7 @@ func Example_pretty_print_numerical_strings() {
 // The input file contains a mix of client-side and
 // server-side commands to ensure that both are supported with -f.
 func Example_read_from_file() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "select 1", "-f", "testdata/inputfile.sql"})
@@ -279,7 +279,7 @@ func Example_read_from_file() {
 
 	// Output:
 	// sql -e select 1 -f testdata/inputfile.sql
-	// ERROR: unsupported combination: --execute and --file
+	// ERROR: cannot specify both an input file and discrete statements
 	// sql -f testdata/inputfile.sql
 	// SET
 	// CREATE TABLE
@@ -298,7 +298,7 @@ func Example_read_from_file() {
 
 // Example_includes tests the \i command.
 func Example_includes() {
-	c := NewCLITest(TestCLIParams{})
+	c := cli.NewCLITest(cli.TestCLIParams{})
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-f", "testdata/i_twolevels1.sql"})
@@ -341,14 +341,16 @@ func Example_includes() {
 
 // Example_sql_lex tests the usage of the lexer in the sql subcommand.
 func Example_sql_lex() {
-	c := NewCLITest(TestCLIParams{Insecure: true})
+	c := cli.NewCLITest(cli.TestCLIParams{Insecure: true})
 	defer c.Cleanup()
 
-	conn := sqlConnCtx.MakeSQLConn(fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
-		security.RootUser, c.ServingSQLAddr()))
+	var sqlConnCtx clisqlclient.Context
+	conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard,
+		fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
+			security.RootUser, c.ServingSQLAddr()))
 	defer func() {
 		if err := conn.Close(); err != nil {
-			fmt.Fprintf(stderr, "error closing connection: %v\n", err)
+			fmt.Printf("error closing connection: %v\n", err)
 		}
 	}()
 
@@ -370,13 +372,11 @@ select '''
 -- just a comment without final semicolon`,
 	}
 
-	setCLIDefaultsForTests()
-
 	// We need a temporary file with a name guaranteed to be available.
 	// So open a dummy file.
 	f, err := ioutil.TempFile("", "input")
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		fmt.Println(err)
 		return
 	}
 	// Get the name and close it.
@@ -396,22 +396,23 @@ select '''
 	for _, test := range tests {
 		// Populate the test input.
 		if f, err = os.OpenFile(fname, os.O_WRONLY, 0644); err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Println(err)
 			return
 		}
 		if _, err := f.WriteString(test); err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Println(err)
 			return
 		}
 		f.Close()
 		// Make it available for reading.
 		if f, err = os.Open(fname); err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Println(err)
 			return
 		}
-		err := runInteractive(conn, f)
+		c := setupTestCliStateWithConn(conn)
+		err := c.RunInteractive(f, os.Stdout, os.Stdout)
 		if err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Println(err)
 		}
 	}
 
@@ -439,135 +440,14 @@ select '''
 	// (1 row)
 }
 
-func TestIsEndOfStatement(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	tests := []struct {
-		in         string
-		isEnd      bool
-		isNotEmpty bool
-	}{
-		{
-			in:         ";",
-			isEnd:      true,
-			isNotEmpty: true,
-		},
-		{
-			in:         "; /* comment */",
-			isEnd:      true,
-			isNotEmpty: true,
-		},
-		{
-			in:         "; SELECT",
-			isNotEmpty: true,
-		},
-		{
-			in:         "SELECT",
-			isNotEmpty: true,
-		},
-		{
-			in:         "SET; SELECT 1;",
-			isEnd:      true,
-			isNotEmpty: true,
-		},
-		{
-			in:         "SELECT ''''; SET;",
-			isEnd:      true,
-			isNotEmpty: true,
-		},
-		{
-			in: "  -- hello",
-		},
-		{
-			in:         "select 'abc", // invalid token
-			isNotEmpty: true,
-		},
-		{
-			in:         "'abc", // invalid token
-			isNotEmpty: true,
-		},
-		{
-			in:         `SELECT e'\xaa';`, // invalid token but last token is semicolon
-			isEnd:      true,
-			isNotEmpty: true,
-		},
+func setupTestCliStateWithConn(conn clisqlclient.Conn) clisqlshell.Shell {
+	cliCtx := &clicfg.Context{}
+	sqlConnCtx := &clisqlclient.Context{CliCtx: cliCtx}
+	sqlExecCtx := &clisqlexec.Context{
+		CliCtx:             cliCtx,
+		TableDisplayFormat: clisqlexec.TableDisplayTable,
 	}
-
-	for _, test := range tests {
-		lastTok, isNotEmpty := parser.LastLexicalToken(test.in)
-		if isNotEmpty != test.isNotEmpty {
-			t.Errorf("%q: isNotEmpty expected %v, got %v", test.in, test.isNotEmpty, isNotEmpty)
-		}
-		isEnd := isEndOfStatement(lastTok)
-		if isEnd != test.isEnd {
-			t.Errorf("%q: isEnd expected %v, got %v", test.in, test.isEnd, isEnd)
-		}
-	}
-}
-
-// Test handleCliCmd cases for client-side commands that are aliases for sql
-// statements.
-func TestHandleCliCmdSqlAlias(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	initCLIDefaults()
-
-	clientSideCommandTestsTable := []struct {
-		commandString string
-		wantSQLStmt   string
-	}{
-		{`\l`, `SHOW DATABASES`},
-		{`\dt`, `SHOW TABLES`},
-		{`\dT`, `SHOW TYPES`},
-		{`\du`, `SHOW USERS`},
-		{`\d mytable`, `SHOW COLUMNS FROM mytable`},
-		{`\d`, `SHOW TABLES`},
-	}
-
-	var c cliState
-	for _, tt := range clientSideCommandTestsTable {
-		c = setupTestCliState()
-		c.lastInputLine = tt.commandString
-		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
-
-		assert.Equal(t, cliRunStatement, gotState)
-		assert.Equal(t, tt.wantSQLStmt, c.concatLines)
-	}
-}
-
-func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	initCLIDefaults()
-
-	clientSideCommandTests := []string{`\d goodarg badarg`, `\dz`}
-
-	var c cliState
-	for _, tt := range clientSideCommandTests {
-		c = setupTestCliState()
-		c.lastInputLine = tt
-		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
-
-		assert.Equal(t, cliStateEnum(0), gotState)
-		assert.Equal(t, errInvalidSyntax, c.exitErr)
-	}
-}
-
-func TestHandleDemoNodeCommandsInvalidNodeName(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	initCLIDefaults()
-
-	demoNodeCommandTests := []string{"shutdown", "*"}
-
-	c := setupTestCliState()
-	c.handleDemoNodeCommands(demoNodeCommandTests, cliStateEnum(0), cliStateEnum(1))
-	assert.Equal(t, errInvalidSyntax, c.exitErr)
-}
-
-func setupTestCliState() cliState {
-	c := cliState{}
-	c.ins = noLineEditor
+	sqlCtx := &clisqlshell.Context{}
+	c := clisqlshell.NewShell(cliCtx, sqlConnCtx, sqlExecCtx, sqlCtx, conn)
 	return c
 }

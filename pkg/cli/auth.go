@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -68,12 +69,11 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		rows := [][]string{
 			{username, fmt.Sprintf("%d", id), hC},
 		}
-		if err := sqlExecCtx.PrintQueryOutput(os.Stdout, cols, clisqlexec.NewRowSliceIter(rows, "ll")); err != nil {
+		if err := sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, cols, clisqlexec.NewRowSliceIter(rows, "ll")); err != nil {
 			return err
 		}
 
-		checkInteractive(os.Stdin)
-		if cliCtx.IsInteractive {
+		if isatty.IsTerminal(os.Stdin.Fd()) {
 			fmt.Fprintf(stderr, `#
 # Example uses:
 #
@@ -175,7 +175,7 @@ func runLogout(cmd *cobra.Command, args []string) (resErr error) {
             id AS "session ID",
             "revokedAt" AS "revoked"`,
 		username)
-	return sqlExecCtx.RunQueryAndFormatResults(sqlConn, os.Stdout, logoutQuery)
+	return sqlExecCtx.RunQueryAndFormatResults(sqlConn, os.Stdout, stderr, logoutQuery)
 }
 
 var authListCmd = &cobra.Command{
@@ -205,7 +205,7 @@ SELECT username,
        "revokedAt" as "revoked",
        "lastUsedAt" as "last used"
   FROM system.web_sessions`)
-	return sqlExecCtx.RunQueryAndFormatResults(sqlConn, os.Stdout, logoutQuery)
+	return sqlExecCtx.RunQueryAndFormatResults(sqlConn, os.Stdout, stderr, logoutQuery)
 }
 
 var authCmds = []*cobra.Command{

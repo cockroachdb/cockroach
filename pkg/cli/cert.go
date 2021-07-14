@@ -300,7 +300,7 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 		addRow(cert, fmt.Sprintf("user: %s", user))
 	}
 
-	return sqlExecCtx.PrintQueryOutput(os.Stdout, certTableHeaders, clisqlexec.NewRowSliceIter(rows, alignment))
+	return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, certTableHeaders, clisqlexec.NewRowSliceIter(rows, alignment))
 }
 
 var certCmds = []*cobra.Command{

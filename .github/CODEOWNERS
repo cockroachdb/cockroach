@@ -56,6 +56,7 @@
 /pkg/cli/mt_test_directory.go @cockroachdb/sqlproxy-prs @cockroachdb/server-prs
 /pkg/cli/connect*.go         @cockroachdb/cli-prs @cockroachdb/server-prs
 /pkg/cli/init.go             @cockroachdb/cli-prs @cockroachdb/server-prs
+/pkg/cmd/cockroach-sql/      @cockroachdb/cli-prs
 
 /pkg/server/                 @cockroachdb/server-prs
 /pkg/server/testserver*.go   @cockroachdb/server-prs @cockroachdb/test-eng
