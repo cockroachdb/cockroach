@@ -20,6 +20,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -36,7 +37,7 @@ var debugJobTraceFromClusterCmd = &cobra.Command{
 
 const jobTraceZipSuffix = "job-trace.zip"
 
-func runDebugJobTrace(_ *cobra.Command, args []string) error {
+func runDebugJobTrace(_ *cobra.Command, args []string) (resErr error) {
 	jobID, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil {
 		return err
@@ -46,12 +47,12 @@ func runDebugJobTrace(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Wrap(err, "could not establish connection to cluster")
 	}
-	defer sqlConn.Close()
+	defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
 
 	return constructJobTraceZipBundle(context.Background(), sqlConn, jobID)
 }
 
-func getJobTraceID(sqlConn *sqlConn, jobID int64) (int64, error) {
+func getJobTraceID(sqlConn clisqlclient.Conn, jobID int64) (int64, error) {
 	var traceID int64
 	rows, err := sqlConn.Query(`SELECT trace_id FROM crdb_internal.jobs WHERE job_id=$1`, []driver.Value{jobID})
 	if err != nil {
@@ -162,7 +163,7 @@ func populateInflightTraceRow(vals []driver.Value) (inflightTraceRow, error) {
 	return row, nil
 }
 
-func constructJobTraceZipBundle(ctx context.Context, sqlConn *sqlConn, jobID int64) error {
+func constructJobTraceZipBundle(ctx context.Context, sqlConn clisqlclient.Conn, jobID int64) error {
 	maybePrint := func(stmt string) string {
 		if debugCtx.verbose {
 			fmt.Println("querying " + stmt)
