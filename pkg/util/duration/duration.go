@@ -442,6 +442,61 @@ func (d Duration) Format(buf *bytes.Buffer) {
 	}
 }
 
+// FormatISO8601 emits an ISO 6801 string representation of a Duration to a Buffer truncated to microseconds.
+func (d Duration) FormatISO8601(buf *bytes.Buffer) {
+	buf.WriteString("P")
+	if d.nanos < nanosInMicro && d.Days == 0 && d.Months == 0 {
+		buf.WriteString("T0S")
+		return
+	}
+	months := d.Months
+	if absGE(months, 12) {
+		years := months / 12
+		fmt.Fprintf(buf, "%dY", years)
+		months %= 12
+	}
+	if months != 0 {
+		fmt.Fprintf(buf, "%dM", months)
+	}
+	if d.Days != 0 {
+		fmt.Fprintf(buf, "%dD", d.Days)
+	}
+	if d.nanos == 0 {
+		return
+	}
+	buf.WriteString("T")
+	// Extract abs(d.nanos). See https://play.golang.org/p/U3_gNMpyUew.
+	var nanos uint64
+	sign := ""
+	if d.nanos >= 0 {
+		nanos = uint64(d.nanos)
+	} else {
+		nanos = uint64(-d.nanos)
+		sign = "-"
+	}
+	hn := nanos / hourNanos
+	nanos %= hourNanos
+	mn := nanos / minuteNanos
+	nanos %= minuteNanos
+	sn := nanos / secondNanos
+	nanos %= secondNanos
+	micros := nanos / nanosInMicro
+	if hn != 0 {
+		fmt.Fprintf(buf, "%s%dH", sign, hn)
+	}
+	if mn != 0 {
+		fmt.Fprintf(buf, "%s%dM", sign, mn)
+	}
+	if sn != 0 || micros != 0 {
+		fmt.Fprintf(buf, "%s%d", sign, sn)
+		if micros != 0 {
+			s := fmt.Sprintf(".%06d", micros)
+			buf.WriteString(strings.TrimRight(s, "0"))
+		}
+		buf.WriteString("S")
+	}
+}
+
 func isPlural(i int64) string {
 	if i == 1 {
 		return ""
@@ -462,6 +517,13 @@ func absGE(x, y int64) bool {
 func (d Duration) String() string {
 	var buf bytes.Buffer
 	d.Format(&buf)
+	return buf.String()
+}
+
+// ISO8601String returns an ISO 8601 representation ('P1Y2M3DT4H') of a Duration.
+func (d Duration) ISO8601String() string {
+	var buf bytes.Buffer
+	d.FormatISO8601(&buf)
 	return buf.String()
 }
 
