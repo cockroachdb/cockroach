@@ -86,6 +86,7 @@ var debugZipTablesPerCluster = []string{
 	"system.namespace2", // TODO(sqlexec): consider removing in 20.2 or later.
 	"system.scheduled_jobs",
 
+	"crdb_internal.kv_node_liveness",
 	"crdb_internal.kv_node_status",
 	"crdb_internal.kv_store_status",
 
