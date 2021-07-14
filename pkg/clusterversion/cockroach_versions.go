@@ -309,6 +309,9 @@ const (
 	// SQLStatsTable adds the system tables for storing persisted SQL statistics
 	// for statements and transactions.
 	SQLStatsTable
+	// AlterSystemWebSessionsCreateIndexes creates indexes on the columns revokedAt and
+	// lastUsedAt for the system.web_sessions table.
+	AlterSystemWebSessionsCreateIndexes
 
 	// Step (1): Add new versions here.
 )
@@ -529,6 +532,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SQLStatsTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 116},
+	},
+	{
+		Key:     AlterSystemWebSessionsCreateIndexes,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 117},
 	},
 	// Step (2): Add new versions here.
 }
