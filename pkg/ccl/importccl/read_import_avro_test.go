@@ -18,14 +18,17 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/linkedin/goavro/v2"
@@ -252,9 +255,21 @@ func (th *testHelper) newRecordStream(
 	producer, consumer, err := newImportAvroPipeline(avro, &fileReader{Reader: records})
 	require.NoError(t, err)
 
+	ctx := context.Background()
+	evalCtx := th.evalCtx.Copy()
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			DB:       kvDB,
+			Settings: th.settings,
+		},
+	}
+
 	conv, err := row.NewDatumRowConverter(
-		context.Background(), th.schemaTable, nil, th.evalCtx.Copy(), nil,
-		nil /* seqChunkProvider */)
+		ctx, flowCtx, th.schemaTable, nil,
+		evalCtx, nil, nil /* seqChunkProvider */)
 	require.NoError(t, err)
 	return &testRecordStream{
 		producer: producer,
@@ -549,8 +564,6 @@ func BenchmarkBinaryJSONImport(b *testing.B) {
 }
 
 func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData string) {
-	ctx := context.Background()
-
 	b.SetBytes(120) // Raw input size. With 8 indexes, expect more on output side.
 
 	stmt, err := parser.ParseOne(`CREATE TABLE stock (
@@ -577,9 +590,17 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	require.NoError(b, err)
 
 	create := stmt.AST.(*tree.CreateTable)
-	st := cluster.MakeTestingClusterSettings()
 	semaCtx := tree.MakeSemaContext()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
 	require.NoError(b, err)
@@ -608,6 +629,6 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	require.NoError(b, err)
 	b.ResetTimer()
 	require.NoError(
-		b, runParallelImport(ctx, avro.importContext, &importFileContext{}, limitStream, consumer))
+		b, runParallelImport(ctx, flowCtx, avro.importContext, &importFileContext{}, limitStream, consumer))
 	close(kvCh)
 }

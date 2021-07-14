@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -477,17 +478,24 @@ func (a *avroInputReader) start(group ctxgroup.Group) {}
 
 func (a *avroInputReader) readFiles(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	user security.SQLUsername,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, a.readFile, makeExternalStorage, user)
+	return readInputFiles(ctx, flowCtx, dataFiles, resumePos, format, a.readFile,
+		makeExternalStorage, user)
 }
 
 func (a *avroInputReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	input *fileReader,
+	inputIdx int32,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	producer, consumer, err := newImportAvroPipeline(a, input)
 	if err != nil {
@@ -500,5 +508,5 @@ func (a *avroInputReader) readFile(
 		rejected: rejected,
 		rowLimit: a.opts.RowLimit,
 	}
-	return runParallelImport(ctx, a.importContext, fileCtx, producer, consumer)
+	return runParallelImport(ctx, flowCtx, a.importContext, fileCtx, producer, consumer)
 }

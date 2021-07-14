@@ -215,6 +215,7 @@ func injectTimeIntoEvalCtx(ctx *tree.EvalContext, walltime int64) {
 
 func makeInputConverter(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ReadImportDataSpec,
 	evalCtx *tree.EvalContext,
 	kvCh chan row.KVBatch,
@@ -281,13 +282,14 @@ func makeInputConverter(
 			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
 			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
-		return newMysqldumpReader(ctx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx, spec.Format.MysqlDump)
+		return newMysqldumpReader(ctx, flowCtx, kvCh, spec.WalltimeNanos,
+			spec.Tables, evalCtx, spec.Format.MysqlDump)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
 			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
 	case roachpb.IOFileFormat_PgDump:
-		return newPgDumpReader(ctx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
-			spec.WalltimeNanos, spec.Tables, evalCtx)
+		return newPgDumpReader(ctx, flowCtx, int64(spec.Progress.JobID), kvCh,
+			spec.Format.PgDump, spec.WalltimeNanos, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
