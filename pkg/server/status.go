@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1221,8 +1220,6 @@ func (s *statusServer) Stacks(
 			}
 			return &serverpb.JSONResponse{Data: buf[:length]}, nil
 		}
-	case serverpb.StacksType_THREAD_STACKS:
-		return &serverpb.JSONResponse{Data: []byte(storage.ThreadStacks())}, nil
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
 	}

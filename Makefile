@@ -470,7 +470,7 @@ target-is-linux := $(findstring linux,$(TARGET_TRIPLE))
 cmake-flags := -DCMAKE_TARGET_MESSAGES=OFF $(if $(host-is-mingw),-G 'MSYS Makefiles')
 configure-flags :=
 
-# Use xcmake-flags when invoking CMake on libraries/binaries for the target
+# Use xcmake-flags when invoking CMake on binaries for the target
 # platform (i.e., the cross-compiled platform, if specified); use plain
 # cmake-flags when invoking CMake on libraries/binaries for the host platform.
 # Similarly for xconfigure-flags and configure-flags, and xgo and GO.
@@ -490,14 +490,10 @@ JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
 GEOS_SRC_DIR     := $(C_DEPS_DIR)/geos
 PROJ_SRC_DIR     := $(C_DEPS_DIR)/proj
 LIBEDIT_SRC_DIR  := $(C_DEPS_DIR)/libedit
-LIBROACH_SRC_DIR := $(C_DEPS_DIR)/libroach
 KRB5_SRC_DIR     := $(C_DEPS_DIR)/krb5
 
 # Derived build variants.
 use-stdmalloc          := $(findstring stdmalloc,$(TAGS))
-
-# User-requested build variants.
-ENABLE_LIBROACH_ASSERTIONS ?=
 
 BUILD_DIR := $(GOPATH)/native/$(TARGET_TRIPLE)
 
@@ -514,12 +510,10 @@ JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
 GEOS_DIR     := $(BUILD_DIR)/geos
 PROJ_DIR     := $(BUILD_DIR)/proj
 LIBEDIT_DIR  := $(BUILD_DIR)/libedit
-LIBROACH_DIR := $(BUILD_DIR)/libroach$(if $(ENABLE_LIBROACH_ASSERTIONS),_assert)
 KRB5_DIR     := $(BUILD_DIR)/krb5
 
 LIBJEMALLOC := $(JEMALLOC_DIR)/lib/libjemalloc.a
 LIBEDIT     := $(LIBEDIT_DIR)/src/.libs/libedit.a
-LIBROACH    := $(LIBROACH_DIR)/libroach.a
 LIBPROJ     := $(PROJ_DIR)/lib/libproj$(if $(target-is-windows),_4_9).a
 LIBKRB5     := $(KRB5_DIR)/lib/libgssapi_krb5.a
 
@@ -537,7 +531,7 @@ LIBGEOS     := $(DYN_LIB_DIR)/libgeos.$(DYN_EXT)
 C_LIBS_COMMON = \
 	$(if $(use-stdmalloc),,$(LIBJEMALLOC)) \
 	$(if $(target-is-windows),,$(LIBEDIT)) \
-	$(LIBPROJ) $(LIBROACH)
+	$(LIBPROJ)
 C_LIBS_SHORT = $(C_LIBS_COMMON)
 C_LIBS_OSS = $(C_LIBS_COMMON)
 C_LIBS_CCL = $(C_LIBS_COMMON)
@@ -578,7 +572,6 @@ CGO_PKGS := \
 	pkg/cli \
 	pkg/cli/clisqlshell \
 	pkg/server/status \
-	pkg/storage \
 	pkg/ccl/gssapiccl \
 	pkg/geo/geoproj \
 	vendor/github.com/knz/go-libedit/unix
@@ -597,7 +590,7 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo 'package $(if $($(@D)-package),$($(@D)-package),$(notdir $(@D)))' >> $@
 	@echo >> $@
 	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS))' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(JEMALLOC_DIR)/lib $(LIBEDIT_DIR)/src/.libs $(LIBROACH_DIR) $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(JEMALLOC_DIR)/lib $(LIBEDIT_DIR)/src/.libs $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
 	@echo 'import "C"' >> $@
 
 vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized
@@ -666,14 +659,6 @@ $(GEOS_DIR)/Makefile: $(C_DEPS_DIR)/geos-rebuild | bin/.submodules-initialized
 	@# directories.
 	mkdir $(GEOS_DIR)/capi/geos
 	cp $(GEOS_SRC_DIR)/include/geos/export.h $(GEOS_DIR)/capi/geos
-
-$(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild | bin/.submodules-initialized
-	rm -rf $(LIBROACH_DIR)
-	mkdir -p $(LIBROACH_DIR)
-	@# NOTE: If you change the CMake flags below, bump the version in
-	@# $(C_DEPS_DIR)/libroach-rebuild. See above for rationale.
-	cd $(LIBROACH_DIR) && cmake $(xcmake-flags) $(LIBROACH_SRC_DIR) \
-	  -DCMAKE_BUILD_TYPE=$(if $(ENABLE_LIBROACH_ASSERTIONS),Debug,Release)
 
 $(PROJ_DIR)/Makefile: $(C_DEPS_DIR)/proj-rebuild | bin/.submodules-initialized
 	rm -rf $(PROJ_DIR)
@@ -767,19 +752,15 @@ $(LIBPROJ): $(PROJ_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 $(LIBEDIT): $(LIBEDIT_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(LIBEDIT_SRC_DIR) || $(MAKE) --no-print-directory -C $(LIBEDIT_DIR)/src
 
-$(LIBROACH): $(LIBROACH_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
-	@uptodate $@ $(LIBROACH_SRC_DIR) || $(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
-
 $(LIBKRB5): $(KRB5_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(KRB5_SRC_DIR)/src || $(MAKE) --no-print-directory -C $(KRB5_DIR)
 
 # Convenient names for maintainers. Not used by other targets in the Makefile.
-.PHONY:  libjemalloc libgeos libproj libroach libkrb5
+.PHONY:  libjemalloc libgeos libproj libkrb5
 libedit:     $(LIBEDIT)
 libjemalloc: $(LIBJEMALLOC)
 libgeos:     $(LIBGEOS)
 libproj:     $(LIBPROJ)
-libroach:    $(LIBROACH)
 libkrb5:     $(LIBKRB5)
 
 override TAGS += make $(native-tag)
@@ -793,7 +774,7 @@ export LC_ALL=C
 # Go binary. It is not intended to be perfect. Upgrading the compiler toolchain
 # in place will go unnoticed, for example. Similar problems exist in all Make-
 # based build systems and are not worth solving.
-build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET_TRIPLE):$(BUILDTYPE):$(IGNORE_GOVERS):$(ENABLE_LIBROACH_ASSERTIONS)
+build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET_TRIPLE):$(BUILDTYPE):$(IGNORE_GOVERS)
 build/defs.mk.sig: .ALWAYS_REBUILD
 	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
 
@@ -1241,9 +1222,6 @@ ifneq ($(GIT_DIR),)
 .buildinfo/rev: .ALWAYS_REBUILD
 endif
 
-CPP_PROTO_ROOT := $(LIBROACH_SRC_DIR)/protos
-CPP_PROTO_CCL_ROOT := $(LIBROACH_SRC_DIR)/protosccl
-
 GOGO_PROTOBUF_PATH := ./vendor/github.com/gogo/protobuf
 
 GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
@@ -1665,17 +1643,11 @@ pkg/sql/opt/exec/factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 pkg/sql/opt/exec/explain/explain_factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 	optgen -out $@ execexplain $(optgen-exec-defs)
 
-# Format non-generated .cc and .h files in libroach using clang-format.
-.PHONY: c-deps-fmt
-c-deps-fmt:
-	find $(LIBROACH_SRC_DIR) -name '*.cc' -o -name '*.h' | xargs grep -L 'DO NOT EDIT' | xargs clang-format -i
-
 .PHONY: clean-c-deps
 clean-c-deps:
 	rm -rf $(JEMALLOC_DIR)
 	rm -rf $(GEOS_DIR)
 	rm -rf $(PROJ_DIR)
-	rm -rf $(LIBROACH_DIR)
 	rm -rf $(KRB5_DIR)
 
 .PHONY: unsafe-clean-c-deps
@@ -1683,7 +1655,6 @@ unsafe-clean-c-deps:
 	git -C $(JEMALLOC_SRC_DIR) clean -dxf
 	git -C $(GEOS_SRC_DIR)     clean -dxf
 	git -C $(PROJ_SRC_DIR)     clean -dxf
-	git -C $(LIBROACH_SRC_DIR) clean -dxf
 	git -C $(KRB5_SRC_DIR)     clean -dxf
 
 .PHONY: cleanshort

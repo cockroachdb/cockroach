@@ -242,23 +242,6 @@ func (zc *debugZipContext) collectPerNodeData(
 		return err
 	}
 
-	var threadData []byte
-	s = nodePrinter.start("requesting threads")
-	requestErr = zc.runZipFn(ctx, s,
-		func(ctx context.Context) error {
-			threads, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
-				NodeId: id,
-				Type:   serverpb.StacksType_THREAD_STACKS,
-			})
-			if err == nil {
-				threadData = threads.Data
-			}
-			return err
-		})
-	if err := zc.z.createRawOrError(s, prefix+"/threads.txt", threadData, requestErr); err != nil {
-		return err
-	}
-
 	var heapData []byte
 	s = nodePrinter.start("requesting heap profile")
 	requestErr = zc.runZipFn(ctx, s,
