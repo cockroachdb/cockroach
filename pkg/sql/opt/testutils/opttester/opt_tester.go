@@ -1832,17 +1832,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 		colMeta := rel.Memo().Metadata().ColumnMeta(col)
 		colName := colNameGen.GenerateName(col)
 
-		columns[i].InitNonVirtual(
-			i,
-			cat.StableID(i+1),
-			tree.Name(colName),
-			cat.Ordinary,
-			colMeta.Type,
-			!relProps.NotNullCols.Contains(col),
-			cat.Visible,
-			nil, /* defaultExpr */
-			nil, /* computedExpr */
-		)
+		columns[i].InitNonVirtual(i, cat.StableID(i+1), tree.Name(colName), cat.Ordinary, colMeta.Type, !relProps.NotNullCols.Contains(col), cat.Visible, nil, nil, false)
 
 		// Make sure we have estimated stats for this column.
 		colSet := opt.MakeColSet(col)

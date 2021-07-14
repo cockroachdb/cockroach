@@ -581,7 +581,7 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 // NOTE: colIDs is updated with the column IDs of any synthesized columns which
 // are added to mb.outScope.
 func (mb *mutationBuilder) addSynthesizedDefaultCols(
-	colIDs opt.OptionalColList, includeOrdinary bool,
+	colIDs opt.OptionalColList, includeOrdinary bool, includeDefaultOnUpdate bool,
 ) {
 	// We will construct a new Project operator that will contain the newly
 	// synthesized column(s).
@@ -593,6 +593,8 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 			// Always include WriteOnly columns.
 		} else if includeOrdinary && kind == cat.Ordinary {
 			// Include Ordinary columns if indicated.
+		} else if includeDefaultOnUpdate && tabCol.ApplyDefaultOnUpdate() {
+
 		} else {
 			// Wrong kind.
 			continue

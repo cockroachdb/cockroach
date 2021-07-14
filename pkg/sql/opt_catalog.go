@@ -683,17 +683,7 @@ func newOptTable(
 			visibility = cat.Inaccessible
 		}
 		if !col.IsVirtual() {
-			ot.columns[col.Ordinal()].InitNonVirtual(
-				col.Ordinal(),
-				cat.StableID(col.GetID()),
-				col.ColName(),
-				kind,
-				col.GetType(),
-				col.IsNullable(),
-				visibility,
-				col.ColumnDesc().DefaultExpr,
-				col.ColumnDesc().ComputeExpr,
-			)
+			ot.columns[col.Ordinal()].InitNonVirtual(col.Ordinal(), cat.StableID(col.GetID()), col.ColName(), kind, col.GetType(), col.IsNullable(), visibility, col.ColumnDesc().DefaultExpr, col.ColumnDesc().ComputeExpr, col.ApplyDefaultOnUpdate())
 		} else {
 			// Note: a WriteOnly or DeleteOnly mutation column doesn't require any
 			// special treatment inside the optimizer, other than having the correct
@@ -724,17 +714,7 @@ func newOptTable(
 		found, _ := desc.FindColumnWithName(sysCol.ColName())
 		if found == nil || found.IsSystemColumn() {
 			col, ord := newColumn()
-			col.InitNonVirtual(
-				ord,
-				cat.StableID(sysCol.GetID()),
-				sysCol.ColName(),
-				cat.System,
-				sysCol.GetType(),
-				sysCol.IsNullable(),
-				cat.MaybeHidden(sysCol.IsHidden()),
-				sysCol.ColumnDesc().DefaultExpr,
-				sysCol.ColumnDesc().ComputeExpr,
-			)
+			col.InitNonVirtual(ord, cat.StableID(sysCol.GetID()), sysCol.ColName(), cat.System, sysCol.GetType(), sysCol.IsNullable(), cat.MaybeHidden(sysCol.IsHidden()), sysCol.ColumnDesc().DefaultExpr, sysCol.ColumnDesc().ComputeExpr, col.ApplyDefaultOnUpdate())
 		}
 	}
 
@@ -1799,29 +1779,9 @@ func newOptVirtualTable(
 
 	ot.columns = make([]cat.Column, len(desc.PublicColumns())+1)
 	// Init dummy PK column.
-	ot.columns[0].InitNonVirtual(
-		0,
-		math.MaxInt64, /* stableID */
-		"crdb_internal_vtable_pk",
-		cat.Ordinary,
-		types.Int,
-		false,      /* nullable */
-		cat.Hidden, /* hidden */
-		nil,        /* defaultExpr */
-		nil,        /* computedExpr */
-	)
+	ot.columns[0].InitNonVirtual(0, math.MaxInt64, "crdb_internal_vtable_pk", cat.Ordinary, types.Int, false, cat.Hidden, nil, nil, false)
 	for i, d := range desc.PublicColumns() {
-		ot.columns[i+1].InitNonVirtual(
-			i+1,
-			cat.StableID(d.GetID()),
-			tree.Name(d.GetName()),
-			cat.Ordinary,
-			d.GetType(),
-			d.IsNullable(),
-			cat.MaybeHidden(d.IsHidden()),
-			d.ColumnDesc().DefaultExpr,
-			d.ColumnDesc().ComputeExpr,
-		)
+		ot.columns[i+1].InitNonVirtual(i+1, cat.StableID(d.GetID()), tree.Name(d.GetName()), cat.Ordinary, d.GetType(), d.IsNullable(), cat.MaybeHidden(d.IsHidden()), d.ColumnDesc().DefaultExpr, d.ColumnDesc().ComputeExpr, d.ApplyDefaultOnUpdate())
 	}
 
 	// Create the table's column mapping from descpb.ColumnID to column ordinal.
