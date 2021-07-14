@@ -86,7 +86,7 @@ go_library(
 
 go_test(
     name = "colexec_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "aggregators_test.go",
         "and_or_projection_test.go",

@@ -158,11 +158,6 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 		_ = dump.HTML(w)
 	})
 
-	mux.HandleFunc("/debug/threads", func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Add("Content-type", "text/plain")
-		fmt.Fprint(w, storage.ThreadStacks())
-	})
-
 	return &Server{
 		st:  st,
 		mux: mux,

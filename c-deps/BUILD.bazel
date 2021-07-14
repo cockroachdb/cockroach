@@ -119,41 +119,6 @@ cmake(
     visibility = ["//visibility:public"],
 )
 
-# Define the build target for libroach.
-#
-# Bazel also expects the library archive and the include headers to be placed
-# in a certain path, so we fix it all up accordingly within make_commands.
-cmake(
-    name = "libroach",
-    cache_entries = select({
-        "@io_bazel_rules_go//go/platform:windows": {
-            "BUILD_LIBPROJ_SHARED": "OFF",
-            "CMAKE_BUILD_TYPE": "Release",
-            "CMAKE_SYSTEM_NAME": "Generic",
-        },
-        "//conditions:default": {
-            "BUILD_LIBPROJ_SHARED": "OFF",
-            "CMAKE_BUILD_TYPE": "Release",
-        },
-    }),
-    # As of this writing (2021-05-05), foreign_cc
-    # only knows about windows, darwin and linux.
-    cmake_options = ["-GUnix Makefiles"],
-    lib_source = "@libroach//:all",
-    make_commands = [
-        "make roach",
-        "mkdir -p libroach/lib",
-        "cp libroach.a libroach/lib/libroach.a",
-        "cp -r $EXT_BUILD_ROOT/external/libroach/include libroach",
-    ],
-    out_static_libs = ["libroach.a"],
-    tools_deps = [
-        "@libroach//:all",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [],
-)
-
 # Define the build target for kerberos.
 #
 # TODO(irfansharif): Kerboros is not used for anything other than Linux.
@@ -190,12 +155,6 @@ configure_make(
 filegroup(
     name = "libgeos_files",
     srcs = [":libgeos"],
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "libroach_files",
-    srcs = [":libroach"],
     visibility = ["//visibility:public"],
 )
 
