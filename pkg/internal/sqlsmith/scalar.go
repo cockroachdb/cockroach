@@ -148,13 +148,7 @@ func makeConstExpr(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
 		}
 	}
 
-	expr := tree.TypedExpr(makeConstDatum(s, typ))
-	// In Postgres mode, make sure the datum is resolved as the type we want.
-	// CockroachDB and Postgres differ in how constants are typed otherwise.
-	if s.postgres {
-		expr = tree.NewTypedCastExpr(expr, typ)
-	}
-	return expr
+	return makeConstDatum(s, typ)
 }
 
 func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
