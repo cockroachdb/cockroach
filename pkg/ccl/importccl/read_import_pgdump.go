@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -921,6 +922,7 @@ var _ inputConverter = &pgDumpReader{}
 // newPgDumpReader creates a new inputConverter for pg_dump files.
 func newPgDumpReader(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	jobID int64,
 	kvCh chan row.KVBatch,
 	opts roachpb.PgDumpOptions,
@@ -942,8 +944,8 @@ func newPgDumpReader(
 			for i, col := range tableDesc.VisibleColumns() {
 				colSubMap[col.GetName()] = i
 			}
-			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, kvCh,
-				nil /* seqChunkProvider */)
+			conv, err := row.NewDatumRowConverter(ctx, flowCtx, tableDesc, targetCols,
+				evalCtx, kvCh, nil /* seqChunkProvider */)
 			if err != nil {
 				return nil, err
 			}
@@ -973,6 +975,7 @@ func (m *pgDumpReader) start(ctx ctxgroup.Group) {
 
 func (m *pgDumpReader) readFiles(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
@@ -984,7 +987,8 @@ func (m *pgDumpReader) readFiles(
 		m.jobID, format.PgDump.IgnoreUnsupported, format.PgDump.IgnoreUnsupportedLog, dataIngestion,
 		makeExternalStorage)
 
-	err := readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
+	err := readInputFiles(ctx, flowCtx, dataFiles, resumePos, format, m.readFile,
+		makeExternalStorage, user)
 	if err != nil {
 		return err
 	}
@@ -999,7 +1003,12 @@ func wrapErrorWithUnsupportedHint(err error) error {
 }
 
 func (m *pgDumpReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	input *fileReader,
+	inputIdx int32,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	tableNameToRowsProcessed := make(map[string]int64)
 	var inserts, count int64

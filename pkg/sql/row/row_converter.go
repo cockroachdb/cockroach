@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -295,6 +296,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	tableDesc catalog.TableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
@@ -328,14 +330,22 @@ func NewDatumRowConverter(
 	}
 
 	var txCtx transform.ExprTransformContext
-	semaCtx := tree.MakeSemaContext()
 	relevantColumns := func(col catalog.Column) bool {
 		return col.HasDefault() || col.IsComputed()
 	}
 	cols := schemaexpr.ProcessColumnSet(targetCols, tableDesc, relevantColumns)
-	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
-	if err != nil {
-		return nil, errors.Wrap(err, "process default and computed columns")
+
+	var defaultExprs []tree.TypedExpr
+	// The DB is nil in some tests, so check first here.
+	if flowCtx.Cfg.DB != nil {
+		if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(txn)
+			var err error
+			defaultExprs, err = schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, semaCtx)
+			return err
+		}); err != nil {
+			return nil, errors.Wrap(err, "process default and computed columns")
+		}
 	}
 
 	ri, err := MakeInserter(
@@ -429,19 +439,27 @@ func NewDatumRowConverter(
 		// MakeComputedExprs to map that of Datums.
 		colsOrdered[ri.InsertColIDtoRowIndex.GetDefault(col.GetID())] = col
 	}
-	// Here, computeExprs will be nil if there's no computed column, or
-	// the list of computed expressions (including nil, for those columns
-	// that are not computed) otherwise, according to colsOrdered.
-	c.computedExprs, _, err = schemaexpr.MakeComputedExprs(
-		ctx,
-		colsOrdered,
-		c.tableDesc.PublicColumns(),
-		c.tableDesc,
-		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
-		c.EvalCtx,
-		&semaCtx)
-	if err != nil {
-		return nil, errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
+
+	// The DB is nil in some tests, so check first here.
+	if flowCtx.Cfg.DB != nil {
+		if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(txn)
+			var err error
+			// Here, computeExprs will be nil if there's no computed column, or
+			// the list of computed expressions (including nil, for those columns
+			// that are not computed) otherwise, according to colsOrdered.
+			c.computedExprs, _, err = schemaexpr.MakeComputedExprs(
+				ctx,
+				colsOrdered,
+				c.tableDesc.PublicColumns(),
+				c.tableDesc,
+				tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
+				c.EvalCtx,
+				semaCtx)
+			return err
+		}); err != nil {
+			return nil, errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
+		}
 	}
 
 	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
