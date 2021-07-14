@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -762,4 +763,66 @@ func TestUpdateSystemLocationData(t *testing.T) {
 	if count != len(roachpb.DefaultLocationInformation) {
 		t.Fatalf("Exected to find 0 rows in system.locations. Found  %d instead", count)
 	}
+}
+
+func TestAlterSystemWebSessionsTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// oldWebSessionsTableSchema is the system.web_sessions definition prior to 21.2 (without newly added indexes)
+	// It is used in order to test migration.
+	oldWebSessionsTableSchema := `
+CREATE TABLE system.web_sessions (
+	id             INT8       NOT NULL DEFAULT unique_rowid() PRIMARY KEY,
+	"hashedSecret" BYTES      NOT NULL,
+	username       STRING     NOT NULL,
+	"createdAt"    TIMESTAMP  NOT NULL DEFAULT now(),
+	"expiresAt"    TIMESTAMP  NOT NULL,
+	"revokedAt"    TIMESTAMP,
+	"lastUsedAt"   TIMESTAMP  NOT NULL DEFAULT now(),
+	"auditInfo"    STRING,
+	INDEX ("expiresAt"),
+	INDEX ("createdAt"),
+	FAMILY (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
+)
+`
+	oldWebSessionsTable, err := sql.CreateTestTableDescriptor(
+		context.Background(),
+		keys.SystemDatabaseID,
+		keys.WebSessionsTableID,
+		oldWebSessionsTableSchema,
+		systemschema.WebSessionsTable.GetPrivileges(),
+	)
+	require.NoError(t, err)
+
+	// Sanity check oldWebSessionsTable does not have new indexes.
+	require.Equal(t, 2, len(oldWebSessionsTable.Indexes))
+
+	webSessionsTable := systemschema.WebSessionsTable
+	systemschema.WebSessionsTable = oldWebSessionsTable
+	defer func() {
+		systemschema.WebSessionsTable = webSessionsTable
+	}()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add indexes on columns revokedAt and lastUsedAt for system.web_sessions table")
+	mt.start(t, base.TestServerArgs{})
+
+	// Run migration and verify we have added indexes.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	newWebSessionsTable := catalogkv.TestingGetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "web_sessions")
+	indexes := newWebSessionsTable.AllIndexes()
+	require.Equal(t, 5, len(indexes))
+	require.Equal(t, "web_sessions_revokedAt_idx", indexes[3].GetName())
+	require.Equal(t, "web_sessions_lastUsedAt_idx", indexes[4].GetName())
+
+	// Run the migration again and verify that the result is the same.
+	require.NoError(t, mt.runMigration(ctx, migration))
+	newWebSessionsTableAgain := catalogkv.TestingGetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "web_sessions")
+	require.True(t, newWebSessionsTable.TableDesc().Equal(newWebSessionsTableAgain.TableDesc()))
 }
