@@ -50,7 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -351,10 +351,10 @@ func (ts *TestServer) JobRegistry() interface{} {
 	return nil
 }
 
-// SQLMigrationsManager returns the *sqlmigrations.Manager as an interface{}.
-func (ts *TestServer) SQLMigrationsManager() interface{} {
+// StartupMigrationsManager returns the *startupmigrations.Manager as an interface{}.
+func (ts *TestServer) StartupMigrationsManager() interface{} {
 	if ts != nil {
-		return ts.sqlServer.sqlmigrationsMgr
+		return ts.sqlServer.startupMigrationsMgr
 	}
 	return nil
 }
@@ -628,7 +628,7 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 func ExpectedInitialRangeCount(
 	db *kv.DB, defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (int, error) {
-	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(
+	descriptorIDs, err := startupmigrations.ExpectedDescriptorIDs(
 		context.Background(), db, keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig,
 	)
 	if err != nil {

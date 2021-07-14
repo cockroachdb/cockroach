@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -685,7 +685,7 @@ func TestDropWhileBackfill(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -934,7 +934,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 			BulkAdderFlushesEveryBatch: true,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -1271,7 +1271,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 			SerializeIndexBackfillCreationAndIngestion: make(chan struct{}, 1),
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
@@ -1360,7 +1360,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 			SerializeIndexBackfillCreationAndIngestion: make(chan struct{}, 1),
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
@@ -1474,7 +1474,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			BulkAdderFlushesEveryBatch: true,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -1617,7 +1617,7 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 		},
 		// Disable backfill migrations so it doesn't interfere with the
 		// backfill in this test.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -1712,7 +1712,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 			BackfillChunkSize: chunkSize,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -2097,7 +2097,7 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -2184,7 +2184,7 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 		},
 		// Disable backfill migrations so it doesn't interfere with the
 		// backfill in this test.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -3224,7 +3224,7 @@ func TestGrantRevokeWhileIndexBackfill(t *testing.T) {
 			BulkAdderFlushesEveryBatch: true,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
@@ -3320,7 +3320,7 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
@@ -5216,7 +5216,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 			BulkAdderFlushesEveryBatch: true,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -5287,7 +5287,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 			BulkAdderFlushesEveryBatch: true,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -5341,7 +5341,7 @@ func TestMultipleIndexBackfills(t *testing.T) {
 			BackfillChunkSize: maxValue / 5,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -5480,7 +5480,7 @@ func TestTableValidityWhileAddingFK(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -5567,7 +5567,7 @@ func TestTableValidityWhileAddingUniqueConstraint(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -5652,7 +5652,7 @@ func TestWritesWithChecksBeforeDefaultColumnBackfill(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -5751,7 +5751,7 @@ func TestWritesWithChecksBeforeComputedColumnBackfill(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -5966,7 +5966,7 @@ func TestSchemaChangeJobRunningStatusValidation(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -6019,7 +6019,7 @@ func TestFKReferencesAddedOnlyOnceOnRetry(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
