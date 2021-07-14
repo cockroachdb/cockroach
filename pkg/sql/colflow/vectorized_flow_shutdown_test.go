@@ -406,6 +406,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					recv := &fakeReceiver{numMoreItemsNeeded: 10}
 					coordinator := colflow.NewBatchFlowCoordinator(
 						flowCtx,
+						testAllocator,
 						1, /* processorID */
 						inputInfo,
 						recv,

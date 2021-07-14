@@ -494,7 +494,6 @@ func (o *Outbox) runWithStream(
 				handleStreamErr(streamCtx, "CloseSend", err, flowCtxCancel, outboxCtxCancel)
 			}
 		}
-		o.consumer.ConsumerClosed()
 		wg.Wait()
 	}()
 

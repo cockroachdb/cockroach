@@ -1040,6 +1040,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			// the batches.
 			s.batchFlowCoordinator = NewBatchFlowCoordinator(
 				flowCtx,
+				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
 				pspec.ProcessorID,
 				opWithMetaInfo,
 				s.batchReceiver,

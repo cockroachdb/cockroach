@@ -186,7 +186,6 @@ func TestStreamingMetadataHandler(t *testing.T) {
 					receivedMeta = append(receivedMeta, meta)
 				}
 			}
-			consumer.ConsumerClosed()
 
 			// Wait for all goroutines to exit and run the verification.
 			wg.Wait()

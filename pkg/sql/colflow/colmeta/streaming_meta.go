@@ -12,10 +12,14 @@ package colmeta
 
 import (
 	"context"
+	"math"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -75,7 +79,7 @@ type DataProducer interface {
 	// batch has been received, and the caller is then free to reuse the batch.
 	// A context cancellation error can be returned in which case the producer
 	// should exit right away.
-	SendBatch(context.Context, coldata.Batch) error
+	SendBatch(context.Context, coldata.Batch, *colmem.Allocator) error
 	// SendRemoteProducerMessage pushes an execinfrapb.ProducerMessage to the
 	// consumer. It blocks until the message has been received, and the caller
 	// is then free to reuse the message. A context cancellation error can be
@@ -125,11 +129,6 @@ type DataConsumer interface {
 	// consume. It blocks until there is something to consume or the
 	// DataProducer exits.
 	NextRemoteProducerMsg(context.Context) *execinfrapb.ProducerMessage
-
-	// ConsumerClosed must be called exactly once when the consumer goroutine
-	// exits. No other calls are allowed after this. ConsumerArrived **must**
-	// have been called already.
-	ConsumerClosed()
 }
 
 // StreamingMetadataHandler implements the logic of intertwining the data coming
@@ -141,7 +140,7 @@ type StreamingMetadataHandler struct {
 		// nextCh is used to intertwine data produced by the input reading
 		// goroutine with the requests to propagate streaming metadata. It is
 		// closed when the DataProducer goroutine exits.
-		nextCh chan nextChMsg
+		nextCh chan *nextChMsg
 		// done indicates whether the DataProducer goroutine exited (meaning
 		// nextCh has already been closed). All requests to propagate streaming
 		// meta will error out once it is set to true.
@@ -160,25 +159,12 @@ type StreamingMetadataHandler struct {
 	// DataConsumer goroutine arrives.
 	waitForConsumer chan struct{}
 
-	// producerBlock is used to block the DataProducer goroutine from proceeding
-	// until the DataConsumer goroutine has communicated the previous result to
-	// its output.
-	//
-	// This blockage serves two purposes:
-	// 1. making sure that the DataProducer goroutine doesn't invalidate the
-	//    data it has just sent to the DataConsumer goroutine
-	// 2. allowing the reuse of the scratch message to reduce the allocations.
-	producerBlock chan struct{}
-
-	// unblockProducer indicates whether the DataProducer goroutine is currently
-	// blocked on producerBlock channel (unless it exited due to context
-	// cancellation).
-	unblockProducer bool
-
-	// scratch can be safely reused to pass the information from the
-	// DataProducer goroutine because that goroutine is blocked until the
-	// DataConsumer goroutine has communicated the message to its output.
-	scratch nextChMsg
+	producerScratch struct {
+		nextIdx int
+		row     [2]rowenc.EncDatumRow
+		batch   [2]coldata.Batch
+		typs    []*types.T
+	}
 }
 
 var _ DataProducer = &StreamingMetadataHandler{}
@@ -191,19 +177,23 @@ type nextChMsg struct {
 	batch coldata.Batch
 	msg   *execinfrapb.ProducerMessage
 	meta  *execinfrapb.ProducerMetadata
+}
 
-	// streamingMeta indicates whether this message came from propagating the
-	// metadata in a streaming fashion.
-	streamingMeta bool
+var nextChMsgPool = sync.Pool{
+	New: func() interface{} {
+		return &nextChMsg{}
+	},
+}
+
+func (msg *nextChMsg) release() {
+	*msg = nextChMsg{}
+	nextChMsgPool.Put(msg)
 }
 
 // Init initializes the handler.
 func (h *StreamingMetadataHandler) Init() {
-	h.producerMu.nextCh = make(chan nextChMsg)
+	h.producerMu.nextCh = make(chan *nextChMsg)
 	h.waitForConsumer = make(chan struct{})
-	// This channel is buffered in order to not block the DataConsumer goroutine
-	// when it notifies the producer to proceed.
-	h.producerBlock = make(chan struct{}, 1)
 }
 
 // WaitForConsumer is part of the DataProducer interface.
@@ -211,13 +201,12 @@ func (h *StreamingMetadataHandler) WaitForConsumer() <-chan struct{} {
 	return h.waitForConsumer
 }
 
-// sendInputMsg sends the scratch input message on nextCh. It blocks until the
-// DataConsumer goroutine has communicated that the input should fetch the next
-// piece of data.
+// sendInputMsg sends the scratch input message on nextCh.
 //
 // An error is returned if the context is canceled and the producer should exit.
-func (h *StreamingMetadataHandler) sendInputMsg(ctx context.Context) error {
+func (h *StreamingMetadataHandler) sendInputMsg(ctx context.Context, msg *nextChMsg) error {
 	defer func() {
+		msg.release()
 		if ctx.Err() != nil {
 			h.producerExitMu.Lock()
 			h.producerExitMu.err = ctx.Err()
@@ -227,13 +216,8 @@ func (h *StreamingMetadataHandler) sendInputMsg(ctx context.Context) error {
 	select {
 	// No need to hold the mutex here since the current goroutine is the only
 	// that can close nextCh.
-	case h.producerMu.nextCh <- h.scratch:
-		select {
-		case <-h.producerBlock:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+	case h.producerMu.nextCh <- msg:
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -241,30 +225,67 @@ func (h *StreamingMetadataHandler) sendInputMsg(ctx context.Context) error {
 
 // SendRow is part of the DataProducer interface.
 func (h *StreamingMetadataHandler) SendRow(ctx context.Context, row rowenc.EncDatumRow) error {
-	h.scratch = nextChMsg{row: row}
-	return h.sendInputMsg(ctx)
+	msg := nextChMsgPool.Get().(*nextChMsg)
+	if h.producerScratch.row[h.producerScratch.nextIdx] == nil {
+		h.producerScratch.row[h.producerScratch.nextIdx] = make(rowenc.EncDatumRow, len(row))
+	}
+	msg.row = h.producerScratch.row[h.producerScratch.nextIdx]
+	h.producerScratch.nextIdx = (h.producerScratch.nextIdx + 1) % 2
+	copy(msg.row, row)
+	return h.sendInputMsg(ctx, msg)
 }
 
 // SendBatch is part of the DataProducer interface.
-func (h *StreamingMetadataHandler) SendBatch(ctx context.Context, batch coldata.Batch) error {
-	h.scratch = nextChMsg{batch: batch}
-	return h.sendInputMsg(ctx)
+func (h *StreamingMetadataHandler) SendBatch(
+	ctx context.Context, batch coldata.Batch, allocator *colmem.Allocator,
+) error {
+	msg := nextChMsgPool.Get().(*nextChMsg)
+	if h.producerScratch.typs == nil {
+		h.producerScratch.typs = make([]*types.T, batch.Width())
+		for i := range h.producerScratch.typs {
+			h.producerScratch.typs[i] = batch.ColVec(i).Type()
+		}
+	}
+	h.producerScratch.batch[h.producerScratch.nextIdx], _ = allocator.ResetMaybeReallocate(
+		h.producerScratch.typs,
+		h.producerScratch.batch[h.producerScratch.nextIdx],
+		batch.Length(),
+		math.MaxInt64,
+	)
+	msg.batch = h.producerScratch.batch[h.producerScratch.nextIdx]
+	h.producerScratch.nextIdx = (h.producerScratch.nextIdx + 1) % 2
+	allocator.PerformOperation(msg.batch.ColVecs(), func() {
+		for colIdx, col := range msg.batch.ColVecs() {
+			col.Copy(coldata.CopySliceArgs{
+				SliceArgs: coldata.SliceArgs{
+					Src:       batch.ColVec(colIdx),
+					Sel:       batch.Selection(),
+					SrcEndIdx: batch.Length(),
+				},
+			})
+		}
+		msg.batch.SetLength(batch.Length())
+	})
+	return h.sendInputMsg(ctx, msg)
 }
 
 // SendRemoteProducerMessage is part of the DataProducer interface.
 func (h *StreamingMetadataHandler) SendRemoteProducerMessage(
-	ctx context.Context, msg *execinfrapb.ProducerMessage,
+	ctx context.Context, producerMsg *execinfrapb.ProducerMessage,
 ) error {
-	h.scratch = nextChMsg{msg: msg}
-	return h.sendInputMsg(ctx)
+	msg := nextChMsgPool.Get().(*nextChMsg)
+	// TODO: deep copy.
+	msg.msg = producerMsg
+	return h.sendInputMsg(ctx, msg)
 }
 
 // SendMeta is part of the DataProducer interface.
 func (h *StreamingMetadataHandler) SendMeta(
 	ctx context.Context, meta *execinfrapb.ProducerMetadata,
 ) error {
-	h.scratch = nextChMsg{meta: meta}
-	return h.sendInputMsg(ctx)
+	msg := nextChMsgPool.Get().(*nextChMsg)
+	msg.meta = meta
+	return h.sendInputMsg(ctx, msg)
 }
 
 // ProducerDone is part of the DataProducer interface.
@@ -280,7 +301,7 @@ var errNextChClosed = errors.New("nextCh is closed")
 // sendStreamingMsg sends a message (which supposed to be a streaming metadata
 // object, either local or remote) to the DataConsumer, might block. If the
 // DataProducer goroutine has already exited, an error is returned.
-func (h *StreamingMetadataHandler) sendStreamingMsg(ctx context.Context, msg nextChMsg) error {
+func (h *StreamingMetadataHandler) sendStreamingMsg(ctx context.Context, msg *nextChMsg) error {
 	h.producerMu.Lock()
 	defer h.producerMu.Unlock()
 	if h.producerMu.done {
@@ -298,14 +319,14 @@ func (h *StreamingMetadataHandler) sendStreamingMsg(ctx context.Context, msg nex
 func (h *StreamingMetadataHandler) SendStreamingMeta(
 	ctx context.Context, meta *execinfrapb.ProducerMetadata,
 ) error {
-	return h.sendStreamingMsg(ctx, nextChMsg{meta: meta, streamingMeta: true})
+	return h.sendStreamingMsg(ctx, &nextChMsg{meta: meta})
 }
 
 // SendRemoteStreamingMeta is part of the StreamingMetadataProducer interface.
 func (h *StreamingMetadataHandler) SendRemoteStreamingMeta(
 	ctx context.Context, msg *execinfrapb.ProducerMessage,
 ) error {
-	return h.sendStreamingMsg(ctx, nextChMsg{msg: msg, streamingMeta: true})
+	return h.sendStreamingMsg(ctx, &nextChMsg{msg: msg})
 }
 
 // ConsumerArrived is part of the DataConsumer interface.
@@ -316,12 +337,7 @@ func (h *StreamingMetadataHandler) ConsumerArrived() {
 // next retrieves the next piece of data to consume, might block. If the
 // DataProducer goroutine exited because of the context cancellation, that error
 // is returned as an execinfrapb.ProducerMetadata.
-func (h *StreamingMetadataHandler) next() (nextChMsg, *execinfrapb.ProducerMetadata) {
-	if h.unblockProducer {
-		// The channel is buffered, so this send will never block.
-		h.producerBlock <- struct{}{}
-		h.unblockProducer = false
-	}
+func (h *StreamingMetadataHandler) next() (*nextChMsg, *execinfrapb.ProducerMetadata) {
 	msg, ok := <-h.producerMu.nextCh
 	if !ok {
 		// The DataProducer goroutine has exited. Check whether it was because
@@ -335,11 +351,10 @@ func (h *StreamingMetadataHandler) next() (nextChMsg, *execinfrapb.ProducerMetad
 		if err != nil {
 			meta := execinfrapb.GetProducerMeta()
 			meta.Err = err
-			return nextChMsg{}, meta
+			return nil, meta
 		}
-		return nextChMsg{}, nil
+		return nil, nil
 	}
-	h.unblockProducer = !msg.streamingMeta
 	return msg, nil
 }
 
@@ -349,10 +364,13 @@ func (h *StreamingMetadataHandler) NextRowAndMeta() (
 	*execinfrapb.ProducerMetadata,
 ) {
 	msg, meta := h.next()
+	if msg != nil {
+		return msg.row, msg.meta
+	}
 	if meta != nil {
 		return nil, meta
 	}
-	return msg.row, msg.meta
+	return nil, nil
 }
 
 // NextBatchAndMeta is part of the DataConsumer interface.
@@ -361,10 +379,13 @@ func (h *StreamingMetadataHandler) NextBatchAndMeta() (
 	*execinfrapb.ProducerMetadata,
 ) {
 	msg, meta := h.next()
+	if msg != nil {
+		return msg.batch, msg.meta
+	}
 	if meta != nil {
 		return nil, meta
 	}
-	return msg.batch, msg.meta
+	return nil, nil
 }
 
 // NextRemoteProducerMsg is part of the DataConsumer interface.
@@ -372,15 +393,13 @@ func (h *StreamingMetadataHandler) NextRemoteProducerMsg(
 	ctx context.Context,
 ) *execinfrapb.ProducerMessage {
 	msg, meta := h.next()
+	if msg != nil {
+		return msg.msg
+	}
 	if meta != nil {
 		errMsg := &execinfrapb.ProducerMessage{}
 		errMsg.Data.Metadata = []execinfrapb.RemoteProducerMetadata{execinfrapb.LocalMetaToRemoteProducerMeta(ctx, *meta)}
 		return errMsg
 	}
-	return msg.msg
-}
-
-// ConsumerClosed is part of the DataConsumer interface.
-func (h *StreamingMetadataHandler) ConsumerClosed() {
-	close(h.producerBlock)
+	return nil
 }

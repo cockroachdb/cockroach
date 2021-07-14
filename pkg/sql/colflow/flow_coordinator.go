@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colmeta"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -359,7 +360,6 @@ func (f *FlowCoordinator) drainInput(ctx context.Context) {
 
 func (f *FlowCoordinator) close() {
 	f.cancelFlow()
-	f.consumer.ConsumerClosed()
 	f.input.ConsumerClosed()
 	f.output.ProducerDone()
 }
@@ -380,8 +380,9 @@ type BatchFlowCoordinator struct {
 	colexecop.OneInputNode
 	colexecop.NonExplainable
 
-	input  colexecargs.OpWithMetaInfo
-	output execinfra.BatchReceiver
+	allocator *colmem.Allocator
+	input     colexecargs.OpWithMetaInfo
+	output    execinfra.BatchReceiver
 
 	batch coldata.Batch
 }
@@ -402,6 +403,7 @@ var batchFlowCoordinatorPool = sync.Pool{
 // Flow.ctxCancel).
 func NewBatchFlowCoordinator(
 	flowCtx *execinfra.FlowCtx,
+	allocator *colmem.Allocator,
 	processorID int32,
 	input colexecargs.OpWithMetaInfo,
 	output execinfra.BatchReceiver,
@@ -410,6 +412,7 @@ func NewBatchFlowCoordinator(
 	f := batchFlowCoordinatorPool.Get().(*BatchFlowCoordinator)
 	*f = BatchFlowCoordinator{
 		OneInputNode: colexecop.NewOneInputNode(input.Root),
+		allocator:    allocator,
 		input:        input,
 		output:       output,
 	}
@@ -456,7 +459,7 @@ func (f *BatchFlowCoordinator) produceNext(ctx context.Context) (drain, exit boo
 		// All rows have been exhausted, so we transition to draining.
 		return true, false
 	}
-	return false, f.producer.SendBatch(ctx, f.batch) != nil
+	return false, f.producer.SendBatch(ctx, f.batch, f.allocator) != nil
 }
 
 func (f *BatchFlowCoordinator) consumeNext() (outputStatus execinfra.ConsumerStatus, exit bool) {
@@ -487,7 +490,6 @@ func (f *BatchFlowCoordinator) drainInput(ctx context.Context) {
 
 func (f *BatchFlowCoordinator) close() {
 	f.cancelFlow()
-	f.consumer.ConsumerClosed()
 	var lastErr error
 	for _, toClose := range f.input.ToClose {
 		if err := toClose.Close(); err != nil {
