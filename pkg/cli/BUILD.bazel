@@ -149,7 +149,7 @@ go_library(
         "//pkg/sql/row",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
-        "//pkg/sqlmigrations",
+        "//pkg/startupmigrations",
         "//pkg/storage",
         "//pkg/storage/cloud",
         "//pkg/storage/cloud/userfile",

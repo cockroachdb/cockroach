@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -234,7 +234,7 @@ Output the list of cluster settings known to this binary.
 				defaultVal = sm.SettingsListDefault()
 			} else {
 				defaultVal = setting.String(&s.SV)
-				if override, ok := sqlmigrations.SettingsDefaultOverrides[name]; ok {
+				if override, ok := startupmigrations.SettingsDefaultOverrides[name]; ok {
 					defaultVal = override
 				}
 			}

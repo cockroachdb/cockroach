@@ -182,7 +182,7 @@
 /pkg/security/               @cockroachdb/server-prs
 /pkg/settings/               @cockroachdb/server-prs
 /pkg/sql/                    @cockroachdb/sql-queries-noreview
-/pkg/sqlmigrations/          @cockroachdb/sql-queries-noreview
+/pkg/startupmigrations/      @cockroachdb/sql-queries-noreview
 /pkg/streaming/              @cockroachdb/bulk-prs
 /pkg/testutils/              @cockroachdb/test-eng
 /pkg/ts/                     @cockroachdb/kv

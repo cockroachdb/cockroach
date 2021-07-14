@@ -865,7 +865,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	skip.WithIssue(t, 51798, "fails in the presence of migrations requiring backfill, "+
-		"but cannot import sqlmigrations")
+		"but cannot import startupmigrations")
 
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {
