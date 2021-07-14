@@ -18,11 +18,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
+const (
+	stressTarget = "@com_github_cockroachdb_stress//:stress"
+
 	// General testing flags.
 	filterFlag      = "filter"
 	timeoutFlag     = "timeout"
-	showLogsFlag    = "show-logs"
 	vFlag           = "verbose"
 	stressFlag      = "stress"
 	raceFlag        = "race"
@@ -46,7 +47,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 		Long:  `Run the specified tests.`,
 		Example: `
 	dev test
-	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v -show-logs --timeout=1m
+	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
 	dev test --stress --race ...
 	dev test --logic --files=prepare|fk --subtests=20042 --config=local
 	dev test --fuzz sql/sem/tree --filter=Decimal`,
@@ -55,7 +56,6 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	}
 	// Attach flags for the test sub-command.
 	addCommonTestFlags(testCmd)
-	testCmd.Flags().Bool(showLogsFlag, false, "print logs instead of saving them in files")
 	testCmd.Flags().BoolP(vFlag, "v", false, "enable logging during test runs")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
@@ -95,14 +95,26 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 	timeout := mustGetFlagDuration(cmd, timeoutFlag)
 	ignoreCache := mustGetFlagBool(cmd, ignoreCacheFlag)
 	verbose := mustGetFlagBool(cmd, vFlag)
-	showLogs := mustGetFlagBool(cmd, showLogsFlag)
-
-	if showLogs {
-		return errors.New("-show-logs unimplemented")
-	}
 
 	d.log.Printf("unit test args: stress=%t  race=%t  filter=%s  timeout=%s  ignore-cache=%t  pkgs=%s",
 		stress, race, filter, timeout, ignoreCache, pkgs)
+
+	// If we're running `stress`, we need to build it first.
+	var stressBin string
+	if stress {
+		var args []string
+		args = append(args, "build", "--color=yes", "--experimental_convenience_symlinks=ignore")
+		args = append(args, getConfigFlags()...)
+		args = append(args, stressTarget)
+		_, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
+		if err != nil {
+			return err
+		}
+		stressBin, err = d.getPathToBin(ctx, stressTarget)
+		if err != nil {
+			return err
+		}
+	}
 
 	var args []string
 	args = append(args, "test")
@@ -167,10 +179,12 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 	if ignoreCache {
 		args = append(args, "--nocache_test_results")
 	}
-	if stress {
+	if stress && timeout > 0 {
 		// TODO(irfansharif): Should this be pulled into a top-level flag?
 		// Should we just re-purpose timeout here?
-		args = append(args, "--run_under", fmt.Sprintf("stress -maxtime=%s", timeout))
+		args = append(args, "--run_under", fmt.Sprintf("%s -maxtime=%s", stressBin, timeout))
+	} else if stress {
+		args = append(args, "--run_under", stressBin)
 	} else if timeout > 0 {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}

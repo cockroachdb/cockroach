@@ -60,7 +60,21 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under stress -maxtime=10s --test_filter='TestStartChild*' --test_output errors
+bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev @com_github_cockroachdb_stress//:stress
+----
+----
+ok
+----
+----
+
+bazel info bazel-bin --color=no --config=dev
+----
+----
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
+----
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/external/com_github_cockroachdb_stress/stress_/stress --test_filter='TestStartChild*' --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 12.3s
@@ -69,7 +83,21 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under stress -maxtime=10s --test_filter='TestStartChild*' --test_output all --test_arg -test.v
+bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev @com_github_cockroachdb_stress//:stress
+----
+----
+ok
+----
+----
+
+bazel info bazel-bin --color=no --config=dev
+----
+----
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
+----
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/external/com_github_cockroachdb_stress/stress_/stress -maxtime=10s --test_filter='TestStartChild*' --test_output all --test_arg -test.v
 ----
 ----
 ==================== Test output for //pkg/util/tracing:tracing_test:
