@@ -120,7 +120,7 @@ world$$`, []int{SCONST}},
 		var tokens []int
 		for {
 			var lval = &sqlSymType{}
-			s.scan(lval)
+			s.Scan(lval)
 			if lval.ID() == 0 {
 				break
 			}
@@ -155,13 +155,13 @@ foo`, "", "foo"},
 	for i, d := range testData {
 		s := makeScanner(d.sql)
 		var lval = &sqlSymType{}
-		present, ok := s.scanComment(lval)
+		present, ok := s.ScanComment(lval)
 		if d.err == "" && (!present || !ok) {
 			t.Fatalf("%d: expected success, but found %s", i, lval.Str())
 		} else if d.err != "" && (present || ok || d.err != lval.Str()) {
 			t.Fatalf("%d: expected %s, but found %s", i, d.err, lval.Str())
 		}
-		if r := s.in[s.pos:]; d.remainder != r {
+		if r := s.In()[s.Pos():]; d.remainder != r {
 			t.Fatalf("%d: expected '%s', but found '%s'", i, d.remainder, r)
 		}
 	}
@@ -171,7 +171,7 @@ func TestScanKeyword(t *testing.T) {
 	for _, kwName := range lexbase.KeywordNames {
 		s := makeScanner(kwName)
 		var lval = &sqlSymType{}
-		s.scan(lval)
+		s.Scan(lval)
 		if id := lexbase.GetKeywordID(kwName); id != lval.ID() {
 			t.Errorf("%s: expected %d, but found %d", kwName, id, lval.ID())
 		}
@@ -211,7 +211,7 @@ func TestScanNumber(t *testing.T) {
 	for _, d := range testData {
 		s := makeScanner(d.sql)
 		var lval = &sqlSymType{}
-		s.scan(lval)
+		s.Scan(lval)
 		if d.id != int(lval.ID()) {
 			t.Errorf("%s: expected %d, but found %d", d.sql, d.id, lval.ID())
 		}
@@ -233,7 +233,7 @@ func TestScanPlaceholder(t *testing.T) {
 	for _, d := range testData {
 		s := makeScanner(d.sql)
 		var lval = &sqlSymType{}
-		s.scan(lval)
+		s.Scan(lval)
 		if lval.ID() != PLACEHOLDER {
 			t.Errorf("%s: expected %d, but found %d", d.sql, PLACEHOLDER, lval.ID())
 		}
@@ -326,7 +326,7 @@ world`},
 	for _, d := range testData {
 		s := makeScanner(d.sql)
 		var lval = &sqlSymType{}
-		s.scan(lval)
+		s.Scan(lval)
 		if d.expected != lval.Str() {
 			t.Errorf("%s: expected %q, but found %q", d.sql, d.expected, lval.Str())
 		}
@@ -359,7 +359,7 @@ func TestScanError(t *testing.T) {
 	for _, d := range testData {
 		s := makeScanner(d.sql)
 		var lval = &sqlSymType{}
-		s.scan(lval)
+		s.Scan(lval)
 		if lval.ID() != ERROR {
 			t.Errorf("%s: expected ERROR, but found %d", d.sql, lval.ID())
 		}
