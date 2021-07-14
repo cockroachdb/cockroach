@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
@@ -53,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -724,6 +726,9 @@ type StoreConfig struct {
 	// subsystem. It is queried during the GC process and in the handling of
 	// AdminVerifyProtectedTimestampRequest.
 	ProtectedTimestampCache protectedts.Cache
+
+	// Used to watch for span configuration Changes.
+	RangeFeedFactory *rangefeed.Factory
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -1578,27 +1583,30 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.startLeaseRenewer(ctx)
 	}
 
-	// Initiate a watcher process to listen in on span config updates, and
-	// propagate said updates to the underlying store.
-	spanConfigWatcher := spanconfig.NewWatcher(s.DB(), s.Clock())
-	spanConfigUpdateC, err := spanConfigWatcher.Start(ctx, s.Stopper())
-	if err != nil {
-		return err
-	}
-	if err := s.stopper.RunAsyncTask(ctx, "spanconfig-watcher", func(context.Context) {
-		for {
-			select {
-			case update := <-spanConfigUpdateC:
-				if interceptor := s.TestingKnobs().SpanConfigUpdateInterceptor; interceptor != nil {
-					interceptor(update)
-				}
-				s.onSpanConfigUpdate(update)
-			case <-s.stopper.ShouldQuiesce():
-				return
-			}
+	// RangeFeedFactory is only ever nil in unit tests.
+	if s.cfg.RangeFeedFactory != nil {
+		// Initiate a watcher process to listen in on span config updates, and
+		// propagate said updates to the underlying store.
+		spanConfigWatcher := spanconfigwatcher.New(s.DB(), s.Clock(), s.cfg.RangeFeedFactory)
+		spanConfigUpdateC, err := spanConfigWatcher.Start(ctx, s.Stopper())
+		if err != nil {
+			return err
 		}
-	}); err != nil {
-		return err
+		if err := s.stopper.RunAsyncTask(ctx, "spanconfig-watcher", func(context.Context) {
+			for {
+				select {
+				case update := <-spanConfigUpdateC:
+					if interceptor := s.TestingKnobs().SpanConfigUpdateInterceptor; interceptor != nil {
+						interceptor(update)
+					}
+					s.onSpanConfigUpdate(update)
+				case <-s.stopper.ShouldQuiesce():
+					return
+				}
+			}
+		}); err != nil {
+			return err
+		}
 	}
 
 	// Connect rangefeeds to closed timestamp updates.

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -522,7 +522,7 @@ func (p *planner) MigrationJobDeps() migration.JobDeps {
 }
 
 // ConfigReconciliationJobDeps returns the zcfgreconciler.JobDependencies.
-func (p *planner) ConfigReconciliationJobDeps() zcfgreconciler.JobDependencies {
+func (p *planner) ConfigReconciliationJobDeps() spanconfigmanager.JobDependencies {
 	return p.execCfg.ConfigReconciliationJobDeps
 }
 

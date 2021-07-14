@@ -8,54 +8,46 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfig
+package spanconfigwatcher
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-// NewWatcher instantiates a span configuration watcher.
-func NewWatcher(db *kv.DB, clock *hlc.Clock) *Watcher {
+// New instantiates a span configuration watcher.
+func New(db *kv.DB, clock *hlc.Clock, rangeFeedFactory *rangefeed.Factory) *Watcher {
 	return &Watcher{
-		db:         db,
-		clock:      clock,
-		rowDecoder: newRowDecoder(),
+		db:               db,
+		clock:            clock,
+		rangeFeedFactory: rangeFeedFactory,
+		rowDecoder:       newRowDecoder(),
 	}
 }
 
 // Watcher is used to watch for span configuration changes using a rangefeed.
 type Watcher struct {
-	db         *kv.DB
-	clock      *hlc.Clock
-	rowDecoder *rowDecoder
+	db               *kv.DB
+	clock            *hlc.Clock
+	rangeFeedFactory *rangefeed.Factory
+	rowDecoder       *rowDecoder
 }
 
-// Update is the the unit of what the span config watcher emits.
-type Update struct {
-	// Entry captures the keyspan and corresponding config that has been
-	// updated. If deleted is false, the embedded config is what the keyspan was
-	// updated with.
-	Entry roachpb.SpanConfigEntry
-
-	// Deleted is true if the span config entry has been deleted.
-	Deleted bool
-}
-
-func (e *Update) String() string {
-	return fmt.Sprintf("span config update: span=%s/deleted=%t", e.Entry.Span, e.Deleted)
-}
-
-func (s *Watcher) Start(ctx context.Context, stopper *stop.Stopper) (<-chan Update, error) {
-	updateCh := make(chan Update)
+// Start will kick off the span config watcher. It establishes a rangefeed over
+// the span configurations table, and sends forth updates to it through the
+// returned channel.
+func (w *Watcher) Start(
+	ctx context.Context, stopper *stop.Stopper,
+) (<-chan spanconfig.Update, error) {
+	updateCh := make(chan spanconfig.Update)
 	spanConfigTableStart := keys.SystemSQLCodec.TablePrefix(keys.SpanConfigurationsTableID)
 	spanConfigTableSpan := roachpb.Span{
 		Key:    spanConfigTableStart,
@@ -74,7 +66,7 @@ func (s *Watcher) Start(ctx context.Context, stopper *stop.Stopper) (<-chan Upda
 			// decode the previous value in order to determine what it is.
 			value = ev.PrevValue
 		}
-		entry, err := s.rowDecoder.Decode(roachpb.KeyValue{
+		entry, err := w.rowDecoder.Decode(roachpb.KeyValue{
 			Key:   ev.Key,
 			Value: value,
 		})
@@ -90,16 +82,12 @@ func (s *Watcher) Start(ctx context.Context, stopper *stop.Stopper) (<-chan Upda
 
 		select {
 		case <-ctx.Done():
-		case updateCh <- Update{Entry: entry, Deleted: deleted}:
+		case updateCh <- spanconfig.Update{Entry: entry, Deleted: deleted}:
 		}
 	}
 
-	rangeFeedFactory, err := rangefeed.NewFactory(stopper, s.db, nil)
-	if err != nil {
-		return nil, err
-	}
-	rf, err := rangeFeedFactory.RangeFeed(
-		ctx, "spanconfig-rangefeed", spanConfigTableSpan, s.clock.Now(), handleUpdate,
+	rf, err := w.rangeFeedFactory.RangeFeed(
+		ctx, "spanconfig-rangefeed", spanConfigTableSpan, w.clock.Now(), handleUpdate,
 		rangefeed.WithDiff(),
 		rangefeed.WithInitialScan(nil),
 		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {

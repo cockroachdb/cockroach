@@ -13,11 +13,11 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler"
 )
 
 // plannerJobExecContext is a wrapper to implement JobExecContext with a planner
@@ -58,7 +58,7 @@ func (e *plannerJobExecContext) User() security.SQLUsername      { return e.p.Us
 func (e *plannerJobExecContext) MigrationJobDeps() migration.JobDeps {
 	return e.p.MigrationJobDeps()
 }
-func (e *plannerJobExecContext) ConfigReconciliationJobDeps() zcfgreconciler.JobDependencies {
+func (e *plannerJobExecContext) ConfigReconciliationJobDeps() spanconfigmanager.JobDependencies {
 	return e.p.ConfigReconciliationJobDeps()
 }
 
@@ -80,5 +80,5 @@ type JobExecContext interface {
 	LeaseMgr() *lease.Manager
 	User() security.SQLUsername
 	MigrationJobDeps() migration.JobDeps
-	ConfigReconciliationJobDeps() zcfgreconciler.JobDependencies
+	ConfigReconciliationJobDeps() spanconfigmanager.JobDependencies
 }

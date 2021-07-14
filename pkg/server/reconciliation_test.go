@@ -2,8 +2,7 @@ package server
 
 import (
 	"context"
-	"math/rand"
-	"sync"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,67 +15,65 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSpanConfigUpdateSeenByAllStores(t *testing.T) {
+// TestUpdateSpanConfigSeenByAllStores tests that a span config update is
+// observed by all stores in the system.
+func TestUpdateSpanConfigSeenByAllStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const numStores = 3
-	var storeSpecs []base.StoreSpec
-	for i := 0; i < numStores; i++ {
-		storeSpecs = append(storeSpecs, base.StoreSpec{InMemory: true})
-	}
+	for _, numStores := range []int{1, 3} {
+		t.Run(fmt.Sprintf("num-stores=%d", numStores), func(t *testing.T) {
+			var storeSpecs []base.StoreSpec
+			for i := 0; i < numStores; i++ {
+				storeSpecs = append(storeSpecs, base.StoreSpec{InMemory: true})
+			}
 
-	// TODO(zcfgs-pod): Plumb in testing knob to disable the automatic
-	// reconciliation job.
-	// TODO(zcfgs-pod): Plumb in testing knob to filter out span config updates
-	// -- here we're only interested in making sure that all stores receive the
-	// update.
+			waitForAllUpdatesCh := make(chan struct{})
+			blockSpanConfigJobCh := make(chan struct{})
+			defer func() { close(blockSpanConfigJobCh) }()
+			var seenCount int32 = 0
+			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+				StoreSpecs: storeSpecs,
+				Knobs: base.TestingKnobs{
+					SpanConfigManager: &spanconfig.TestingKnobs{
+						PreJobCreationInterceptor: func() {
+							<-blockSpanConfigJobCh
+						},
+					},
 
-	id := rand.Uint32()
-	var seenCount int32 = 0
-	var once sync.Once
-	waitCh := make(chan struct{})
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		StoreSpecs: storeSpecs,
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				SpanConfigUpdateInterceptor: func(update spanconfig.Update) {
-					if update.Entry.Config.NumReplicas == int32(id) {
-						if atomic.AddInt32(&seenCount, 1) == numStores {
-							once.Do(func() { close(waitCh) })
-						}
-					}
+					Store: &kvserver.StoreTestingKnobs{
+						SpanConfigUpdateInterceptor: func(_ spanconfig.Update) {
+							if atomic.AddInt32(&seenCount, 1) == int32(numStores) {
+								close(waitForAllUpdatesCh)
+							}
+						},
+					},
 				},
-			},
-		},
-	})
-	defer s.Stopper().Stop(context.Background())
+			})
+			defer s.Stopper().Stop(context.Background())
 
-	ctx := context.Background()
-	nameSpaceTableStart := s.ExecutorConfig().(sql.ExecutorConfig).Codec.TablePrefix(keys.NamespaceTableID)
-	nameSpaceTableSpan := roachpb.Span{
-		Key:    nameSpaceTableStart,
-		EndKey: nameSpaceTableStart.PrefixEnd(),
-	}
+			ctx := context.Background()
+			nameSpaceTableStart := s.ExecutorConfig().(sql.ExecutorConfig).Codec.TablePrefix(keys.NamespaceTableID)
+			nameSpaceTableSpan := roachpb.Span{
+				Key:    nameSpaceTableStart,
+				EndKey: nameSpaceTableStart.PrefixEnd(),
+			}
+			update := []roachpb.SpanConfigEntry{
+				{
+					Span:   nameSpaceTableSpan,
+					Config: roachpb.SpanConfig{},
+				},
+			}
 
-	var update []roachpb.SpanConfigEntry
-	var delete []roachpb.Span
-	update = append(update, roachpb.SpanConfigEntry{
-		Span: nameSpaceTableSpan,
-		Config: roachpb.SpanConfig{
-			NumReplicas: int32(id),
-		},
-	})
+			require.NoError(t, s.Node().(spanconfig.Accessor).UpdateSpanConfigEntries(ctx, update, nil))
 
-	log.Infof(ctx, "xxx: test updating some random span entry: %s (id=%d)", nameSpaceTableSpan, id)
-	require.NoError(t, s.Node().(*Node).UpdateSpanConfigEntries(ctx, update, delete))
-
-	select {
-	case <-waitCh:
-	case <-time.After(10 * time.Second):
-		t.Fatal(`test timed out`)
+			select {
+			case <-waitForAllUpdatesCh:
+			case <-time.After(5 * time.Second):
+				t.Errorf("test timed out")
+			}
+		})
 	}
 }

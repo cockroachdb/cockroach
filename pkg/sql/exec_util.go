@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -75,7 +76,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -921,12 +921,12 @@ type ExecutorConfig struct {
 	// perform compaction over a key span.
 	CompactEngineSpanFunc tree.CompactEngineSpanFunc
 
-	// ConfigReconciliationJobDeps is used to drive the zone config
+	// ConfigReconciliationJobDeps is used to drive the span config
 	// reconciliation job.
-	ConfigReconciliationJobDeps zcfgreconciler.JobDependencies
+	ConfigReconciliationJobDeps spanconfigmanager.JobDependencies
 
 	// StartConfigReconciliationJobHook is called during the SQL server startup
-	// process, to idempotently create and start a zone config reconciliation
+	// process, to idempotently create and start a span config reconciliation
 	// for the tenant if none exist.
 	StartConfigReconciliationJobHook StartConfigReconciliationJobHook
 }

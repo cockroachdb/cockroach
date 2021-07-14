@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfig
+package spanconfigwatcher
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -41,9 +41,7 @@ func newRowDecoder() *rowDecoder {
 }
 
 // Decode decodes a span config entry from the system.span_configurations table.
-func (d *rowDecoder) Decode(
-	kv roachpb.KeyValue,
-) (entry roachpb.SpanConfigEntry, _ error) {
+func (rd *rowDecoder) Decode(kv roachpb.KeyValue) (entry roachpb.SpanConfigEntry, _ error) {
 	tbl := systemschema.SpanConfigurationsTable
 	// First we need to decode the start_key field from the index key.
 	{
@@ -59,7 +57,7 @@ func (d *rowDecoder) Decode(
 		if !matches {
 			return roachpb.SpanConfigEntry{}, errors.AssertionFailedf("system.span_configurations descriptor does not match key: %v", kv.Key)
 		}
-		if err := startKeyRow[0].EnsureDecoded(types[0], &d.alloc); err != nil {
+		if err := startKeyRow[0].EnsureDecoded(types[0], &rd.alloc); err != nil {
 			return roachpb.SpanConfigEntry{}, err
 		}
 		entry.Span.Key = []byte(tree.MustBeDBytes(startKeyRow[0].Datum))
@@ -85,8 +83,8 @@ func (d *rowDecoder) Decode(
 			}
 			colID := lastColID + descpb.ColumnID(colIDDiff)
 			lastColID = colID
-			if idx, ok := d.colIdxMap.Get(colID); ok {
-				res, bytes, err = rowenc.DecodeTableValue(&d.alloc, tbl.PublicColumns()[idx].GetType(), bytes)
+			if idx, ok := rd.colIdxMap.Get(colID); ok {
+				res, bytes, err = rowenc.DecodeTableValue(&rd.alloc, tbl.PublicColumns()[idx].GetType(), bytes)
 				if err != nil {
 					return roachpb.SpanConfigEntry{}, err
 				}

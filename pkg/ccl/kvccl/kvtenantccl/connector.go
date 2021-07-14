@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -91,7 +91,7 @@ var _ rangecache.RangeDescriptorDB = (*Connector)(nil)
 // network.
 var _ config.SystemConfigProvider = (*Connector)(nil)
 
-var _ zcfgreconciler.SpanConfigAccessor = (*Connector)(nil)
+var _ spanconfig.Accessor = (*Connector)(nil)
 
 // NewConnector creates a new Connector.
 // NOTE: Calling Start will set cfg.RPCContext.ClusterID.
@@ -439,7 +439,7 @@ func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.Internal
 	}
 }
 
-// GetSpanConfigsFor implements the zcfgreconciler.SpanConfigAccessor interface.
+// GetSpanConfigsFor implements the spanconfig.Accessor interface.
 func (c *Connector) GetSpanConfigsFor(
 	ctx context.Context, span roachpb.Span,
 ) ([]roachpb.SpanConfigEntry, error) {
@@ -459,7 +459,7 @@ func (c *Connector) GetSpanConfigsFor(
 	return nil, ctx.Err()
 }
 
-// UpdateSpanConfigEntries implements the zcfgreconciler.SpanConfigAccessor
+// UpdateSpanConfigEntries implements the spanconfig.Accessor
 // interface.
 func (c *Connector) UpdateSpanConfigEntries(
 	ctx context.Context, update []roachpb.SpanConfigEntry, delete []roachpb.Span,

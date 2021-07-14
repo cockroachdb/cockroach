@@ -1,4 +1,4 @@
-package job
+package spanconfigjob
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 )
 
 func init() {
-	jobs.RegisterConstructor(jobspb.TypeAutoZoneConfigReconciliation,
+	jobs.RegisterConstructor(jobspb.TypeAutoSpanConfigReconciliation,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 			return &resumer{job: job}
 		})
@@ -28,7 +28,7 @@ type resumer struct {
 var _ jobs.Resumer = (*resumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
-func (z *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
+func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 
 	// TODO(zcfgs-pod): Listen in on rangefeeds over system.{descriptor,zones}
@@ -47,10 +47,10 @@ func (z *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			Span:   nameSpaceTableSpan,
 			Config: roachpb.SpanConfig{},
 		})
-		rc := execCtx.ConfigReconciliationJobDeps()
 
 		// NB: We cannot return from this method, as that would put the job in
 		// an un-revertable, non-running state.
+		rc := execCtx.ConfigReconciliationJobDeps()
 		if err := rc.UpdateSpanConfigEntries(ctx, update, delete); err != nil {
 			log.Errorf(ctx, "config reconciliation error: %v", err)
 		}
@@ -65,6 +65,6 @@ func (z *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (z *resumer) OnFailOrCancel(context.Context, interface{}) error {
-	return errors.AssertionFailedf("zone config reconciliation job can never fail or be cancelled")
+func (r *resumer) OnFailOrCancel(context.Context, interface{}) error {
+	return errors.AssertionFailedf("span config reconciliation job can never fail or be cancelled")
 }

@@ -46,6 +46,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
@@ -70,7 +72,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
-	"github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -198,8 +199,8 @@ type sqlServerArgs struct {
 	// Used by the executor config.
 	systemConfigProvider config.SystemConfigProvider
 
-	// Used by the zone config reconciliation job.
-	spanConfigAccessor zcfgreconciler.SpanConfigAccessor
+	// Used by the span config reconciliation job.
+	spanConfigAccessor spanconfig.Accessor
 
 	// Used by DistSQLPlanner.
 	nodeDialer *nodedialer.Dialer
@@ -700,11 +701,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	{
-		reconciliationMgr := zcfgreconciler.NewManager(
-			cfg.db, jobRegistry, cfg.circularInternalExecutor,
+		knobs, _ := cfg.TestingKnobs.SpanConfigManager.(*spanconfig.TestingKnobs)
+		reconciliationMgr := spanconfigmanager.New(
+			cfg.db, jobRegistry, cfg.circularInternalExecutor, cfg.spanConfigAccessor, knobs,
 		)
+		execCfg.ConfigReconciliationJobDeps = reconciliationMgr
 		execCfg.StartConfigReconciliationJobHook = reconciliationMgr.CreateAndStartJobIfNoneExist
-		execCfg.ConfigReconciliationJobDeps = cfg.spanConfigAccessor
 	}
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
@@ -827,7 +829,7 @@ func (s *SQLServer) preStart(
 	}
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
 
-	// Create and start the zone config reconciliation job if none exist.
+	// Create and start the span config reconciliation job if none exist.
 	s.execCfg.StartConfigReconciliationJobHook(ctx, stopper)
 
 	// Before serving SQL requests, we have to make sure the database is

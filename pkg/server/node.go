@@ -36,11 +36,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -1324,11 +1324,13 @@ func (n *Node) Join(
 	}, nil
 }
 
-var _ zcfgreconciler.SpanConfigAccessor = &Node{}
+var _ spanconfig.Accessor = &Node{}
 
-// GetSpanConfigsFor implements the zcfgreconciler.SpanConfigAccessor interface.
+// GetSpanConfigsFor implements the spanconfig.Accessor interface.
 // It's a convenience wrapper around the RPC implementation.
-func (n *Node) GetSpanConfigsFor(ctx context.Context, span roachpb.Span) ([]roachpb.SpanConfigEntry, error) {
+func (n *Node) GetSpanConfigsFor(
+	ctx context.Context, span roachpb.Span,
+) ([]roachpb.SpanConfigEntry, error) {
 	resp, err := n.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{Span: span})
 	if err != nil {
 		return nil, err
@@ -1336,7 +1338,7 @@ func (n *Node) GetSpanConfigsFor(ctx context.Context, span roachpb.Span) ([]roac
 	return resp.SpanConfigs, nil
 }
 
-// UpdateSpanConfigEntries implements the zcfgreconciler.SpanConfigAccessor
+// UpdateSpanConfigEntries implements the spanconfig.Accessor
 // interface. It's a convenience wrapper around the RPC implementation.
 func (n *Node) UpdateSpanConfigEntries(
 	ctx context.Context, update []roachpb.SpanConfigEntry, delete []roachpb.Span,
