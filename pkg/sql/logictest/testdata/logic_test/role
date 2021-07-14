@@ -590,6 +590,28 @@ SELECT * FROM system.role_members
 role   member    isAdmin
 admin  root      true
 
+# Verify that GRANT/REVOKE are not sensitive to the case of role names.
+
+statement ok
+GRANT roLea,rOleB TO tEstUSER WITH ADMIN OPTION
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+rolea  testuser  true
+roleb  testuser  true
+
+statement ok
+REVOKE roleA, roleB FROM TestUser
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+
 # Test privilege checks.
 
 statement ok
