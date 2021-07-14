@@ -110,13 +110,19 @@ type SSTBatcher struct {
 	ms enginepb.MVCCStats
 	// rows written in the current batch.
 	rowCounter storage.RowCounter
+
+	metrics *Metrics
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
 func MakeSSTBatcher(
-	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context,
+	db SSTSender,
+	metrics *Metrics,
+	settings *cluster.Settings,
+	flushBytes func() int64,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: true}
+	b := &SSTBatcher{db: db, metrics: metrics, settings: settings, maxSize: flushBytes, disallowShadowing: true}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -124,9 +130,13 @@ func MakeSSTBatcher(
 // MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
 // that might be received from a cluster to cluster stream.
 func MakeStreamSSTBatcher(
-	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context,
+	db SSTSender,
+	metrics *Metrics,
+	settings *cluster.Settings,
+	flushBytes func() int64,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, ingestAll: true}
+	b := &SSTBatcher{db: db, metrics: metrics, settings: settings, maxSize: flushBytes, ingestAll: true}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -258,10 +268,26 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 	return b.doFlush(ctx, manualFlush, nil)
 }
 
+func (b *SSTBatcher) recordFlush(dataSize int64, reason int) {
+	if b.metrics == nil {
+		return
+	}
+	b.metrics.WrittenBytes.Inc(dataSize)
+	switch reason {
+	case sizeFlush:
+		b.metrics.SizeFlushes.Inc(1)
+	case rangeFlush:
+		b.metrics.RangeFlushes.Inc(1)
+	case manualFlush:
+		b.metrics.ManualFlushes.Inc(1)
+	}
+}
+
 func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Key) error {
 	if b.sstWriter.DataSize == 0 {
 		return nil
 	}
+	b.recordFlush(b.sstWriter.DataSize, reason)
 	b.flushCounts.total++
 
 	hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}

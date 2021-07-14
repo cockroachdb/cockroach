@@ -369,7 +369,8 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	iter := sst.iter
 	defer sst.cleanup()
 
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
+	metrics := rd.flowCtx.Cfg.BulkMetrics
+	batcher, err := bulk.MakeSSTBatcher(ctx, db, metrics, evalCtx.Settings,
 		func() int64 { return rd.flushBytes })
 	if err != nil {
 		return summary, err

@@ -539,10 +539,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				// Tenants aren't allowed to split, so force off the split-after opt.
 				opts.SplitAndScatterAfter = func() int64 { return kvserverbase.DisableExplicitSplits }
 			}
-			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon)
+			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), &bulkMetrics, cfg.Settings, ts, opts, bulkMon)
 		},
 
 		Metrics:            &distSQLMetrics,
+		BulkMetrics:        &bulkMetrics,
 		RowMetrics:         &rowMetrics,
 		InternalRowMetrics: &internalRowMetrics,
 
