@@ -12,7 +12,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -65,16 +64,15 @@ import (
 // leaseholder.
 //
 // "wait-for-zone-config-changes idx=server_number table-name=tbName
-// [num-voters=num] [num-non-voters=num]": finds the
+// [num-voters=num] [num-non-voters=num] [leaseholder=idx] [voter=idx_list]
+// [nonvoter=idx_list] [not-present=idx_list]": finds the
 // range belonging to the given tbName's prefix key and runs it through the
 // split, replicate, and raftsnapshot queues. If the num-voters or
 // num-non-voters arguments are provided, it then makes sure that the range
 // conforms to those.
-// It also takes input in the form of space separated pairs of
-// <replica_type>=<server_idx_list>, where each server_idx is separated by a
-// comma. For example, input may look like `leaseholder=0 voter=2,3 nonvoter=4`.
-// Acceptable values for replica_type are `leaseholder`, `voter`, `non-voter`,
-// and `not-present`.
+// It also takes the arguments leaseholder, voter, nonvoter, and not-present,
+// each of which take a comma-separated list of server indexes to check against
+// the provided table.
 // If the leaseholder does not match the argument provided, a lease
 // transfer is attempted.
 // All this is done in a succeeds soon as any of these steps may error out for
@@ -301,8 +299,6 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				}
 				tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
 
-				leaseTransferInitiated := false
-
 				// There's a lot going on here and things can fail at various steps, for
 				// completely legitimate reasons, which is why this thing needs to be
 				// wrapped in a succeeds soon.
@@ -349,11 +345,11 @@ func TestMultiRegionDataDriven(t *testing.T) {
 					}
 
 					// Parse user replica types from input.
-					expectedReplicaTypes := parseUserReplicas(t, d.Input)
+					expectedReplicaTypes := parseUserReplicas(t, d)
 
 					// If the user specified a leaseholder, transfer range lease to the leaseholder.
 					leaseholderList := expectedReplicaTypes[replicaTypeLeaseholder]
-					if leaseholderList != nil && len(leaseholderList) == 1 {
+					if len(leaseholderList) == 1 {
 						nodeIdx := leaseholderList[0]
 						leaseIdx := nodeIdToIdx(t, ds.tc, leaseHolderInfo.NodeID)
 						if nodeIdx != leaseIdx {
@@ -379,21 +375,16 @@ func TestMultiRegionDataDriven(t *testing.T) {
 							// has already been transferred but before the new leaseholder
 							// has been applied, which leads to strange epoch errors and
 							// the new lease never being applied.
-							if !leaseTransferInitiated {
-								leaseTransferInitiated = true
-								log.VEventf(
-									ctx,
-									2,
-									"transferring lease from node %d to %d", leaseIdx, nodeIdx)
-								t.Logf("transferring lease from node %d to %d", leaseIdx, nodeIdx)
-								err = ds.tc.TransferRangeLease(desc, ds.tc.Target(nodeIdx))
-								return errors.CombineErrors(
-									leaseErr,
-									err,
-								)
-							} else {
-								return leaseErr
-							}
+							log.VEventf(
+								ctx,
+								2,
+								"transferring lease from node %d to %d", leaseIdx, nodeIdx)
+							t.Logf("transferring lease from node %d to %d", leaseIdx, nodeIdx)
+							err = ds.tc.TransferRangeLease(desc, ds.tc.Target(nodeIdx))
+							return errors.CombineErrors(
+								leaseErr,
+								err,
+							)
 						}
 					}
 
@@ -547,54 +538,36 @@ func parseRangeReplicas(
 	return replicaMap
 }
 
-// parseUserReplicas takes a string of space-separated values formatted as
-// <replica_type>=<server_idx_list> and constructs a corresponding map from node
-// idx to replica type
-func parseUserReplicas(t *testing.T, input string) map[replicaType][]int {
-	replicasRaw := strings.Split(input, " ")
-	replicaMap := make(map[replicaType][]int)
-	re := regexp.MustCompile(`^(\S+)=((?:\d+,)*\d+)$`)
-	for _, replicaRaw := range replicasRaw {
-		// Grab node idx and replica type.
-		submatch := re.FindStringSubmatch(replicaRaw)
-		if len(submatch) < 3 {
-			t.Fatalf(
-				"could not parse replica type %s: expected 3 matches but got %d",
-				replicaRaw,
-				len(submatch))
+// parseUserReplicas take the arguments from a datadriven test and parses them
+// out to a map of replica_type -> server_idx_list
+func parseUserReplicas(t *testing.T, d *datadriven.TestData) map[replicaType][]int {
+	userReplicas := make(map[replicaType][]int)
+	for replicaTypeName := range replicaTypes {
+		if !d.HasArg(replicaTypeName) {
+			continue
 		}
 
-		// Get all indices (separated by ',').
-		rawIndices := strings.Split(submatch[2], ",")
+		var rawReplicas string
+		d.ScanArgs(t, replicaTypeName, &rawReplicas)
 
-		// Convert specified node replica type to a replicaType if possible, error
-		// otherwise.
-		rawReplicaReq := submatch[1]
-		replicaTypeReq, found := replicaTypes[rawReplicaReq]
-		if !found {
-			t.Fatalf("unexpected required replica type: %s", rawReplicaReq)
-		} else {
-			if _, found = replicaMap[replicaTypeReq]; !found {
-				replicaMap[replicaTypeReq] = make([]int, 0, len(rawIndices))
-			}
-		}
-
-		newReplicas := replicaMap[replicaTypeReq]
-		for _, rawIndex := range rawIndices {
+		rawReplicaList := strings.Split(rawReplicas, ",")
+		newReplicas := make([]int, 0, len(rawReplicaList))
+		for _, rawIndex := range rawReplicaList {
 			ind, err := strconv.Atoi(rawIndex)
 			if err != nil {
 				t.Fatalf("could not parse replica type for index: %v", err)
 			}
 			newReplicas = append(newReplicas, ind)
 		}
-		replicaMap[replicaTypeReq] = newReplicas
+
+		userReplicas[replicaTypes[replicaTypeName]] = newReplicas
 	}
 
-	if leaseholders := replicaMap[replicaTypeLeaseholder]; len(leaseholders) > 1 {
+	if leaseholders := userReplicas[replicaTypeLeaseholder]; len(leaseholders) > 1 {
 		t.Fatalf("got more than one leaseholder: %d", len(leaseholders))
 	}
 
-	return replicaMap
+	return userReplicas
 }
 
 func nodeIdToIdx(t *testing.T, tc serverutils.TestClusterInterface, id roachpb.NodeID) int {
