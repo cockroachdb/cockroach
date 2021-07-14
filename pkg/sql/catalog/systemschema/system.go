@@ -205,6 +205,8 @@ CREATE TABLE system.web_sessions (
 	"auditInfo"    STRING,
 	INDEX ("expiresAt"),
 	INDEX ("createdAt"),
+  INDEX ("revokedAt"),
+  INDEX ("lastUsedAt"),
 	FAMILY (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
 );`
 
@@ -1102,8 +1104,28 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
+			{
+				Name:                "web_sessions_revokedAt_idx",
+				ID:                  4,
+				Unique:              false,
+				KeyColumnNames:      []string{"revokedAt"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{6},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			{
+				Name:                "web_sessions_lastUsedAt_idx",
+				ID:                  5,
+				Unique:              false,
+				KeyColumnNames:      []string{"lastUsedAt"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{7},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
 		},
-		NextIndexID: 4,
+		NextIndexID: 6,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.WebSessionsTableID], security.NodeUserName()),
 		NextMutationID: 1,

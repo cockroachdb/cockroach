@@ -813,6 +813,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
 	}
+
+	// Begin an async task to periodically purge old sessions in the web sessions table.
+	if err = runDaemon(ctx, sAuth); err != nil {
+		return nil, err
+	}
+
 	return lateBoundServer, err
 }
 
