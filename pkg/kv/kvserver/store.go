@@ -1427,6 +1427,12 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// depends on the scanner not having added its own log tag.
 	if s.scanner != nil {
 		s.scanner.AmbientContext.AddLogTag("s", s.StoreID())
+
+		// We have to set the stopper here to avoid races, since scanner.Start() is
+		// called async and the stopper is not available when the scanner is
+		// created. This is a hack, the scanner/queue construction should be
+		// refactored.
+		s.scanner.stopper = s.stopper
 	}
 
 	// If the nodeID is 0, it has not be assigned yet.
@@ -1594,7 +1600,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.stopper.RunWorker(ctx, func(context.Context) {
 			select {
 			case <-s.cfg.Gossip.Connected:
-				s.scanner.Start(s.stopper)
+				s.scanner.Start()
 			case <-s.stopper.ShouldStop():
 				return
 			}
