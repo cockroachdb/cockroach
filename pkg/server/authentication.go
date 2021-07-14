@@ -86,12 +86,28 @@ var ConfigureOIDC = func(
 	return &noOIDCConfigured{}, nil
 }
 
-var webSessionTimeout = settings.RegisterDurationSetting(
-	"server.web_session_timeout",
-	"the duration that a newly created web session will be valid",
-	7*24*time.Hour,
-	settings.NonNegativeDuration,
-).WithPublic()
+var (
+	webSessionTimeout = settings.RegisterDurationSetting(
+		"server.web_session_timeout",
+		"the duration that a newly created web session will be valid",
+		7*24*time.Hour,
+		settings.NonNegativeDuration,
+	).WithPublic()
+
+	webSessionPurgeTTL = settings.RegisterDurationSetting(
+		"server.web_session.purge_ttl",
+		"if nonzero, entries in system.web_sessions older than this duration are deleted with the creation of new "+
+			"sessions for a user.",
+		time.Hour,
+	).WithPublic()
+
+	webSessionAutoLogoutTimeout = settings.RegisterDurationSetting(
+		"server.web_session.auto_logout_timeout",
+		"the duration that a web session will survive before being removed, since it was last used",
+		7*24*time.Hour,
+		settings.NonNegativeDuration,
+	).WithPublic()
+)
 
 type authenticationServer struct {
 	server *Server
@@ -473,9 +489,23 @@ func (s *authenticationServer) newAuthSession(
 
 	expiration := s.server.clock.PhysicalTime().Add(webSessionTimeout.Get(&s.server.st.SV))
 
-	insertSessionStmt := `
+	// Insert the new session and delete the user's expired sessions.
+	sessionStmt := `
+WITH
+	delete_with_expired_purge_ttl AS (
+		DELETE FROM system.web_sessions@"web_sessions_expiresAt_idx"
+		WHERE "expiresAt" < $1 and username = $4
+	),
+	delete_with_revoked_purge_ttl AS (
+		DELETE FROM system.web_sessions@"web_sessions_revokedAt_idx"
+		WHERE "revokedAt" < $1 and username = $4
+	),
+	delete_with_auto_logout AS (
+		DELETE FROM system.web_sessions@"web_sessions_lastUsedAt_idx"
+		WHERE "lastUsedAt" < $2 and username = $4
+	)
 INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt")
-VALUES($1, $2, $3)
+VALUES($3, $4, $5)
 RETURNING id
 `
 	var id int64
@@ -485,7 +515,9 @@ RETURNING id
 		"create-auth-session",
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		insertSessionStmt,
+		sessionStmt,
+		s.server.clock.PhysicalTime().Add(time.Duration(-1)*webSessionPurgeTTL.Get(&s.server.st.SV)),
+		s.server.clock.PhysicalTime().Add(time.Duration(-1)*webSessionAutoLogoutTimeout.Get(&s.server.st.SV)),
 		hashedSecret,
 		username.Normalized(),
 		expiration,

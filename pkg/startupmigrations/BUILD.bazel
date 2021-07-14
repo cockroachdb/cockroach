@@ -56,6 +56,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
@@ -67,6 +68,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
         "@com_github_stretchr_testify//require",
     ],
 )

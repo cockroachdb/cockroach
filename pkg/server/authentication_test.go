@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -826,5 +827,107 @@ func TestGRPCAuthentication(t *testing.T) {
 				t.Errorf("expected %q error, but got %v", exp, err)
 			}
 		})
+	}
+}
+
+func TestPurgeSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	ts := s.(*TestServer)
+	username := security.TestUserName()
+
+	_, hashedSecret, err := CreateAuthSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Customize cluster settings to a lower value than the defaults. webSessionTimeout.Get(&ts.st.SV)
+	if _, err := db.Exec(`SET CLUSTER SETTING server.web_session_timeout = '2s'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`SET CLUSTER SETTING server.web_session.purge_ttl = '2s'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`SET CLUSTER SETTING server.web_session.auto_logout_timeout = '2s'`); err != nil {
+		t.Fatal(err)
+	}
+
+	insertOldSessions := func(expiration time.Duration, revocation time.Duration, lastUse time.Duration) {
+		insertSessionStmt := `
+INSERT INTO system.web_sessions ("hashedSecret", username, "createdAt", "expiresAt", "lastUsedAt") 
+VALUES($1, $2, $3, $4, $5)
+`
+		for i := 0; i < 3; i++ {
+			createdAt := ts.clock.PhysicalTime()
+			expiresAt := createdAt.Add(expiration)
+			revokedAt := createdAt.Add(revocation)
+			lastUsedAt := createdAt.Add(lastUse)
+
+			if _, err = ts.sqlServer.internalExecutor.QueryRowEx(
+				ctx,
+				"add-session",
+				nil, /* txn */
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				insertSessionStmt,
+				hashedSecret,
+				username.Normalized(),
+				createdAt,
+				expiresAt,
+				revokedAt,
+				lastUsedAt,
+			); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}
+	webSessionCount := func() int {
+		var count int
+		if err := db.QueryRow("SELECT count(*) FROM system.web_sessions").Scan(&count); err != nil {
+			t.Fatalf("failed to get web sessions count: %v", err)
+		}
+		return count
+	}
+
+	// Check for deletion with the expiration being older than the purge TTL.
+	insertOldSessions(webSessionTimeout.Get(&ts.st.SV), time.Minute, time.Minute)
+	time.Sleep(webSessionTimeout.Get(&ts.st.SV))
+	time.Sleep(webSessionPurgeTTL.Get(&ts.st.SV))
+
+	if _, _, err = ts.authentication.newAuthSession(ctx, username); err != nil {
+		t.Fatal(err)
+	}
+
+	if count := webSessionCount(); count != 1 {
+		t.Fatal(errors.New("failed to delete sessions with expiration older than the purge TTL"))
+	}
+
+	// Check for deletion with the revocation being older than the purge TTL.
+	insertOldSessions(time.Minute, 0*time.Second, time.Minute)
+	time.Sleep(webSessionPurgeTTL.Get(&ts.st.SV))
+
+	if _, _, err = ts.authentication.newAuthSession(ctx, username); err != nil {
+		t.Fatal(err)
+	}
+
+	if count := webSessionCount(); count != 1 {
+		t.Fatal(errors.New("failed to delete sessions with revocation older than the purge TTL"))
+	}
+
+	// Check for deletion with auto-logout timeout.
+	insertOldSessions(time.Minute, time.Minute, 0*time.Second)
+	time.Sleep(webSessionAutoLogoutTimeout.Get(&ts.st.SV))
+
+	if _, _, err = ts.authentication.newAuthSession(ctx, username); err != nil {
+		t.Fatal(err)
+	}
+
+	if count := webSessionCount(); count != 1 {
+		t.Fatal(errors.New("failed to delete sessions after the auto-logout timeout"))
 	}
 }
