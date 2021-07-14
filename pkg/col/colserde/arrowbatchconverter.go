@@ -92,12 +92,19 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			nulls.Truncate(batch.Length())
 		}
 
-		data, err := c.batchToArrowSpecialType(vec, n, nulls)
-		if err != nil {
-			return nil, err
-		}
-		if data != nil {
-			c.scratch.arrowData[vecIdx] = data
+		// Bools require special handling.
+		if typ.Family() == types.BoolFamily {
+			c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
+			c.scratch.arrowData[vecIdx] = c.builders.boolBuilder.NewBooleanArray().Data()
+			// Overwrite incorrect null bitmap (that has all values as "valid")
+			// with the actual null bitmap. Note that if we actually don't have
+			// any nulls, we use a bitmap with zero length for it in order to
+			// reduce the size of serialized representation.
+			var arrowBitmap []byte
+			if nulls != nil {
+				arrowBitmap = nulls.NullBitmap()
+			}
+			c.scratch.arrowData[vecIdx].Buffers()[0] = memory.NewBufferBytes(arrowBitmap)
 			continue
 		}
 
@@ -281,31 +288,6 @@ func unsafeCastOffsetsArray(offsetsInt32 []int32, offsetsBytes *[]byte) {
 	bytesHeader.Data = int32Header.Data
 	bytesHeader.Len = int32Header.Len * sizeOfInt32
 	bytesHeader.Cap = int32Header.Cap * sizeOfInt32
-}
-
-// batchToArrowSpecialType checks whether the vector requires special handling
-// and performs the conversion to the Arrow format if so. If we support "native"
-// conversion for this vector, then nil is returned.
-func (c *ArrowBatchConverter) batchToArrowSpecialType(
-	vec coldata.Vec, n int, nulls *coldata.Nulls,
-) (*array.Data, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(vec.Type().Family()) {
-	case types.BoolFamily:
-		c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
-		data := c.builders.boolBuilder.NewBooleanArray().Data()
-		// Overwrite incorrect null bitmap (that has all values as "valid")
-		// with the actual null bitmap. Note that if we actually don't have
-		// any nulls, we use a bitmap with zero length for it in order to
-		// reduce the size of serialized representation.
-		var arrowBitmap []byte
-		if nulls != nil {
-			arrowBitmap = nulls.NullBitmap()
-		}
-		data.Buffers()[0] = memory.NewBufferBytes(arrowBitmap)
-		return data, nil
-	}
-
-	return nil, nil
 }
 
 // ArrowToBatch converts []*array.Data to a coldata.Batch. There must not be

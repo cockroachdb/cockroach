@@ -2132,6 +2132,9 @@ Flags shown square brackets after the geometry type have the following meaning:
 				seed := timeutil.Now().Unix()
 				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, rand.New(rand.NewSource(seed)))
 				if err != nil {
+					if errors.Is(err, geomfn.ErrGenerateRandomPointsInvalidPoints) {
+						return tree.DNull, nil
+					}
 					return nil, err
 				}
 				return tree.NewDGeometry(generatedPoints), nil
@@ -2154,6 +2157,9 @@ The requested number of points must be not larger than 65336.`,
 				}
 				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, rand.New(rand.NewSource(seed)))
 				if err != nil {
+					if errors.Is(err, geomfn.ErrGenerateRandomPointsInvalidPoints) {
+						return tree.DNull, nil
+					}
 					return nil, err
 				}
 				return tree.NewDGeometry(generatedPoints), nil
