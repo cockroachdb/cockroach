@@ -299,6 +299,15 @@ func backup(
 
 	backupID := uuid.MakeV4()
 	backupManifest.ID = backupID
+
+	// If the backup job has been configured to persist its protected timestamp
+	// record for future backups in the chain, we must store the record ID in the
+	// backup manifest so that it can be released by the next backup in the chain.
+	backupDetails := job.Details().(jobspb.BackupDetails)
+	if backupDetails.PersistProtectedTimestampRecordForNextBackup {
+		backupManifest.ProtectedTimestampRecordForNextBackup = backupDetails.ProtectedTimestampRecord
+	}
+
 	// Write additional partial descriptors to each node for partitioned backups.
 	if len(storageByLocalityKV) > 0 {
 		resumerSpan.RecordStructured(&types.StringValue{Value: "writing partition descriptors for partitioned backup"})
@@ -373,7 +382,45 @@ func backup(
 	return backupManifest.EntryCounts, nil
 }
 
-func (b *backupResumer) releaseProtectedTimestamp(
+func (b *backupResumer) releaseProtectedTimestampOnSuccess(
+	ctx context.Context, txn *kv.Txn, pts protectedts.Storage,
+) error {
+	details := b.job.Details().(jobspb.BackupDetails)
+	var ptsID *uuid.UUID
+	// Check if the backup job has been configured to persist the protected
+	// timestamp record associated with the job until the next backup in the
+	// chain runs.
+	//
+	// This is currently only done by scheduled backups with incrementals.
+	if details.PersistProtectedTimestampRecordForNextBackup {
+		if details.ProtectedTimestampRecordFromPreviousBackup != nil {
+			ptsID = details.ProtectedTimestampRecordFromPreviousBackup
+		}
+		// If the backup job does not have a record to cleanup from a previous
+		// backup, then this is the first, full backup in the chain.
+	} else {
+		ptsID = details.ProtectedTimestampRecord
+	}
+
+	if ptsID == nil {
+		return nil
+	}
+
+	err := pts.Release(ctx, txn, *ptsID)
+	if errors.Is(err, protectedts.ErrNotExists) {
+		// No reason to return an error which might cause problems if it doesn't
+		// seem to exist.
+		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+		err = nil
+	}
+
+	// TODO(adityamaru): If we fail to clear the previous backups' protected
+	// timestamp record, then we should update the job record for that backup to
+	// be eligible for reconciliation by the protected ts reconciliation loop.
+	return err
+}
+
+func (b *backupResumer) releaseProtectedTimestampOnFailure(
 	ctx context.Context, txn *kv.Txn, pts protectedts.Storage,
 ) error {
 	details := b.job.Details().(jobspb.BackupDetails)
@@ -388,6 +435,28 @@ func (b *backupResumer) releaseProtectedTimestamp(
 		// seem to exist.
 		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
 		err = nil
+	}
+
+	// If we failed to release the protected timestamp record, and the backup job
+	// is configured to persist its record for the purpose of chaining (scheduled
+	// backups), then the corresponding record will not be cleaned up by the
+	// reconciler. To ensure it does get cleaned up, set the persistence field to
+	// false.
+	if err != nil && details.PersistProtectedTimestampRecordForNextBackup {
+		if updateErr := b.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			details := md.Payload
+			backupDetails := details.GetBackup()
+			if backupDetails == nil {
+				return errors.New("failed to unmarshal backup job details when releasing protected timestamp")
+			}
+			// If the job has failed, we want to allow the protected timestamp
+			// reconciler to cleanup the record in case our attempt below fails.
+			backupDetails.PersistProtectedTimestampRecordForNextBackup = false
+			ju.UpdatePayload(details)
+			return nil
+		}); updateErr != nil {
+			return errors.CombineErrors(err, updateErr)
+		}
 	}
 	return err
 }
@@ -524,7 +593,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+			return b.releaseProtectedTimestampOnSuccess(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
 		}); err != nil {
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 		}
@@ -718,7 +787,7 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 	cfg := p.ExecCfg()
 	b.deleteCheckpoint(ctx, cfg, p.User())
 	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return b.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
+		return b.releaseProtectedTimestampOnFailure(ctx, txn, cfg.ProtectedTimestampProvider)
 	})
 }
 

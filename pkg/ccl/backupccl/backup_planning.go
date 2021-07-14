@@ -883,6 +883,11 @@ func backupPlanHook(
 			startTime = prevBackups[len(prevBackups)-1].EndTime
 		}
 
+		var protectedTimestampFromPreviousBackup *uuid.UUID
+		if len(prevBackups) > 0 {
+			protectedTimestampFromPreviousBackup = prevBackups[len(prevBackups)-1].ProtectedTimestampRecordForNextBackup
+		}
+
 		mvccFilter := MVCCFilter_Latest
 		if backupStmt.Options.CaptureRevisionHistory {
 			if err := requireEnterprise("revision_history"); err != nil {
@@ -1212,6 +1217,8 @@ func backupPlanHook(
 			EncryptionOptions: encryptionOptions,
 			EncryptionInfo:    encryptionInfo,
 			CollectionURI:     collectionURI,
+			ProtectedTimestampRecordFromPreviousBackup:   protectedTimestampFromPreviousBackup,
+			PersistProtectedTimestampRecordForNextBackup: backupStmt.Options.PersistProtectedTimestampForNextBackup,
 		}
 		if len(spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
 			protectedtsID := uuid.MakeV4()
@@ -1313,8 +1320,19 @@ func backupPlanHook(
 			// The protect timestamp logic for a DETACHED BACKUP can be run within the
 			// same txn as the BACKUP is being planned in, because we do not wait for
 			// the BACKUP job to complete.
-			err = protectTimestampForBackup(ctx, p, p.ExtendedEvalContext().Txn, jobID, spans,
-				startTime, endTime, backupDetails)
+			//
+			// If the backup has been configured to persist its protected timestamp
+			// for the next backup, then we want to protect all data after the endTime
+			// of the current backup. The next backup in the chain will rely on this
+			// record to prevent GC of relevant data, and will also be responsible for
+			// cleaning up this record.
+			if backupStmt.Options.PersistProtectedTimestampForNextBackup {
+				err = protectTimestampForBackup(ctx, p, p.ExtendedEvalContext().Txn, jobID, spans,
+					hlc.Timestamp{}, endTime, backupDetails)
+			} else {
+				err = protectTimestampForBackup(ctx, p, p.ExtendedEvalContext().Txn, jobID, spans,
+					startTime, endTime, backupDetails)
+			}
 			if err != nil {
 				return err
 			}

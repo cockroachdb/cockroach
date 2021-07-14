@@ -129,7 +129,16 @@ message BackupManifest {
   int32 descriptor_coverage = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];
 
-  // NEXT ID: 26
+  // ProtectedTimestampRecordForNextBackup is used to persist the protected
+  // timestamp record laid down by the current backup for the next backup in the
+  // chain.
+  // This information is used by the next backup in the chain to release the
+  // record once the job completes successfully.
+  bytes protected_timestamp_record_for_next_backup = 26 [
+    (gogoproto.customname) = "ProtectedTimestampRecordForNextBackup",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+
+  // NEXT ID: 27
 }
 
 message BackupPartitionDescriptor{
@@ -139,7 +148,6 @@ message BackupPartitionDescriptor{
                       (gogoproto.customname) = "BackupID",
                       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
-
 
 // In 20.2 and later, the Statistics object is stored separately from the backup manifest.
 // StatsTables is a struct containing an array of sql.stats.TableStatisticProto object so
