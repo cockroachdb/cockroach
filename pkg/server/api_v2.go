@@ -87,20 +87,23 @@ type apiV2Server struct {
 }
 
 // newAPIV2Server returns a new apiV2Server.
-func newAPIV2Server(ctx context.Context, s *Server) *apiV2Server {
-	authServer := newAuthenticationV2Server(ctx, s, apiV2Path)
+func newAPIV2Server(ctx context.Context, s *Server) (a *apiV2Server, err error) {
+	var authServer *authenticationV2Server
+	if authServer, err = newAuthenticationV2Server(ctx, s, apiV2Path); err != nil {
+		return nil, err
+	}
 	innerMux := mux.NewRouter()
 
 	authMux := newAuthenticationV2Mux(authServer, innerMux)
 	outerMux := mux.NewRouter()
-	a := &apiV2Server{
+	a = &apiV2Server{
 		admin:      s.admin,
 		authServer: authServer,
 		status:     s.status,
 		mux:        outerMux,
 	}
 	a.registerRoutes(innerMux, authMux)
-	return a
+	return a, nil
 }
 
 // registerRoutes registers endpoints under the current API server.

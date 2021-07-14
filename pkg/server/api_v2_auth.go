@@ -45,19 +45,25 @@ type authenticationV2Server struct {
 // outer Server, and base path.
 func newAuthenticationV2Server(
 	ctx context.Context, s *Server, basePath string,
-) *authenticationV2Server {
+) (authV2Server *authenticationV2Server, err error) {
 	simpleMux := http.NewServeMux()
 
-	authServer := &authenticationV2Server{
+	var authServer *authenticationServer
+	authServer, err = newAuthenticationServer(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+
+	authV2Server = &authenticationV2Server{
 		sqlServer:  s.sqlServer,
-		authServer: newAuthenticationServer(s),
+		authServer: authServer,
 		mux:        simpleMux,
 		ctx:        ctx,
 		basePath:   basePath,
 	}
 
-	authServer.registerRoutes()
-	return authServer
+	authV2Server.registerRoutes()
+	return authV2Server, nil
 }
 
 func (a *authenticationV2Server) registerRoutes() {

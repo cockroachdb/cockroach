@@ -704,7 +704,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		internalExecutor,
 	)
 	// TODO(tbg): don't pass all of Server into this to avoid this hack.
-	sAuth := newAuthenticationServer(lateBoundServer)
+	var sAuth *authenticationServer
+	if sAuth, err = newAuthenticationServer(ctx, lateBoundServer); err != nil {
+		return nil, err
+	}
 	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
 		if reflect.ValueOf(gw).IsNil() {
 			return nil, errors.Errorf("%d: nil", i)
@@ -813,6 +816,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
 	}
+
 	return lateBoundServer, err
 }
 
@@ -1808,7 +1812,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 	s.mux.Handle(debug.Endpoint, debugHandler)
 
-	apiServer := newAPIV2Server(ctx, s)
+	var apiServer *apiV2Server
+	if apiServer, err = newAPIV2Server(ctx, s); err != nil {
+		return err
+	}
 	s.mux.Handle(apiV2Path, apiServer)
 
 	log.Event(ctx, "added http endpoints")
