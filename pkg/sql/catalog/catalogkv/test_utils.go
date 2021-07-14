@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/errors"
 )
 
 // TestingGetTableDescriptorFromSchema retrieves a table descriptor directly
@@ -133,28 +134,28 @@ func testingGetObjectDescriptor(
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		found, dbID, err := LookupDatabaseID(ctx, txn, codec, database)
 		if err != nil {
-			panic(err)
-		} else if !found {
-			panic(fmt.Sprintf("database %s not found", database))
+			return err
+		}
+		if !found {
+			return errors.Errorf("database %s not found", database)
 		}
 		exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, schema)
 		if err != nil {
-			panic(err)
-		} else if !exists {
-			panic(fmt.Sprintf("schema %s not found", schema))
+			return err
+		}
+		if !exists {
+			return errors.Errorf("schema %s not found", schema)
 		}
 		found, objectID, err := LookupObjectID(ctx, txn, codec, dbID, schemaID, object)
 		if err != nil {
-			panic(err)
-		} else if !found {
-			panic(fmt.Sprintf("object %s not found", object))
+			return err
+		}
+		if !found {
+			return errors.Errorf("object %s not found", object)
 		}
 		desc, err = getDescriptorByID(
 			ctx, txn, codec, objectID, immutable, catalog.Any, true /* required */)
-		if err != nil {
-			panic(err)
-		}
-		return nil
+		return err
 	}); err != nil {
 		panic(err)
 	}

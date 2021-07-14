@@ -168,7 +168,7 @@ func evalExport(
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
-		summary, resume, err := reader.ExportMVCCToSst(start, args.EndKey, args.StartTime,
+		summary, resume, err := reader.ExportMVCCToSst(ctx, start, args.EndKey, args.StartTime,
 			h.Timestamp, exportAllRevisions, targetSize, maxSize, useTBI, destFile)
 		if err != nil {
 			return result.Result{}, err

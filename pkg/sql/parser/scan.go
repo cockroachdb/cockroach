@@ -19,9 +19,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 const eof = -1
@@ -30,6 +28,17 @@ const errInvalidUTF8 = "invalid UTF-8 byte sequence"
 const errInvalidHexNumeric = "invalid hexadecimal numeric literal"
 const singleQuote = '\''
 const identQuote = '"'
+
+// NewNumValFn allows us to use tree.NewNumVal without a dependency on tree.
+var NewNumValFn = func(constant.Value, string, bool) interface{} {
+	return struct{}{}
+}
+
+// NewPlaceholderFn allows us to use tree.NewPlaceholder without a dependency on
+// tree.
+var NewPlaceholderFn = func(string) (interface{}, error) {
+	return struct{}{}, nil
+}
 
 // scanner lexes SQL statements.
 type scanner struct {
@@ -565,14 +574,14 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 		kw = lval.str[8:]
 		isExperimental = true
 	}
-	lval.id = lex.GetKeywordID(kw)
-	if lval.id != lex.IDENT {
+	lval.id = lexbase.GetKeywordID(kw)
+	if lval.id != lexbase.IDENT {
 		if isExperimental {
-			if _, ok := lex.AllowedExperimental[kw]; !ok {
+			if _, ok := lexbase.AllowedExperimental[kw]; !ok {
 				// If the parsed token is not on the allowlisted set of keywords,
 				// then it might have been intended to be parsed as something else.
 				// In that case, re-tokenize the original string.
-				lval.id = lex.GetKeywordID(lval.str)
+				lval.id = lexbase.GetKeywordID(lval.str)
 			} else {
 				// It is a allowlisted keyword, so remember the shortened
 				// keyword for further processing.
@@ -583,7 +592,7 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 		// If the word after experimental_ or testing_ is an identifier,
 		// then we might have classified it incorrectly after removing the
 		// experimental_/testing_ prefix.
-		lval.id = lex.GetKeywordID(lval.str)
+		lval.id = lexbase.GetKeywordID(lval.str)
 	}
 }
 
@@ -656,7 +665,7 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 			lval.str = fmt.Sprintf("could not make constant float from literal %q", lval.str)
 			return
 		}
-		lval.union.val = tree.NewNumVal(floatConst, lval.str, false /* negative */)
+		lval.union.val = NewNumValFn(floatConst, lval.str, false /* negative */)
 	} else {
 		if isHex && s.pos == start+2 {
 			lval.id = ERROR
@@ -681,7 +690,7 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 			lval.str = fmt.Sprintf("could not make constant int from literal %q", lval.str)
 			return
 		}
-		lval.union.val = tree.NewNumVal(intConst, lval.str, false /* negative */)
+		lval.union.val = NewNumValFn(intConst, lval.str, false /* negative */)
 	}
 }
 
@@ -692,7 +701,7 @@ func (s *scanner) scanPlaceholder(lval *sqlSymType) {
 	}
 	lval.str = s.in[start:s.pos]
 
-	placeholder, err := tree.NewPlaceholder(lval.str)
+	placeholder, err := NewPlaceholderFn(lval.str)
 	if err != nil {
 		lval.id = ERROR
 		lval.str = err.Error()

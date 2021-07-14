@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -168,11 +168,11 @@ foo`, "", "foo"},
 }
 
 func TestScanKeyword(t *testing.T) {
-	for _, kwName := range lex.KeywordNames {
+	for _, kwName := range lexbase.KeywordNames {
 		s := makeScanner(kwName)
 		var lval sqlSymType
 		s.scan(&lval)
-		if id := lex.GetKeywordID(kwName); id != lval.id {
+		if id := lexbase.GetKeywordID(kwName); id != lval.id {
 			t.Errorf("%s: expected %d, but found %d", kwName, id, lval.id)
 		}
 	}

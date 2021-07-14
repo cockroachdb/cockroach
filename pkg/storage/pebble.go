@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -688,6 +689,7 @@ func (p *Pebble) Closed() bool {
 
 // ExportMVCCToSst is part of the engine.Reader interface.
 func (p *Pebble) ExportMVCCToSst(
+	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
@@ -698,8 +700,8 @@ func (p *Pebble) ExportMVCCToSst(
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
 	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
-	summary, k, err := pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
-		maxSize, useTBI, dest, maxIntentCount)
+	summary, k, err := pebbleExportToSst(ctx, r, startKey, endKey, startTS, endTS, exportAllRevisions,
+		targetSize, maxSize, useTBI, dest, maxIntentCount)
 	r.Free()
 	return summary, k, err
 }
@@ -1407,6 +1409,7 @@ func (p *pebbleReadOnly) Closed() bool {
 
 // ExportMVCCToSst is part of the engine.Reader interface.
 func (p *pebbleReadOnly) ExportMVCCToSst(
+	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
@@ -1418,7 +1421,8 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	// Doing defer r.Free() does not inline.
 	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.parent.settings.SV)
 	summary, k, err := pebbleExportToSst(
-		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest, maxIntentCount)
+		ctx, r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest,
+		maxIntentCount)
 	r.Free()
 	return summary, k, err
 }
@@ -1680,6 +1684,7 @@ func (p *pebbleSnapshot) Closed() bool {
 
 // ExportMVCCToSst is part of the engine.Reader interface.
 func (p *pebbleSnapshot) ExportMVCCToSst(
+	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
@@ -1691,7 +1696,8 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 	// Doing defer r.Free() does not inline.
 	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
 	summary, k, err := pebbleExportToSst(
-		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest, maxIntentCount)
+		ctx, r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest,
+		maxIntentCount)
 	r.Free()
 	return summary, k, err
 }
@@ -1798,6 +1804,7 @@ func pebbleGetProto(
 }
 
 func pebbleExportToSst(
+	ctx context.Context,
 	reader Reader,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
@@ -1807,6 +1814,10 @@ func pebbleExportToSst(
 	dest io.Writer,
 	maxIntentCount int64,
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, "pebbleExportToSst")
+	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
+	defer span.Finish()
 	sstWriter := MakeBackupSSTWriter(dest)
 	defer sstWriter.Close()
 

@@ -409,7 +409,7 @@ type Reader interface {
 	// This function looks at MVCC versions and intents, and returns an error if an
 	// intent is found.
 	ExportMVCCToSst(
-		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
+		ctx context.Context, startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
 		exportAllRevisions bool, targetSize uint64, maxSize uint64, useTBI bool,
 		dest io.Writer,
 	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)

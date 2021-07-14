@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
@@ -122,9 +123,12 @@ func TestSavepoints(t *testing.T) {
 				fmt.Fprintf(&buf, "txn id %s\n", changed)
 
 			case "put":
-				if err := txn.Put(ctx,
-					roachpb.Key(td.CmdArgs[0].Key),
-					[]byte(td.CmdArgs[1].Key)); err != nil {
+				b := txn.NewBatch()
+				b.Put(td.CmdArgs[0].Key, td.CmdArgs[1].Key)
+				if td.HasArg("nowait") {
+					b.Header.WaitPolicy = lock.WaitPolicy_Error
+				}
+				if err := txn.Run(ctx, b); err != nil {
 					fmt.Fprintf(&buf, "(%T) %v\n", err, err)
 				}
 
@@ -150,12 +154,22 @@ func TestSavepoints(t *testing.T) {
 				}
 
 			case "get":
-				v, err := txn.Get(ctx, td.CmdArgs[0].Key)
-				if err != nil {
+				b := txn.NewBatch()
+				if td.HasArg("locking") {
+					b.GetForUpdate(td.CmdArgs[0].Key)
+				} else {
+					b.Get(td.CmdArgs[0].Key)
+				}
+				if td.HasArg("nowait") {
+					b.Header.WaitPolicy = lock.WaitPolicy_Error
+				}
+				if err := txn.Run(ctx, b); err != nil {
 					fmt.Fprintf(&buf, "(%T) %v\n", err, err)
 				} else {
-					ba, _ := v.Value.GetBytes()
-					fmt.Fprintf(&buf, "%v -> %v\n", v.Key, string(ba))
+					kv := b.Results[0].Rows[0]
+					ba, err := kv.Value.GetBytes()
+					require.NoError(t, err)
+					fmt.Fprintf(&buf, "%v -> %v\n", kv.Key, string(ba))
 				}
 
 			case "savepoint":

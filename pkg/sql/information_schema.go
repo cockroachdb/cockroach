@@ -72,7 +72,9 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaColumnDomainUsageTableID:            informationSchemaColumnDomainUsageTable,
 		catconstants.InformationSchemaColumnOptionsTableID:                informationSchemaColumnOptionsTable,
 		catconstants.InformationSchemaColumnPrivilegesID:                  informationSchemaColumnPrivileges,
+		catconstants.InformationSchemaColumnStatisticsTableID:             informationSchemaColumnStatisticsTable,
 		catconstants.InformationSchemaColumnUDTUsageID:                    informationSchemaColumnUDTUsage,
+		catconstants.InformationSchemaColumnsExtensionsTableID:            informationSchemaColumnsExtensionsTable,
 		catconstants.InformationSchemaColumnsTableID:                      informationSchemaColumnsTable,
 		catconstants.InformationSchemaConstraintColumnUsageTableID:        informationSchemaConstraintColumnUsageTable,
 		catconstants.InformationSchemaConstraintTableUsageTableID:         informationSchemaConstraintTableUsageTable,
@@ -82,6 +84,9 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaDomainsTableID:                      informationSchemaDomainsTable,
 		catconstants.InformationSchemaElementTypesTableID:                 informationSchemaElementTypesTable,
 		catconstants.InformationSchemaEnabledRolesID:                      informationSchemaEnabledRoles,
+		catconstants.InformationSchemaEnginesTableID:                      informationSchemaEnginesTable,
+		catconstants.InformationSchemaEventsTableID:                       informationSchemaEventsTable,
+		catconstants.InformationSchemaFilesTableID:                        informationSchemaFilesTable,
 		catconstants.InformationSchemaForeignDataWrapperOptionsTableID:    informationSchemaForeignDataWrapperOptionsTable,
 		catconstants.InformationSchemaForeignDataWrappersTableID:          informationSchemaForeignDataWrappersTable,
 		catconstants.InformationSchemaForeignServerOptionsTableID:         informationSchemaForeignServerOptionsTable,
@@ -90,8 +95,15 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaForeignTablesTableID:                informationSchemaForeignTablesTable,
 		catconstants.InformationSchemaInformationSchemaCatalogNameTableID: informationSchemaInformationSchemaCatalogNameTable,
 		catconstants.InformationSchemaKeyColumnUsageTableID:               informationSchemaKeyColumnUsageTable,
+		catconstants.InformationSchemaKeywordsTableID:                     informationSchemaKeywordsTable,
+		catconstants.InformationSchemaOptimizerTraceTableID:               informationSchemaOptimizerTraceTable,
 		catconstants.InformationSchemaParametersTableID:                   informationSchemaParametersTable,
+		catconstants.InformationSchemaPartitionsTableID:                   informationSchemaPartitionsTable,
+		catconstants.InformationSchemaPluginsTableID:                      informationSchemaPluginsTable,
+		catconstants.InformationSchemaProcesslistTableID:                  informationSchemaProcesslistTable,
+		catconstants.InformationSchemaProfilingTableID:                    informationSchemaProfilingTable,
 		catconstants.InformationSchemaReferentialConstraintsTableID:       informationSchemaReferentialConstraintsTable,
+		catconstants.InformationSchemaResourceGroupsTableID:               informationSchemaResourceGroupsTable,
 		catconstants.InformationSchemaRoleColumnGrantsTableID:             informationSchemaRoleColumnGrantsTable,
 		catconstants.InformationSchemaRoleRoutineGrantsTableID:            informationSchemaRoleRoutineGrantsTable,
 		catconstants.InformationSchemaRoleTableGrantsID:                   informationSchemaRoleTableGrants,
@@ -99,24 +111,33 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaRoleUsageGrantsTableID:              informationSchemaRoleUsageGrantsTable,
 		catconstants.InformationSchemaRoutinePrivilegesTableID:            informationSchemaRoutinePrivilegesTable,
 		catconstants.InformationSchemaRoutineTableID:                      informationSchemaRoutineTable,
-		catconstants.InformationSchemaSchemataTableID:                     informationSchemaSchemataTable,
-		catconstants.InformationSchemaSchemataTablePrivilegesID:           informationSchemaSchemataTablePrivileges,
-		catconstants.InformationSchemaSequencesID:                         informationSchemaSequences,
-		catconstants.InformationSchemaSessionVariables:                    informationSchemaSessionVariables,
 		catconstants.InformationSchemaSQLFeaturesTableID:                  informationSchemaSQLFeaturesTable,
 		catconstants.InformationSchemaSQLImplementationInfoTableID:        informationSchemaSQLImplementationInfoTable,
 		catconstants.InformationSchemaSQLPartsTableID:                     informationSchemaSQLPartsTable,
 		catconstants.InformationSchemaSQLSizingTableID:                    informationSchemaSQLSizingTable,
+		catconstants.InformationSchemaSchemataExtensionsTableID:           informationSchemaSchemataExtensionsTable,
+		catconstants.InformationSchemaSchemataTableID:                     informationSchemaSchemataTable,
+		catconstants.InformationSchemaSchemataTablePrivilegesID:           informationSchemaSchemataTablePrivileges,
+		catconstants.InformationSchemaSequencesID:                         informationSchemaSequences,
+		catconstants.InformationSchemaSessionVariables:                    informationSchemaSessionVariables,
+		catconstants.InformationSchemaStGeometryColumnsTableID:            informationSchemaStGeometryColumnsTable,
+		catconstants.InformationSchemaStSpatialReferenceSystemsTableID:    informationSchemaStSpatialReferenceSystemsTable,
+		catconstants.InformationSchemaStUnitsOfMeasureTableID:             informationSchemaStUnitsOfMeasureTable,
 		catconstants.InformationSchemaStatisticsTableID:                   informationSchemaStatisticsTable,
 		catconstants.InformationSchemaTableConstraintTableID:              informationSchemaTableConstraintTable,
+		catconstants.InformationSchemaTableConstraintsExtensionsTableID:   informationSchemaTableConstraintsExtensionsTable,
 		catconstants.InformationSchemaTablePrivilegesID:                   informationSchemaTablePrivileges,
+		catconstants.InformationSchemaTablesExtensionsTableID:             informationSchemaTablesExtensionsTable,
 		catconstants.InformationSchemaTablesTableID:                       informationSchemaTablesTable,
+		catconstants.InformationSchemaTablespacesExtensionsTableID:        informationSchemaTablespacesExtensionsTable,
+		catconstants.InformationSchemaTablespacesTableID:                  informationSchemaTablespacesTable,
 		catconstants.InformationSchemaTransformsTableID:                   informationSchemaTransformsTable,
 		catconstants.InformationSchemaTriggeredUpdateColumnsTableID:       informationSchemaTriggeredUpdateColumnsTable,
 		catconstants.InformationSchemaTriggersTableID:                     informationSchemaTriggersTable,
 		catconstants.InformationSchemaTypePrivilegesID:                    informationSchemaTypePrivilegesTable,
 		catconstants.InformationSchemaUdtPrivilegesTableID:                informationSchemaUdtPrivilegesTable,
 		catconstants.InformationSchemaUsagePrivilegesTableID:              informationSchemaUsagePrivilegesTable,
+		catconstants.InformationSchemaUserAttributesTableID:               informationSchemaUserAttributesTable,
 		catconstants.InformationSchemaUserDefinedTypesTableID:             informationSchemaUserDefinedTypesTable,
 		catconstants.InformationSchemaUserMappingOptionsTableID:           informationSchemaUserMappingOptionsTable,
 		catconstants.InformationSchemaUserMappingsTableID:                 informationSchemaUserMappingsTable,
@@ -1837,6 +1858,195 @@ var informationSchemaForeignServersTable = virtualSchemaTable{
 var informationSchemaTriggersTable = virtualSchemaTable{
 	comment: "triggers was created for compatibility and is currently unimplemented",
 	schema:  vtable.InformationSchemaTriggers,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaResourceGroupsTable = virtualSchemaTable{
+	comment: "resource_groups was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaResourceGroups,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaPartitionsTable = virtualSchemaTable{
+	comment: "partitions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaPartitions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTablespacesExtensionsTable = virtualSchemaTable{
+	comment: "tablespaces_extensions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTablespacesExtensions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaSchemataExtensionsTable = virtualSchemaTable{
+	comment: "schemata_extensions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaSchemataExtensions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaColumnStatisticsTable = virtualSchemaTable{
+	comment: "column_statistics was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaColumnStatistics,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaStUnitsOfMeasureTable = virtualSchemaTable{
+	comment: "st_units_of_measure was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaStUnitsOfMeasure,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaFilesTable = virtualSchemaTable{
+	comment: "files was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaFiles,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaEnginesTable = virtualSchemaTable{
+	comment: "engines was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaEngines,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaEventsTable = virtualSchemaTable{
+	comment: "events was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaEvents,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaUserAttributesTable = virtualSchemaTable{
+	comment: "user_attributes was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUserAttributes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaKeywordsTable = virtualSchemaTable{
+	comment: "keywords was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaKeywords,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaOptimizerTraceTable = virtualSchemaTable{
+	comment: "optimizer_trace was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaOptimizerTrace,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTableConstraintsExtensionsTable = virtualSchemaTable{
+	comment: "table_constraints_extensions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTableConstraintsExtensions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaColumnsExtensionsTable = virtualSchemaTable{
+	comment: "columns_extensions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaColumnsExtensions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaStGeometryColumnsTable = virtualSchemaTable{
+	comment: "st_geometry_columns was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaStGeometryColumns,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaPluginsTable = virtualSchemaTable{
+	comment: "plugins was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaPlugins,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaStSpatialReferenceSystemsTable = virtualSchemaTable{
+	comment: "st_spatial_reference_systems was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaStSpatialReferenceSystems,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaProcesslistTable = virtualSchemaTable{
+	comment: "processlist was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaProcesslist,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTablesExtensionsTable = virtualSchemaTable{
+	comment: "tables_extensions was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTablesExtensions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaProfilingTable = virtualSchemaTable{
+	comment: "profiling was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaProfiling,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTablespacesTable = virtualSchemaTable{
+	comment: "tablespaces was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTablespaces,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},

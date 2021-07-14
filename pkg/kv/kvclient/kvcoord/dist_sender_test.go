@@ -3324,6 +3324,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 	retryErr := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err")
 	abortErr := roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 	conditionFailedErr := &roachpb.ConditionFailedError{}
+	writeIntentErr := &roachpb.WriteIntentError{}
 	sendErr := sendError{}
 	ambiguousErr := &roachpb.AmbiguousResultError{}
 	randomErr := &roachpb.IntegerOverflowError{}
@@ -3391,6 +3392,22 @@ func TestMultipleErrorsMerged(t *testing.T) {
 		},
 		{
 			err1:   conditionFailedErr,
+			err2:   randomErr,
+			expErr: "results in overflow",
+		},
+		// WriteIntentError also has a low score since it's "not ambiguous".
+		{
+			err1:   writeIntentErr,
+			err2:   ambiguousErr,
+			expErr: "result is ambiguous",
+		},
+		{
+			err1:   writeIntentErr,
+			err2:   sendErr,
+			expErr: "failed to send RPC",
+		},
+		{
+			err1:   writeIntentErr,
 			err2:   randomErr,
 			expErr: "results in overflow",
 		},
