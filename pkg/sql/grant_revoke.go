@@ -47,13 +47,13 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	// TODO(solon): there are SQL identifiers (tree.Name) in n.Grantees,
-	// but we want SQL usernames. Do we normalize or not? For reference,
-	// REASSIGN / OWNER TO do normalize.
-	// Related: https://github.com/cockroachdb/cockroach/issues/54696
 	grantees := make([]security.SQLUsername, len(n.Grantees))
 	for i, grantee := range n.Grantees {
-		grantees[i] = security.MakeSQLUsernameFromPreNormalizedString(string(grantee))
+		normalizedGrantee, err := security.MakeSQLUsernameFromUserInput(string(grantee), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		grantees[i] = normalizedGrantee
 	}
 
 	return &changePrivilegesNode{
@@ -73,7 +73,6 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 // - Target: single database, table, or view.
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
-// - should we make users case-insensitive?
 // Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
@@ -84,13 +83,13 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 
-	// TODO(solon): there are SQL identifiers (tree.Name) in n.Grantees,
-	// but we want SQL usernames. Do we normalize or not? For reference,
-	// REASSIGN / OWNER TO do normalize.
-	// Related: https://github.com/cockroachdb/cockroach/issues/54696
 	grantees := make([]security.SQLUsername, len(n.Grantees))
 	for i, grantee := range n.Grantees {
-		grantees[i] = security.MakeSQLUsernameFromPreNormalizedString(string(grantee))
+		normalizedGrantee, err := security.MakeSQLUsernameFromUserInput(string(grantee), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		grantees[i] = normalizedGrantee
 	}
 
 	return &changePrivilegesNode{
