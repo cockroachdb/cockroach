@@ -160,7 +160,7 @@ go_test(
         "//pkg/sql/sqlutil",
         "//pkg/sql/stats",
         "//pkg/sql/types",
-        "//pkg/sqlmigrations",
+        "//pkg/startupmigrations",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/buildutil",

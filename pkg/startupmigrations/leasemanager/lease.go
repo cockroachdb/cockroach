@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 // Package leasemanager provides functionality for acquiring and managing leases
-// via the kv api for use during sqlmigrations.
+// via the kv api for use during startupmigrations.
 package leasemanager
 
 import (
