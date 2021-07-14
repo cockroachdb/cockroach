@@ -416,7 +416,7 @@ func (p *sortOp) sort() {
 		// Convert the distinct vector into a selection vector - a vector of indices
 		// that were true in the distinct vector.
 		sizeBefore := memsize.Int * int64(cap(p.scratch.partitions))
-		p.scratch.partitions = boolVecToSel64(partitionsCol, p.scratch.partitions[:0])
+		p.scratch.partitions = boolVecToSel(partitionsCol, p.scratch.partitions[:0])
 		sizeAfter := memsize.Int * int64(cap(p.scratch.partitions))
 		p.allocator.AdjustMemoryUsage(sizeAfter - sizeBefore)
 		// For each partition (set of tuples that are identical in all of the sort

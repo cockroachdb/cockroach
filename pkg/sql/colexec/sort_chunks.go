@@ -330,7 +330,7 @@ func (s *chunker) prepareNextChunks() chunkerReadingState {
 				s.partitioners[i].partition(s.batch.ColVec(int(orderedCol)), s.partitionCol,
 					s.batch.Length())
 			}
-			s.chunks = boolVecToSel64(s.partitionCol, s.chunks[:0])
+			s.chunks = boolVecToSel(s.partitionCol, s.chunks[:0])
 
 			if s.bufferedTuples.Length() == 0 {
 				// There are no buffered tuples, so a new chunk starts in the current
