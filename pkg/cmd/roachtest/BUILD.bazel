@@ -59,6 +59,7 @@ go_test(
         "test_test.go",
     ],
     embed = [":roachtest_lib"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/logger",
