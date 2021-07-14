@@ -452,6 +452,11 @@ func TestZipRetries(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer func() {
+			if err := out.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
 		z := newZipper(out)
 		defer func() {
 			if err := z.close(); err != nil {

@@ -11,11 +11,14 @@
 package cli
 
 import (
+	"bytes"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFileSelection(t *testing.T) {
@@ -170,3 +173,46 @@ func TestTimestampFlag(t *testing.T) {
 		}
 	}
 }
+
+func TestSizeWarner(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var warnings []int
+
+	var buf bytes.Buffer
+	f := &nopCloser{&buf}
+	w := newSizeWarner(f, 100, func(sz int) {
+		warnings = append(warnings, sz)
+	})
+
+	_, _ = w.Write(make([]byte, 10)) // does not warn
+	require.Equal(t, []int(nil), warnings)
+
+	_, _ = w.Write(make([]byte, 100)) // warns once
+	require.Equal(t, []int{110}, warnings)
+
+	_, _ = w.Write(make([]byte, 200)) // warns once more (even though the threshold is crossed 2x)
+	require.Equal(t, []int{110, 310}, warnings)
+	_, _ = w.Write(make([]byte, 10)) // no warning
+	require.Equal(t, []int{110, 310}, warnings)
+
+	_ = w.Close() // warns once more because 10+100+200 is not a multiple of 100
+	require.Equal(t, []int{110, 310, 320}, warnings)
+
+	warnings = nil
+	w = newSizeWarner(f, 100, func(sz int) {
+		warnings = append(warnings, sz)
+	})
+
+	_, _ = w.Write(make([]byte, 100)) // warns once
+	require.Equal(t, []int{100}, warnings)
+
+	_ = w.Close() // does not warn: no write since last warning
+	require.Equal(t, []int{100}, warnings)
+}
+
+type nopCloser struct {
+	io.Writer
+}
+
+func (nopCloser) Close() error { return nil }

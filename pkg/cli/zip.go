@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 	"github.com/lib/pq"
 	"github.com/marusama/semaphore"
 	"github.com/spf13/cobra"
@@ -178,7 +180,9 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	}
 
 	// We're going to use the SQL code, but in non-interactive mode.
-	// Override whatever terminal-driven defaults there may be out there.
+	// (The SQL output is written to files.)
+	// Override whatever terminal-driven defaults there may be out there
+	// for the SQL output code.
 	cliCtx.isInteractive = false
 	cliCtx.terminalOutput = false
 	sqlCtx.showTimes = false
@@ -198,15 +202,31 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 	name := args[0]
 	s = zr.start("creating output file %s", name)
-	out, err := os.Create(name)
+	outf, err := os.Create(name)
 	if err != nil {
 		return s.fail(err)
 	}
 
+	// This size is the size beyond which the command will report
+	// informational warnings on its standard error.
+	const outputFileSizeMultipleWarningThreshold = 10 << 20 // 10 MiB
+	out := newSizeWarner(outf, outputFileSizeMultipleWarningThreshold, func(sz int) {
+		fmt.Fprintf(stderr, "# warning: output file size exceeds %s.\n"+
+			"# hint: consider using --%s/--%s or --%s/--%s to refine what data gets included,\n"+
+			"# as well as the 'debug list-files' to test the configuration before running 'debug zip'.\n",
+			humanize.Bytes(uint64(sz)),
+			cliflags.ZipIncludedFiles.Name, cliflags.ZipExcludedFiles.Name,
+			cliflags.ZipFilesFrom.Name, cliflags.ZipFilesUntil.Name,
+		)
+	})
+
+	defer func() {
+		retErr = errors.CombineErrors(retErr, out.Close())
+	}()
+
 	z := newZipper(out)
 	defer func() {
-		cErr := z.close()
-		retErr = errors.CombineErrors(retErr, cErr)
+		retErr = errors.CombineErrors(retErr, z.close())
 	}()
 	s.done()
 

@@ -15,7 +15,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -34,13 +33,11 @@ type zipper struct {
 	// goroutines to write concurrently to a zip.Writer.
 	syncutil.Mutex
 
-	f *os.File
 	z *zip.Writer
 }
 
-func newZipper(f *os.File) *zipper {
+func newZipper(f io.Writer) *zipper {
 	return &zipper{
-		f: f,
 		z: zip.NewWriter(f),
 	}
 }
@@ -49,9 +46,7 @@ func (z *zipper) close() error {
 	z.Lock()
 	defer z.Unlock()
 
-	err1 := z.z.Close()
-	err2 := z.f.Close()
-	return errors.CombineErrors(err1, err2)
+	return z.z.Close()
 }
 
 // createLocked opens a new entry in the zip file. The caller is
@@ -569,4 +564,53 @@ func (t *timestampValue) Set(v string) error {
 	}
 	*t = timestampValue(tm)
 	return nil
+}
+
+// newSizeWarner creates an io.WriteCloser which calls the provided closure
+// any time the size of the data written passes a multiple of the
+// given threshold, plus one time at close time if the total size
+// written is larger than the threshold and some bytes were
+// written since the last call.
+//
+// It also takes responsibility of calling Close() on the provided
+// WriteCloser.
+func newSizeWarner(f io.WriteCloser, threshold int, cb func(int)) io.WriteCloser {
+	return &sizeWarner{
+		f:         f,
+		sz:        0,
+		threshold: threshold,
+		cb:        cb,
+	}
+}
+
+type sizeWarner struct {
+	f io.WriteCloser
+
+	sz        int
+	threshold int
+	cb        func(sz int)
+}
+
+// Write implements the io.Writer interface.
+func (s *sizeWarner) Write(b []byte) (int, error) {
+	n, err := s.f.Write(b)
+
+	// If we're passing beyond the threshold, call the function.
+	if (s.sz+n)/s.threshold > s.sz/s.threshold {
+		s.cb(s.sz + n)
+	}
+	s.sz += n
+
+	return n, err
+}
+
+// Close implements the io.Closer interface.
+func (s *sizeWarner) Close() error {
+	if s.sz > s.threshold {
+		// NB: we are not using s.sz >= s.threshold because the case s.sz
+		// == s.threshold would have been handled in the last call to
+		// Write() already.
+		s.cb(s.sz)
+	}
+	return s.f.Close()
 }
