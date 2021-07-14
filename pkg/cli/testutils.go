@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -178,6 +179,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 	c.prevStderr = stderr
 	stderr = os.Stdout
 	clisqlclient.TestingSetStderr(os.Stdout)
+	clisqlexec.TestingSetStderr(os.Stdout)
 
 	return c
 }
@@ -187,11 +189,11 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 // e.g. that tests ran with -v have the same output as those without.
 func setCLIDefaultsForTests() {
 	initCLIDefaults()
-	cliCtx.terminalOutput = false
-	sqlCtx.showTimes = false
+	sqlExecCtx.TerminalOutput = false
+	sqlExecCtx.ShowTimes = false
 	// Even though we pretend there is no terminal, most tests want
 	// pretty tables.
-	cliCtx.tableDisplayFormat = clisqlclient.TableDisplayTable
+	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTable
 }
 
 // stopServer stops the test server.
@@ -233,6 +235,7 @@ func (c *TestCLI) Cleanup() {
 	// Restore stderr.
 	stderr = c.prevStderr
 	clisqlclient.TestingSetStderr(c.prevStderr)
+	clisqlexec.TestingSetStderr(c.prevStderr)
 
 	log.Info(context.Background(), "stopping server and cleaning up CLI test")
 
@@ -280,6 +283,7 @@ func captureOutput(f func()) (out string, err error) {
 	os.Stdout = w
 	stderr = w
 	clisqlclient.TestingSetStderr(w)
+	clisqlexec.TestingSetStderr(w)
 
 	// Send all bytes from piped stdout through the output channel.
 	type captureResult struct {

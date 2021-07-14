@@ -716,8 +716,8 @@ func init() {
 		stringFlag(f, &sqlCtx.inputFile, cliflags.File)
 		durationFlag(f, &sqlCtx.repeatDelay, cliflags.Watch)
 		boolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates)
-		boolFlag(f, &sqlCtx.debugMode, cliflags.CliDebugMode)
-		boolFlag(f, &sqlCtx.embeddedMode, cliflags.EmbeddedMode)
+		boolFlag(f, &sqlConnCtx.DebugMode, cliflags.CliDebugMode)
+		boolFlag(f, &sqlConnCtx.EmbeddedMode, cliflags.EmbeddedMode)
 	}
 
 	// Commands that establish a SQL connection.
@@ -742,7 +742,7 @@ func init() {
 		// The --echo-sql flag is special: it is a marker for CLI tests to
 		// recognize SQL-only commands. If/when adding this flag to non-SQL
 		// commands, ensure the isSQLCommand() predicate is updated accordingly.
-		boolFlag(f, &sqlCtx.echo, cliflags.EchoSQL)
+		boolFlag(f, &sqlConnCtx.Echo, cliflags.EchoSQL)
 
 		if cmd != demoCmd {
 			varFlag(f, urlParser{cmd, &cliCtx, false /* strictSSL */}, cliflags.URL)
@@ -803,7 +803,7 @@ func init() {
 	// in the CLI shell.
 	for _, cmd := range tableOutputCommands {
 		f := cmd.PersistentFlags()
-		varFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
+		varFlag(f, &sqlExecCtx.TableDisplayFormat, cliflags.TableDisplayFormat)
 	}
 
 	// demo command.
@@ -1201,8 +1201,8 @@ func extraClientFlagInit() error {
 	// If CLI/SQL debug mode is requested, override the echo mode here,
 	// so that the initial client/server handshake reveals the SQL being
 	// sent.
-	if sqlCtx.debugMode {
-		sqlCtx.echo = true
+	if sqlConnCtx.DebugMode {
+		sqlConnCtx.Echo = true
 	}
 	return nil
 }

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package clisqlclient
+package clisqlexec
 
 import (
 	"bytes"
@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
@@ -96,7 +97,7 @@ func NewRowSliceIter(allRows [][]string, align string) RowStrIter {
 }
 
 type rowIter struct {
-	rows          Rows
+	rows          clisqlclient.Rows
 	colTypes      []string
 	showMoreChars bool
 }
@@ -138,7 +139,7 @@ func (iter *rowIter) Align() []int {
 	return align
 }
 
-func newRowIter(rows Rows, showMoreChars bool) *rowIter {
+func newRowIter(rows clisqlclient.Rows, showMoreChars bool) *rowIter {
 	return &rowIter{
 		rows:          rows,
 		colTypes:      rows.ColumnTypeNames(),
@@ -630,17 +631,15 @@ func (p *sqlReporter) doneRows(w io.Writer, seenRows int) error {
 // makeReporter instantiates a table formatter. It returns the
 // formatter and a cleanup function that must be called in all cases
 // when the formatting completes.
-func makeReporter(
-	w io.Writer, tableDisplayFormat TableDisplayFormat, tableBorderMode int,
-) (rowReporter, func(), error) {
-	switch tableDisplayFormat {
+func (sqlExecCtx *Context) makeReporter(w io.Writer) (rowReporter, func(), error) {
+	switch sqlExecCtx.TableDisplayFormat {
 	case TableDisplayTable:
-		return newASCIITableReporter(tableBorderMode), nil, nil
+		return newASCIITableReporter(sqlExecCtx.TableBorderMode), nil, nil
 
 	case TableDisplayTSV:
 		fallthrough
 	case TableDisplayCSV:
-		reporter, cleanup := makeCSVReporter(w, tableDisplayFormat)
+		reporter, cleanup := makeCSVReporter(w, sqlExecCtx.TableDisplayFormat)
 		return reporter, cleanup, nil
 
 	case TableDisplayRaw:
@@ -659,20 +658,14 @@ func makeReporter(
 		return &sqlReporter{}, nil, nil
 
 	default:
-		return nil, nil, errors.Errorf("unhandled display format: %d", tableDisplayFormat)
+		return nil, nil, errors.Errorf("unhandled display format: %d", sqlExecCtx.TableDisplayFormat)
 	}
 }
 
 // PrintQueryOutput takes a list of column names and a list of row
 // contents writes a formatted table to 'w'.
-func PrintQueryOutput(
-	w io.Writer,
-	cols []string,
-	allRows RowStrIter,
-	tableDisplayFormat TableDisplayFormat,
-	tableBorderMode int,
-) error {
-	reporter, cleanup, err := makeReporter(w, tableDisplayFormat, tableBorderMode)
+func (sqlExecCtx *Context) PrintQueryOutput(w io.Writer, cols []string, allRows RowStrIter) error {
+	reporter, cleanup, err := sqlExecCtx.makeReporter(w)
 	if err != nil {
 		return err
 	}

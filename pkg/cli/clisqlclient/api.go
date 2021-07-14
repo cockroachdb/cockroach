@@ -13,6 +13,7 @@ package clisqlclient
 import (
 	"database/sql/driver"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -40,6 +41,27 @@ type Conn interface {
 
 	// ExecTxn runs fn inside a transaction and retries it as needed.
 	ExecTxn(fn func(TxBoundConn) error) error
+
+	// GetLastQueryStatistics returns the detailed latency stats for the
+	// last executed query, if supported by the server and enabled by
+	// configuration.
+	// The first returned value is false if the feature is not supported
+	// by the server, is disabled by configuration or an error is returned.
+	// An error is returned if one was encountered when attempting
+	// to retrieve the stats from the server.
+	//
+	// The providesJobLat return value indicates whether jobsLat returns
+	// a meaningful value. This is set to false for some pre-21.1
+	// CockroachDB versions.
+	//
+	// TODO(knz): This collection of return values would be best
+	// returned as a struct implementing some standardized interface.
+	GetLastQueryStatistics() (
+		hasStats bool,
+		parseLat, planLat, execLat, serviceLat, jobsLat time.Duration,
+		providesJobLat bool,
+		err error,
+	)
 
 	// SetURL changes the URL field in the connection object, so that the
 	// next connection (re-)establishment will use the new URL.
