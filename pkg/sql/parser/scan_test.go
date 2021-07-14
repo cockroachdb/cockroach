@@ -119,12 +119,12 @@ world$$`, []int{SCONST}},
 		s := makeScanner(d.sql)
 		var tokens []int
 		for {
-			var lval sqlSymType
-			s.scan(&lval)
-			if lval.id == 0 {
+			var lval = &sqlSymType{}
+			s.scan(lval)
+			if lval.ID() == 0 {
 				break
 			}
-			tokens = append(tokens, int(lval.id))
+			tokens = append(tokens, int(lval.ID()))
 		}
 
 		if !reflect.DeepEqual(d.expected, tokens) {
@@ -154,12 +154,12 @@ foo`, "", "foo"},
 	}
 	for i, d := range testData {
 		s := makeScanner(d.sql)
-		var lval sqlSymType
-		present, ok := s.scanComment(&lval)
+		var lval = &sqlSymType{}
+		present, ok := s.scanComment(lval)
 		if d.err == "" && (!present || !ok) {
-			t.Fatalf("%d: expected success, but found %s", i, lval.str)
-		} else if d.err != "" && (present || ok || d.err != lval.str) {
-			t.Fatalf("%d: expected %s, but found %s", i, d.err, lval.str)
+			t.Fatalf("%d: expected success, but found %s", i, lval.Str())
+		} else if d.err != "" && (present || ok || d.err != lval.Str()) {
+			t.Fatalf("%d: expected %s, but found %s", i, d.err, lval.Str())
 		}
 		if r := s.in[s.pos:]; d.remainder != r {
 			t.Fatalf("%d: expected '%s', but found '%s'", i, d.remainder, r)
@@ -170,10 +170,10 @@ foo`, "", "foo"},
 func TestScanKeyword(t *testing.T) {
 	for _, kwName := range lexbase.KeywordNames {
 		s := makeScanner(kwName)
-		var lval sqlSymType
-		s.scan(&lval)
-		if id := lexbase.GetKeywordID(kwName); id != lval.id {
-			t.Errorf("%s: expected %d, but found %d", kwName, id, lval.id)
+		var lval = &sqlSymType{}
+		s.scan(lval)
+		if id := lexbase.GetKeywordID(kwName); id != lval.ID() {
+			t.Errorf("%s: expected %d, but found %d", kwName, id, lval.ID())
 		}
 	}
 }
@@ -210,13 +210,13 @@ func TestScanNumber(t *testing.T) {
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql)
-		var lval sqlSymType
-		s.scan(&lval)
-		if d.id != int(lval.id) {
-			t.Errorf("%s: expected %d, but found %d", d.sql, d.id, lval.id)
+		var lval = &sqlSymType{}
+		s.scan(lval)
+		if d.id != int(lval.ID()) {
+			t.Errorf("%s: expected %d, but found %d", d.sql, d.id, lval.ID())
 		}
-		if d.expected != lval.str {
-			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.str)
+		if d.expected != lval.Str() {
+			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.Str())
 		}
 	}
 }
@@ -232,13 +232,13 @@ func TestScanPlaceholder(t *testing.T) {
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql)
-		var lval sqlSymType
-		s.scan(&lval)
-		if lval.id != PLACEHOLDER {
-			t.Errorf("%s: expected %d, but found %d", d.sql, PLACEHOLDER, lval.id)
+		var lval = &sqlSymType{}
+		s.scan(lval)
+		if lval.ID() != PLACEHOLDER {
+			t.Errorf("%s: expected %d, but found %d", d.sql, PLACEHOLDER, lval.ID())
 		}
-		if d.expected != lval.str {
-			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.str)
+		if d.expected != lval.Str() {
+			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.Str())
 		}
 	}
 }
@@ -325,10 +325,10 @@ world`},
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql)
-		var lval sqlSymType
-		s.scan(&lval)
-		if d.expected != lval.str {
-			t.Errorf("%s: expected %q, but found %q", d.sql, d.expected, lval.str)
+		var lval = &sqlSymType{}
+		s.scan(lval)
+		if d.expected != lval.Str() {
+			t.Errorf("%s: expected %q, but found %q", d.sql, d.expected, lval.Str())
 		}
 	}
 }
@@ -358,13 +358,13 @@ func TestScanError(t *testing.T) {
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql)
-		var lval sqlSymType
-		s.scan(&lval)
-		if lval.id != ERROR {
-			t.Errorf("%s: expected ERROR, but found %d", d.sql, lval.id)
+		var lval = &sqlSymType{}
+		s.scan(lval)
+		if lval.ID() != ERROR {
+			t.Errorf("%s: expected ERROR, but found %d", d.sql, lval.ID())
 		}
-		if !testutils.IsError(errors.Newf("%s", lval.str), d.err) {
-			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.str)
+		if !testutils.IsError(errors.Newf("%s", lval.Str()), d.err) {
+			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.Str())
 		}
 	}
 }

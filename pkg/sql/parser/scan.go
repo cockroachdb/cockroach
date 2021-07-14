@@ -40,6 +40,18 @@ var NewPlaceholderFn = func(string) (interface{}, error) {
 	return struct{}{}, nil
 }
 
+// ScanSymType is the interface for accessing the fields of a yacc symType.
+type ScanSymType interface {
+	ID() int32
+	SetID(int32)
+	Pos() int32
+	SetPos(int32)
+	Str() string
+	SetStr(string)
+	UnionVal() interface{}
+	SetUnionVal(interface{})
+}
+
 // scanner lexes SQL statements.
 type scanner struct {
 	in            string
@@ -99,10 +111,10 @@ func (s *scanner) finishString(buf []byte) string {
 	return str
 }
 
-func (s *scanner) scan(lval *sqlSymType) {
-	lval.id = 0
-	lval.pos = int32(s.pos)
-	lval.str = "EOF"
+func (s *scanner) scan(lval ScanSymType) {
+	lval.SetID(0)
+	lval.SetPos(int32(s.pos))
+	lval.SetStr("EOF")
 
 	if _, ok := s.skipWhitespace(lval, true); !ok {
 		return
@@ -110,13 +122,13 @@ func (s *scanner) scan(lval *sqlSymType) {
 
 	ch := s.next()
 	if ch == eof {
-		lval.pos = int32(s.pos)
+		lval.SetPos(int32(s.pos))
 		return
 	}
 
-	lval.id = int32(ch)
-	lval.pos = int32(s.pos - 1)
-	lval.str = s.in[lval.pos:s.pos]
+	lval.SetID(int32(ch))
+	lval.SetPos(int32(s.pos - 1))
+	lval.SetStr(s.in[lval.Pos():s.pos])
 
 	switch ch {
 	case '$':
@@ -125,7 +137,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 			s.scanPlaceholder(lval)
 			return
 		} else if s.scanDollarQuotedString(lval) {
-			lval.id = SCONST
+			lval.SetID(SCONST)
 			return
 		}
 		return
@@ -133,14 +145,14 @@ func (s *scanner) scan(lval *sqlSymType) {
 	case identQuote:
 		// "[^"]"
 		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
-			lval.id = IDENT
+			lval.SetID(IDENT)
 		}
 		return
 
 	case singleQuote:
 		// '[^']'
 		if s.scanString(lval, ch, false /* allowEscapes */, true /* requireUTF8 */) {
-			lval.id = SCONST
+			lval.SetID(SCONST)
 		}
 		return
 
@@ -150,7 +162,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 			// b'[^']'
 			s.pos++
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, false /* requireUTF8 */) {
-				lval.id = BCONST
+				lval.SetID(BCONST)
 			}
 			return
 		}
@@ -167,7 +179,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 			// [eE]'[^']'
 			s.pos++
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, true /* requireUTF8 */) {
-				lval.id = SCONST
+				lval.SetID(SCONST)
 			}
 			return
 		}
@@ -200,7 +212,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 		switch t := s.peek(); {
 		case t == '.': // ..
 			s.pos++
-			lval.id = DOT_DOT
+			lval.SetID(DOT_DOT)
 			return
 		case lexbase.IsDigit(t):
 			s.scanNumber(lval, ch)
@@ -212,17 +224,17 @@ func (s *scanner) scan(lval *sqlSymType) {
 		switch s.peek() {
 		case '=': // !=
 			s.pos++
-			lval.id = NOT_EQUALS
+			lval.SetID(NOT_EQUALS)
 			return
 		case '~': // !~
 			s.pos++
 			switch s.peek() {
 			case '*': // !~*
 				s.pos++
-				lval.id = NOT_REGIMATCH
+				lval.SetID(NOT_REGIMATCH)
 				return
 			}
-			lval.id = NOT_REGMATCH
+			lval.SetID(NOT_REGMATCH)
 			return
 		}
 		return
@@ -231,15 +243,15 @@ func (s *scanner) scan(lval *sqlSymType) {
 		switch s.peek() {
 		case '?': // ??
 			s.pos++
-			lval.id = HELPTOKEN
+			lval.SetID(HELPTOKEN)
 			return
 		case '|': // ?|
 			s.pos++
-			lval.id = JSON_SOME_EXISTS
+			lval.SetID(JSON_SOME_EXISTS)
 			return
 		case '&': // ?&
 			s.pos++
-			lval.id = JSON_ALL_EXISTS
+			lval.SetID(JSON_ALL_EXISTS)
 			return
 		}
 		return
@@ -251,22 +263,22 @@ func (s *scanner) scan(lval *sqlSymType) {
 			switch s.peek() {
 			case '=': // <<=
 				s.pos++
-				lval.id = INET_CONTAINED_BY_OR_EQUALS
+				lval.SetID(INET_CONTAINED_BY_OR_EQUALS)
 				return
 			}
-			lval.id = LSHIFT
+			lval.SetID(LSHIFT)
 			return
 		case '>': // <>
 			s.pos++
-			lval.id = NOT_EQUALS
+			lval.SetID(NOT_EQUALS)
 			return
 		case '=': // <=
 			s.pos++
-			lval.id = LESS_EQUALS
+			lval.SetID(LESS_EQUALS)
 			return
 		case '@': // <@
 			s.pos++
-			lval.id = CONTAINED_BY
+			lval.SetID(CONTAINED_BY)
 			return
 		}
 		return
@@ -278,14 +290,14 @@ func (s *scanner) scan(lval *sqlSymType) {
 			switch s.peek() {
 			case '=': // >>=
 				s.pos++
-				lval.id = INET_CONTAINS_OR_EQUALS
+				lval.SetID(INET_CONTAINS_OR_EQUALS)
 				return
 			}
-			lval.id = RSHIFT
+			lval.SetID(RSHIFT)
 			return
 		case '=': // >=
 			s.pos++
-			lval.id = GREATER_EQUALS
+			lval.SetID(GREATER_EQUALS)
 			return
 		}
 		return
@@ -296,11 +308,11 @@ func (s *scanner) scan(lval *sqlSymType) {
 			if s.peekN(1) == ':' {
 				// :::
 				s.pos += 2
-				lval.id = TYPEANNOTATE
+				lval.SetID(TYPEANNOTATE)
 				return
 			}
 			s.pos++
-			lval.id = TYPECAST
+			lval.SetID(TYPECAST)
 			return
 		}
 		return
@@ -312,14 +324,14 @@ func (s *scanner) scan(lval *sqlSymType) {
 			switch s.peek() {
 			case '/': // ||/
 				s.pos++
-				lval.id = CBRT
+				lval.SetID(CBRT)
 				return
 			}
-			lval.id = CONCAT
+			lval.SetID(CONCAT)
 			return
 		case '/': // |/
 			s.pos++
-			lval.id = SQRT
+			lval.SetID(SQRT)
 			return
 		}
 		return
@@ -328,7 +340,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 		switch s.peek() {
 		case '/': // //
 			s.pos++
-			lval.id = FLOORDIV
+			lval.SetID(FLOORDIV)
 			return
 		}
 		return
@@ -337,7 +349,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 		switch s.peek() {
 		case '*': // ~*
 			s.pos++
-			lval.id = REGIMATCH
+			lval.SetID(REGIMATCH)
 			return
 		}
 		return
@@ -346,7 +358,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 		switch s.peek() {
 		case '>': // @>
 			s.pos++
-			lval.id = CONTAINS
+			lval.SetID(CONTAINS)
 			return
 		}
 		return
@@ -355,7 +367,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 		switch s.peek() {
 		case '&': // &&
 			s.pos++
-			lval.id = AND_AND
+			lval.SetID(AND_AND)
 			return
 		}
 		return
@@ -366,11 +378,11 @@ func (s *scanner) scan(lval *sqlSymType) {
 			if s.peekN(1) == '>' {
 				// ->>
 				s.pos += 2
-				lval.id = FETCHTEXT
+				lval.SetID(FETCHTEXT)
 				return
 			}
 			s.pos++
-			lval.id = FETCHVAL
+			lval.SetID(FETCHVAL)
 			return
 		}
 		return
@@ -381,15 +393,15 @@ func (s *scanner) scan(lval *sqlSymType) {
 			if s.peekN(1) == '>' {
 				// #>>
 				s.pos += 2
-				lval.id = FETCHTEXT_PATH
+				lval.SetID(FETCHTEXT_PATH)
 				return
 			}
 			s.pos++
-			lval.id = FETCHVAL_PATH
+			lval.SetID(FETCHVAL_PATH)
 			return
 		case '-': // #-
 			s.pos++
-			lval.id = REMOVE_PATH
+			lval.SetID(REMOVE_PATH)
 			return
 		}
 		return
@@ -432,7 +444,7 @@ func (s *scanner) next() int {
 	return ch
 }
 
-func (s *scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline, ok bool) {
+func (s *scanner) skipWhitespace(lval ScanSymType, allowComments bool) (newline, ok bool) {
 	newline = false
 	for {
 		ch := s.peek()
@@ -457,7 +469,7 @@ func (s *scanner) skipWhitespace(lval *sqlSymType, allowComments bool) (newline,
 	return newline, true
 }
 
-func (s *scanner) scanComment(lval *sqlSymType) (present, ok bool) {
+func (s *scanner) scanComment(lval ScanSymType) (present, ok bool) {
 	start := s.pos
 	ch := s.peek()
 
@@ -489,9 +501,9 @@ func (s *scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 				}
 
 			case eof:
-				lval.id = ERROR
-				lval.pos = int32(start)
-				lval.str = "unterminated comment"
+				lval.SetID(ERROR)
+				lval.SetPos(int32(start))
+				lval.SetStr("unterminated comment")
 				return false, false
 			}
 		}
@@ -514,7 +526,7 @@ func (s *scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 	return false, true
 }
 
-func (s *scanner) scanIdent(lval *sqlSymType) {
+func (s *scanner) scanIdent(lval ScanSymType) {
 	s.pos--
 	start := s.pos
 	isASCII := true
@@ -546,7 +558,7 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 
 	if isLower {
 		// Already lowercased - nothing to do.
-		lval.str = s.in[start:s.pos]
+		lval.SetStr(s.in[start:s.pos])
 	} else if isASCII {
 		// We know that the identifier we've seen so far is ASCII, so we don't need
 		// to unicode normalize. Instead, just lowercase as normal.
@@ -558,45 +570,45 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 			}
 			b[i] = byte(c)
 		}
-		lval.str = *(*string)(unsafe.Pointer(&b))
+		lval.SetStr(*(*string)(unsafe.Pointer(&b)))
 	} else {
 		// The string has unicode in it. No choice but to run Normalize.
-		lval.str = lexbase.NormalizeName(s.in[start:s.pos])
+		lval.SetStr(lexbase.NormalizeName(s.in[start:s.pos]))
 	}
 
 	isExperimental := false
-	kw := lval.str
+	kw := lval.Str()
 	switch {
-	case strings.HasPrefix(lval.str, "experimental_"):
-		kw = lval.str[13:]
+	case strings.HasPrefix(lval.Str(), "experimental_"):
+		kw = lval.Str()[13:]
 		isExperimental = true
-	case strings.HasPrefix(lval.str, "testing_"):
-		kw = lval.str[8:]
+	case strings.HasPrefix(lval.Str(), "testing_"):
+		kw = lval.Str()[8:]
 		isExperimental = true
 	}
-	lval.id = lexbase.GetKeywordID(kw)
-	if lval.id != lexbase.IDENT {
+	lval.SetID(lexbase.GetKeywordID(kw))
+	if lval.ID() != lexbase.IDENT {
 		if isExperimental {
 			if _, ok := lexbase.AllowedExperimental[kw]; !ok {
 				// If the parsed token is not on the allowlisted set of keywords,
 				// then it might have been intended to be parsed as something else.
 				// In that case, re-tokenize the original string.
-				lval.id = lexbase.GetKeywordID(lval.str)
+				lval.SetID(lexbase.GetKeywordID(lval.Str()))
 			} else {
 				// It is a allowlisted keyword, so remember the shortened
 				// keyword for further processing.
-				lval.str = kw
+				lval.SetStr(kw)
 			}
 		}
 	} else {
 		// If the word after experimental_ or testing_ is an identifier,
 		// then we might have classified it incorrectly after removing the
 		// experimental_/testing_ prefix.
-		lval.id = lexbase.GetKeywordID(lval.str)
+		lval.SetID(lexbase.GetKeywordID(lval.Str()))
 	}
 }
 
-func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
+func (s *scanner) scanNumber(lval ScanSymType, ch int) {
 	start := s.pos - 1
 	isHex := false
 	hasDecimal := ch == '.'
@@ -610,8 +622,8 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 		}
 		if ch == 'x' || ch == 'X' {
 			if isHex || s.in[start] != '0' || s.pos != start+1 {
-				lval.id = ERROR
-				lval.str = errInvalidHexNumeric
+				lval.SetID(ERROR)
+				lval.SetStr(errInvalidHexNumeric)
 				return
 			}
 			s.pos++
@@ -647,8 +659,8 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 			}
 			ch = s.peek()
 			if !lexbase.IsDigit(ch) {
-				lval.id = ERROR
-				lval.str = "invalid floating point literal"
+				lval.SetID(ERROR)
+				lval.SetStr("invalid floating point literal")
 				return
 			}
 			continue
@@ -656,20 +668,20 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 		break
 	}
 
-	lval.str = s.in[start:s.pos]
+	lval.SetStr(s.in[start:s.pos])
 	if hasDecimal || hasExponent {
-		lval.id = FCONST
-		floatConst := constant.MakeFromLiteral(lval.str, token.FLOAT, 0)
+		lval.SetID(FCONST)
+		floatConst := constant.MakeFromLiteral(lval.Str(), token.FLOAT, 0)
 		if floatConst.Kind() == constant.Unknown {
-			lval.id = ERROR
-			lval.str = fmt.Sprintf("could not make constant float from literal %q", lval.str)
+			lval.SetID(ERROR)
+			lval.SetStr(fmt.Sprintf("could not make constant float from literal %q", lval.Str()))
 			return
 		}
-		lval.union.val = NewNumValFn(floatConst, lval.str, false /* negative */)
+		lval.SetUnionVal(NewNumValFn(floatConst, lval.Str(), false /* negative */))
 	} else {
 		if isHex && s.pos == start+2 {
-			lval.id = ERROR
-			lval.str = errInvalidHexNumeric
+			lval.SetID(ERROR)
+			lval.SetStr(errInvalidHexNumeric)
 			return
 		}
 
@@ -678,41 +690,41 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 		// string as an octal literal. Note: we can't use strings.TrimLeft
 		// here, because it will truncate '0' to ''.
 		if !isHex {
-			for len(lval.str) > 1 && lval.str[0] == '0' {
-				lval.str = lval.str[1:]
+			for len(lval.Str()) > 1 && lval.Str()[0] == '0' {
+				lval.SetStr(lval.Str()[1:])
 			}
 		}
 
-		lval.id = ICONST
-		intConst := constant.MakeFromLiteral(lval.str, token.INT, 0)
+		lval.SetID(ICONST)
+		intConst := constant.MakeFromLiteral(lval.Str(), token.INT, 0)
 		if intConst.Kind() == constant.Unknown {
-			lval.id = ERROR
-			lval.str = fmt.Sprintf("could not make constant int from literal %q", lval.str)
+			lval.SetID(ERROR)
+			lval.SetStr(fmt.Sprintf("could not make constant int from literal %q", lval.Str()))
 			return
 		}
-		lval.union.val = NewNumValFn(intConst, lval.str, false /* negative */)
+		lval.SetUnionVal(NewNumValFn(intConst, lval.Str(), false /* negative */))
 	}
 }
 
-func (s *scanner) scanPlaceholder(lval *sqlSymType) {
+func (s *scanner) scanPlaceholder(lval ScanSymType) {
 	start := s.pos
 	for lexbase.IsDigit(s.peek()) {
 		s.pos++
 	}
-	lval.str = s.in[start:s.pos]
+	lval.SetStr(s.in[start:s.pos])
 
-	placeholder, err := NewPlaceholderFn(lval.str)
+	placeholder, err := NewPlaceholderFn(lval.Str())
 	if err != nil {
-		lval.id = ERROR
-		lval.str = err.Error()
+		lval.SetID(ERROR)
+		lval.SetStr(err.Error())
 		return
 	}
-	lval.id = PLACEHOLDER
-	lval.union.val = placeholder
+	lval.SetID(PLACEHOLDER)
+	lval.SetUnionVal(placeholder)
 }
 
 // scanHexString scans the content inside x'....'.
-func (s *scanner) scanHexString(lval *sqlSymType, ch int) bool {
+func (s *scanner) scanHexString(lval ScanSymType, ch int) bool {
 	buf := s.buffer()
 
 	var curbyte byte
@@ -744,8 +756,8 @@ outer:
 		case 'A', 'B', 'C', 'D', 'E', 'F':
 			curbyte = (curbyte << 4) | byte(b-'A'+10)
 		default:
-			lval.id = ERROR
-			lval.str = errInvalidBytesLiteral
+			lval.SetID(ERROR)
+			lval.SetStr(errInvalidBytesLiteral)
 			return false
 		}
 		bytep++
@@ -758,18 +770,18 @@ outer:
 	}
 
 	if bytep != 0 {
-		lval.id = ERROR
-		lval.str = errInvalidBytesLiteral
+		lval.SetID(ERROR)
+		lval.SetStr(errInvalidBytesLiteral)
 		return false
 	}
 
-	lval.id = BCONST
-	lval.str = s.finishString(buf)
+	lval.SetID(BCONST)
+	lval.SetStr(s.finishString(buf))
 	return true
 }
 
 // scanBitString scans the content inside B'....'.
-func (s *scanner) scanBitString(lval *sqlSymType, ch int) bool {
+func (s *scanner) scanBitString(lval ScanSymType, ch int) bool {
 	buf := s.buffer()
 outer:
 	for {
@@ -793,21 +805,21 @@ outer:
 		case '0', '1':
 			buf = append(buf, byte(b))
 		default:
-			lval.id = ERROR
-			lval.str = fmt.Sprintf(`"%c" is not a valid binary digit`, rune(b))
+			lval.SetID(ERROR)
+			lval.SetStr(fmt.Sprintf(`"%c" is not a valid binary digit`, rune(b)))
 			return false
 		}
 	}
 
-	lval.id = BITCONST
-	lval.str = s.finishString(buf)
+	lval.SetID(BITCONST)
+	lval.SetStr(s.finishString(buf))
 	return true
 }
 
 // scanString scans the content inside '...'. This is used for simple
 // string literals '...' but also e'....' and b'...'. For x'...', see
 // scanHexString().
-func (s *scanner) scanString(lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool) bool {
+func (s *scanner) scanString(lval ScanSymType, ch int, allowEscapes, requireUTF8 bool) bool {
 	buf := s.buffer()
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
@@ -864,8 +876,8 @@ outer:
 					}
 					v, multibyte, tail, err := strconv.UnquoteChar(tmp, byte(ch))
 					if err != nil {
-						lval.id = ERROR
-						lval.str = err.Error()
+						lval.SetID(ERROR)
+						lval.SetStr(err.Error())
 						return false
 					}
 					if v < utf8.RuneSelf || !multibyte {
@@ -887,25 +899,25 @@ outer:
 			}
 
 		case eof:
-			lval.id = ERROR
-			lval.str = errUnterminated
+			lval.SetID(ERROR)
+			lval.SetStr(errUnterminated)
 			return false
 		}
 	}
 
 	if requireUTF8 && !utf8.Valid(buf) {
-		lval.id = ERROR
-		lval.str = errInvalidUTF8
+		lval.SetID(ERROR)
+		lval.SetStr(errInvalidUTF8)
 		return false
 	}
 
-	lval.str = s.finishString(buf)
+	lval.SetStr(s.finishString(buf))
 	return true
 }
 
 // scanDollarQuotedString scans for so called dollar-quoted strings, which start/end with either $$ or $tag$, where
 // tag is some arbitrary string.  e.g. $$a string$$ or $escaped$a string$escaped$.
-func (s *scanner) scanDollarQuotedString(lval *sqlSymType) bool {
+func (s *scanner) scanDollarQuotedString(lval ScanSymType) bool {
 	buf := s.buffer()
 	start := s.pos
 
@@ -943,8 +955,8 @@ outer:
 		case eof:
 			if foundStartTag {
 				// A start tag was found, therefore we expect an end tag before the eof, otherwise it is an error.
-				lval.id = ERROR
-				lval.str = errUnterminated
+				lval.SetID(ERROR)
+				lval.SetStr(errUnterminated)
 			} else {
 				// This is not a dollar-quoted string, reset the pos back to the start.
 				s.pos = start
@@ -971,12 +983,12 @@ outer:
 	}
 
 	if !utf8.Valid(buf) {
-		lval.id = ERROR
-		lval.str = errInvalidUTF8
+		lval.SetID(ERROR)
+		lval.SetStr(errInvalidUTF8)
 		return false
 	}
 
-	lval.str = s.finishString(buf)
+	lval.SetStr(s.finishString(buf))
 	return true
 }
 
@@ -985,10 +997,10 @@ outer:
 // semicolon, returns ok=false.
 func SplitFirstStatement(sql string) (pos int, ok bool) {
 	s := makeScanner(sql)
-	var lval sqlSymType
+	var lval ScanSymType
 	for {
-		s.scan(&lval)
-		switch lval.id {
+		s.scan(lval)
+		switch lval.ID() {
 		case 0, ERROR:
 			return 0, false
 		case ';':
@@ -1001,15 +1013,15 @@ func SplitFirstStatement(sql string) (pos int, ok bool) {
 func Tokens(sql string) (tokens []TokenString, ok bool) {
 	s := makeScanner(sql)
 	for {
-		var lval sqlSymType
-		s.scan(&lval)
-		if lval.id == ERROR {
+		var lval ScanSymType
+		s.scan(lval)
+		if lval.ID() == ERROR {
 			return nil, false
 		}
-		if lval.id == 0 {
+		if lval.ID() == 0 {
 			break
 		}
-		tokens = append(tokens, TokenString{TokenID: lval.id, Str: lval.str})
+		tokens = append(tokens, TokenString{TokenID: lval.ID(), Str: lval.Str()})
 	}
 	return tokens, true
 }
@@ -1024,11 +1036,11 @@ type TokenString struct {
 // tokens, returns 0 and ok=false.
 func LastLexicalToken(sql string) (lastTok int, ok bool) {
 	s := makeScanner(sql)
-	var lval sqlSymType
+	var lval ScanSymType
 	for {
-		last := lval.id
-		s.scan(&lval)
-		if lval.id == 0 {
+		last := lval.ID()
+		s.scan(lval)
+		if lval.ID() == 0 {
 			return int(last), last != 0
 		}
 	}
