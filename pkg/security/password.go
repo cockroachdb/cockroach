@@ -13,8 +13,6 @@ package security
 import (
 	"context"
 	"crypto/sha256"
-	"fmt"
-	"os"
 	"runtime"
 	"sync"
 
@@ -24,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/term"
 )
 
 // BcryptCost is the cost to use when hashing passwords. It is exposed for
@@ -81,20 +78,6 @@ func HashPassword(ctx context.Context, password string) ([]byte, error) {
 	}
 	defer alloc.Release()
 	return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
-}
-
-// PromptForPassword prompts for a password.
-// This is meant to be used when using a password.
-func PromptForPassword() (string, error) {
-	fmt.Print("Enter password: ")
-	password, err := term.ReadPassword(int(os.Stdin.Fd()))
-	if err != nil {
-		return "", err
-	}
-	// Make sure stdout moves on to the next line.
-	fmt.Print("\n")
-
-	return string(password), nil
 }
 
 // MinPasswordLength is the cluster setting that configures the

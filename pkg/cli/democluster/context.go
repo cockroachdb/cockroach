@@ -1,0 +1,98 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package democluster
+
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
+	"github.com/cockroachdb/cockroach/pkg/workload"
+)
+
+// Context represents the input configuration and current state
+// of a demo cluster.
+type Context struct {
+	// CliCtx links this demo context to a CLI configuration
+	// environment.
+	CliCtx *clicfg.Context
+
+	// NumNodes is the requested number of nodes, and is also
+	// modified when adding new nodes.
+	NumNodes int
+
+	// SQLPoolMemorySize is the size of the memory pool for each SQL
+	// server.
+	SQLPoolMemorySize int64
+
+	// CacheSize is the size of the storage cache for each KV server.
+	CacheSize int64
+
+	// DisableTelemetry requests that telemetry be disabled.
+	DisableTelemetry bool
+
+	// DisableLicenseAcquisition requests that no evaluation license be
+	// automatically acquired to enable enterprise features.
+	DisableLicenseAcquisition bool
+
+	// NoExampleDatabase prevents the auto-creation of a demo database
+	// from a workload.
+	NoExampleDatabase bool
+
+	// RunWorkload indicates whether to run a workload in the background
+	// after the demo cluster has been initialized.
+	RunWorkload bool
+
+	// WorkloadGenerator is the desired workload generator.
+	WorkloadGenerator workload.Generator
+
+	// Localities configures the list of localities available for use
+	// by instantiated servers.
+	Localities DemoLocalityList
+
+	// GeoPartitionedReplicas requests that the executed workload
+	// partition its data across localities. Requires an enterprise
+	// license.
+	GeoPartitionedReplicas bool
+
+	// SimulateLatency requests that cross-region latencies be simulated
+	// across region localities.
+	SimulateLatency bool
+
+	// DefaultKeySize is the default size of TLS private keys to use.
+	DefaultKeySize int
+
+	// DefaultCALifetime is the default lifetime of CA certs that are
+	// generated for the transient cluster.
+	DefaultCALifetime time.Duration
+
+	// DefaultCertLifetime is the default lifetime of client certs that
+	// are generated for the transient cluster.
+	DefaultCertLifetime time.Duration
+
+	// insecure requests that the server be started in "insecure mode".
+	// NB: This is obsolete.
+	Insecure bool
+
+	// SQLPort is the first SQL port number to use when instantiating
+	// servers. Use zero for auto-allocated random ports.
+	SQLPort int
+
+	// HTTPPort is the first HTTP port number to use when instantiating
+	// servers. Use zero for auto-allocated random ports.
+	HTTPPort int
+}
+
+// IsInteractive returns true if the demo cluster configuration
+// is for an interactive session. This exposes the field
+// from clicfg.Context if available.
+func (demoCtx *Context) IsInteractive() bool {
+	return demoCtx.CliCtx != nil && demoCtx.CliCtx.IsInteractive
+}

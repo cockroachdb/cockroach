@@ -24,6 +24,7 @@ go_library(
         "//pkg/cli",
         "//pkg/cli/cliflags",
         "//pkg/cli/clisqlexec",
+        "//pkg/cli/democluster",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/security",

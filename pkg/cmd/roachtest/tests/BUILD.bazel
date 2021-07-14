@@ -100,7 +100,6 @@ go_library(
         "scrub.go",
         "secondary_indexes.go",
         "sequelize.go",
-        "sequence_upgrade.go",
         "split.go",
         "sqlalchemy.go",
         "sqlalchemy_blocklist.go",

@@ -20,8 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
+	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -198,6 +201,7 @@ func setCliContextDefaults() {
 	// other client commands are non-interactive, regardless of whether
 	// the standard input is a terminal.
 	cliCtx.IsInteractive = false
+	cliCtx.EmbeddedMode = false
 	cliCtx.cmdTimeout = 0 // no timeout
 	cliCtx.clientConnHost = ""
 	cliCtx.clientConnPort = base.DefaultPort
@@ -227,7 +231,6 @@ func setSQLConnContextDefaults() {
 	// See also setCLIDefaultForTests() in cli_test.go.
 	sqlConnCtx.DebugMode = false
 	sqlConnCtx.Echo = false
-	sqlConnCtx.EmbeddedMode = false
 	sqlConnCtx.EnableServerExecutionTimings = false
 }
 
@@ -241,7 +244,7 @@ var sqlExecCtx = clisqlexec.Context{
 // This binds PrintQueryOutput to this package's common/global
 // CLI configuration, for use by other packages like the CCL CLI.
 func PrintQueryOutput(w io.Writer, cols []string, allRows clisqlexec.RowStrIter) error {
-	return sqlExecCtx.PrintQueryOutput(w, cols, allRows)
+	return sqlExecCtx.PrintQueryOutput(w, stderr, cols, allRows)
 }
 
 // setSQLConnContextDefaults set the default values in sqlConnCtx.  This
@@ -260,62 +263,20 @@ func setSQLExecContextDefaults() {
 	sqlExecCtx.VerboseTimings = false
 }
 
-// sqlCtx captures the configuration of the `sql` command.
-// See below for defaults.
-var sqlCtx = struct {
-	// setStmts is a list of \set commands to execute before entering the sql shell.
-	setStmts statementsValue
-
-	// execStmts is a list of statements to execute.
-	// Only valid if inputFile is empty.
-	execStmts statementsValue
-
-	// quitAfterExecStmts tells the shell whether to quit
-	// after processing the execStmts.
-	quitAfterExecStmts bool
-
-	// inputFile is the file to read from.
-	// If empty, os.Stdin is used.
-	// Only valid if execStmts is empty.
-	inputFile string
-
-	// repeatDelay indicates that the execStmts should be "watched"
-	// at the specified time interval. Zero disables
-	// the watch.
-	repeatDelay time.Duration
-
-	// safeUpdates indicates whether to set sql_safe_updates in the CLI
-	// shell.
-	safeUpdates bool
-
-	// Determines whether to stop the client upon encountering an error.
-	errExit bool
-
-	// Determines whether to perform client-side syntax checking.
-	checkSyntax bool
-
-	// autoTrace, when non-empty, encloses the executed statements
-	// by suitable SET TRACING and SHOW TRACE FOR SESSION statements.
-	autoTrace string
-
-	// The string used to produce the value of fullPrompt.
-	customPromptPattern string
-}{}
+var sqlCtx = func() *clisqlcfg.Context {
+	cfg := &clisqlcfg.Context{
+		CliCtx:  &cliCtx.Context,
+		ConnCtx: &sqlConnCtx,
+		ExecCtx: &sqlExecCtx,
+	}
+	return cfg
+}()
 
 // setSQLContextDefaults set the default values in sqlCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
 func setSQLContextDefaults() {
-	sqlCtx.setStmts = nil
-	sqlCtx.execStmts = nil
-	sqlCtx.quitAfterExecStmts = false
-	sqlCtx.inputFile = ""
-	sqlCtx.repeatDelay = 0
-	sqlCtx.safeUpdates = false
-	sqlCtx.errExit = false
-	sqlCtx.checkSyntax = false
-	sqlCtx.autoTrace = ""
-	sqlCtx.customPromptPattern = defaultPromptPattern
+	sqlCtx.LoadDefaults(os.Stdout, stderr)
 }
 
 // zipCtx captures the command-line parameters of the `zip` command.
@@ -537,7 +498,7 @@ var sqlfmtCtx struct {
 	tabWidth   int
 	noSimplify bool
 	align      bool
-	execStmts  statementsValue
+	execStmts  clisqlshell.StatementsValue
 }
 
 // setSqlfmtContextDefaults set the default values in sqlfmtCtx.  This
@@ -566,41 +527,30 @@ func setConvContextDefaults() {
 
 // demoCtx captures the command-line parameters of the `demo` command.
 // See below for defaults.
-var demoCtx struct {
-	nodes                     int
-	sqlPoolMemorySize         int64
-	cacheSize                 int64
-	disableTelemetry          bool
-	disableLicenseAcquisition bool
-	noExampleDatabase         bool
-	runWorkload               bool
-	localities                demoLocalityList
-	geoPartitionedReplicas    bool
-	simulateLatency           bool
-	transientCluster          *transientCluster
-	insecure                  bool
-	sqlPort                   int
-	httpPort                  int
+var demoCtx = democluster.Context{
+	CliCtx: &cliCtx.Context,
 }
 
 // setDemoContextDefaults set the default values in demoCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
 func setDemoContextDefaults() {
-	demoCtx.nodes = 1
-	demoCtx.sqlPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.cacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.noExampleDatabase = false
-	demoCtx.simulateLatency = false
-	demoCtx.runWorkload = false
-	demoCtx.localities = nil
-	demoCtx.geoPartitionedReplicas = false
-	demoCtx.disableTelemetry = false
-	demoCtx.disableLicenseAcquisition = false
-	demoCtx.transientCluster = nil
-	demoCtx.insecure = false
-	demoCtx.sqlPort, _ = strconv.Atoi(base.DefaultPort)
-	demoCtx.httpPort, _ = strconv.Atoi(base.DefaultHTTPPort)
+	demoCtx.NumNodes = 1
+	demoCtx.SQLPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
+	demoCtx.CacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
+	demoCtx.NoExampleDatabase = false
+	demoCtx.SimulateLatency = false
+	demoCtx.RunWorkload = false
+	demoCtx.Localities = nil
+	demoCtx.GeoPartitionedReplicas = false
+	demoCtx.DisableTelemetry = false
+	demoCtx.DisableLicenseAcquisition = false
+	demoCtx.DefaultKeySize = defaultKeySize
+	demoCtx.DefaultCALifetime = defaultCALifetime
+	demoCtx.DefaultCertLifetime = defaultCertLifetime
+	demoCtx.Insecure = false
+	demoCtx.SQLPort, _ = strconv.Atoi(base.DefaultPort)
+	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'

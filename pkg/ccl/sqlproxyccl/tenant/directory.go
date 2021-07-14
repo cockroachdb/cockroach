@@ -185,7 +185,13 @@ func (d *Directory) LookupTenantAddrs(
 		return nil, status.Errorf(
 			codes.NotFound, "tenant %d not in directory cache", tenantID.ToUint64())
 	}
-	return entry.getPodAddrs(), nil
+
+	tenantPods := entry.getPods()
+	addrs := make([]string, len(tenantPods))
+	for i, pod := range tenantPods {
+		addrs[i] = pod.Addr
+	}
+	return addrs, nil
 }
 
 // ReportFailure should be called when attempts to connect to a particular SQL
@@ -376,8 +382,7 @@ func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error 
 // watcher events. When a pod is created, destroyed, or modified, it updates the
 // tenant's entry to reflect that change.
 func (d *Directory) updateTenantEntry(ctx context.Context, pod *Pod) {
-	podAddr := pod.Addr
-	if podAddr == "" {
+	if pod.Addr == "" {
 		// Nothing needs to be done if there is no IP address specified.
 		return
 	}
@@ -393,15 +398,23 @@ func (d *Directory) updateTenantEntry(ctx context.Context, pod *Pod) {
 		return
 	}
 
-	if pod.State == RUNNING {
-		// Add addresses of RUNNING pods if they are not already present.
-		if entry.AddPodAddr(podAddr) {
-			log.Infof(ctx, "added IP address %s for tenant %d", podAddr, pod.TenantID)
+	switch pod.State {
+	case RUNNING:
+		// Add entries of RUNNING pods if they are not already present.
+		if entry.AddPod(pod) {
+			log.Infof(ctx, "added IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
+		} else {
+			log.Infof(ctx, "updated IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
 		}
-	} else {
+	// Update entries of UNKNOWN pods only if they are already present.
+	case UNKNOWN:
+		if entry.UpdatePod(pod) {
+			log.Infof(ctx, "updated IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
+		}
+	default:
 		// Remove addresses of DRAINING and DELETING pods.
-		if entry.RemovePodAddr(podAddr) {
-			log.Infof(ctx, "deleted IP address %s for tenant %d", podAddr, pod.TenantID)
+		if entry.RemovePodByAddr(pod.Addr) {
+			log.Infof(ctx, "deleted IP address %s for tenant %d", pod.Addr, pod.TenantID)
 		}
 	}
 }

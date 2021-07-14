@@ -13,6 +13,7 @@ package clisqlexec_test
 import (
 	"bytes"
 	"io"
+	"io/ioutil"
 	"net/url"
 	"reflect"
 	"testing"
@@ -31,13 +32,13 @@ var testExecCtx = clisqlexec.Context{
 
 func makeSQLConn(url string) clisqlclient.Conn {
 	var sqlConnCtx clisqlclient.Context
-	return sqlConnCtx.MakeSQLConn(url)
+	return sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, url)
 }
 
 func runQueryAndFormatResults(
 	conn clisqlclient.Conn, w io.Writer, fn clisqlclient.QueryFn,
 ) (err error) {
-	return testExecCtx.RunQueryAndFormatResults(conn, w, fn)
+	return testExecCtx.RunQueryAndFormatResults(conn, w, ioutil.Discard, fn)
 }
 
 func TestRunQuery(t *testing.T) {

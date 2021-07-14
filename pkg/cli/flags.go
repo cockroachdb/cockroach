@@ -711,13 +711,17 @@ func init() {
 	// SQL and demo commands.
 	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {
 		f := cmd.Flags()
-		varFlag(f, &sqlCtx.setStmts, cliflags.Set)
-		varFlag(f, &sqlCtx.execStmts, cliflags.Execute)
-		stringFlag(f, &sqlCtx.inputFile, cliflags.File)
-		durationFlag(f, &sqlCtx.repeatDelay, cliflags.Watch)
-		boolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates)
+		varFlag(f, &sqlCtx.ShellCtx.SetStmts, cliflags.Set)
+		varFlag(f, &sqlCtx.ShellCtx.ExecStmts, cliflags.Execute)
+		stringFlag(f, &sqlCtx.InputFile, cliflags.File)
+		durationFlag(f, &sqlCtx.ShellCtx.RepeatDelay, cliflags.Watch)
+		varFlag(f, &sqlCtx.SafeUpdates, cliflags.SafeUpdates)
+		// The "safe-updates" flag is tri-valued (true, false, not-specified).
+		// If the flag is specified on the command line, but is not given a value,
+		// then use the value "true".
+		f.Lookup(cliflags.SafeUpdates.Name).NoOptDefVal = "true"
 		boolFlag(f, &sqlConnCtx.DebugMode, cliflags.CliDebugMode)
-		boolFlag(f, &sqlConnCtx.EmbeddedMode, cliflags.EmbeddedMode)
+		boolFlag(f, &cliCtx.EmbeddedMode, cliflags.EmbeddedMode)
 	}
 
 	// Commands that establish a SQL connection.
@@ -813,33 +817,33 @@ func init() {
 		// ./cockroach demo movr --nodes=3.
 		f := demoCmd.PersistentFlags()
 
-		intFlag(f, &demoCtx.nodes, cliflags.DemoNodes)
-		boolFlag(f, &demoCtx.runWorkload, cliflags.RunDemoWorkload)
-		varFlag(f, &demoCtx.localities, cliflags.DemoNodeLocality)
-		boolFlag(f, &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
+		intFlag(f, &demoCtx.NumNodes, cliflags.DemoNodes)
+		boolFlag(f, &demoCtx.RunWorkload, cliflags.RunDemoWorkload)
+		varFlag(f, &demoCtx.Localities, cliflags.DemoNodeLocality)
+		boolFlag(f, &demoCtx.GeoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
 		varFlag(f, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
 		varFlag(f, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
-		boolFlag(f, &demoCtx.insecure, cliflags.ClientInsecure)
+		boolFlag(f, &demoCtx.Insecure, cliflags.ClientInsecure)
 		// NB: Insecure for `cockroach demo` is deprecated. See #53404.
 		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name,
 			"to start a test server without any security, run start-single-node --insecure\n"+
 				"For details, see: "+build.MakeIssueURL(53404))
 
-		boolFlag(f, &demoCtx.disableLicenseAcquisition, cliflags.DemoNoLicense)
-		boolFlag(f, &demoCtx.simulateLatency, cliflags.Global)
+		boolFlag(f, &demoCtx.DisableLicenseAcquisition, cliflags.DemoNoLicense)
+		boolFlag(f, &demoCtx.SimulateLatency, cliflags.Global)
 		// The --empty flag is only valid for the top level demo command,
 		// so we use the regular flag set.
-		boolFlag(demoCmd.Flags(), &demoCtx.noExampleDatabase, cliflags.UseEmptyDatabase)
+		boolFlag(demoCmd.Flags(), &demoCtx.NoExampleDatabase, cliflags.UseEmptyDatabase)
 		_ = f.MarkDeprecated(cliflags.UseEmptyDatabase.Name, "use --no-workload-database")
-		boolFlag(demoCmd.Flags(), &demoCtx.noExampleDatabase, cliflags.NoExampleDatabase)
+		boolFlag(demoCmd.Flags(), &demoCtx.NoExampleDatabase, cliflags.NoExampleDatabase)
 		// We also support overriding the GEOS library path for 'demo'.
 		// Even though the demoCtx uses mostly different configuration
 		// variables from startCtx, this is one case where we afford
 		// sharing a variable between both.
 		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
 
-		intFlag(f, &demoCtx.sqlPort, cliflags.DemoSQLPort)
-		intFlag(f, &demoCtx.httpPort, cliflags.DemoHTTPPort)
+		intFlag(f, &demoCtx.SQLPort, cliflags.DemoSQLPort)
+		intFlag(f, &demoCtx.HTTPPort, cliflags.DemoHTTPPort)
 	}
 
 	// statement-diag command.

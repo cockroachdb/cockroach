@@ -159,7 +159,7 @@ func newRowIter(rows clisqlclient.Rows, showMoreChars bool) *rowIter {
 type rowReporter interface {
 	describe(w io.Writer, cols []string) error
 	beforeFirstRow(w io.Writer, allRows RowStrIter) error
-	iter(w io.Writer, rowIdx int, row []string) error
+	iter(w, ew io.Writer, rowIdx int, row []string) error
 	doneRows(w io.Writer, seenRows int) error
 	doneNoRows(w io.Writer) error
 }
@@ -175,7 +175,7 @@ type rowReporter interface {
 // regardless of whether an error occurred.
 func render(
 	r rowReporter,
-	w io.Writer,
+	w, ew io.Writer,
 	cols []string,
 	iter RowStrIter,
 	completedHook func(),
@@ -209,7 +209,7 @@ func render(
 		}
 
 		if err != nil && nRows > 0 {
-			fmt.Fprintf(stderr, "(error encountered after some results were delivered)\n")
+			fmt.Fprintf(ew, "(error encountered after some results were delivered)\n")
 		}
 	}()
 
@@ -236,7 +236,7 @@ func render(
 		}
 
 		// Report every row including the first.
-		if err = r.iter(w, nRows, row); err != nil {
+		if err = r.iter(w, ew, nRows, row); err != nil {
 			return err
 		}
 
@@ -320,13 +320,13 @@ func (p *asciiTableReporter) beforeFirstRow(w io.Writer, iter RowStrIter) error 
 // printed during buffering in memory.
 const asciiTableWarnRows = 10000
 
-func (p *asciiTableReporter) iter(_ io.Writer, _ int, row []string) error {
+func (p *asciiTableReporter) iter(_, ew io.Writer, _ int, row []string) error {
 	if p.table == nil {
 		return nil
 	}
 
 	if p.rows == asciiTableWarnRows {
-		fmt.Fprintf(stderr,
+		fmt.Fprintf(ew,
 			"warning: buffering more than %d result rows in client "+
 				"- RAM usage growing, consider another formatter instead\n",
 			asciiTableWarnRows)
@@ -413,7 +413,7 @@ func (p *csvReporter) describe(w io.Writer, cols []string) error {
 	return nil
 }
 
-func (p *csvReporter) iter(_ io.Writer, _ int, row []string) error {
+func (p *csvReporter) iter(_, _ io.Writer, _ int, row []string) error {
 	p.mu.Lock()
 	if len(row) == 0 {
 		_ = p.mu.csvWriter.Write([]string{"# empty"})
@@ -442,7 +442,7 @@ func (p *rawReporter) describe(w io.Writer, cols []string) error {
 	return nil
 }
 
-func (p *rawReporter) iter(w io.Writer, rowIdx int, row []string) error {
+func (p *rawReporter) iter(w, _ io.Writer, rowIdx int, row []string) error {
 	fmt.Fprintf(w, "# row %d\n", rowIdx+1)
 	for _, r := range row {
 		fmt.Fprintf(w, "## %d\n%s\n", len(r), r)
@@ -486,7 +486,7 @@ func (p *htmlReporter) beforeFirstRow(w io.Writer, _ RowStrIter) error {
 	return nil
 }
 
-func (p *htmlReporter) iter(w io.Writer, rowIdx int, row []string) error {
+func (p *htmlReporter) iter(w, _ io.Writer, rowIdx int, row []string) error {
 	fmt.Fprint(w, "<tr>")
 	if p.rowStats {
 		fmt.Fprintf(w, "<td>%d</td>", rowIdx+1)
@@ -537,7 +537,7 @@ func (p *recordReporter) describe(w io.Writer, cols []string) error {
 	return nil
 }
 
-func (p *recordReporter) iter(w io.Writer, rowIdx int, row []string) error {
+func (p *recordReporter) iter(w, _ io.Writer, rowIdx int, row []string) error {
 	if len(p.cols) == 0 {
 		// No record details; a summary will be printed at the end.
 		return nil
@@ -603,7 +603,7 @@ func (p *sqlReporter) describe(w io.Writer, cols []string) error {
 	return nil
 }
 
-func (p *sqlReporter) iter(w io.Writer, _ int, row []string) error {
+func (p *sqlReporter) iter(w, _ io.Writer, _ int, row []string) error {
 	if p.noColumns {
 		fmt.Fprintln(w, "INSERT INTO results(rowid) VALUES (DEFAULT);")
 		return nil
@@ -664,7 +664,10 @@ func (sqlExecCtx *Context) makeReporter(w io.Writer) (rowReporter, func(), error
 
 // PrintQueryOutput takes a list of column names and a list of row
 // contents writes a formatted table to 'w'.
-func (sqlExecCtx *Context) PrintQueryOutput(w io.Writer, cols []string, allRows RowStrIter) error {
+// Errors/warnings, if any, are written to 'ew'.
+func (sqlExecCtx *Context) PrintQueryOutput(
+	w, ew io.Writer, cols []string, allRows RowStrIter,
+) error {
 	reporter, cleanup, err := sqlExecCtx.makeReporter(w)
 	if err != nil {
 		return err
@@ -672,5 +675,5 @@ func (sqlExecCtx *Context) PrintQueryOutput(w io.Writer, cols []string, allRows 
 	if cleanup != nil {
 		defer cleanup()
 	}
-	return render(reporter, w, cols, allRows, nil, nil)
+	return render(reporter, w, ew, cols, allRows, nil, nil)
 }

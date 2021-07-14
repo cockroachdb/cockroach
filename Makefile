@@ -576,6 +576,7 @@ native-tag := $(subst -,_,$(TARGET_TRIPLE))$(if $(use-stdmalloc),_stdmalloc)
 # directly, so these files are only compiled when building with Make.
 CGO_PKGS := \
 	pkg/cli \
+	pkg/cli/clisqlshell \
 	pkg/server/status \
 	pkg/storage \
 	pkg/ccl/gssapiccl \
@@ -799,6 +800,7 @@ build/defs.mk.sig: .ALWAYS_REBUILD
 COCKROACH      := ./cockroach$(SUFFIX)
 COCKROACHOSS   := ./cockroachoss$(SUFFIX)
 COCKROACHSHORT := ./cockroachshort$(SUFFIX)
+COCKROACHSQL   := ./cockroach-sql$(SUFFIX)
 
 LOG_TARGETS = \
 	pkg/util/log/severity/severity_generated.go \
@@ -931,7 +933,7 @@ go-targets-ccl := \
 	generate \
 	lint lintshort
 
-go-targets := $(go-targets-ccl) $(COCKROACHOSS) $(COCKROACHSHORT)
+go-targets := $(go-targets-ccl) $(COCKROACHOSS) $(COCKROACHSHORT) $(COCKROACHSQL)
 
 .DEFAULT_GOAL := all
 all: build
@@ -951,6 +953,9 @@ $(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/distoss/bindata.go | $(C_LIBS_DYNAMIC)
 $(COCKROACHSHORT): BUILDTARGET = ./pkg/cmd/cockroach-short
 $(COCKROACHSHORT): TAGS += short
 $(COCKROACHSHORT): $(C_LIBS_SHORT) | $(C_LIBS_DYNAMIC)
+
+$(COCKROACHSQL): BUILDTARGET = ./pkg/cmd/cockroach-sql
+$(COCKROACHSQL): $(if $(target-is-windows),,$(LIBEDIT))
 
 # For test targets, add a tag (used to enable extra assertions).
 $(test-targets): TAGS += crdb_test
@@ -993,7 +998,7 @@ SETTINGS_DOC_PAGES := docs/generated/settings/settings.html docs/generated/setti
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
 .PHONY: go-install
-$(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) go-install:
+$(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) $(COCKROACHSQL) go-install:
 	 $(xgo) $(build-mode) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 # The build targets, in addition to producing a Cockroach binary, silently
@@ -1719,6 +1724,7 @@ bins = \
   bin/benchmark \
   bin/cockroach-oss \
   bin/cockroach-short \
+  bin/cockroach-sql \
   bin/compile-builds \
   bin/docgen \
   bin/execgen \

@@ -108,7 +108,11 @@ var (
 					// Postgres sometimes adds spaces to the end of a string.
 					t = strings.TrimSpace(t)
 					v = strings.Replace(t, "T00:00:00+00:00", "T00:00:00Z", 1)
-					v = strings.Replace(t, ":00+00:00", ":00", 1)
+
+					// Postgres only shows the minutes offset of a timezone if it is
+					// non-zero.
+					// See https://github.com/cockroachdb/cockroach/issues/41563
+					v = strings.Replace(t, ":00+00:00", ":00+00", 1)
 				case *pgtype.Numeric:
 					if t.Status == pgtype.Present {
 						v = apd.NewWithBigInt(t.Int, t.Exp)

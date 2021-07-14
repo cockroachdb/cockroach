@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -93,36 +92,6 @@ func (c *TestCLI) fail(err interface{}) {
 	}
 }
 
-func createTestCerts(certsDir string) (cleanup func() error) {
-	// Copy these assets to disk from embedded strings, so this test can
-	// run from a standalone binary.
-	// Disable embedded certs, or the security library will try to load
-	// our real files as embedded assets.
-	security.ResetAssetLoader()
-
-	assets := []string{
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantClientCACert),
-	}
-
-	for _, a := range assets {
-		_, err := securitytest.RestrictedCopy(a, certsDir, filepath.Base(a))
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	return func() error {
-		security.SetAssetLoader(securitytest.EmbeddedAssets)
-		return os.RemoveAll(certsDir)
-	}
-}
-
 // NewCLITest export for cclcli.
 func NewCLITest(params TestCLIParams) TestCLI {
 	return newCLITestWithArgs(params, nil)
@@ -145,7 +114,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 
 	if !params.NoServer {
 		if !params.Insecure {
-			c.cleanupFunc = createTestCerts(certsDir)
+			c.cleanupFunc = securitytest.CreateTestCerts(certsDir)
 		}
 
 		args := base.TestServerArgs{
@@ -178,8 +147,6 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 	// captured.
 	c.prevStderr = stderr
 	stderr = os.Stdout
-	clisqlclient.TestingSetStderr(os.Stdout)
-	clisqlexec.TestingSetStderr(os.Stdout)
 
 	return c
 }
@@ -234,8 +201,6 @@ func (c *TestCLI) Cleanup() {
 
 	// Restore stderr.
 	stderr = c.prevStderr
-	clisqlclient.TestingSetStderr(c.prevStderr)
-	clisqlexec.TestingSetStderr(c.prevStderr)
 
 	log.Info(context.Background(), "stopping server and cleaning up CLI test")
 
@@ -282,8 +247,6 @@ func captureOutput(f func()) (out string, err error) {
 	}
 	os.Stdout = w
 	stderr = w
-	clisqlclient.TestingSetStderr(w)
-	clisqlexec.TestingSetStderr(w)
 
 	// Send all bytes from piped stdout through the output channel.
 	type captureResult struct {
