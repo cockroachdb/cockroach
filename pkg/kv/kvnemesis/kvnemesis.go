@@ -25,12 +25,6 @@ import (
 
 // RunNemesis generates and applies a series of Operations to exercise the KV
 // api. It returns a slice of the logical failures encountered.
-//
-// Ideas for conditions to be added to KV nemesis:
-// - Transactions being abandoned by their coordinator.
-// - CPuts, and continuing after CPut errors (generally continuing after errors
-// is not allowed, but it is allowed after ConditionFailedError as a special
-// case).
 func RunNemesis(
 	ctx context.Context,
 	rng *rand.Rand,

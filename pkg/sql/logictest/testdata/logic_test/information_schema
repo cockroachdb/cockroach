@@ -28,8 +28,10 @@ information_schema  column_column_usage                    table  NULL  NULL  NU
 information_schema  column_domain_usage                    table  NULL  NULL  NULL
 information_schema  column_options                         table  NULL  NULL  NULL
 information_schema  column_privileges                      table  NULL  NULL  NULL
+information_schema  column_statistics                      table  NULL  NULL  NULL
 information_schema  column_udt_usage                       table  NULL  NULL  NULL
 information_schema  columns                                table  NULL  NULL  NULL
+information_schema  columns_extensions                     table  NULL  NULL  NULL
 information_schema  constraint_column_usage                table  NULL  NULL  NULL
 information_schema  constraint_table_usage                 table  NULL  NULL  NULL
 information_schema  data_type_privileges                   table  NULL  NULL  NULL
@@ -38,6 +40,9 @@ information_schema  domain_udt_usage                       table  NULL  NULL  NU
 information_schema  domains                                table  NULL  NULL  NULL
 information_schema  element_types                          table  NULL  NULL  NULL
 information_schema  enabled_roles                          table  NULL  NULL  NULL
+information_schema  engines                                table  NULL  NULL  NULL
+information_schema  events                                 table  NULL  NULL  NULL
+information_schema  files                                  table  NULL  NULL  NULL
 information_schema  foreign_data_wrapper_options           table  NULL  NULL  NULL
 information_schema  foreign_data_wrappers                  table  NULL  NULL  NULL
 information_schema  foreign_server_options                 table  NULL  NULL  NULL
@@ -46,8 +51,15 @@ information_schema  foreign_table_options                  table  NULL  NULL  NU
 information_schema  foreign_tables                         table  NULL  NULL  NULL
 information_schema  information_schema_catalog_name        table  NULL  NULL  NULL
 information_schema  key_column_usage                       table  NULL  NULL  NULL
+information_schema  keywords                               table  NULL  NULL  NULL
+information_schema  optimizer_trace                        table  NULL  NULL  NULL
 information_schema  parameters                             table  NULL  NULL  NULL
+information_schema  partitions                             table  NULL  NULL  NULL
+information_schema  plugins                                table  NULL  NULL  NULL
+information_schema  processlist                            table  NULL  NULL  NULL
+information_schema  profiling                              table  NULL  NULL  NULL
 information_schema  referential_constraints                table  NULL  NULL  NULL
+information_schema  resource_groups                        table  NULL  NULL  NULL
 information_schema  role_column_grants                     table  NULL  NULL  NULL
 information_schema  role_routine_grants                    table  NULL  NULL  NULL
 information_schema  role_table_grants                      table  NULL  NULL  NULL
@@ -57,22 +69,31 @@ information_schema  routine_privileges                     table  NULL  NULL  NU
 information_schema  routines                               table  NULL  NULL  NULL
 information_schema  schema_privileges                      table  NULL  NULL  NULL
 information_schema  schemata                               table  NULL  NULL  NULL
+information_schema  schemata_extensions                    table  NULL  NULL  NULL
 information_schema  sequences                              table  NULL  NULL  NULL
 information_schema  session_variables                      table  NULL  NULL  NULL
 information_schema  sql_features                           table  NULL  NULL  NULL
 information_schema  sql_implementation_info                table  NULL  NULL  NULL
 information_schema  sql_parts                              table  NULL  NULL  NULL
 information_schema  sql_sizing                             table  NULL  NULL  NULL
+information_schema  st_geometry_columns                    table  NULL  NULL  NULL
+information_schema  st_spatial_reference_systems           table  NULL  NULL  NULL
+information_schema  st_units_of_measure                    table  NULL  NULL  NULL
 information_schema  statistics                             table  NULL  NULL  NULL
 information_schema  table_constraints                      table  NULL  NULL  NULL
+information_schema  table_constraints_extensions           table  NULL  NULL  NULL
 information_schema  table_privileges                       table  NULL  NULL  NULL
 information_schema  tables                                 table  NULL  NULL  NULL
+information_schema  tables_extensions                      table  NULL  NULL  NULL
+information_schema  tablespaces                            table  NULL  NULL  NULL
+information_schema  tablespaces_extensions                 table  NULL  NULL  NULL
 information_schema  transforms                             table  NULL  NULL  NULL
 information_schema  triggered_update_columns               table  NULL  NULL  NULL
 information_schema  triggers                               table  NULL  NULL  NULL
 information_schema  type_privileges                        table  NULL  NULL  NULL
 information_schema  udt_privileges                         table  NULL  NULL  NULL
 information_schema  usage_privileges                       table  NULL  NULL  NULL
+information_schema  user_attributes                        table  NULL  NULL  NULL
 information_schema  user_defined_types                     table  NULL  NULL  NULL
 information_schema  user_mapping_options                   table  NULL  NULL  NULL
 information_schema  user_mappings                          table  NULL  NULL  NULL
@@ -228,8 +249,10 @@ information_schema  column_column_usage                    table  NULL  NULL  NU
 information_schema  column_domain_usage                    table  NULL  NULL  NULL
 information_schema  column_options                         table  NULL  NULL  NULL
 information_schema  column_privileges                      table  NULL  NULL  NULL
+information_schema  column_statistics                      table  NULL  NULL  NULL
 information_schema  column_udt_usage                       table  NULL  NULL  NULL
 information_schema  columns                                table  NULL  NULL  NULL
+information_schema  columns_extensions                     table  NULL  NULL  NULL
 information_schema  constraint_column_usage                table  NULL  NULL  NULL
 information_schema  constraint_table_usage                 table  NULL  NULL  NULL
 information_schema  data_type_privileges                   table  NULL  NULL  NULL
@@ -238,6 +261,9 @@ information_schema  domain_udt_usage                       table  NULL  NULL  NU
 information_schema  domains                                table  NULL  NULL  NULL
 information_schema  element_types                          table  NULL  NULL  NULL
 information_schema  enabled_roles                          table  NULL  NULL  NULL
+information_schema  engines                                table  NULL  NULL  NULL
+information_schema  events                                 table  NULL  NULL  NULL
+information_schema  files                                  table  NULL  NULL  NULL
 information_schema  foreign_data_wrapper_options           table  NULL  NULL  NULL
 information_schema  foreign_data_wrappers                  table  NULL  NULL  NULL
 information_schema  foreign_server_options                 table  NULL  NULL  NULL
@@ -246,8 +272,15 @@ information_schema  foreign_table_options                  table  NULL  NULL  NU
 information_schema  foreign_tables                         table  NULL  NULL  NULL
 information_schema  information_schema_catalog_name        table  NULL  NULL  NULL
 information_schema  key_column_usage                       table  NULL  NULL  NULL
+information_schema  keywords                               table  NULL  NULL  NULL
+information_schema  optimizer_trace                        table  NULL  NULL  NULL
 information_schema  parameters                             table  NULL  NULL  NULL
+information_schema  partitions                             table  NULL  NULL  NULL
+information_schema  plugins                                table  NULL  NULL  NULL
+information_schema  processlist                            table  NULL  NULL  NULL
+information_schema  profiling                              table  NULL  NULL  NULL
 information_schema  referential_constraints                table  NULL  NULL  NULL
+information_schema  resource_groups                        table  NULL  NULL  NULL
 information_schema  role_column_grants                     table  NULL  NULL  NULL
 information_schema  role_routine_grants                    table  NULL  NULL  NULL
 information_schema  role_table_grants                      table  NULL  NULL  NULL
@@ -257,22 +290,31 @@ information_schema  routine_privileges                     table  NULL  NULL  NU
 information_schema  routines                               table  NULL  NULL  NULL
 information_schema  schema_privileges                      table  NULL  NULL  NULL
 information_schema  schemata                               table  NULL  NULL  NULL
+information_schema  schemata_extensions                    table  NULL  NULL  NULL
 information_schema  sequences                              table  NULL  NULL  NULL
 information_schema  session_variables                      table  NULL  NULL  NULL
 information_schema  sql_features                           table  NULL  NULL  NULL
 information_schema  sql_implementation_info                table  NULL  NULL  NULL
 information_schema  sql_parts                              table  NULL  NULL  NULL
 information_schema  sql_sizing                             table  NULL  NULL  NULL
+information_schema  st_geometry_columns                    table  NULL  NULL  NULL
+information_schema  st_spatial_reference_systems           table  NULL  NULL  NULL
+information_schema  st_units_of_measure                    table  NULL  NULL  NULL
 information_schema  statistics                             table  NULL  NULL  NULL
 information_schema  table_constraints                      table  NULL  NULL  NULL
+information_schema  table_constraints_extensions           table  NULL  NULL  NULL
 information_schema  table_privileges                       table  NULL  NULL  NULL
 information_schema  tables                                 table  NULL  NULL  NULL
+information_schema  tables_extensions                      table  NULL  NULL  NULL
+information_schema  tablespaces                            table  NULL  NULL  NULL
+information_schema  tablespaces_extensions                 table  NULL  NULL  NULL
 information_schema  transforms                             table  NULL  NULL  NULL
 information_schema  triggered_update_columns               table  NULL  NULL  NULL
 information_schema  triggers                               table  NULL  NULL  NULL
 information_schema  type_privileges                        table  NULL  NULL  NULL
 information_schema  udt_privileges                         table  NULL  NULL  NULL
 information_schema  usage_privileges                       table  NULL  NULL  NULL
+information_schema  user_attributes                        table  NULL  NULL  NULL
 information_schema  user_defined_types                     table  NULL  NULL  NULL
 information_schema  user_mapping_options                   table  NULL  NULL  NULL
 information_schema  user_mappings                          table  NULL  NULL  NULL
@@ -423,8 +465,10 @@ information_schema  column_column_usage
 information_schema  column_domain_usage
 information_schema  column_options
 information_schema  column_privileges
+information_schema  column_statistics
 information_schema  column_udt_usage
 information_schema  columns
+information_schema  columns_extensions
 information_schema  constraint_column_usage
 information_schema  constraint_table_usage
 information_schema  data_type_privileges
@@ -433,6 +477,9 @@ information_schema  domain_udt_usage
 information_schema  domains
 information_schema  element_types
 information_schema  enabled_roles
+information_schema  engines
+information_schema  events
+information_schema  files
 information_schema  foreign_data_wrapper_options
 information_schema  foreign_data_wrappers
 information_schema  foreign_server_options
@@ -441,8 +488,15 @@ information_schema  foreign_table_options
 information_schema  foreign_tables
 information_schema  information_schema_catalog_name
 information_schema  key_column_usage
+information_schema  keywords
+information_schema  optimizer_trace
 information_schema  parameters
+information_schema  partitions
+information_schema  plugins
+information_schema  processlist
+information_schema  profiling
 information_schema  referential_constraints
+information_schema  resource_groups
 information_schema  role_column_grants
 information_schema  role_routine_grants
 information_schema  role_table_grants
@@ -452,22 +506,31 @@ information_schema  routine_privileges
 information_schema  routines
 information_schema  schema_privileges
 information_schema  schemata
+information_schema  schemata_extensions
 information_schema  sequences
 information_schema  session_variables
 information_schema  sql_features
 information_schema  sql_implementation_info
 information_schema  sql_parts
 information_schema  sql_sizing
+information_schema  st_geometry_columns
+information_schema  st_spatial_reference_systems
+information_schema  st_units_of_measure
 information_schema  statistics
 information_schema  table_constraints
+information_schema  table_constraints_extensions
 information_schema  table_privileges
 information_schema  tables
+information_schema  tables_extensions
+information_schema  tablespaces
+information_schema  tablespaces_extensions
 information_schema  transforms
 information_schema  triggered_update_columns
 information_schema  triggers
 information_schema  type_privileges
 information_schema  udt_privileges
 information_schema  usage_privileges
+information_schema  user_attributes
 information_schema  user_defined_types
 information_schema  user_mapping_options
 information_schema  user_mappings
@@ -673,8 +736,10 @@ column_column_usage
 column_domain_usage
 column_options
 column_privileges
+column_statistics
 column_udt_usage
 columns
+columns_extensions
 constraint_column_usage
 constraint_table_usage
 data_type_privileges
@@ -683,6 +748,9 @@ domain_udt_usage
 domains
 element_types
 enabled_roles
+engines
+events
+files
 foreign_data_wrapper_options
 foreign_data_wrappers
 foreign_server_options
@@ -691,8 +759,15 @@ foreign_table_options
 foreign_tables
 information_schema_catalog_name
 key_column_usage
+keywords
+optimizer_trace
 parameters
+partitions
+plugins
+processlist
+profiling
 referential_constraints
+resource_groups
 role_column_grants
 role_routine_grants
 role_table_grants
@@ -702,22 +777,31 @@ routine_privileges
 routines
 schema_privileges
 schemata
+schemata_extensions
 sequences
 session_variables
 sql_features
 sql_implementation_info
 sql_parts
 sql_sizing
+st_geometry_columns
+st_spatial_reference_systems
+st_units_of_measure
 statistics
 table_constraints
+table_constraints_extensions
 table_privileges
 tables
+tables_extensions
+tablespaces
+tablespaces_extensions
 transforms
 triggered_update_columns
 triggers
 type_privileges
 udt_privileges
 usage_privileges
+user_attributes
 user_defined_types
 user_mapping_options
 user_mappings
@@ -865,17 +949,22 @@ user_privileges
 user_mappings
 user_mapping_options
 user_defined_types
+user_attributes
 usage_privileges
 udt_privileges
 type_privileges
 triggers
 triggered_update_columns
 transforms
+tablespaces_extensions
+tablespaces
+tables_extensions
 tables
 tables
 table_row_statistics
 table_privileges
 table_indexes
+table_constraints_extensions
 table_constraints
 table_columns
 
@@ -953,8 +1042,10 @@ system         information_schema  column_column_usage                    SYSTEM
 system         information_schema  column_domain_usage                    SYSTEM VIEW  NO                  1
 system         information_schema  column_options                         SYSTEM VIEW  NO                  1
 system         information_schema  column_privileges                      SYSTEM VIEW  NO                  1
+system         information_schema  column_statistics                      SYSTEM VIEW  NO                  1
 system         information_schema  column_udt_usage                       SYSTEM VIEW  NO                  1
 system         information_schema  columns                                SYSTEM VIEW  NO                  1
+system         information_schema  columns_extensions                     SYSTEM VIEW  NO                  1
 system         information_schema  constraint_column_usage                SYSTEM VIEW  NO                  1
 system         information_schema  constraint_table_usage                 SYSTEM VIEW  NO                  1
 system         information_schema  data_type_privileges                   SYSTEM VIEW  NO                  1
@@ -963,6 +1054,9 @@ system         information_schema  domain_udt_usage                       SYSTEM
 system         information_schema  domains                                SYSTEM VIEW  NO                  1
 system         information_schema  element_types                          SYSTEM VIEW  NO                  1
 system         information_schema  enabled_roles                          SYSTEM VIEW  NO                  1
+system         information_schema  engines                                SYSTEM VIEW  NO                  1
+system         information_schema  events                                 SYSTEM VIEW  NO                  1
+system         information_schema  files                                  SYSTEM VIEW  NO                  1
 system         information_schema  foreign_data_wrapper_options           SYSTEM VIEW  NO                  1
 system         information_schema  foreign_data_wrappers                  SYSTEM VIEW  NO                  1
 system         information_schema  foreign_server_options                 SYSTEM VIEW  NO                  1
@@ -971,8 +1065,15 @@ system         information_schema  foreign_table_options                  SYSTEM
 system         information_schema  foreign_tables                         SYSTEM VIEW  NO                  1
 system         information_schema  information_schema_catalog_name        SYSTEM VIEW  NO                  1
 system         information_schema  key_column_usage                       SYSTEM VIEW  NO                  1
+system         information_schema  keywords                               SYSTEM VIEW  NO                  1
+system         information_schema  optimizer_trace                        SYSTEM VIEW  NO                  1
 system         information_schema  parameters                             SYSTEM VIEW  NO                  1
+system         information_schema  partitions                             SYSTEM VIEW  NO                  1
+system         information_schema  plugins                                SYSTEM VIEW  NO                  1
+system         information_schema  processlist                            SYSTEM VIEW  NO                  1
+system         information_schema  profiling                              SYSTEM VIEW  NO                  1
 system         information_schema  referential_constraints                SYSTEM VIEW  NO                  1
+system         information_schema  resource_groups                        SYSTEM VIEW  NO                  1
 system         information_schema  role_column_grants                     SYSTEM VIEW  NO                  1
 system         information_schema  role_routine_grants                    SYSTEM VIEW  NO                  1
 system         information_schema  role_table_grants                      SYSTEM VIEW  NO                  1
@@ -982,22 +1083,31 @@ system         information_schema  routine_privileges                     SYSTEM
 system         information_schema  routines                               SYSTEM VIEW  NO                  1
 system         information_schema  schema_privileges                      SYSTEM VIEW  NO                  1
 system         information_schema  schemata                               SYSTEM VIEW  NO                  1
+system         information_schema  schemata_extensions                    SYSTEM VIEW  NO                  1
 system         information_schema  sequences                              SYSTEM VIEW  NO                  1
 system         information_schema  session_variables                      SYSTEM VIEW  NO                  1
 system         information_schema  sql_features                           SYSTEM VIEW  NO                  1
 system         information_schema  sql_implementation_info                SYSTEM VIEW  NO                  1
 system         information_schema  sql_parts                              SYSTEM VIEW  NO                  1
 system         information_schema  sql_sizing                             SYSTEM VIEW  NO                  1
+system         information_schema  st_geometry_columns                    SYSTEM VIEW  NO                  1
+system         information_schema  st_spatial_reference_systems           SYSTEM VIEW  NO                  1
+system         information_schema  st_units_of_measure                    SYSTEM VIEW  NO                  1
 system         information_schema  statistics                             SYSTEM VIEW  NO                  1
 system         information_schema  table_constraints                      SYSTEM VIEW  NO                  1
+system         information_schema  table_constraints_extensions           SYSTEM VIEW  NO                  1
 system         information_schema  table_privileges                       SYSTEM VIEW  NO                  1
 system         information_schema  tables                                 SYSTEM VIEW  NO                  1
+system         information_schema  tables_extensions                      SYSTEM VIEW  NO                  1
+system         information_schema  tablespaces                            SYSTEM VIEW  NO                  1
+system         information_schema  tablespaces_extensions                 SYSTEM VIEW  NO                  1
 system         information_schema  transforms                             SYSTEM VIEW  NO                  1
 system         information_schema  triggered_update_columns               SYSTEM VIEW  NO                  1
 system         information_schema  triggers                               SYSTEM VIEW  NO                  1
 system         information_schema  type_privileges                        SYSTEM VIEW  NO                  1
 system         information_schema  udt_privileges                         SYSTEM VIEW  NO                  1
 system         information_schema  usage_privileges                       SYSTEM VIEW  NO                  1
+system         information_schema  user_attributes                        SYSTEM VIEW  NO                  1
 system         information_schema  user_defined_types                     SYSTEM VIEW  NO                  1
 system         information_schema  user_mapping_options                   SYSTEM VIEW  NO                  1
 system         information_schema  user_mappings                          SYSTEM VIEW  NO                  1
@@ -2384,8 +2494,10 @@ NULL     public   system         information_schema  column_column_usage        
 NULL     public   system         information_schema  column_domain_usage                    SELECT          NULL          YES
 NULL     public   system         information_schema  column_options                         SELECT          NULL          YES
 NULL     public   system         information_schema  column_privileges                      SELECT          NULL          YES
+NULL     public   system         information_schema  column_statistics                      SELECT          NULL          YES
 NULL     public   system         information_schema  column_udt_usage                       SELECT          NULL          YES
 NULL     public   system         information_schema  columns                                SELECT          NULL          YES
+NULL     public   system         information_schema  columns_extensions                     SELECT          NULL          YES
 NULL     public   system         information_schema  constraint_column_usage                SELECT          NULL          YES
 NULL     public   system         information_schema  constraint_table_usage                 SELECT          NULL          YES
 NULL     public   system         information_schema  data_type_privileges                   SELECT          NULL          YES
@@ -2394,6 +2506,9 @@ NULL     public   system         information_schema  domain_udt_usage           
 NULL     public   system         information_schema  domains                                SELECT          NULL          YES
 NULL     public   system         information_schema  element_types                          SELECT          NULL          YES
 NULL     public   system         information_schema  enabled_roles                          SELECT          NULL          YES
+NULL     public   system         information_schema  engines                                SELECT          NULL          YES
+NULL     public   system         information_schema  events                                 SELECT          NULL          YES
+NULL     public   system         information_schema  files                                  SELECT          NULL          YES
 NULL     public   system         information_schema  foreign_data_wrapper_options           SELECT          NULL          YES
 NULL     public   system         information_schema  foreign_data_wrappers                  SELECT          NULL          YES
 NULL     public   system         information_schema  foreign_server_options                 SELECT          NULL          YES
@@ -2402,8 +2517,15 @@ NULL     public   system         information_schema  foreign_table_options      
 NULL     public   system         information_schema  foreign_tables                         SELECT          NULL          YES
 NULL     public   system         information_schema  information_schema_catalog_name        SELECT          NULL          YES
 NULL     public   system         information_schema  key_column_usage                       SELECT          NULL          YES
+NULL     public   system         information_schema  keywords                               SELECT          NULL          YES
+NULL     public   system         information_schema  optimizer_trace                        SELECT          NULL          YES
 NULL     public   system         information_schema  parameters                             SELECT          NULL          YES
+NULL     public   system         information_schema  partitions                             SELECT          NULL          YES
+NULL     public   system         information_schema  plugins                                SELECT          NULL          YES
+NULL     public   system         information_schema  processlist                            SELECT          NULL          YES
+NULL     public   system         information_schema  profiling                              SELECT          NULL          YES
 NULL     public   system         information_schema  referential_constraints                SELECT          NULL          YES
+NULL     public   system         information_schema  resource_groups                        SELECT          NULL          YES
 NULL     public   system         information_schema  role_column_grants                     SELECT          NULL          YES
 NULL     public   system         information_schema  role_routine_grants                    SELECT          NULL          YES
 NULL     public   system         information_schema  role_table_grants                      SELECT          NULL          YES
@@ -2413,22 +2535,31 @@ NULL     public   system         information_schema  routine_privileges         
 NULL     public   system         information_schema  routines                               SELECT          NULL          YES
 NULL     public   system         information_schema  schema_privileges                      SELECT          NULL          YES
 NULL     public   system         information_schema  schemata                               SELECT          NULL          YES
+NULL     public   system         information_schema  schemata_extensions                    SELECT          NULL          YES
 NULL     public   system         information_schema  sequences                              SELECT          NULL          YES
 NULL     public   system         information_schema  session_variables                      SELECT          NULL          YES
 NULL     public   system         information_schema  sql_features                           SELECT          NULL          YES
 NULL     public   system         information_schema  sql_implementation_info                SELECT          NULL          YES
 NULL     public   system         information_schema  sql_parts                              SELECT          NULL          YES
 NULL     public   system         information_schema  sql_sizing                             SELECT          NULL          YES
+NULL     public   system         information_schema  st_geometry_columns                    SELECT          NULL          YES
+NULL     public   system         information_schema  st_spatial_reference_systems           SELECT          NULL          YES
+NULL     public   system         information_schema  st_units_of_measure                    SELECT          NULL          YES
 NULL     public   system         information_schema  statistics                             SELECT          NULL          YES
 NULL     public   system         information_schema  table_constraints                      SELECT          NULL          YES
+NULL     public   system         information_schema  table_constraints_extensions           SELECT          NULL          YES
 NULL     public   system         information_schema  table_privileges                       SELECT          NULL          YES
 NULL     public   system         information_schema  tables                                 SELECT          NULL          YES
+NULL     public   system         information_schema  tables_extensions                      SELECT          NULL          YES
+NULL     public   system         information_schema  tablespaces                            SELECT          NULL          YES
+NULL     public   system         information_schema  tablespaces_extensions                 SELECT          NULL          YES
 NULL     public   system         information_schema  transforms                             SELECT          NULL          YES
 NULL     public   system         information_schema  triggered_update_columns               SELECT          NULL          YES
 NULL     public   system         information_schema  triggers                               SELECT          NULL          YES
 NULL     public   system         information_schema  type_privileges                        SELECT          NULL          YES
 NULL     public   system         information_schema  udt_privileges                         SELECT          NULL          YES
 NULL     public   system         information_schema  usage_privileges                       SELECT          NULL          YES
+NULL     public   system         information_schema  user_attributes                        SELECT          NULL          YES
 NULL     public   system         information_schema  user_defined_types                     SELECT          NULL          YES
 NULL     public   system         information_schema  user_mapping_options                   SELECT          NULL          YES
 NULL     public   system         information_schema  user_mappings                          SELECT          NULL          YES
@@ -2883,8 +3014,10 @@ NULL     public   system         information_schema  column_column_usage        
 NULL     public   system         information_schema  column_domain_usage                    SELECT          NULL          YES
 NULL     public   system         information_schema  column_options                         SELECT          NULL          YES
 NULL     public   system         information_schema  column_privileges                      SELECT          NULL          YES
+NULL     public   system         information_schema  column_statistics                      SELECT          NULL          YES
 NULL     public   system         information_schema  column_udt_usage                       SELECT          NULL          YES
 NULL     public   system         information_schema  columns                                SELECT          NULL          YES
+NULL     public   system         information_schema  columns_extensions                     SELECT          NULL          YES
 NULL     public   system         information_schema  constraint_column_usage                SELECT          NULL          YES
 NULL     public   system         information_schema  constraint_table_usage                 SELECT          NULL          YES
 NULL     public   system         information_schema  data_type_privileges                   SELECT          NULL          YES
@@ -2893,6 +3026,9 @@ NULL     public   system         information_schema  domain_udt_usage           
 NULL     public   system         information_schema  domains                                SELECT          NULL          YES
 NULL     public   system         information_schema  element_types                          SELECT          NULL          YES
 NULL     public   system         information_schema  enabled_roles                          SELECT          NULL          YES
+NULL     public   system         information_schema  engines                                SELECT          NULL          YES
+NULL     public   system         information_schema  events                                 SELECT          NULL          YES
+NULL     public   system         information_schema  files                                  SELECT          NULL          YES
 NULL     public   system         information_schema  foreign_data_wrapper_options           SELECT          NULL          YES
 NULL     public   system         information_schema  foreign_data_wrappers                  SELECT          NULL          YES
 NULL     public   system         information_schema  foreign_server_options                 SELECT          NULL          YES
@@ -2901,8 +3037,15 @@ NULL     public   system         information_schema  foreign_table_options      
 NULL     public   system         information_schema  foreign_tables                         SELECT          NULL          YES
 NULL     public   system         information_schema  information_schema_catalog_name        SELECT          NULL          YES
 NULL     public   system         information_schema  key_column_usage                       SELECT          NULL          YES
+NULL     public   system         information_schema  keywords                               SELECT          NULL          YES
+NULL     public   system         information_schema  optimizer_trace                        SELECT          NULL          YES
 NULL     public   system         information_schema  parameters                             SELECT          NULL          YES
+NULL     public   system         information_schema  partitions                             SELECT          NULL          YES
+NULL     public   system         information_schema  plugins                                SELECT          NULL          YES
+NULL     public   system         information_schema  processlist                            SELECT          NULL          YES
+NULL     public   system         information_schema  profiling                              SELECT          NULL          YES
 NULL     public   system         information_schema  referential_constraints                SELECT          NULL          YES
+NULL     public   system         information_schema  resource_groups                        SELECT          NULL          YES
 NULL     public   system         information_schema  role_column_grants                     SELECT          NULL          YES
 NULL     public   system         information_schema  role_routine_grants                    SELECT          NULL          YES
 NULL     public   system         information_schema  role_table_grants                      SELECT          NULL          YES
@@ -2912,22 +3055,31 @@ NULL     public   system         information_schema  routine_privileges         
 NULL     public   system         information_schema  routines                               SELECT          NULL          YES
 NULL     public   system         information_schema  schema_privileges                      SELECT          NULL          YES
 NULL     public   system         information_schema  schemata                               SELECT          NULL          YES
+NULL     public   system         information_schema  schemata_extensions                    SELECT          NULL          YES
 NULL     public   system         information_schema  sequences                              SELECT          NULL          YES
 NULL     public   system         information_schema  session_variables                      SELECT          NULL          YES
 NULL     public   system         information_schema  sql_features                           SELECT          NULL          YES
 NULL     public   system         information_schema  sql_implementation_info                SELECT          NULL          YES
 NULL     public   system         information_schema  sql_parts                              SELECT          NULL          YES
 NULL     public   system         information_schema  sql_sizing                             SELECT          NULL          YES
+NULL     public   system         information_schema  st_geometry_columns                    SELECT          NULL          YES
+NULL     public   system         information_schema  st_spatial_reference_systems           SELECT          NULL          YES
+NULL     public   system         information_schema  st_units_of_measure                    SELECT          NULL          YES
 NULL     public   system         information_schema  statistics                             SELECT          NULL          YES
 NULL     public   system         information_schema  table_constraints                      SELECT          NULL          YES
+NULL     public   system         information_schema  table_constraints_extensions           SELECT          NULL          YES
 NULL     public   system         information_schema  table_privileges                       SELECT          NULL          YES
 NULL     public   system         information_schema  tables                                 SELECT          NULL          YES
+NULL     public   system         information_schema  tables_extensions                      SELECT          NULL          YES
+NULL     public   system         information_schema  tablespaces                            SELECT          NULL          YES
+NULL     public   system         information_schema  tablespaces_extensions                 SELECT          NULL          YES
 NULL     public   system         information_schema  transforms                             SELECT          NULL          YES
 NULL     public   system         information_schema  triggered_update_columns               SELECT          NULL          YES
 NULL     public   system         information_schema  triggers                               SELECT          NULL          YES
 NULL     public   system         information_schema  type_privileges                        SELECT          NULL          YES
 NULL     public   system         information_schema  udt_privileges                         SELECT          NULL          YES
 NULL     public   system         information_schema  usage_privileges                       SELECT          NULL          YES
+NULL     public   system         information_schema  user_attributes                        SELECT          NULL          YES
 NULL     public   system         information_schema  user_defined_types                     SELECT          NULL          YES
 NULL     public   system         information_schema  user_mapping_options                   SELECT          NULL          YES
 NULL     public   system         information_schema  user_mappings                          SELECT          NULL          YES

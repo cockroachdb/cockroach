@@ -569,7 +569,7 @@ func assertEqualKVs(
 			maxSize := uint64(0)
 			prevStart := start
 			sstFile := &storage.MemFile{}
-			summary, start, err = e.ExportMVCCToSst(start, endKey, startTime, endTime,
+			summary, start, err = e.ExportMVCCToSst(ctx, start, endKey, startTime, endTime,
 				exportAllRevisions, targetSize, maxSize, enableTimeBoundIteratorOptimization, sstFile)
 			require.NoError(t, err)
 			sst = sstFile.Data()
@@ -609,7 +609,7 @@ func assertEqualKVs(
 				if dataSizeWhenExceeded == maxSize {
 					maxSize--
 				}
-				_, _, err = e.ExportMVCCToSst(prevStart, endKey, startTime, endTime,
+				_, _, err = e.ExportMVCCToSst(ctx, prevStart, endKey, startTime, endTime,
 					exportAllRevisions, targetSize, maxSize, enableTimeBoundIteratorOptimization, &storage.MemFile{})
 				require.Regexp(t, fmt.Sprintf("export size \\(%d bytes\\) exceeds max size \\(%d bytes\\)",
 					dataSizeWhenExceeded, maxSize), err)
