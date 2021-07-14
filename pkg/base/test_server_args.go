@@ -59,6 +59,9 @@ type TestServerArgs struct {
 	TenantAddr *string
 	// HTTPAddr (if nonempty) is the HTTP address to use for the test server.
 	HTTPAddr string
+	// HTTPAdvertiseAddr (if nonempty) is the advertised HTTP address to use.
+	HTTPAdvertiseAddr string
+
 	// DisableTLSForHTTP if set, disables TLS for the HTTP interface.
 	DisableTLSForHTTP bool
 
