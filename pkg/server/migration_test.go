@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -254,7 +254,7 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 			Server: &TestingKnobs{
 				BinaryVersionOverride: clusterversion.TestingBinaryMinSupportedVersion,
 			},
-			SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 				AfterEnsureMigrations: func() {
 					// Try to encourage other goroutines to run.
 					const N = 100

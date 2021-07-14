@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -96,7 +96,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0 /* maxRows */); err != nil {
 		t.Fatal(err)
 	} else {
-		descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(
+		descriptorIDs, err := startupmigrations.ExpectedDescriptorIDs(
 			ctx, kvDB, codec, &s.(*server.TestServer).Cfg.DefaultZoneConfig, &s.(*server.TestServer).Cfg.DefaultSystemZoneConfig,
 		)
 		if err != nil {

@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -852,7 +852,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -1147,7 +1147,7 @@ func TestDropNameReuse(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}

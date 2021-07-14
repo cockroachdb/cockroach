@@ -71,7 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -112,7 +112,7 @@ type SQLServer struct {
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
 	jobRegistry            *jobs.Registry
-	sqlmigrationsMgr       *sqlmigrations.Manager
+	startupMigrationsMgr   *startupmigrations.Manager
 	statsRefresher         *stats.Refresher
 	temporaryObjectCleaner *sql.TemporaryObjectCleaner
 	internalMemMetrics     sql.MemoryMetrics
@@ -844,9 +844,9 @@ func (s *SQLServer) preStart(
 	// in an acceptable form for this version of the software.
 	// We have to do this after actually starting up the server to be able to
 	// seamlessly use the kv client against other nodes in the cluster.
-	var mmKnobs sqlmigrations.MigrationManagerTestingKnobs
-	if migrationManagerTestingKnobs := knobs.SQLMigrationManager; migrationManagerTestingKnobs != nil {
-		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
+	var mmKnobs startupmigrations.MigrationManagerTestingKnobs
+	if migrationManagerTestingKnobs := knobs.StartupMigrationManager; migrationManagerTestingKnobs != nil {
+		mmKnobs = *migrationManagerTestingKnobs.(*startupmigrations.MigrationManagerTestingKnobs)
 	}
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
@@ -869,7 +869,7 @@ func (s *SQLServer) preStart(
 				DistSQLMode: sessiondata.DistSQLOff,
 			},
 		})
-	sqlmigrationsMgr := sqlmigrations.NewManager(
+	startupMigrationsMgr := startupmigrations.NewManager(
 		stopper,
 		s.execCfg.DB,
 		s.execCfg.Codec,
@@ -880,7 +880,7 @@ func (s *SQLServer) preStart(
 		s.execCfg.Settings,
 		s.jobRegistry,
 	)
-	s.sqlmigrationsMgr = sqlmigrationsMgr // only for testing via TestServer
+	s.startupMigrationsMgr = startupMigrationsMgr // only for testing via TestServer
 
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
 		return err
@@ -919,7 +919,7 @@ func (s *SQLServer) preStart(
 	}
 
 	// Run startup migrations (note: these depend on jobs subsystem running).
-	if err := sqlmigrationsMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
+	if err := startupMigrationsMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
 		return errors.Wrap(err, "ensuring SQL migrations")
 	}
 
