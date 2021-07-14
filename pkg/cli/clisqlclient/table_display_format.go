@@ -22,14 +22,35 @@ type TableDisplayFormat int
 
 // The following constants identify the supported table formats.
 const (
+	// TableDisplayTSV has the values separated by tabs. It is like CSV
+	// but using tabs instead of commas.
 	TableDisplayTSV TableDisplayFormat = iota
+	// TableDisplayCSV has the values separated by commas. Values that
+	// contain commas themselves are enclosed in double quotes.
 	TableDisplayCSV
+	// TableDisplayTable is a tabular output format, that ensures that
+	// all values in the same column are rendered with the same
+	// width. This format follows what 'psql' does by default. It also
+	// supports an additional customization option called 'border mode'.
 	TableDisplayTable
+	// TableDisplayRecords is a record-oriented format. It is somewhat
+	// compatible with 'psql' "expanded display" mode.
 	TableDisplayRecords
+	// TableDisplaySQL reports results using SQL statements that mimic
+	// the creation of a SQL table containing the result values.
 	TableDisplaySQL
+	// TableDisplayHTML reports the results using a HTML table.  HTML
+	// special characters inside the values are escapde.
 	TableDisplayHTML
+	// TableDisplayRawHTML is a variant of the HTML output format
+	// supported specifically to generate CockroachDB's documentation.
 	TableDisplayRawHTML
+	// TableDisplayRaw is a special format optimized to ensure that the
+	// values can be parsed accurately from the text output.
 	TableDisplayRaw
+
+	// TableDisplayLastFormat is a marker for the end of the list of
+	// formats, for use in tests.
 	TableDisplayLastFormat // this must remain at the end of the list.
 )
 
