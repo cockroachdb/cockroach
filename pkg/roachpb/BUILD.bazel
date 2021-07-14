@@ -9,23 +9,7 @@ load("//build:STRINGER.bzl", "stringer")
 go_library(
     name = "roachpb",
     srcs = [
-        "api.go",
-        "app_stats.go",
-        "batch.go",
-        "data.go",
-        "errors.go",
-        "internal.go",
-        "merge_spans.go",
-        "metadata.go",
-        "metadata_replicas.go",
-        "method.go",
-        "span_group.go",
-        "tenant.go",
-        "version.go",
-        ":gen-batch-generated",  # keep
-        ":gen-errordetailtype-stringer",  # keep
-        ":gen-method-stringer",  # keep
-        ":mocks_api",  # keep
+            ":mocks_api" #keep
     ],
     embed = [":roachpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
@@ -57,55 +41,6 @@ go_library(
     ],
 )
 
-# See the BUILD.bazel file in pkg/roachpb/gen for more details. We need to
-# partition the dependencies here to avoid cyclical structures.
-#
-# keep
-go_library(
-    name = "bootstrap",
-    srcs = [
-        "api.go",
-        "app_stats.go",
-        "batch.go",
-        "batch_generated.go",
-        "data.go",
-        "errors.go",
-        "metadata.go",
-        "metadata_replicas.go",
-        "method.go",
-        "version.go",
-    ],
-    embed = [":roachpb_go_proto"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/geo",
-        "//pkg/geo/geopb",
-        "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/storage/enginepb",
-        "//pkg/util",
-        "//pkg/util/bitarray",
-        "//pkg/util/caller",
-        "//pkg/util/duration",
-        "//pkg/util/encoding",
-        "//pkg/util/hlc",
-        "//pkg/util/humanizeutil",
-        "//pkg/util/interval",
-        "//pkg/util/log",
-        "//pkg/util/protoutil",
-        "//pkg/util/timetz",
-        "//pkg/util/uuid",
-        "@com_github_aws_aws_sdk_go//aws",
-        "@com_github_aws_aws_sdk_go//aws/credentials",
-        "@com_github_cockroachdb_apd_v2//:apd",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//errorspb",
-        "@com_github_cockroachdb_errors//extgrpc",
-        "@com_github_cockroachdb_redact//:redact",
-        "@io_etcd_go_etcd_raft_v3//raftpb",
-    ],
-)
-
 gomock(
     name = "mocks_api",
     out = "mocks_generated.go",
@@ -113,7 +48,7 @@ gomock(
         "Internal_RangeFeedClient",
         "InternalClient",
     ],
-    library = ":bootstrap",
+    library = ":roachpb_go_proto",
     package = "roachpb",
     self_package = "github.com/cockroachdb/cockroach/pkg/roachpb",
 )
@@ -223,15 +158,53 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
     proto = ":roachpb_proto",
     visibility = ["//visibility:public"],
+    go_srcs = [
+        "api.go",
+        "app_stats.go",
+        "batch.go",
+        "batch_generated.go",
+        "data.go",
+        "errors.go",
+        "internal.go",
+        "merge_spans.go",
+        "metadata.go",
+        "metadata_replicas.go",
+        "method.go",
+        "span_group.go",
+        "tenant.go",
+        "version.go",
+        ":gen-errordetailtype-stringer",  # keep
+        ":gen-method-stringer",  # keep
+    ],
+
     deps = [
+        "@com_github_aws_aws_sdk_go//aws",
+        "@com_github_aws_aws_sdk_go//aws/credentials",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_cockroachdb_errors//extgrpc",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//gogoproto",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
+        "//pkg/geo",
+        "//pkg/geo/geopb",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/storage/enginepb",
         "//pkg/util",
+        "//pkg/util/bitarray",
+        "//pkg/util/caller",
+        "//pkg/util/duration",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/interval",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/timetz",
         "//pkg/util/tracing/tracingpb",
-        "@com_github_cockroachdb_errors//errorspb",
-        "@com_github_gogo_protobuf//gogoproto",
+        "//pkg/util/uuid",
     ],
 )
 
@@ -245,13 +218,4 @@ stringer(
     name = "gen-errordetailtype-stringer",
     src = "errors.go",
     typ = "ErrorDetailType",
-)
-
-genrule(
-    name = "gen-batch-generated",
-    outs = ["batch_generated-gen.go"],
-    cmd = """
-     $(location //pkg/roachpb/gen) --filename=$(location batch_generated-gen.go)
-       """,
-    exec_tools = ["//pkg/roachpb/gen"],
 )

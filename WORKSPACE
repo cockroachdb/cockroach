@@ -12,7 +12,7 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 git_repository(
     name = "io_bazel_rules_go",
-    commit = "91c4e2b0f233c7031b191b93587f562ffe21f86f",
+    commit = "9ae7d767095aa453cd72f5a2804ff1a99ccaf26f",
     remote = "https://github.com/cockroachdb/rules_go",
 )
 
