@@ -33,7 +33,7 @@ func TestLexer(t *testing.T) {
 		var scanTokens []sqlSymType
 		for {
 			var lval sqlSymType
-			s.scan(&lval)
+			s.Scan(&lval)
 			if lval.id == 0 {
 				break
 			}

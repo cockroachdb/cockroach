@@ -219,6 +219,7 @@ ALL_TESTS = [
     "//pkg/sql/gcjob/gcjobnotifier:gcjobnotifier_test",
     "//pkg/sql/gcjob:gcjob_test",
     "//pkg/sql/gcjob_test:gcjob_test_test",
+    "//pkg/sql/idxusage:idxusage_test",
     "//pkg/sql/inverted:inverted_test",
     "//pkg/sql/lex:lex_test",
     "//pkg/sql/lexbase:lexbase_test",

@@ -10,7 +10,7 @@ go_library(
         "help.go",
         "lexer.go",
         "parse.go",
-        "scan.go",
+        "scanner.go",
         "show_syntax.go",
         ":gen-help-messages",  # keep
         ":sql-goyacc",  # keep
@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",  # keep
+        "//pkg/sql/scanner",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
@@ -45,7 +46,7 @@ go_test(
         "lexer_test.go",
         "parse_internal_test.go",
         "parse_test.go",
-        "scan_test.go",
+        "scanner_test.go",
         ":gen-helpmap-test",  # keep
     ],
     data = glob(["testdata/**"]),

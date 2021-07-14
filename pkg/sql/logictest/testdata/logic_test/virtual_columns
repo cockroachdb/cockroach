@@ -1193,3 +1193,18 @@ SELECT * FROM t_65915;
 
 statement ok
 DROP TABLE t_65915
+
+# Test that backfills on indexes with non-null virtual columns work.
+subtest 67528
+
+statement ok
+CREATE TABLE t67528 (
+  s STRING,
+  v STRING AS (lower(s)) VIRTUAL NOT NULL
+)
+
+statement ok
+INSERT INTO t67528 (s) VALUES ('')
+
+statement ok
+CREATE INDEX ON t67528 (v DESC)

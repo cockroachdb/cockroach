@@ -43,6 +43,10 @@ var (
 	)
 )
 
+func init() {
+	predictableDevProfile = true
+}
+
 // TestDatadriven makes use of datadriven and recorder to capture all operations
 // executed by individual `dev` invocations. The testcases are defined under
 // testdata/*, where each test files corresponds to a recording capture found in

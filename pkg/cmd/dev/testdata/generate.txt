@@ -1,4 +1,4 @@
 dev gen bazel
 ----
-bazel info workspace --color=no
+bazel info workspace --color=no --config=dev
 go/src/github.com/cockroachdb/cockroach/build/bazelutil/bazel-generate.sh

@@ -71,6 +71,7 @@ func (d *dev) build(cmd *cobra.Command, targets []string) (err error) {
 	// Don't let bazel generate any convenience symlinks, we'll create them
 	// ourself.
 	args = append(args, "--experimental_convenience_symlinks=ignore")
+	args = append(args, getConfigFlags()...)
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
@@ -131,7 +132,9 @@ func (d *dev) symlinkBinaries(ctx context.Context, targets []string) error {
 }
 
 func (d *dev) getPathToBin(ctx context.Context, target string) (string, error) {
-	out, err := d.exec.CommandContextSilent(ctx, "bazel", "info", "bazel-bin", "--color=no")
+	args := []string{"info", "bazel-bin", "--color=no"}
+	args = append(args, getConfigFlags()...)
+	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
 	if err != nil {
 		return "", err
 	}

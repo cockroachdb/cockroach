@@ -15,12 +15,16 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
+
+// To be turned on for tests.
+var predictableDevProfile bool
 
 func mustGetFlagString(cmd *cobra.Command, name string) string {
 	val, err := cmd.Flags().GetString(name)
@@ -76,9 +80,21 @@ func parseAddr(addr string) (string, error) {
 }
 
 func (d *dev) getWorkspace(ctx context.Context) (string, error) {
-	out, err := d.exec.CommandContextSilent(ctx, "bazel", "info", "workspace", "--color=no")
+	args := []string{"info", "workspace", "--color=no"}
+	args = append(args, getConfigFlags()...)
+	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func getConfigFlags() []string {
+	if skipDevConfig {
+		return []string{}
+	}
+	if !predictableDevProfile && runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
+		return []string{"--config=devdarwinx86_64"}
+	}
+	return []string{"--config=dev"}
 }
