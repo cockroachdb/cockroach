@@ -386,4 +386,5 @@ var PostgresMode = multiOption(
 	IgnoreFNs("st_.*withinexclusive$"),
 	IgnoreFNs("^postgis_.*build_date"),
 	IgnoreFNs("^postgis_.*version"),
+	IgnoreFNs("^postgis_.*scripts"),
 )
