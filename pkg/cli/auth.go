@@ -17,6 +17,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -67,12 +68,12 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		rows := [][]string{
 			{username, fmt.Sprintf("%d", id), hC},
 		}
-		if err := PrintQueryOutput(os.Stdout, cols, clisqlclient.NewRowSliceIter(rows, "ll")); err != nil {
+		if err := sqlExecCtx.PrintQueryOutput(os.Stdout, cols, clisqlexec.NewRowSliceIter(rows, "ll")); err != nil {
 			return err
 		}
 
 		checkInteractive(os.Stdin)
-		if cliCtx.isInteractive {
+		if cliCtx.IsInteractive {
 			fmt.Fprintf(stderr, `#
 # Example uses:
 #
@@ -97,7 +98,7 @@ func createAuthSessionToken(
 	defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
 
 	// First things first. Does the user exist?
-	_, rows, err := clisqlclient.RunQuery(sqlConn,
+	_, rows, err := sqlExecCtx.RunQuery(sqlConn,
 		clisqlclient.MakeQuery(`SELECT count(username) FROM system.users WHERE username = $1 AND NOT "isRole"`, username), false)
 	if err != nil {
 		return -1, nil, err
@@ -174,7 +175,7 @@ func runLogout(cmd *cobra.Command, args []string) (resErr error) {
             id AS "session ID",
             "revokedAt" AS "revoked"`,
 		username)
-	return runQueryAndFormatResults(sqlConn, os.Stdout, logoutQuery)
+	return sqlExecCtx.RunQueryAndFormatResults(sqlConn, os.Stdout, logoutQuery)
 }
 
 var authListCmd = &cobra.Command{
@@ -204,7 +205,7 @@ SELECT username,
        "revokedAt" as "revoked",
        "lastUsedAt" as "last used"
   FROM system.web_sessions`)
-	return runQueryAndFormatResults(sqlConn, os.Stdout, logoutQuery)
+	return sqlExecCtx.RunQueryAndFormatResults(sqlConn, os.Stdout, logoutQuery)
 }
 
 var authCmds = []*cobra.Command{

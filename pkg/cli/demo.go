@@ -292,7 +292,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 
 	checkInteractive(cmdIn)
 
-	if cliCtx.isInteractive {
+	if cliCtx.IsInteractive {
 		printfUnlessEmbedded(`#
 # Welcome to the CockroachDB demo database!
 #
@@ -334,7 +334,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 		return checkAndMaybeShout(err)
 	}
 
-	if cliCtx.isInteractive {
+	if cliCtx.IsInteractive {
 		if gen != nil {
 			fmt.Printf("#\n# The cluster has been preloaded with the %q dataset\n# (%s).\n",
 				gen.Meta().Name, gen.Meta().Description)
@@ -384,7 +384,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 		}
 	}
 
-	conn := makeSQLConn(c.connURL)
+	conn := sqlConnCtx.MakeSQLConn(c.connURL)
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	return runClient(cmd, conn, cmdIn)

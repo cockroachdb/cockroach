@@ -280,7 +280,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			url, err := c.getNetworkURLForServer(ctx, tc.nodeIdx, true /* includeAppName */)
 			require.NoError(t, err)
-			conn := makeSQLConn(url.ToPQ().String())
+			conn := sqlConnCtx.MakeSQLConn(url.ToPQ().String())
 			defer func() {
 				if err := conn.Close(); err != nil {
 					t.Fatal(err)
@@ -297,7 +297,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 			// Attempt to make a query that talks to every node.
 			// This should take at least maxLatency.
 			startTime := timeutil.Now()
-			_, _, err = clisqlclient.RunQuery(
+			_, _, err = sqlExecCtx.RunQuery(
 				conn,
 				clisqlclient.MakeQuery(`SHOW ALL CLUSTER QUERIES`),
 				false,

@@ -12,13 +12,16 @@ package cli
 
 import (
 	"context"
+	"io"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
+	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -43,6 +46,8 @@ func initCLIDefaults() {
 	// flags), but instead overwrite the existing structs' values.
 	baseCfg.InitDefaults()
 	setCliContextDefaults()
+	setSQLConnContextDefaults()
+	setSQLExecContextDefaults()
 	setSQLContextDefaults()
 	setZipContextDefaults()
 	setDumpContextDefaults()
@@ -127,30 +132,8 @@ type cliContext struct {
 	// Embed the base context.
 	*base.Config
 
-	// isInteractive indicates whether the session is interactive, that
-	// is, the commands executed are extremely likely to be *input* from
-	// a human user: the standard input is a terminal and `-e` was not
-	// used (the shell has a prompt).
-	//
-	// Refer to README.md to understand the general design guidelines for
-	// CLI utilities with interactive vs non-interactive input.
-	isInteractive bool
-
-	// terminalOutput indicates whether output is going to a terminal,
-	// that is, it is not going to a file, another program for automated
-	// processing, etc.: the standard output is a terminal.
-	//
-	// Refer to README.md to understand the general design guidelines for
-	// CLI utilities with terminal vs non-terminal output.
-	terminalOutput bool
-
-	// tableDisplayFormat indicates how to format result tables.
-	tableDisplayFormat clisqlclient.TableDisplayFormat
-
-	// tableBorderMode indicates how to format tables when the display
-	// format is 'table'. This exists for compatibility
-	// with psql: https://www.postgresql.org/docs/12/app-psql.html
-	tableBorderMode int
+	// Embed the new-style configuration context.
+	clicfg.Context
 
 	// cmdTimeout sets the maximum run time for the command.
 	// Commands that wish to use this must use cmdTimeoutContext().
@@ -214,15 +197,7 @@ func setCliContextDefaults() {
 	// isInteractive is only set to `true` by `cockroach sql` -- all
 	// other client commands are non-interactive, regardless of whether
 	// the standard input is a terminal.
-	cliCtx.isInteractive = false
-	// See also setCLIDefaultForTests() in cli_test.go.
-	cliCtx.terminalOutput = isatty.IsTerminal(os.Stdout.Fd())
-	cliCtx.tableDisplayFormat = clisqlclient.TableDisplayTSV
-	cliCtx.tableBorderMode = 0 /* no outer lines + no inside row lines */
-	if cliCtx.terminalOutput {
-		// See also setCLIDefaultForTests() in cli_test.go.
-		cliCtx.tableDisplayFormat = clisqlclient.TableDisplayTable
-	}
+	cliCtx.IsInteractive = false
 	cliCtx.cmdTimeout = 0 // no timeout
 	cliCtx.clientConnHost = ""
 	cliCtx.clientConnPort = base.DefaultPort
@@ -239,11 +214,55 @@ func setCliContextDefaults() {
 	cliCtx.showVersionUsingOnlyBuildTag = false
 }
 
+// sqlConnContext captures the connection configuration for all SQL
+// clients. See below for defaults.
+var sqlConnCtx = clisqlclient.Context{
+	CliCtx: &cliCtx.Context,
+}
+
+// setSQLConnContextDefaults set the default values in sqlConnCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setSQLConnContextDefaults() {
+	// See also setCLIDefaultForTests() in cli_test.go.
+	sqlConnCtx.DebugMode = false
+	sqlConnCtx.Echo = false
+	sqlConnCtx.EmbeddedMode = false
+	sqlConnCtx.EnableServerExecutionTimings = false
+}
+
+var sqlExecCtx = clisqlexec.Context{
+	CliCtx: &cliCtx.Context,
+}
+
+// PrintQueryOutput takes a list of column names and a list of row
+// contents writes a formatted table to 'w'.
+//
+// This binds PrintQueryOutput to this package's common/global
+// CLI configuration, for use by other packages like the CCL CLI.
+func PrintQueryOutput(w io.Writer, cols []string, allRows clisqlexec.RowStrIter) error {
+	return sqlExecCtx.PrintQueryOutput(w, cols, allRows)
+}
+
+// setSQLConnContextDefaults set the default values in sqlConnCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setSQLExecContextDefaults() {
+	// See also setCLIDefaultForTests() in cli_test.go.
+	sqlExecCtx.TerminalOutput = isatty.IsTerminal(os.Stdout.Fd())
+	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
+	sqlExecCtx.TableBorderMode = 0 /* no outer lines + no inside row lines */
+	if sqlExecCtx.TerminalOutput {
+		// See also setCLIDefaultForTests() in cli_test.go.
+		sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTable
+	}
+	sqlExecCtx.ShowTimes = false
+	sqlExecCtx.VerboseTimings = false
+}
+
 // sqlCtx captures the configuration of the `sql` command.
 // See below for defaults.
 var sqlCtx = struct {
-	*cliContext
-
 	// setStmts is a list of \set commands to execute before entering the sql shell.
 	setStmts statementsValue
 
@@ -269,29 +288,6 @@ var sqlCtx = struct {
 	// shell.
 	safeUpdates bool
 
-	// showTimes indicates whether to display query times after each result line.
-	showTimes bool
-
-	// echo, when set, requests that SQL queries sent to the server are
-	// also printed out on the client.
-	echo bool
-
-	// debugMode, when set, overrides the defaults to disable as much
-	// "intelligent behavior" in the SQL shell as possible and become
-	// more verbose (sets echo).
-	debugMode bool
-
-	// embeddedMode, when set, reduces the amount of informational
-	// messages printed out to exclude details that are not
-	// under user's control when the shell is run by a playground environment.
-	embeddedMode bool
-
-	// Determines whether to display server execution timings in the CLI.
-	enableServerExecutionTimings bool
-
-	// Determine whether to show raw durations.
-	verboseTimings bool
-
 	// Determines whether to stop the client upon encountering an error.
 	errExit bool
 
@@ -304,7 +300,7 @@ var sqlCtx = struct {
 
 	// The string used to produce the value of fullPrompt.
 	customPromptPattern string
-}{cliContext: &cliCtx}
+}{}
 
 // setSQLContextDefaults set the default values in sqlCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
@@ -316,11 +312,6 @@ func setSQLContextDefaults() {
 	sqlCtx.inputFile = ""
 	sqlCtx.repeatDelay = 0
 	sqlCtx.safeUpdates = false
-	sqlCtx.showTimes = false
-	sqlCtx.debugMode = false
-	sqlCtx.echo = false
-	sqlCtx.enableServerExecutionTimings = false
-	sqlCtx.verboseTimings = false
 	sqlCtx.errExit = false
 	sqlCtx.checkSyntax = false
 	sqlCtx.autoTrace = ""

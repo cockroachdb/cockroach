@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
@@ -180,11 +181,11 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 	// We're going to use the SQL code, but in non-interactive mode.
 	// Override whatever terminal-driven defaults there may be out there.
-	cliCtx.isInteractive = false
-	cliCtx.terminalOutput = false
-	sqlCtx.showTimes = false
+	cliCtx.IsInteractive = false
+	sqlExecCtx.TerminalOutput = false
+	sqlExecCtx.ShowTimes = false
 	// Use a streaming format to avoid accumulating all rows in RAM.
-	cliCtx.tableDisplayFormat = clisqlclient.TableDisplayTSV
+	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
 	if err != nil {
@@ -320,7 +321,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			}
 			// Pump the SQL rows directly into the zip writer, to avoid
 			// in-RAM buffering.
-			return runQueryAndFormatResults(conn, w, clisqlclient.MakeQuery(fullQuery))
+			return sqlExecCtx.RunQueryAndFormatResults(conn, w, clisqlclient.MakeQuery(fullQuery))
 		}()
 		if sqlErr != nil {
 			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {

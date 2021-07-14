@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -164,7 +164,7 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 	rows = append(rows, []string{"", "total", fmt.Sprintf("(%s)", humanizeutil.IBytes(totalSize)), "", "", fmt.Sprintf("%d", totalSize)})
 
 	// Display the file listing.
-	return PrintQueryOutput(os.Stdout, fileTableHeaders, clisqlclient.NewRowSliceIter(rows, alignment))
+	return sqlExecCtx.PrintQueryOutput(os.Stdout, fileTableHeaders, clisqlexec.NewRowSliceIter(rows, alignment))
 }
 
 var tzRe = regexp.MustCompile(`\d\d\d\d-\d\d-\d\dT\d\d_\d\d_\d\d`)

@@ -465,7 +465,7 @@ func TestZipRetries(t *testing.T) {
 			Host:     s.ServingSQLAddr(),
 			RawQuery: "sslmode=disable",
 		}
-		sqlConn := makeSQLConn(sqlURL.String())
+		sqlConn := sqlConnCtx.MakeSQLConn(sqlURL.String())
 		defer func() {
 			if err := sqlConn.Close(); err != nil {
 				t.Fatal(err)
