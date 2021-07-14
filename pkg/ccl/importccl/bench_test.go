@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -184,7 +185,10 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 				SessionData: &sessiondata.SessionData{},
 				Codec:       keys.SystemSQLCodec,
 			}
-			return wc.Worker(ctx, evalCtx)
+			flowCtx := execinfra.FlowCtx{
+				EvalCtx: evalCtx,
+			}
+			return wc.Worker(ctx, &flowCtx, evalCtx)
 		})
 		for kvBatch := range kvCh {
 			for i := range kvBatch.KVs {
