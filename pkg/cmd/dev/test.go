@@ -13,7 +13,6 @@ package main
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -55,8 +54,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 		RunE: runE,
 	}
 	// Attach flags for the test sub-command.
-	testCmd.Flags().StringP(filterFlag, "f", "", "run unit tests matching this regex")
-	testCmd.Flags().Duration(timeoutFlag, 20*time.Minute, "timeout for test")
+	addCommonTestFlags(testCmd)
 	testCmd.Flags().Bool(showLogsFlag, false, "print logs instead of saving them in files")
 	testCmd.Flags().BoolP(vFlag, "v", false, "enable logging during test runs")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
@@ -120,6 +118,8 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 	}
 
 	for _, pkg := range pkgs {
+		pkg = strings.TrimPrefix(pkg, "//")
+
 		if !strings.HasPrefix(pkg, "pkg/") {
 			return errors.Newf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
@@ -150,7 +150,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 			// where we define `Stringer` separately for the `RemoteOffset`
 			// type.
 			{
-				out, err := d.exec.CommandContext(ctx, "bazel", "query", fmt.Sprintf("kind(go_test,  //%s)", pkg))
+				out, err := d.exec.CommandContextSilent(ctx, "bazel", "query", fmt.Sprintf("kind(go_test,  //%s)", pkg))
 				if err != nil {
 					return err
 				}
@@ -171,6 +171,8 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 		// TODO(irfansharif): Should this be pulled into a top-level flag?
 		// Should we just re-purpose timeout here?
 		args = append(args, "--run_under", fmt.Sprintf("stress -maxtime=%s", timeout))
+	} else if timeout > 0 {
+		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}
 	if filter != "" {
 		args = append(args, fmt.Sprintf("--test_filter=%s", filter))
