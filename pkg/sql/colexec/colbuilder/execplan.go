@@ -2045,16 +2045,6 @@ func planProjectionOperators(
 	case *tree.CaseExpr:
 		allocator := colmem.NewAllocator(ctx, acc, factory)
 		caseOutputType := t.ResolvedType()
-		family := typeconv.TypeFamilyToCanonicalTypeFamily(caseOutputType.Family())
-		if family == types.BytesFamily || family == types.JsonFamily {
-			// Currently, there is a contradiction between the way CASE operator
-			// works (which populates its output in arbitrary order) and the
-			// flat bytes implementation of Bytes type (which prohibits sets in
-			// arbitrary order), so we reject such scenario to fall back to
-			// row-by-row engine.
-			return nil, resultIdx, typs, errors.Newf(
-				"unsupported type %s in CASE operator", caseOutputType)
-		}
 		caseOutputIdx := len(columnTypes)
 		// We don't know the schema yet and will update it below, right before
 		// instantiating caseOp. The same goes for subsetEndIdx.
