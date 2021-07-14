@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "startupmigrations",
-    srcs = ["migrations.go"],
+    srcs = [
+        "doc.go",
+        "migrations.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/startupmigrations",
     visibility = ["//visibility:public"],
     deps = [
