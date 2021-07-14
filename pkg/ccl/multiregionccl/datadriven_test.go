@@ -12,7 +12,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -65,16 +64,18 @@ import (
 // leaseholder.
 //
 // "wait-for-zone-config-changes idx=server_number table-name=tbName
-// [num-voters=num] [num-non-voters=num]": finds the
+// [num-voters=num] [num-non-voters=num] [leaseholder=idx] [voter=idx_list]
+// [non-voter=idx_list] [not-present=idx_list]": finds the
 // range belonging to the given tbName's prefix key and runs it through the
 // split, replicate, and raftsnapshot queues. If the num-voters or
 // num-non-voters arguments are provided, it then makes sure that the range
 // conforms to those.
-// It also takes input in the form of space separated pairs of
-// <replica_type>=<server_idx_list>, where each server_idx is separated by a
-// comma. For example, input may look like `leaseholder=0 voter=2,3 nonvoter=4`.
-// Acceptable values for replica_type are `leaseholder`, `voter`, `non-voter`,
-// and `not-present`.
+// It also takes the arguments leaseholder, voter, nonvoter, and not-present,
+// each of which take a comma-separated list of server indexes to check against
+// the provided table.
+// Note that if a server idx is not listed, it is unconstrained. This is
+// necessary for cases where we know how many replicas of a type we want but
+// we can't deterministically know their placement.
 // If the leaseholder does not match the argument provided, a lease
 // transfer is attempted.
 // All this is done in a succeeds soon as any of these steps may error out for
@@ -301,8 +302,6 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				}
 				tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
 
-				leaseTransferInitiated := false
-
 				// There's a lot going on here and things can fail at various steps, for
 				// completely legitimate reasons, which is why this thing needs to be
 				// wrapped in a succeeds soon.
@@ -348,59 +347,42 @@ func TestMultiRegionDataDriven(t *testing.T) {
 						}
 					}
 
-					// Parse user replica types from input.
-					expectedReplicaTypes := parseUserReplicas(t, d.Input)
+					// Parse user-supplied expected replica types from input.
+					expectedReplicaTypes := parseExpectedReplicasFromInput(t, ds.tc, d)
+					// Get current replica type info from range and validate against
+					// user-specified replica types
+					actualReplicaTypes := parseRangeReplicas(t, ds.tc, desc)
 
 					// If the user specified a leaseholder, transfer range lease to the leaseholder.
 					leaseholderList := expectedReplicaTypes[replicaTypeLeaseholder]
-					if leaseholderList != nil && len(leaseholderList) == 1 {
+					if len(leaseholderList) == 1 {
 						nodeIdx := leaseholderList[0]
 						leaseIdx := nodeIdToIdx(t, ds.tc, leaseHolderInfo.NodeID)
 						if nodeIdx != leaseIdx {
 							leaseErr := errors.Newf("expected leaseholder %d but got %d", nodeIdx, leaseIdx)
 
 							// We want to only initiate a lease transfer if our target replica
-							// is a voter. Otherwise, this will silently fail.
-							expectedNodeId := ds.tc.Target(nodeIdx).NodeID
-							foundVoter := false
-							for _, replica := range desc.Replicas().VoterDescriptors() {
-								if replica.NodeID == expectedNodeId {
-									foundVoter = true
-								}
-							}
-							if !foundVoter {
+							// is a voter. Otherwise, TransferRangeLease will silently fail.
+							if newLeaseholderType := actualReplicaTypes[nodeIdx]; newLeaseholderType != replicaTypeVoter {
 								return errors.CombineErrors(
 									leaseErr,
-									errors.Newf("expected node %s to be a voter but was not", nodeIdx))
+									errors.Newf("expected node %s to be a voter but was %s", nodeIdx, newLeaseholderType.String()))
 							}
 
-							// Only want to transfer a lease once. If we don't check this,
-							// the test can attempt to transfer the lease after the lease
-							// has already been transferred but before the new leaseholder
-							// has been applied, which leads to strange epoch errors and
-							// the new lease never being applied.
-							if !leaseTransferInitiated {
-								leaseTransferInitiated = true
-								log.VEventf(
-									ctx,
-									2,
-									"transferring lease from node %d to %d", leaseIdx, nodeIdx)
-								t.Logf("transferring lease from node %d to %d", leaseIdx, nodeIdx)
-								err = ds.tc.TransferRangeLease(desc, ds.tc.Target(nodeIdx))
-								return errors.CombineErrors(
-									leaseErr,
-									err,
-								)
-							} else {
-								return leaseErr
-							}
+							log.VEventf(
+								ctx,
+								2,
+								"transferring lease from node %d to %d", leaseIdx, nodeIdx)
+							t.Logf("transferring lease from node %d to %d", leaseIdx, nodeIdx)
+							err = ds.tc.TransferRangeLease(desc, ds.tc.Target(nodeIdx))
+							return errors.CombineErrors(
+								leaseErr,
+								err,
+							)
 						}
 					}
 
-					// Get current replica type info from range and validate against
-					// user-specified replica types
-					actualReplicaTypes := parseRangeReplicas(t, ds.tc, desc)
-					err = validateReplicas(expectedReplicaTypes, actualReplicaTypes)
+					err = ensureCorrectReplicaPlacement(expectedReplicaTypes, actualReplicaTypes)
 					if err != nil {
 						return err
 					}
@@ -449,7 +431,7 @@ type replicaType int
 const (
 	replicaTypeLeaseholder replicaType = iota
 	replicaTypeVoter
-	replicaTypeNonvoter
+	replicaTypeNonVoter
 	replicaTypeNotPresent
 )
 
@@ -460,14 +442,18 @@ type datadrivenTestState struct {
 var replicaTypes = map[string]replicaType{
 	"leaseholder": replicaTypeLeaseholder,
 	"voter":       replicaTypeVoter,
-	"non-voter":   replicaTypeNonvoter,
+	"non-voter":   replicaTypeNonVoter,
 	"not-present": replicaTypeNotPresent,
 }
 var replicaTypeString = map[replicaType]string{
 	replicaTypeLeaseholder: "leaseholder",
 	replicaTypeVoter:       "voter",
-	replicaTypeNonvoter:    "non-voter",
+	replicaTypeNonVoter:    "non-voter",
 	replicaTypeNotPresent:  "not-present",
+}
+
+func (r replicaType) String() string {
+	return replicaTypeString[r]
 }
 
 func (d *datadrivenTestState) cleanup(ctx context.Context) {
@@ -493,7 +479,9 @@ func mustHaveArgOrFatal(t *testing.T, d *datadriven.TestData, arg string) {
 	}
 }
 
-func validateReplicas(expected map[replicaType][]int, actual map[int]replicaType) error {
+func ensureCorrectReplicaPlacement(
+	expected map[replicaType][]int, actual map[int]replicaType,
+) error {
 	for rt, ids := range expected {
 		for _, id := range ids {
 			actualRt, found := actual[id]
@@ -504,12 +492,19 @@ func validateReplicas(expected map[replicaType][]int, actual map[int]replicaType
 				continue
 			}
 
+			if !found {
+				return errors.Newf(
+					"expected replica type for %d to be %s but was not found in list of replicas",
+					id,
+					rt.String())
+			}
+
 			if actualRt != rt {
 				return errors.Newf(
 					"expected replica type for %d to be %s but was %s",
 					id,
-					replicaTypeString[rt],
-					replicaTypeString[actualRt])
+					rt.String(),
+					actualRt.String())
 			}
 		}
 	}
@@ -539,62 +534,52 @@ func parseRangeReplicas(
 
 	for _, replica := range desc.Replicas().NonVoterDescriptors() {
 		idx := nodeIdToIdx(t, tc, replica.NodeID)
-		if _, found := replicaMap[idx]; !found {
-			replicaMap[idx] = replicaTypeNonvoter
+		if rt, found := replicaMap[idx]; !found {
+			replicaMap[idx] = replicaTypeNonVoter
+		} else {
+			t.Fatalf("expected not to find non-voter %d in replica map but found %s",
+				idx, rt.String())
 		}
 	}
 
 	return replicaMap
 }
 
-// parseUserReplicas takes a string of space-separated values formatted as
-// <replica_type>=<server_idx_list> and constructs a corresponding map from node
-// idx to replica type
-func parseUserReplicas(t *testing.T, input string) map[replicaType][]int {
-	replicasRaw := strings.Split(input, " ")
-	replicaMap := make(map[replicaType][]int)
-	re := regexp.MustCompile(`^(\S+)=((?:\d+,)*\d+)$`)
-	for _, replicaRaw := range replicasRaw {
-		// Grab node idx and replica type.
-		submatch := re.FindStringSubmatch(replicaRaw)
-		if len(submatch) < 3 {
-			t.Fatalf(
-				"could not parse replica type %s: expected 3 matches but got %d",
-				replicaRaw,
-				len(submatch))
+// parseExpectedReplicasFromInput take the arguments from a datadriven test and parses them
+// out to a map of replica_type -> server_idx_list
+func parseExpectedReplicasFromInput(
+	t *testing.T, tc serverutils.TestClusterInterface, d *datadriven.TestData,
+) map[replicaType][]int {
+	userReplicas := make(map[replicaType][]int)
+	for replicaTypeName := range replicaTypes {
+		if !d.HasArg(replicaTypeName) {
+			continue
 		}
 
-		// Get all indices (separated by ',').
-		rawIndices := strings.Split(submatch[2], ",")
+		var rawReplicas string
+		d.ScanArgs(t, replicaTypeName, &rawReplicas)
 
-		// Convert specified node replica type to a replicaType if possible, error
-		// otherwise.
-		rawReplicaReq := submatch[1]
-		replicaTypeReq, found := replicaTypes[rawReplicaReq]
-		if !found {
-			t.Fatalf("unexpected required replica type: %s", rawReplicaReq)
-		} else {
-			if _, found = replicaMap[replicaTypeReq]; !found {
-				replicaMap[replicaTypeReq] = make([]int, 0, len(rawIndices))
-			}
-		}
-
-		newReplicas := replicaMap[replicaTypeReq]
-		for _, rawIndex := range rawIndices {
+		rawReplicaList := strings.Split(rawReplicas, ",")
+		newReplicas := make([]int, 0, len(rawReplicaList))
+		for _, rawIndex := range rawReplicaList {
 			ind, err := strconv.Atoi(rawIndex)
 			if err != nil {
 				t.Fatalf("could not parse replica type for index: %v", err)
 			}
+			if ind >= tc.NumServers() {
+				t.Fatalf("got server index %d but only have %d servers", ind, tc.NumServers())
+			}
 			newReplicas = append(newReplicas, ind)
 		}
-		replicaMap[replicaTypeReq] = newReplicas
+
+		userReplicas[replicaTypes[replicaTypeName]] = newReplicas
 	}
 
-	if leaseholders := replicaMap[replicaTypeLeaseholder]; len(leaseholders) > 1 {
+	if leaseholders := userReplicas[replicaTypeLeaseholder]; len(leaseholders) > 1 {
 		t.Fatalf("got more than one leaseholder: %d", len(leaseholders))
 	}
 
-	return replicaMap
+	return userReplicas
 }
 
 func nodeIdToIdx(t *testing.T, tc serverutils.TestClusterInterface, id roachpb.NodeID) int {
