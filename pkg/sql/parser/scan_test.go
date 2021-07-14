@@ -31,22 +31,22 @@ func TestScanner(t *testing.T) {
 		{` `, nil},
 		{` /* hello */`, nil},
 		{`.`, []int{'.'}},
-		{`..`, []int{DOT_DOT}},
+		{`..`, []int{lexbase.DOT_DOT}},
 		{`!`, []int{'!'}},
-		{`!=`, []int{NOT_EQUALS}},
+		{`!=`, []int{lexbase.NOT_EQUALS}},
 		{`<`, []int{'<'}},
-		{`<>`, []int{NOT_EQUALS}},
-		{`<=`, []int{LESS_EQUALS}},
-		{`<<`, []int{LSHIFT}},
-		{`<<=`, []int{INET_CONTAINED_BY_OR_EQUALS}},
+		{`<>`, []int{lexbase.NOT_EQUALS}},
+		{`<=`, []int{lexbase.LESS_EQUALS}},
+		{`<<`, []int{lexbase.LSHIFT}},
+		{`<<=`, []int{lexbase.INET_CONTAINED_BY_OR_EQUALS}},
 		{`>`, []int{'>'}},
-		{`>=`, []int{GREATER_EQUALS}},
-		{`>>`, []int{RSHIFT}},
-		{`>>=`, []int{INET_CONTAINS_OR_EQUALS}},
+		{`>=`, []int{lexbase.GREATER_EQUALS}},
+		{`>>`, []int{lexbase.RSHIFT}},
+		{`>>=`, []int{lexbase.INET_CONTAINS_OR_EQUALS}},
 		{`=`, []int{'='}},
 		{`:`, []int{':'}},
-		{`::`, []int{TYPECAST}},
-		{`:: :`, []int{TYPECAST, ':'}},
+		{`::`, []int{lexbase.TYPECAST}},
+		{`:: :`, []int{lexbase.TYPECAST, ':'}},
 		{`(`, []int{'('}},
 		{`)`, []int{')'}},
 		{`[`, []int{'['}},
@@ -57,74 +57,74 @@ func TestScanner(t *testing.T) {
 		{`-`, []int{'-'}},
 		{`*`, []int{'*'}},
 		{`/`, []int{'/'}},
-		{`//`, []int{FLOORDIV}},
+		{`//`, []int{lexbase.FLOORDIV}},
 		{`%`, []int{'%'}},
 		{`^`, []int{'^'}},
 		{`$`, []int{'$'}},
 		{`&`, []int{'&'}},
-		{`&&`, []int{AND_AND}},
+		{`&&`, []int{lexbase.AND_AND}},
 		{`|`, []int{'|'}},
-		{`||`, []int{CONCAT}},
-		{`|/`, []int{SQRT}},
-		{`||/`, []int{CBRT}},
+		{`||`, []int{lexbase.CONCAT}},
+		{`|/`, []int{lexbase.SQRT}},
+		{`||/`, []int{lexbase.CBRT}},
 		{`#`, []int{'#'}},
 		{`~`, []int{'~'}},
-		{`!~`, []int{NOT_REGMATCH}},
-		{`~*`, []int{REGIMATCH}},
-		{`!~*`, []int{NOT_REGIMATCH}},
-		{`$1`, []int{PLACEHOLDER}},
+		{`!~`, []int{lexbase.NOT_REGMATCH}},
+		{`~*`, []int{lexbase.REGIMATCH}},
+		{`!~*`, []int{lexbase.NOT_REGIMATCH}},
+		{`$1`, []int{lexbase.PLACEHOLDER}},
 		{`$a`, []int{'$', IDENT}},
-		{`a`, []int{IDENT}},
-		{`foo + bar`, []int{IDENT, '+', IDENT}},
-		{`select a from b`, []int{SELECT, IDENT, FROM, IDENT}},
-		{`"a" "b"`, []int{IDENT, IDENT}},
-		{`'a'`, []int{SCONST}},
-		{`$$a$$`, []int{SCONST}},
-		{`$a$b$a$`, []int{SCONST}},
-		{`$a$b b$a$`, []int{SCONST}},
-		{`$a$ $a$`, []int{SCONST}},
-		{`$a$1$b$2$b$3$a$`, []int{SCONST}},
-		{`$a$1$b$2$b3$a$`, []int{SCONST}},
-		{`$a$1$$3$a$`, []int{SCONST}},
-		{`$a$1$$3$a$`, []int{SCONST}},
-		{`$a$1$3$a$`, []int{SCONST}},
-		{`$ab$1$a$ab$`, []int{SCONST}},
-		{`$ab1$ab$ab1$`, []int{SCONST}},
-		{`$ab1$ab12$ab1$`, []int{SCONST}},
-		{`$$~!@#$%^&*()_+:",./<>?;'$$`, []int{SCONST}},
+		{`a`, []int{lexbase.IDENT}},
+		{`foo + bar`, []int{lexbase.IDENT, '+', lexbase.IDENT}},
+		{`select a from b`, []int{lexbase.SELECT, lexbase.IDENT, lexbase.FROM, lexbase.IDENT}},
+		{`"a" "b"`, []int{lexbase.IDENT, lexbase.IDENT}},
+		{`'a'`, []int{lexbase.SCONST}},
+		{`$$a$$`, []int{lexbase.SCONST}},
+		{`$a$b$a$`, []int{lexbase.SCONST}},
+		{`$a$b b$a$`, []int{lexbase.SCONST}},
+		{`$a$ $a$`, []int{lexbase.SCONST}},
+		{`$a$1$b$2$b$3$a$`, []int{lexbase.SCONST}},
+		{`$a$1$b$2$b3$a$`, []int{lexbase.SCONST}},
+		{`$a$1$$3$a$`, []int{lexbase.SCONST}},
+		{`$a$1$$3$a$`, []int{lexbase.SCONST}},
+		{`$a$1$3$a$`, []int{lexbase.SCONST}},
+		{`$ab$1$a$ab$`, []int{lexbase.SCONST}},
+		{`$ab1$ab$ab1$`, []int{lexbase.SCONST}},
+		{`$ab1$ab12$ab1$`, []int{lexbase.SCONST}},
+		{`$$~!@#$%^&*()_+:",./<>?;'$$`, []int{lexbase.SCONST}},
 		{`$$hello
-world$$`, []int{SCONST}},
-		{`b'a'`, []int{BCONST}},
-		{`b'\xff'`, []int{BCONST}},
-		{`B'10101'`, []int{BITCONST}},
-		{`e'a'`, []int{SCONST}},
-		{`E'a'`, []int{SCONST}},
-		{`NOT`, []int{NOT}},
-		{`NOT BETWEEN`, []int{NOT, BETWEEN}},
-		{`NOT IN`, []int{NOT, IN}},
-		{`NOT SIMILAR`, []int{NOT, SIMILAR}},
-		{`WITH`, []int{WITH}},
-		{`WITH TIME`, []int{WITH, TIME}},
-		{`WITH ORDINALITY`, []int{WITH, ORDINALITY}},
-		{`1`, []int{ICONST}},
-		{`0xa`, []int{ICONST}},
-		{`x'2F'`, []int{BCONST}},
-		{`X'2F'`, []int{BCONST}},
-		{`1.0`, []int{FCONST}},
-		{`1.0e1`, []int{FCONST}},
-		{`1e+1`, []int{FCONST}},
-		{`1e-1`, []int{FCONST}},
+world$$`, []int{lexbase.SCONST}},
+		{`b'a'`, []int{lexbase.BCONST}},
+		{`b'\xff'`, []int{lexbase.BCONST}},
+		{`B'10101'`, []int{lexbase.BITCONST}},
+		{`e'a'`, []int{lexbase.SCONST}},
+		{`E'a'`, []int{lexbase.SCONST}},
+		{`NOT`, []int{lexbase.NOT}},
+		{`NOT BETWEEN`, []int{lexbase.NOT, lexbase.BETWEEN}},
+		{`NOT IN`, []int{lexbase.NOT, IN}},
+		{`NOT SIMILAR`, []int{lexbase.NOT, lexbase.SIMILAR}},
+		{`WITH`, []int{lexbase.WITH}},
+		{`WITH TIME`, []int{lexbase.WITH, lexbase.TIME}},
+		{`WITH ORDINALITY`, []int{lexbase.WITH, lexbase.ORDINALITY}},
+		{`1`, []int{lexbase.ICONST}},
+		{`0xa`, []int{lexbase.ICONST}},
+		{`x'2F'`, []int{lexbase.BCONST}},
+		{`X'2F'`, []int{lexbase.BCONST}},
+		{`1.0`, []int{lexbase.FCONST}},
+		{`1.0e1`, []int{lexbase.FCONST}},
+		{`1e+1`, []int{lexbase.FCONST}},
+		{`1e-1`, []int{lexbase.FCONST}},
 	}
 	for i, d := range testData {
 		s := makeScanner(d.sql)
 		var tokens []int
 		for {
-			var lval sqlSymType
-			s.scan(&lval)
-			if lval.id == 0 {
+			var lval ScanSymType
+			s.scan(lval)
+			if lval.Id() == 0 {
 				break
 			}
-			tokens = append(tokens, int(lval.id))
+			tokens = append(tokens, int(lval.Id()))
 		}
 
 		if !reflect.DeepEqual(d.expected, tokens) {
@@ -154,12 +154,12 @@ foo`, "", "foo"},
 	}
 	for i, d := range testData {
 		s := makeScanner(d.sql)
-		var lval sqlSymType
-		present, ok := s.scanComment(&lval)
+		var lval ScanSymType
+		present, ok := s.scanComment(lval)
 		if d.err == "" && (!present || !ok) {
-			t.Fatalf("%d: expected success, but found %s", i, lval.str)
-		} else if d.err != "" && (present || ok || d.err != lval.str) {
-			t.Fatalf("%d: expected %s, but found %s", i, d.err, lval.str)
+			t.Fatalf("%d: expected success, but found %s", i, lval.Str())
+		} else if d.err != "" && (present || ok || d.err != lval.Str()) {
+			t.Fatalf("%d: expected %s, but found %s", i, d.err, lval.Str())
 		}
 		if r := s.in[s.pos:]; d.remainder != r {
 			t.Fatalf("%d: expected '%s', but found '%s'", i, d.remainder, r)
@@ -170,10 +170,10 @@ foo`, "", "foo"},
 func TestScanKeyword(t *testing.T) {
 	for _, kwName := range lexbase.KeywordNames {
 		s := makeScanner(kwName)
-		var lval sqlSymType
-		s.scan(&lval)
-		if id := lexbase.GetKeywordID(kwName); id != lval.id {
-			t.Errorf("%s: expected %d, but found %d", kwName, id, lval.id)
+		var lval ScanSymType
+		s.scan(lval)
+		if id := lexbase.GetKeywordID(kwName); id != lval.Id() {
+			t.Errorf("%s: expected %d, but found %d", kwName, id, lval.Id())
 		}
 	}
 }
@@ -184,39 +184,39 @@ func TestScanNumber(t *testing.T) {
 		expected string
 		id       int
 	}{
-		{`0`, `0`, ICONST},
-		{`000`, `0`, ICONST},
-		{`1`, `1`, ICONST},
-		{`0x1`, `0x1`, ICONST},
-		{`0X2`, `0X2`, ICONST},
-		{`0xff`, `0xff`, ICONST},
-		{`0xff.`, `0xff`, ICONST},
-		{`12345`, `12345`, ICONST},
-		{`08`, `8`, ICONST},
-		{`0011`, `11`, ICONST},
-		{`1.`, `1.`, FCONST},
-		{`.1`, `.1`, FCONST},
-		{`1..2`, `1`, ICONST},
-		{`1.2`, `1.2`, FCONST},
-		{`1.2e3`, `1.2e3`, FCONST},
-		{`1e3`, `1e3`, FCONST},
-		{`1e3.4`, `1e3`, FCONST},
-		{`.1e3.4`, `.1e3`, FCONST},
-		{`1e-3`, `1e-3`, FCONST},
-		{`1e-3-`, `1e-3`, FCONST},
-		{`1e+3`, `1e+3`, FCONST},
-		{`1e+3+`, `1e+3`, FCONST},
-		{`9223372036854775809`, `9223372036854775809`, ICONST},
+		{`0`, `0`, lexbase.ICONST},
+		{`000`, `0`, lexbase.ICONST},
+		{`1`, `1`, lexbase.ICONST},
+		{`0x1`, `0x1`, lexbase.ICONST},
+		{`0X2`, `0X2`, lexbase.ICONST},
+		{`0xff`, `0xff`, lexbase.ICONST},
+		{`0xff.`, `0xff`, lexbase.ICONST},
+		{`12345`, `12345`, lexbase.ICONST},
+		{`08`, `8`, lexbase.ICONST},
+		{`0011`, `11`, lexbase.ICONST},
+		{`1.`, `1.`, lexbase.FCONST},
+		{`.1`, `.1`, lexbase.FCONST},
+		{`1..2`, `1`, lexbase.ICONST},
+		{`1.2`, `1.2`, lexbase.FCONST},
+		{`1.2e3`, `1.2e3`, lexbase.FCONST},
+		{`1e3`, `1e3`, lexbase.FCONST},
+		{`1e3.4`, `1e3`, lexbase.FCONST},
+		{`.1e3.4`, `.1e3`, lexbase.FCONST},
+		{`1e-3`, `1e-3`, lexbase.FCONST},
+		{`1e-3-`, `1e-3`, lexbase.FCONST},
+		{`1e+3`, `1e+3`, lexbase.FCONST},
+		{`1e+3+`, `1e+3`, lexbase.FCONST},
+		{`9223372036854775809`, `9223372036854775809`, lexbase.ICONST},
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql)
-		var lval sqlSymType
-		s.scan(&lval)
-		if d.id != int(lval.id) {
-			t.Errorf("%s: expected %d, but found %d", d.sql, d.id, lval.id)
+		var lval ScanSymType
+		s.scan(lval)
+		if d.id != int(lval.Id()) {
+			t.Errorf("%s: expected %d, but found %d", d.sql, d.id, lval.Id())
 		}
-		if d.expected != lval.str {
-			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.str)
+		if d.expected != lval.Str() {
+			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.Str())
 		}
 	}
 }
@@ -232,13 +232,13 @@ func TestScanPlaceholder(t *testing.T) {
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql)
-		var lval sqlSymType
-		s.scan(&lval)
-		if lval.id != PLACEHOLDER {
-			t.Errorf("%s: expected %d, but found %d", d.sql, PLACEHOLDER, lval.id)
+		var lval ScanSymType
+		s.scan(lval)
+		if lval.Id() != lexbase.PLACEHOLDER {
+			t.Errorf("%s: expected %d, but found %d", d.sql, lexbase.PLACEHOLDER, lval.Id())
 		}
-		if d.expected != lval.str {
-			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.str)
+		if d.expected != lval.Str() {
+			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.Str())
 		}
 	}
 }
@@ -325,10 +325,10 @@ world`},
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql)
-		var lval sqlSymType
-		s.scan(&lval)
-		if d.expected != lval.str {
-			t.Errorf("%s: expected %q, but found %q", d.sql, d.expected, lval.str)
+		var lval ScanSymType
+		s.scan(lval)
+		if d.expected != lval.Str() {
+			t.Errorf("%s: expected %q, but found %q", d.sql, d.expected, lval.Str())
 		}
 	}
 }
@@ -358,13 +358,13 @@ func TestScanError(t *testing.T) {
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql)
-		var lval sqlSymType
-		s.scan(&lval)
-		if lval.id != ERROR {
-			t.Errorf("%s: expected ERROR, but found %d", d.sql, lval.id)
+		var lval ScanSymType
+		s.scan(lval)
+		if lval.Id() != ERROR {
+			t.Errorf("%s: expected ERROR, but found %d", d.sql, lval.Id())
 		}
-		if !testutils.IsError(errors.Newf("%s", lval.str), d.err) {
-			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.str)
+		if !testutils.IsError(errors.Newf("%s", lval.Str()), d.err) {
+			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.Str())
 		}
 	}
 }
