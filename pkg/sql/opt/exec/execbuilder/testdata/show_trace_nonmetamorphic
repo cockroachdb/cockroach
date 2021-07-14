@@ -241,19 +241,6 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 End
 r40: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 node received request: 1 CPut, 1 EndTxn
 
-# Temporarily disabled flaky test (#58202).
-## TODO(tschottdorf): re-enable
-# statement ok
-# CREATE TABLE t.enginestats(k INT PRIMARY KEY, v INT)
-#
-# statement ok
-# SHOW TRACE FOR SELECT * FROM t.enginestats
-#
-# query T
-# SELECT message FROM [ SHOW TRACE FOR SESSION ] WHERE message LIKE '%InternalDelete%'
-# ----
-# engine stats: {InternalDeleteSkippedCount:0 TimeBoundNumSSTs:0}
-
 # Check that we can run set tracing regardless of the current tracing state.
 # This is convenient; sometimes it's unclear, for example, if you previously
 # stopped tracing or not, so issuing a set tracing=off should just work.
@@ -279,43 +266,21 @@ SET tracing = off
 statement ok
 ROLLBACK
 
-subtest replica
+subtest system_table_lookup
 
+# We use AOST to bypass the table cache.
 statement ok
-CREATE TABLE t (a INT PRIMARY KEY)
+SET tracing = on,kv; SELECT * FROM system.eventlog AS OF SYSTEM TIME '-1us'; SET tracing = off
 
-statement ok
-SET tracing = on; SELECT * FROM t; SET tracing = off
-
-# Temporarily disabled flaky test (#58202).
-# query III colnames
-# SELECT DISTINCT node_id, store_id, replica_id
-#   FROM [SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION]
-# ----
-# node_id  store_id  replica_id
-# 1        1         26
-# 1        1         6
-# 1        1         29
-#
-# subtest system_table_lookup
-#
-# # We use AOST to bypass the table cache.
-# statement ok
-# SET tracing = on,kv; SELECT * FROM system.eventlog AS OF SYSTEM TIME '-1us'; SET tracing = off
-#
-# query TT
-# SELECT operation, regexp_replace(regexp_replace(message, 'job_id:[1-9]\d*', 'job_id:...', 'g')), 'drop_time:\d+', 'drop_time:...', 'g') as message
-#   FROM [SHOW KV TRACE FOR SESSION]
-# WHERE (message LIKE 'querying next range%' OR message LIKE '%batch%')
-#   AND message NOT LIKE '%SystemConfigSpan%'
-#   AND message NOT LIKE '%PushTxn%'
-# ----
-# dist sender send  querying next range at /Table/3/1/12/2/1
-# dist sender send  r6: sending batch 1 Get to (n1,s1):1
-# dist sender send  querying next range at /Table/3/1/1/2/1
-# dist sender send  r6: sending batch 1 Get to (n1,s1):1
-# dist sender send  querying next range at /Table/12/1
-# dist sender send  r8: sending batch 1 Scan to (n1,s1):1
+query TT
+SELECT operation, message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE (message LIKE 'querying next range%' OR message LIKE '%batch%')
+  AND message NOT LIKE '%SystemConfigSpan%'
+  AND message NOT LIKE '%PushTxn%'
+----
+dist sender send  querying next range at /Table/12/1
+dist sender send  r8: sending batch 1 Scan to (n1,s1):1
 
 # Regression tests for incorrect interaction between consecutive session traces
 # (#59203, #60672).

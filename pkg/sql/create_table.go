@@ -2553,9 +2553,9 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 		// Add all columns. Columns are always added.
 		for i := range td.Columns {
 			c := &td.Columns[i]
-			if c.Hidden {
-				// Hidden columns automatically get added by the system; we don't need
-				// to add them ourselves here.
+			if c.Hidden || c.Inaccessible {
+				// Hidden and inaccessible columns automatically get added by
+				// the system; we don't need to add them ourselves here.
 				continue
 			}
 			def := tree.ColumnTableDef{
@@ -2646,6 +2646,17 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					elem := tree.IndexElem{
 						Column:    tree.Name(name),
 						Direction: tree.Ascending,
+					}
+					col, err := td.FindColumnWithID(idx.GetKeyColumnID(j))
+					if err != nil {
+						return nil, err
+					}
+					if col.IsExpressionIndexColumn() {
+						elem.Column = ""
+						elem.Expr, err = parser.ParseExpr(col.GetComputeExpr())
+						if err != nil {
+							return nil, err
+						}
 					}
 					if idx.GetKeyColumnDirection(j) == descpb.IndexDescriptor_DESC {
 						elem.Direction = tree.Descending
