@@ -369,6 +369,11 @@ CREATE TABLE system.join_tokens (
     FAMILY "primary" (id, secret, expiration)
 )`
 
+	// TODO(zcfgs-pod): Should the primary key be a compound one with both
+	// start_key and end_key? On the one hand it's possible for "spans" to have
+	// empty end keys (and PK columns have to be non-empty), but on the other
+	// hand it's unlikely (?) we'll support defining a span config on a single
+	// key.
 	SpanConfigurationsTableSchema = `
 CREATE TABLE system.span_configurations (
 	start_key		BYTES NOT NULL PRIMARY KEY,
@@ -1770,7 +1775,7 @@ var (
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "start_key", ID: 1, Type: types.Bytes},
 			{Name: "end_key", ID: 2, Type: types.Bytes},
-			{Name: "config", ID: 3, Type: types.Bytes, Nullable: true},
+			{Name: "config", ID: 3, Type: types.Bytes},
 		},
 		NextColumnID: 4,
 		Families: []descpb.ColumnFamilyDescriptor{

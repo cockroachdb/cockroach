@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -59,12 +60,11 @@ type Connector interface {
 	// gossip network.
 	config.SystemConfigProvider
 
-	// SpanConfigAccessor mediates access to the subset of the cluster's span
-	// configs applicable to secondary tenants. Attempts to set span
-	// configurations are subject to admission control by KV (e.g. is the tenant
-	// attempting to configure a number of spans greater than what they're
-	// allowed to?).
-	config.SpanConfigAccessor
+	// Accessor mediates access to the subset of the cluster's span configs
+	// applicable to secondary tenants. Attempts to set span configurations are
+	// subject to admission control by KV (e.g. is the tenant attempting to
+	// configure a number of spans greater than what they're allowed to?).
+	spanconfig.Accessor
 }
 
 // ConnectorConfig encompasses the configuration required to create a Connector.

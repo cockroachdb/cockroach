@@ -2279,6 +2279,8 @@ message LeasePreference {
 
 // SpanConfig holds the configuration that applies to a given keyspan. It
 // parallels the definition found in zonepb/zone.proto.
+//
+// TODO(zcfgs-pod): Write a custom, compact .String() method.
 message SpanConfig {
   // RangeMinBytes is the minimum size, in bytes, for a range in the given
   // keyspan. When a range is less than this size, it'll be merged with an
@@ -2343,30 +2345,27 @@ message SpanConfigEntry {
   SpanConfig config = 2 [(gogoproto.nullable) = false];
 };
 
-// GetSpanConfigsRequest is used to fetch the span configurations for the
+// GetSpanConfigsRequest is used to fetch the span configurations over the
 // specified keyspan.
 message GetSpanConfigsRequest {
   Span span = 1 [(gogoproto.nullable) = false];
 };
 
-// GetSpanConfigsResponse lists out the span configurations for the requested
+// GetSpanConfigsResponse lists out the span configurations over the specified
 // keyspan.
 message GetSpanConfigsResponse {
   repeated SpanConfigEntry span_configs = 1 [(gogoproto.nullable) = false];
 };
 
-// UpdateSpanConfigsRequest is used to update the span configurations for the
+// UpdateSpanConfigsRequest is used to update the span configurations over the
 // specified keyspans.
 message UpdateSpanConfigsRequest {
-  // SpanConfigsToUpsert lists out the spans we want to update, and and the
-  // configs we want to update with.
-  repeated SpanConfigEntry span_configs_to_upsert = 2 [(gogoproto.nullable) = false];
+  // SpanConfigsToUpdate lists out the spans we want to update, and the configs
+  // we want to update with.
+  repeated SpanConfigEntry span_configs_to_update = 1 [(gogoproto.nullable) = false];
 
-  // SpanConfigsToDelete lists out the spans we want to delete the configs for.
-  //
-  // TODO(zcfgs-pod): We're not considering the configs for the spans being
-  // deleted, should our request proto reflect as much?
-  repeated SpanConfigEntry span_configs_to_delete = 3 [(gogoproto.nullable) = false];
+  // SpansToDelete lists out the spans we want to delete the configs for.
+  repeated Span spans_to_delete = 2 [(gogoproto.nullable) = false];
 };
 
 message UpdateSpanConfigsResponse { };
@@ -2379,10 +2378,11 @@ service Internal {
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
   rpc ResetQuorum        (ResetQuorumRequest)        returns (ResetQuorumResponse)            {}
 
-  // GetSpanConfigs is used to fetch the span configurations for a given keyspan.
+  // GetSpanConfigs is used to fetch the span configurations over a given
+  // keyspan.
   rpc GetSpanConfigs (GetSpanConfigsRequest) returns (GetSpanConfigsResponse) { }
 
-  // UpdateSpanConfigs is used to update the span configurations for given
+  // UpdateSpanConfigs is used to update the span configurations over given
   // keyspans.
   rpc UpdateSpanConfigs (UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) { }
 

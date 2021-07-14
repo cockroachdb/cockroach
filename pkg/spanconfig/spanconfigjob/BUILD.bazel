@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "job",
+    srcs = ["job.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/job",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_library(
+    name = "spanconfigjob",
+    srcs = ["job.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

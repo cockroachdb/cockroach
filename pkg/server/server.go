@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -603,6 +604,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ExternalStorage:         externalStorage,
 		ExternalStorageFromURI:  externalStorageFromURI,
 		ProtectedTimestampCache: protectedtsProvider,
+		RangeFeedFactory:        rangeFeedFactory,
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
@@ -723,6 +725,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		rpcContext:               rpcContext,
 		nodeDescs:                g,
 		systemConfigProvider:     g,
+		spanConfigAccessor:       node,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
