@@ -179,8 +179,11 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			mockCache.Insert(ctx, r)
 
 			ts := hlc.Timestamp{WallTime: 100}
+			bulkOpts := kvserverbase.BulkAdderOptions{MinBufferSize: batchSize(), SSTSize: batchSize}
 			b, err := bulk.MakeBulkAdder(
-				ctx, kvDB, mockCache, s.ClusterSettings(), ts, kvserverbase.BulkAdderOptions{MinBufferSize: batchSize(), SSTSize: batchSize}, nil, /* bulkMon */
+				ctx, kvDB, mockCache, nil, /* metrics */
+				s.ClusterSettings(), ts,
+				bulkOpts, nil, /* bulkMon */
 			)
 			if err != nil {
 				t.Fatal(err)
