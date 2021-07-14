@@ -131,10 +131,12 @@ func (p partitionerBool) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -188,6 +190,7 @@ func (p partitionerBool) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 bool
@@ -350,10 +353,12 @@ func (p partitionerBytes) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -399,6 +404,7 @@ func (p partitionerBytes) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 []byte
@@ -537,10 +543,12 @@ func (p partitionerDecimal) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -586,6 +594,7 @@ func (p partitionerDecimal) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 apd.Decimal
@@ -724,10 +733,12 @@ func (p partitionerInt16) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -784,6 +795,7 @@ func (p partitionerInt16) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 int16
@@ -955,10 +967,12 @@ func (p partitionerInt32) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -1015,6 +1029,7 @@ func (p partitionerInt32) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 int32
@@ -1186,10 +1201,12 @@ func (p partitionerInt64) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -1246,6 +1263,7 @@ func (p partitionerInt64) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 int64
@@ -1417,10 +1435,12 @@ func (p partitionerFloat64) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -1485,6 +1505,7 @@ func (p partitionerFloat64) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 float64
@@ -1680,10 +1701,12 @@ func (p partitionerTimestamp) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -1736,6 +1759,7 @@ func (p partitionerTimestamp) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 time.Time
@@ -1895,10 +1919,12 @@ func (p partitionerInterval) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -1944,6 +1970,7 @@ func (p partitionerInterval) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 duration.Duration
@@ -2082,10 +2109,12 @@ func (p partitionerJSON) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -2137,6 +2166,7 @@ func (p partitionerJSON) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 json.JSON
@@ -2293,10 +2323,12 @@ func (p partitionerDatum) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var (
@@ -2344,6 +2376,7 @@ func (p partitionerDatum) partitionWithOrder(
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
 				var __retval_0 interface{}

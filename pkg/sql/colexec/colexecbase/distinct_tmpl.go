@@ -261,15 +261,18 @@ func (p partitioner_TYPE) partitionWithOrder(
 	// Eliminate bounds checks.
 	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
+	_ = order[n-1]
 	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			lastVal, lastValNull = checkDistinctWithNulls(checkIdx, outputIdx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct)
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
 			lastVal = checkDistinct(checkIdx, outputIdx, lastVal, col, outputCol)
 		}
