@@ -28,7 +28,7 @@ go_library(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
-        "//pkg/sqlmigrations",
+        "//pkg/startupmigrations",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",

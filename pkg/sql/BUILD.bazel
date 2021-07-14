@@ -583,7 +583,7 @@ go_test(
         "//pkg/sql/stmtdiagnostics",
         "//pkg/sql/tests",
         "//pkg/sql/types",
-        "//pkg/sqlmigrations",
+        "//pkg/startupmigrations",
         "//pkg/storage",
         "//pkg/storage/cloudimpl",
         "//pkg/testutils",

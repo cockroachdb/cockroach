@@ -51,30 +51,30 @@ func (t *testServerShim) ServingSQLAddr() string {
 	return t.SQLAddr()
 }
 
-func (t *testServerShim) Stopper() *stop.Stopper            { panic(unsupportedShimMethod) }
-func (t *testServerShim) Start(context.Context) error       { panic(unsupportedShimMethod) }
-func (t *testServerShim) Node() interface{}                 { panic(unsupportedShimMethod) }
-func (t *testServerShim) NodeID() roachpb.NodeID            { panic(unsupportedShimMethod) }
-func (t *testServerShim) ClusterID() uuid.UUID              { panic(unsupportedShimMethod) }
-func (t *testServerShim) ServingRPCAddr() string            { panic(unsupportedShimMethod) }
-func (t *testServerShim) RPCAddr() string                   { panic(unsupportedShimMethod) }
-func (t *testServerShim) DB() *kv.DB                        { panic(unsupportedShimMethod) }
-func (t *testServerShim) RPCContext() *rpc.Context          { panic(unsupportedShimMethod) }
-func (t *testServerShim) LeaseManager() interface{}         { panic(unsupportedShimMethod) }
-func (t *testServerShim) InternalExecutor() interface{}     { panic(unsupportedShimMethod) }
-func (t *testServerShim) ExecutorConfig() interface{}       { panic(unsupportedShimMethod) }
-func (t *testServerShim) Tracer() interface{}               { panic(unsupportedShimMethod) }
-func (t *testServerShim) GossipI() interface{}              { panic(unsupportedShimMethod) }
-func (t *testServerShim) RangeFeedFactory() interface{}     { panic(unsupportedShimMethod) }
-func (t *testServerShim) Clock() *hlc.Clock                 { panic(unsupportedShimMethod) }
-func (t *testServerShim) DistSenderI() interface{}          { panic(unsupportedShimMethod) }
-func (t *testServerShim) MigrationServer() interface{}      { panic(unsupportedShimMethod) }
-func (t *testServerShim) SQLServer() interface{}            { panic(unsupportedShimMethod) }
-func (t *testServerShim) SQLLivenessProvider() interface{}  { panic(unsupportedShimMethod) }
-func (t *testServerShim) SQLMigrationsManager() interface{} { panic(unsupportedShimMethod) }
-func (t *testServerShim) NodeLiveness() interface{}         { panic(unsupportedShimMethod) }
-func (t *testServerShim) HeartbeatNodeLiveness() error      { panic(unsupportedShimMethod) }
-func (t *testServerShim) NodeDialer() interface{}           { panic(unsupportedShimMethod) }
+func (t *testServerShim) Stopper() *stop.Stopper                { panic(unsupportedShimMethod) }
+func (t *testServerShim) Start(context.Context) error           { panic(unsupportedShimMethod) }
+func (t *testServerShim) Node() interface{}                     { panic(unsupportedShimMethod) }
+func (t *testServerShim) NodeID() roachpb.NodeID                { panic(unsupportedShimMethod) }
+func (t *testServerShim) ClusterID() uuid.UUID                  { panic(unsupportedShimMethod) }
+func (t *testServerShim) ServingRPCAddr() string                { panic(unsupportedShimMethod) }
+func (t *testServerShim) RPCAddr() string                       { panic(unsupportedShimMethod) }
+func (t *testServerShim) DB() *kv.DB                            { panic(unsupportedShimMethod) }
+func (t *testServerShim) RPCContext() *rpc.Context              { panic(unsupportedShimMethod) }
+func (t *testServerShim) LeaseManager() interface{}             { panic(unsupportedShimMethod) }
+func (t *testServerShim) InternalExecutor() interface{}         { panic(unsupportedShimMethod) }
+func (t *testServerShim) ExecutorConfig() interface{}           { panic(unsupportedShimMethod) }
+func (t *testServerShim) Tracer() interface{}                   { panic(unsupportedShimMethod) }
+func (t *testServerShim) GossipI() interface{}                  { panic(unsupportedShimMethod) }
+func (t *testServerShim) RangeFeedFactory() interface{}         { panic(unsupportedShimMethod) }
+func (t *testServerShim) Clock() *hlc.Clock                     { panic(unsupportedShimMethod) }
+func (t *testServerShim) DistSenderI() interface{}              { panic(unsupportedShimMethod) }
+func (t *testServerShim) MigrationServer() interface{}          { panic(unsupportedShimMethod) }
+func (t *testServerShim) SQLServer() interface{}                { panic(unsupportedShimMethod) }
+func (t *testServerShim) SQLLivenessProvider() interface{}      { panic(unsupportedShimMethod) }
+func (t *testServerShim) StartupMigrationsManager() interface{} { panic(unsupportedShimMethod) }
+func (t *testServerShim) NodeLiveness() interface{}             { panic(unsupportedShimMethod) }
+func (t *testServerShim) HeartbeatNodeLiveness() error          { panic(unsupportedShimMethod) }
+func (t *testServerShim) NodeDialer() interface{}               { panic(unsupportedShimMethod) }
 func (t *testServerShim) SetDistSQLSpanResolver(spanResolver interface{}) {
 	panic(unsupportedShimMethod)
 }
