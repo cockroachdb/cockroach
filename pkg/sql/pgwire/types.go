@@ -13,7 +13,6 @@ package pgwire
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"math/big"
 	"net"
@@ -63,17 +62,6 @@ func pgTypeForParserType(t *types.T) pgType {
 		oid:  t.Oid(),
 		size: size,
 	}
-}
-
-// resolveBlankPaddedChar pads the given string with spaces if blank padding is
-// required or returns the string unmodified otherwise.
-func resolveBlankPaddedChar(s string, t *types.T) string {
-	if t.Oid() == oid.T_bpchar {
-		// Pad spaces on the right of the string to make it of length specified in
-		// the type t.
-		return fmt.Sprintf("%-*v", t.Width(), s)
-	}
-	return s
 }
 
 // writeTextDatum writes d to the buffer. Type t must be specified for types
@@ -142,10 +130,10 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedString(v.IPAddr.String())
 
 	case *tree.DString:
-		b.writeLengthPrefixedString(resolveBlankPaddedChar(string(*v), t))
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(string(*v), t))
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(v.Contents)
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
 
 	case *tree.DDate:
 		b.textFormatter.FormatNode(v)
@@ -372,6 +360,12 @@ func (b *writeBuffer) writeBinaryDatum(
 			return ndigit
 		}
 
+		// The dscale is defined as number of digits (in base 10) visible
+		// after the decimal separator, so it can't be negative.
+		if alloc.pgNum.Dscale < 0 {
+			alloc.pgNum.Dscale = 0
+		}
+
 		b.putInt32(int32(2 * (4 + alloc.pgNum.Ndigits)))
 		b.putInt16(alloc.pgNum.Ndigits)
 		b.putInt16(alloc.pgNum.Weight)
@@ -429,10 +423,10 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.writeLengthPrefixedString(v.LogicalRep)
 
 	case *tree.DString:
-		b.writeLengthPrefixedString(resolveBlankPaddedChar(string(*v), t))
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(string(*v), t))
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(v.Contents)
+		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
 
 	case *tree.DTimestamp:
 		b.putInt32(8)
@@ -466,10 +460,11 @@ func (b *writeBuffer) writeBinaryDatum(
 		subWriter := newWriteBuffer(nil /* bytecount */)
 		// Put the number of datums.
 		subWriter.putInt32(int32(len(v.D)))
-		for _, elem := range v.D {
-			oid := elem.ResolvedType().Oid()
+		tupleTypes := t.TupleContents()
+		for i, elem := range v.D {
+			oid := tupleTypes[i].Oid()
 			subWriter.putInt32(int32(oid))
-			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, elem.ResolvedType())
+			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 
@@ -534,10 +529,10 @@ func (b *writeBuffer) writeBinaryDatum(
 
 const (
 	pgTimeFormat              = "15:04:05.999999"
-	pgTimeTZFormat            = pgTimeFormat + "-07:00"
+	pgTimeTZFormat            = pgTimeFormat + "-07"
 	pgDateFormat              = "2006-01-02"
 	pgTimeStampFormatNoOffset = pgDateFormat + " " + pgTimeFormat
-	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00"
+	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07"
 	pgTime2400Format          = "24:00:00"
 )
 
@@ -555,10 +550,14 @@ func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
 // formatTimeTZ formats t into a format lib/pq understands, appending to the
 // provided tmp buffer and reallocating if needed. The function will then return
 // the resulting buffer.
-// Note it does not understand the "second" component of the offset as lib/pq
-// cannot parse it.
 func formatTimeTZ(t timetz.TimeTZ, tmp []byte) []byte {
-	ret := t.ToTime().AppendFormat(tmp, pgTimeTZFormat)
+	format := pgTimeTZFormat
+	if t.OffsetSecs%60 != 0 {
+		format += ":00:00"
+	} else if t.OffsetSecs%3600 != 0 {
+		format += ":00"
+	}
+	ret := t.ToTime().AppendFormat(tmp, format)
 	// time.Time's AppendFormat does not recognize 2400, so special case it accordingly.
 	if t.TimeOfDay == timeofday.Time2400 {
 		// It instead reads 00:00:00. Replace that text.
@@ -574,6 +573,11 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	var format string
 	if offset != nil {
 		format = pgTimeStampFormat
+		if _, offsetSeconds := t.In(offset).Zone(); offsetSeconds%60 != 0 {
+			format += ":00:00"
+		} else if offsetSeconds%3600 != 0 {
+			format += ":00"
+		}
 	} else {
 		format = pgTimeStampFormatNoOffset
 	}

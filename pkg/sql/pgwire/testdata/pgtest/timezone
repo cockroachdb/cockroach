@@ -1,0 +1,69 @@
+send
+Query {"String": "SET TIME ZONE \"UTC\""}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"UTC"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT '00:00:00+01:01'::\"timetz\""}
+----
+
+until ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"timetz","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1266,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"00:00:00+01:01"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT '00:00:00+01:01:03'::\"timetz\""}
+----
+
+until ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"timetz","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1266,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"00:00:00+01:01:03"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT '1882-05-23T00:00:00'::\"timestamptz\""}
+----
+
+until ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"timestamptz","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1184,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1882-05-23 00:00:00+00"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET TIME ZONE \"America/Chicago\""}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/Chicago"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT '1882-05-23T00:00:00-05:51'::\"timestamptz\""}
+----
+
+until ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"timestamptz","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1184,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1882-05-23 00:00:24-05:50:36"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

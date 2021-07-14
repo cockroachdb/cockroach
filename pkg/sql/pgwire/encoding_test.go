@@ -100,6 +100,13 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 			// The width of a bpchar type is fixed and equal to the length of the
 			// Text string returned by postgres.
 			tc.T.InternalType.Width = int32(len(tc.Text))
+		case oid.T_record:
+			tupleExpr := te.(*tree.Tuple)
+			typs := make([]*types.T, len(tupleExpr.Exprs))
+			for i := range tupleExpr.Exprs {
+				typs[i] = tupleExpr.Exprs[i].(tree.TypedExpr).ResolvedType()
+			}
+			tc.T = types.MakeTuple(typs)
 		}
 	}
 
@@ -150,7 +157,7 @@ func TestEncodings(t *testing.T) {
 				}
 				got := verifyLen(t)
 				if !bytes.Equal(got, tc.TextAsBinary) {
-					t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.Text)
+					t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.TextAsBinary)
 				}
 			}
 		})
@@ -177,6 +184,11 @@ func TestEncodings(t *testing.T) {
 				continue
 			case *tree.DTuple:
 				// Unsupported.
+				continue
+			case *tree.DCollatedString:
+				// Decoding collated strings is unsupported by this test. The encoded
+				// value is the same as a normal string, so decoding it turns it into
+				// a DString.
 				continue
 			}
 			for code, value := range map[pgwirebase.FormatCode][]byte{

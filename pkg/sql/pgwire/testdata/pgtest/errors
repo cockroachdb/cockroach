@@ -23,13 +23,23 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Query {"String": "CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p))"}
+Query {"String": "CREATE TABLE child (c INT PRIMARY KEY, p INT)"}
 ----
 
 until
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "ALTER TABLE child ADD CONSTRAINT fk_p_ref_parent FOREIGN KEY (p) REFERENCES parent(p)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -47,13 +57,13 @@ send
 Query {"String": "ALTER TABLE child DROP CONSTRAINT fk_p_ref_parent"}
 ----
 
-# Test with a constraint name that requires quoting.
 until
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Test with a constraint name that requires quoting.
 send
 Query {"String": "ALTER TABLE child ADD CONSTRAINT \"foo bar\" FOREIGN KEY (p) REFERENCES parent(p)"}
 ----
