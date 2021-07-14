@@ -358,52 +358,16 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	// Iterate over the specified range of Raft entries and send them all out
 	// together.
+	rangeID := header.State.Desc.RangeID
 	firstIndex := header.State.TruncatedState.Index + 1
 	endIndex := snap.RaftSnap.Metadata.Index + 1
-	preallocSize := endIndex - firstIndex
-	const maxPreallocSize = 1000
-	if preallocSize > maxPreallocSize {
-		// It's possible for the raft log to become enormous in certain
-		// sustained failure conditions. We may bail out of the snapshot
-		// process early in scanFunc, but in the worst case this
-		// preallocation is enough to run the server out of memory. Limit
-		// the size of the buffer we will preallocate.
-		preallocSize = maxPreallocSize
+	logEntries := make([]raftpb.Entry, 0, endIndex-firstIndex)
+	scanFunc := func(ent raftpb.Entry) (bool, error) {
+		logEntries = append(logEntries, ent)
+		return false, nil
 	}
-	logEntries := make([][]byte, 0, preallocSize)
-
-	var raftLogBytes int64
-	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
-		bytes, err := kv.Value.GetBytes()
-		if err == nil {
-			logEntries = append(logEntries, bytes)
-			raftLogBytes += int64(len(bytes))
-		}
-		return false, err
-	}
-
-	rangeID := header.State.Desc.RangeID
-
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return 0, err
-	}
-
-	// The difference between the snapshot index (applied index at the time of
-	// snapshot) and the truncated index should equal the number of log entries
-	// shipped over.
-	expLen := endIndex - firstIndex
-	if expLen != uint64(len(logEntries)) {
-		// We've generated a botched snapshot. We could fatal right here but opt
-		// to warn loudly instead, and fatal at the caller to capture a checkpoint
-		// of the underlying storage engine.
-		entriesRange, err := extractRangeFromEntries(logEntries)
-		if err != nil {
-			return 0, err
-		}
-		log.Warningf(ctx, "missing log entries in snapshot (%s): "+
-			"got %d entries, expected %d (TruncatedState.Index=%d, LogEntries=%s)",
-			snap.String(), len(logEntries), expLen, snap.State.TruncatedState.Index, entriesRange)
-		return 0, errMalformedSnapshot
 	}
 
 	// Inline the payloads for all sideloaded proposals.
@@ -413,11 +377,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// solution, but let's see if it ever becomes relevant. Snapshots with
 	// inlined proposals are hopefully the exception.
 	{
-		var ent raftpb.Entry
-		for i := range logEntries {
-			if err := protoutil.Unmarshal(logEntries[i], &ent); err != nil {
-				return 0, err
-			}
+		for i, ent := range logEntries {
 			if !sniffSideloadedRaftCommand(ent.Data) {
 				continue
 			}
@@ -429,7 +389,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 					return err
 				}
 				if newEnt != nil {
-					ent = *newEnt
+					logEntries[i] = *newEnt
 				}
 				return nil
 			}); err != nil {
@@ -455,15 +415,39 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				}
 				return 0, err
 			}
-			// TODO(tschottdorf): it should be possible to reuse `logEntries[i]` here.
-			var err error
-			if logEntries[i], err = protoutil.Marshal(&ent); err != nil {
-				return 0, err
-			}
 		}
 	}
+
+	// Marshal each of the log entries.
+	logEntriesRaw := make([][]byte, len(logEntries))
+	for i := range logEntries {
+		entRaw, err := protoutil.Marshal(&logEntries[i])
+		if err != nil {
+			return 0, err
+		}
+		logEntriesRaw[i] = entRaw
+	}
+
+	// The difference between the snapshot index (applied index at the time of
+	// snapshot) and the truncated index should equal the number of log entries
+	// shipped over.
+	expLen := endIndex - firstIndex
+	if expLen != uint64(len(logEntries)) {
+		// We've generated a botched snapshot. We could fatal right here but opt
+		// to warn loudly instead, and fatal at the caller to capture a checkpoint
+		// of the underlying storage engine.
+		entriesRange, err := extractRangeFromEntries(logEntriesRaw)
+		if err != nil {
+			return 0, err
+		}
+		log.Warningf(ctx, "missing log entries in snapshot (%s): "+
+			"got %d entries, expected %d (TruncatedState.Index=%d, LogEntries=%s)",
+			snap.String(), len(logEntries), expLen, snap.State.TruncatedState.Index, entriesRange)
+		return 0, errMalformedSnapshot
+	}
+
 	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", n, len(logEntries))
-	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries}); err != nil {
+	if err := stream.Send(&SnapshotRequest{LogEntries: logEntriesRaw}); err != nil {
 		return 0, err
 	}
 	return kvSS.bytesSent, nil
