@@ -331,6 +331,7 @@ go_test(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/idxusage",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
         "//pkg/sql/tests",
         "//pkg/startupmigrations",

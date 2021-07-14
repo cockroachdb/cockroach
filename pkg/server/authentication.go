@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	math_rand "math/rand"
 	"net/http"
 	"strconv"
 	"time"
@@ -86,22 +87,52 @@ var ConfigureOIDC = func(
 	return &noOIDCConfigured{}, nil
 }
 
-var webSessionTimeout = settings.RegisterDurationSetting(
-	"server.web_session_timeout",
-	"the duration that a newly created web session will be valid",
-	7*24*time.Hour,
-	settings.NonNegativeDuration,
-).WithPublic()
+var (
+	webSessionTimeout = settings.RegisterDurationSetting(
+		"server.web_session_timeout",
+		"the duration that a newly created web session will be valid",
+		7*24*time.Hour,
+		settings.NonNegativeDuration,
+	).WithPublic()
+
+	webSessionPurgeTTL = settings.RegisterDurationSetting(
+		"server.web_session.purge.ttl",
+		"if nonzero, entries in system.web_sessions older than this duration are periodically purged",
+		time.Hour,
+	).WithPublic()
+
+	webSessionAutoLogoutTimeout = settings.RegisterDurationSetting(
+		"server.web_session.auto_logout.timeout",
+		"the duration that web sessions will survive before being periodically purged, since they were last used",
+		7*24*time.Hour,
+		settings.NonNegativeDuration,
+	).WithPublic()
+
+	webSessionPurgePeriod = settings.RegisterDurationSetting(
+		"server.web_session.purge.period",
+		"the time until old sessions are deleted",
+		time.Hour,
+		settings.NonNegativeDuration,
+	).WithPublic()
+
+	webSessionPurgeLimit = settings.RegisterIntSetting(
+		"server.web_session.purge_limit",
+		"the maximum number of sessions to delete per purge",
+		10,
+	).WithPublic()
+)
 
 type authenticationServer struct {
-	server *Server
+	server             *Server
+	hasActivePurgeTask bool
 }
 
 // newAuthenticationServer allocates and returns a new REST server for
 // authentication APIs.
-func newAuthenticationServer(s *Server) *authenticationServer {
+func newAuthenticationServer(ctx context.Context, s *Server) *authenticationServer {
 	return &authenticationServer{
-		server: s,
+		server:             s,
+		hasActivePurgeTask: false,
 	}
 }
 
@@ -501,6 +532,14 @@ RETURNING id
 	// Extract integer value from single datum.
 	id = int64(*row[0].(*tree.DInt))
 
+	// If not started, begin an async task to periodically purge old sessions in the web sessions table.
+	if !s.hasActivePurgeTask {
+		if err = s.purgeOldSessions(ctx); err != nil {
+			return 0, nil, err
+		}
+		s.hasActivePurgeTask = true
+	}
+
 	return id, secret, nil
 }
 
@@ -659,4 +698,85 @@ func forwardAuthenticationMetadata(ctx context.Context, _ *http.Request) metadat
 		md.Set(webSessionIDKeyStr, fmt.Sprintf("%v", sessionID))
 	}
 	return md
+}
+
+func (s *authenticationServer) purgeOldSessions(ctx context.Context) error {
+	return s.server.stopper.RunAsyncTask(ctx, "purge-old-sessions", func(context.Context) {
+		settingsValues := &s.server.st.SV
+		period := webSessionPurgePeriod.Get(settingsValues)
+
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		timer.Reset(jitteredInterval(period))
+
+		for ; ; timer.Reset(webSessionPurgePeriod.Get(settingsValues)) {
+			select {
+			case <-timer.C:
+				timer.Read = true
+
+				// TODO(cameron): LIMIT is used here to avoid a very large initial transaction.
+				// However, this may prevent deletion of a large backlog of entries.
+				// This needs to be addressed in a later iteration.
+				// May be useful to look at startupmigrations/migrations for where to implement this.
+				// See: https://github.com/cockroachdb/cockroach/issues/67933
+				deleteSessionsStmt := `
+WITH
+	deleted_sessions_from_expired_purge_ttl AS (
+		DELETE FROM system.web_sessions@"web_sessions_expiresAt_idx"
+		WHERE "expiresAt" < $1
+    ORDER BY random()
+    LIMIT $3
+    RETURNING 1
+	),
+	deleted_sessions_from_revoked_purge_ttl AS (
+		DELETE FROM system.web_sessions@"web_sessions_revokedAt_idx"
+		WHERE "revokedAt" < $1
+    ORDER BY random()
+    LIMIT $3
+    RETURNING 1
+	),
+	deleted_sessions_from_auto_logout AS (
+		DELETE FROM system.web_sessions@"web_sessions_lastUsedAt_idx"
+		WHERE "lastUsedAt" < $2
+    ORDER BY random()
+    LIMIT $3
+    RETURNING 1
+	)
+SELECT 1
+`
+				currTime := s.server.clock.PhysicalTime()
+
+				purgeTTL := webSessionPurgeTTL.Get(settingsValues)
+				autoLogoutTimeout := webSessionAutoLogoutTimeout.Get(settingsValues)
+				limit := webSessionPurgeLimit.Get(settingsValues)
+
+				purgeTime := currTime.Add(purgeTTL * time.Duration(-1))
+				autoLogoutTime := currTime.Add(autoLogoutTimeout * time.Duration(-1))
+
+				if _, err := s.server.sqlServer.internalExecutor.QueryRowEx(
+					ctx,
+					"delete-old-sessions",
+					nil, /* txn */
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+					deleteSessionsStmt,
+					purgeTime,
+					autoLogoutTime,
+					limit,
+				); err != nil {
+					log.Errorf(ctx, "error while deleting old web sessions: %+v", err)
+				}
+			case <-s.server.stopper.ShouldQuiesce():
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	},
+	)
+}
+
+// jitteredInterval returns a randomly jittered (+/-25%) duration
+// from the interval.
+func jitteredInterval(interval time.Duration) time.Duration {
+	return time.Duration(float64(interval) * (0.75 + 0.5*math_rand.Float64()))
 }
