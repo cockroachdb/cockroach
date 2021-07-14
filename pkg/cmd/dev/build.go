@@ -150,7 +150,19 @@ func (d *dev) getPathToBin(ctx context.Context, target string) (string, error) {
 		return "", err
 	}
 	bazelBin := strings.TrimSpace(string(out))
-	target = strings.TrimPrefix(target, "//")
-	_, filename := filepath.Split(target)
-	return filepath.Join(bazelBin, target, filename+"_", filename), nil
+	var head string
+	if strings.HasPrefix(target, "@") {
+		doubleSlash := strings.Index(target, "//")
+		head = filepath.Join("external", target[1:doubleSlash])
+	} else {
+		head = strings.TrimPrefix(target, "//")
+	}
+	var bin string
+	colon := strings.Index(target, ":")
+	if colon >= 0 {
+		bin = target[colon+1:]
+	} else {
+		bin = target[strings.LastIndex(target, "/")+1:]
+	}
+	return filepath.Join(bazelBin, head, bin+"_", bin), nil
 }
