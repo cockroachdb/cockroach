@@ -828,3 +828,68 @@ func TestGRPCAuthentication(t *testing.T) {
 		})
 	}
 }
+
+func TestPurgeSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	ts := s.(*TestServer)
+	username := security.TestUserName()
+
+	// Customize cluster settings to a lower value than the defaults.
+	if _, err := db.Exec(`SET CLUSTER SETTING server.web_session_timeout = '3s'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`SET CLUSTER SETTING server.web_session.purge_ttl = '3s'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`SET CLUSTER SETTING server.web_session.auto_logout_timeout = '10s'`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert seemingly-old entries
+	_, hashedSecret, err := CreateAuthSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 3; i++ {
+		createdAt := ts.clock.PhysicalTime()
+		expiresAt := createdAt.Add(webSessionTimeout.Get(&ts.st.SV))
+		lastUsedAt := createdAt
+
+		db.Exec(
+			`INSERT INTO system.web_sessions (hashedSecret, username, createdAt, expiresAt, lastUsedAt) 
+VALUES($1, $2, $3, $4, $5)`,
+			hashedSecret, username, createdAt, expiresAt, lastUsedAt,
+		)
+	}
+
+	// Wait for the entries to expire.
+	time.Sleep(webSessionTimeout.Get(&ts.st.SV))
+
+	// Wait for the duration of the purge TTL.
+	time.Sleep(webSessionPurgeTTL.Get(&ts.st.SV))
+
+	// Call newAuthSession()
+	if _, _, err = ts.authentication.newAuthSession(ctx, username); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the inserted entries have been deleted.
+	webSessionCount := func() int {
+		var count int
+		var q = fmt.Sprintf("SELECT count(*) FROM system.web_sessions WHERE username = %s", username)
+		if err := db.QueryRow(q).Scan(&count); err != nil {
+			t.Fatalf("failed to get web sessions count: %v", err)
+		}
+		return count
+	}
+	if count := webSessionCount(); count > 1 {
+		t.Fatal(errors.New("failed to delete expired sessions"))
+	}
+}
