@@ -97,6 +97,7 @@ func setServerContextDefaults() {
 	serverCfg.GoroutineDumpDirName = ""
 	serverCfg.HeapProfileDirName = ""
 	serverCfg.CPUProfileDirName = ""
+	serverCfg.JobTraceDirName = ""
 
 	serverCfg.AutoInitializeCluster = false
 	serverCfg.KVConfig.ReadyFn = nil
