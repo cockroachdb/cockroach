@@ -352,9 +352,9 @@ UPDATE cpk SET extra = (
 )
 WHERE ((cpk.key, cpk.value) IN (SELECT new_values.k, new_values.v FROM new_values))
 
-# Regression test for not closing the subqueries in the apply join if they hit
-# an error (#54166).
-query error pgcode XX000 invalid index .*
+# Regression tests for not handling the subqueries in the "inner" plans
+# correctly (#39433).
+query I
 SELECT
   (
     SELECT
@@ -379,3 +379,47 @@ SELECT
 FROM
   (VALUES (NULL)) AS tab_4 (col_4),
   (VALUES (NULL), (NULL)) AS tab_5 (col_5)
+----
+NULL
+NULL
+
+statement ok
+CREATE TABLE t39433 AS SELECT true AS _bool;
+
+query I
+SELECT
+  (
+    SELECT
+      NULL
+    FROM
+      t39433
+      LEFT JOIN t39433 AS tab_57077
+        RIGHT JOIN t39433 AS tab_57078 FULL JOIN t39433 AS tab_57079 ON true ON tab_57069._bool
+        CROSS JOIN t39433 AS tab_57080
+        INNER JOIN t39433 AS tab_57081 ON true ON
+          EXISTS(SELECT NULL FROM t39433 AS tab_57082 LEFT JOIN t39433 ON EXISTS(SELECT NULL FROM t39433))
+  )
+FROM
+  t39433 AS tab_57069;
+----
+NULL
+
+# Regression test for mixing subqueries in "inner" and "outer" contexts
+# (#66923).
+query error unimplemented: apply joins with subqueries in the \"inner\" and \"outer\" contexts are not supported
+VALUES
+  (
+    (
+      SELECT
+        (
+          SELECT
+            NULL
+          FROM
+            (VALUES (tab_54747.col_95055)) AS tab_54752 (col_95061)
+          WHERE
+            (SELECT 0) < tab_54752.col_95061
+        )
+      FROM
+        (VALUES (0:::OID), (3790322641:::OID)) AS tab_54747 (col_95055)
+    )
+  );
