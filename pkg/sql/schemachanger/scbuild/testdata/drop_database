@@ -50,63 +50,43 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 build
 DROP DATABASE db1 CASCADE
 ----
-- DROP Database:{DescID: 52}
-  state: PUBLIC
-  details:
-    databaseId: 52
+- - [DROP, PUBLIC, Database: {DescID: 52}]
+  - databaseId: 52
     dependentObjects:
     - 29
     - 53
     - 54
     - 57
-- DROP DefaultExpression:{DescID: 56, ColumnID: 1}
-  state: PUBLIC
-  details:
-    columnId: 1
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 56, ColumnID: 1}]
+  - columnId: 1
     tableId: 56
-- DROP DefaultExpression:{DescID: 56, ColumnID: 2}
-  state: PUBLIC
-  details:
-    columnId: 2
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 56, ColumnID: 2}]
+  - columnId: 2
     tableId: 56
-- DROP DefaultExpression:{DescID: 56, ColumnID: 3}
-  state: PUBLIC
-  details:
-    columnId: 3
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 56, ColumnID: 3}]
+  - columnId: 3
     tableId: 56
     usesSequenceIDs:
     - 55
-- DROP DefaultExpression:{DescID: 57, ColumnID: 1}
-  state: PUBLIC
-  details:
-    columnId: 1
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 57, ColumnID: 1}]
+  - columnId: 1
     tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 2}
-  state: PUBLIC
-  details:
-    columnId: 2
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 57, ColumnID: 2}]
+  - columnId: 2
     tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 3}
-  state: PUBLIC
-  details:
-    columnId: 3
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 57, ColumnID: 3}]
+  - columnId: 3
     tableId: 57
     usesSequenceIDs:
     - 54
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}
-  state: PUBLIC
-  details:
-    dependedOn: 57
+- - [DROP, PUBLIC, RelationDependedOnBy: {DescID: 54, ReferencedDescID: 57}]
+  - dependedOn: 57
     tableId: 54
-- DROP RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}
-  state: PUBLIC
-  details:
-    dependedOn: 56
+- - [DROP, PUBLIC, RelationDependedOnBy: {DescID: 55, ReferencedDescID: 56}]
+  - dependedOn: 56
     tableId: 55
-- DROP Schema:{DescID: 53}
-  state: PUBLIC
-  details:
-    dependentObjects:
+- - [DROP, PUBLIC, Schema: {DescID: 53}]
+  - dependentObjects:
     - 55
     - 56
     - 58
@@ -117,78 +97,52 @@ DROP DATABASE db1 CASCADE
     - 63
     - 64
     schemaId: 53
-- DROP Sequence:{DescID: 54}
-  state: PUBLIC
-  details:
-    sequenceId: 54
-- DROP Sequence:{DescID: 55}
-  state: PUBLIC
-  details:
-    sequenceId: 55
-- DROP Table:{DescID: 56}
-  state: PUBLIC
-  details:
-    tableId: 56
-- DROP Table:{DescID: 57}
-  state: PUBLIC
-  details:
-    tableId: 57
-- DROP Type:{DescID: 62}
-  state: PUBLIC
-  details:
+- - [DROP, PUBLIC, Sequence: {DescID: 54}]
+  - sequenceId: 54
+- - [DROP, PUBLIC, Sequence: {DescID: 55}]
+  - sequenceId: 55
+- - [DROP, PUBLIC, Table: {DescID: 56}]
+  - tableId: 56
+- - [DROP, PUBLIC, Table: {DescID: 57}]
+  - tableId: 57
+- - [DROP, PUBLIC, Type: {DescID: 62}]
+  - typeId: 62
+- - [DROP, PUBLIC, Type: {DescID: 63}]
+  - typeId: 63
+- - [DROP, PUBLIC, TypeReference: {DescID: 64, ReferencedDescID: 62}]
+  - descriptorId: 64
     typeId: 62
-- DROP Type:{DescID: 63}
-  state: PUBLIC
-  details:
+- - [DROP, PUBLIC, TypeReference: {DescID: 64, ReferencedDescID: 63}]
+  - descriptorId: 64
     typeId: 63
-- DROP TypeReference:{DescID: 64, ReferencedDescID: 62}
-  state: PUBLIC
-  details:
-    descriptorId: 64
-    typeId: 62
-- DROP TypeReference:{DescID: 64, ReferencedDescID: 63}
-  state: PUBLIC
-  details:
-    descriptorId: 64
-    typeId: 63
-- DROP View:{DescID: 58}
-  state: PUBLIC
-  details:
-    dependedOnBy:
+- - [DROP, PUBLIC, View: {DescID: 58}]
+  - dependedOnBy:
     - 59
     - 60
     dependsOn:
     - 56
     tableId: 58
-- DROP View:{DescID: 59}
-  state: PUBLIC
-  details:
-    dependedOnBy:
+- - [DROP, PUBLIC, View: {DescID: 59}]
+  - dependedOnBy:
     - 60
     - 61
     dependsOn:
     - 58
     tableId: 59
-- DROP View:{DescID: 60}
-  state: PUBLIC
-  details:
-    dependedOnBy: []
+- - [DROP, PUBLIC, View: {DescID: 60}]
+  - dependedOnBy: []
     dependsOn:
     - 58
     - 59
     tableId: 60
-- DROP View:{DescID: 61}
-  state: PUBLIC
-  details:
-    dependedOnBy:
+- - [DROP, PUBLIC, View: {DescID: 61}]
+  - dependedOnBy:
     - 64
     dependsOn:
     - 59
     tableId: 61
-- DROP View:{DescID: 64}
-  state: PUBLIC
-  details:
-    dependedOnBy: []
+- - [DROP, PUBLIC, View: {DescID: 64}]
+  - dependedOnBy: []
     dependsOn:
     - 61
     tableId: 64

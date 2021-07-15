@@ -96,10 +96,10 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 	// TODO(ajwerner): Generate the stages for all of the phases as it will make
 	// debugging easier.
 	for _, ts := range initial {
-		p[reflect.TypeOf(ts.Element())].ops(g, ts.Target, ts.Status, params)
+		p[reflect.TypeOf(ts.GetElement())].ops(g, ts.Target, ts.Status, params)
 	}
 	if err := g.ForEachNode(func(n *scpb.Node) error {
-		d, ok := p[reflect.TypeOf(n.Element())]
+		d, ok := p[reflect.TypeOf(n.GetElement())]
 		if !ok {
 			return errors.Errorf("not implemented for %T", n.Target)
 		}

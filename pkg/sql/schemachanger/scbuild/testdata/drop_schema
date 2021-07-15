@@ -45,32 +45,22 @@ CREATE VIEW sc2.v6 AS (SELECT 'a'::sc1.typ::string AS k, n2, n1 from sc1.v4)
 build
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-- DROP DefaultExpression:{DescID: 55, ColumnID: 1}
-  state: PUBLIC
-  details:
-    columnId: 1
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 55, ColumnID: 1}]
+  - columnId: 1
     tableId: 55
-- DROP DefaultExpression:{DescID: 55, ColumnID: 2}
-  state: PUBLIC
-  details:
-    columnId: 2
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 55, ColumnID: 2}]
+  - columnId: 2
     tableId: 55
-- DROP DefaultExpression:{DescID: 55, ColumnID: 3}
-  state: PUBLIC
-  details:
-    columnId: 3
+- - [DROP, PUBLIC, DefaultExpression: {DescID: 55, ColumnID: 3}]
+  - columnId: 3
     tableId: 55
     usesSequenceIDs:
     - 54
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
-  state: PUBLIC
-  details:
-    dependedOn: 55
+- - [DROP, PUBLIC, RelationDependedOnBy: {DescID: 54, ReferencedDescID: 55}]
+  - dependedOn: 55
     tableId: 54
-- DROP Schema:{DescID: 52}
-  state: PUBLIC
-  details:
-    dependentObjects:
+- - [DROP, PUBLIC, Schema: {DescID: 52}]
+  - dependentObjects:
     - 54
     - 55
     - 56
@@ -81,88 +71,60 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     - 61
     - 62
     schemaId: 52
-- DROP Sequence:{DescID: 54}
-  state: PUBLIC
-  details:
-    sequenceId: 54
-- DROP Table:{DescID: 55}
-  state: PUBLIC
-  details:
-    tableId: 55
-- DROP Type:{DescID: 60}
-  state: PUBLIC
-  details:
+- - [DROP, PUBLIC, Sequence: {DescID: 54}]
+  - sequenceId: 54
+- - [DROP, PUBLIC, Table: {DescID: 55}]
+  - tableId: 55
+- - [DROP, PUBLIC, Type: {DescID: 60}]
+  - typeId: 60
+- - [DROP, PUBLIC, Type: {DescID: 61}]
+  - typeId: 61
+- - [DROP, PUBLIC, TypeReference: {DescID: 62, ReferencedDescID: 60}]
+  - descriptorId: 62
     typeId: 60
-- DROP Type:{DescID: 61}
-  state: PUBLIC
-  details:
+- - [DROP, PUBLIC, TypeReference: {DescID: 62, ReferencedDescID: 61}]
+  - descriptorId: 62
     typeId: 61
-- DROP TypeReference:{DescID: 62, ReferencedDescID: 60}
-  state: PUBLIC
-  details:
-    descriptorId: 62
+- - [DROP, PUBLIC, TypeReference: {DescID: 63, ReferencedDescID: 60}]
+  - descriptorId: 63
     typeId: 60
-- DROP TypeReference:{DescID: 62, ReferencedDescID: 61}
-  state: PUBLIC
-  details:
-    descriptorId: 62
+- - [DROP, PUBLIC, TypeReference: {DescID: 63, ReferencedDescID: 61}]
+  - descriptorId: 63
     typeId: 61
-- DROP TypeReference:{DescID: 63, ReferencedDescID: 60}
-  state: PUBLIC
-  details:
-    descriptorId: 63
-    typeId: 60
-- DROP TypeReference:{DescID: 63, ReferencedDescID: 61}
-  state: PUBLIC
-  details:
-    descriptorId: 63
-    typeId: 61
-- DROP View:{DescID: 56}
-  state: PUBLIC
-  details:
-    dependedOnBy:
+- - [DROP, PUBLIC, View: {DescID: 56}]
+  - dependedOnBy:
     - 57
     - 58
     dependsOn:
     - 55
     tableId: 56
-- DROP View:{DescID: 57}
-  state: PUBLIC
-  details:
-    dependedOnBy:
+- - [DROP, PUBLIC, View: {DescID: 57}]
+  - dependedOnBy:
     - 58
     - 59
     dependsOn:
     - 56
     tableId: 57
-- DROP View:{DescID: 58}
-  state: PUBLIC
-  details:
-    dependedOnBy: []
+- - [DROP, PUBLIC, View: {DescID: 58}]
+  - dependedOnBy: []
     dependsOn:
     - 56
     - 57
     tableId: 58
-- DROP View:{DescID: 59}
-  state: PUBLIC
-  details:
-    dependedOnBy:
+- - [DROP, PUBLIC, View: {DescID: 59}]
+  - dependedOnBy:
     - 62
     - 63
     dependsOn:
     - 57
     tableId: 59
-- DROP View:{DescID: 62}
-  state: PUBLIC
-  details:
-    dependedOnBy: []
+- - [DROP, PUBLIC, View: {DescID: 62}]
+  - dependedOnBy: []
     dependsOn:
     - 59
     tableId: 62
-- DROP View:{DescID: 63}
-  state: PUBLIC
-  details:
-    dependedOnBy: []
+- - [DROP, PUBLIC, View: {DescID: 63}]
+  - dependedOnBy: []
     dependsOn:
     - 59
     tableId: 63

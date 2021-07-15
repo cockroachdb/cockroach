@@ -55,7 +55,7 @@ func drawStages(p *scplan.Plan) (*dot.Graph, error) {
 	for idx, n := range p.Initial {
 		t := n.Target
 		tn := targetsSubgraph.Node(strconv.Itoa(idx))
-		tn.Attr("label", htmlLabel(t.Element()))
+		tn.Attr("label", htmlLabel(t.GetElement()))
 		tn.Attr("fontsize", "9")
 		tn.Attr("shape", "none")
 		targetNodes[t] = tn
@@ -112,7 +112,7 @@ func drawDeps(p *scplan.Plan) (*dot.Graph, error) {
 	for idx, n := range p.Initial {
 		t := n.Target
 		tn := targetsSubgraph.Node(strconv.Itoa(idx))
-		tn.Attr("label", htmlLabel(t.Element()))
+		tn.Attr("label", htmlLabel(t.GetElement()))
 		tn.Attr("fontsize", "9")
 		tn.Attr("shape", "none")
 		targetNodes[t] = tn

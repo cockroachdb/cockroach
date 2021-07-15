@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scattr",
+    srcs = [
+        "attr.go",
+        "elements.go",
+        "value.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scattr",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/lexbase",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "scattr_test",
+    srcs = ["attr_test.go"],
+    embed = [":scattr"],
+    deps = [
+        "//pkg/sql/schemachanger/scpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)
