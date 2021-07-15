@@ -696,7 +696,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 		return errors.Errorf("%s: failed to lookup zone config: %s", r, err)
 	}
 
-	r.SetZoneConfig(zone)
+	r.SetZoneConfig(zone) // XXX: Called post-split. Need this to come from span config storage.
 	return nil
 }
 

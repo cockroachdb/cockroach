@@ -56,7 +56,6 @@ func (w *Watcher) Watch(
 		EndKey: spanConfigTableStart.PrefixEnd(),
 	}
 	rowDecoder := spanconfigdecoder.New()
-
 	handleUpdate := func(
 		ctx context.Context, ev *roachpb.RangeFeedValue,
 	) {

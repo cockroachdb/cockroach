@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -623,6 +624,7 @@ type Store struct {
 
 	computeInitialMetrics              sync.Once
 	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
+	spanConfigStorage                  spanconfig.Storage
 }
 
 var _ kv.Sender = &Store{}
@@ -801,12 +803,13 @@ func NewStore(
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
 	s := &Store{
-		cfg:      cfg,
-		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:   eng,
-		nodeDesc: nodeDesc,
-		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
-		ctSender: cfg.ClosedTimestampSender,
+		cfg:               cfg,
+		db:                cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine:            eng,
+		nodeDesc:          nodeDesc,
+		metrics:           newStoreMetrics(cfg.HistogramWindowInterval),
+		ctSender:          cfg.ClosedTimestampSender,
+		spanConfigStorage: spanconfigstorage.New(),
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
@@ -1991,9 +1994,46 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
-func (s *Store) onSpanConfigUpdate(spanconfig.Update) {
+func (s *Store) onSpanConfigUpdate(update spanconfig.Update) {
 	// TODO(zcfgs-pod): Apply the span config update locally, updating the
 	// relevant replicas and queuing up the implied merge/split actions.
+
+	if update.Deleted {
+		s.spanConfigStorage.Delete(update.Entry.Span)
+	} else {
+		s.spanConfigStorage.Set(update.Entry.Span, update.Entry.Config)
+	}
+
+	// XXX: Audit all uses of system config span.
+
+	// ctx := s.AnnotateCtx(context.Background())
+	// We'll want to offer all replicas to the split and merge queues. Be a
+	// little careful about not spawning too many individual goroutines.
+
+	// For every range, update its zone config and check if it needs to
+	// be split or merged.
+	// now := s.cfg.Clock.NowAsClockTimestamp()
+	// shouldQueue := s.systemConfigUpdateQueueRateLimiter.AdmitN(1)
+	// newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+	// 	key := repl.Desc().StartKey
+	// 	spanConfig, err := s.spanConfigStorage.Get(key) // XXX: Should we get it just for the start key? Or the range's span?
+	// 	if err != nil {
+	// 		if log.V(1) {
+	// 			log.Infof(context.TODO(), "failed to get zone config for key %s", key)
+	// 		}
+	// 		spanConfig = s.cfg.DefaultZoneConfig
+	// 	}
+	// 	repl.SetZoneConfig(spanConfig) // XXX: Audit uses
+	// 	if shouldQueue {
+	// 		s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+	// 			h.MaybeAdd(ctx, repl, now)
+	// 		})
+	// 		s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+	// 			h.MaybeAdd(ctx, repl, now)
+	// 		})
+	// 	}
+	// 	return true // more
+	// })
 }
 
 func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached bool) {
@@ -2556,11 +2596,11 @@ func (s *Store) RangeFeed(
 // scanning ranges. An ideal solution would be to create incremental events
 // whenever availability changes.
 func (s *Store) updateReplicationGauges(ctx context.Context) error {
-	// Load the system config.
-	cfg := s.Gossip().GetSystemConfig()
-	if cfg == nil {
-		return errors.Errorf("%s: system config not yet available", s)
-	}
+	// Load the system config. // XXX: Not needed?
+	// cfg := s.Gossip().GetSystemConfig()
+	// if cfg == nil {
+	// 	return errors.Errorf("%s: system config not yet available", s)
+	// }
 
 	var (
 		raftLeaderCount               int64

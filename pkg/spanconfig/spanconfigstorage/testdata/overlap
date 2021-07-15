@@ -1,0 +1,47 @@
+# Test get/set/del operations where the spans overlap with the existing ones.
+
+set span=[b,h) conf=A
+----
+
+get span=[b,h)
+----
+[b,h):A
+
+set span=[d,f) conf=B
+----
+
+get span=[d,f)
+----
+[d,f):B
+
+get span=[b,h)
+----
+[b,d):A
+[d,f):B
+[f,h):A
+
+set span=[c,e) conf=C
+----
+
+get span=[b,h)
+----
+[b,c):A
+[c,e):C
+[e,f):B
+[f,h):A
+
+del span=[d,g)
+----
+
+get span=[b,h)
+----
+[b,c):A
+[c,d):C
+[g,h):A
+
+set span=[b,g) conf=A
+----
+
+get span=[b,h)
+----
+[b,h):A
