@@ -427,6 +427,12 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
         .keys()
         .map((nodeIDb) => Number.parseInt(nodeIDb, 10))
         .difference(healthyIDs)
+        // It's possible for the activity list to contain nodes
+        // that are no longer in our list of known nodes in
+        // `identityByID`. We ensure via the filter below
+        // that we only access nodes we have data for to
+        // prevent unrecoverable error states.
+        .filter((id) => identityByID.has(id))
         .map((nodeIDb) => ({
           from: identityByID.get(nodeIDa),
           to: identityByID.get(nodeIDb),
