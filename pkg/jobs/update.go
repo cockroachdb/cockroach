@@ -119,7 +119,7 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
-		stmt := "SELECT status, payload, progress FROM system.jobs WHERE id = $1 FOR UPDATE"
+		stmt := "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
 		if j.sessionID != "" {
 			stmt = "SELECT status, payload, progress, claim_session_id FROM system." +
 				"jobs WHERE id = $1 FOR UPDATE"
