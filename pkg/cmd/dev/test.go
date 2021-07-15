@@ -29,9 +29,6 @@ var (
 	raceFlag        = "race"
 	ignoreCacheFlag = "ignore-cache"
 
-	// Fuzz testing related flag.
-	fuzzFlag = "fuzz"
-
 	// Logic test related flags.
 	logicFlag    = "logic"
 	filesFlag    = "files"
@@ -49,8 +46,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	dev test
 	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v -show-logs --timeout=1m
 	dev test --stress --race ...
-	dev test --logic --files=prepare|fk --subtests=20042 --config=local
-	dev test --fuzz sql/sem/tree --filter=Decimal`,
+	dev test --logic --files=prepare|fk --subtests=20042 --config=local`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
@@ -62,9 +58,6 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
-
-	// Fuzz testing related flag.
-	testCmd.Flags().Bool(fuzzFlag, false, "run fuzz tests")
 
 	// Logic test related flags.
 	testCmd.Flags().Bool(logicFlag, false, "run logic tests")
@@ -80,10 +73,6 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 func (d *dev) test(cmd *cobra.Command, pkgs []string) error {
 	if logicTest := mustGetFlagBool(cmd, logicFlag); logicTest {
 		return d.runLogicTest(cmd)
-	}
-
-	if fuzzTest := mustGetFlagBool(cmd, fuzzFlag); fuzzTest {
-		return d.runFuzzTest(cmd, pkgs)
 	}
 
 	return d.runUnitTest(cmd, pkgs)
@@ -193,11 +182,4 @@ func (d *dev) runLogicTest(cmd *cobra.Command) error {
 	d.log.Printf("logic test args: files=%s  subtests=%s  config=%s",
 		files, subtests, config)
 	return errors.New("--logic unimplemented")
-}
-
-func (d *dev) runFuzzTest(cmd *cobra.Command, pkgs []string) error {
-	filter := mustGetFlagString(cmd, filterFlag)
-
-	d.log.Printf("fuzz test args: filter=%s  pkgs=%s", filter, pkgs)
-	return errors.New("--fuzz unimplemented")
 }
