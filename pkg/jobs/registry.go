@@ -554,13 +554,13 @@ func (r *Registry) LoadJobWithTxn(
 // a transaction passed in the txn argument. Passing a nil transaction means
 // that a txn will be automatically created.
 func (r *Registry) UpdateJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, updateFunc UpdateFn,
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc UpdateFn,
 ) error {
 	j := &Job{
 		id:       jobID,
 		registry: r,
 	}
-	return j.Update(ctx, txn, updateFunc)
+	return j.update(ctx, txn, useReadLock, updateFunc)
 }
 
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)

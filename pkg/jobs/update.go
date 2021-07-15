@@ -116,19 +116,23 @@ func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobU
 // Note that there are various convenience wrappers (like FractionProgressed)
 // defined in jobs.go.
 func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error {
+	const useForUpdate = false
+	return j.update(ctx, txn, useForUpdate, updateFn)
+}
+
+func (j *Job) update(
+	ctx context.Context, txn *kv.Txn, useForUpdateReadLock bool, updateFn UpdateFn,
+) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
+
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
-		stmt := "SELECT status, payload, progress FROM system.jobs WHERE id = $1 FOR UPDATE"
-		if j.sessionID != "" {
-			stmt = "SELECT status, payload, progress, claim_session_id FROM system." +
-				"jobs WHERE id = $1 FOR UPDATE"
-		}
 		var err error
 		var row tree.Datums
 		row, err = j.registry.ex.QueryRowEx(
-			ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			stmt, j.ID(),
+			ctx, "log-job", txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			getSelectStmtForJobUpdate(j.sessionID != "", useForUpdateReadLock), j.ID(),
 		)
 		if err != nil {
 			return err
@@ -252,4 +256,25 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 		j.mu.Unlock()
 	}
 	return nil
+}
+
+// getSelectStmtForJobUpdate constructs the select statement used in Job.update.
+func getSelectStmtForJobUpdate(hasSessionID, useForUpdate bool) string {
+	const (
+		columnsWithoutSession = `status, payload, progress`
+		columnsWithSession    = columnsWithoutSession + `, claim_session_id`
+		from                  = ` FROM system.jobs WHERE id = $1`
+	)
+	switch {
+	case hasSessionID && !useForUpdate:
+		return "SELECT " + columnsWithSession + from
+	case !hasSessionID && !useForUpdate:
+		return "SELECT " + columnsWithoutSession + from
+	case hasSessionID && useForUpdate:
+		return "SELECT " + columnsWithSession + from + " FOR UPDATE"
+	case !hasSessionID && useForUpdate:
+		return "SELECT " + columnsWithoutSession + from + " FOR UPDATE"
+	default:
+		panic("unreachable")
+	}
 }
