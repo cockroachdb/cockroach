@@ -367,6 +367,8 @@ func DescriptorsMatchingTargets(
 	// Process all the TABLE requests.
 	// Pulling in a table needs to pull in the underlying database too.
 	alreadyRequestedTables := make(map[descpb.ID]struct{})
+	// Process specific SCHEMAs requested for a database.
+	alreadyRequestedSchemasByDBs := make(map[descpb.ID]map[string]struct{})
 	for _, pattern := range targets.Tables {
 		var err error
 		pattern, err = pattern.NormalizeTablePattern()
@@ -437,6 +439,9 @@ func DescriptorsMatchingTargets(
 			}
 
 		case *tree.AllTablesSelector:
+			// If both the explicit schema and explicit catalog flags are set to true,
+			// the table pattern has a schema scope.
+			hasSchemaScope := p.ExplicitSchema && p.ExplicitCatalog
 			found, prefix, err := resolver.ResolveObjectNamePrefix(ctx, r, currentDatabase, searchPath, &p.ObjectNamePrefix)
 			if err != nil {
 				return ret, err
@@ -458,59 +463,94 @@ func DescriptorsMatchingTargets(
 				alreadyExpandedDBs[prefix.Database.GetID()] = struct{}{}
 			}
 
+			// Schemas can specified either by:
+			// 1) Including both the database and schema in the BACKUP statement
+			// (db.schema.*): hasSchemaScope will be set to true
+			// 2) Including the schema in the BACKUP statement (schema.*):
+			// 	p.SchemaName should be successfully resolved under the current DB.
+			// 	If the schema name cannot be resolved, the resolver will attempt
+			// 	to resolve `schema.public.*`, and successful resolution implies that
+			//  we should back up all tables in the database with name `schema`.
+			// 	The explicit catalog flag will be set to true post resolution, if
+			// 	`schema` is a database name.
+			//  We need to check if p.ExplicitCatalog is false to confirm whether
+			//  a schema scope was specified or not.
+			if hasSchemaScope || !p.ExplicitCatalog {
+				if _, ok := alreadyRequestedSchemasByDBs[dbID]; !ok {
+					scMap := make(map[string]struct{})
+					alreadyRequestedSchemasByDBs[dbID] = scMap
+				}
+				scMap := alreadyRequestedSchemasByDBs[dbID]
+				scMap[p.Schema()] = struct{}{}
+			}
 		default:
 			return ret, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
 		}
 	}
 
+	addTableDescsInSchema := func(schemas map[string]descpb.ID) error {
+		for _, id := range schemas {
+			desc := r.DescByID[id]
+			switch desc := desc.(type) {
+			case catalog.TableDescriptor:
+				if err := catalog.FilterDescriptorState(
+					desc, tree.CommonLookupFlags{},
+				); err != nil {
+					// Don't include this table in the expansion since it's not in a valid
+					// state. Silently fail since this table was not directly requested,
+					// but was just part of an expansion.
+					continue
+				}
+				if _, ok := alreadyRequestedTables[id]; !ok {
+					ret.Descs = append(ret.Descs, desc)
+				}
+				// If this table is a member of a user defined schema, then request the
+				// user defined schema.
+				if desc.GetParentSchemaID() != keys.PublicSchemaID {
+					// Note, that although we're processing the database expansions,
+					// since the table is in a PUBLIC state, we also expect the schema
+					// to be in a similar state.
+					if err := maybeAddSchemaDesc(desc.GetParentSchemaID(), true /* requirePublic */); err != nil {
+						return err
+					}
+				}
+				// Get all the types used by this table.
+				dbRaw := r.DescByID[desc.GetParentID()]
+				dbDesc := dbRaw.(catalog.DatabaseDescriptor)
+				typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
+				if err != nil {
+					return err
+				}
+				for _, id := range typeIDs {
+					maybeAddTypeDesc(id)
+				}
+			case catalog.TypeDescriptor:
+				maybeAddTypeDesc(desc.GetID())
+			}
+		}
+		return nil
+	}
+
 	// Then process the database expansions.
 	for dbID := range alreadyExpandedDBs {
-		for schemaName, schemas := range r.ObjsByName[dbID] {
-			schemaID, err := getSchemaIDByName(schemaName, dbID)
-			if err != nil {
-				return ret, err
+		if requestedSchemas, ok := alreadyRequestedSchemasByDBs[dbID]; !ok {
+			for schemaName, schemas := range r.ObjsByName[dbID] {
+				schemaID, err := getSchemaIDByName(schemaName, dbID)
+				if err != nil {
+					return ret, err
+				}
+				if err := maybeAddSchemaDesc(schemaID, false /* requirePublic */); err != nil {
+					return ret, err
+				}
+				if err := addTableDescsInSchema(schemas); err != nil {
+					return ret, err
+				}
 			}
-			if err := maybeAddSchemaDesc(schemaID, false /* requirePublic */); err != nil {
-				return ret, err
-			}
-
-			for _, id := range schemas {
-				desc := r.DescByID[id]
-				switch desc := desc.(type) {
-				case catalog.TableDescriptor:
-					if err := catalog.FilterDescriptorState(
-						desc, tree.CommonLookupFlags{},
-					); err != nil {
-						// Don't include this table in the expansion since it's not in a valid
-						// state. Silently fail since this table was not directly requested,
-						// but was just part of an expansion.
-						continue
-					}
-					if _, ok := alreadyRequestedTables[id]; !ok {
-						ret.Descs = append(ret.Descs, desc)
-					}
-					// If this table is a member of a user defined schema, then request the
-					// user defined schema.
-					if desc.GetParentSchemaID() != keys.PublicSchemaID {
-						// Note, that although we're processing the database expansions,
-						// since the table is in a PUBLIC state, we also expect the schema
-						// to be in a similar state.
-						if err := maybeAddSchemaDesc(desc.GetParentSchemaID(), true /* requirePublic */); err != nil {
-							return ret, err
-						}
-					}
-					// Get all the types used by this table.
-					dbRaw := r.DescByID[desc.GetParentID()]
-					dbDesc := dbRaw.(catalog.DatabaseDescriptor)
-					typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
-					if err != nil {
-						return ret, err
-					}
-					for _, id := range typeIDs {
-						maybeAddTypeDesc(id)
-					}
-				case catalog.TypeDescriptor:
-					maybeAddTypeDesc(desc.GetID())
+		} else {
+			for schemaName := range requestedSchemas {
+				schemas := r.ObjsByName[dbID][schemaName]
+				if err := addTableDescsInSchema(schemas); err != nil {
+					return ret, err
 				}
 			}
 		}
