@@ -382,6 +382,8 @@ test           pg_catalog          pg_shdescription                       public
 test           pg_catalog          pg_shmem_allocations                   public   SELECT
 test           pg_catalog          pg_shseclabel                          public   SELECT
 test           pg_catalog          pg_stat_activity                       public   SELECT
+test           pg_catalog          pg_stat_database                       public   SELECT
+test           pg_catalog          pg_stat_database_conflicts             public   SELECT
 test           pg_catalog          pg_statistic_ext                       public   SELECT
 test           pg_catalog          pg_subscription                        public   SELECT
 test           pg_catalog          pg_subscription_rel                    public   SELECT
