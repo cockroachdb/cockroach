@@ -27,6 +27,7 @@ import (
 )
 
 func distBackupPlanSpecs(
+	ctx context.Context,
 	planCtx *sql.PlanningCtx,
 	execCtx sql.JobExecContext,
 	dsp *sql.DistSQLPlanner,
@@ -39,7 +40,8 @@ func distBackupPlanSpecs(
 	mvccFilter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 ) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
-	ctx, span := tracing.ChildSpan(planCtx.EvalContext().Context, "backup-plan-specs")
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, "backup-plan-specs")
 	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
 	defer span.Finish()
 	user := execCtx.User()
