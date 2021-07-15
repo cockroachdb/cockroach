@@ -129,6 +129,18 @@ CREATE TABLE err (a INT, INDEX ((a + z)))
 statement error index element expression cannot reference computed columns
 CREATE TABLE err (a INT, comp INT AS (a + 10) STORED, INDEX ((comp + 10)))
 
+# TODO(mgartner): Postgres does not allow unique constraints with expressions,
+# but does allow unique indexes with expressions. We may want to err in this
+# case to be consistent with Postgres. See #65825.
+statement ok
+CREATE TABLE err (a INT, UNIQUE ((a + 10)))
+
+# TODO(mgartner): Postgres does not allow unique constraints with expressions,
+# but does allow unique indexes with expressions. We may want to err in this
+# case to be consistent with Postgres. See #65825.
+statement ok
+ALTER TABLE t ADD CONSTRAINT err UNIQUE ((a + 10))
+
 statement ok
 DROP TABLE t
 
@@ -181,8 +193,12 @@ CREATE TABLE public.t (
 statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
 ALTER TABLE t ADD CONSTRAINT err CHECK (crdb_internal_idx_expr_4 > 0)
 
+# Referencing an inaccessible column in a NOT NULL constraint is not allowed.
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
+ALTER TABLE t ALTER COLUMN crdb_internal_idx_expr_4 SET NOT NULL
+
 # Referencing an inaccessible column in a UNIQUE constraint is not allowed.
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced by a unique constraint
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
 ALTER TABLE t ADD CONSTRAINT err UNIQUE (crdb_internal_idx_expr_4)
 
 # Referencing an inaccessible column in a computed column expression is not
@@ -211,6 +227,19 @@ ALTER TABLE child ADD CONSTRAINT err FOREIGN KEY (a) REFERENCES t(crdb_internal_
 
 statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot reference a foreign key
 ALTER TABLE t ADD CONSTRAINT err FOREIGN KEY (crdb_internal_idx_expr_4) REFERENCES child(a)
+
+# Dropping an inaccessible column is not allowed.
+statement error cannot drop inaccessible column \"crdb_internal_idx_expr_4\"
+ALTER TABLE t DROP COLUMN crdb_internal_idx_expr_4
+
+# Renaming a column to the same name as one of the inaccessible expression index
+# columns is not allowed.
+statement error column \"crdb_internal_idx_expr_4\" of relation \"t\" already exists
+ALTER TABLE t RENAME COLUMN a TO crdb_internal_idx_expr_4
+
+# Renaming an inaccessible expression index column is not allowed.
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be renamed
+ALTER TABLE t RENAME COLUMN crdb_internal_idx_expr_4 TO err
 
 # Adding a column with the same name as one of the inaccessible columns created
 # for an expression index is not allowed.
@@ -303,6 +332,21 @@ CREATE INDEX err ON other ((t.a + 10))
 # queries.
 statement error column \"crdb_internal_idx_expr\" does not exist
 SELECT * FROM t WHERE crdb_internal_idx_expr > 0
+
+# An inaccessible column cannot be used in a view.
+statement error column \"crdb_internal_idx_expr\" does not exist
+CREATE VIEW v(a) AS SELECT crdb_internal_idx_expr FROM t
+
+statement ok
+CREATE TABLE pk (
+  k INT PRIMARY KEY,
+  UNIQUE INDEX ((k + 10))
+)
+
+statement error cannot use inaccessible column \"crdb_internal_idx_expr\" in primary key
+ALTER TABLE pk ALTER PRIMARY KEY USING COLUMNS (crdb_internal_idx_expr)
+
+# Tests for CREATE TABLE ... LIKE.
 
 statement ok
 CREATE TABLE src (

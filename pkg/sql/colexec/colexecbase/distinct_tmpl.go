@@ -201,26 +201,27 @@ func (p *distinct_TYPEOp) Next() coldata.Batch {
 		sel = sel[:n]
 		if nulls != nil {
 			for _, idx := range sel {
-				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct)
+				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct, false, false)
 			}
 		} else {
 			for _, idx := range sel {
-				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
+				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol, false, false)
 			}
 		}
 	} else {
 		// Eliminate bounds checks for outputCol[idx].
 		_ = outputCol[n-1]
+		// {{if .Sliceable}}
 		// Eliminate bounds checks for col[idx].
 		_ = col.Get(n - 1)
-		// TODO(yuzefovich): add BCE assertions for these.
+		// {{end}}
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
-				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct)
+				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct, true, true)
 			}
 		} else {
 			for idx := 0; idx < n; idx++ {
-				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
+				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol, true, true)
 			}
 		}
 	}
@@ -259,19 +260,20 @@ func (p partitioner_TYPE) partitionWithOrder(
 
 	col := colVec.TemplateType()
 	// Eliminate bounds checks.
-	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
+	_ = order[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
-			lastVal, lastValNull = checkDistinctWithNulls(checkIdx, outputIdx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct)
+			lastVal, lastValNull = checkDistinctWithNulls(checkIdx, outputIdx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct, false, true)
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
 			checkIdx := order[outputIdx]
-			lastVal = checkDistinct(checkIdx, outputIdx, lastVal, col, outputCol)
+			lastVal = checkDistinct(checkIdx, outputIdx, lastVal, col, outputCol, false, true)
 		}
 	}
 }
@@ -287,17 +289,18 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 
 	col := colVec.TemplateType()
+	// {{if .Sliceable}}
 	_ = col.Get(n - 1)
+	// {{end}}
 	_ = outputCol[n-1]
-	// TODO(yuzefovich): add BCE assertions for these.
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
-			lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct)
+			lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct, true, true)
 		}
 	} else {
 		for idx := 0; idx < n; idx++ {
-			lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
+			lastVal = checkDistinct(idx, idx, lastVal, col, outputCol, true, true)
 		}
 	}
 }
@@ -309,12 +312,27 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 // compared values were distinct. It presumes that the current batch has no null
 // values.
 // execgen:inline
+// execgen:template<colBCE,outputBCE>
 func checkDistinct(
-	checkIdx int, outputIdx int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool,
+	checkIdx int,
+	outputIdx int,
+	lastVal _GOTYPE,
+	col []_GOTYPE,
+	outputCol []bool,
+	colBCE bool,
+	outputBCE bool,
 ) _GOTYPE {
+	if colBCE {
+		// {{if .Sliceable}}
+		//gcassert:bce
+		// {{end}}
+	}
 	v := col.Get(checkIdx)
 	var unique bool
 	_ASSIGN_NE(unique, v, lastVal, _, col, _)
+	if outputBCE {
+		//gcassert:bce
+	}
 	outputCol[outputIdx] = outputCol[outputIdx] || unique
 	return v
 }
@@ -323,6 +341,7 @@ func checkDistinct(
 // considers whether the previous and current values are null. It assumes that
 // `nulls` is non-nil.
 // execgen:inline
+// execgen:template<colBCE,outputBCE>
 func checkDistinctWithNulls(
 	checkIdx int,
 	outputIdx int,
@@ -332,6 +351,8 @@ func checkDistinctWithNulls(
 	col []_GOTYPE,
 	outputCol []bool,
 	nullsAreDistinct bool,
+	colBCE bool,
+	outputBCE bool,
 ) (lastVal _GOTYPE, lastValNull bool) {
 	null := nulls.NullAt(checkIdx)
 	if null {
@@ -339,17 +360,31 @@ func checkDistinctWithNulls(
 			// The current value is null, and either the previous one is not
 			// (meaning they are definitely distinct) or we treat nulls as
 			// distinct values.
+			if outputBCE {
+				//gcassert:bce
+			}
 			outputCol[outputIdx] = true
 		}
 	} else {
+		if colBCE {
+			// {{if .Sliceable}}
+			//gcassert:bce
+			// {{end}}
+		}
 		v := col.Get(checkIdx)
 		if lastValNull {
 			// The previous value was null while the current is not.
+			if outputBCE {
+				//gcassert:bce
+			}
 			outputCol[outputIdx] = true
 		} else {
 			// Neither value is null, so we must compare.
 			var unique bool
 			_ASSIGN_NE(unique, v, lastVal, _, col, _)
+			if outputBCE {
+				//gcassert:bce
+			}
 			outputCol[outputIdx] = outputCol[outputIdx] || unique
 		}
 		lastVal = v

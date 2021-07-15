@@ -230,18 +230,40 @@ func (n *alterTableNode) startExec(params runParams) error {
 					continue
 				}
 
+				if err := validateColumnsAreAccessible(n.tableDesc, d.Columns); err != nil {
+					return err
+				}
+
+				tableName, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
+				if err != nil {
+					return err
+				}
+
+				if err := replaceExpressionElemsWithVirtualCols(
+					params.ctx,
+					n.tableDesc,
+					tableName,
+					d.Columns,
+					false, /* isInverted */
+					false, /* isNewTable */
+					params.p.SemaCtx(),
+					params.EvalContext(),
+					params.SessionData(),
+				); err != nil {
+					return err
+				}
+
 				// Check if the columns exist on the table.
 				for _, column := range d.Columns {
-					col, err := n.tableDesc.FindColumnWithName(column.Column)
+					if column.Expr != nil {
+						return pgerror.New(
+							pgcode.InvalidTableDefinition,
+							"cannot create a unique constraint on an expression, use UNIQUE INDEX instead",
+						)
+					}
+					_, err := n.tableDesc.FindColumnWithName(column.Column)
 					if err != nil {
 						return err
-					}
-					if col.IsInaccessible() {
-						return pgerror.Newf(
-							pgcode.UndefinedColumn,
-							"column %q is inaccessible and cannot be referenced by a unique constraint",
-							column.Column,
-						)
 					}
 				}
 				// If the index is named, ensure that the name is unique.
@@ -258,7 +280,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 
-				var err error
 				idx, err = params.p.configureIndexDescForNewIndexPartitioning(
 					params.ctx,
 					n.tableDesc,
@@ -449,6 +470,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if colToDrop.Dropped() {
 				continue
+			}
+
+			if colToDrop.IsInaccessible() {
+				return pgerror.Newf(
+					pgcode.InvalidColumnReference,
+					"cannot drop inaccessible column %q",
+					t.Column,
+				)
 			}
 
 			// If the dropped column uses a sequence, remove references to it from that sequence.
