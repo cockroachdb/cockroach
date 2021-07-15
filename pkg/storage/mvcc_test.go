@@ -3693,7 +3693,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 				t.Fatal(err)
 			}
 			num, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn1e2Commit, roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}), 2)
+				roachpb.MakeLockUpdate(txn1e2Commit, roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}), 2, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3894,7 +3894,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 
 			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
 				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1, EndKey: testKey4.Next()}),
-				math.MaxInt64)
+				math.MaxInt64, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3979,7 +3979,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 			// Resolve up to 5 intents.
 			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
 				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: roachpb.Key("00"), EndKey: roachpb.Key("30")}),
-				5)
+				5, false)
 			if err != nil {
 				t.Fatal(err)
 			}

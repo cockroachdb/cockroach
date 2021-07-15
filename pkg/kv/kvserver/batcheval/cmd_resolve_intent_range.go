@@ -44,8 +44,20 @@ func ResolveIntentRange(
 
 	update := args.AsLockUpdate()
 
+	onlySeparatedIntents := false
+	// TODO: change the following to set onlySeparatedIntents=true only when the
+	// long-running migration to rewrite interleaved intents in 21.2 has
+	// completed.
+	stats := cArgs.EvalCtx.GetMVCCStats()
+	if stats.ContainsEstimates == 0 && stats.IntentCount == stats.SeparatedIntentCount {
+		// Stats incorrectness manifested as there being non-zero interleaved
+		// intents, can leave unresolved interleaved intents for a committed
+		// transaction whose transaction record is garbage collected (which would
+		// cause those intents to be incorrectly rolled back).
+		onlySeparatedIntents = true
+	}
 	numKeys, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
-		ctx, readWriter, ms, update, h.MaxSpanRequestKeys)
+		ctx, readWriter, ms, update, h.MaxSpanRequestKeys, onlySeparatedIntents)
 	if err != nil {
 		return result.Result{}, err
 	}
