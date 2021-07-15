@@ -805,7 +805,9 @@ func newNthValueWindow([]*types.T, *tree.EvalContext) tree.WindowFunc {
 	return &nthValueWindow{}
 }
 
-var errInvalidArgumentForNthValue = pgerror.Newf(
+// ErrInvalidArgumentForNthValue should be thrown when the nth_value window
+// function is given a value of 'n' less than zero.
+var ErrInvalidArgumentForNthValue = pgerror.Newf(
 	pgcode.InvalidParameterValue, "argument of nth_value() must be greater than zero")
 
 func (nthValueWindow) Compute(
@@ -822,7 +824,7 @@ func (nthValueWindow) Compute(
 
 	nth := int(tree.MustBeDInt(arg))
 	if nth <= 0 {
-		return nil, errInvalidArgumentForNthValue
+		return nil, ErrInvalidArgumentForNthValue
 	}
 
 	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)

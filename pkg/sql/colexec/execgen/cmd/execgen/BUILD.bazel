@@ -21,6 +21,7 @@ go_library(
         "default_cmp_proj_ops_gen.go",
         "default_cmp_sel_ops_gen.go",
         "distinct_gen.go",
+        "first_last_nth_value_gen.go",
         "hash_aggregator_gen.go",
         "hash_utils_gen.go",
         "hashjoiner_gen.go",

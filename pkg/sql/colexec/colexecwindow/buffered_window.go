@@ -358,3 +358,51 @@ func (b *bufferedWindowOp) Close() error {
 	b.windower.Close()
 	return nil
 }
+
+// partitionSeekerBase extracts common fields and methods for buffered windower
+// implementations that use the same logic for the seekNextPartition phase.
+type partitionSeekerBase struct {
+	colexecop.InitHelper
+	partitionColIdx int
+	partitionSize   int
+
+	buffer *colexecutils.SpillingBuffer
+}
+
+func (b *partitionSeekerBase) seekNextPartition(
+	batch coldata.Batch, startIdx int, isPartitionStart bool,
+) (nextPartitionIdx int) {
+	n := batch.Length()
+	if b.partitionColIdx == -1 {
+		// There is only one partition, so it includes the entirety of this batch.
+		b.partitionSize += n
+		nextPartitionIdx = n
+	} else {
+		i := startIdx
+		partitionCol := batch.ColVec(b.partitionColIdx).Bool()
+		_ = partitionCol[n-1]
+		// Find the location of the start of the next partition (and the end of the
+		// current one).
+		if isPartitionStart {
+			i++
+		}
+		if i < n {
+			_ = partitionCol[i]
+			for ; i < n; i++ {
+				//gcassert:bce
+				if partitionCol[i] {
+					break
+				}
+			}
+		}
+		b.partitionSize += i - startIdx
+		nextPartitionIdx = i
+	}
+
+	// Add all tuples from the argument column that fall within the current
+	// partition to the buffer so that they can be accessed later.
+	if startIdx < nextPartitionIdx {
+		b.buffer.AppendTuples(b.Ctx, batch, startIdx, nextPartitionIdx)
+	}
+	return nextPartitionIdx
+}
