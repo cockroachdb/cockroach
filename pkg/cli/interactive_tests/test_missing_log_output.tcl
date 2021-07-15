@@ -75,7 +75,9 @@ eexpect ":/# "
 
 start_test "Check that --logtostderr can override the threshold but no error is printed on startup"
 send "echo marker; $argv start-single-node -s=path=logs/db --insecure --logtostderr=ERROR 2>&1 | grep -v '^\\*'\r"
-eexpect "marker\r\nCockroachDB node starting"
+# Until --insecure is removed, we have to contend with a deprecation notice.
+# eexpect "marker\r\nCockroachDB node starting"
+eexpect "marker\r\nFlag --insecure has been deprecated, it will be removed in a subsequent release.\r\nFor details, see: https://go.crdb.dev/issue/53404\r\nCockroachDB node starting"
 end_test
 
 # Stop it.
@@ -89,7 +91,11 @@ eexpect "CockroachDB node starting"
 system "($argv sql --insecure -e \"select crdb_internal.force_panic('helloworld')\" || true)&"
 # Check the panic is reported on the server's stderr
 eexpect "a SQL panic has occurred"
-eexpect "panic: *helloworld"
+# This catches the first occurrence of "panic:" at the start of a line. We need
+# the start-of-line marker because there is another occurrence of it
+# within the detailed error report, after the stack trace; if we
+# let expect match the second one, it then never finds "stack trace" afterwards.
+eexpect "\npanic: *helloworld"
 eexpect "stack trace"
 eexpect ":/# "
 # Check the panic is reported on the server log file
