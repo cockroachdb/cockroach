@@ -2208,13 +2208,12 @@ func TestChangefeedDataTTL(t *testing.T) {
 		knobs := f.Server().TestingKnobs().
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		knobs.BeforeEmitRow = func(_ context.Context) error {
+		knobs.FeedKnobs.BeforeScanRequest = func(_ *kv.Batch) {
 			if atomic.LoadInt32(&shouldWait) == 0 {
-				return nil
+				return
 			}
 			wait <- struct{}{}
 			<-resume
-			return nil
 		}
 
 		sqlDB := sqlutils.MakeSQLRunner(db)

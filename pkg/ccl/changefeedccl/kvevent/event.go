@@ -77,6 +77,14 @@ func (b *Event) Type() Type {
 	return 0 // unreachable
 }
 
+// ApproximateSize returns events approximate size in bytes.
+func (b *Event) ApproximateSize() int {
+	if b.kv.Key != nil {
+		return b.kv.Size() + b.prevVal.Size()
+	}
+	return b.resolved.Size()
+}
+
 // KV is populated if this event returns true for IsKV().
 func (b *Event) KV() roachpb.KeyValue {
 	return b.kv
