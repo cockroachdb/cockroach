@@ -1251,14 +1251,25 @@ func (cf *changeFrontier) maybeCheckpointJob(frontierChanged, isBehind bool) err
 	}
 
 	if frontierChanged || updateCheckpoint {
-		cf.js.lastFrontierCheckpoint = timeutil.Now()
+		timeSinceLastCheckpoint := timeutil.Since(cf.js.lastFrontierCheckpoint)
 		checkpointStart := timeutil.Now()
 		if err := cf.checkpointJobProgress(
 			cf.frontier.Frontier(), frontierChanged, checkpoint, isBehind,
 		); err != nil {
 			return err
 		}
-		cf.metrics.CheckpointHistNanos.RecordValue(timeutil.Since(checkpointStart).Nanoseconds())
+		cf.metrics.FrontierUpdates.Inc(1)
+
+		checkpointDuration := timeutil.Since(checkpointStart)
+		cf.metrics.CheckpointHistNanos.RecordValue(checkpointDuration.Nanoseconds())
+		cf.js.lastFrontierCheckpoint = timeutil.Now()
+
+		if checkpointDuration > timeSinceLastCheckpoint {
+			log.Warningf(cf.Ctx,
+				"time to update job progress took longer than the checkpoint frequency (%s > %s)",
+				checkpointDuration, timeSinceLastCheckpoint)
+		}
+
 	}
 
 	return nil
@@ -1279,16 +1290,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 	if updateRunStatus {
 		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
 	}
-
-	updateStart := timeutil.Now()
-	defer func() {
-		elapsed := timeutil.Since(updateStart)
-		if elapsed > 5*time.Millisecond {
-			log.Warningf(cf.Ctx, "slow job progress update took %s", elapsed)
-		}
-	}()
-
-	cf.metrics.FrontierUpdates.Inc(1)
 
 	return cf.js.job.Update(cf.Ctx, nil, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
