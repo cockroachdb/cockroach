@@ -88,7 +88,7 @@ func runImport(
 	// Read input files into kvs
 	group.GoCtx(func(ctx context.Context) error {
 		defer close(kvCh)
-		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
+		ctx, span := tracing.ChildSpan(ctx, "import-files-to-kvs")
 		defer span.Finish()
 		var inputs map[int32]string
 		if spec.ResumePos != nil {
@@ -546,7 +546,8 @@ func runParallelImport(
 
 	minEmited := make([]int64, parallelism)
 	group.GoCtx(func(ctx context.Context) error {
-		ctx, span := tracing.ChildSpan(ctx, "inputconverter")
+		var span *tracing.Span
+		ctx, span = tracing.ChildSpan(ctx, "import-rows-to-datums")
 		defer span.Finish()
 		return ctxgroup.GroupWorkers(ctx, parallelism, func(ctx context.Context, id int) error {
 			return importer.importWorker(ctx, id, consumer, importCtx, fileCtx, minEmited)
@@ -556,6 +557,9 @@ func runParallelImport(
 	// Read data from producer and send it to consumers.
 	group.GoCtx(func(ctx context.Context) error {
 		defer close(importer.recordCh)
+		var span *tracing.Span
+		ctx, span = tracing.ChildSpan(ctx, "import-file-to-rows")
+		defer span.Finish()
 		var numSkipped int64
 		var count int64
 		for producer.Scan() {

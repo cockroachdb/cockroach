@@ -307,7 +307,7 @@ func ingestKvs(
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
 ) (*roachpb.BulkOpSummary, error) {
-	ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
+	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
