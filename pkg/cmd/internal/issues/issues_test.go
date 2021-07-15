@@ -274,7 +274,7 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 						Message:             c.message,
 						Artifacts:           c.artifacts,
 						AuthorEmail:         c.author,
-						ReproductionCommand: c.reproCmd,
+						ReproductionCommand: ReproductionCommandFromString(c.reproCmd),
 						ExtraLabels:         []string{"release-blocker"},
 					}
 					require.NoError(t, p.post(ctx, UnitTestFormatter, req))
