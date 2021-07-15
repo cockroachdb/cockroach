@@ -4592,6 +4592,68 @@ CREATE TABLE pg_catalog.pg_stat_activity (
    backend_type STRING NULL,
    leader_pid INT4 NULL
 )  {}  {}
+CREATE TABLE pg_catalog.pg_stat_database (
+   datid OID NULL,
+   datname NAME NULL,
+   numbackends INT4 NULL,
+   xact_commit INT8 NULL,
+   xact_rollback INT8 NULL,
+   blks_read INT8 NULL,
+   blks_hit INT8 NULL,
+   tup_returned INT8 NULL,
+   tup_fetched INT8 NULL,
+   tup_inserted INT8 NULL,
+   tup_updated INT8 NULL,
+   tup_deleted INT8 NULL,
+   conflicts INT8 NULL,
+   temp_files INT8 NULL,
+   temp_bytes INT8 NULL,
+   deadlocks INT8 NULL,
+   checksum_failures INT8 NULL,
+   checksum_last_failure TIMESTAMPTZ NULL,
+   blk_read_time FLOAT8 NULL,
+   blk_write_time FLOAT8 NULL,
+   stats_reset TIMESTAMPTZ NULL
+)  CREATE TABLE pg_catalog.pg_stat_database (
+   datid OID NULL,
+   datname NAME NULL,
+   numbackends INT4 NULL,
+   xact_commit INT8 NULL,
+   xact_rollback INT8 NULL,
+   blks_read INT8 NULL,
+   blks_hit INT8 NULL,
+   tup_returned INT8 NULL,
+   tup_fetched INT8 NULL,
+   tup_inserted INT8 NULL,
+   tup_updated INT8 NULL,
+   tup_deleted INT8 NULL,
+   conflicts INT8 NULL,
+   temp_files INT8 NULL,
+   temp_bytes INT8 NULL,
+   deadlocks INT8 NULL,
+   checksum_failures INT8 NULL,
+   checksum_last_failure TIMESTAMPTZ NULL,
+   blk_read_time FLOAT8 NULL,
+   blk_write_time FLOAT8 NULL,
+   stats_reset TIMESTAMPTZ NULL
+)  {}  {}
+CREATE TABLE pg_catalog.pg_stat_database_conflicts (
+   datid OID NULL,
+   datname NAME NULL,
+   confl_tablespace INT8 NULL,
+   confl_lock INT8 NULL,
+   confl_snapshot INT8 NULL,
+   confl_bufferpin INT8 NULL,
+   confl_deadlock INT8 NULL
+)  CREATE TABLE pg_catalog.pg_stat_database_conflicts (
+   datid OID NULL,
+   datname NAME NULL,
+   confl_tablespace INT8 NULL,
+   confl_lock INT8 NULL,
+   confl_snapshot INT8 NULL,
+   confl_bufferpin INT8 NULL,
+   confl_deadlock INT8 NULL
+)  {}  {}
 CREATE TABLE pg_catalog.pg_statistic_ext (
    stxrelid OID NULL,
    stxstattarget INT4 NULL,

@@ -1,11 +1,11 @@
 {
-  "pgVersion": "13.2",
+  "pgVersion": "13.3",
   "diffSummary": {
-    "TotalTables": 88,
-    "TotalColumns": 725,
+    "TotalTables": 90,
+    "TotalColumns": 753,
     "MissingTables": 0,
     "MissingColumns": 1,
-    "DatatypeMismatches": 35
+    "DatatypeMismatches": 18
   },
   "pgMetadata": {
     "pg_am": {
@@ -18,20 +18,6 @@
     },
     "pg_attribute": {
       "attmissingval": null
-    },
-    "pg_class": {
-      "relfrozenxid": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": 26,
-        "expectedDataType": "OID"
-      },
-      "relminmxid": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": 26,
-        "expectedDataType": "OID"
-      }
     },
     "pg_collation": {
       "collcollate": {
@@ -51,32 +37,6 @@
         "dataType": "text",
         "expectedOid": 19,
         "expectedDataType": "name"
-      }
-    },
-    "pg_constraint": {
-      "confdeltype": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 18,
-        "expectedDataType": "char"
-      },
-      "confmatchtype": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 18,
-        "expectedDataType": "char"
-      },
-      "confupdtype": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 18,
-        "expectedDataType": "char"
-      },
-      "contype": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 18,
-        "expectedDataType": "char"
       }
     },
     "pg_conversion": {
@@ -99,18 +59,6 @@
         "dataType": "text",
         "expectedOid": 19,
         "expectedDataType": "name"
-      },
-      "datfrozenxid": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": 26,
-        "expectedDataType": "OID"
-      },
-      "datminmxid": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": 26,
-        "expectedDataType": "OID"
       }
     },
     "pg_enum": {
@@ -135,14 +83,6 @@
         "expectedDataType": "_oid"
       }
     },
-    "pg_locks": {
-      "transactionid": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": 26,
-        "expectedDataType": "OID"
-      }
-    },
     "pg_operator": {
       "oprcode": {
         "oid": 26,
@@ -156,33 +96,11 @@
         "expectedOid": 24,
         "expectedDataType": "regproc"
       },
-      "oprkind": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 18,
-        "expectedDataType": "char"
-      },
       "oprrest": {
         "oid": 26,
         "dataType": "oid",
         "expectedOid": 24,
         "expectedDataType": "regproc"
-      }
-    },
-    "pg_prepared_xacts": {
-      "transaction": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": 26,
-        "expectedDataType": "OID"
-      }
-    },
-    "pg_proc": {
-      "proargmodes": {
-        "oid": 1009,
-        "dataType": "_text",
-        "expectedOid": 1002,
-        "expectedDataType": "_char"
       }
     },
     "pg_range": {
@@ -199,34 +117,6 @@
         "expectedDataType": "regproc"
       }
     },
-    "pg_replication_slots": {
-      "catalog_xmin": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": 26,
-        "expectedDataType": "OID"
-      },
-      "xmin": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": 26,
-        "expectedDataType": "OID"
-      }
-    },
-    "pg_rewrite": {
-      "ev_enabled": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 18,
-        "expectedDataType": "char"
-      },
-      "ev_type": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 18,
-        "expectedDataType": "char"
-      }
-    },
     "pg_seclabel": {
       "objsubid": {
         "oid": 20,
@@ -241,14 +131,6 @@
         "dataType": "text",
         "expectedOid": 1009,
         "expectedDataType": "_text"
-      }
-    },
-    "pg_trigger": {
-      "tgenabled": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 18,
-        "expectedDataType": "char"
       }
     },
     "pg_user": {
