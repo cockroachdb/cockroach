@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -64,7 +64,7 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 		// templates are supported, this should call ctx.FormatNode
 		// on the template expr.
 		ctx.WriteString(" TEMPLATE = ")
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, node.Template, ctx.flags.EncodeFlags())
+		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, node.Template, ctx.flags.EncodeFlags())
 	}
 	if node.Encoding != "" {
 		// NB: the encoding is not currently edited out under FmtAnonymize,
@@ -72,7 +72,7 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 		// encodings are supported, this should call ctx.FormatNode
 		// on the encoding expr.
 		ctx.WriteString(" ENCODING = ")
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, node.Encoding, ctx.flags.EncodeFlags())
+		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, node.Encoding, ctx.flags.EncodeFlags())
 	}
 	if node.Collate != "" {
 		// NB: the collation is not currently edited out under FmtAnonymize,
@@ -80,7 +80,7 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 		// collations are supported, this should call ctx.FormatNode
 		// on the collation expr.
 		ctx.WriteString(" LC_COLLATE = ")
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, node.Collate, ctx.flags.EncodeFlags())
+		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, node.Collate, ctx.flags.EncodeFlags())
 	}
 	if node.CType != "" {
 		// NB: the ctype (formatting customization) is not currently
@@ -88,7 +88,7 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 		// cutomizations. If/when custom customizations are supported,
 		// this should call ctx.FormatNode on the ctype expr.
 		ctx.WriteString(" LC_CTYPE = ")
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, node.CType, ctx.flags.EncodeFlags())
+		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, node.CType, ctx.flags.EncodeFlags())
 	}
 	if node.ConnectionLimit != -1 {
 		ctx.WriteString(" CONNECTION LIMIT = ")
@@ -309,7 +309,7 @@ func (n *EnumValue) Format(ctx *FmtCtx) {
 	if f.HasFlags(FmtAnonymize) {
 		ctx.WriteByte('_')
 	} else {
-		lex.EncodeSQLString(&ctx.Buffer, string(*n))
+		lexbase.EncodeSQLString(&ctx.Buffer, string(*n))
 	}
 }
 

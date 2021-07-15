@@ -14,7 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -28,9 +28,9 @@ func (d *delegator) delegateShowEnums(n *tree.ShowEnums) (tree.Statement, error)
 
 	schemaClause := ""
 	if n.ExplicitSchema {
-		schema := lex.EscapeSQLString(name.Schema())
+		schema := lexbase.EscapeSQLString(name.Schema())
 		if name.Schema() == catconstants.PgTempSchemaName {
-			schema = lex.EscapeSQLString(d.evalCtx.SessionData.SearchPath.GetTemporarySchemaName())
+			schema = lexbase.EscapeSQLString(d.evalCtx.SessionData.SearchPath.GetTemporarySchemaName())
 		}
 		schemaClause = fmt.Sprintf("AND nsp.nspname = %s", schema)
 	}

@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -316,7 +316,7 @@ def`,
 	}
 
 	for _, sqlStr := range testData {
-		escaped := lex.EscapeSQLString(sqlStr)
+		escaped := lexbase.EscapeSQLString(sqlStr)
 		sql := "select " + escaped + " as s, " + escaped + " as t"
 		c.RunWithArgs([]string{"sql", "--format=csv", "-e", sql})
 		c.RunWithArgs([]string{"sql", "--format=tsv", "-e", sql})
