@@ -130,10 +130,10 @@ SUBTESTS :=
 LINTTIMEOUT := 30m
 
 ## Test timeout to use for regular tests.
-TESTTIMEOUT := 30m
+TESTTIMEOUT := 45m
 
 ## Test timeout to use for race tests.
-RACETIMEOUT := 30m
+RACETIMEOUT := 45m
 
 ## Test timeout to use for acceptance tests.
 ACCEPTANCETIMEOUT := 30m
