@@ -56,7 +56,8 @@ func (w *Watcher) Watch(
 		EndKey: spanConfigTableStart.PrefixEnd(),
 	}
 	rowDecoder := spanconfigdecoder.New()
-
+	// XXX: In the restore path we need to make sure we do a full reconciliation
+	// pass pre-restore (?).
 	handleUpdate := func(
 		ctx context.Context, ev *roachpb.RangeFeedValue,
 	) {

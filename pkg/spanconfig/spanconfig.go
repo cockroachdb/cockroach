@@ -42,8 +42,8 @@ type ReconciliationDependencies interface {
 
 	// TODO(zcfgs-pod): We'll also needs access to a tenant's system.descriptor,
 	// or ideally a Watcher emitting relevant Updates from a tenant's
-	// system.{descriptor,zones}. That suggests we'll want two Watcher
-	// implementations:
+	// system.{descriptor,zones}. That suggests we'll want two Watcher-like
+	// implementations, one for KV and one for SQL:
 	// - Something per-store, watching over system.span_configurations.
 	// - Something watching over a tenant's system.{descriptor,zones}, emitting
 	//   updates for the reconciliation process.
@@ -65,4 +65,19 @@ type Update struct {
 
 	// Deleted is true if the span config entry has been deleted.
 	Deleted bool
+}
+
+// XXX: Document these. Should we use the accessor interface instead? What about
+// split points? In #66394 we originally suggested:
+//
+// 		GetConfigFor(key roachpb.Key) roachpb.SpanConfig
+// 		GetSplitsBetween(start, end roachpb.Key) []roachpb.Key
+//
+// Should we expose a read-only view of this cache for everything other than
+// what's being used to update an in-memory cache? Do it similar to
+// io.{Reader,Writer}.
+type Storage interface {
+	Get(roachpb.Span) []roachpb.SpanConfigEntry
+	Set(roachpb.Span, roachpb.SpanConfig)
+	Delete(roachpb.Span)
 }
