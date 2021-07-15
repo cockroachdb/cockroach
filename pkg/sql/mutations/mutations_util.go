@@ -27,6 +27,13 @@ var defaultMaxBatchSize = int64(util.ConstantWithMetamorphicTestRange(
 	productionMaxBatchSize, /* max */
 ))
 
+var testingMaxBatchByteSize = util.ConstantWithMetamorphicTestRange(
+	"max-batch-byte-size",
+	0,      // we'll use the cluster setting instead if we see zero.
+	1,      /* min */
+	32<<20, /* max */
+)
+
 // MaxBatchSize returns the max number of entries in the KV batch for a
 // mutation operation (delete, insert, update, upsert) - including secondary
 // index updates, FK cascading updates, etc - before the current KV batch is
@@ -53,4 +60,13 @@ func SetMaxBatchSizeForTests(newMaxBatchSize int) {
 // the default mutation batch size. It should only be used in tests.
 func ResetMaxBatchSizeForTests() {
 	atomic.SwapInt64(&maxBatchSize, defaultMaxBatchSize)
+}
+
+// MaxBatchByteSize takes the passed value read from the cluster setting and
+// returns it unless the testing metamorphic value overrides it.
+func MaxBatchByteSize(clusterSetting int, forceProductionBatchSizes bool) int {
+	if forceProductionBatchSizes || testingMaxBatchByteSize == 0 {
+		return clusterSetting
+	}
+	return testingMaxBatchByteSize
 }
