@@ -84,3 +84,46 @@ func TestTryEvalBools(t *testing.T) {
 		assert.Equal(t, actual, tc.expected, "wrong result for expr", prettyPrintExprs(tc.expr))
 	}
 }
+
+func TestGenerateInstantiateCombinations(t *testing.T) {
+	tcs := []struct {
+		args     [][]string
+		expected [][]string
+	}{
+		{
+			args: [][]string{
+				{"1"},
+			},
+			expected: [][]string{
+				{"1"},
+			},
+		},
+		{
+			args: [][]string{
+				{"true", "false"},
+			},
+			expected: [][]string{
+				{"true"},
+				{"false"},
+			},
+		},
+		{
+			args: [][]string{
+				{"t", "f"},
+				{"1"},
+				{"foo", "bar", "baz"},
+			},
+			expected: [][]string{
+				{"t", "1", "foo"},
+				{"t", "1", "bar"},
+				{"t", "1", "baz"},
+				{"f", "1", "foo"},
+				{"f", "1", "bar"},
+				{"f", "1", "baz"},
+			},
+		},
+	}
+	for _, tc := range tcs {
+		assert.Equal(t, tc.expected, generateInstantiateCombinations(tc.args))
+	}
+}
