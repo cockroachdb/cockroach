@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -457,7 +458,7 @@ func (ag *hashAggregator) accumulateRows() (
 
 	// Note that, for simplicity, we're ignoring the overhead of the slice of
 	// strings.
-	if err := ag.bucketsAcc.Grow(ag.Ctx, int64(len(ag.buckets))*sizeOfString); err != nil {
+	if err := ag.bucketsAcc.Grow(ag.Ctx, int64(len(ag.buckets))*memsize.String); err != nil {
 		ag.MoveToDraining(err)
 		return aggStateUnknown, nil, nil
 	}
@@ -588,7 +589,7 @@ func (ag *hashAggregator) emitRow() (
 		ag.bucketsAcc.Shrink(ag.Ctx, int64(ag.alreadyAccountedFor)*hashAggregatorSizeOfBucketsItem)
 		// Note that, for simplicity, we're ignoring the overhead of the slice of
 		// strings.
-		ag.bucketsAcc.Shrink(ag.Ctx, int64(len(ag.buckets))*sizeOfString)
+		ag.bucketsAcc.Shrink(ag.Ctx, int64(len(ag.buckets))*memsize.String)
 		ag.bucketsIter = nil
 		ag.buckets = make(map[string]aggregateFuncs)
 		ag.bucketsLenGrowThreshold = hashAggregatorBucketsInitialLen
@@ -889,7 +890,6 @@ type aggregateFuncHolder struct {
 }
 
 const (
-	sizeOfString         = int64(unsafe.Sizeof(""))
 	sizeOfAggregateFuncs = int64(unsafe.Sizeof(aggregateFuncs{}))
 	sizeOfAggregateFunc  = int64(unsafe.Sizeof(tree.AggregateFunc(nil)))
 )

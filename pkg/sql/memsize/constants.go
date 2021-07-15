@@ -49,6 +49,9 @@ const (
 	// Decimal is the in-memory size of an apd.Decimal in bytes.
 	Decimal = int64(unsafe.Sizeof(apd.Decimal{}))
 
+	// String is the in-memory size of an empty string in bytes.
+	String = int64(unsafe.Sizeof(""))
+
 	// BoolSliceOverhead is the in-memory overhead of a []bool in bytes.
 	BoolSliceOverhead = int64(unsafe.Sizeof([]bool{}))
 
