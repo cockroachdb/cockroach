@@ -1172,6 +1172,10 @@ type importResumer struct {
 	}
 }
 
+func (r *importResumer) ForceRealSpan() {}
+
+var _ jobs.TraceableJob = &importResumer{}
+
 // Prepares descriptors for newly created tables being imported into.
 func prepareNewTableDescsForIngestion(
 	ctx context.Context,
@@ -1830,6 +1834,10 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 	owner := r.job.Payload().UsernameProto.Decode()
 
 	if details.ParseBundleSchema {
+		var span *tracing.Span
+		ctx, span = tracing.ChildSpan(ctx, "import-parsing-bundle-schema")
+		defer span.Finish()
+
 		if err := r.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return runningStatusImportBundleParseSchema, nil
 		}); err != nil {
@@ -2168,6 +2176,7 @@ func ingestWithRetry(
 	walltime int64,
 	alwaysFlushProgress bool,
 ) (roachpb.BulkOpSummary, error) {
+	resumerSpan := tracing.SpanFromContext(ctx)
 
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
@@ -2182,7 +2191,14 @@ func ingestWithRetry(
 	// import.
 	var res roachpb.BulkOpSummary
 	var err error
+	var retryCount int32
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		retryCount++
+		resumerSpan.RecordStructured(&roachpb.RetryTracingEvent{
+			Operation:     "importResumer.ingestWithRetry",
+			AttemptNumber: retryCount,
+			RetryError:    tracing.RedactAndTruncateError(err),
+		})
 		res, err = sql.DistIngest(ctx, execCtx, job, tables, from, format, walltime, alwaysFlushProgress)
 		if err == nil {
 			break
