@@ -609,6 +609,9 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	// Load the system config if it's needed.
 	var cfg *config.SystemConfig
 	if bq.needsSystemConfig {
+		// TODO(zcfgs-pod): instead accessing the system config directly, we'll
+		// want to expose a thin read-only interface into the per-store
+		// spanconfig.Store.
 		cfg = bq.gossip.GetSystemConfig()
 		if cfg == nil {
 			if log.V(1) {
