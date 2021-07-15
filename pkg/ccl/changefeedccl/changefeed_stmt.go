@@ -357,7 +357,9 @@ func changefeedPlanHook(
 			var spansToProtect []roachpb.Span
 			var ptr *ptpb.Record
 
-			shouldProtectTimestamp := initialScanFromOptions(details.Opts) && p.ExecCfg().Codec.ForSystemTenant()
+			_, disableProtectedTimestamp := details.Opts[changefeedbase.OptDisableProtectedTimestamp]
+			shouldProtectTimestamp := !disableProtectedTimestamp &&
+				initialScanFromOptions(details.Opts) && p.ExecCfg().Codec.ForSystemTenant()
 			if shouldProtectTimestamp {
 				protectedTimestampID = uuid.MakeV4()
 				spansToProtect = makeSpansToProtect(p.ExecCfg().Codec, details.Targets)

@@ -855,6 +855,7 @@ unreserved_keyword ::=
 	| 'DELIMITER'
 	| 'DESTINATION'
 	| 'DETACHED'
+	| 'DISABLE_PROTECTED_TIMESTAMP'
 	| 'DISCARD'
 	| 'DOMAIN'
 	| 'DOUBLE'
@@ -1787,6 +1788,7 @@ backup_options ::=
 	| 'DETACHED'
 	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'INCLUDE_DEPRECATED_INTERLEAVES'
+	| 'DISABLE_PROTECTED_TIMESTAMP'
 
 c_expr ::=
 	d_expr

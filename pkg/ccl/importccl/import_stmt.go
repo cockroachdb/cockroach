@@ -83,13 +83,14 @@ const (
 	mysqlOutfileEnclose  = "fields_enclosed_by"
 	mysqlOutfileEscape   = "fields_escaped_by"
 
-	importOptionSSTSize          = "sstsize"
-	importOptionDecompress       = "decompress"
-	importOptionOversample       = "oversample"
-	importOptionSkipFKs          = "skip_foreign_keys"
-	importOptionDisableGlobMatch = "disable_glob_matching"
-	importOptionSaveRejected     = "experimental_save_rejected"
-	importOptionDetached         = "detached"
+	importOptionSSTSize                   = "sstsize"
+	importOptionDecompress                = "decompress"
+	importOptionOversample                = "oversample"
+	importOptionSkipFKs                   = "skip_foreign_keys"
+	importOptionDisableGlobMatch          = "disable_glob_matching"
+	importOptionSaveRejected              = "experimental_save_rejected"
+	importOptionDetached                  = "detached"
+	importOptionDisableProtectedTimestamp = "disable_protected_timestamp"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
@@ -137,9 +138,10 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	importOptionOversample:   sql.KVStringOptRequireValue,
 	importOptionSaveRejected: sql.KVStringOptRequireNoValue,
 
-	importOptionSkipFKs:          sql.KVStringOptRequireNoValue,
-	importOptionDisableGlobMatch: sql.KVStringOptRequireNoValue,
-	importOptionDetached:         sql.KVStringOptRequireNoValue,
+	importOptionSkipFKs:                   sql.KVStringOptRequireNoValue,
+	importOptionDisableGlobMatch:          sql.KVStringOptRequireNoValue,
+	importOptionDetached:                  sql.KVStringOptRequireNoValue,
+	importOptionDisableProtectedTimestamp: sql.KVStringOptRequireNoValue,
 
 	optMaxRowSize: sql.KVStringOptRequireValue,
 
@@ -175,7 +177,8 @@ func makeStringSet(opts ...string) map[string]struct{} {
 // Options common to all formats.
 var allowedCommonOptions = makeStringSet(
 	importOptionSSTSize, importOptionDecompress, importOptionOversample,
-	importOptionSaveRejected, importOptionDisableGlobMatch, importOptionDetached)
+	importOptionSaveRejected, importOptionDisableGlobMatch, importOptionDetached,
+	importOptionDisableProtectedTimestamp)
 
 // Format specific allowed options.
 var avroAllowedOptions = makeStringSet(
@@ -968,7 +971,8 @@ func importPlanHook(
 				spansToProtect = append(spansToProtect, tableDescs[i].TableSpan(codec))
 			}
 		}
-		if len(spansToProtect) > 0 {
+		_, disableProtectedTimestamp := opts[importOptionDisableProtectedTimestamp]
+		if !disableProtectedTimestamp && len(spansToProtect) > 0 {
 			protectedtsID := uuid.MakeV4()
 			importDetails.ProtectedTimestampRecord = &protectedtsID
 		}
@@ -1146,7 +1150,7 @@ func protectTimestampForImport(
 	walltime int64,
 	importDetails jobspb.ImportDetails,
 ) error {
-	if len(spansToProtect) > 0 {
+	if len(spansToProtect) > 0 && importDetails.ProtectedTimestampRecord != nil {
 		// NB: We protect the timestamp preceding the import statement timestamp
 		// because that's the timestamp to which we want to revert.
 		tsToProtect := hlc.Timestamp{WallTime: walltime}.Prev()
