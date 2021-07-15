@@ -11,6 +11,7 @@
 package coldata
 
 import (
+	"encoding/binary"
 	"fmt"
 	"strings"
 	"unsafe"
@@ -397,6 +398,51 @@ func (b *Bytes) ProportionalSize(n int64) int64 {
 	// It is possible that we have a "window" into the vector that doesn't start
 	// from the offset of 0, so we have to look at the first actual offset.
 	return FlatBytesOverhead + int64(len(b.data[b.offsets[0]:b.offsets[n]])) + n*memsize.Int32
+}
+
+// Abbreviated returns a uint64 slice where each uint64 represents the first
+// eight bytes of each []byte. It is used for byte comparison fast paths.
+//
+// Given Bytes b, and abbr = b.Abbreviated():
+//
+//   - abbr[i] > abbr[j] iff b.Get(i) > b.Get(j)
+//   - abbr[i] < abbr[j] iff b.Get(i) < b.Get(j)
+//   - If abbr[i] == abbr[j], it is unknown if b.Get(i) is greater than, less
+//     than, or equal to b.Get(j). A full comparison of all bytes in each is
+//     required.
+//
+func (b *Bytes) Abbreviated() []uint64 {
+	r := make([]uint64, b.Len())
+	for i := range r {
+		bs := b.Get(i)
+		r[i] = abbreviate(bs)
+	}
+	return r
+}
+
+// abbreviate interprets up to the first 8 bytes of the slice as a big-endian
+// uint64. If the slice has less than 8 bytes, the value returned is the same as
+// if the slice was filled to 8 bytes with zero value bytes. For example:
+//
+//   abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+//     => 1
+//
+//   abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00})
+//     => 256
+//
+//   abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+//     => 256
+//
+func abbreviate(bs []byte) uint64 {
+	if len(bs) >= 8 {
+		return binary.BigEndian.Uint64(bs)
+	}
+	var v uint64
+	for _, b := range bs {
+		v <<= 8
+		v |= uint64(b)
+	}
+	return v << uint(8*(8-len(bs)))
 }
 
 // Reset resets the underlying Bytes for reuse.
