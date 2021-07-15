@@ -8,3 +8,4 @@ alter_ddl_stmt ::=
 	| alter_partition_stmt
 	| alter_schema_stmt
 	| alter_type_stmt
+	| alter_default_privileges_stmt
