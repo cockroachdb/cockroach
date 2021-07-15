@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -237,7 +238,14 @@ func (j *Job) started(ctx context.Context, txn *kv.Txn) error {
 		// TODO(spaskob): Remove this status change after we stop supporting
 		// pending job states.
 		ju.UpdateStatus(StatusRunning)
-		md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		if md.Payload.StartedMicros == 0 {
+			md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		}
+
+		if j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			ju.UpdateRunStats(md.RunStats.NumRuns+1, j.registry.clock.Now().GoTime())
+		}
+
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -513,6 +521,8 @@ func (j *Job) pauseRequested(ctx context.Context, txn *kv.Txn, fn onPauseRequest
 		return nil
 	})
 }
+
+// TODO(sajjad):  Update runInfo in reverted
 
 // reverted sets the status of the tracked job to reverted.
 func (j *Job) reverted(
