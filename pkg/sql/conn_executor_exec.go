@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"runtime/pprof"
@@ -1380,14 +1381,25 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 	svcLat := phaseTimes.GetServiceLatencyTotal().Seconds()
 	postCommitJobsLat := phaseTimes.GetPostCommitJobsLatency().Seconds()
 
-	return res.AddRow(ctx,
-		tree.Datums{
-			tree.NewDInterval(duration.FromFloat64(parseLat), types.DefaultIntervalTypeMetadata),
-			tree.NewDInterval(duration.FromFloat64(planLat), types.DefaultIntervalTypeMetadata),
-			tree.NewDInterval(duration.FromFloat64(runLat), types.DefaultIntervalTypeMetadata),
-			tree.NewDInterval(duration.FromFloat64(svcLat), types.DefaultIntervalTypeMetadata),
-			tree.NewDInterval(duration.FromFloat64(postCommitJobsLat), types.DefaultIntervalTypeMetadata),
-		})
+	// Now convert the durations to the string representation of intervals.
+	// We do the conversion server-side using a fixed format, so that
+	// the CLI code does not get different results depending on the
+	// IntervalStyle session parameter. (See issue #67618.)
+	// We also choose to convert to interval, and then convert to string
+	// so that pre-v21.2 CLI can still parse the value as an interval
+	// (INTERVAL was the result type in previous versions).
+	// Using a simpler type (e.g. microseconds as an INT) would be simpler
+	// but would be incompatible with previous version clients.
+	strs := make(tree.Datums, 5)
+	var buf bytes.Buffer
+	for i, d := range []float64{parseLat, planLat, runLat, svcLat, postCommitJobsLat} {
+		ival := tree.NewDInterval(duration.FromFloat64(d), types.DefaultIntervalTypeMetadata)
+		buf.Reset()
+		ival.Duration.FormatWithStyle(&buf, duration.IntervalStyle_POSTGRES)
+		strs[i] = tree.NewDString(buf.String())
+	}
+
+	return res.AddRow(ctx, strs)
 }
 
 func (ex *connExecutor) runSetTracing(
