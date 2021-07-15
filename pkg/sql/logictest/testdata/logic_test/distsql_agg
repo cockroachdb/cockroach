@@ -654,3 +654,46 @@ ALTER TABLE table58683_1 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_
 CREATE TABLE table58683_2 (col2 BOOL);
 ALTER TABLE table58683_2 EXPERIMENTAL_RELOCATE SELECT ARRAY[2], 2;
 SELECT every(col2) FROM table58683_1 JOIN table58683_2 ON col1 = (table58683_2.tableoid)::INT8 GROUP BY col2 HAVING bool_and(col2);
+
+# Test muti-stage aggregate functions for #58347 (add support for multi-stage execution of aggregate functions).
+statement ok
+CREATE TABLE t (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO t SELECT a, b, c::FLOAT, d::DECIMAL FROM
+  generate_series(1, 10) AS a(a),
+  generate_series(1, 10) AS b(b),
+  generate_series(1, 10) AS c(c),
+  generate_series(1, 10) AS d(d)
+
+# Test aggregrate functions without muti-stage.
+query FFF
+select sqrdiff(d), stddev_pop(d), var_pop(d) from t
+----
+82499.99999999999999999976 2.8722813232690143299 8.25
+
+query IFFFF
+select regr_count(c,d), regr_sxx(c,d), regr_syy(c,d), regr_avgx(c,d), regr_avgy(c,d) from t
+----
+10000 82499.99999999996 82500.00000000012 5.5 5.5
+
+# Split into ten parts.
+statement ok
+ALTER TABLE t SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Test aggregrate functions in muti-stage.
+query FFF
+select sqrdiff(d), stddev_pop(d), var_pop(d) from t
+----
+82499.99999999999999999952 2.8724249481071304094 8.25
+
+query IFFFF
+select regr_count(c,d), regr_sxx(c,d), regr_syy(c,d), regr_avgx(c,d), regr_avgy(c,d) from t
+----
+10000 82499.99999999996 82500.00000000012 5.5 5.5
