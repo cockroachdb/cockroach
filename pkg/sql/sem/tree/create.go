@@ -422,6 +422,7 @@ type ColumnTableDef struct {
 	DefaultExpr struct {
 		Expr           Expr
 		ConstraintName Name
+		ApplyOnUpdate  bool
 	}
 	CheckExprs []ColumnTableDefCheckExpr
 	References struct {
@@ -516,6 +517,7 @@ func NewColumnTableDef(
 					"multiple default values specified for column %q", name)
 			}
 			d.DefaultExpr.Expr = t.Expr
+			d.DefaultExpr.ApplyOnUpdate = t.ApplyOnUpdate
 			d.DefaultExpr.ConstraintName = c.Name
 		case HiddenConstraint:
 			d.Hidden = true
@@ -583,6 +585,10 @@ func NewColumnTableDef(
 // HasDefaultExpr returns if the ColumnTableDef has a default expression.
 func (node *ColumnTableDef) HasDefaultExpr() bool {
 	return node.DefaultExpr.Expr != nil
+}
+
+func (node *ColumnTableDef) ApplyDefaultOnUpdate() bool {
+	return node.DefaultExpr.ApplyOnUpdate
 }
 
 // HasFKConstraint returns if the ColumnTableDef has a foreign key constraint.
@@ -654,6 +660,9 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 		}
 		ctx.WriteString(" DEFAULT ")
 		ctx.FormatNode(node.DefaultExpr.Expr)
+		if node.ApplyDefaultOnUpdate() {
+			ctx.WriteString(" ON UPDATE")
+		}
 	}
 	for _, checkExpr := range node.CheckExprs {
 		if checkExpr.ConstraintName != "" {
@@ -755,7 +764,8 @@ type ColumnCollation string
 
 // ColumnDefault represents a DEFAULT clause for a column.
 type ColumnDefault struct {
-	Expr Expr
+	Expr          Expr
+	ApplyOnUpdate bool
 }
 
 // NotNullConstraint represents NOT NULL on a column.

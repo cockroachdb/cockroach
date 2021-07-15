@@ -115,17 +115,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	if !hasPrimaryIndex {
 		var rowid cat.Column
 		ordinal := len(tab.Columns)
-		rowid.InitNonVirtual(
-			ordinal,
-			cat.StableID(1+ordinal),
-			"rowid",
-			cat.Ordinary,
-			types.Int,
-			false, /* nullable */
-			cat.Hidden,
-			&uniqueRowIDString, /* defaultExpr */
-			nil,                /* computedExpr */
-		)
+		rowid.InitNonVirtual(ordinal, cat.StableID(1+ordinal), "rowid", cat.Ordinary, types.Int, false, cat.Hidden, &uniqueRowIDString, nil, false)
 		tab.Columns = append(tab.Columns, rowid)
 	}
 
@@ -142,33 +132,13 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Add the MVCC timestamp system column.
 	var mvcc cat.Column
 	ordinal := len(tab.Columns)
-	mvcc.InitNonVirtual(
-		ordinal,
-		cat.StableID(1+ordinal),
-		colinfo.MVCCTimestampColumnName,
-		cat.System,
-		colinfo.MVCCTimestampColumnType,
-		true, /* nullable */
-		cat.Hidden,
-		nil, /* defaultExpr */
-		nil, /* computedExpr */
-	)
+	mvcc.InitNonVirtual(ordinal, cat.StableID(1+ordinal), colinfo.MVCCTimestampColumnName, cat.System, colinfo.MVCCTimestampColumnType, true, cat.Hidden, nil, nil, false)
 	tab.Columns = append(tab.Columns, mvcc)
 
 	// Add the tableoid system column.
 	var tableoid cat.Column
 	ordinal = len(tab.Columns)
-	tableoid.InitNonVirtual(
-		ordinal,
-		cat.StableID(1+ordinal),
-		colinfo.TableOIDColumnName,
-		cat.System,
-		types.Oid,
-		true, /* nullable */
-		cat.Hidden,
-		nil, /* defaultExpr */
-		nil, /* computedExpr */
-	)
+	tableoid.InitNonVirtual(ordinal, cat.StableID(1+ordinal), colinfo.TableOIDColumnName, cat.System, types.Oid, true, cat.Hidden, nil, nil, false)
 	tab.Columns = append(tab.Columns, tableoid)
 
 	// Cache the partitioning statement for the primary index.
@@ -290,17 +260,7 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 
 	// Add the dummy PK column.
 	var pk cat.Column
-	pk.InitNonVirtual(
-		0, /* ordinal */
-		0, /* stableID */
-		"crdb_internal_vtable_pk",
-		cat.Ordinary,
-		types.Int,
-		false, /* nullable */
-		cat.Hidden,
-		nil, /* defaultExpr */
-		nil, /* computedExpr */
-	)
+	pk.InitNonVirtual(0, 0, "crdb_internal_vtable_pk", cat.Ordinary, types.Int, false, cat.Hidden, nil, nil, false)
 
 	tab.Columns = []cat.Column{pk}
 
@@ -346,17 +306,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 
 	var rowid cat.Column
 	ordinal := len(columns)
-	rowid.InitNonVirtual(
-		ordinal,
-		cat.StableID(1+ordinal),
-		"rowid",
-		cat.Ordinary,
-		types.Int,
-		false, /* nullable */
-		cat.Hidden,
-		&uniqueRowIDString, /* defaultExpr */
-		nil,                /* computedExpr */
-	)
+	rowid.InitNonVirtual(ordinal, cat.StableID(1+ordinal), "rowid", cat.Ordinary, types.Int, false, cat.Hidden, &uniqueRowIDString, nil, false)
 
 	tab.Columns = append(tab.Columns, rowid)
 	tab.addPrimaryColumnIndex("rowid")
@@ -605,17 +555,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			*computedExpr,
 		)
 	} else {
-		col.InitNonVirtual(
-			ordinal,
-			cat.StableID(1+ordinal),
-			name,
-			kind,
-			typ,
-			nullable,
-			visibility,
-			defaultExpr,
-			computedExpr,
-		)
+		col.InitNonVirtual(ordinal, cat.StableID(1+ordinal), name, kind, typ, nullable, visibility, defaultExpr, computedExpr, def.ApplyDefaultOnUpdate())
 	}
 	tt.Columns = append(tt.Columns, col)
 }

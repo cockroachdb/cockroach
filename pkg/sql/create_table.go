@@ -2875,6 +2875,7 @@ func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.Column
 	}
 	c.Nullable.Nullability = tree.NotNull
 	c.DefaultExpr.Expr = defaultExpr
+	c.DefaultExpr.ApplyOnUpdate = true
 	return c
 }
 

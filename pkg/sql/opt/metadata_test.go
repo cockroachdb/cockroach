@@ -238,17 +238,7 @@ func TestMetadataTables(t *testing.T) {
 
 	mkCol := func(ordinal int, name string) cat.Column {
 		var c cat.Column
-		c.InitNonVirtual(
-			ordinal,
-			cat.StableID(ordinal+1),
-			tree.Name(name),
-			cat.Ordinary,
-			types.Int,
-			false, /* nullable */
-			cat.Visible,
-			nil, /* defaultExpr */
-			nil, /* computedExpr */
-		)
+		c.InitNonVirtual(ordinal, cat.StableID(ordinal+1), tree.Name(name), cat.Ordinary, types.Int, false, cat.Visible, nil, nil, false)
 		return c
 	}
 	x := mkCol(0, "x")

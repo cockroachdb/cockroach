@@ -99,6 +99,12 @@ func (w column) HasDefault() bool {
 	return w.desc.HasDefault()
 }
 
+// ApplyDefaultOnUpdate returns true iff the column has a default expression set and it should be
+// applied on update.
+func (w column) ApplyDefaultOnUpdate() bool {
+	return w.desc.HasDefault() && w.desc.DefaultOnUpdate
+}
+
 // GetDefaultExpr returns the column default expression if it exists,
 // empty string otherwise.
 func (w column) GetDefaultExpr() string {

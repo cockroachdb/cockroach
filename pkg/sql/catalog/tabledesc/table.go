@@ -101,6 +101,7 @@ func MakeColumnDefDescs(
 			s := tree.Serialize(d.DefaultExpr.Expr)
 			col.DefaultExpr = &s
 		}
+		col.DefaultOnUpdate = d.ApplyDefaultOnUpdate()
 	}
 
 	if d.IsComputed() {

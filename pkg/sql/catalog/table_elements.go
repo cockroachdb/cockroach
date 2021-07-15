@@ -224,6 +224,8 @@ type Column interface {
 	// HasDefault returns true iff the column has a default expression set.
 	HasDefault() bool
 
+	ApplyDefaultOnUpdate() bool
+
 	// GetDefaultExpr returns the column default expression if it exists,
 	// empty string otherwise.
 	GetDefaultExpr() string

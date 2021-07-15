@@ -2973,6 +2973,7 @@ col_qualification_elem ::=
 	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
+	| 'DEFAULT' b_expr 'ON' 'UPDATE'
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| generated_as '(' a_expr ')' 'STORED'
 	| generated_as '(' a_expr ')' 'VIRTUAL'

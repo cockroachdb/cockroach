@@ -35,6 +35,7 @@ type Column struct {
 	defaultExpr                 string
 	computedExpr                string
 	invertedSourceColumnOrdinal int
+	applyDefaultOnUpdate        bool
 }
 
 // Ordinal returns the position of the column in its table. The following always
@@ -101,6 +102,10 @@ func (c *Column) HasDefault() bool {
 // columns.
 func (c *Column) DefaultExprStr() string {
 	return c.defaultExpr
+}
+
+func (c *Column) ApplyDefaultOnUpdate() bool {
+	return c.applyDefaultOnUpdate
 }
 
 // IsComputed returns true if the column is a computed value. ComputedExprStr
@@ -200,6 +205,7 @@ func (c *Column) InitNonVirtual(
 	visibility ColumnVisibility,
 	defaultExpr *string,
 	computedExpr *string,
+	applyDefaultOnUpdate bool,
 ) {
 	if kind == VirtualInverted {
 		panic(errors.AssertionFailedf("incorrect init method"))
@@ -218,6 +224,7 @@ func (c *Column) InitNonVirtual(
 		nullable:                    nullable,
 		visibility:                  visibility,
 		invertedSourceColumnOrdinal: -1,
+		applyDefaultOnUpdate:        applyDefaultOnUpdate,
 	}
 	if defaultExpr != nil {
 		c.defaultExpr = *defaultExpr

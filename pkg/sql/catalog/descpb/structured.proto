@@ -135,6 +135,10 @@ message ColumnDescriptor {
   // have been serialized in a internal format. Instead, use one of the
   // schemaexpr.FormatExpr* functions.
   optional string default_expr = 5;
+
+  // Apply default condition on UPDATE.
+  optional bool default_on_update = 18 [(gogoproto.nullable) = false];
+
   reserved 9;
 
   // A hidden column does not appear in star expansion, but can be referenced in
