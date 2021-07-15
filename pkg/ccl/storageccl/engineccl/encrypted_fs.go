@@ -117,20 +117,31 @@ func (fs *encryptedFS) Create(name string) (vfs.File, error) {
 	if err != nil {
 		return f, err
 	}
+	// NB: f.Close() must be called except in the case of a successful return.
 	settings, stream, err := fs.streamCreator.CreateNew(context.TODO())
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, err
 	}
-	fproto := &enginepb.FileEntry{}
-	fproto.EnvType = fs.streamCreator.envType
-	if fproto.EncryptionSettings, err = protoutil.Marshal(settings); err != nil {
-		f.Close()
-		return nil, err
-	}
-	if err = fs.fileRegistry.SetFileEntry(name, fproto); err != nil {
-		f.Close()
-		return nil, err
+	// Add an entry for the file to the pebble file registry if it is encrypted.
+	// We choose not to store an entry for unencrypted files since the absence of
+	// a file in the file registry implies that it is unencrypted.
+	if settings.EncryptionType == enginepbccl.EncryptionType_Plaintext {
+		if err := fs.fileRegistry.MaybeDeleteEntry(name); err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+	} else {
+		fproto := &enginepb.FileEntry{}
+		fproto.EnvType = fs.streamCreator.envType
+		if fproto.EncryptionSettings, err = protoutil.Marshal(settings); err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+		if err := fs.fileRegistry.SetFileEntry(name, fproto); err != nil {
+			_ = f.Close()
+			return nil, err
+		}
 	}
 	ef := &encryptedFile{File: f, stream: stream}
 	return vfs.WithFd(f, ef), nil
@@ -255,9 +266,10 @@ func (e *encryptionStatsHandler) GetKeyIDFromSettings(settings []byte) (string, 
 	return s.KeyId, nil
 }
 
-// Init initializes engine.NewEncryptedEncFunc.
+// init initializes function hooks used in non-CCL code.
 func init() {
 	storage.NewEncryptedEnvFunc = newEncryptedEnv
+	storage.CanRegistryElideFunc = canRegistryElide
 }
 
 // newEncryptedEnv creates an encrypted environment and returns the vfs.FS to use for reading and
@@ -318,4 +330,15 @@ func newEncryptedEnv(
 		}
 	}
 	return dataFS, &encryptionStatsHandler{storeKM: storeKeyManager, dataKM: dataKeyManager}, nil
+}
+
+func canRegistryElide(entry *enginepb.FileEntry) bool {
+	if entry == nil {
+		return true
+	}
+	settings := &enginepbccl.EncryptionSettings{}
+	if err := protoutil.Unmarshal(entry.EncryptionSettings, settings); err != nil {
+		return false
+	}
+	return settings.EncryptionType == enginepbccl.EncryptionType_Plaintext
 }
