@@ -243,7 +243,7 @@ goroutine 13:
 						Message:             c.message,
 						Artifacts:           c.artifacts,
 						AuthorEmail:         c.author,
-						ReproductionCommand: c.reproCmd,
+						ReproductionCommand: ReproductionCommandFromString(c.reproCmd),
 						ExtraLabels:         []string{"release-blocker"},
 					}
 					require.NoError(t, p.post(ctx, UnitTestFormatter, req))
