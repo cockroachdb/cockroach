@@ -40,8 +40,8 @@ func (idx PlaceholderIdx) String() string {
 // placeholders in the statement. Entries that don't yet have a type are nil.
 type PlaceholderTypes []*types.T
 
-// Equals returns true if two PlaceholderTypes contain the same types.
-func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
+// Identical returns true if two PlaceholderTypes contain the same types.
+func (pt PlaceholderTypes) Identical(other PlaceholderTypes) bool {
 	if len(pt) != len(other) {
 		return false
 	}
@@ -50,7 +50,7 @@ func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
 		case t == nil && other[i] == nil:
 		case t == nil || other[i] == nil:
 			return false
-		case !t.Equivalent(other[i]):
+		case !t.Identical(other[i]):
 			return false
 		}
 	}
