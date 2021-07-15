@@ -3,6 +3,8 @@
 ⚠️ roachprod is an **internal** tool for creating and testing
 CockroachDB clusters. Use at your own risk! ⚠️
 
+Note that an internal tutorial is also maintained [at the Developer Infrastructure Team's wiki](https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/144408811/Roachprod+Tutorial).
+
 ## Setup
 
 1. Make sure you have [gcloud installed] and configured (`gcloud auth list` to
@@ -37,9 +39,6 @@ installations (`gcloud components update`).
 # with your username.
 export CLUSTER="${USER}-test"
 roachprod create ${CLUSTER} -n 4 --local-ssd
-
-# Add gcloud SSH key. Optional for most commands, but some require it.
-ssh-add ~/.ssh/google_compute_engine
 
 # Stage binaries.
 roachprod stage ${CLUSTER} workload
