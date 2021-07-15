@@ -998,3 +998,69 @@ outer:
 	lval.SetStr(s.finishString(buf))
 	return true
 }
+
+// HasMultipleStatements returns true if the sql string contains more than one
+// statements. An error is returned if an invalid token was encountered.
+func HasMultipleStatements(sql string) (multipleStmt bool, err error) {
+	var s Scanner
+	var lval fakeSym
+	s.Init(sql)
+	count := 0
+	for {
+		done, hasToks, err := s.scanOne(&lval)
+		if err != nil {
+			return false, err
+		}
+		if hasToks {
+			count++
+		}
+		if done || count > 1 {
+			break
+		}
+	}
+	return count > 1, nil
+}
+
+// scanOne is a simplified version of (*Parser).scanOneStmt() for use
+// by HasMultipleStatements().
+func (s *Scanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
+	// Scan the first token.
+	for {
+		s.Scan(lval)
+		if lval.id == 0 {
+			return true, false, nil
+		}
+		if lval.id != ';' {
+			break
+		}
+	}
+
+	for {
+		if lval.id == lexbase.ERROR {
+			return true, true, fmt.Errorf("scan error: %s", lval.s)
+		}
+		s.Scan(lval)
+		if lval.id == 0 || lval.id == ';' {
+			return (lval.id == 0), true, nil
+		}
+	}
+}
+
+// fakeSym is a simplified symbol type for use by
+// HasMultipleStatements.
+type fakeSym struct {
+	id  int32
+	pos int32
+	s   string
+}
+
+var _ ScanSymType = (*fakeSym)(nil)
+
+func (s fakeSym) ID() int32                 { return s.id }
+func (s *fakeSym) SetID(id int32)           { s.id = id }
+func (s fakeSym) Pos() int32                { return s.pos }
+func (s *fakeSym) SetPos(p int32)           { s.pos = p }
+func (s fakeSym) Str() string               { return s.s }
+func (s *fakeSym) SetStr(v string)          { s.s = v }
+func (s fakeSym) UnionVal() interface{}     { return nil }
+func (s fakeSym) SetUnionVal(v interface{}) {}
