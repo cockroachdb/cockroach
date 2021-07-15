@@ -95,7 +95,6 @@ type txnKVFetcher struct {
 	responses    []roachpb.ResponseUnion
 
 	remainingBatches [][]byte
-	mon              *mon.BytesMonitor
 	acc              mon.BoundAccount
 
 	// If set, we will use the production value for kvBatchSize.
@@ -313,7 +312,6 @@ func makeKVBatchFetcherWithSendFunc(
 		firstBatchLimit:            firstBatchLimit,
 		lockStrength:               lockStrength,
 		lockWaitPolicy:             lockWaitPolicy,
-		mon:                        mon,
 		acc:                        mon.MakeBoundAccount(),
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
 		requestAdmissionHeader:     requestAdmissionHeader,
