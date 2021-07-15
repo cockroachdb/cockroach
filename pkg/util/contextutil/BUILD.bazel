@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "contextutil",
     srcs = [
+        "cancel.go",
         "context.go",
         "timeout_error.go",
     ],
@@ -20,6 +21,7 @@ go_test(
     name = "contextutil_test",
     size = "small",
     srcs = [
+        "cancel_test.go",
         "context_test.go",
         "timeout_error_test.go",
     ],
@@ -28,5 +30,6 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errbase",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
