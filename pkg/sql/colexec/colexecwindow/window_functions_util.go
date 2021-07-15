@@ -11,10 +11,19 @@
 package colexecwindow
 
 import (
+	"math/rand"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // SupportedWindowFns contains all window functions supported by the
@@ -28,6 +37,9 @@ var SupportedWindowFns = map[execinfrapb.WindowerSpec_WindowFunc]struct{}{
 	execinfrapb.WindowerSpec_NTILE:        {},
 	execinfrapb.WindowerSpec_LAG:          {},
 	execinfrapb.WindowerSpec_LEAD:         {},
+	execinfrapb.WindowerSpec_FIRST_VALUE:  {},
+	execinfrapb.WindowerSpec_LAST_VALUE:   {},
+	execinfrapb.WindowerSpec_NTH_VALUE:    {},
 }
 
 // WindowFnNeedsPeersInfo returns whether a window function pays attention to
@@ -36,8 +48,8 @@ var SupportedWindowFns = map[execinfrapb.WindowerSpec_WindowFunc]struct{}{
 // columns in ORDER BY clause). For most window functions, the result of
 // computation should be the same for "peers", so most window functions do need
 // this information.
-func WindowFnNeedsPeersInfo(windowFn execinfrapb.WindowerSpec_WindowFunc) bool {
-	switch windowFn {
+func WindowFnNeedsPeersInfo(windowFn *execinfrapb.WindowerSpec_WindowFn) bool {
+	switch *windowFn.Func.WindowFunc {
 	case
 		execinfrapb.WindowerSpec_ROW_NUMBER,
 		execinfrapb.WindowerSpec_NTILE,
@@ -51,6 +63,28 @@ func WindowFnNeedsPeersInfo(windowFn execinfrapb.WindowerSpec_WindowFunc) bool {
 		execinfrapb.WindowerSpec_PERCENT_RANK,
 		execinfrapb.WindowerSpec_CUME_DIST:
 		return true
+	case
+		execinfrapb.WindowerSpec_FIRST_VALUE,
+		execinfrapb.WindowerSpec_LAST_VALUE,
+		execinfrapb.WindowerSpec_NTH_VALUE:
+		if len(windowFn.Ordering.Columns) == 0 {
+			return false
+		}
+		windowFrame := windowFn.Frame
+		switch windowFrame.Mode {
+		case
+			execinfrapb.WindowerSpec_Frame_GROUPS,
+			execinfrapb.WindowerSpec_Frame_RANGE:
+			if windowFrame.Bounds.Start.BoundType != execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
+				windowFrame.Bounds.End.BoundType != execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING {
+				return true
+			}
+		}
+		if windowFrame.Exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_GROUP ||
+			windowFrame.Exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES {
+			return true
+		}
+		return false
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("window function %s is not supported", windowFn.String()))
 		// This code is unreachable, but the compiler cannot infer that.
@@ -84,6 +118,23 @@ func WindowFnArgNeedsCast(
 		}
 		colexecerror.InternalError(errors.AssertionFailedf("lag and lead expect between one and three arguments"))
 	case
+		execinfrapb.WindowerSpec_FIRST_VALUE,
+		execinfrapb.WindowerSpec_LAST_VALUE:
+		if idx > 0 {
+			colexecerror.InternalError(errors.AssertionFailedf("first_value and last_value expect exactly one argument"))
+		}
+		// These window functions can take any argument type.
+		return false, provided
+	case execinfrapb.WindowerSpec_NTH_VALUE:
+		// The first argument can be any type, but the second must be an integer.
+		if idx > 1 {
+			colexecerror.InternalError(errors.AssertionFailedf("nth_value expects exactly two arguments"))
+		}
+		if idx == 0 {
+			return false, provided
+		}
+		return !types.Int.Identical(provided), types.Int
+	case
 		execinfrapb.WindowerSpec_ROW_NUMBER,
 		execinfrapb.WindowerSpec_RANK,
 		execinfrapb.WindowerSpec_DENSE_RANK,
@@ -96,4 +147,94 @@ func WindowFnArgNeedsCast(
 	colexecerror.InternalError(errors.AssertionFailedf("window function %s is not supported", windowFn.String()))
 	// This code is unreachable, but the compiler cannot infer that.
 	return false, nil
+}
+
+// NormalizeWindowFrame returns a frame that is identical to the given one
+// except that the default values have been explicitly set (where before they
+// may have been nil).
+func NormalizeWindowFrame(frame *execinfrapb.WindowerSpec_Frame) *execinfrapb.WindowerSpec_Frame {
+	if frame == nil {
+		// The default window frame:
+		//   RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE NO ROWS
+		return &execinfrapb.WindowerSpec_Frame{
+			Mode: execinfrapb.WindowerSpec_Frame_RANGE,
+			Bounds: execinfrapb.WindowerSpec_Frame_Bounds{
+				Start: execinfrapb.WindowerSpec_Frame_Bound{
+					BoundType: execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING,
+				},
+				End: &execinfrapb.WindowerSpec_Frame_Bound{
+					BoundType: execinfrapb.WindowerSpec_Frame_CURRENT_ROW,
+				},
+			},
+			Exclusion: execinfrapb.WindowerSpec_Frame_NO_EXCLUSION,
+		}
+	}
+	if frame.Bounds.End == nil {
+		// The default end bound is CURRENT ROW.
+		return &execinfrapb.WindowerSpec_Frame{
+			Mode: frame.Mode,
+			Bounds: execinfrapb.WindowerSpec_Frame_Bounds{
+				Start: frame.Bounds.Start,
+				End: &execinfrapb.WindowerSpec_Frame_Bound{
+					BoundType: execinfrapb.WindowerSpec_Frame_CURRENT_ROW,
+				},
+			},
+			Exclusion: frame.Exclusion,
+		}
+	}
+	return frame
+}
+
+// EncodeWindowFrameOffset returns the given datum offset encoded as bytes, for
+// use in testing window functions in RANGE mode with offsets.
+func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
+	var encoded, scratch []byte
+	encoded, err := rowenc.EncodeTableValue(
+		encoded, descpb.ColumnID(encoding.NoColumnID), offset, scratch)
+	require.NoError(t, err)
+	return encoded
+}
+
+// MakeRandWindowFrameRangeOffset returns a valid offset of the given type for
+// use in testing window functions in RANGE mode with offsets.
+func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) tree.Datum {
+	isNegative := func(val tree.Datum) bool {
+		switch datumTyp := val.(type) {
+		case *tree.DInt:
+			return int64(*datumTyp) < 0
+		case *tree.DFloat:
+			return float64(*datumTyp) < 0
+		case *tree.DDecimal:
+			return datumTyp.Negative
+		case *tree.DInterval:
+			return false
+		default:
+			t.Errorf("unexpected error: %v", errors.AssertionFailedf("unsupported datum: %v", datumTyp))
+			return false
+		}
+	}
+
+	for {
+		val := randgen.RandDatumSimple(rng, typ)
+		if isNegative(val) {
+			// Offsets must be non-null and non-negative.
+			continue
+		}
+		return val
+	}
+}
+
+// GetOffsetTypeFromOrderColType returns the correct offset type for the given
+// order column type for a window frame in RANGE mode with offsets. For numeric
+// columns, the order and offset types are the same. For datetime columns,
+// offsets are of type interval. GetOffsetTypeFromOrderColType is intended for
+// use in testing window functions.
+func GetOffsetTypeFromOrderColType(t *testing.T, orderColType *types.T) *types.T {
+	if !types.IsAdditiveType(orderColType) {
+		t.Errorf("unexpected order column type: %v", orderColType)
+	}
+	if types.IsDateTimeType(orderColType) {
+		return types.Interval
+	}
+	return orderColType
 }

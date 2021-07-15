@@ -1092,17 +1092,21 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 		typs[i] = types.Int
 	}
 	for windowFn := range colexecwindow.SupportedWindowFns {
-		useRandomTypes := rand.Float64() < randTypesProbability
 		var argTypes []*types.T
+		useRandomTypes := rand.Float64() < randTypesProbability
+		randArgType := types.Int
+		if useRandomTypes {
+			randArgType = generateRandomSupportedTypes(rng, 1 /* nCols */)[0]
+		}
 		switch windowFn {
 		case execinfrapb.WindowerSpec_NTILE:
 			argTypes = []*types.T{types.Int}
 		case execinfrapb.WindowerSpec_LAG, execinfrapb.WindowerSpec_LEAD:
-			argType := types.Int
-			if useRandomTypes {
-				argType = generateRandomSupportedTypes(rng, 1 /* nCols */)[0]
-			}
-			argTypes = []*types.T{argType, types.Int, argType}
+			argTypes = []*types.T{randArgType, types.Int, randArgType}
+		case execinfrapb.WindowerSpec_FIRST_VALUE, execinfrapb.WindowerSpec_LAST_VALUE:
+			argTypes = []*types.T{randArgType}
+		case execinfrapb.WindowerSpec_NTH_VALUE:
+			argTypes = []*types.T{randArgType, types.Int}
 		}
 		for _, partitionBy := range [][]uint32{
 			{},     // No PARTITION BY clause.
@@ -1129,11 +1133,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						argsIdxs = append(argsIdxs, uint32(nCols+i))
 					}
 
-					if useRandomTypes &&
-						(windowFn == execinfrapb.WindowerSpec_LAG ||
-							windowFn == execinfrapb.WindowerSpec_LEAD) {
-						// Only lag and lead take non-integer arguments. In addition, ntile
-						// will error if given a non-positive argument.
+					if useRandomTypes {
 						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						rows = randgen.MakeRandIntRowsInRange(rng, nRows, len(inputTypes), maxNum, nullProbability)
@@ -1142,7 +1142,10 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 					if windowFn == execinfrapb.WindowerSpec_ROW_NUMBER ||
 						windowFn == execinfrapb.WindowerSpec_NTILE ||
 						windowFn == execinfrapb.WindowerSpec_LAG ||
-						windowFn == execinfrapb.WindowerSpec_LEAD {
+						windowFn == execinfrapb.WindowerSpec_LEAD ||
+						windowFn == execinfrapb.WindowerSpec_FIRST_VALUE ||
+						windowFn == execinfrapb.WindowerSpec_LAST_VALUE ||
+						windowFn == execinfrapb.WindowerSpec_NTH_VALUE {
 						// The outputs of these window functions are not deterministic if
 						// there are columns that are not present in either PARTITION BY or
 						// ORDER BY clauses, so we require that all non-partitioning columns
@@ -1150,18 +1153,20 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						nOrderingCols = len(inputTypes)
 					}
 
+					ordering := generateOrderingGivenPartitionBy(rng, len(inputTypes), nOrderingCols, partitionBy)
 					windowerSpec := &execinfrapb.WindowerSpec{
 						PartitionBy: partitionBy,
 						WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 							{
 								Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn},
 								ArgsIdxs:     argsIdxs,
-								Ordering:     generateOrderingGivenPartitionBy(rng, len(inputTypes), nOrderingCols, partitionBy),
+								Ordering:     ordering,
 								OutputColIdx: uint32(len(inputTypes)),
 								FilterColIdx: tree.NoColumnIdx,
 							},
 						},
 					}
+					windowerSpec.WindowFns[0].Frame = generateWindowFrame(t, rng, &ordering, inputTypes)
 
 					_, outputType, err := execinfrapb.GetWindowFunctionInfo(execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn}, argTypes...)
 					require.NoError(t, err)
@@ -1177,6 +1182,12 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						pspec:      pspec,
 					}
 					if err := verifyColOperator(t, args); err != nil {
+						if strings.Contains(err.Error(), "different errors returned") {
+							// Columnar and row-based windowers are likely to hit
+							// different errors, and we will swallow those and move
+							// on.
+							continue
+						}
 						fmt.Printf("window function: %s\n", windowFn.String())
 						fmt.Printf("seed = %d\n", seed)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
@@ -1276,6 +1287,97 @@ func generateOrderingGivenPartitionBy(
 		}
 	}
 	return ordering
+}
+
+func generateWindowFrame(
+	t *testing.T, rng *rand.Rand, ordering *execinfrapb.Ordering, inputTypes []*types.T,
+) *execinfrapb.WindowerSpec_Frame {
+	var modes = []execinfrapb.WindowerSpec_Frame_Mode{
+		execinfrapb.WindowerSpec_Frame_RANGE,
+		execinfrapb.WindowerSpec_Frame_ROWS,
+		execinfrapb.WindowerSpec_Frame_GROUPS,
+	}
+	var boundTypes = []execinfrapb.WindowerSpec_Frame_BoundType{
+		execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING,
+		execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING,
+		execinfrapb.WindowerSpec_Frame_CURRENT_ROW,
+		execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING,
+		execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING,
+	}
+	var exclusionTypes = []execinfrapb.WindowerSpec_Frame_Exclusion{
+		execinfrapb.WindowerSpec_Frame_NO_EXCLUSION,
+		execinfrapb.WindowerSpec_Frame_EXCLUDE_CURRENT_ROW,
+		execinfrapb.WindowerSpec_Frame_EXCLUDE_GROUP,
+		execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES,
+	}
+
+	mode := modes[rng.Intn(len(modes))]
+
+	// Ensure that start and end bound types are syntactically valid.
+	startBoundIdx := rng.Intn(len(boundTypes) - 1)
+	var endBoundIdx int
+	for {
+		endBoundIdx = rng.Intn(len(boundTypes)-1) + 1
+		if endBoundIdx >= startBoundIdx {
+			break
+		}
+	}
+	startBoundType := boundTypes[startBoundIdx]
+	endBoundType := boundTypes[endBoundIdx]
+
+	windowFrameBoundIsOffset := func(boundType execinfrapb.WindowerSpec_Frame_BoundType) bool {
+		return boundType == execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING ||
+			boundType == execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING
+	}
+
+	if mode == execinfrapb.WindowerSpec_Frame_RANGE &&
+		(len(ordering.Columns) != 1 || !types.IsAdditiveType(inputTypes[ordering.Columns[0].ColIdx])) {
+		// RANGE mode with OFFSET PRECEDING or OFFSET FOLLOWING requires there to
+		// be exactly one ordering column that is numeric or datetime.
+		if windowFrameBoundIsOffset(startBoundType) {
+			startBoundType = execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING
+		}
+		if windowFrameBoundIsOffset(endBoundType) {
+			endBoundType = execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING
+		}
+	}
+
+	exclusion := exclusionTypes[rng.Intn(len(exclusionTypes))]
+
+	frame := &execinfrapb.WindowerSpec_Frame{
+		Mode: mode,
+		Bounds: execinfrapb.WindowerSpec_Frame_Bounds{
+			Start: execinfrapb.WindowerSpec_Frame_Bound{BoundType: startBoundType},
+			End:   &execinfrapb.WindowerSpec_Frame_Bound{BoundType: endBoundType},
+		},
+		Exclusion: exclusion,
+	}
+
+	const maxUInt64Offset = 10
+	if windowFrameBoundIsOffset(startBoundType) || windowFrameBoundIsOffset(endBoundType) {
+		if frame.Mode == execinfrapb.WindowerSpec_Frame_ROWS ||
+			frame.Mode == execinfrapb.WindowerSpec_Frame_GROUPS {
+			frame.Bounds.Start.IntOffset = rng.Uint64() % maxUInt64Offset
+			frame.Bounds.End.IntOffset = rng.Uint64() % maxUInt64Offset
+		} else {
+			// We can assume that there is exactly one ordering column of an additive
+			// type, since we checked above.
+			colIdx := ordering.Columns[0].ColIdx
+			colEncoding := descpb.DatumEncoding_ASCENDING_KEY
+			if ordering.Columns[0].Direction == execinfrapb.Ordering_Column_DESC {
+				colEncoding = descpb.DatumEncoding_DESCENDING_KEY
+			}
+			offsetType := colexecwindow.GetOffsetTypeFromOrderColType(t, inputTypes[colIdx])
+			startOffset := colexecwindow.MakeRandWindowFrameRangeOffset(t, rng, offsetType)
+			endOffset := colexecwindow.MakeRandWindowFrameRangeOffset(t, rng, offsetType)
+			frame.Bounds.Start.TypedOffset = colexecwindow.EncodeWindowFrameOffset(t, startOffset)
+			frame.Bounds.End.TypedOffset = colexecwindow.EncodeWindowFrameOffset(t, endOffset)
+			frame.Bounds.Start.OffsetType = execinfrapb.DatumInfo{Encoding: colEncoding, Type: offsetType}
+			frame.Bounds.End.OffsetType = execinfrapb.DatumInfo{Encoding: colEncoding, Type: offsetType}
+		}
+	}
+
+	return frame
 }
 
 // prettyPrintTypes prints out typs as a CREATE TABLE statement.
