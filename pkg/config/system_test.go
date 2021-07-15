@@ -81,9 +81,9 @@ func tenant(tenID uint64) roachpb.KeyValue {
 	return kv(k, nil)
 }
 
-func zoneConfig(descID config.SystemTenantObjectID, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
+func zoneConfig(descID descpb.ID, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
 	kv := roachpb.KeyValue{
-		Key: config.MakeZoneKey(descID),
+		Key: config.MakeZoneKey(keys.SystemSQLCodec, descID),
 	}
 	if err := kv.Value.SetProto(&zonepb.ZoneConfig{SubzoneSpans: spans}); err != nil {
 		panic(err)

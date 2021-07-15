@@ -15,14 +15,13 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"gopkg.in/yaml.v2"
@@ -65,10 +64,6 @@ const (
 )
 
 func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
-	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
-	}
-
 	return &delayedNode{
 		name:    n.String(),
 		columns: showZoneConfigColumns,
@@ -122,7 +117,7 @@ func getShowZoneConfigRow(
 		}
 	}
 
-	targetID, err := resolveZone(ctx, p.txn, &zoneSpecifier)
+	targetID, err := p.resolveZone(ctx, &zoneSpecifier)
 	if err != nil {
 		return nil, err
 	}
@@ -133,8 +128,9 @@ func getShowZoneConfigRow(
 	}
 
 	subZoneIdx := uint32(0)
-	zoneID, zone, subzone, err := GetZoneConfigInTxn(ctx, p.txn,
-		config.SystemTenantObjectID(targetID), index, partition, false /* getInheritedDefault */)
+	zoneID, zone, subzone, err := GetZoneConfigInTxn(
+		ctx, p.txn, p.ExecCfg().Codec, targetID, index, partition, false, /* getInheritedDefault */
+	)
 	if errors.Is(err, errNoZoneConfigApplies) {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
@@ -155,7 +151,7 @@ func getShowZoneConfigRow(
 
 	// Determine the zone specifier for the zone config that actually applies
 	// without performing another KV lookup.
-	zs := ascendZoneSpecifier(zoneSpecifier, config.SystemTenantObjectID(targetID), zoneID, subzone)
+	zs := ascendZoneSpecifier(zoneSpecifier, targetID, zoneID, subzone)
 
 	// Ensure subzone configs don't infect the output of config_bytes.
 	zone.Subzones = nil
@@ -369,9 +365,7 @@ func yamlMarshalFlow(v interface{}) (string, error) {
 // TODO(benesch): Teach GetZoneConfig to return the specifier of the zone it
 // finds without impacting performance.
 func ascendZoneSpecifier(
-	zs tree.ZoneSpecifier,
-	resolvedID, actualID config.SystemTenantObjectID,
-	actualSubzone *zonepb.Subzone,
+	zs tree.ZoneSpecifier, resolvedID, actualID descpb.ID, actualSubzone *zonepb.Subzone,
 ) tree.ZoneSpecifier {
 	if actualID == keys.RootNamespaceID {
 		// We had to traverse to the top of the hierarchy, so we're showing the

@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -184,9 +183,6 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 
 	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
 		return nil, err
-	}
-	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
 	}
 
 	if err := p.CheckZoneConfigChangePermittedForMultiRegion(
@@ -466,7 +462,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// resolveZone determines the ID of the target object of the zone
 		// specifier. This ought to succeed regardless of whether there is
 		// already a zone config for the target object.
-		targetID, err := resolveZone(params.ctx, params.p.txn, &zs)
+		targetID, err := params.p.resolveZone(params.ctx, &zs)
 		if err != nil {
 			return err
 		}
@@ -520,8 +516,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// parameter getInheritedDefault to GetZoneConfigInTxn().
 		// These zones are only used for validations. The merged zone is will
 		// not be written.
-		_, completeZone, completeSubzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
-			config.SystemTenantObjectID(targetID), index, partition, n.setDefault)
+		_, completeZone, completeSubzone, err := GetZoneConfigInTxn(
+			params.ctx, params.p.txn, params.p.ExecCfg().Codec, targetID, index, partition, n.setDefault,
+		)
 
 		if errors.Is(err, errNoZoneConfigApplies) {
 			// No zone config yet.
@@ -552,7 +549,12 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// inherit from its parent. We do this by using an empty zoneConfig
 				// and completing at the level of the current zone.
 				zoneInheritedFields := zonepb.ZoneConfig{}
-				if err := completeZoneConfig(&zoneInheritedFields, config.SystemTenantObjectID(targetID), getKey); err != nil {
+				if err := completeZoneConfig(
+					&zoneInheritedFields,
+					params.p.ExecCfg().Codec,
+					targetID,
+					getKey,
+				); err != nil {
 					return err
 				}
 				partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
@@ -560,7 +562,12 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// If we are operating on a subZone, we need to inherit all remaining
 				// unset fields in its parent zone, which is partialZone.
 				zoneInheritedFields := *partialZone
-				if err := completeZoneConfig(&zoneInheritedFields, config.SystemTenantObjectID(targetID), getKey); err != nil {
+				if err := completeZoneConfig(
+					&zoneInheritedFields,
+					params.p.ExecCfg().Codec,
+					targetID,
+					getKey,
+				); err != nil {
 					return err
 				}
 				// In the case we have just an index, we should copy from the inherited
@@ -673,18 +680,24 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 
-			ss, err := params.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(MultitenancyZoneCfgIssueNo)
-			if err != nil {
-				return err
-			}
+			// TODO(zcfgs-pod): We want to validate localities being referenced for
+			// secondary tenants as well. Secondary tenant's don't have access to
+			// underlying localities yet, but when that lands, this check should go
+			// away.
+			if params.p.ExecCfg().Codec.ForSystemTenant() {
+				ss, err := params.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(MultitenancyZoneCfgIssueNo)
+				if err != nil {
+					return err
+				}
 
-			// Validate that the result makes sense.
-			if err := validateZoneAttrsAndLocalities(
-				params.ctx,
-				ss.Nodes,
-				&newZone,
-			); err != nil {
-				return err
+				// Validate that the result makes sense.
+				if err := validateZoneAttrsAndLocalities(
+					params.ctx,
+					ss.Nodes,
+					&newZone,
+				); err != nil {
+					return err
+				}
 			}
 
 			// Are we operating on an index?
@@ -951,9 +964,6 @@ func writeZoneConfig(
 	execCfg *ExecutorConfig,
 	hasNewSubzones bool,
 ) (numAffected int, err error) {
-	if !execCfg.Codec.ForSystemTenant() {
-		return 0, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
-	}
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(
@@ -986,11 +996,7 @@ func writeZoneConfig(
 func getZoneConfigRaw(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
-	if !codec.ForSystemTenant() {
-		// Secondary tenants do not have zone configs for individual objects.
-		return nil, nil
-	}
-	kv, err := txn.Get(ctx, config.MakeZoneKey(config.SystemTenantObjectID(id)))
+	kv, err := txn.Get(ctx, config.MakeZoneKey(codec, id))
 	if err != nil {
 		return nil, err
 	}
@@ -1010,13 +1016,9 @@ func getZoneConfigRaw(
 func getZoneConfigRawBatch(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
 ) (map[descpb.ID]*zonepb.ZoneConfig, error) {
-	if !codec.ForSystemTenant() {
-		// Secondary tenants do not have zone configs for individual objects.
-		return nil, nil
-	}
 	b := txn.NewBatch()
 	for _, id := range ids {
-		b.Get(config.MakeZoneKey(config.SystemTenantObjectID(id)))
+		b.Get(config.MakeZoneKey(codec, id))
 	}
 	if err := txn.Run(ctx, b); err != nil {
 		return nil, err
