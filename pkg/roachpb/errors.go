@@ -635,16 +635,34 @@ func (e *RangeKeyMismatchError) AppendRangeInfo(
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}
 
-// NewAmbiguousResultError initializes a new AmbiguousResultError with
-// an explanatory message.
-func NewAmbiguousResultError(msg string) *AmbiguousResultError {
-	return &AmbiguousResultError{Message: msg}
+// NewAmbiguousResultError initializes a new AmbiguousResultError wrapping
+// (opaquely) a causing error.
+func NewAmbiguousResultError(err error) *AmbiguousResultError {
+	return &AmbiguousResultError{
+		Message:    err.Error(),
+		EncodedErr: errors.EncodeError(context.Background(), err),
+	}
 }
 
 // NewAmbiguousResultErrorf initializes a new AmbiguousResultError with
 // an explanatory format and set of arguments.
 func NewAmbiguousResultErrorf(format string, args ...interface{}) *AmbiguousResultError {
-	return NewAmbiguousResultError(fmt.Sprintf(format, args...))
+	return NewAmbiguousResultError(errors.Errorf(format, args...))
+}
+
+// SafeFormatError implements errors.SafeFormatter.
+func (e *AmbiguousResultError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("result is ambiguous")
+	cause := errors.DecodeError(context.Background(), e.EncodedErr)
+	if f, l, _, ok := errors.GetOneLineSource(cause); ok {
+		p.Printf(" (originated at %s:%d)", redact.SafeString(f), redact.Safe(l))
+	}
+	return cause
+}
+
+// Format implements fmt.Formatter.
+func (e *AmbiguousResultError) Format(s fmt.State, v rune) {
+	errors.FormatError(e, s, v)
 }
 
 func (e *AmbiguousResultError) Error() string {

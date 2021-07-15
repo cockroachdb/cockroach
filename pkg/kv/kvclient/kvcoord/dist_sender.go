@@ -1015,7 +1015,7 @@ func (ds *DistSender) detectIntentMissingDueToIntentResolution(
 		// We weren't able to determine whether the intent missing error is
 		// due to intent resolution or not, so it is still ambiguous whether
 		// the commit succeeded.
-		return false, roachpb.NewAmbiguousResultErrorf("error=%s [intent missing]", pErr)
+		return false, roachpb.NewAmbiguousResultError(errors.Wrap(pErr.GoError(), "intent missing"))
 	}
 	resp := br.Responses[0].GetQueryTxn()
 	respTxn := &resp.QueriedTxn
@@ -1720,7 +1720,7 @@ func fillSkippedResponses(
 // the error that the last attempt to execute the request returned.
 func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 	if ambiguousErr != nil {
-		return roachpb.NewAmbiguousResultErrorf("error=%s [exhausted]", ambiguousErr)
+		return roachpb.NewAmbiguousResultError(errors.Wrap(ambiguousErr, "exhausted"))
 	}
 
 	// TODO(bdarnell): The error from the last attempt is not necessarily the best
@@ -2045,7 +2045,7 @@ func (ds *DistSender) sendToReplicas(
 				}
 			default:
 				if ambiguousError != nil {
-					return nil, roachpb.NewAmbiguousResultErrorf("error=%s [propagate]", ambiguousError)
+					return nil, roachpb.NewAmbiguousResultError(errors.Wrap(ambiguousError, "propagate"))
 				}
 
 				// The error received is likely not specific to this
@@ -2062,7 +2062,7 @@ func (ds *DistSender) sendToReplicas(
 			reportedErr := errors.Wrap(ctx.Err(), "context done during DistSender.Send")
 			log.Eventf(ctx, "%v", reportedErr)
 			if ambiguousError != nil {
-				return nil, roachpb.NewAmbiguousResultErrorf(reportedErr.Error())
+				return nil, roachpb.NewAmbiguousResultError(reportedErr)
 			}
 			// Don't consider this a sendError, because sendErrors indicate that we
 			// were unable to reach a replica that could serve the request, and they

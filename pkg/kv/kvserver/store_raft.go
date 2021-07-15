@@ -606,7 +606,7 @@ func (s *Store) processRaft(ctx context.Context) {
 				prop.finishApplication(
 					context.Background(),
 					proposalResult{
-						Err: roachpb.NewError(roachpb.NewAmbiguousResultError("store is stopping")),
+						Err: roachpb.NewError(roachpb.NewAmbiguousResultErrorf("store is stopping")),
 					},
 				)
 			}
