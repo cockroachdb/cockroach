@@ -343,7 +343,8 @@ func (j *SeqChunkProvider) RequestChunk(
 			ju.UpdateProgress(progress)
 			return nil
 		}
-		err := j.Registry.UpdateJobWithTxn(ctx, j.JobID, txn, resolveChunkFunc)
+		const useReadLock = true
+		err := j.Registry.UpdateJobWithTxn(ctx, j.JobID, txn, useReadLock, resolveChunkFunc)
 		if err != nil {
 			return err
 		}

@@ -552,15 +552,20 @@ func (r *Registry) LoadJobWithTxn(
 
 // UpdateJobWithTxn calls the Update method on an existing job with jobID, using
 // a transaction passed in the txn argument. Passing a nil transaction means
-// that a txn will be automatically created.
+// that a txn will be automatically created. The useReadLock parameter will
+// have the update acquire an exclusive lock on the job row when reading. This
+// can help eliminate restarts in the face of concurrent updates at the cost of
+// locking the row from readers. Most updates of a job do not expect contention
+// and may do extra work and thus should not do locking. Cases where the job
+// is used to coordinate resources from multiple nodes may benefit from locking.
 func (r *Registry) UpdateJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, updateFunc UpdateFn,
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc UpdateFn,
 ) error {
 	j := &Job{
 		id:       jobID,
 		registry: r,
 	}
-	return j.Update(ctx, txn, updateFunc)
+	return j.update(ctx, txn, useReadLock, updateFunc)
 }
 
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
