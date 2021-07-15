@@ -10,6 +10,7 @@ package cliccl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -18,13 +19,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -72,48 +78,117 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	desc, err := backupccl.ReadBackupManifestFromURI(ctx, basepath, security.RootUserName(),
 		externalStorageFromURI, nil)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "fetching backup manifest")
 	}
-	start := timeutil.Unix(0, desc.StartTime.WallTime).Format(time.RFC3339Nano)
-	end := timeutil.Unix(0, desc.EndTime.WallTime).Format(time.RFC3339Nano)
-	fmt.Printf("StartTime: %s (%s)\n", start, desc.StartTime)
-	fmt.Printf("EndTime: %s (%s)\n", end, desc.EndTime)
-	fmt.Printf("DataSize: %d (%s)\n", desc.EntryCounts.DataSize, humanizeutil.IBytes(desc.EntryCounts.DataSize))
-	fmt.Printf("Rows: %d\n", desc.EntryCounts.Rows)
-	fmt.Printf("IndexEntries: %d\n", desc.EntryCounts.IndexEntries)
-	fmt.Printf("FormatVersion: %d\n", desc.FormatVersion)
-	fmt.Printf("ClusterID: %s\n", desc.ClusterID)
-	fmt.Printf("NodeID: %s\n", desc.NodeID)
-	fmt.Printf("BuildInfo: %s\n", desc.BuildInfo.Short())
-	fmt.Printf("Spans:\n")
-	for _, s := range desc.Spans {
-		fmt.Printf("	%s\n", s)
+
+	var meta = backupMetaDisplayMsg(desc)
+	jsonBytes, err := json.MarshalIndent(meta, "" /*prefix*/, "\t" /*indent*/)
+	if err != nil {
+		return errors.Wrapf(err, "marshall backup manifest")
 	}
-	fmt.Printf("Files:\n")
-	for _, f := range desc.Files {
-		fmt.Printf("	%s:\n", f.Path)
-		fmt.Printf("		Span: %s\n", f.Span)
-		fmt.Printf("		Sha512: %0128x\n", f.Sha512)
-		fmt.Printf("		DataSize: %d (%s)\n", f.EntryCounts.DataSize, humanizeutil.IBytes(f.EntryCounts.DataSize))
-		fmt.Printf("		Rows: %d\n", f.EntryCounts.Rows)
-		fmt.Printf("		IndexEntries: %d\n", f.EntryCounts.IndexEntries)
-	}
-	// Note that these descriptors could be from any past version of the cluster,
-	// in case more fields need to be added to the output.
-	fmt.Printf("Descriptors:\n")
-	for i := range desc.Descriptors {
-		d := &desc.Descriptors[i]
-		table, database, _, _ := descpb.FromDescriptor(d)
-		var typeName string
-		if table != nil {
-			typeName = "table"
-		} else if database != nil {
-			typeName = "database"
-		} else {
-			continue
-		}
-		fmt.Printf("	%d: %s (%s)\n",
-			descpb.GetDescriptorID(d), descpb.GetDescriptorName(d), typeName)
-	}
+	s := string(jsonBytes)
+	fmt.Println(s)
 	return nil
+}
+
+type backupMetaDisplayMsg backupccl.BackupManifest
+type backupFileDisplayMsg backupccl.BackupManifest_File
+
+func (f backupFileDisplayMsg) MarshalJSON() ([]byte, error) {
+	fileDisplayMsg := struct {
+		Path         string
+		Span         string
+		DataSize     string
+		IndexEntries int64
+		Rows         int64
+	}{
+		Path:         f.Path,
+		Span:         fmt.Sprint(f.Span),
+		DataSize:     humanizeutil.IBytes(f.EntryCounts.DataSize),
+		IndexEntries: f.EntryCounts.IndexEntries,
+		Rows:         f.EntryCounts.Rows,
+	}
+	return json.Marshal(fileDisplayMsg)
+}
+
+func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
+
+	fileMsg := make([]backupFileDisplayMsg, len(b.Files))
+	for i, file := range b.Files {
+		fileMsg[i] = backupFileDisplayMsg(file)
+	}
+
+	displayMsg := struct {
+		StartTime           string
+		EndTime             string
+		DataSize            string
+		Rows                int64
+		IndexEntries        int64
+		FormatVersion       uint32
+		ClusterID           uuid.UUID
+		NodeID              roachpb.NodeID
+		BuildInfo           string
+		Files               []backupFileDisplayMsg
+		Spans               string
+		DatabaseDescriptors map[descpb.ID]string
+		TableDescriptors    map[descpb.ID]string
+		TypeDescriptors     map[descpb.ID]string
+		SchemaDescriptors   map[descpb.ID]string
+	}{
+		StartTime:           timeutil.Unix(0, b.StartTime.WallTime).Format(time.RFC3339),
+		EndTime:             timeutil.Unix(0, b.EndTime.WallTime).Format(time.RFC3339),
+		DataSize:            humanizeutil.IBytes(b.EntryCounts.DataSize),
+		Rows:                b.EntryCounts.Rows,
+		IndexEntries:        b.EntryCounts.IndexEntries,
+		FormatVersion:       b.FormatVersion,
+		ClusterID:           b.ClusterID,
+		NodeID:              b.NodeID,
+		BuildInfo:           b.BuildInfo.Short(),
+		Files:               fileMsg,
+		Spans:               fmt.Sprint(b.Spans),
+		DatabaseDescriptors: make(map[descpb.ID]string),
+		TableDescriptors:    make(map[descpb.ID]string),
+		TypeDescriptors:     make(map[descpb.ID]string),
+		SchemaDescriptors:   make(map[descpb.ID]string),
+	}
+
+	dbIDToName := make(map[descpb.ID]string)
+	schemaIDToFullyQualifiedName := make(map[descpb.ID]string)
+	schemaIDToFullyQualifiedName[keys.PublicSchemaID] = sessiondata.PublicSchemaName
+	typeIDToFullyQualifiedName := make(map[descpb.ID]string)
+	tableIDToFullyQualifiedName := make(map[descpb.ID]string)
+
+	for i := range b.Descriptors {
+		d := &b.Descriptors[i]
+		id := descpb.GetDescriptorID(d)
+		tableDesc, databaseDesc, typeDesc, schemaDesc := descpb.FromDescriptor(d)
+		if databaseDesc != nil {
+			dbIDToName[id] = descpb.GetDescriptorName(d)
+		} else if schemaDesc != nil {
+			dbName := dbIDToName[schemaDesc.GetParentID()]
+			schemaName := descpb.GetDescriptorName(d)
+			schemaIDToFullyQualifiedName[id] = dbName + "." + schemaName
+		} else if typeDesc != nil {
+			parentSchema := schemaIDToFullyQualifiedName[typeDesc.GetParentSchemaID()]
+			if parentSchema == sessiondata.PublicSchemaName {
+				parentSchema = dbIDToName[typeDesc.GetParentID()] + "." + parentSchema
+			}
+			typeName := descpb.GetDescriptorName(d)
+			typeIDToFullyQualifiedName[id] = parentSchema + "." + typeName
+		} else if tableDesc != nil {
+			tbDesc := tabledesc.NewBuilder(tableDesc).BuildImmutable()
+			parentSchema := schemaIDToFullyQualifiedName[tbDesc.GetParentSchemaID()]
+			if parentSchema == sessiondata.PublicSchemaName {
+				parentSchema = dbIDToName[tableDesc.GetParentID()] + "." + parentSchema
+			}
+			tableName := descpb.GetDescriptorName(d)
+			tableIDToFullyQualifiedName[id] = parentSchema + "." + tableName
+		}
+	}
+	displayMsg.DatabaseDescriptors = dbIDToName
+	displayMsg.TableDescriptors = tableIDToFullyQualifiedName
+	displayMsg.SchemaDescriptors = schemaIDToFullyQualifiedName
+	displayMsg.TypeDescriptors = typeIDToFullyQualifiedName
+
+	return json.Marshal(displayMsg)
 }
