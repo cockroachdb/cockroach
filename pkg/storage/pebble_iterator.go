@@ -362,8 +362,6 @@ func (p *pebbleIterator) Next() {
 // NextEngineKey implements the Engineterator interface.
 func (p *pebbleIterator) NextEngineKey() (valid bool, err error) {
 	ok := p.iter.Next()
-	// NB: A Pebble Iterator always returns ok==false when an error is
-	// present.
 	if ok {
 		return true, nil
 	}
@@ -510,8 +508,6 @@ func (p *pebbleIterator) Prev() {
 // PrevEngineKey implements the EngineIterator interface.
 func (p *pebbleIterator) PrevEngineKey() (valid bool, err error) {
 	ok := p.iter.Prev()
-	// NB: A Pebble Iterator always returns ok==false when an error is
-	// present.
 	if ok {
 		return true, nil
 	}
