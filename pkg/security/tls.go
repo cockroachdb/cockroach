@@ -13,6 +13,8 @@ package security
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 )
@@ -117,13 +119,21 @@ func newUIClientTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, erro
 // passed-in certificate and optional CA certificate.
 func newBaseTLSConfigWithCertificate(
 	settings TLSSettings, certPEM, keyPEM, caPEM []byte,
-) (*tls.Config, error) {
+) (cfg *tls.Config, resErr error) {
+	defer func() {
+		// This is to work around https://github.com/golang/go/issues/42554 until
+		// this build of CockroachDB is using Go 1.15.5.
+		if r := recover(); r != nil && strings.Contains(fmt.Sprint(r), "index out of range") {
+			resErr = errors.CombineErrors(resErr, errors.Newf("panic during key load: %v", r))
+		}
+	}()
+
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg, err := newBaseTLSConfig(settings, caPEM)
+	cfg, err = newBaseTLSConfig(settings, caPEM)
 	if err != nil {
 		return nil, err
 	}
