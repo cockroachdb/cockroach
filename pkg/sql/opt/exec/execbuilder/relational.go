@@ -791,6 +791,11 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
+	if b.forceForUpdateLocking {
+		b.forceForUpdateLocking = false
+		defer func() { b.forceForUpdateLocking = true }()
+	}
+
 	projections := prj.Projections
 	if len(projections) == 0 {
 		// We have only pass-through columns.
