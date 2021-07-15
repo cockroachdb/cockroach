@@ -11,3 +11,7 @@
 // Package distoss embeds the assets for the OSS version of the web UI into the
 // Cockroach binary.
 package distoss
+
+import "github.com/cockroachdb/cockroach/pkg/ui"
+
+func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }

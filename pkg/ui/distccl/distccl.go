@@ -9,3 +9,7 @@
 // Package distccl embeds the assets for the CCL version of the web UI into the
 // Cockroach binary.
 package distccl
+
+import "github.com/cockroachdb/cockroach/pkg/ui"
+
+func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }
