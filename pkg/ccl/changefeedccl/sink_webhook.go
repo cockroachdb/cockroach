@@ -78,10 +78,16 @@ type webhookSink struct {
 	cancelFunc  func()
 	eventsChans []chan []byte
 	inflight    *inflightTracker
+	retryCfg    retryConfig
 }
 
 func makeWebhookSink(
-	ctx context.Context, u sinkURL, opts map[string]string, parallelism int, acc mon.BoundAccount,
+	ctx context.Context,
+	u sinkURL,
+	opts map[string]string,
+	parallelism int,
+	acc mon.BoundAccount,
+	retryCfg retryConfig,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
@@ -131,6 +137,7 @@ func makeWebhookSink(
 		authHeader:  opts[changefeedbase.OptWebhookAuthHeader],
 		cancelFunc:  cancel,
 		parallelism: parallelism,
+		retryCfg:    retryCfg,
 	}
 
 	var err error
@@ -201,6 +208,18 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 	return client, nil
 }
 
+type retryConfig struct {
+	backoff    time.Duration
+	maxRetries uint
+}
+
+func defaultRetryConfig() retryConfig {
+	return retryConfig{
+		backoff:    500 * time.Millisecond,
+		maxRetries: 3,
+	}
+}
+
 // defaultWorkerCount() is the number of CPU's on the machine
 func defaultWorkerCount() int {
 	return system.NumCPU()
@@ -225,7 +244,7 @@ func (s *webhookSink) workerLoop(workerCh chan []byte) {
 		case <-s.ctx.Done():
 			return
 		case msg := <-workerCh:
-			err := s.sendMessage(s.ctx, msg)
+			err := s.sendMessageWithRetries(s.ctx, msg)
 			s.inflight.maybeSetError(err)
 			// reduce inflight count by one and reduce memory counter
 			s.inflight.FinishRequest(s.ctx, int64(len(msg)))
@@ -236,6 +255,26 @@ func (s *webhookSink) workerLoop(workerCh chan []byte) {
 func (s *webhookSink) Dial() error {
 	s.setupWorkers()
 	return nil
+}
+
+func (s *webhookSink) sendMessageWithRetries(ctx context.Context, reqBody []byte) error {
+	var backoffTime time.Duration
+	var i uint
+	var err error
+	for i = 0; i <= s.retryCfg.maxRetries; i++ {
+		time.Sleep(backoffTime)
+		err = s.sendMessage(ctx, reqBody)
+		if err != nil {
+			if i == 0 {
+				backoffTime = s.retryCfg.backoff
+			} else {
+				backoffTime *= 2
+			}
+		} else {
+			break
+		}
+	}
+	return err
 }
 
 func (s *webhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
@@ -395,7 +434,7 @@ func (s *webhookSink) EmitResolvedTimestamp(
 	// do worker logic directly here instead (there's no point using workers for
 	// resolved timestamps since there are no keys and everything must be
 	// in order)
-	err = s.sendMessage(ctx, j)
+	err = s.sendMessageWithRetries(ctx, j)
 	s.inflight.maybeSetError(err)
 	s.inflight.FinishRequest(ctx, int64(len(j)))
 	return nil

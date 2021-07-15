@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +52,7 @@ func setupWebhookSinkWithDetails(details jobspb.ChangefeedDetails, parallelism i
 		cluster.MakeTestingClusterSettings(),
 	)
 
-	sinkSrc, err := makeWebhookSink(context.Background(), sinkURL{URL: u}, details.Opts, parallelism, memMon.MakeBoundAccount())
+	sinkSrc, err := makeWebhookSink(context.Background(), sinkURL{URL: u}, details.Opts, parallelism, memMon.MakeBoundAccount(), defaultRetryConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -315,6 +317,73 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 			t.Fatal(err)
 		}
 		err = sinkSrcWrongCreds.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkDest.Close()
+	}
+
+	// run tests with parallelism from 1-16 (1,2,4,8,16)
+	for i := 1; i <= 16; i *= 2 {
+		webhookSinkTestfn(i)
+	}
+}
+
+func TestWebhookSinkRetriesRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	webhookSinkTestfn := func(parallelism int) {
+		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkDest.SetStatusCode(http.StatusInternalServerError)
+
+		opts := getGenericWebhookSinkOptions()
+
+		sinkDestHost, err := url.Parse(sinkDest.URL())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		params := sinkDestHost.Query()
+		params.Set(changefeedbase.SinkParamCACert, certEncoded)
+		sinkDestHost.RawQuery = params.Encode()
+
+		details := jobspb.ChangefeedDetails{
+			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
+			Opts:    opts,
+		}
+
+		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		retryCfg := defaultRetryConfig()
+		timeBeforeRetries := timeutil.Now()
+		err = sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"),
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = sinkSrc.Flush(context.Background())
+		timeForRetries := timeutil.Since(timeBeforeRetries)
+		require.EqualError(t, err, "500 Internal Server Error: ")
+		// ensure that failures are retried the default maximum number of times
+		require.Equal(t, retryCfg.maxRetries+1, uint(sinkDest.GetNumCalls()))
+
+		// total backoff time with max retries formula is backoffTime * (2^maxRetries - 1)
+		totalBackoffTime := retryCfg.backoff * time.Duration((2^retryCfg.maxRetries)-1)
+		require.True(t, timeForRetries >= totalBackoffTime,
+			fmt.Sprintf("expected total retry time to be at least: %v, got %v", totalBackoffTime, timeForRetries))
+
+		err = sinkSrc.Close()
 		if err != nil {
 			t.Fatal(err)
 		}

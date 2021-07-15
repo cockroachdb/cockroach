@@ -23,9 +23,9 @@ type MockWebhookSink struct {
 	username, password string
 	server             *httptest.Server
 	mu                 struct {
-		statusCode int
-		rows       []string
 		syncutil.Mutex
+		statusCode, numCalls int
+		rows                 []string
 	}
 }
 
@@ -69,6 +69,13 @@ func makeMockWebhookSink() *MockWebhookSink {
 // URL returns the http address of this mock Webhook sink.
 func (s *MockWebhookSink) URL() string {
 	return s.server.URL
+}
+
+// GetNumCalls returns how many times the sink handler has been invoked.
+func (s *MockWebhookSink) GetNumCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.numCalls
 }
 
 // SetStatusCode sets the HTTP status code to use when responding to a request.
@@ -138,8 +145,11 @@ func (s *MockWebhookSink) publish(hw http.ResponseWriter, hr *http.Request) erro
 		return err
 	}
 	s.mu.Lock()
-	s.mu.rows = append(s.mu.rows, string(row))
-	s.mu.Unlock()
+	s.mu.numCalls++
+	if s.mu.statusCode >= http.StatusOK && s.mu.statusCode < http.StatusMultipleChoices {
+		s.mu.rows = append(s.mu.rows, string(row))
+	}
 	hw.WriteHeader(s.mu.statusCode)
+	s.mu.Unlock()
 	return nil
 }
