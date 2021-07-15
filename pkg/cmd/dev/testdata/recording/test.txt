@@ -60,7 +60,21 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under stress -maxtime=10s --test_filter='TestStartChild*' --test_output errors
+bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev @com_github_cockroachdb_stress//:stress
+----
+----
+ok
+----
+----
+
+bazel info bazel-bin --color=no --config=dev
+----
+----
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
+----
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/external/com_github_cockroachdb_stress/stress_/stress --test_filter='TestStartChild*' --test_output errors
 ----
 ----
 //pkg/util/tracing:tracing_test                                          [0m[32mPASSED[0m in 12.3s
@@ -69,7 +83,21 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
-bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under stress -maxtime=10s --test_filter='TestStartChild*' --test_output all --test_arg -test.v
+bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev @com_github_cockroachdb_stress//:stress
+----
+----
+ok
+----
+----
+
+bazel info bazel-bin --color=no --config=dev
+----
+----
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
+----
+----
+
+bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/external/com_github_cockroachdb_stress/stress_/stress -maxtime=10s --test_filter='TestStartChild*' --test_output all --test_arg -test.v
 ----
 ----
 ==================== Test output for //pkg/util/tracing:tracing_test:
@@ -84,3 +112,27 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
+bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/testutils:testutils_test --test_timeout=10 --test_output errors
+----
+----
+[32mLoading:[0m 
+[32mLoading:[0m 0 packages loaded
+[32mINFO: [0mBuild option --test_timeout has changed, discarding analysis cache.
+[32mAnalyzing:[0m target //pkg/testutils:testutils_test (0 packages loaded, 0 targets configured)
+[32mINFO: [0mAnalyzed target //pkg/testutils:testutils_test (0 packages loaded, 11870 targets configured).
+[32mINFO: [0mFound 1 test target...
+[32m[0 / 2][0m [Prepa] BazelWorkspaceStatusAction stable-status.txt
+[32m[1,220 / 1,221][0m GoLink pkg/testutils/testutils_test_/testutils_test; 0s darwin-sandbox
+[32m[1,221 / 1,222][0m Testing //pkg/testutils:testutils_test; 0s darwin-sandbox
+Target //pkg/testutils:testutils_test up-to-date:
+  _bazel/bin/pkg/testutils/testutils_test_/testutils_test
+[32mINFO: [0mElapsed time: 4.336s, Critical Path: 2.79s
+[32mINFO: [0m3 processes: 1 internal, 2 darwin-sandbox.
+[32mINFO:[0m Build completed successfully, 3 total actions
+//pkg/testutils:testutils_test                                           [0m[32mPASSED[0m in 0.8s
+
+Executed 1 out of 1 test: 1 test passes.
+[32mINFO:[0m Build completed successfully, 3 total actions
+[0m
+----
+----

@@ -94,7 +94,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		if ok && cachedData.PrepareMetadata != nil {
 			pm := cachedData.PrepareMetadata
 			// Check that the type hints match (the type hints affect type checking).
-			if !pm.TypeHints.Equals(p.semaCtx.Placeholders.TypeHints) {
+			if !pm.TypeHints.Identical(p.semaCtx.Placeholders.TypeHints) {
 				opc.log(ctx, "query cache hit but type hints don't match")
 			} else {
 				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog)

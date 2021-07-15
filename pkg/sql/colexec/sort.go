@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -211,6 +212,15 @@ type sortOp struct {
 	// state is the current state of the sort.
 	state sortState
 
+	// The fields in the scratch are only used when we're sorting on more than
+	// one column and are mostly useful in the scenario when this sortOp is
+	// being used by the external sorter.
+	scratch struct {
+		partitions []int
+		// partitionsCol is used only in the global sort (i.e. not sort chunks).
+		partitionsCol []bool
+	}
+
 	output coldata.Batch
 
 	exported int
@@ -350,7 +360,13 @@ func (p *sortOp) sort() {
 			return
 		}
 		sorters = sorters[1:]
-		partitionsCol = make([]bool, spooledTuples)
+		sizeBefore := memsize.Bool * int64(cap(p.scratch.partitionsCol))
+		// We want to make sure that partitionsCol is zeroed out if we're
+		// reusing it (and this method accomplishes that).
+		p.scratch.partitionsCol = colexecutils.MaybeAllocateBoolArray(p.scratch.partitionsCol, spooledTuples)
+		partitionsCol = p.scratch.partitionsCol
+		sizeAfter := memsize.Bool * int64(cap(p.scratch.partitionsCol))
+		p.allocator.AdjustMemoryUsage(sizeAfter - sizeBefore)
 	} else {
 		// There are at least two partitions already, so the first column needs the
 		// same special treatment as all others. The general sequence is as
@@ -386,7 +402,6 @@ func (p *sortOp) sort() {
 	// 2 a
 	// 2 b
 
-	partitions := make([]int, 0, 16)
 	for i, sorter := range sorters {
 		if !omitNextPartitioning {
 			// We partition the previous column by running an ordered distinct operation
@@ -400,10 +415,13 @@ func (p *sortOp) sort() {
 		}
 		// Convert the distinct vector into a selection vector - a vector of indices
 		// that were true in the distinct vector.
-		partitions = boolVecToSel64(partitionsCol, partitions[:0])
+		sizeBefore := memsize.Int * int64(cap(p.scratch.partitions))
+		p.scratch.partitions = boolVecToSel(partitionsCol, p.scratch.partitions[:0])
+		sizeAfter := memsize.Int * int64(cap(p.scratch.partitions))
+		p.allocator.AdjustMemoryUsage(sizeAfter - sizeBefore)
 		// For each partition (set of tuples that are identical in all of the sort
 		// columns we've seen so far), sort based on the new column.
-		sorter.sortPartitions(partitions)
+		sorter.sortPartitions(p.scratch.partitions)
 	}
 }
 

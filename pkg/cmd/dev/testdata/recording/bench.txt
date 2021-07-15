@@ -1,0 +1,15 @@
+git grep -l ^func Benchmark -- pkg/util/*_test.go
+----
+pkg/util/topk_test.go
+pkg/util/uuid/benchmark_fast_test.go
+pkg/util/uuid/codec_test.go
+pkg/util/uuid/generator_test.go
+
+bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/util:util_test -- -test.bench=.
+----
+
+bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/util/uuid:uuid_test -- -test.bench=.
+----
+
+bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/sql/parser:parser_test -- -test.bench=BenchmarkParse
+----
