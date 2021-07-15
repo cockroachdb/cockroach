@@ -457,14 +457,9 @@ func (w *windower) processPartition(
 				case execinfrapb.WindowerSpec_Frame_ROWS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				case execinfrapb.WindowerSpec_Frame_RANGE:
-					datum, rem, err := rowenc.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type, startBound.TypedOffset)
+					datum, err := execinfra.DecodeDatum(&w.datumAlloc, startBound.OffsetType.Type, startBound.TypedOffset)
 					if err != nil {
-						return errors.NewAssertionErrorWithWrappedErrf(err,
-							"error decoding %d bytes", errors.Safe(len(startBound.TypedOffset)))
-					}
-					if len(rem) != 0 {
-						return errors.AssertionFailedf(
-							"%d trailing bytes in encoded value", errors.Safe(len(rem)))
+						return err
 					}
 					frameRun.StartBoundOffset = datum
 				case execinfrapb.WindowerSpec_Frame_GROUPS:
@@ -481,14 +476,9 @@ func (w *windower) processPartition(
 					case execinfrapb.WindowerSpec_Frame_ROWS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					case execinfrapb.WindowerSpec_Frame_RANGE:
-						datum, rem, err := rowenc.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type, endBound.TypedOffset)
+						datum, err := execinfra.DecodeDatum(&w.datumAlloc, endBound.OffsetType.Type, endBound.TypedOffset)
 						if err != nil {
-							return errors.NewAssertionErrorWithWrappedErrf(err,
-								"error decoding %d bytes", errors.Safe(len(endBound.TypedOffset)))
-						}
-						if len(rem) != 0 {
-							return errors.AssertionFailedf(
-								"%d trailing bytes in encoded value", errors.Safe(len(rem)))
+							return err
 						}
 						frameRun.EndBoundOffset = datum
 					case execinfrapb.WindowerSpec_Frame_GROUPS:
