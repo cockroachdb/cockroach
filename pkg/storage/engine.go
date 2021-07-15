@@ -808,6 +808,14 @@ type Batch interface {
 // *pebble.Metrics struct, which has its own documentation.
 type Metrics struct {
 	*pebble.Metrics
+	// WriteStallCount counts the number of times Pebble intentionally delayed
+	// incoming writes. Currently, the only two reasons for this to happen are:
+	// - "memtable count limit reached"
+	// - "L0 file count limit exceeded"
+	//
+	// We do not split this metric across these two reasons, but they can be
+	// distinguished in the pebble logs.
+	WriteStallCount int64
 	// DiskSlowCount counts the number of times Pebble records disk slowness.
 	DiskSlowCount int64
 	// DiskStallCount counts the number of times Pebble observes slow writes

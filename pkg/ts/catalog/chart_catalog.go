@@ -2279,6 +2279,10 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Bytes",
 			},
+			{
+				Title:   "Stalls",
+				Metrics: []string{"rocksdb.write-stalls"},
+			},
 		},
 	},
 	{
