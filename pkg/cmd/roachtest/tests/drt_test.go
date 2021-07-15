@@ -61,12 +61,14 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 		retVal model.SampleValue
 	}
 	testCases := []struct {
-		desc              string
-		chaosEvents       []ChaosEvent
-		ops               []string
-		workloadInstances []workloadInstance
-		mockPromQueries   []expectPromQuery
-		expectedErrors    []string
+		desc                         string
+		chaosEvents                  []ChaosEvent
+		ops                          []string
+		workloadInstances            []workloadInstance
+		mockPromQueries              []expectPromQuery
+		expectedErrors               []string
+		allowZeroSuccessDuringUptime bool
+		maxErrorsDuringUptime        int
 	}{
 		{
 			desc: "everything is good",
@@ -164,6 +166,103 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 			},
 		},
 		{
+			desc: "tolerate errors and no successes during uptime",
+			chaosEvents: []ChaosEvent{
+				{Type: ChaosEventTypeStart, Time: startTime.Add(0 * time.Second)},
+
+				// Shutdown and restart region1.
+				{Type: ChaosEventTypePreShutdown, Time: firstPreShutdown, Target: region1},
+				{Type: ChaosEventTypeShutdownComplete, Time: firstShutdownComplete, Target: region1},
+				{Type: ChaosEventTypePreStartup, Time: firstPreStartup, Target: region1},
+				{Type: ChaosEventTypeStartupComplete, Time: firstStartupComplete, Target: region1},
+
+				// Shutdown and restart region2.
+				{Type: ChaosEventTypePreShutdown, Time: secondPreShutdown, Target: region2},
+				{Type: ChaosEventTypeShutdownComplete, Time: secondShutdownComplete, Target: region2},
+				{Type: ChaosEventTypePreStartup, Time: secondPreStartup, Target: region2},
+				{Type: ChaosEventTypeStartupComplete, Time: secondStartupComplete, Target: region2},
+
+				{Type: ChaosEventTypeEnd, Time: startTime.Add(600 * time.Second)},
+			},
+			allowZeroSuccessDuringUptime: true,
+			maxErrorsDuringUptime:        5,
+			ops:                          []string{metricA, metricB},
+			mockPromQueries: []expectPromQuery{
+				// Restart region1.
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000},
+
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 5}, // test that it still works with <= maxErrorsDuringUptime errors
+
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000},
+
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 0},
+
+				// Shutdown region2.
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 100},
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 100}, // no success should still succeed as allowZeroSuccessDuringUptime = true
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
+
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 100},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
+
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 100},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterFirstStartupComplete, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
+
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 100},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterFirstStartupComplete, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeSecondPreShutdown, retVal: 1000},
+
+				// Restart region2.
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeSecondPreStartup, retVal: 10000},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeBeforeSecondPreStartup, retVal: 1000},
+
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeSecondPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeSecondPreStartup, retVal: 10000},
+
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeSecondPreStartup, retVal: 10000},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeSecondPreStartup, retVal: 1000},
+
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeSecondPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterSecondShutdownComplete, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeSecondPreStartup, retVal: 10000},
+			},
+			workloadInstances: []workloadInstance{
+				{
+					nodes:          region1,
+					prometheusPort: portRegion1,
+				},
+				{
+					nodes:          region2,
+					prometheusPort: portRegion2,
+				},
+			},
+		},
+		{
 			desc: "unexpected node errors during shutdown",
 			chaosEvents: []ChaosEvent{
 				{Type: ChaosEventTypeStart, Time: startTime.Add(0 * time.Second)},
@@ -197,7 +296,7 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
 				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
 				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
-				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000}, // should have had errors during shutdown.
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000}, // should have had no errors during shutdown.
 			},
 			workloadInstances: []workloadInstance{
 				{
@@ -211,11 +310,66 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 			},
 			expectedErrors: []string{
 				fmt.Sprintf(
-					`error at from 2020-12-25T00:01:45Z, to 2020-12-25T00:02:50Z on metric %s: expected 0 errors, found from 0.000000, to 1000.000000`,
+					`error at from 2020-12-25T00:01:45Z, to 2020-12-25T00:02:50Z on metric %s: expected <=0 errors, found from 0.000000, to 1000.000000`,
 					makeMetric(metricB, "error", portRegion2),
 				),
 			},
 		},
+		{
+			desc: "unexpected node errors during shutdown with tolerance",
+			chaosEvents: []ChaosEvent{
+				{Type: ChaosEventTypeStart, Time: startTime.Add(0 * time.Second)},
+
+				// Shutdown and restart region1.
+				{Type: ChaosEventTypePreShutdown, Time: firstPreShutdown, Target: region1},
+				{Type: ChaosEventTypeShutdownComplete, Time: firstShutdownComplete, Target: region1},
+				{Type: ChaosEventTypePreStartup, Time: firstPreStartup, Target: region1},
+				{Type: ChaosEventTypeStartupComplete, Time: firstStartupComplete, Target: region1},
+
+				{Type: ChaosEventTypeEnd, Time: startTime.Add(0 * time.Second)},
+			},
+			ops: []string{metricA, metricB},
+			mockPromQueries: []expectPromQuery{
+				// Restart region1.
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
+				{q: makeMetric(metricA, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
+				{q: makeMetric(metricA, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000},
+
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
+				{q: makeMetric(metricA, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
+				{q: makeMetric(metricA, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 0},
+
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 100},
+				{q: makeMetric(metricB, "success", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 100},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeAfterFirstShutdownComplete, retVal: 10},
+				{q: makeMetric(metricB, "error", portRegion1), t: scrapeBeforeFirstPreStartup, retVal: 1000},
+
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 100},
+				{q: makeMetric(metricB, "success", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 1000},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeAfterFirstShutdownComplete, retVal: 0},
+				{q: makeMetric(metricB, "error", portRegion2), t: scrapeBeforeFirstPreStartup, retVal: 6}, // should have had <= 5 errors during shutdown.
+			},
+			maxErrorsDuringUptime: 5,
+			workloadInstances: []workloadInstance{
+				{
+					nodes:          region1,
+					prometheusPort: portRegion1,
+				},
+				{
+					nodes:          region2,
+					prometheusPort: portRegion2,
+				},
+			},
+			expectedErrors: []string{
+				fmt.Sprintf(
+					`error at from 2020-12-25T00:01:45Z, to 2020-12-25T00:02:50Z on metric %s: expected <=5 errors, found from 0.000000, to 6.000000`,
+					makeMetric(metricB, "error", portRegion2),
+				),
+			},
+		},
+
 		{
 			desc: "unexpected node successes during shutdown",
 			chaosEvents: []ChaosEvent{
@@ -344,7 +498,7 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 					makeMetric(metricA, "success", portRegion1),
 				),
 				fmt.Sprintf(
-					`error at from 2020-12-25T00:03:15Z, to 2020-12-25T00:06:20Z on metric %s: expected 0 errors, found from 1000.000000, to 10000.000000`,
+					`error at from 2020-12-25T00:03:15Z, to 2020-12-25T00:06:20Z on metric %s: expected <=0 errors, found from 1000.000000, to 10000.000000`,
 					makeMetric(metricB, "error", portRegion2),
 				),
 			},
@@ -358,9 +512,12 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 
 			ch := make(chan ChaosEvent)
 			ep := tpccChaosEventProcessor{
-				workloadInstances: tc.workloadInstances,
-				ops:               tc.ops,
-				ch:                ch,
+				workloadInstances:            tc.workloadInstances,
+				ops:                          tc.ops,
+				ch:                           ch,
+				allowZeroSuccessDuringUptime: tc.allowZeroSuccessDuringUptime,
+				maxErrorsDuringUptime:        tc.maxErrorsDuringUptime,
+
 				promClient: func(ctrl *gomock.Controller) promClient {
 					c := NewMockpromClient(ctrl)
 					e := c.EXPECT()
