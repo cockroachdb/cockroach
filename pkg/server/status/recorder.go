@@ -254,7 +254,8 @@ func (mr *MetricsRecorder) scrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 			log.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
 		}
 	}
-	includeChildMetrics := childMetricsEnabled.Get(&mr.settings.SV)
+	// TODO(tbg): clean this up.
+	includeChildMetrics := true || childMetricsEnabled.Get(&mr.settings.SV)
 	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics)
 	for _, reg := range mr.mu.storeRegistries {
 		pm.ScrapeRegistry(reg, includeChildMetrics)
