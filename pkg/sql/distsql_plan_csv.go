@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -154,6 +155,9 @@ func presplitTableBoundaries(
 	cfg *ExecutorConfig,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 ) error {
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, "import-pre-splitting-table-boundaries")
+	defer span.Finish()
 	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, tbl := range tables {
 		// TODO(ajwerner): Consider passing in the wrapped descriptors.
