@@ -2325,6 +2325,64 @@ INSERT INTO sc.tb2 VALUES ('hello');
 		sqlDB.ExpectErr(t, `pq: schema "unused" already exists`, `USE d; CREATE SCHEMA unused`)
 	})
 
+	// Tests backing up and restoring all tables in requested user defined
+	// schemas.
+	t.Run("all-tables-in-requested-schema", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `
+CREATE DATABASE foo;
+USE foo;
+CREATE SCHEMA sc;
+CREATE TABLE sc.tb1 (x INT);
+INSERT INTO sc.tb1 VALUES (1);
+CREATE TABLE tb2 (y INT);
+INSERT INTO tb2 VALUES (1);
+
+CREATE DATABASE bar;
+CREATE SCHEMA bar.bar;
+CREATE TABLE bar.bar.baz (x INT);
+INSERT INTO bar.bar.baz VALUES (1);
+CREATE TABLE bar.baz (x INT);
+INSERT INTO bar.baz VALUES (1);
+
+CREATE DATABASE baz;
+CREATE SCHEMA baz.baz;
+CREATE TABLE baz.baz.tb1 (x INT);
+INSERT INTO baz.baz.tb1 VALUES (1);
+CREATE TABLE baz.tb2 (y INT);
+INSERT INTO baz.tb2 VALUES (1);
+`)
+
+		sqlDB.Exec(t, `BACKUP TABLE foo.sc.*, public.* TO 'nodelocal://0/test/foo'`)
+		sqlDB.Exec(t, `BACKUP TABLE bar.bar.* TO 'nodelocal://0/test/bar'`)
+		sqlDB.Exec(t, `BACKUP TABLE baz.* TO 'nodelocal://0/test/baz'`)
+
+		sqlDB.Exec(t, `DROP TABLE sc.tb1`)
+		sqlDB.Exec(t, `DROP TABLE tb2`)
+		sqlDB.Exec(t, `DROP TABLE bar.bar.baz`)
+		sqlDB.Exec(t, `DROP TABLE bar.baz`)
+		sqlDB.Exec(t, `DROP TABLE baz.baz.tb1`)
+		sqlDB.Exec(t, `DROP TABLE baz.tb2`)
+
+		sqlDB.Exec(t, `RESTORE TABLE foo.sc.* FROM 'nodelocal://0/test/foo'`)
+		sqlDB.Exec(t, `RESTORE TABLE public.* FROM 'nodelocal://0/test/foo'`)
+		sqlDB.Exec(t, `RESTORE TABLE bar.bar.* FROM 'nodelocal://0/test/bar'`)
+		sqlDB.Exec(t, `RESTORE TABLE baz.* FROM 'nodelocal://0/test/baz'`)
+
+		sqlDB.CheckQueryResults(t, `SELECT * FROM foo.sc.tb1`, [][]string{{"1"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM tb2`, [][]string{{"1"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM bar.bar.baz`, [][]string{{"1"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM baz.baz.tb1`, [][]string{{"1"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM baz.tb2`, [][]string{{"1"}})
+
+		// Tables in bar.baz should not have been backed up
+		sqlDB.ExpectErr(t,
+			`pq: failed to resolve targets in the BACKUP location specified by the RESTORE stmt, use SHOW BACKUP to find correct targets: table "bar.baz" does not exist`,
+			`RESTORE TABLE bar.baz FROM 'nodelocal://0/test/bar'`)
+	})
+
 	// Test restoring tables with user defined schemas when restore schemas are
 	// not being remapped.
 	t.Run("no-remap", func(t *testing.T) {
