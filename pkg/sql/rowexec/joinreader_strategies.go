@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -134,6 +135,8 @@ type joinReaderNoOrderingStrategy struct {
 	}
 
 	groupingState *inputBatchGroupingState
+
+	memAcc *mon.BoundAccount
 }
 
 // getLookupRowsBatchSizeHint returns the batch size for the join reader no
@@ -155,7 +158,7 @@ func (s *joinReaderNoOrderingStrategy) generateRemoteSpans() (roachpb.Spans, err
 		return nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
 	}
 	s.remoteSpansGenerated = true
-	return gen.generateRemoteSpans(s.inputRows)
+	return gen.generateRemoteSpans(s.Ctx, s.inputRows)
 }
 
 func (s *joinReaderNoOrderingStrategy) generatedRemoteSpans() bool {
@@ -168,7 +171,7 @@ func (s *joinReaderNoOrderingStrategy) processLookupRows(
 	s.inputRows = rows
 	s.remoteSpansGenerated = false
 	s.emitState.unmatchedInputRowIndicesInitialized = false
-	return s.generateSpans(s.inputRows)
+	return s.generateSpans(s.Ctx, s.inputRows)
 }
 
 func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
@@ -308,6 +311,8 @@ type joinReaderIndexJoinStrategy struct {
 		processingLookupRow bool
 		lookedUpRow         rowenc.EncDatumRow
 	}
+
+	memAcc *mon.BoundAccount
 }
 
 // getLookupRowsBatchSizeHint returns the batch size for the join reader index
@@ -335,7 +340,7 @@ func (s *joinReaderIndexJoinStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
 	s.inputRows = rows
-	return s.generateSpans(s.inputRows)
+	return s.generateSpans(s.Ctx, s.inputRows)
 }
 
 func (s *joinReaderIndexJoinStrategy) processLookedUpRow(
@@ -443,6 +448,8 @@ type joinReaderOrderingStrategy struct {
 	// always be of size 1 (real input batching only happens when this join is
 	// the second join in paired-joins).
 	outputGroupContinuationForLeftRow bool
+
+	memAcc *mon.BoundAccount
 }
 
 func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
@@ -461,7 +468,7 @@ func (s *joinReaderOrderingStrategy) generateRemoteSpans() (roachpb.Spans, error
 		return nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
 	}
 	s.remoteSpansGenerated = true
-	return gen.generateRemoteSpans(s.inputRows)
+	return gen.generateRemoteSpans(s.Ctx, s.inputRows)
 }
 
 func (s *joinReaderOrderingStrategy) generatedRemoteSpans() bool {
@@ -480,12 +487,17 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 			s.inputRowIdxToLookedUpRowIndices[i] = s.inputRowIdxToLookedUpRowIndices[i][:0]
 		}
 	} else {
+		beforeSize := s.mapSize()
 		s.inputRowIdxToLookedUpRowIndices = make([][]int, len(rows))
+		afterSize := s.mapSize()
+		if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
+			return nil, err
+		}
 	}
 
 	s.inputRows = rows
 	s.remoteSpansGenerated = false
-	return s.generateSpans(s.inputRows)
+	return s.generateSpans(s.Ctx, s.inputRows)
 }
 
 func (s *joinReaderOrderingStrategy) processLookedUpRow(
@@ -508,6 +520,7 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	}
 
 	// Update our map from input rows to looked up rows.
+	beforeSize := s.mapSize()
 	for _, inputRowIdx := range matchingInputRowIndices {
 		if !s.isPartialJoin {
 			s.inputRowIdxToLookedUpRowIndices[inputRowIdx] = append(
@@ -532,6 +545,12 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 			s.groupingState.setMatched(inputRowIdx)
 			s.inputRowIdxToLookedUpRowIndices[inputRowIdx] = partialJoinSentinel
 		}
+	}
+
+	// Perform memory accounting.
+	afterSize := s.mapSize()
+	if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
+		return jrStateUnknown, err
 	}
 
 	return jrPerformingLookup, nil
@@ -630,4 +649,18 @@ func (s *joinReaderOrderingStrategy) close(ctx context.Context) {
 	if s.lookedUpRows != nil {
 		s.lookedUpRows.Close(ctx)
 	}
+}
+
+// mapSize returns the size of inputRowIdxToLookedUpRowIndices in bytes, to
+// be used for memory accounting.
+func (s *joinReaderOrderingStrategy) mapSize() int64 {
+	// Account for the memory used by the outer slice.
+	size := sliceOfIntsOverhead * int64(cap(s.inputRowIdxToLookedUpRowIndices))
+
+	// Account for the memory used by the inner slices.
+	for i := range s.inputRowIdxToLookedUpRowIndices {
+		size += sizeOfInt * int64(cap(s.inputRowIdxToLookedUpRowIndices[i]))
+	}
+
+	return size
 }
