@@ -1527,3 +1527,7 @@ func (c *ContentionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
 func (c *ContentionEvent) String() string {
 	return redact.StringWithoutMarkers(c)
 }
+
+func (s SpanConfig) IsEmpty() bool {
+	return s.Equal(SpanConfig{})
+}

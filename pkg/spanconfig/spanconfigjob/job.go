@@ -70,7 +70,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			time.Sleep(1 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
 	}
 }
