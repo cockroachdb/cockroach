@@ -38,6 +38,7 @@ func storageConfigFromTempStorageConfigAndStoreSpec(
 	return base.StorageConfig{
 		Attrs:             roachpb.Attributes{},
 		Dir:               config.Path,
+		BallastSize:       0, // redundant with primary store ballast
 		MaxSize:           0, // doesn't matter for temp storage - it's not enforced in any way.
 		Settings:          config.Settings,
 		UseFileRegistry:   spec.UseFileRegistry,
