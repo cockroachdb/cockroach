@@ -55,11 +55,13 @@ regions: <hidden>
   KV contention time: 0µs
   KV rows read: 2,001
   KV bytes read: 16 KiB
+  MVCC step count: 0
+  MVCC seek count: 0
   missing stats
   table: a@primary
   spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMFO8zAQhO__U1hz9i8SDhx8qkBFqgoUtRUXlIMbr4ql1A7ejaCK8li8AE-GErcHhJA4zjfeWe_04NcGBpv53fxmq6y6Xa_ulYVGiI4e7IEY5hklKo02xZqYYxpRPz1YuHeYQsOHtpMRVxp1TATTQ7w0BIOt3TW0JusoXRTQcCTWN1OsnbXJH2w6QmPT2sBG_YfGqhOjZiU0lk9K_IGMKj4_OOs6BqEgPoYfVopvrBJZZ9SlLopTwO4odMbllVr6a2jsrNQvxCp20o7bxo9N42eQA6pBI5PTcSx2TzDloP9ewJq4jYHp2-2_JRdDpUFuT7lkjl2q6THFelqT5Wqam4AjluyWWSxCtoZq-PcVAAD__yPumVo=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkcFq40AQRO_7FU2dZ1lpD3uYk1njgHEcB9v4EnQYS40jIs8o0y0SY_RZ-YF8WbDGDgkhkGO9mqmC6iPksYHFanI9Ga_J0dVyMScHAx8qvnF7Ftg75CgM2hhKFgnxhI7Dg2n1DJsZ1L7t9IQLgzJEhj1Ca20YFmu3bXjJruL4J4NBxerqZoh1ozbWexcPMFi1zoul3zBYdGpplMNgtiGt92wpe32RpMvglb3WwX-xYngSiuwqS39Nlp0DtgflC87_0az-D4P5ZjwmUW6pDJ1XS9k7ZH74CLdOy3sWCp223ZkNRReQqoreIJHzDKJux7B5b34-1ZKlDV7400rfJWd9YcDVjtM5JHSx5NsYyqEmycXwbwAViyY3T2Lqk9UX_a-3AAAA__8TM6XW
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
@@ -81,6 +83,8 @@ regions: <hidden>
 │ KV contention time: 0µs
 │ KV rows read: 1
 │ KV bytes read: 8 B
+│ MVCC step count: 0
+│ MVCC seek count: 0
 │ table: d@primary
 │ equality: (b) = (b)
 │
@@ -92,11 +96,13 @@ regions: <hidden>
       KV contention time: 0µs
       KV rows read: 2
       KV bytes read: 16 B
+      MVCC step count: 0
+      MVCC seek count: 0
       estimated row count: 1 (100% of the table; stats collected <hidden> ago)
       table: c@sec
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkl-L00AUxd_9FJfzPNamDyIDQlFW6Lo20l18kTxMZi5rNJ0bZya4S-nH8gv4ySQzWbAWxT-P59ycufd3yAHxcw-N64uri5c3ZBeGXu3qN2Tpst5syVG9Jbdo6TnZRQsFL463Zs8R-j0qNApDEMsxSpisQ_5g4-6glwqdH8Y02Y2ClcDQB6Qu9QyNG9P2vGPjODxZQsFxMl2fn7XryBYK14PxUdNjKNRj0rSu1HoFhdfvKHV71rT89jUWbcUn9qkTfzYK8iVSYOM0zeH2PvGDVT2lF1BoTbIfOJKMaZhWTRfl4IOxQnNUKGomisncMnR1VH9OfSmdn6GrU2i3HkK3N-EeClcin8aBPkrnSbymTD1XgHlB5ipIRcdk-v6M_t-Kqs6LepZ74ju243n6P-pb_U19O46D-Mgn1f3q5eWxUWB3y-XHjDIGy2-D2LymyDrnsuE4pjKtitj4MpoO_DFc_Ta8-incHB99DwAA__8TeBlu
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykktFu0zAUhu95iqP_2pSkFwhZQqqohtSxNaibdoNy4dhHIyz1CbYjNlV9LF6AJ0ONM7RRgRi7_L-T3yf-5B3i1w4aFydnJ8tLsjND7zfVOVk6rVZrclStyc0aekt21kDBi-O12XKE_oQStUIfxHKMEg5oN36wcrfQhULr-yEdcK1gJTD0DqlNHUPj0jQdb9g4Dq8KKDhOpu3GY-0isoXCRW981PQSCtWQNC1KtZhD4cMVpXbLmoof32POVnxin1rxR6Mg3yIFNk7TVG7uEt-j8jW9g8L51XJJMXFPVgafNBW_IPPNQ9iYZD9zJBlSP0xsXHEP5qj3CjlNd4_JXDN0uVf_7udUWj_pKR_rcYs-tFsT7qBwJnIz9PRFWk_iNY1-JlmYFowG8uVzjsl03ZGn_1NaHit980SjfMt2ON7zDNHzp4jecOzFR34k-U8nF_tagd0158ceZQiWPwax45ocq7E3Ascx5WmZw8rn0eEHH5bLv5bnv5Xr_YufAQAA__8S5TJm
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
@@ -172,6 +178,8 @@ regions: <hidden>
 │         KV contention time: 0µs
 │         KV rows read: 2
 │         KV bytes read: 16 B
+│         MVCC step count: 0
+│         MVCC seek count: 0
 │         estimated row count: 1 (100% of the table; stats collected <hidden> ago)
 │         table: c@sec
 │         spans: FULL SCAN
@@ -184,11 +192,13 @@ regions: <hidden>
       KV contention time: 0µs
       KV rows read: 2
       KV bytes read: 16 B
+      MVCC step count: 0
+      MVCC seek count: 0
       missing stats
       table: d@primary
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMk8GO0zAQhu88xWhOoDW7dbriYGmlChRQF5qgdMUF5eDaQzYisbO2I1pVfSxegCdDSajYdMtCxWVvmX_mt-ebcbbo7yoUuIw_xG9uQJ1LeJulC1AwT5I4g0WcvYvhOp0noCFN-oIr0OcrZGispkTW5FF8Ro45w8ZZRd5b10nbvmCu1ygmDEvTtKGTc4bKOkKxxVCGilDgjVxVlJHU5C4myFBTkGXVH6tmnhQyXDbSeAEvkWHaBgEzjgzff4JQ1iRg8uO7H2JlTSATSmsepJz95sGR1AKiQVltAu0l_gpeI8OVDOqWPNg2NN09XTu9cS9EmO8YDtEvHB9kQSj4jv078tK6QO6Cj2ln_AwZ0ppU-xChlmuoqbZuA7KqrJKBtIBJ33aX83cVBKob0KX_Cq2XBe3T_0EVnUJ1f5HRGE3PGlfW0m2OLTN6csuc_hH7N21rrNPkSI9I8875t5Ijs1uQK-jalobcxXQ8u4q-hOczfvbiypXF7fA5-hGe1Iu5POXFZOQbazwdjvDoyZNubqQLGvbgbesUfXRW9dcMYdr7ekGTD0OWD8HcDKmuwftm_qh5OjLzQ3N0gjk6NE8fNV8etJ3vnv0MAAD__xmY2Xc=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUU9Fu0zAUfecrru4TaGaN04kHS5MqqoI6aIvaaS8oD659yaIldmY7olXVz-IH-DKUZIWmK4OKF_aWe849ts-5Nxv09zkKXIw-jobXoM4lvJvPJqBgPJ2O5jAZzd-P4Go2noKG2bRpuAR9vkSGxmqayoI8is_IMWFYOqvIe-tqaNM0jPUKRcQwM2UVajhhqKwjFBsMWcgJBV7LZU5zkppcL0KGmoLM8uZYNfCkkOGilMYLeI0MZ1UQMODI8MMNhKwgAdH3b76tlTWBTMiseUQ5-9WDI6kFxC2yXAfaQfwNvEWGk5vhEHygEpStTBAQ_QSJ7vbBpQzqljzYKpTVA9ZcsQNiTLYM2-rBuA8yJRR8y_4-nIV1gVyPd3MZ8DNkSCtS1WOzhVxBQYV1a5B5bpUMpAVEjcGa8_c5BCpK0Jm_g8rLlHb0P7iKT3G1P_K4a00PSpcV0q2PjT1-xmPv_zagX7lUxjpNjnQnk6RW_qnlSMoTcild2cyQ6_W7Kef0Jbwc8LNXly5Lb9vPzs_1X-3WxSm7NSdfWuPpMMKjJ0d1bqRTaufgbeUUfXJWNde05azRNYAmH1qWt8XYtFT9wH0xf1Lc74j5oTg-QRwfivtPii8Onp1sX_wIAAD__w2R8m8=
 
 statement ok
 RESET vectorize; RESET distsql

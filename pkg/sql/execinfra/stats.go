@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -49,4 +51,45 @@ func GetCumulativeContentionTime(ctx context.Context) time.Duration {
 		})
 	}
 	return cumulativeContentionTime
+}
+
+type ScanStats struct {
+	NumInterfaceSteps uint64
+	NumInternalSteps  uint64
+	NumInterfaceSeeks uint64
+	NumInternalSeeks  uint64
+}
+
+// PopulateKVMVCCStats adds data from the input ScanStats to the input KVStats.
+func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
+	kvStats.NumInterfaceSteps = optional.MakeUint(ss.NumInterfaceSteps)
+	kvStats.NumInternalSteps = optional.MakeUint(ss.NumInternalSteps)
+	kvStats.NumInterfaceSeeks = optional.MakeUint(ss.NumInterfaceSeeks)
+	kvStats.NumInternalSeeks = optional.MakeUint(ss.NumInternalSeeks)
+}
+
+// GetScanStats is a helper function to calculate scan stats from the tracing
+// span from the context.
+func GetScanStats(ctx context.Context) (ss ScanStats) {
+	recording := GetTraceData(ctx)
+	if recording == nil {
+		return ScanStats{}
+	}
+	var ev roachpb.ScanStats
+	for i := range recording {
+		recording[i].Structured(func(any *pbtypes.Any, _ time.Time) {
+			if !pbtypes.Is(any, &ev) {
+				return
+			}
+			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+				return
+			}
+
+			ss.NumInterfaceSteps += ev.NumInterfaceSteps
+			ss.NumInternalSteps += ev.NumInternalSteps
+			ss.NumInterfaceSeeks += ev.NumInterfaceSeeks
+			ss.NumInternalSeeks += ev.NumInternalSeeks
+		})
+	}
+	return ss
 }
