@@ -46,10 +46,12 @@ func init() {
 // certificates in the specified certs-dir for use with start.
 var connectInitCmd = &cobra.Command{
 	Use:   "init --certs-dir=<path to cockroach certs dir> --init-token=<shared secret> --join=<host 1>,<host 2>,...,<host N>",
-	Short: "auto-build TLS certificates for use with the start command",
+	Short: "auto-create TLS certificates for use with the start command",
 	Long: `
-Connects to other nodes and negotiates an initialization bundle for use with
-secure inter-node connections.
+Connects to other instances of the 'connect init' command and negotiates
+a package of TLS certificates for use with secure inter-node connections.
+
+The TLS certificates are saved in the configured target directory.
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runConnectInit),
