@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -800,6 +801,10 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 func (rf *cFetcher) nextAdapter() {
 	rf.adapter.batch, rf.adapter.err = rf.nextBatch(rf.adapter.ctx)
+}
+
+func (rf *cFetcher) setEstimatedRowCount(estimatedRowCount uint64) {
+	rf.estimatedRowCount = estimatedRowCount
 }
 
 // setNextKV sets the next KV to process to the input KV. needsCopy, if true,
@@ -1590,4 +1595,49 @@ func (rf *cFetcher) Release() {
 		typs: rf.typs[:0],
 	}
 	cFetcherPool.Put(rf)
+}
+
+type cFetcherArgs struct {
+	visibility        execinfrapb.ScanVisibility
+	lockingStrength   descpb.ScanLockingStrength
+	lockingWaitPolicy descpb.ScanLockingWaitPolicy
+	hasSystemColumns  bool
+	reverse           bool
+	memoryLimit       int64
+	estimatedRowCount uint64
+}
+
+// initCFetcher extracts common logic for operators in the colfetcher package
+// that need to use cFetcher operators.
+func initCFetcher(
+	flowCtx *execinfra.FlowCtx,
+	allocator *colmem.Allocator,
+	desc catalog.TableDescriptor,
+	index catalog.Index,
+	neededCols util.FastIntSet,
+	colIdxMap catalog.TableColMap,
+	virtualCol catalog.Column,
+	args cFetcherArgs,
+) (*cFetcher, error) {
+	fetcher := cFetcherPool.Get().(*cFetcher)
+	fetcher.setEstimatedRowCount(args.estimatedRowCount)
+
+	tableArgs := row.FetcherTableArgs{
+		Desc:             desc,
+		Index:            index,
+		ColIdxMap:        colIdxMap,
+		IsSecondaryIndex: !index.Primary(),
+		ValNeededForCol:  neededCols,
+	}
+
+	tableArgs.InitCols(desc, args.visibility, args.hasSystemColumns, virtualCol)
+
+	if err := fetcher.Init(
+		flowCtx.Codec(), allocator, args.memoryLimit, args.reverse,
+		args.lockingStrength, args.lockingWaitPolicy, tableArgs,
+	); err != nil {
+		return nil, err
+	}
+
+	return fetcher, nil
 }
