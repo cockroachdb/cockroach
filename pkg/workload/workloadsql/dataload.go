@@ -29,8 +29,9 @@ import (
 // batched INSERTs. The zero-value gets some sane defaults for the tunable
 // settings.
 type InsertsDataLoader struct {
-	BatchSize   int
-	Concurrency int
+	BatchSize              int
+	Concurrency            int
+	RunInsertInTransaction bool
 }
 
 // InitialDataLoad implements the InitialDataLoader interface.
@@ -101,8 +102,24 @@ func (l InsertsDataLoader) InitialDataLoad(
 				flush := func() error {
 					if len(params) > 0 {
 						insertStmt := insertStmtBuf.String()
-						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
-							return errors.Wrapf(err, "failed insert into %s", table.Name)
+						if l.RunInsertInTransaction {
+							tx, err := db.BeginTx(gCtx, &gosql.TxOptions{Isolation: gosql.LevelSerializable})
+							if err != nil {
+								return err
+							}
+							if _, err := tx.ExecContext(gCtx, insertStmt, params...); err != nil {
+								fmt.Println(insertStmt)
+								_ = tx.Rollback()
+								return errors.Wrapf(err, "failed insert into %s", table.Name)
+							}
+							err = tx.Commit()
+							if err != nil {
+								return err
+							}
+						} else {
+							if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
+								return errors.Wrapf(err, "failed insert into %s", table.Name)
+							}
 						}
 					}
 					insertStmtBuf.Reset()
