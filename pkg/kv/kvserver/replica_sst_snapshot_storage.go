@@ -67,6 +67,7 @@ type SSTSnapshotStorageScratch struct {
 	ssts       []string
 	snapDir    string
 	dirCreated bool
+	bytes      int64
 }
 
 func (s *SSTSnapshotStorageScratch) filename(id int) string {
@@ -124,6 +125,11 @@ func (s *SSTSnapshotStorageScratch) WriteSST(ctx context.Context, data []byte) e
 	return f.Close()
 }
 
+// Size returns the combined size of files created.
+func (s *SSTSnapshotStorageScratch) Size() int64 {
+	return s.bytes
+}
+
 // SSTs returns the names of the files created.
 func (s *SSTSnapshotStorageScratch) SSTs() []string {
 	return s.ssts
@@ -142,6 +148,7 @@ type SSTSnapshotStorageFile struct {
 	file         fs.File
 	filename     string
 	ctx          context.Context
+	bytes        int64
 	bytesPerSync int64
 }
 
@@ -180,6 +187,7 @@ func (f *SSTSnapshotStorageFile) Write(contents []byte) (int, error) {
 	if err := f.ensureFile(); err != nil {
 		return 0, err
 	}
+	f.bytes += int64(len(contents))
 	limitBulkIOWrite(f.ctx, f.scratch.storage.limiter, len(contents))
 	return f.file.Write(contents)
 }
@@ -199,6 +207,8 @@ func (f *SSTSnapshotStorageFile) Close() error {
 		return err
 	}
 	f.file = nil
+	f.scratch.bytes += f.bytes
+	f.bytes = 0
 	return nil
 }
 
