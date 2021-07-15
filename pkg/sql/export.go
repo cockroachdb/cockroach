@@ -81,8 +81,8 @@ var exportOptionExpectValues = map[string]KVStringOptValidate{
 	exportOptionChunkSize:   KVStringOptRequireValue,
 }
 
-const exportChunkSizeDefault = int64(32 << 20) // 32 MB
-const exportChunkRowsDefault = 100000
+const exportChunkSizeDefault = int64(1 << 30) // 1GB
+const exportChunkRowsDefault = 100000000
 const exportFilePatternPart = "%part%"
 const exportFilePatternDefault = exportFilePatternPart + ".csv"
 const exportCompressionCodec = "gzip"
