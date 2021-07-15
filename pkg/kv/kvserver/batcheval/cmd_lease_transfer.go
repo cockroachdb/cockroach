@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 func init() {
@@ -50,6 +52,8 @@ func declareKeysTransferLease(
 	declareAllKeys(latchSpans)
 }
 
+var errTransferLeaseToStateSnapshot = errors.Errorf("cannot transfer lease to replica in need of a snapshot")
+
 // TransferLease sets the lease holder for the range.
 // Unlike with RequestLease(), the new lease is allowed to overlap the old one,
 // the contract being that the transfer must have been initiated by the (soon
@@ -77,10 +81,24 @@ func TransferLease(
 	newLease.Start.Forward(cArgs.EvalCtx.Clock().NowAsClockTimestamp())
 	args.Lease = roachpb.Lease{} // prevent accidental use below
 
-	// If this check is removed at some point, the filtering of learners on the
-	// sending side would have to be removed as well.
+	// If this check is removed at some point, the filtering of
+	// learners/non-voters on the sending side would have to be removed as well.
 	if err := roachpb.CheckCanReceiveLease(newLease.Replica, cArgs.EvalCtx.Desc()); err != nil {
 		return newFailedLeaseTrigger(true /* isTransfer */), err
+	}
+
+	// If the replica we're transferring the lease to is waiting for a snapshot,
+	// reject the transfer since letting it through will effectively wedge the
+	// range until the new leaseholder applies a snapshot (which could take on the
+	// order of minutes).
+	//
+	// NB: `raftStatus.Progress` is only non-nil on the leader. Thus, the check
+	// here is best effort since it would not kick in during
+	// leader-not-leaseholder scenarios.
+	if raftStatus := cArgs.EvalCtx.RaftStatus(); raftStatus != nil && raftStatus.Progress != nil {
+		if progress := raftStatus.Progress[uint64(newLease.Replica.ReplicaID)]; progress.State == tracker.StateSnapshot {
+			return newFailedLeaseTrigger(true /* isTransfer */), errTransferLeaseToStateSnapshot
+		}
 	}
 
 	// Stop using the current lease. All future calls to leaseStatus on this

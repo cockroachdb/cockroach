@@ -325,9 +325,9 @@ type RaftConfig struct {
 	// means always renew.
 	RangeLeaseRenewalFraction float64
 
-	// RaftLogTruncationThreshold controls how large a single Range's Raft log
-	// can grow. When a Range's Raft log grows above this size, the Range will
-	// begin performing log truncations.
+	// RaftLogTruncationThreshold controls (in terms of the number of bytes) how
+	// large a single Range's Raft log can grow. When a Range's Raft log grows
+	// above this size, the Range will begin performing log truncations.
 	RaftLogTruncationThreshold int64
 
 	// RaftProposalQuota controls the maximum aggregate size of Raft commands
