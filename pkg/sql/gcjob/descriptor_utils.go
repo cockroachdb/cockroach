@@ -62,19 +62,15 @@ func deleteDatabaseZoneConfig(
 	if databaseID == descpb.InvalidID {
 		return nil
 	}
-	if !codec.ForSystemTenant() {
-		// Secondary tenants do not have zone configs for individual objects.
-		return nil
-	}
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
+		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
 			return err
 		}
 		b := &kv.Batch{}
 
 		// Delete the zone config entry for the dropped database associated with the
 		// job, if it exists.
-		dbZoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(databaseID))
+		dbZoneKeyPrefix := config.MakeZoneKeyPrefix(codec, databaseID)
 		b.DelRange(dbZoneKeyPrefix, dbZoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		return txn.Run(ctx, b)
 	})

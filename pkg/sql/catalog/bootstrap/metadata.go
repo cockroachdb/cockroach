@@ -269,9 +269,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.NamespaceTable)
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.DescriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.UsersTable)
-	if target.codec.ForSystemTenant() {
-		target.AddDescriptor(keys.SystemDatabaseID, systemschema.ZonesTable)
-	}
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ZonesTable)
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SettingsTable)
 	if !target.codec.ForSystemTenant() {
 		// Only add the descriptor ID sequence if this is a non-system tenant.
@@ -336,8 +334,9 @@ func addSplitIDs(target *MetadataSchema) {
 	target.AddSplitIDs(keys.PseudoTableIDs...)
 }
 
-// Create a kv pair for the zone config for the given key and config value.
-func createZoneConfigKV(
+// CreateZoneConfigKV creates a kv pair for the zone config for the given key
+// and config value.
+func CreateZoneConfigKV(
 	keyID int, codec keys.SQLCodec, zoneConfig *zonepb.ZoneConfig,
 ) roachpb.KeyValue {
 	value := roachpb.Value{}
@@ -357,48 +356,52 @@ func addZoneConfigKVsToSchema(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) {
-	// If this isn't the system tenant, don't add any zone configuration keys.
-	// Only the system tenant has a zone table.
-	if !target.codec.ForSystemTenant() {
-		return
-	}
-
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older cluster. The includedInBootstrap
 	// field should be set on the migration.
 
+	// Both the system tenant and secondary tenants get their own RANGE DEFAULT
+	// zone configuration.
+	// TODO(zcfgs-pod): This might be better suited to a single startup migration
+	// instead of adding it in two places for tenants -- here and in the tenant
+	// migration.
 	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.RootNamespaceID, target.codec, defaultZoneConfig))
+		CreateZoneConfigKV(keys.RootNamespaceID, target.codec, defaultZoneConfig))
 
-	systemZoneConf := defaultSystemZoneConfig
-	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
-	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
+	if target.codec.ForSystemTenant() {
+		// Only the system tenant has zone configs over {META, LIVENESS, SYSTEM}
+		// ranges. Additionally, some reporting tables have custom zone configs set,
+		// but only for the system tenant.
+		systemZoneConf := defaultSystemZoneConfig
+		metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
+		livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
 
-	// .meta zone config entry with a shorter GC time.
-	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.MetaRangesID, target.codec, metaRangeZoneConf))
+		// .meta zone config entry with a shorter GC time.
+		metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
+		target.otherKV = append(target.otherKV,
+			CreateZoneConfigKV(keys.MetaRangesID, target.codec, metaRangeZoneConf))
 
-	// Some reporting tables have shorter GC times.
-	replicationConstraintStatsZoneConf := &zonepb.ZoneConfig{
-		GC: &zonepb.GCPolicy{TTLSeconds: int32(systemschema.ReplicationConstraintStatsTableTTL.Seconds())},
+		// Some reporting tables have shorter GC times.
+		replicationConstraintStatsZoneConf := &zonepb.ZoneConfig{
+			GC: &zonepb.GCPolicy{TTLSeconds: int32(systemschema.ReplicationConstraintStatsTableTTL.Seconds())},
+		}
+		replicationStatsZoneConf := &zonepb.ZoneConfig{
+			GC: &zonepb.GCPolicy{TTLSeconds: int32(systemschema.ReplicationStatsTableTTL.Seconds())},
+		}
+
+		// Liveness zone config entry with a shorter GC time.
+		livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+		target.otherKV = append(target.otherKV,
+			CreateZoneConfigKV(keys.LivenessRangesID, target.codec, livenessZoneConf))
+		target.otherKV = append(target.otherKV,
+			CreateZoneConfigKV(keys.SystemRangesID, target.codec, systemZoneConf))
+		target.otherKV = append(target.otherKV,
+			CreateZoneConfigKV(keys.SystemDatabaseID, target.codec, systemZoneConf))
+		target.otherKV = append(target.otherKV,
+			CreateZoneConfigKV(keys.ReplicationConstraintStatsTableID, target.codec, replicationConstraintStatsZoneConf))
+		target.otherKV = append(target.otherKV,
+			CreateZoneConfigKV(keys.ReplicationStatsTableID, target.codec, replicationStatsZoneConf))
 	}
-	replicationStatsZoneConf := &zonepb.ZoneConfig{
-		GC: &zonepb.GCPolicy{TTLSeconds: int32(systemschema.ReplicationStatsTableTTL.Seconds())},
-	}
-
-	// Liveness zone config entry with a shorter GC time.
-	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.LivenessRangesID, target.codec, livenessZoneConf))
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.SystemRangesID, target.codec, systemZoneConf))
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.SystemDatabaseID, target.codec, systemZoneConf))
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.ReplicationConstraintStatsTableID, target.codec, replicationConstraintStatsZoneConf))
-	target.otherKV = append(target.otherKV,
-		createZoneConfigKV(keys.ReplicationStatsTableID, target.codec, replicationStatsZoneConf))
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the
