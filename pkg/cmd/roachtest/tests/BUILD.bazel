@@ -61,6 +61,7 @@ go_library(
         "libpq.go",
         "libpq_blocklist.go",
         "liquibase.go",
+        "liquibase_blocklist.go",
         "many_splits.go",
         "mixed_version_decommission.go",
         "mixed_version_jobs.go",
