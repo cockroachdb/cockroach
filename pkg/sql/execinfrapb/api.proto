@@ -125,6 +125,20 @@ message ConsumerHandshake {
                                             (gogoproto.casttype) = "DistSQLVersion"];
 }
 
+// CancelDeadFlowsRequest is a request to cancel some flows that have been
+// scheduled to run on the receiving node but haven't been started yet (i.e.
+// they are in the queue to be run). This request originates on the node that
+// performed SetupFlow RPC in order to setup flows mentioned in the request.
+message CancelDeadFlowsRequest {
+  // FlowIDs is a list of IDs of flows to be canceled if they are currently in
+  // the queue to be scheduled. If a particular flow is not found for any reason
+  // in the queue (i.e. it has already completed or is currently running), such
+  // flow is ignored.
+  repeated bytes flow_ids = 1 [(gogoproto.nullable) = false,
+                              (gogoproto.customname) = "FlowIDs",
+                              (gogoproto.customtype) = "FlowID"];
+}
+
 service DistSQL {
   // RunSyncFlow instantiates a flow and streams back results of that flow.
   // The request must contain one flow, and that flow must have a single mailbox
@@ -134,6 +148,15 @@ service DistSQL {
   // SetupFlow instantiates a flow (subgraphs of a distributed SQL
   // computation) on the receiving node.
   rpc SetupFlow(SetupFlowRequest) returns (SimpleResponse) {}
+
+  // CancelDeadFlows cancels all specified flows that are currently scheduled to
+  // run on the receiving node but haven't been started yet because the flows
+  // are dead (the client of SetupFlow RPC has abandoned them). Flows that have
+  // been started aren't affected even if mentioned in the request.
+  //
+  // This RPC is performed on a best effort basis, so any errors returned from
+  // it should be ignored.
+  rpc CancelDeadFlows(CancelDeadFlowsRequest) returns (SimpleResponse) {}
 
   // FlowStream is used to push a stream of messages that is part of a flow. The
   // first message will have a StreamHeader which identifies the flow and the
