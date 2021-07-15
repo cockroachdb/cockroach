@@ -783,8 +783,14 @@ func TestNodeStatusResponse(t *testing.T) {
 	s := startServer(t)
 	defer s.Stopper().Stop(context.Background())
 
-	// First fetch all the node statuses.
 	wrapper := serverpb.NodesResponse{}
+
+	// Check that the node statuses cannot be accessed via a non-admin account.
+	if err := getStatusJSONProtoWithAdminOption(s, "nodes", &wrapper, false /* isAdmin */); !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	// Now fetch all the node statuses as admin.
 	if err := getStatusJSONProto(s, "nodes", &wrapper); err != nil {
 		t.Fatal(err)
 	}
@@ -801,7 +807,14 @@ func TestNodeStatusResponse(t *testing.T) {
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
 		nodeStatus := statuspb.NodeStatus{}
-		if err := getStatusJSONProto(s, "nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
+		nodeURL := "nodes/" + oldNodeStatus.Desc.NodeID.String()
+		// Check that the node statuses cannot be accessed via a non-admin account.
+		if err := getStatusJSONProtoWithAdminOption(s, nodeURL, &nodeStatus, false /* isAdmin */); !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
+
+		// Now access that node's status.
+		if err := getStatusJSONProto(s, nodeURL, &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
 		if !s.node.Descriptor.Equal(&nodeStatus.Desc) {
