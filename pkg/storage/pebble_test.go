@@ -418,7 +418,7 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 
 }
 
-func TestPebbleDiskSlowEmit(t *testing.T) {
+func TestPebbleMetricEventListener(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -429,14 +429,21 @@ func TestPebbleDiskSlowEmit(t *testing.T) {
 	require.NoError(t, err)
 	defer p.Close()
 
-	require.Equal(t, uint64(0), p.diskSlowCount)
-	require.Equal(t, uint64(0), p.diskStallCount)
+	require.Equal(t, int64(0), p.writeStallCount)
+	require.Equal(t, int64(0), p.diskSlowCount)
+	require.Equal(t, int64(0), p.diskStallCount)
+	p.eventListener.WriteStallBegin(pebble.WriteStallBeginInfo{})
+	require.Equal(t, int64(1), p.writeStallCount)
+	require.Equal(t, int64(0), p.diskSlowCount)
+	require.Equal(t, int64(0), p.diskStallCount)
 	p.eventListener.DiskSlow(pebble.DiskSlowInfo{Duration: 1 * time.Second})
-	require.Equal(t, uint64(1), p.diskSlowCount)
-	require.Equal(t, uint64(0), p.diskStallCount)
+	require.Equal(t, int64(1), p.writeStallCount)
+	require.Equal(t, int64(1), p.diskSlowCount)
+	require.Equal(t, int64(0), p.diskStallCount)
 	p.eventListener.DiskSlow(pebble.DiskSlowInfo{Duration: 70 * time.Second})
-	require.Equal(t, uint64(1), p.diskSlowCount)
-	require.Equal(t, uint64(1), p.diskStallCount)
+	require.Equal(t, int64(1), p.writeStallCount)
+	require.Equal(t, int64(1), p.diskSlowCount)
+	require.Equal(t, int64(1), p.diskStallCount)
 }
 
 func TestPebbleIterConsistency(t *testing.T) {

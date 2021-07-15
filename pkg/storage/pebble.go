@@ -456,8 +456,10 @@ type Pebble struct {
 	fileRegistry *PebbleFileRegistry
 
 	// Stats updated by pebble.EventListener invocations, and returned in
-	// GetStats. Updated and retrieved atomically.
-	diskSlowCount, diskStallCount uint64
+	// GetMetrics. Updated and retrieved atomically.
+	writeStallCount int64
+	diskSlowCount   int64
+	diskStallCount  int64
 
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
@@ -606,6 +608,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 
 func (p *Pebble) makeMetricEventListener(ctx context.Context) pebble.EventListener {
 	return pebble.EventListener{
+		WriteStallBegin: func(info pebble.WriteStallBeginInfo) {
+			atomic.AddInt64(&p.writeStallCount, 1)
+		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
 			maxSyncDuration := maxSyncDurationDefault
 			fatalOnExceeded := maxSyncDurationFatalOnExceededDefault
@@ -614,7 +619,7 @@ func (p *Pebble) makeMetricEventListener(ctx context.Context) pebble.EventListen
 				fatalOnExceeded = MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
 			}
 			if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
-				atomic.AddUint64(&p.diskStallCount, 1)
+				atomic.AddInt64(&p.diskStallCount, 1)
 				// Note that the below log messages go to the main cockroach log, not
 				// the pebble-specific log.
 				if fatalOnExceeded {
@@ -626,7 +631,7 @@ func (p *Pebble) makeMetricEventListener(ctx context.Context) pebble.EventListen
 				}
 				return
 			}
-			atomic.AddUint64(&p.diskSlowCount, 1)
+			atomic.AddInt64(&p.diskSlowCount, 1)
 		},
 	}
 }
@@ -1043,9 +1048,10 @@ func (p *Pebble) Flush() error {
 func (p *Pebble) GetMetrics() Metrics {
 	m := p.db.Metrics()
 	return Metrics{
-		Metrics:        m,
-		DiskSlowCount:  int64(atomic.LoadUint64(&p.diskSlowCount)),
-		DiskStallCount: int64(atomic.LoadUint64(&p.diskStallCount)),
+		Metrics:         m,
+		WriteStallCount: atomic.LoadInt64(&p.writeStallCount),
+		DiskSlowCount:   atomic.LoadInt64(&p.diskSlowCount),
+		DiskStallCount:  atomic.LoadInt64(&p.diskStallCount),
 	}
 }
 

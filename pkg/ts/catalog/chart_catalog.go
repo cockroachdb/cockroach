@@ -2305,6 +2305,10 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Bytes",
 			},
+			{
+				Title:   "Stalls",
+				Metrics: []string{"storage.write-stalls"},
+			},
 		},
 	},
 	{
