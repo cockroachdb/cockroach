@@ -274,14 +274,16 @@ func (r *Registry) runJob(
 	// exponential backoff, always) updating the job in that call.
 	ctx, span = r.settings.Tracer.StartSpanCtx(ctx, spanName, spanOptions...)
 	defer span.Finish()
-	if err := job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md JobMetadata,
-		ju *JobUpdater) error {
-		progress := *md.Progress
-		progress.TraceID = span.TraceID()
-		ju.UpdateProgress(&progress)
-		return nil
-	}); err != nil {
-		return err
+	if span.TraceID() != 0 {
+		if err := job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md JobMetadata,
+			ju *JobUpdater) error {
+			progress := *md.Progress
+			progress.TraceID = span.TraceID()
+			ju.UpdateProgress(&progress)
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
 
 	// Run the actual job.
