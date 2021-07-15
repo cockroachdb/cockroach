@@ -19,10 +19,15 @@ import (
 
 // FakeResumer calls optional callbacks during the job lifecycle.
 type FakeResumer struct {
-	OnResume     func(context.Context) error
-	FailOrCancel func(context.Context) error
-	Success      func() error
-	PauseRequest onPauseRequestFunc
+	OnResume      func(context.Context) error
+	FailOrCancel  func(context.Context) error
+	Success       func() error
+	PauseRequest  onPauseRequestFunc
+	TraceRealSpan bool
+}
+
+func (d FakeResumer) ForceRealSpan() bool {
+	return d.TraceRealSpan
 }
 
 var _ Resumer = FakeResumer{}
