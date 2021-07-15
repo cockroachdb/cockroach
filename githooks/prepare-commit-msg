@@ -72,6 +72,19 @@ $cchar Note: to disable this commit template, run: git config --global --add coc
 	fi
 fi
 
+# Add an explicit "Docs note: <why>" if no epic ref, issue ref or docs note
+# specified.
+docs_note_regex='^([Dd]ocs note|[Ee]pic|[Ss]ee also|[Ii]nforms|[Cc]lose|[Cc]loses|[Cc]losed|[Ff]ix|[Ff]ixes|[Ff]ixed|[Rr]esolve|[Rr]esolves|[Rr]esolved):?\s'
+if ! grep -Eq "$docs_note_regex" "$1" ; then
+    sed_script+="/$cchar Please enter the commit message for your changes./i\\
+$cchar The 'Docs note:' section can be removed if an epic or issue is\\
+$cchar referenced elsewhere.\\
+${tchar}Docs note: <why>\\
+
+;
+"
+fi
+
 # Add an explicit "Release note: None" if no release note was specified.
 if ! grep -q '^Release note' "$1"; then
 	sed_script+="/$cchar Please enter the commit message for your changes./i\\
@@ -101,6 +114,8 @@ $cchar     <what was there before: Previously, ...>\\
 $cchar     <why it needed to change: This was inadequate because ...>\\
 $cchar     <what you did about it: To address this, this patch ...>\\
 $cchar\\
+$cchar     Epic: CRDB-123\\
+$cchar\\
 $cchar     Release note (<category>): <what> <show> <why>\\
 $cchar     ---\\
 $cchar\\
@@ -120,8 +135,22 @@ $cchar\\
 "
 fi
 
-sed_script+="$cchar The release note must be present if your commit has user-facing\\
+sed_script+="$cchar An epic reference, an issue reference or the docs note section must be\\
+$cchar present. When using 'Release note: None', you may use 'Docs note: None'.\\
+$cchar\\
+$cchar The release note must be present if your commit has user-facing\\
 $cchar or backward-incompatible changes. Use 'Release note: None' otherwise.\\
+$cchar\\
+$cchar Things to keep in mind for epic refs, issue refs and docs notes:\\
+$cchar   - epic refs or issue refs to issues containing an epic link in the\\
+$cchar     body are preferred\\
+$cchar   - when no epic exists for the commit, use the docs note or referenced\\
+$cchar     issue to explain why the change / what motivated the change. Include\\
+$cchar     enough detail for writers to understand the context for the change.\\
+$cchar   - epic ref format: '[Ee]pic:? CRDB-123'\\
+$cchar   - issue ref format: 'Fixes:? #123' or 'See also:? #123, #456'\\
+$cchar\\
+$cchar See also: https://wiki.crdb.io/wiki/spaces/CRDB/pages/2009039063/\\
 $cchar\\
 $cchar Things to keep in mind for release notes:\\
 $cchar   - past tense (this was changed...) or present tense (now possible to...)\\
