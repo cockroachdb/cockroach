@@ -1,0 +1,200 @@
+create-table
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int)
+----
+
+ops
+CREATE INDEX id1 on defaultdb.t1(id, name) storing (money)
+----
+Stage 0
+  *scop.MakeAddedIndexDeleteOnly
+    IndexId: 2
+    IndexName: id1
+    KeyColumnDirections:
+    - 0
+    - 0
+    KeyColumnIDs:
+    - 1
+    - 2
+    SecondaryIndex: true
+    StoreColumnIDs:
+    - 3
+    TableID: 52
+Stage 1
+  *scop.MakeAddedIndexDeleteAndWriteOnly
+    IndexID: 2
+    TableID: 52
+Stage 2
+  scop.BackfillIndex
+    IndexID: 2
+    TableID: 52
+Stage 3
+  *scop.MakeAddedSecondaryIndexPublic
+    IndexID: 2
+    TableID: 52
+
+deps
+CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
+----
+
+ops
+CREATE INVERTED INDEX concurrently id1 on defaultdb.t1(id, name) storing (money)
+----
+Stage 0
+  *scop.MakeAddedIndexDeleteOnly
+    Concurrently: true
+    IndexId: 2
+    IndexName: id1
+    Inverted: true
+    KeyColumnDirections:
+    - 0
+    - 0
+    KeyColumnIDs:
+    - 1
+    - 2
+    SecondaryIndex: true
+    StoreColumnIDs:
+    - 3
+    TableID: 52
+Stage 1
+  *scop.MakeAddedIndexDeleteAndWriteOnly
+    IndexID: 2
+    TableID: 52
+Stage 2
+  scop.BackfillIndex
+    IndexID: 2
+    TableID: 52
+Stage 3
+  *scop.MakeAddedSecondaryIndexPublic
+    IndexID: 2
+    TableID: 52
+
+deps
+CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
+----
+
+ops
+CREATE INDEX id1 on defaultdb.t1(lower(name)) storing (money)
+----
+Stage 0
+  *scop.MakeAddedColumnDeleteOnly
+    Column:
+      ComputeExpr: lower(name)
+      Hidden: true
+      ID: 4
+      Name: crdb_idx_expr
+      Nullable: true
+      Type:
+        family: StringFamily
+        oid: 25
+      Virtual: true
+    TableID: 52
+  *scop.MakeAddedIndexDeleteOnly
+    IndexId: 2
+    IndexName: new_primary_key
+    KeyColumnDirections:
+    - 0
+    KeyColumnIDs:
+    - 1
+    ShardedDescriptor: {}
+    StoreColumnIDs:
+    - 2
+    - 3
+    - 4
+    TableID: 52
+    Unique: true
+  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    IndexID: 1
+    TableID: 52
+Stage 1
+  *scop.MakeDroppedIndexDeleteOnly
+    IndexID: 1
+    TableID: 52
+  *scop.MakeAddedIndexDeleteAndWriteOnly
+    IndexID: 2
+    TableID: 52
+Stage 2
+  *scop.MakeIndexAbsent
+    IndexID: 1
+    TableID: 52
+Stage 3
+  scop.BackfillIndex
+    IndexID: 2
+    TableID: 52
+Stage 4
+  *scop.ValidateUniqueIndex
+    IndexID: 2
+    TableID: 52
+Stage 5
+  *scop.MakeAddedPrimaryIndexPublic
+    IndexID: 2
+    TableID: 52
+
+deps
+CREATE INDEX id1 on defaultdb.t1(lower(name)) storing (money)
+----
+- from: [Column:{DescID: 52, ColumnID: 4, ElementName: "crdb_idx_expr"}, DELETE_AND_WRITE_ONLY]
+  to:   [PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 52, ColumnID: 4, ElementName: "crdb_idx_expr"}, DELETE_AND_WRITE_ONLY]
+  to:   [SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 3}, DELETE_AND_WRITE_ONLY]
+- from: [Column:{DescID: 52, ColumnID: 4, ElementName: "crdb_idx_expr"}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}, PUBLIC]
+- from: [Column:{DescID: 52, ColumnID: 4, ElementName: "crdb_idx_expr"}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 3}, PUBLIC]
+- from: [PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}, DELETE_ONLY]
+  to:   [Column:{DescID: 52, ColumnID: 4, ElementName: "crdb_idx_expr"}, DELETE_ONLY]
+- from: [PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}, DELETE_AND_WRITE_ONLY]
+  to:   [PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 3}, DELETE_ONLY]
+  to:   [Column:{DescID: 52, ColumnID: 4, ElementName: "crdb_idx_expr"}, PUBLIC]
+
+ops
+CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (
+                                                              PARTITION p1 VALUES IN (1)
+                                                            )
+----
+Stage 0
+  *scop.MakeAddedIndexDeleteOnly
+    IndexId: 2
+    IndexName: id1
+    KeyColumnDirections:
+    - 0
+    - 0
+    KeyColumnIDs:
+    - 1
+    - 2
+    SecondaryIndex: true
+    StoreColumnIDs:
+    - 3
+    TableID: 52
+  *scop.AddIndexPartitionInfo
+    IndexID: 2
+    ListPartitions:
+    - name: p1
+      expr:
+      - "1"
+    PartitionFields:
+    - id
+    RangePartitions: []
+    TableID: 52
+Stage 1
+  *scop.MakeAddedIndexDeleteAndWriteOnly
+    IndexID: 2
+    TableID: 52
+Stage 2
+  scop.BackfillIndex
+    IndexID: 2
+    TableID: 52
+Stage 3
+  *scop.MakeAddedSecondaryIndexPublic
+    IndexID: 2
+    TableID: 52
+
+deps
+CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (
+                                                              PARTITION p1 VALUES IN (1)
+                                                            )
+----
+- from: [Partitioning:{DescID: 52, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 2}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 2}, DELETE_AND_WRITE_ONLY]
+  to:   [Partitioning:{DescID: 52, IndexID: 2}, PUBLIC]

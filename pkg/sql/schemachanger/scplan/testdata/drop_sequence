@@ -27,14 +27,14 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 Stage 0
   *scop.RemoveColumnDefaultExpression
     ColumnID: 2
-    TableID: 53
+    TableID: 54
   *scop.UpdateRelationDeps
-    TableID: 53
+    TableID: 54
   *scop.RemoveColumnDefaultExpression
     ColumnID: 2
-    TableID: 54
+    TableID: 53
   *scop.UpdateRelationDeps
-    TableID: 54
+    TableID: 53
 Stage 1
   *scop.MarkDescriptorAsDropped
     TableID: 52
