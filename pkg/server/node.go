@@ -1449,7 +1449,7 @@ func (n *Node) UpdateSpanConfigs(
 	})
 
 	// TODO(zcfgs-pod): Instead of simply upserting/deleting into the table, we
-	// could "merge" into the existing state -- it would make for simpler
+	// could "absorb" into the existing state -- it would make for simpler
 	// client-side operations. Given an initial state, and sets of span configs
 	// to delete and upsert, we could do the following:
 	//

@@ -52,10 +52,34 @@ type ReconciliationDependencies interface {
 type Update struct {
 	// Entry captures the keyspan and the corresponding config that has been
 	// updated. If deleted is true, the config over that span has been deleted
-	// (those keys no longer exist). If false, the embedded config is what the
-	// keyspan was updated to.
+	// (those keys no longer exist) -- the embedded config captures the last
+	// config. If false, the embedded config is what the keyspan was updated to.
 	Entry roachpb.SpanConfigEntry
 
 	// Deleted is true if the span config entry has been deleted.
 	Deleted bool
 }
+
+// Store is a data structure used to store span configs.
+type Store interface {
+	StoreReader
+	StoreWriter
+}
+
+// StoreWriter is the write-only portion of the Store interface.
+type StoreWriter interface {
+	SetSpanConfig(span roachpb.Span, conf roachpb.SpanConfig)
+}
+
+// StoreReader is the read-only portion of the Store interface.
+type StoreReader interface {
+	GetConfigsForSpan(span roachpb.Span) []roachpb.SpanConfigEntry
+	GetSplitsBetween(start, end roachpb.Key) []roachpb.Key
+}
+
+// TODO(zcfgs-pod): In the restore path we need to make sure we do a full
+// reconciliation pass pre-restore (?). Was mentioned in some pod meeting.
+
+// TODO(zcfgs-pod): De-dup away sql updates by maintaining a similar
+// spanconfig.Store on the tenant/SQL watcher. Alternatively, fetch span configs
+// from KV each time to compare against.

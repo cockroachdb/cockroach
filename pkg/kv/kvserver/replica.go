@@ -367,6 +367,9 @@ type Replica struct {
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.ClockTimestamp
 		// A pointer to the zone config for this replica.
+		//
+		// TODO(zcfgs-pod): Audit uses, and migrate over to using SpanConfigs
+		// instead.
 		zone *zonepb.ZoneConfig
 		// proposalBuf buffers Raft commands as they are passed to the Raft
 		// replication subsystem. The buffer is populated by requests after
