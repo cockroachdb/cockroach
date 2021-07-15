@@ -916,7 +916,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   contention_time_var FLOAT,
   implicit_txn        BOOL NOT NULL,
   full_scan           BOOL NOT NULL,
-  sample_plan         JSONB,
+  sample_plan         STRING,
   database_name       STRING NOT NULL,
   exec_node_ids       INT[] NOT NULL
 )`,
@@ -957,15 +957,19 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			}
 
 			samplePlan := ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription)
+			samplePlanPretty, err := json.Pretty(samplePlan)
+			if err != nil {
+				return err
+			}
 
 			execNodeIDs := tree.NewDArray(types.Int)
 			for _, nodeID := range stats.Stats.Nodes {
-				if err := execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); err != nil {
+				if err = execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); err != nil {
 					return err
 				}
 			}
 
-			err := addRow(
+			err = addRow(
 				tree.NewDInt(tree.DInt(nodeID)),                           // node_id
 				tree.NewDString(stats.Key.App),                            // application_name
 				tree.NewDString(flags),                                    // flags
@@ -1004,9 +1008,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),      // contention_time_var
 				tree.MakeDBool(tree.DBool(stats.Key.ImplicitTxn)),                                   // implicit_txn
 				tree.MakeDBool(tree.DBool(stats.Key.FullScan)),                                      // full_scan
-				tree.NewDJSON(samplePlan),           // sample_plan
-				tree.NewDString(stats.Key.Database), // database_name
-				execNodeIDs,                         // exec_node_ids
+				tree.NewDString(samplePlanPretty),                                                   // sample_plan
+				tree.NewDString(stats.Key.Database),                                                 // database_name
+				execNodeIDs,                                                                         // exec_node_ids
 			)
 			if err != nil {
 				return err
