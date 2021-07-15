@@ -758,6 +758,8 @@ pg_shdescription                       NULL
 pg_shmem_allocations                   NULL
 pg_shseclabel                          NULL
 pg_stat_activity                       NULL
+pg_stat_database                       NULL
+pg_stat_database_conflicts             NULL
 pg_statistic_ext                       NULL
 pg_subscription                        NULL
 pg_subscription_rel                    NULL
