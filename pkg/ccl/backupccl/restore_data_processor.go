@@ -285,7 +285,8 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		iters = append(iters, iter)
 	}
 
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
+	metrics := rd.flowCtx.Cfg.BulkMetrics
+	batcher, err := bulk.MakeSSTBatcher(ctx, db, metrics, evalCtx.Settings,
 		func() int64 { return storageccl.MaxIngestBatchSize(evalCtx.Settings) })
 	if err != nil {
 		return summary, err

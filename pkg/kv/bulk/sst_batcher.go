@@ -110,13 +110,19 @@ type SSTBatcher struct {
 	ms enginepb.MVCCStats
 	// rows written in the current batch.
 	rowCounter storage.RowCounter
+
+	metrics *Metrics
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
 func MakeSSTBatcher(
-	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context,
+	db SSTSender,
+	metrics *Metrics,
+	settings *cluster.Settings,
+	flushBytes func() int64,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: true}
+	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: true, metrics: metrics}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -261,6 +267,8 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Key) error {
 	if b.sstWriter.DataSize == 0 {
 		return nil
+	} else {
+		b.metrics.WrittenBytes.Inc(b.sstWriter.DataSize)
 	}
 	b.flushCounts.total++
 
@@ -275,6 +283,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	if reason == sizeFlush {
 		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(b.maxSize()))
 		b.flushCounts.sstSize++
+		b.metrics.SizeFlushes.Inc(1)
 
 		// On first flush, if it is due to size, we introduce one split at the start
 		// of our span, since size means we didn't already hit one. When adders have
@@ -300,6 +309,9 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	} else if reason == rangeFlush {
 		log.VEventf(ctx, 3, "flushing %s SST due to range boundary %s", sz(size), b.flushKey)
 		b.flushCounts.split++
+		b.metrics.SizeFlushes.Inc(1)
+	} else if reason == manualFlush {
+		b.metrics.ManualFlushes.Inc(1)
 	}
 
 	err := b.sstWriter.Finish()
