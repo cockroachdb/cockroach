@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
@@ -60,6 +62,13 @@ type restoreDataProcessor struct {
 	// progress updates are accumulated on this channel. It is populated by the
 	// concurrent workers and sent down the flow by the processor.
 	progCh chan RestoreProgress
+
+	mu struct {
+		sync.Mutex
+		// memAcc is a memory account shared by all workers to track how much
+		// memory the processor is using.
+		memAcc mon.BoundAccount
+	}
 }
 
 var _ execinfra.Processor = &restoreDataProcessor{}
@@ -69,6 +78,8 @@ const restoreDataProcName = "restoreDataProcessor"
 
 const maxConcurrentRestoreWorkers = 32
 
+const restoreWorkerConcurrencyKey = "kv.bulk_io_write.restore_node_concurrency"
+
 // TODO(pbardea): It may be worthwhile to combine this setting with the one that
 // controls the number of concurrent AddSSTable requests if each restore worker
 // spends all if its time sending AddSSTable requests.
@@ -76,7 +87,7 @@ const maxConcurrentRestoreWorkers = 32
 // The maximum is not enforced since if the maximum is reduced in the future that
 // may cause the cluster setting to fail.
 var numRestoreWorkers = settings.RegisterIntSetting(
-	"kv.bulk_io_write.restore_node_concurrency",
+	restoreWorkerConcurrencyKey,
 	fmt.Sprintf("the number of workers processing a restore per job per node; maximum %d",
 		maxConcurrentRestoreWorkers),
 	1, /* default */
@@ -92,6 +103,8 @@ func newRestoreDataProcessor(
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	sv := &flowCtx.EvalCtx.Settings.SV
+	mm := flowCtx.Cfg.RestoreMemMonitor
+	memAcc := mm.MakeBoundAccount()
 
 	rd := &restoreDataProcessor{
 		flowCtx: flowCtx,
@@ -105,6 +118,8 @@ func newRestoreDataProcessor(
 			uint64(numRestoreWorkers.Get(sv)),
 		),
 	}
+	// No need to hold the lock since no concurrency yet.
+	rd.mu.memAcc = memAcc
 
 	numRestoreWorkers.SetOnChange(sv, func(_ context.Context) {
 		rd.concurrentWorkerLimit.UpdateCapacity(uint64(numRestoreWorkers.Get(sv)))
@@ -285,6 +300,26 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		iters = append(iters, iter)
 	}
 
+	// TODO(pbardea): Grow this memory account dynamically to account for changes
+	// in max ingest batch size.
+	maxMemAlloc := storageccl.MaxIngestBatchSize(evalCtx.Settings)
+	rd.mu.Lock()
+	if err := rd.mu.memAcc.Grow(ctx, maxMemAlloc); err != nil {
+		rd.mu.Unlock()
+		hint := fmt.Sprintf("Try setting a higher --max-sql-memory or decreasing eiter %s or %s",
+			storageccl.MaxIngestSettingKey, restoreWorkerConcurrencyKey)
+		return summary, errors.WithHint(
+			errors.Wrap(err, "not enough memory available to buffer SSTs during"),
+			hint)
+	}
+	rd.mu.Unlock()
+
+	defer func() {
+		rd.mu.Lock()
+		defer rd.mu.Unlock()
+		rd.mu.memAcc.Shrink(ctx, maxMemAlloc)
+	}()
+
 	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
 		func() int64 { return storageccl.MaxIngestBatchSize(evalCtx.Settings) })
 	if err != nil {
@@ -417,6 +452,10 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 		if rd.metaCh != nil {
 			close(rd.metaCh)
 		}
+
+		rd.mu.Lock()
+		defer rd.mu.Unlock()
+		rd.mu.memAcc.Close(rd.Ctx)
 	}
 }
 
