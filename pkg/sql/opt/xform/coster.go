@@ -1474,7 +1474,11 @@ func lookupJoinInputLimitHint(inputRowCount, outputRowCount, outputLimitHint flo
 func lookupExprCost(join memo.RelExpr) memo.Cost {
 	lookupExpr, ok := join.(*memo.LookupJoinExpr)
 	if ok {
-		return cpuCostFactor * memo.Cost(len(lookupExpr.LookupExpr))
+		// 1.1 is a fudge factor that pushes some plans over the edge when choosing
+		// between a partial index vs full index plus lookup expr in the
+		// regional_by_row.
+		// TODO(treilly): do some empirical analysis and model this better
+		return cpuCostFactor * memo.Cost(len(lookupExpr.LookupExpr)) * 1.1
 	}
 	return 0
 }
