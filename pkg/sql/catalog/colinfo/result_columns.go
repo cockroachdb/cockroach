@@ -189,11 +189,11 @@ var ShowSyntaxColumns = ResultColumns{
 // ShowLastQueryStatisticsColumns are the columns of a
 // SHOW LAST QUERY STATISTICS statement.
 var ShowLastQueryStatisticsColumns = ResultColumns{
-	{Name: "parse_latency", Typ: types.Interval},
-	{Name: "plan_latency", Typ: types.Interval},
-	{Name: "exec_latency", Typ: types.Interval},
-	{Name: "service_latency", Typ: types.Interval},
-	{Name: "post_commit_jobs_latency", Typ: types.Interval},
+	{Name: "parse_latency", Typ: types.String},
+	{Name: "plan_latency", Typ: types.String},
+	{Name: "exec_latency", Typ: types.String},
+	{Name: "service_latency", Typ: types.String},
+	{Name: "post_commit_jobs_latency", Typ: types.String},
 }
 
 // ShowFingerprintsColumns are the result columns of a
