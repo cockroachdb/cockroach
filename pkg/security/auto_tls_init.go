@@ -174,6 +174,26 @@ func CreateServiceCertAndKey(
 
 	caKey, err := x509.ParsePKCS1PrivateKey(caKeyBlock.Bytes)
 	if err != nil {
+		// Maybe the data is in PKCS#8 format (there is an option to generate
+		// the files this way). Try the alternative parser.
+		var maybeKey interface{}
+		maybeKey, err = x509.ParsePKCS8PrivateKey(caKeyBlock.Bytes)
+		if err == nil {
+			// As per tls.parsePrivateKey()
+			switch key := maybeKey.(type) {
+			case *rsa.PrivateKey:
+				// TODO(knz): if we ever support non-RSA keys, we'll need to
+				// check for *ecdsa.PrivateKey, ed25519.PrivateKey here too.
+				caKey = key
+			default:
+				return nil, nil, errors.New("found unknown private key type in PKCS#8 wrapping")
+			}
+		}
+	}
+	// TODO(knz): if we ever support EC keys, we'll also want to call
+	// ParseECPrivateKey() here too. See tls.parsePrivateKey() for
+	// details.
+	if err != nil {
 		err = errors.Wrap(err, "failed to parse valid Private Key from PEM blob")
 		return nil, nil, err
 	}
