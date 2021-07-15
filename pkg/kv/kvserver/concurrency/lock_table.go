@@ -345,6 +345,9 @@ type lockTableGuardImpl struct {
 	// implementation, in comparison with eager queueing. If eager queueing
 	// is comparable in system throughput, one can eliminate the above anomalies.
 	//
+	// TODO(nvanbenschoten): should we be Reset-ing these btree snapshots when we
+	// Dequeue a lockTableGuardImpl? In releaseLockTableGuardImpl?
+	//
 	tableSnapshot [spanset.NumSpanScope]btree
 
 	// notRemovableLock points to the lock for which this guard has incremented
@@ -1016,6 +1019,23 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnC
 	if l.distinguishedWaiter != nil {
 		sb.Printf("   distinguished req: %d\n", redact.Safe(l.distinguishedWaiter.seqNum))
 	}
+}
+
+// addToMetrics adds the receiver's state to the provided metrics struct.
+func (l *lockState) addToMetrics(m *LockTableMetrics) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.isEmptyLock() {
+		return
+	}
+	lm := LockMetrics{
+		Key:            l.key,
+		Held:           l.holder.locked,
+		WaitingReaders: int64(l.waitingReaders.Len()),
+		WaitingWriters: int64(l.queuedWriters.Len()),
+	}
+	lm.Waiters = lm.WaitingReaders + lm.WaitingWriters
+	m.addLockMetrics(lm)
 }
 
 // Called for a write request when there is a reservation. Returns true iff it
@@ -2616,7 +2636,32 @@ func (t *lockTableImpl) Clear(disable bool) {
 	t.finalizedTxnCache.clear()
 }
 
-// For tests.
+// Metrics implements the lockTable interface.
+func (t *lockTableImpl) Metrics() LockTableMetrics {
+	var m LockTableMetrics
+	for i := 0; i < len(t.locks); i++ {
+		// Grab tree snapshot to avoid holding read lock during iteration.
+		var snap btree
+		{
+			tree := &t.locks[i]
+			tree.mu.RLock()
+			snap = tree.Clone()
+			tree.mu.RUnlock()
+		}
+
+		// Iterate and compute metrics.
+		iter := snap.MakeIter()
+		for iter.First(); iter.Valid(); iter.Next() {
+			iter.Cur().addToMetrics(&m)
+		}
+
+		// Reset snapshot to free resources.
+		snap.Reset()
+	}
+	return m
+}
+
+// String implements the lockTable interface.
 func (t *lockTableImpl) String() string {
 	var sb redact.StringBuilder
 	for i := 0; i < len(t.locks); i++ {

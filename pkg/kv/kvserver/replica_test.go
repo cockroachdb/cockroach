@@ -7724,8 +7724,8 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	}
 
 	// The request should still be holding its latches.
-	latchInfoGlobal, _ := tc.repl.concMgr.LatchMetrics()
-	if w := latchInfoGlobal.WriteCount; w == 0 {
+	latchMetrics := tc.repl.concMgr.LatchMetrics()
+	if w := latchMetrics.WriteCount; w == 0 {
 		t.Fatal("expected non-empty latch manager")
 	}
 
@@ -7735,8 +7735,8 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	// Even though we canceled the command it will still get executed and its
 	// latches cleaned up.
 	testutils.SucceedsSoon(t, func() error {
-		latchInfoGlobal, _ := tc.repl.concMgr.LatchMetrics()
-		if w := latchInfoGlobal.WriteCount; w != 0 {
+		latchMetrics := tc.repl.concMgr.LatchMetrics()
+		if w := latchMetrics.WriteCount; w != 0 {
 			return errors.Errorf("expected empty latch manager")
 		}
 		return nil
@@ -9070,10 +9070,8 @@ func TestReplicaMetrics(t *testing.T) {
 				context.Background(), hlc.Timestamp{}, &cfg.RaftConfig, zoneConfig,
 				c.liveness, 0, &c.desc, c.raftStatus, kvserverpb.LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking,
-				kvserverpb.LatchManagerInfo{}, kvserverpb.LatchManagerInfo{}, c.raftLogSize, true)
-			if c.expected != metrics {
-				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
-			}
+				concurrency.LatchMetrics{}, concurrency.LockTableMetrics{}, c.raftLogSize, true)
+			require.Equal(t, c.expected, metrics)
 		})
 	}
 }
