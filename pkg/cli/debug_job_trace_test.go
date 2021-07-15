@@ -41,7 +41,9 @@ import (
 var _ jobs.Resumer = &traceSpanResumer{}
 var _ jobs.TraceableJob = &traceSpanResumer{}
 
-func (r *traceSpanResumer) ForceRealSpan() {}
+func (r *traceSpanResumer) ForceRealSpan() bool {
+	return true
+}
 
 type traceSpanResumer struct {
 	ctx               context.Context
