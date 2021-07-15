@@ -2325,6 +2325,36 @@ INSERT INTO sc.tb2 VALUES ('hello');
 		sqlDB.ExpectErr(t, `pq: schema "unused" already exists`, `USE d; CREATE SCHEMA unused`)
 	})
 
+	// Tests backing up and restoring all tables in requested user defined
+	// schemas.
+	t.Run("requested-schema", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `
+CREATE DATABASE d;
+USE d;
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+CREATE TABLE sc1.tb1 (x INT);
+INSERT INTO sc1.tb1 VALUES (1);
+CREATE TABLE sc2.tb2 (y INT);
+`)
+
+		// Backup all tables in sc1.
+		sqlDB.Exec(t, `BACKUP TABLE d.sc1.* TO 'nodelocal://0/test/'`)
+
+		// Drop tables in both schemas and restore them into the database.
+		sqlDB.Exec(t, `DROP TABLE sc1.tb1`)
+		sqlDB.Exec(t, `DROP TABLE sc2.tb2`)
+		sqlDB.Exec(t, `RESTORE TABLE d.sc1.* FROM 'nodelocal://0/test/'`)
+
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.sc1.tb1`, [][]string{{"1"}})
+
+		// Tables in sc2 should not have been backed up
+		sqlDB.ExpectErr(t, `pq: relation "d.sc2.tb2" does not exist`, `SELECT * FROM d.sc2.tb2`)
+	})
+
 	// Test restoring tables with user defined schemas when restore schemas are
 	// not being remapped.
 	t.Run("no-remap", func(t *testing.T) {
