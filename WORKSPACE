@@ -27,8 +27,9 @@ http_archive(
 # repo.
 git_repository(
     name = "bazel_gazelle",
-    commit = "d038863ba2e096792c6bb6afca31f6514f1aeecd",
+    commit = "0ac66c98675a24d58f89a614b84dcd920a7e1762",
     remote = "https://github.com/bazelbuild/bazel-gazelle",
+    shallow_since = "1626107853 -0400",
 )
 
 # Override the location of some libraries; otherwise, rules_go will pull its own

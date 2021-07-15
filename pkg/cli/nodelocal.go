@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -132,7 +133,7 @@ func uploadFile(
 	if err != nil {
 		return errors.Wrap(err, "unable to get node id")
 	}
-	fmt.Printf("successfully uploaded to nodelocal://%s\n", filepath.Join(nodeID.String(), destination))
+	fmt.Printf("successfully uploaded to nodelocal://%s\n", filepath.Join(roachpb.NodeID(nodeID).String(), destination))
 	return nil
 }
 
