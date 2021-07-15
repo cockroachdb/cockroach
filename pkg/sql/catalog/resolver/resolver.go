@@ -488,7 +488,6 @@ func ResolveObjectNamePrefix(
 				tp.CatalogName = tp.SchemaName
 				tp.SchemaName = tree.PublicSchemaName
 				tp.ExplicitCatalog = true
-				tp.ExplicitCatalog = true
 			}
 			return found, scMeta, err
 		}
