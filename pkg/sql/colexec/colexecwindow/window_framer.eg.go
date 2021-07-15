@@ -2947,9 +2947,7 @@ func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameLas
 // frameNthIdx returns the index of the nth row (starting from one) in the
 // window frame for the current row. If no such row exists, frameNthIdx
 // returns -1.
-func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(
-	n int,
-) (idx int) {
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
 }
@@ -4264,9 +4262,7 @@ func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameLast
 // frameNthIdx returns the index of the nth row (starting from one) in the
 // window frame for the current row. If no such row exists, frameNthIdx
 // returns -1.
-func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(
-	n int,
-) (idx int) {
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
 }
