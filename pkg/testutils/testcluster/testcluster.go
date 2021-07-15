@@ -1316,7 +1316,12 @@ func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 // Fails the test if they do not match.
 func (tc *TestCluster) WaitForValues(t testing.TB, key roachpb.Key, expected []int64) {
 	t.Helper()
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, tc.WaitForValuesE(key, expected))
+}
+
+// WaitForValuesE is like WaitForValues, but returns the error and does not take a T.
+func (tc *TestCluster) WaitForValuesE(key roachpb.Key, expected []int64) error {
+	return testutils.SucceedsSoonError(func() error {
 		actual := tc.ReadIntFromStores(key)
 		if !reflect.DeepEqual(expected, actual) {
 			return errors.Errorf("expected %v, got %v", expected, actual)
