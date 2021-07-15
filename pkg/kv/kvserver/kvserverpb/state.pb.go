@@ -5,6 +5,10 @@ package kvserverpb
 
 import (
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+
 	github_com_cockroachdb_cockroach_pkg_kv_kvserver_closedts_ctpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -12,9 +16,6 @@ import (
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
-	io "io"
-	math "math"
-	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

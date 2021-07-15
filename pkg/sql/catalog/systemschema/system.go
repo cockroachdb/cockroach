@@ -437,6 +437,13 @@ CREATE TABLE system.transaction_statistics (
 		)
 );
 `
+	SQLInstancesTableSchema = `
+CREATE TABLE system.sql_instances (
+    id           INT NOT NULL PRIMARY KEY,
+    addr    STRING,
+    session_id   BYTES,
+    FAMILY "primary" (id, addr, session_id)
+)`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1982,7 +1989,8 @@ var (
 					"aggregated_ts", "fingerprint_id", "app_name", "node_id",
 					"count", "agg_interval", "metadata", "statistics",
 				},
-				ColumnIDs:       []descpb.ColumnID{9, 1, 2, 3, 4, 5, 6, 7, 8},
+				ColumnIDs: []descpb.ColumnID{9, 1, 2, 3, 4, 5, 6, 7, 8},
+
 				DefaultColumnID: 0,
 			},
 		},
@@ -2054,6 +2062,39 @@ var (
 		NextIndexID: 3,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.TransactionStatisticsTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// SQLInstancesTable is the descriptor for the sqlinstances table
+	// It stores information about all the SQL instances for a tenant
+	// and their associated session and address information.
+	SQLInstancesTable = makeTable(descpb.TableDescriptor{
+		Name:                    "sql_instances",
+		ID:                      keys.SQLInstancesTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Int, Nullable: false},
+			{Name: "addr", ID: 2, Type: types.String, Nullable: true},
+			{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
+		},
+		NextColumnID: 4,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:            "primary",
+				ID:              0,
+				ColumnNames:     []string{"id", "addr", "session_id"},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+				DefaultColumnID: 0,
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: pk("id"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.SQLInstancesTableID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})

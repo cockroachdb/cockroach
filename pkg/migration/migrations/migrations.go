@@ -53,7 +53,7 @@ var migrations = []migration.Migration{
 		protectedTsMetaPrivilegesMigration,
 	),
 	migration.NewTenantMigration(
-		"add the systems.join_tokens table",
+		"add the system.join_tokens table",
 		toCV(clusterversion.JoinTokensTable),
 		joinTokensTableMigration,
 	),
@@ -76,6 +76,11 @@ var migrations = []migration.Migration{
 		"add the system.sql_transaction_stats table",
 		toCV(clusterversion.SQLStatsTable),
 		sqlTransactionStatsTableMigration,
+	),
+	migration.NewTenantMigration(
+		"add the system.sql_instances table",
+		toCV(clusterversion.SQLInstancesTable),
+		sqlInstancesTableMigration,
 	),
 }
 

@@ -514,7 +514,8 @@ const leaseConcurrencyLimit = 5
 //
 // internalExecutor can be nil to help bootstrapping, but then it needs to be set via
 // SetInternalExecutor before the Manager is used.
-//
+// nodeIDContainer can be nil to help bootstrapping, but then it needs to be set via
+// SetNodeIDContainer before the Manager is used.
 // stopper is used to run async tasks. Can be nil in tests.
 func NewLeaseManager(
 	ambientCtx log.AmbientContext,
@@ -1178,4 +1179,11 @@ func (m *Manager) VisitLeases(
 			return
 		}
 	}
+}
+
+
+// SetNodeIDContainer sets the node ID container. The node ID container can be initialized as nil
+// in a multi-tenant environment and needs to be set explicitly.
+func (m *Manager) SetNodeIDContainer(nodeIDContainer *base.SQLIDContainer) {
+	m.storage.nodeIDContainer = nodeIDContainer
 }
