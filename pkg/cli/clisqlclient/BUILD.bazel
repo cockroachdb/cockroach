@@ -21,7 +21,7 @@ go_library(
         "//pkg/cli/clicfg",
         "//pkg/cli/clierror",
         "//pkg/security/pprompt",
-        "//pkg/sql/parser",
+        "//pkg/sql/scanner",
         "//pkg/util/version",
         "@com_github_cockroachdb_cockroach_go//crdb",
         "@com_github_cockroachdb_errors//:errors",
