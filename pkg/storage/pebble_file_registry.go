@@ -24,6 +24,10 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// CanRegistryElideFunc is a function that returns true for entries that can be
+// elided instead of being written to the registry.
+var CanRegistryElideFunc func(entry *enginepb.FileEntry) bool
+
 // PebbleFileRegistry keeps track of files for the data-FS and store-FS for Pebble (see encrypted_fs.go
 // for high-level comment).
 //
@@ -95,6 +99,26 @@ func (r *PebbleFileRegistry) Load() error {
 	if err = protoutil.Unmarshal(b, r.mu.currProto); err != nil {
 		return err
 	}
+	// Delete all unnecessary entries to reduce registry size.
+	if err := r.maybeElideEntries(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *PebbleFileRegistry) maybeElideEntries() error {
+	newProto := &enginepb.FileRegistry{}
+	proto.Merge(newProto, r.mu.currProto)
+	filesChanged := false
+	for filename, entry := range newProto.Files {
+		if CanRegistryElideFunc != nil && CanRegistryElideFunc(entry) {
+			delete(newProto.Files, filename)
+			filesChanged = true
+		}
+	}
+	if filesChanged {
+		return r.writeRegistry(newProto)
+	}
 	return nil
 }
 
@@ -107,10 +131,11 @@ func (r *PebbleFileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
 }
 
 // SetFileEntry sets filename => entry in the registry map and persists the registry.
+// It should not be called for entries corresponding to unencrypted files since the
+// absence of a file in the file registry implies that it is unencrypted.
 func (r *PebbleFileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) error {
-	// We choose not to store an entry for unencrypted files since the absence of
-	// a file in the file registry implies that it is unencrypted.
-	if entry != nil && entry.EnvType == enginepb.EnvType_Plaintext {
+	// We don't need to store nil entries since that's the default zero value.
+	if entry == nil {
 		return r.MaybeDeleteEntry(filename)
 	}
 

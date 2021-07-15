@@ -169,7 +169,7 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if len(registries.FileRegistry) == 0 || len(registries.KeyRegistry) == 0 {
+	if len(registries.KeyRegistry) == 0 {
 		return nil
 	}
 
