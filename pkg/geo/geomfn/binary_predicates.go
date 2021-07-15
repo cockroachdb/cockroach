@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/geo/geosprepared"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -135,6 +136,8 @@ func Equals(a geo.Geometry, b geo.Geometry) (bool, error) {
 	return geos.Equals(a.EWKB(), b.EWKB())
 }
 
+var preparedCache = &geosprepared.Cache{}
+
 // Intersects returns whether geometry A intersects geometry B.
 func Intersects(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
@@ -142,6 +145,13 @@ func Intersects(a geo.Geometry, b geo.Geometry) (bool, error) {
 	}
 	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
 		return false, nil
+	}
+	prep, other, err := preparedCache.Get(a.SpatialObject(), b.SpatialObject())
+	if err != nil {
+		return false, err
+	}
+	if prep != nil {
+		return geos.PreparedIntersects(prep, other.EWKB)
 	}
 
 	// Optimization for point in polygon calculations.

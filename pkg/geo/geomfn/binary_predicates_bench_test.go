@@ -57,6 +57,7 @@ func BenchmarkIntersectsSmallPolygonsAndPoints(b *testing.B) {
 func benchmarkIntersects(geomListA []geo.Geometry, geomListB []geo.Geometry, b *testing.B) {
 	var res bool
 	var err error
+	preparedCache.Free()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		for _, geomA := range geomListA {
