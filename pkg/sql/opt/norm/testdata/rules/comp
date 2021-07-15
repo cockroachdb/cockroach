@@ -804,9 +804,9 @@ select
  └── filters
       └── st_intersects(geom:1, '010100000000000000000000000000000000000000') [outer=(1), immutable, constraints=(/1: (/NULL - ])]
 
-# Geography case.
+# Geography case with use_spheroid=false.
 norm expect=FoldEqZeroSTDistance
-SELECT * FROM geom_geog WHERE st_distance(geog, 'POINT(0.0 0.0)') = 0
+SELECT * FROM geom_geog WHERE st_distance(geog, 'POINT(0.0 0.0)', false) = 0
 ----
 select
  ├── columns: geom:1 geog:2!null val:3
@@ -827,6 +827,30 @@ select
  │    └── columns: geom:1 geog:2 val:3
  └── filters
       └── st_distance(geom:1, '010100000000000000000000000000000000000000') = 1.0 [outer=(1), immutable]
+
+# No-op case because use_spheroid=true implicitly.
+norm expect-not=FoldEqZeroSTDistance
+SELECT * FROM geom_geog WHERE st_distance(geog, 'POINT(0.0 0.0)') = 0
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000') = 0.0 [outer=(2), immutable]
+
+# No-op case because use_spheroid=true.
+norm expect-not=FoldEqZeroSTDistance
+SELECT * FROM geom_geog WHERE st_distance(geog, 'POINT(0.0 0.0)', true) = 0
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000', true) = 0.0 [outer=(2), immutable]
 
 # --------------------------------------------------
 # FoldCmpSTDistanceLeft
