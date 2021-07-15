@@ -34,6 +34,9 @@ const (
 	OnTable = "on_table"
 	// OnType is used when a GRANT/REVOKE is happening on a type.
 	OnType = "on_type"
+	// OnAllTablesInSchema is used when a GRANT/REVOKE is happening on
+	// all tables in a set of schemas.
+	OnAllTablesInSchema = "on_all_tables_in_schemas"
 
 	iamRoles = "iam.roles"
 )
