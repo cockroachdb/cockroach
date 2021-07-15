@@ -13,7 +13,6 @@ package colexecwindow
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"sort"
 	"testing"
@@ -64,12 +63,15 @@ func TestWindowFramer(t *testing.T) {
 	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
 	queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 
+	var memLimits = []int64{1, 1 << 10, 1 << 20}
+
 	testCfg := &testConfig{
 		rng:       rng,
 		evalCtx:   evalCtx,
 		factory:   factory,
 		allocator: allocator,
 		queueCfg:  queueCfg,
+		memLimit:  memLimits[rng.Intn(len(memLimits))],
 	}
 
 	const randTypeProbability = 0.5
@@ -152,6 +154,7 @@ type testConfig struct {
 	startBound tree.WindowFrameBoundType
 	endBound   tree.WindowFrameBoundType
 	exclusion  tree.WindowFrameExclusion
+	memLimit   int64
 }
 
 func testWindowFramer(t *testing.T, testCfg *testConfig) {
@@ -283,7 +286,7 @@ func makeSortedPartition(testCfg *testConfig) (tree.Datums, *colexecutils.Spilli
 	sort.Sort(datums)
 
 	partition := colexecutils.NewSpillingBuffer(
-		testCfg.allocator, math.MaxInt64, testCfg.queueCfg,
+		testCfg.allocator, testCfg.memLimit, testCfg.queueCfg,
 		colexecop.NewTestingSemaphore(2), []*types.T{testCfg.typ, types.Bool}, testDiskAcc,
 	)
 	insertBatch := testCfg.allocator.NewMemBatchWithFixedCapacity(
