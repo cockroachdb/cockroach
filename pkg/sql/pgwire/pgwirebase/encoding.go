@@ -493,6 +493,8 @@ func DecodeDatum(
 		}
 	case FormatBinary:
 		switch id {
+		case oid.T_record:
+			return decodeTuple(evalCtx, t, code, b)
 		case oid.T_bool:
 			if len(b) > 0 {
 				switch b[0] {
@@ -948,6 +950,58 @@ func decodeBinaryArray(
 		}
 	}
 	return arr, nil
+}
+
+func decodeTuple(
+	evalCtx *tree.EvalContext, t *types.T, code FormatCode, b []byte,
+) (tree.Datum, error) {
+	if len(b) < 4 {
+		return nil, pgerror.Newf(pgcode.Syntax, "Tuple needs to have atleast 4 bytes to indicate the number of columns.")
+	}
+
+	totalLength := int32(len(b))
+	numberOfCols := int32(binary.BigEndian.Uint32(b[0:4]))
+	typs := make([]*types.T, 0, numberOfCols)
+	datums := make(tree.Datums, 0, numberOfCols)
+	curByte := int32(4)
+	curCol := int32(0)
+
+	for curCol < numberOfCols {
+
+		if totalLength < curByte+4 {
+			return nil, pgerror.Newf(pgcode.Syntax, "Tuple does not have enough bytes for column oid.")
+		}
+
+		colOid := int32(binary.BigEndian.Uint32(b[curByte : curByte+4]))
+		colType := types.OidToType[oid.Oid(colOid)]
+		typs = append(typs, colType)
+		curByte = curByte + 4
+
+		if totalLength < curByte+4 {
+			return nil, pgerror.Newf(pgcode.Syntax, "Tuple does not have enough bytes for column length.")
+		}
+
+		colLength := int32(binary.BigEndian.Uint32(b[curByte : curByte+4]))
+		curByte = curByte + 4
+
+		if colLength == -1 {
+			datums = append(datums, tree.DNull)
+		} else {
+			colDatum, err := DecodeDatum(evalCtx, colType, code, b[curByte:curByte+colLength])
+
+			if err != nil {
+				return nil, err
+			}
+
+			curByte = curByte + colLength
+			datums = append(datums, colDatum)
+		}
+		curCol++
+	}
+
+	tupleTyps := types.MakeTuple(typs)
+	return tree.NewDTuple(tupleTyps, datums...), nil
+
 }
 
 var invalidUTF8Error = pgerror.Newf(pgcode.CharacterNotInRepertoire, "invalid UTF-8 sequence")

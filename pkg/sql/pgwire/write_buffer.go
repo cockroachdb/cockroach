@@ -79,6 +79,10 @@ func (b *writeBuffer) writeString(s string) {
 	}
 }
 
+func (b *writeBuffer) Len() int {
+	return b.wrapped.Len()
+}
+
 func (b *writeBuffer) nullTerminate() {
 	if b.err == nil {
 		b.err = b.wrapped.WriteByte(0)
@@ -147,6 +151,10 @@ func (b *writeBuffer) putInt64(v int64) {
 		binary.BigEndian.PutUint64(b.putbuf[:], uint64(v))
 		_, b.err = b.wrapped.Write(b.putbuf[:8])
 	}
+}
+
+func (b *writeBuffer) putInt32AtIndex(index int, v int32) {
+	binary.BigEndian.PutUint32(b.wrapped.Bytes()[index:index+4], uint32(v))
 }
 
 func (b *writeBuffer) putErrFieldMsg(field pgwirebase.ServerErrFieldType) {
