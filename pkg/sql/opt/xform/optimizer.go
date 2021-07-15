@@ -977,3 +977,8 @@ func (o *Optimizer) recomputeCostImpl(
 func (o *Optimizer) FormatExpr(e opt.Expr, flags memo.ExprFmtFlags) string {
 	return memo.FormatExpr(e, flags, o.mem, o.catalog)
 }
+
+// CustomFuncs exports the xform.CustomFuncs for testing purposes.
+func (o *Optimizer) CustomFuncs() *CustomFuncs {
+	return &o.explorer.funcs
+}

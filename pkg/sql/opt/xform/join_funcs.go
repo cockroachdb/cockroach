@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -297,8 +298,13 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// join implements logic equivalent to simple equality between
 			// columns (where NULL never equals anything).
 			foundVals, allIdx, ok := c.findJoinFilterConstants(allFilters, idxCol)
+			var foundRange bool
 			if !ok {
-				break
+				// Also allow a limited form of range condition filters.
+				allIdx, foundRange = c.findJoinFilterRange(allFilters, idxCol)
+				if !foundRange {
+					break
+				}
 			}
 
 			if len(foundVals) > 1 {
@@ -319,6 +325,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 					shouldBuildMultiSpanLookupJoin = true
 					break
 				}
+			}
+
+			if foundRange {
+				shouldBuildMultiSpanLookupJoin = true
+				break
 			}
 
 			// We will join these constant values with the input to make
@@ -343,11 +354,12 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		}
 
 		if shouldBuildMultiSpanLookupJoin {
-			// Some of the index columns were constrained to multiple constant values,
-			// and we did not use the method constructJoinWithConstants to create a
-			// cross join as the input (either because it would have been incorrect or
-			// because it would have eliminated the opportunity to apply other
-			// optimizations such as locality optimized search; see above).
+			// Some of the index columns were constrained to multiple constant values
+			// or a range expression, and we did not use the method
+			// constructJoinWithConstants to create a cross join as the input (either
+			// because it would have been incorrect or because it would have
+			// eliminated the opportunity to apply other optimizations such as
+			// locality optimized search; see above).
 			//
 			// As an alternative, we store all the filters needed for the lookup in
 			// LookupExpr, which will be used to construct spans at execution time.
@@ -566,27 +578,41 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 			continue
 		}
 
+		var foundRange bool
 		// Try to find a filter that constrains this column to non-NULL
 		// constant values. We cannot use a NULL value because the lookup
 		// join implements logic equivalent to simple equality between
 		// columns (where NULL never equals anything).
 		values, allIdx, ok := c.findJoinFilterConstants(filters, idxCol)
 		if !ok {
-			break
+			// If there's no const filters look for an inequality range.
+			allIdx, foundRange = c.findJoinFilterRange(filters, idxCol)
+			if !foundRange {
+				break
+			}
 		}
 
 		if constFilters == nil {
 			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
 		}
 
-		// Ensure that the constant filter is either an equality or an IN expression.
-		// These are the only two types of expressions currently supported by the
-		// lookupJoiner for building lookup spans.
+		// Ensure that the constant filter is an equality, IN or inequality
+		// expression.   These are the only types of expressions currently supported
+		// by the lookupJoiner for building lookup spans.
 		constFilter := filters[allIdx]
-		if !c.isCanonicalConstFilter(constFilter) {
-			constFilter = c.makeConstFilter(idxCol, values)
+		if !c.isCanonicalLookupJoinFilter(constFilter) {
+			if len(values) > 0 {
+				constFilter = c.makeConstFilter(idxCol, values)
+			} else if foundRange {
+				constFilter = c.makeRangeFilter(idxCol, constFilter)
+			}
 		}
 		constFilters = append(constFilters, constFilter)
+
+		// Generating additional columns after a range isn't helpful so stop here.
+		if foundRange {
+			break
+		}
 	}
 
 	if len(eqFilters) == 0 {
@@ -597,24 +623,34 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 	return eqFilters, constFilters, rightSideCols
 }
 
-// isCanonicalConstFilter checks that the given filter is a constant filter in
-// one of two possible canonical formats:
-//  1. It is an equality between a variable and a constant.
-//  2. It is an IN expression between a variable and a tuple of constants.
-// Returns true if the filter matches one of these two formats. Otherwise
-// returns false.
-func (c *CustomFuncs) isCanonicalConstFilter(filter memo.FiltersItem) bool {
-	switch t := filter.Condition.(type) {
-	case *memo.EqExpr:
-		if t.Left.Op() == opt.VariableOp && opt.IsConstValueOp(t.Right) {
+// isCanonicalLookupJoinFilter returns true for the limited set of expr's that are
+// supported by the lookup joiner at execution time.
+func (c *CustomFuncs) isCanonicalLookupJoinFilter(filter memo.FiltersItem) bool {
+	var checkExpr func(expr opt.Expr) bool
+	checkExpr = func(expr opt.Expr) bool {
+		switch t := expr.(type) {
+		case *memo.RangeExpr:
+			return checkExpr(t.And)
+		case *memo.AndExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.GeExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.GtExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.LeExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.LtExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.VariableExpr:
 			return true
+		case *memo.EqExpr:
+			return checkExpr(t.Left) && checkExpr(t.Right)
+		case *memo.InExpr:
+			return checkExpr(t.Left) && memo.CanExtractConstTuple(t.Right)
 		}
-	case *memo.InExpr:
-		if t.Left.Op() == opt.VariableOp && memo.CanExtractConstTuple(t.Right) {
-			return true
-		}
+		return opt.IsConstValueOp(expr)
 	}
-	return false
+	return checkExpr(filter.Condition)
 }
 
 // makeConstFilter builds a filter that constrains the given column to the given
@@ -638,6 +674,59 @@ func (c *CustomFuncs) makeConstFilter(col opt.ColumnID, values tree.Datums) memo
 		c.e.f.ConstructVariable(col),
 		c.e.f.ConstructTuple(elems, types.MakeTuple(elemTypes)),
 	))
+}
+
+// makeRangeFilter builds a filter from a constrained column, we assume the
+// column is constrained by at least 1 tight constraint. This code doesn't
+// handle descending columns.
+func (c *CustomFuncs) makeRangeFilter(col opt.ColumnID, filter memo.FiltersItem) memo.FiltersItem {
+	props := filter.ScalarProps()
+	if props.Constraints.Length() == 0 ||
+		props.Constraints.Constraint(0).Spans.Count() != 1 ||
+		props.Constraints.Constraint(0).Columns.Get(0).Descending() {
+		panic(errors.AssertionFailedf("makeRangeFilter needs at least one ascending constraint with one span"))
+	}
+	span := props.Constraints.Constraint(0).Spans.Get(0)
+	return c.makeRangeFilterFromSpan(col, span)
+}
+
+// makeRangeFilterFromSpan constructs a filter from a constraint.Span.
+func (c *CustomFuncs) makeRangeFilterFromSpan(
+	col opt.ColumnID, span *constraint.Span,
+) memo.FiltersItem {
+	variable := c.e.f.ConstructVariable(col)
+	var left, right opt.ScalarExpr
+
+	// Here and below we need to check for IsEmpty and IsNull because sometimes
+	// Null is used for unbounded spans.  Found empirically by forcing
+	// findFiltersForIndexLookup to always wrap the filters with makeRangeFilter.
+	if !span.StartKey().IsEmpty() && !span.StartKey().IsNull() {
+		val := span.StartKey().Value(0)
+		if span.StartBoundary() == constraint.IncludeBoundary {
+			left = c.e.f.ConstructGe(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
+		} else {
+			left = c.e.f.ConstructGt(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
+		}
+	}
+
+	if !span.EndKey().IsEmpty() && !span.EndKey().IsNull() {
+		val := span.EndKey().Value(0)
+		if span.EndBoundary() == constraint.IncludeBoundary {
+			right = c.e.f.ConstructLe(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
+		} else {
+			right = c.e.f.ConstructLt(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
+		}
+	}
+
+	if left != nil && right != nil {
+		return c.e.f.ConstructFiltersItem(c.e.f.ConstructRange(c.e.f.ConstructAnd(right, left)))
+	} else if left != nil {
+		return c.e.f.ConstructFiltersItem(left)
+	} else if right != nil {
+		return c.e.f.ConstructFiltersItem(right)
+	}
+
+	panic(errors.AssertionFailedf("Constraint needs a valid start or end key"))
 }
 
 // constructContinuationColumnForPairedJoin constructs a continuation column
@@ -973,6 +1062,28 @@ func (c *CustomFuncs) findJoinFilterConstants(
 		return nil, -1, false
 	}
 	return bestValues, bestFilterIdx, true
+}
+
+// findJoinFilterRange tries to find an inequality range for this column.
+func (c *CustomFuncs) findJoinFilterRange(
+	filters memo.FiltersExpr, col opt.ColumnID,
+) (filterIdx int, ok bool) {
+	for filterIdx := range filters {
+		props := filters[filterIdx].ScalarProps()
+		if props.TightConstraints && !props.Constraints.IsUnconstrained() {
+			constraint := props.Constraints.Constraint(0)
+			constraintCol := constraint.Columns.Get(0).ID()
+			// See comment in findFiltersForIndexLookup for why we check filter here.
+			// We only support 1 span in the execution engine so check that.
+			if constraintCol != col ||
+				constraint.Spans.Count() != 1 ||
+				!c.isCanonicalLookupJoinFilter(filters[filterIdx]) {
+				continue
+			}
+			return filterIdx, true
+		}
+	}
+	return 0, false
 }
 
 // constructJoinWithConstants constructs a cross join that joins every row in

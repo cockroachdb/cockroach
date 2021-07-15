@@ -4113,7 +4113,10 @@ limit
  │    │    ├── ordering: +20 opt(24) [actual: +20]
  │    │    └── inner-join (lookup watch_item)
  │    │         ├── columns: wi_wl_id:19!null wi_s_symb:20!null wl_id:23!null wl_c_id:24!null
- │    │         ├── key columns: [23] = [19]
+ │    │         ├── lookup expression
+ │    │         │    └── filters
+ │    │         │         ├── wi_wl_id:19 = wl_id:23 [outer=(19,23), constraints=(/19: (/NULL - ]; /23: (/NULL - ]), fd=(19)==(23), (23)==(19)]
+ │    │         │         └── wi_s_symb:20 > 'SYMB' [outer=(20), constraints=(/20: [/e'SYMB\x00' - ]; tight)]
  │    │         ├── key: (20,23)
  │    │         ├── fd: ()-->(24), (19)==(23), (23)==(19)
  │    │         ├── select
@@ -4126,8 +4129,7 @@ limit
  │    │         │    │    └── fd: (23)-->(24)
  │    │         │    └── filters
  │    │         │         └── wl_c_id:24 = 0 [outer=(24), constraints=(/24: [/0 - /0]; tight), fd=()-->(24)]
- │    │         └── filters
- │    │              └── wi_s_symb:20 > 'SYMB' [outer=(20), constraints=(/20: [/e'SYMB\x00' - ]; tight)]
+ │    │         └── filters (true)
  │    └── filters (true)
  └── 1
 
