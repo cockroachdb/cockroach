@@ -1752,6 +1752,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		ex.draining = true
 		res = ex.clientComm.CreateDrainResult(pos)
 		if ex.idleConn() {
+			res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
 			return errDrainingComplete
 		}
 	case Flush:
