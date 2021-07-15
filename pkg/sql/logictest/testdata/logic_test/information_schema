@@ -3709,7 +3709,7 @@ numeric_precision_radix              INT8         true         NULL            �
 numeric_scale                        INT8         true         NULL            ·                      {}       false
 datetime_precision                   INT8         true         NULL            ·                      {}       false
 interval_type                        STRING       true         NULL            ·                      {}       false
-interval_precision                   STRING       true         NULL            ·                      {}       false
+interval_precision                   INT8         true         NULL            ·                      {}       false
 type_udt_catalog                     STRING       true         NULL            ·                      {}       false
 type_udt_schema                      STRING       true         NULL            ·                      {}       false
 type_udt_name                        STRING       true         NULL            ·                      {}       false
@@ -3742,7 +3742,7 @@ is_udt_dependent                     STRING       true         NULL            �
 result_cast_from_data_type           STRING       true         NULL            ·                      {}       false
 result_cast_as_locator               STRING       true         NULL            ·                      {}       false
 result_cast_char_max_length          INT8         true         NULL            ·                      {}       false
-result_cast_char_octet_length        STRING       true         NULL            ·                      {}       false
+result_cast_char_octet_length        INT8         true         NULL            ·                      {}       false
 result_cast_char_set_catalog         STRING       true         NULL            ·                      {}       false
 result_cast_char_set_schema          STRING       true         NULL            ·                      {}       false
 result_cast_char_set_name            STRING       true         NULL            ·                      {}       false
@@ -3752,7 +3752,7 @@ result_cast_collation_name           STRING       true         NULL            �
 result_cast_numeric_precision        INT8         true         NULL            ·                      {}       false
 result_cast_numeric_precision_radix  INT8         true         NULL            ·                      {}       false
 result_cast_numeric_scale            INT8         true         NULL            ·                      {}       false
-result_cast_datetime_precision       STRING       true         NULL            ·                      {}       false
+result_cast_datetime_precision       INT8         true         NULL            ·                      {}       false
 result_cast_interval_type            STRING       true         NULL            ·                      {}       false
 result_cast_interval_precision       INT8         true         NULL            ·                      {}       false
 result_cast_type_udt_catalog         STRING       true         NULL            ·                      {}       false
