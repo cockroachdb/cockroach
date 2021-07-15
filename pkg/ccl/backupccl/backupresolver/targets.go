@@ -260,6 +260,100 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 	return r, nil
 }
 
+// GetQualifiedTablePatterns returns the qualified table names for all the
+// given target tables.
+// For all table names specified in the BACKUP statement, the fully qualified
+// name will be returned.
+// For complete DB backups, if the schema was not specified in the BACKUP
+// statement, return the database-qualified name, e.g., * -> db.*
+// Otherwise, if the schema name can be successfully resolved, return the fully
+// qualified name, e.g., schema.* -> db.schema.*
+func GetQualifiedTablePatterns(
+	ctx context.Context,
+	p sql.PlanHookState,
+	targetDescs []catalog.Descriptor,
+	completeDBIDs []descpb.ID,
+	targetTables tree.TablePatterns,
+) (tree.TablePatterns, error) {
+	txn := p.ExtendedEvalContext().Txn
+	execCfg := *p.ExecCfg()
+
+	completeDBs := make(map[descpb.ID]struct{})
+	for _, dbID := range completeDBIDs {
+		completeDBs[dbID] = struct{}{}
+	}
+
+	var qualifiedPatterns tree.TablePatterns
+	var currentDBDesc catalog.Descriptor
+	for _, desc := range targetDescs {
+		switch desc.DescriptorType() {
+		case catalog.Table:
+			dbDesc, err := catalogkv.MustGetDescriptorByID(ctx, txn, execCfg.Codec, desc.GetParentID())
+			if err != nil {
+				return nil, err
+			}
+
+			// Do not attempt to expand target tables for backuping up complete DBs
+			if _, ok := completeDBs[dbDesc.GetID()]; ok {
+				continue
+			}
+
+			schemaID := desc.GetParentSchemaID()
+			schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, desc.GetParentID(), schemaID)
+			if err != nil {
+				return nil, err
+			}
+
+			tn := tree.NewTableNameWithSchema(
+				tree.Name(dbDesc.GetName()),
+				tree.Name(schemaName),
+				tree.Name(desc.GetName()),
+			)
+			qualifiedPatterns = append(qualifiedPatterns, tn)
+		case catalog.Database:
+			if desc.GetName() == p.CurrentDatabase() {
+				currentDBDesc = desc
+			}
+		}
+	}
+
+	for _, pattern := range targetTables {
+		tablePattern, err := pattern.NormalizeTablePattern()
+		if err != nil {
+			return nil, err
+		}
+		switch tp := tablePattern.(type) {
+		case *tree.AllTablesSelector:
+			if !tp.ExplicitSchema {
+				tp.ExplicitSchema = true
+				tp.SchemaName = tree.Name(p.CurrentDatabase())
+			} else if tp.ExplicitSchema && !tp.ExplicitCatalog {
+				// Proceed to the next iteration if no tables are requested for the
+				// current db.
+				if currentDBDesc == nil {
+					qualifiedPatterns = append(qualifiedPatterns, tp)
+					continue
+				}
+
+				// The schema field could either be a SCHEMA name or a DATABASE name
+				// If we can successfully resolve the schema, we will add the DATABSE
+				// prefix. Otherwise, no updates are needed.
+				resolvedSchema, _, err := catalogkv.ResolveSchemaID(ctx, txn, execCfg.Codec, currentDBDesc.GetID(), tp.SchemaName.String())
+				if err != nil {
+					return nil, err
+				}
+
+				if resolvedSchema {
+					tp.ExplicitCatalog = true
+					tp.CatalogName = tree.Name(p.CurrentDatabase())
+				}
+			}
+			qualifiedPatterns = append(qualifiedPatterns, tp)
+		}
+	}
+	return qualifiedPatterns, nil
+}
+
 // DescriptorsMatchingTargets returns the descriptors that match the targets. A
 // database descriptor is included in this set if it matches the targets (or the
 // session database) or if one of its tables matches the targets. All expanded
