@@ -1699,6 +1699,7 @@ bins = \
   bin/cockroach-short \
   bin/cockroach-sql \
   bin/compile-builds \
+  bin/dev \
   bin/docgen \
   bin/execgen \
   bin/fuzz \
@@ -1719,11 +1720,11 @@ bins = \
   bin/roachprod \
   bin/roachprod-stress \
   bin/roachtest \
-	bin/skip-test \
+  bin/skip-test \
   bin/teamcity-trigger \
   bin/uptodate \
   bin/urlcheck \
-	bin/whoownsit \
+  bin/whoownsit \
   bin/zerosum
 
 # `xbins` contains binaries that should be compiled for the target architecture

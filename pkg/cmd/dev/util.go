@@ -98,3 +98,8 @@ func getConfigFlags() []string {
 	}
 	return []string{"--config=dev"}
 }
+
+func addCommonTestFlags(cmd *cobra.Command) {
+	cmd.Flags().StringP(filterFlag, "f", "", "run unit tests matching this regex")
+	cmd.Flags().Duration(timeoutFlag, 0*time.Minute, "timeout for test")
+}

@@ -1,0 +1,9 @@
+dev bench pkg/util/...
+----
+git grep -l ^func Benchmark -- pkg/util/*_test.go
+bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/util:util_test -- -test.bench=.
+bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/util/uuid:uuid_test -- -test.bench=.
+
+dev bench pkg/sql/parser --filter=BenchmarkParse
+----
+bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/sql/parser:parser_test -- -test.bench=BenchmarkParse

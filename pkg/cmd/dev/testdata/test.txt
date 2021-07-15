@@ -30,3 +30,7 @@ bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev /
 dev test --stress pkg/util/tracing --filter 'TestStartChild*' --timeout=10s -v
 ----
 bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --run_under stress -maxtime=10s --test_filter='TestStartChild*' --test_output all --test_arg -test.v
+
+dev test //pkg/testutils --timeout=10s
+----
+bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/testutils:testutils_test --test_timeout=10 --test_output errors
