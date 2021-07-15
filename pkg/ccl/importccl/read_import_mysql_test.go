@@ -23,10 +23,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -45,6 +47,15 @@ func TestMysqldumpDataReader(t *testing.T) {
 	files := getMysqldumpTestdata(t)
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 	table := descForTable(ctx, t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 100, 200, NoFKs)
 	tables := map[string]*execinfrapb.ReadImportDataSpec_ImportTable{"simple": {Desc: table.TableDesc()}}
 	opts := roachpb.MysqldumpOptions{}
@@ -53,7 +64,8 @@ func TestMysqldumpDataReader(t *testing.T) {
 	// When creating a new dump reader, we need to pass in the walltime that will be used as
 	// a parameter used for generating unique rowid, random, and gen_random_uuid as default
 	// expressions. Here, the parameter doesn't matter so we pass in 0.
-	converter, err := newMysqldumpReader(ctx, kvCh, 0 /*walltime*/, tables, testEvalCtx, opts)
+	converter, err := newMysqldumpReader(ctx, flowCtx, kvCh,
+		0 /*walltime*/, tables, testEvalCtx, opts)
 
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +83,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	defer in.Close()
 	wrapped := &fileReader{Reader: in, counter: byteCounter{r: in}}
 
-	if err := converter.readFile(ctx, wrapped, 1, 0, nil); err != nil {
+	if err := converter.readFile(ctx, flowCtx, wrapped, 1, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	close(kvCh)

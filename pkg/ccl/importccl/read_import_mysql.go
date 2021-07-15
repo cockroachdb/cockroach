@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -61,6 +62,7 @@ var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	kvCh chan row.KVBatch,
 	walltime int64,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
@@ -75,7 +77,8 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(ctx, tabledesc.NewBuilder(table.Desc).BuildImmutableTable(),
+		conv, err := row.NewDatumRowConverter(ctx, flowCtx,
+			tabledesc.NewBuilder(table.Desc).BuildImmutableTable(),
 			nil /* targetColNames */, evalCtx, kvCh, nil /* seqChunkProvider */)
 		if err != nil {
 			return nil, err
@@ -91,17 +94,24 @@ func (m *mysqldumpReader) start(ctx ctxgroup.Group) {
 
 func (m *mysqldumpReader) readFiles(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	user security.SQLUsername,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
+	return readInputFiles(ctx, flowCtx, dataFiles, resumePos, format, m.readFile,
+		makeExternalStorage, user)
 }
 
 func (m *mysqldumpReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	input *fileReader,
+	inputIdx int32,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	var inserts, count int64
 	r := bufio.NewReaderSize(input, 1024*64)

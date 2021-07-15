@@ -14,8 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -141,8 +143,19 @@ func TestParallelImportProducerHandlesConsumerErrors(t *testing.T) {
 
 	consumer := &errorReturningConsumer{errors.New("consumer aborted")}
 
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
+
 	require.Equal(t, consumer.err,
-		runParallelImport(context.Background(), importCtx,
+		runParallelImport(ctx, flowCtx, importCtx,
 			&importFileContext{}, &nilDataProducer{}, consumer))
 }
 
@@ -183,11 +196,20 @@ func TestParallelImportProducerHandlesCancellation(t *testing.T) {
 		func(_ context.Context, _ int) error {
 			timeout := time.Millisecond * time.Duration(250+rand.Intn(250))
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := tree.MakeTestingEvalContext(st)
+			defer evalCtx.Stop(ctx)
+			flowCtx := &execinfra.FlowCtx{
+				EvalCtx: &evalCtx,
+				Cfg: &execinfra.ServerConfig{
+					Settings: st,
+				},
+			}
 			defer func(f func()) {
 				f()
 			}(cancel)
 			require.Equal(t, context.DeadlineExceeded,
-				runParallelImport(ctx, importCtx,
+				runParallelImport(ctx, flowCtx, importCtx,
 					&importFileContext{}, &nilDataProducer{}, &nilDataConsumer{}))
 			return nil
 		}))

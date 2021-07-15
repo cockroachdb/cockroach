@@ -73,7 +73,7 @@ func runImport(
 	// TODO(adityamaru): Should we just plumb the flowCtx instead of this
 	// assignment.
 	evalCtx.DB = flowCtx.Cfg.DB
-	conv, err := makeInputConverter(ctx, spec, evalCtx, kvCh, seqChunkProvider)
+	conv, err := makeInputConverter(ctx, flowCtx, spec, evalCtx, kvCh, seqChunkProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -103,8 +103,8 @@ func runImport(
 			inputs = spec.Uri
 		}
 
-		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage,
-			spec.User())
+		return conv.readFiles(ctx, flowCtx, inputs, spec.ResumePos, spec.Format,
+			flowCtx.Cfg.ExternalStorage, spec.User())
 	})
 
 	// Ingest the KVs that the producer group emitted to the chan and the row result
@@ -137,7 +137,7 @@ func runImport(
 	return summary, nil
 }
 
-type readFileFunc func(context.Context, *fileReader, int32, int64, chan string) error
+type readFileFunc func(context.Context, *execinfra.FlowCtx, *fileReader, int32, int64, chan string) error
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -149,6 +149,7 @@ type readFileFunc func(context.Context, *fileReader, int32, int64, chan string) 
 // reported only after each file has been read.
 func readInputFiles(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
@@ -257,7 +258,8 @@ func readInputFiles(
 
 				grp.GoCtx(func(ctx context.Context) error {
 					defer close(rejected)
-					if err := fileFunc(ctx, src, dataFileIndex, resumePos[dataFileIndex], rejected); err != nil {
+					if err := fileFunc(ctx, flowCtx, src, dataFileIndex,
+						resumePos[dataFileIndex], rejected); err != nil {
 						return err
 					}
 					return nil
@@ -267,7 +269,8 @@ func readInputFiles(
 					return errors.Wrapf(err, "%s", dataFile)
 				}
 			} else {
-				if err := fileFunc(ctx, src, dataFileIndex, resumePos[dataFileIndex], nil /* rejected */); err != nil {
+				if err := fileFunc(ctx, flowCtx, src, dataFileIndex,
+					resumePos[dataFileIndex], nil /* rejected */); err != nil {
 					return errors.Wrapf(err, "%s", dataFile)
 				}
 			}
@@ -346,8 +349,9 @@ func (f fileReader) ReadFraction() float32 {
 
 type inputConverter interface {
 	start(group ctxgroup.Group)
-	readFiles(ctx context.Context, dataFiles map[int32]string, resumePos map[int32]int64,
-		format roachpb.IOFileFormat, makeExternalStorage cloud.ExternalStorageFactory, user security.SQLUsername) error
+	readFiles(ctx context.Context, flowCtx *execinfra.FlowCtx, dataFiles map[int32]string,
+		resumePos map[int32]int64, format roachpb.IOFileFormat,
+		makeExternalStorage cloud.ExternalStorageFactory, user security.SQLUsername) error
 }
 
 // formatHasNamedColumns returns true if the data in the input files can be
@@ -443,11 +447,14 @@ func handleCorruptRow(ctx context.Context, fileCtx *importFileContext, err error
 }
 
 func makeDatumConverter(
-	ctx context.Context, importCtx *parallelImportContext, fileCtx *importFileContext,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	importCtx *parallelImportContext,
+	fileCtx *importFileContext,
 ) (*row.DatumRowConverter, error) {
 	conv, err := row.NewDatumRowConverter(
-		ctx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx, importCtx.kvCh,
-		importCtx.seqChunkProvider)
+		ctx, flowCtx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx,
+		importCtx.kvCh, importCtx.seqChunkProvider)
 	if err == nil {
 		conv.KvBatch.Source = fileCtx.source
 	}
@@ -519,6 +526,7 @@ func TestingSetParallelImporterReaderBatchSize(s int) func() {
 // appropriate key/values.
 func runParallelImport(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	importCtx *parallelImportContext,
 	fileCtx *importFileContext,
 	producer importRowProducer,
@@ -549,7 +557,7 @@ func runParallelImport(
 		ctx, span := tracing.ChildSpan(ctx, "inputconverter")
 		defer span.Finish()
 		return ctxgroup.GroupWorkers(ctx, parallelism, func(ctx context.Context, id int) error {
-			return importer.importWorker(ctx, id, consumer, importCtx, fileCtx, minEmited)
+			return importer.importWorker(ctx, flowCtx, id, consumer, importCtx, fileCtx, minEmited)
 		})
 	})
 
@@ -643,13 +651,14 @@ func timestampAfterEpoch(walltime int64) uint64 {
 
 func (p *parallelImporter) importWorker(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	workerID int,
 	consumer importRowConsumer,
 	importCtx *parallelImportContext,
 	fileCtx *importFileContext,
 	minEmitted []int64,
 ) error {
-	conv, err := makeDatumConverter(ctx, importCtx, fileCtx)
+	conv, err := makeDatumConverter(ctx, flowCtx, importCtx, fileCtx)
 	if err != nil {
 		return err
 	}

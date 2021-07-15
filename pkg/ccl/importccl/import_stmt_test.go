@@ -3611,8 +3611,6 @@ var _ importRowProducer = &csvBenchmarkStream{}
 // BenchmarkConvertRecord-16    	  500000	      2376 ns/op	  50.49 MB/s	    3606 B/op	     101 allocs/op
 // BenchmarkConvertRecord-16    	  500000	      2390 ns/op	  50.20 MB/s	    3606 B/op	     101 allocs/op
 func BenchmarkCSVConvertRecord(b *testing.B) {
-	ctx := context.Background()
-
 	tpchLineItemDataRows := [][]string{
 		{"1", "155190", "7706", "1", "17", "21168.23", "0.04", "0.02", "N", "O", "1996-03-13", "1996-02-12", "1996-03-22", "DELIVER IN PERSON", "TRUCK", "egular courts above the"},
 		{"1", "67310", "7311", "2", "36", "45983.16", "0.09", "0.06", "N", "O", "1996-04-12", "1996-02-28", "1996-04-20", "TAKE BACK RETURN", "MAIL", "ly final dependencies: slyly bold "},
@@ -3658,9 +3656,17 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 	create := stmt.AST.(*tree.CreateTable)
-	st := cluster.MakeTestingClusterSettings()
 	semaCtx := tree.MakeSemaContext()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
 	if err != nil {
@@ -3687,7 +3693,8 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	}
 	consumer := &csvRowConsumer{importCtx: importCtx, opts: &roachpb.CSVOptions{}}
 	b.ResetTimer()
-	require.NoError(b, runParallelImport(ctx, importCtx, &importFileContext{}, producer, consumer))
+	require.NoError(b, runParallelImport(ctx, flowCtx, importCtx, &importFileContext{},
+		producer, consumer))
 	close(kvCh)
 	b.ReportAllocs()
 }
@@ -4621,6 +4628,9 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
+	flowCtx := execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+	}
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
 	if err != nil {
@@ -4653,7 +4663,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 
 	delimited := &fileReader{Reader: producer}
 	b.ResetTimer()
-	require.NoError(b, r.readFile(ctx, delimited, 0, 0, nil))
+	require.NoError(b, r.readFile(ctx, &flowCtx, delimited, 0, 0, nil))
 	close(kvCh)
 	b.ReportAllocs()
 }
@@ -4722,6 +4732,9 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
+	flowCtx := execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+	}
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID,
 		descpb.ID(100), NoFKs, 1)
@@ -4756,7 +4769,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 
 	pgCopyInput := &fileReader{Reader: producer}
 	b.ResetTimer()
-	require.NoError(b, r.readFile(ctx, pgCopyInput, 0, 0, nil))
+	require.NoError(b, r.readFile(ctx, &flowCtx, pgCopyInput, 0, 0, nil))
 	close(kvCh)
 	b.ReportAllocs()
 }

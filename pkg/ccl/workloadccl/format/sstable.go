@@ -20,10 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -81,11 +81,16 @@ func ToSSTable(t workload.Table, tableID descpb.ID, ts time.Time) ([]byte, error
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(kvCh)
-		evalCtx := &tree.EvalContext{
-			SessionData: &sessiondata.SessionData{},
-			Codec:       keys.SystemSQLCodec,
+		st := cluster.MakeTestingClusterSettings()
+		evalCtx := tree.MakeTestingEvalContext(st)
+		defer evalCtx.Stop(ctx)
+		flowCtx := &execinfra.FlowCtx{
+			EvalCtx: &evalCtx,
+			Cfg: &execinfra.ServerConfig{
+				Settings: st,
+			},
 		}
-		return wc.Worker(ctx, evalCtx)
+		return wc.Worker(ctx, flowCtx, &evalCtx)
 	})
 	var sst []byte
 	var kvs sortableKVs

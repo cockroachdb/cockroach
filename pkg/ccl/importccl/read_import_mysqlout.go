@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -60,13 +61,15 @@ func (d *mysqloutfileReader) start(ctx ctxgroup.Group) {
 
 func (d *mysqloutfileReader) readFiles(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	user security.SQLUsername,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, d.readFile, makeExternalStorage, user)
+	return readInputFiles(ctx, flowCtx, dataFiles, resumePos, format, d.readFile,
+		makeExternalStorage, user)
 }
 
 type delimitedProducer struct {
@@ -341,7 +344,12 @@ func (d *delimitedConsumer) FillDatums(
 }
 
 func (d *mysqloutfileReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	input *fileReader,
+	inputIdx int32,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	producer := &delimitedProducer{
 		importCtx: d.importCtx,
@@ -362,5 +370,5 @@ func (d *mysqloutfileReader) readFile(
 		rowLimit: d.opts.RowLimit,
 	}
 
-	return runParallelImport(ctx, d.importCtx, fileCtx, producer, consumer)
+	return runParallelImport(ctx, flowCtx, d.importCtx, fileCtx, producer, consumer)
 }

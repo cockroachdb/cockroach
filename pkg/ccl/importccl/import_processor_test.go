@@ -87,7 +87,15 @@ func TestConverterFlushesBatches(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 
 	tests := []testSpec{
 		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
@@ -114,7 +122,8 @@ func TestConverterFlushesBatches(t *testing.T) {
 				}
 
 				kvCh := make(chan row.KVBatch, batchSize)
-				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, kvCh, nil /* seqChunkProvider */)
+				conv, err := makeInputConverter(ctx, flowCtx, converterSpec, &evalCtx,
+					kvCh, nil /* seqChunkProvider */)
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}
@@ -122,8 +131,8 @@ func TestConverterFlushesBatches(t *testing.T) {
 				group := ctxgroup.WithContext(ctx)
 				group.Go(func() error {
 					defer close(kvCh)
-					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format,
-						externalStorageFactory, security.RootUserName())
+					return conv.readFiles(ctx, flowCtx, testCase.inputs, nil,
+						converterSpec.Format, externalStorageFactory, security.RootUserName())
 				})
 
 				lastBatch := 0

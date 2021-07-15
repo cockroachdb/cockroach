@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -115,6 +116,7 @@ func makeDatumFromColOffset(
 
 func (w *workloadReader) readFiles(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	dataFiles map[int32]string,
 	_ map[int32]int64,
 	_ roachpb.IOFileFormat,
@@ -164,7 +166,7 @@ func (w *workloadReader) readFiles(
 	for _, wc := range wcs {
 		if err := ctxgroup.GroupWorkers(ctx, runtime.GOMAXPROCS(0), func(ctx context.Context, _ int) error {
 			evalCtx := w.evalCtx.Copy()
-			return wc.Worker(ctx, evalCtx)
+			return wc.Worker(ctx, flowCtx, evalCtx)
 		}); err != nil {
 			return err
 		}
@@ -216,9 +218,11 @@ func NewWorkloadKVConverter(
 // minimzing the amount of overlapping SSTs ingested.
 //
 // This worker needs its own EvalContext and DatumAlloc.
-func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalContext) error {
-	conv, err := row.NewDatumRowConverter(ctx, w.tableDesc, nil /* targetColNames */, evalCtx,
-		w.kvCh, nil /* seqChunkProvider */)
+func (w *WorkloadKVConverter) Worker(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, evalCtx *tree.EvalContext,
+) error {
+	conv, err := row.NewDatumRowConverter(ctx, flowCtx, w.tableDesc,
+		nil /* targetColNames */, evalCtx, w.kvCh, nil /* seqChunkProvider */)
 	if err != nil {
 		return err
 	}

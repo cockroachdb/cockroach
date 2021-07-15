@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -397,8 +398,19 @@ func newImportAvroPipeline(
 	avro *avroInputReader, input *fileReader,
 ) (importRowProducer, importRowConsumer, error) {
 	fieldIdxByName := make(map[string]int)
-	for idx, col := range avro.importContext.tableDesc.VisibleColumns() {
-		fieldIdxByName[col.GetName()] = idx
+
+	// The Avro record only stores (field, value) for target columns, in the order
+	// that they appear in avro.importContext.tableDesc.VisibleColumns().
+	// So, if the columns look like [target non-target non-target target target],
+	// we want fieldIdxByName to pick up the indices [0, 1, 2] and not [0, 3, 4].
+	// nextTargetColIdx takes care of this.
+	nextTargetColIdx := 0
+	targetColNames := avro.importContext.targetCols.ToStrings()
+	for _, col := range avro.importContext.tableDesc.VisibleColumns() {
+		if targetColNames[nextTargetColIdx] == col.GetName() {
+			fieldIdxByName[col.GetName()] = nextTargetColIdx
+			nextTargetColIdx++
+		}
 	}
 
 	consumer := &avroConsumer{
@@ -455,6 +467,7 @@ var _ inputConverter = &avroInputReader{}
 func newAvroInputReader(
 	kvCh chan row.KVBatch,
 	tableDesc catalog.TableDescriptor,
+	targetCols tree.NameList,
 	avroOpts roachpb.AvroOptions,
 	walltime int64,
 	parallelism int,
@@ -467,6 +480,7 @@ func newAvroInputReader(
 			numWorkers: parallelism,
 			evalCtx:    evalCtx,
 			tableDesc:  tableDesc,
+			targetCols: targetCols,
 			kvCh:       kvCh,
 		},
 		opts: avroOpts,
@@ -477,17 +491,24 @@ func (a *avroInputReader) start(group ctxgroup.Group) {}
 
 func (a *avroInputReader) readFiles(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	user security.SQLUsername,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, a.readFile, makeExternalStorage, user)
+	return readInputFiles(ctx, flowCtx, dataFiles, resumePos, format, a.readFile,
+		makeExternalStorage, user)
 }
 
 func (a *avroInputReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	input *fileReader,
+	inputIdx int32,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	producer, consumer, err := newImportAvroPipeline(a, input)
 	if err != nil {
@@ -500,5 +521,5 @@ func (a *avroInputReader) readFile(
 		rejected: rejected,
 		rowLimit: a.opts.RowLimit,
 	}
-	return runParallelImport(ctx, a.importContext, fileCtx, producer, consumer)
+	return runParallelImport(ctx, flowCtx, a.importContext, fileCtx, producer, consumer)
 }
