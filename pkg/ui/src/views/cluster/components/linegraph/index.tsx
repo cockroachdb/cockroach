@@ -45,7 +45,7 @@ import { findClosestTimeScale } from "src/redux/timewindow";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
-interface LineGraphProps extends MetricsDataComponentProps {
+export interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
   subtitle?: string;
   legend?: boolean;
