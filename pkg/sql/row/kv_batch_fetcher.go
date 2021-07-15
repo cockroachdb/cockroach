@@ -444,16 +444,6 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if f.responseAdmissionQ != nil {
-		responseAdmission := admission.WorkInfo{
-			TenantID:   roachpb.SystemTenantID,
-			Priority:   admission.WorkPriority(f.requestAdmissionHeader.Priority),
-			CreateTime: f.requestAdmissionHeader.CreateTime,
-		}
-		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
-			return err
-		}
-	}
 	if br != nil {
 		f.responses = br.Responses
 	} else {
@@ -480,6 +470,17 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// reasoning for why we never ratchet this account down past the maximum
 		// fetch size once it's exceeded.
 		if err := f.acc.ResizeTo(ctx, returnedBytes); err != nil {
+			return err
+		}
+	}
+	// Do admission control after we've accounted for the response bytes.
+	if br != nil && f.responseAdmissionQ != nil {
+		responseAdmission := admission.WorkInfo{
+			TenantID:   roachpb.SystemTenantID,
+			Priority:   admission.WorkPriority(f.requestAdmissionHeader.Priority),
+			CreateTime: f.requestAdmissionHeader.CreateTime,
+		}
+		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 			return err
 		}
 	}
