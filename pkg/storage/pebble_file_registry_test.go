@@ -169,3 +169,35 @@ func TestFileRegistryCheckNoFile(t *testing.T) {
 	registry = &PebbleFileRegistry{FS: mem}
 	require.Error(t, registry.CheckNoRegistryFile())
 }
+
+func TestFileRegistryElideUnencrypted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Temporarily change the global CanRegistryElideFunc to test it.
+	prevRegistryElideFunc := CanRegistryElideFunc
+	defer func() {
+		CanRegistryElideFunc = prevRegistryElideFunc
+	}()
+	CanRegistryElideFunc = func(entry *enginepb.FileEntry) bool {
+		return entry == nil || len(entry.EncryptionSettings) == 0
+	}
+
+	// Create a new pebble file registry and inject a registry with an unencrypted file.
+	mem := vfs.NewMem()
+	registry := &PebbleFileRegistry{FS: mem}
+	require.NoError(t, registry.Load())
+	newProto := &enginepb.FileRegistry{}
+	newProto.Files = make(map[string]*enginepb.FileEntry)
+	newProto.Files["test1"] = &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte(nil)}
+	newProto.Files["test2"] = &enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("foo")}
+	require.NoError(t, registry.writeRegistry(newProto))
+
+	// Create another pebble file registry to verify that the unencrypted file is elided on startup.
+	registry2 := &PebbleFileRegistry{FS: mem}
+	require.NoError(t, registry2.Load())
+	require.NotContains(t, registry2.mu.currProto.Files, "test1")
+	entry := registry2.mu.currProto.Files["test2"]
+	require.NotNil(t, entry)
+	require.Equal(t, entry.EncryptionSettings, []byte("foo"))
+}
