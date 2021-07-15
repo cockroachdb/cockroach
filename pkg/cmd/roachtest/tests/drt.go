@@ -35,6 +35,9 @@ type tpccChaosEventProcessor struct {
 	ch                chan ChaosEvent
 	promClient        promClient
 	errs              []error
+
+	allowZeroSuccessDuringUptime bool
+	maxErrorsDuringUptime        int
 }
 
 func (ep *tpccChaosEventProcessor) checkUptime(
@@ -56,13 +59,16 @@ func (ep *tpccChaosEventProcessor) checkUptime(
 			if to > from {
 				return nil
 			}
+			if ep.allowZeroSuccessDuringUptime && to == from {
+				return nil
+			}
 			return errors.Newf("expected successes to be increasing, found from %f, to %f", from, to)
 		},
 		func(from, to model.SampleValue) error {
-			if to == from {
+			if to <= from+model.SampleValue(ep.maxErrorsDuringUptime) {
 				return nil
 			}
-			return errors.Newf("expected 0 errors, found from %f, to %f", from, to)
+			return errors.Newf("expected <=%d errors, found from %f, to %f", ep.maxErrorsDuringUptime, from, to)
 		},
 	)
 }
