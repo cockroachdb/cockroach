@@ -303,7 +303,7 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	// RocksDB metrics.
+	// RocksDB/Pebble metrics.
 	metaRdbBlockCacheHits = metric.Metadata{
 		Name:        "rocksdb.block.cache.hits",
 		Help:        "Count of block cache hits",
@@ -416,6 +416,12 @@ var (
 		Name:        "storage.l0-num-files",
 		Help:        "Number of Level 0 files",
 		Measurement: "Storage",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRdbWriteStalls = metric.Metadata{
+		Name:        "storage.write-stalls",
+		Help:        "Number of instances of intentional write stalls to backpressure incoming writes",
+		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
 
@@ -1180,6 +1186,7 @@ type StoreMetrics struct {
 	RdbPendingCompaction        *metric.Gauge
 	RdbL0Sublevels              *metric.Gauge
 	RdbL0NumFiles               *metric.Gauge
+	RdbWriteStalls              *metric.Gauge
 
 	// Disk health metrics.
 	DiskSlow    *metric.Gauge
@@ -1570,6 +1577,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbPendingCompaction:        metric.NewGauge(metaRdbPendingCompaction),
 		RdbL0Sublevels:              metric.NewGauge(metaRdbL0Sublevels),
 		RdbL0NumFiles:               metric.NewGauge(metaRdbL0NumFiles),
+		RdbWriteStalls:              metric.NewGauge(metaRdbWriteStalls),
 
 		// Disk health metrics.
 		DiskSlow:    metric.NewGauge(metaDiskSlow),
@@ -1785,6 +1793,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
 	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)
 	sm.RdbNumSSTables.Update(m.NumSSTables())
+	sm.RdbWriteStalls.Update(m.WriteStallCount)
 	sm.DiskSlow.Update(m.DiskSlowCount)
 	sm.DiskStalled.Update(m.DiskStallCount)
 }
