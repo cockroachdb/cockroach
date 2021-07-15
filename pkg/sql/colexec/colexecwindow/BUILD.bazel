@@ -13,18 +13,26 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",  # keep
+        "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
         "//pkg/sql/colcontainer",  # keep
+        "//pkg/sql/colconv",  # keep
         "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexecutils",  # keep
+        "//pkg/sql/colexec/execgen",  # keep
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colexecop",  # keep
         "//pkg/sql/colmem",  # keep
+        "//pkg/sql/execinfra",  # keep
         "//pkg/sql/execinfrapb",  # keep
+        "//pkg/sql/rowenc",  # keep
         "//pkg/sql/sem/builtins",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep
+        "//pkg/util/duration",  # keep
         "//pkg/util/mon",  # keep
+        "//pkg/util/timeutil/pgdate",  # keep
+        "@com_github_cockroachdb_apd_v2//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",  # keep
         "@com_github_marusama_semaphore//:semaphore",  # keep
     ],
@@ -36,6 +44,7 @@ go_test(
         "dep_test.go",
         "inject_setup_test.go",
         "main_test.go",
+        "window_framer_test.go",
         "window_functions_test.go",
     ],
     embed = [":colexecwindow"],
@@ -43,22 +52,30 @@ go_test(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/colcontainer",
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexectestutils",
+        "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/randgen",
+        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/skip",
+        "//pkg/util/encoding",
+        "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_marusama_semaphore//:semaphore",
         "@com_github_stretchr_testify//require",
     ],
@@ -69,9 +86,11 @@ targets = [
     ("lag.eg.go", "lead_lag_tmpl.go"),
     ("lead.eg.go", "lead_lag_tmpl.go"),
     ("ntile.eg.go", "ntile_tmpl.go"),
+    ("range_offset_handler.eg.go", "range_offset_handler_tmpl.go"),
     ("rank.eg.go", "rank_tmpl.go"),
     ("relative_rank.eg.go", "relative_rank_tmpl.go"),
     ("row_number.eg.go", "row_number_tmpl.go"),
+    ("window_framer.eg.go", "window_framer_tmpl.go"),
     ("window_peer_grouper.eg.go", "window_peer_grouper_tmpl.go"),
 ]
 
