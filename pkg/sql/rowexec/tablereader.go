@@ -228,16 +228,6 @@ func (tr *tableReader) Release() {
 	trPool.Put(tr)
 }
 
-var tableReaderProgressFrequency int64 = 5000
-
-// TestingSetScannedRowProgressFrequency changes the frequency at which
-// row-scanned progress metadata is emitted by table readers.
-func TestingSetScannedRowProgressFrequency(val int64) func() {
-	oldVal := tableReaderProgressFrequency
-	tableReaderProgressFrequency = val
-	return func() { tableReaderProgressFrequency = oldVal }
-}
-
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == execinfra.StateRunning {
@@ -249,7 +239,7 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 			}
 		}
 		// Check if it is time to emit a progress update.
-		if tr.rowsRead >= tableReaderProgressFrequency {
+		if tr.rowsRead >= execinfra.ScanProgressFrequency {
 			meta := execinfrapb.GetProducerMeta()
 			meta.Metrics = execinfrapb.GetMetricsMeta()
 			meta.Metrics.RowsRead = tr.rowsRead

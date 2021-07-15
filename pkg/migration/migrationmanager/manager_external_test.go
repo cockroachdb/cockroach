@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -67,6 +68,26 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startCV.Version,
 					DisableAutomaticVersionUpgrade: 1,
+				},
+				DistSQL: &execinfra.TestingKnobs{
+					// TODO(yuzefovich): the check below for having a particular
+					// string in the trace is quite unfortunate since it relies
+					// on the assumption that all recordings from the child
+					// spans are imported into the tracer. However, this is not
+					// the case for the DistSQL processors where child spans are
+					// created with WithParentAndManualCollection option which
+					// requires explicitly importing the recordings from the
+					// children. This only happens when the execution flow is
+					// drained which cannot happen until we close the 'unblock'
+					// channel, and this we cannot do until we see the expected
+					// message in the trace.
+					//
+					// At the moment it works in a very fragile manner (by
+					// making sure that no processors actually create their own
+					// spans). Instead, a different way to observe the status of
+					// the migration manager should be introduced and should be
+					// used here.
+					DistSQLNoSpans: true,
 				},
 				MigrationManager: &migrationmanager.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
@@ -159,20 +180,6 @@ RETURNING id;`).Scan(&secondID))
 	}()
 
 	testutils.SucceedsSoon(t, func() error {
-		// TODO(yuzefovich): this check is quite unfortunate since it relies on
-		// the assumption that all recordings from the child spans are imported
-		// into the tracer. However, this is not the case for the DistSQL
-		// processors where child spans are created with
-		// WithParentAndManualCollection option which requires explicitly
-		// importing the recordings from the children. This only happens when
-		// the execution flow is drained which cannot happen until we close
-		// the 'unblock' channel, and this we cannot do until we see the
-		// expected message in the trace.
-		//
-		// At the moment it works in a very fragile manner (by making sure that
-		// no processors actually create their own spans). Instead, a different
-		// way to observe the status of the migration manager should be
-		// introduced and should be used here.
 		if tracing.FindMsgInRecording(getRecording(), "found existing migration job") > 0 {
 			return nil
 		}

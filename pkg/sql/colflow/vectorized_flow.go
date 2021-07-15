@@ -184,6 +184,11 @@ func (f *vectorizedFlow) Setup(
 	if execinfra.ShouldCollectStats(ctx, &f.FlowCtx) {
 		recordingStats = true
 	}
+	if f.FlowCtx.Cfg.TestingKnobs.DistSQLNoSpans {
+		// If we are told not to create tracing spans in root components, we
+		// won't have a way to propagate the stats.
+		recordingStats = false
+	}
 	helper := newVectorizedFlowCreatorHelper(f.FlowBase)
 
 	diskQueueCfg := colcontainer.DiskQueueCfg{
@@ -461,11 +466,9 @@ type admissionOptions struct {
 type remoteComponentCreator interface {
 	newOutbox(
 		allocator *colmem.Allocator,
-		input colexecop.Operator,
+		input colexecargs.OpWithMetaInfo,
 		typs []*types.T,
 		getStats func() []*execinfrapb.ComponentStats,
-		metadataSources []colexecop.MetadataSource,
-		toClose []colexecop.Closer,
 	) (*colrpc.Outbox, error)
 	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 		admissionOpts admissionOptions) (*colrpc.Inbox, error)
@@ -475,13 +478,11 @@ type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
-	input colexecop.Operator,
+	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	getStats func() []*execinfrapb.ComponentStats,
-	metadataSources []colexecop.MetadataSource,
-	toClose []colexecop.Closer,
 ) (*colrpc.Outbox, error) {
-	return colrpc.NewOutbox(allocator, input, typs, getStats, metadataSources, toClose)
+	return colrpc.NewOutbox(allocator, input, typs, getStats)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
@@ -722,7 +723,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 ) (execinfra.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
 		colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
-		op.Root, outputTyps, getStats, op.MetadataSources, op.ToClose,
+		op, outputTyps, getStats,
 	)
 	if err != nil {
 		return nil, err
@@ -814,20 +815,29 @@ func (s *vectorizedFlowCreator) setupRouter(
 			// router is responsible for closing all of the idempotent closers.
 			if _, err := s.setupRemoteOutputStream(
 				ctx, flowCtx, colexecargs.OpWithMetaInfo{
-					Root:            op,
-					MetadataSources: colexecop.MetadataSources{op},
+					Root:                     op,
+					StreamingMetadataSources: input.StreamingMetadataSources,
+					MetadataSources:          colexecop.MetadataSources{op},
 				}, outputTyps, stream, factory, nil, /* getStats */
 			); err != nil {
 				return err
 			}
+			// The outbox that we just created is responsible for all streaming
+			// metadata sources in this input tree.
+			input.StreamingMetadataSources = nil
 		case execinfrapb.StreamEndpointSpec_LOCAL:
 			foundLocalOutput = true
 			opWithMetaInfo := colexecargs.OpWithMetaInfo{
-				Root:            op,
-				MetadataSources: colexecop.MetadataSources{op},
+				Root:                     op,
+				StreamingMetadataSources: input.StreamingMetadataSources,
+				MetadataSources:          colexecop.MetadataSources{op},
 				// ToClose will be closed by the hash router.
 				ToClose: nil,
 			}
+			// We have set the streaming metadata sources above to be bubbled up
+			// locally, until a root component (either an outbox or a flow
+			// coordinator) takes over them.
+			input.StreamingMetadataSources = nil
 			if s.recordingStats {
 				mons := []*mon.BytesMonitor{hashRouterMemMonitor, diskMon}
 				// Wrap local outputs with vectorized stats collectors when recording
@@ -916,8 +926,9 @@ func (s *vectorizedFlowCreator) setupInput(
 				ms = op.(colexecop.MetadataSource)
 			}
 			opWithMetaInfo := colexecargs.OpWithMetaInfo{
-				Root:            op,
-				MetadataSources: colexecop.MetadataSources{ms},
+				Root:                     op,
+				StreamingMetadataSources: []colexecop.StreamingMetadataSource{inbox},
+				MetadataSources:          colexecop.MetadataSources{ms},
 			}
 			if s.recordingStats {
 				// Note: we can't use flowCtx.StreamComponentID because the stream does
@@ -986,6 +997,12 @@ func (s *vectorizedFlowCreator) setupInput(
 			); err != nil {
 				return colexecargs.OpWithMetaInfo{}, err
 			}
+		}
+		// The synchronizers do not have an ability to propagate the metadata in
+		// a streaming fashion, so we need to bubble up all streaming metadata
+		// sources.
+		for _, originalInput := range inputStreamOps {
+			opWithMetaInfo.StreamingMetadataSources = append(opWithMetaInfo.StreamingMetadataSources, originalInput.StreamingMetadataSources...)
 		}
 	}
 	return opWithMetaInfo, nil
@@ -1075,6 +1092,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				pspec.ProcessorID,
 				input,
 				s.rowReceiver,
+				opWithMetaInfo.StreamingMetadataSources,
 				s.getCancelFlowFn(),
 			)
 			// The flow coordinator is a root of its operator chain.
