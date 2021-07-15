@@ -6,6 +6,8 @@ The supported log output sink types are documented below.
 
 - [Output to Fluentd-compatible log collectors](#output-to-fluentd-compatible-log-collectors)
 
+- [Output to HTTP servers.](#output-to-http-servers.)
+
 - [Standard error stream](#standard-error-stream)
 
 
@@ -91,7 +93,7 @@ Configuration options shared across all sink types:
 ## Sink type: Output to Fluentd-compatible log collectors
 
 
-This sink type causes logging data to be sent over the network, to
+This sink type causes logging data to be sent over the network to
 a log collector that can ingest log data in a
 [Fluentd](https://www.fluentd.org)-compatible protocol.
 
@@ -165,6 +167,57 @@ Configuration options shared across all sink types:
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
 | `auditable` | translated to tweaks to the other settings for this sink during validation. For example, it enables `exit-on-error` and changes the format of files from `crdb-v1` to `crdb-v1-count`. |
+
+
+
+<a name="output-to-http-servers.">
+
+## Sink type: Output to HTTP servers.
+
+
+This sink type causes logging data to be sent over the network
+as requests to an HTTP server.
+
+The configuration key under the `sinks` key in teh YAML
+configuration is `http-servers`. Example configuration:
+
+     sinks:
+        http-servers:
+           health:
+              channels: HEALTH
+              address: http://127.0.0.1
+
+Every new server sink configured automatically inherits the configuration set in the `http-defaults` section.
+
+For example:
+
+     http-defaults:
+         redactable: false # default: disable redaction markers
+     sinks:
+       http-servers:
+         health:
+            channels: HEALTH
+            # This sink has redactable set to false,
+            # as the setting is inherited from fluent-defaults
+            # unless overridden here.
+
+The default output format for HTTP sinks is
+`json-compact`. [Other supported formats.](log-formats.html)
+
+{{site.data.alerts.callout_info}}
+Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
+{{site.data.alerts.end}}
+
+
+
+Type-specific configuration options:
+
+| Field | Description |
+|--|--|
+| `channels` | the list of logging channels that use this sink. See the [channel selection configuration](#channel-format) section for details.  |
+| `http-defaults` |  |
+
+
 
 
 
