@@ -264,26 +264,6 @@ func ParseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
 	return p.parseOneWithInt(sql, nakedIntType)
 }
 
-// HasMultipleStatements returns true if the sql string contains more than one
-// statements.
-func HasMultipleStatements(sql string) bool {
-	var p Parser
-	p.scanner.Init(sql)
-	defer p.scanner.Cleanup()
-	count := 0
-	for {
-		_, _, done := p.scanOneStmt()
-		if done {
-			break
-		}
-		count++
-		if count > 1 {
-			return true
-		}
-	}
-	return false
-}
-
 // ParseQualifiedTableName parses a possibly qualified table name. The
 // table name must contain one or more name parts, using the full
 // input SQL syntax: each name part containing special characters, or
