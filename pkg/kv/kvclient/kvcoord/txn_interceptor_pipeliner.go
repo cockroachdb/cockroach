@@ -261,7 +261,7 @@ func (tp *txnPipeliner) SendLocked(
 
 	// Update the in-flight write set and the lock footprint with the results of
 	// the request.
-	tp.updateLockTracking(ctx, ba, br)
+	tp.updateLockTracking(ctx, ba, br, pErr)
 	if pErr != nil {
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
@@ -512,9 +512,9 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 // are added directly to the lock footprint to avoid leaking any locks when the
 // transaction cleans up.
 func (tp *txnPipeliner) updateLockTracking(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) {
-	tp.updateLockTrackingInner(ctx, ba, br)
+	tp.updateLockTrackingInner(ctx, ba, br, pErr)
 
 	// Deal with compacting the lock spans.
 
@@ -539,15 +539,30 @@ func (tp *txnPipeliner) updateLockTracking(
 }
 
 func (tp *txnPipeliner) updateLockTrackingInner(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) {
 	// If the request failed, add all lock acquisitions attempts directly to the
 	// lock footprint. This reduces the likelihood of dangling locks blocking
 	// concurrent requests for extended periods of time. See #3346.
-	if br == nil {
-		// The transaction cannot continue in this epoch whether this is
-		// a retryable error or not.
-		ba.LockSpanIterate(nil, tp.trackLocks)
+	if pErr != nil {
+		// However, as an optimization, if the error indicates that a specific
+		// request (identified by pErr.Index) unambiguously did not acquire any
+		// locks, we ignore that request for the purposes of accounting for lock
+		// spans. This is important for transactions that only perform a single
+		// request and hit an unambiguous error like a ConditionFailedError, as it
+		// can allow them to avoid sending a rollback. It it also important for
+		// transactions that throw a WriteIntentError due to heavy contention on a
+		// certain key after either passing a Error wait policy or hitting a lock
+		// timeout / queue depth limit. In such cases, this optimization prevents
+		// these transactions from adding even more load to the contended key by
+		// trying to perform unnecessary intent resolution.
+		baStripped := ba
+		if roachpb.ErrPriority(pErr.GoError()) <= roachpb.ErrorScoreUnambiguousError && pErr.Index != nil {
+			baStripped.Requests = make([]roachpb.RequestUnion, len(ba.Requests)-1)
+			copy(baStripped.Requests, ba.Requests[:pErr.Index.Index])
+			copy(baStripped.Requests[pErr.Index.Index:], ba.Requests[pErr.Index.Index+1:])
+		}
+		baStripped.LockSpanIterate(nil, tp.trackLocks)
 		return
 	}
 

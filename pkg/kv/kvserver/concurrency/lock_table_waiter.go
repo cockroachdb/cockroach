@@ -174,7 +174,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 					if state.held {
 						err = w.pushLockTxn(ctx, req, state)
 					} else {
-						err = newWriteIntentErr(state)
+						err = newWriteIntentErr(req, state)
 					}
 					if err != nil {
 						return err
@@ -283,6 +283,12 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// holder of this lock wait-queue. This can only happen when the
 				// request's transaction is sending multiple requests concurrently.
 				// Proceed with waiting without pushing anyone.
+
+			case waitQueueMaxLengthExceeded:
+				// The request attempted to wait in a lock wait-queue whose length was
+				// already equal to or exceeding the request's configured maximum. As a
+				// result, the request was rejected.
+				return newWriteIntentErr(req, state)
 
 			case doneWaiting:
 				// The request has waited for all conflicting locks to be released
@@ -394,7 +400,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	ctx context.Context, req Request, ws waitingState,
 ) *Error {
 	if w.disableTxnPushing {
-		return newWriteIntentErr(ws)
+		return newWriteIntentErr(req, ws)
 	}
 
 	// Construct the request header and determine which form of push to use.
@@ -436,7 +442,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// If pushing with an Error WaitPolicy and the push fails, then the lock
 		// holder is still active. Transform the error into a WriteIntentError.
 		if _, ok := err.GetDetail().(*roachpb.TransactionPushError); ok && req.WaitPolicy == lock.WaitPolicy_Error {
-			err = newWriteIntentErr(ws)
+			err = newWriteIntentErr(req, ws)
 		}
 		return err
 	}
@@ -786,7 +792,7 @@ func (h *contentionEventHelper) emitAndInit(s waitingState) {
 			}
 			h.tBegin = timeutil.Now()
 		}
-	case waitElsewhere, doneWaiting:
+	case waitElsewhere, waitQueueMaxLengthExceeded, doneWaiting:
 		// If we have an event, emit it now and that's it - the case we're in
 		// does not give us a new transaction/key.
 		if h.ev != nil {
@@ -797,10 +803,22 @@ func (h *contentionEventHelper) emitAndInit(s waitingState) {
 	}
 }
 
-func newWriteIntentErr(ws waitingState) *Error {
-	return roachpb.NewError(&roachpb.WriteIntentError{
+func newWriteIntentErr(req Request, ws waitingState) *Error {
+	err := roachpb.NewError(&roachpb.WriteIntentError{
 		Intents: []roachpb.Intent{roachpb.MakeIntent(ws.txn, ws.key)},
 	})
+	// TODO(nvanbenschoten): setting an error index can assist the KV client in
+	// understanding which request hit an error. This is not necessary, but can
+	// improve error handling, leading to better error messages and performance
+	// optimizations in some cases. We don't have an easy way to associate a given
+	// conflict with a specific request in a batch because we don't retain a
+	// mapping from lock span to request. However, as a best-effort optimization,
+	// we set the error index to 0 if this is the only request in the batch (that
+	// landed on this range, from the client's perspective).
+	if len(req.Requests) == 1 {
+		err.SetErrorIndex(0)
+	}
+	return err
 }
 
 func hasMinPriority(txn *enginepb.TxnMeta) bool {
