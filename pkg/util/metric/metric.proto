@@ -51,6 +51,33 @@ enum Unit {
   TIMESTAMP_SEC = 8;
 }
 
+// ValueRange indicates the range of values for a metric.
+message ValueRange {
+  optional string lowerBound = 1;
+  optional string upperBound = 2;
+  required Unit unit = 3;
+}
+
+// IndicatorInfo holds information on how to derive an indicator
+// for a metric. It is embedded within the metadata field for a
+// metric.
+message IndicatorInfo {
+  // aggregationInfo will contain free-form text on how to
+  // perform aggregation over the metric to create an indicator.
+  // This will likely need to be updated to some structured language
+  // in the future.
+  required string aggregationInfo = 1 [(gogoproto.nullable) = false];
+  // implementationDetails will outline details on how the metric has
+  // been implemented.
+  required string implementationDetails = 2 [(gogoproto.nullable) = false];
+  // limits will define the *possible* value range for the metric.
+  optional ValueRange limits = 3 [(gogoproto.nullable) = false];
+  // expected will define the *reasonable* value range for the metric.
+  // expected and limits ValueRanges can be used in conjunction to get
+  // an idea of the spectrum of acceptable and normal values for that metric.
+  optional ValueRange expected = 4 [(gogoproto.nullable) = false];
+}
+
 // Metadata holds metadata about a metric. It must be embedded in
 // each metric object. It's used to export information about the
 // metric to Prometheus and for Admin UI charts.
@@ -61,4 +88,5 @@ message Metadata {
   required Unit unit = 4 [(gogoproto.nullable) = false];
   optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
   repeated LabelPair labels = 6;
+  optional IndicatorInfo indicatorInfo = 7 [(gogoproto.nullable) = false];
 }

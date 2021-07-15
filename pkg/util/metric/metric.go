@@ -55,6 +55,8 @@ type Iterable interface {
 	GetMetadata() Metadata
 	// Inspect calls the given closure with each contained item.
 	Inspect(func(interface{}))
+	// GetIndicatorInfo returns information to infer indicator from the metric.
+	GetIndicatorInfo() IndicatorInfo
 }
 
 // PrometheusExportable is the standard interface for an individual metric
@@ -326,6 +328,12 @@ func (h *Histogram) GetMetadata() Metadata {
 	return baseMetadata
 }
 
+// GetIndicatorInfo returns information on inferring the indicator
+// corresponding to the metric.
+func (h *Histogram) GetIndicatorInfo() IndicatorInfo {
+	return h.IndicatorInfo
+}
+
 // A Counter holds a single mutable atomic value.
 type Counter struct {
 	Metadata
@@ -373,6 +381,12 @@ func (c *Counter) GetMetadata() Metadata {
 	baseMetadata := c.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_COUNTER
 	return baseMetadata
+}
+
+// GetIndicatorInfo returns information on inferring the indicator
+// corresponding to the metric.
+func (c *Counter) GetIndicatorInfo() IndicatorInfo {
+	return c.IndicatorInfo
 }
 
 // A Gauge atomically stores a single integer value.
@@ -451,6 +465,12 @@ func (g *Gauge) GetMetadata() Metadata {
 	return baseMetadata
 }
 
+// GetIndicatorInfo returns information on inferring the indicator
+// corresponding to the metric.
+func (g *Gauge) GetIndicatorInfo() IndicatorInfo {
+	return g.IndicatorInfo
+}
+
 // A GaugeFloat64 atomically stores a single float64 value.
 type GaugeFloat64 struct {
 	Metadata
@@ -488,6 +508,12 @@ func (g *GaugeFloat64) GetMetadata() Metadata {
 	baseMetadata := g.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
 	return baseMetadata
+}
+
+// GetIndicatorInfo returns information on inferring the indicator
+// corresponding to the metric.
+func (g *GaugeFloat64) GetIndicatorInfo() IndicatorInfo {
+	return g.IndicatorInfo
 }
 
 // A Rate is a exponential weighted moving average.
@@ -542,6 +568,12 @@ func (e *Rate) GetMetadata() Metadata {
 	baseMetadata := e.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
 	return baseMetadata
+}
+
+// GetIndicatorInfo returns information on inferring the indicator
+// corresponding to the metric.
+func (e *Rate) GetIndicatorInfo() IndicatorInfo {
+	return e.IndicatorInfo
 }
 
 // Value returns the current value of the Rate.
