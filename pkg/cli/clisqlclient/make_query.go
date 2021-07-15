@@ -14,7 +14,7 @@ import (
 	"database/sql/driver"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,7 +25,7 @@ type QueryFn func(conn Conn) (rows Rows, isMultiStatementQuery bool, err error)
 // function that can be applied to a connection object.
 func MakeQuery(query string, parameters ...driver.Value) QueryFn {
 	return func(conn Conn) (Rows, bool, error) {
-		isMultiStatementQuery := parser.HasMultipleStatements(query)
+		isMultiStatementQuery, _ := scanner.HasMultipleStatements(query)
 		// driver.Value is an alias for interface{}, but must adhere to a restricted
 		// set of types when being passed to driver.Queryer.Query (see
 		// driver.IsValue). We use driver.DefaultParameterConverter to perform the

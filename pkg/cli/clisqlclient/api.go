@@ -14,8 +14,6 @@ import (
 	"database/sql/driver"
 	"reflect"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // Conn represents a connection to a SQL server.
@@ -88,7 +86,7 @@ type Conn interface {
 	// GetServerMetadata() returns details about the CockroachDB node
 	// this connection is connected to.
 	GetServerMetadata() (
-		nodeID roachpb.NodeID,
+		nodeID int32,
 		version, clusterID string,
 		err error,
 	)
