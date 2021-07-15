@@ -885,10 +885,12 @@ func (r *testRunner) maybePostGithubIssue(
 		Message:         msg,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
-		ReproductionCommand: fmt.Sprintf(
-			`# From https://go.crdb.dev/p/roachstress, perhaps edited lightly.
-caffeinate ./roachstress.sh %s
-`, t.Name()),
+		ReproductionCommand: func(r *issues.Renderer) {
+			r.P(func() {
+				r.Escaped("See the corresponding section in the ")
+				r.A("roachtest README", "https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/roachtest")
+			})
+		},
 	}
 	if err := issues.Post(
 		context.Background(),

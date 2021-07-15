@@ -26,5 +26,9 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":github-post_lib"],
     tags = ["broken_in_bazel"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "//pkg/cmd/internal/issues",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )

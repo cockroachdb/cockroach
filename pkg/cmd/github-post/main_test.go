@@ -17,7 +17,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestListFailures(t *testing.T) {
@@ -289,8 +291,21 @@ TestXXA - 1.00s
 				if exp := c.expIssues[curIssue].message; !strings.Contains(f.testMessage, exp) {
 					t.Errorf("expected message containing %s, but got:\n%s", exp, f.testMessage)
 				}
-				if exp := c.expIssues[curIssue].expRepro; exp != "" && exp != req.ReproductionCommand {
-					t.Errorf("expected reproduction %q, but got:\n%q", exp, req.ReproductionCommand)
+				// NB: all test cases here emit a repro, but we only check it when the expectation
+				// is set.
+				if c.expIssues[curIssue].expRepro != "" {
+					var actRepro, expRepro string
+					{
+						r := &issues.Renderer{}
+						req.ReproductionCommand(r)
+						actRepro = r.String()
+					}
+					{
+						r := &issues.Renderer{}
+						issues.ReproductionCommandFromString(c.expIssues[curIssue].expRepro)(r)
+						expRepro = r.String()
+					}
+					require.Equal(t, expRepro, actRepro)
 				}
 				assert.Equal(t, c.expIssues[curIssue].mention, req.Mention)
 				assert.Equal(t, c.expIssues[curIssue].hasProject, req.ProjectColumnID != 0)
