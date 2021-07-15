@@ -334,7 +334,7 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	// columns because the check columns are not in-scope for those expressions.
 	preCheckScope := mb.outScope
 
-	mb.addCheckConstraintCols()
+	mb.addCheckConstraintCols(true /* isUpdate */)
 
 	// Add the partial index predicate expressions to the table metadata.
 	// These expressions are used to prune fetch columns during
