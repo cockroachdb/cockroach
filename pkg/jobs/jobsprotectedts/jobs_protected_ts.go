@@ -46,6 +46,12 @@ func MakeStatusFunc(jr *jobs.Registry) ptreconcile.StatusFunc {
 		if err != nil {
 			return false, err
 		}
+
+		// If the protected timestamp record has been marked by a backup job to be
+		// persisted, then the reconciler should not remove it.
+		if bp, ok := j.Details().(jobspb.BackupDetails); ok && bp.PersistProtectedTimestampRecordForNextBackup {
+			return false, nil
+		}
 		isTerminal := j.CheckTerminalStatus(ctx, txn)
 		return isTerminal, nil
 	}

@@ -41,6 +41,14 @@ type BackupOptions struct {
 	Detached                     bool
 	EncryptionKMSURI             StringOrPlaceholderOptList
 	IncludeDeprecatedInterleaves bool
+
+	// PersistProtectedTimestampForNextBackup when set to true, configures the
+	// backup to persist the protected timestamp written during execution for use
+	// by the next backup in the chain.
+	//
+	// PersistProtectedTimestampForNextBackup is only set internally, by scheduled
+	// backups.
+	PersistProtectedTimestampForNextBackup bool
 }
 
 var _ NodeFormatter = &BackupOptions{}

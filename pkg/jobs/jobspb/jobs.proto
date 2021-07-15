@@ -103,15 +103,31 @@ message BackupDetails {
   BackupEncryptionOptions encryption_options = 6;
   EncryptionInfo encryption_info = 9;
 
-  // ProtectedTimestampRecord is the ID of the protected timestamp record
-  // corresponding to this job. While the job ought to clean up the record
-  // when it enters a terminal state, there may be cases where it cannot or
-  // does not run the code to do so. To deal with this there is a background
-  // reconcilliation loop to ensure that protected timestamps are cleaned up.
+  // ProtectedTimestampRecord is the ID of the protected timestamp record that
+  // is written by the backup job. While the job ought to clean up the record
+  // when it enters a terminal state, there may be cases where it cannot or does
+  // not run the code to do so. To deal with this there is a background
+  // reconciliation loop to ensure that protected timestamps are cleaned up.
   bytes protected_timestamp_record = 7 [
     (gogoproto.customname) = "ProtectedTimestampRecord",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
+
+  // ProtectedTimestampRecordFromPreviousBackup is the ID of the protected
+  // timestamp record from the previous backup in the chain, that should be
+  // released by the backup job on successful completion.
+  //
+  // Currently, this field is only set for scheduled incremental backups that
+  // rely on the record written by the previous full or incremental backup in
+  // the chain.
+  bytes protected_timestamp_record_from_previous_backup = 10 [
+    (gogoproto.customname) = "ProtectedTimestampRecordFromPreviousBackup",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+
+  // PersistProtectedTimestampRecordForNextBackup if set to true, prevents the
+  // record created by the backup job from being released on successful
+  // completion of the job.
+  bool persist_protected_timestamp_record_for_next_backup = 11;
 
   // CollectionURI is the path to the collection into which this backup is being
   // written, i.e. the URI the user provided before a chosen suffix was appended

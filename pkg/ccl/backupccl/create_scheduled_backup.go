@@ -332,6 +332,29 @@ func doCreateBackupSchedules(
 
 	// If needed, create incremental.
 	if incRecurrence != nil {
+		// PersistProtectedTimestampForNextBackup when set to true, configures the
+		// backup to persist the protected timestamp written during execution for use
+		// by the next backup in the chain.
+		//
+		// An example of how this chain would work:
+		//
+		// - Full backup runs at t1:
+		// 		-- Protect all data after t1 from GC by writing PTS record A
+		// - Incremental backup runs at t2
+		// 		-- Find relevant changes to backup since t1 that have been protected
+		// 			 from GC courtesy PTS record A
+		// 		-- Protect all data after t2 from GC by writing PTS record B
+		// 		-- Release PTS record A
+		// - Incremental backup runs at t3
+		// 		-- Find relevant changes to backup since t2 that have been protected
+		// 			 from GC courtesy PTS record B
+		// 		-- Protect all data after t2 from GC by writing PTS record C
+		// 		-- Release PTS record B
+		// and so on...
+		//
+		// This chaining allows us to decouple incremental schedules from the
+		// configured GC TTL, since we protect what we need as we go.
+		backupNode.Options.PersistProtectedTimestampForNextBackup = true
 		backupNode.AppendToLatest = true
 		inc, err := makeBackupSchedule(
 			env, p.User(), scheduleLabel,
