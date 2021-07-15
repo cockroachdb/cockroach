@@ -65,6 +65,8 @@ func (t TenantID) String() string {
 	}
 }
 
+func (t TenantID) SafeValue() {}
+
 // Protects against zero value.
 func checkValid(id uint64) {
 	if id == 0 {

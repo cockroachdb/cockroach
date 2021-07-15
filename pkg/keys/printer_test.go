@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+
 	"math"
 	"strconv"
 	"strings"
@@ -30,11 +31,40 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 func lockTableKey(key roachpb.Key) roachpb.Key {
 	k, _ := keys.LockTableSingleKey(key, nil)
 	return k
+}
+
+func TestSafeFormatKey(t *testing.T) {
+	tenSysCodec := keys.SystemSQLCodec
+	ten5Codec := keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+	testCases := []struct {
+		key roachpb.Key
+		exp string
+	}{
+		{roachpb.Key(makeKey(ten5Codec.TablePrefix(42),
+			roachpb.RKey(encoding.EncodeVarintAscending(nil, 1222)),
+			roachpb.RKey(encoding.EncodeStringAscending(nil, "handsome man")))), `/Tenant/5/Table/42/1222/‹"handsome man"›`},
+		{roachpb.Key(makeKey(tenSysCodec.TablePrefix(42),
+			roachpb.RKey(encoding.EncodeVarintAscending(nil, 1222)),
+			roachpb.RKey(encoding.EncodeStringAscending(nil, "handsome man")))), `/Table/42/1222/‹"handsome man"›`},
+		{keys.UserTableDataMin, "/Table/50"},
+		{roachpb.Key(tenSysCodec.IndexPrefix(42, 5)), "/Table/42/5"},
+		{makeKey(tenSysCodec.TablePrefix(42),
+			roachpb.RKey(encoding.EncodeNullAscending(nil))), "/Table/42/‹NULL›"},
+		{keys.SystemConfigSpan.Key, "/Table/SystemConfigSpan/Start"},
+	}
+
+	for i, test := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			require.Equal(t, redact.RedactableString(test.exp), redact.Sprint(test.key))
+		})
+	}
 }
 
 func TestPrettyPrint(t *testing.T) {
