@@ -18,13 +18,10 @@ import { AdminUIState } from "src/redux/state";
 import * as docsURL from "src/util/docs";
 
 import "./loginPage.styl";
-import {
-  CockroachLabsLockupIcon,
-  Button,
-  TextInput,
-  PasswordInput,
-} from "src/components";
+import { CockroachLabsLockupIcon, Button } from "src/components";
 import { Text, TextTypes } from "src/components";
+import { SingleLineTextInput as TextInput } from "src/components/input/form/TextTypeInput";
+import { PasswordInput } from "src/components/input/form/EmailPasswordInput";
 import ErrorCircle from "assets/error-circle.svg";
 import { OIDCLoginConnected } from "src/views/login/oidc";
 
@@ -53,15 +50,15 @@ class PasswordLoginForm extends React.Component<
     // TODO(vilterp): focus username field on mount
   }
 
-  handleUpdateUsername = (value: string) => {
+  handleUpdateUsername = (event: React.FormEvent<{ value: string }>) => {
     this.setState({
-      username: value,
+      username: event.currentTarget.value,
     });
   };
 
-  handleUpdatePassword = (value: string) => {
+  handleUpdatePassword = (event: React.FormEvent<{ value: string }>) => {
     this.setState({
-      password: value,
+      password: event.currentTarget.value,
     });
   };
 
@@ -95,6 +92,9 @@ class PasswordLoginForm extends React.Component<
           name="password"
           onChange={this.handleUpdatePassword}
           placeholder="Password"
+          validate={() => {
+            return false;
+          }}
           label="Password"
           value={password}
         />

@@ -20,6 +20,8 @@ import "./index.styl";
 
 import EnqueueRangeRequest = cockroach.server.serverpb.EnqueueRangeRequest;
 import EnqueueRangeResponse = cockroach.server.serverpb.EnqueueRangeResponse;
+import { NumberInput } from "oss/src/components/input/form/TextTypeInput";
+import { CheckboxInput } from "oss/src/components/input/form";
 
 const QUEUES = [
   "replicate",
@@ -217,7 +219,7 @@ export class EnqueueRange extends React.Component<
                 <br />
                 <label>
                   RangeID:{" "}
-                  <input
+                  <NumberInput
                     type="number"
                     name="rangeID"
                     className="input-text"
@@ -229,7 +231,7 @@ export class EnqueueRange extends React.Component<
                 <br />
                 <label>
                   NodeID:{" "}
-                  <input
+                  <NumberInput
                     type="number"
                     name="nodeID"
                     className="input-text"
@@ -243,16 +245,11 @@ export class EnqueueRange extends React.Component<
                 <br />
                 <label>
                   SkipShouldQueue:{" "}
-                  <input
-                    type="checkbox"
-                    checked={this.state.skipShouldQueue}
-                    name="skipShouldQueue"
-                    onChange={() =>
+                  <CheckboxInput name="skipShouldQueue" label="State" checked={this.state.skipShouldQueue} onChange={() =>
                       this.setState({
                         skipShouldQueue: !this.state.skipShouldQueue,
                       })
-                    }
-                  />
+                    } />
                 </label>
                 <br />
                 <input type="submit" className="submit-button" value="Submit" />
