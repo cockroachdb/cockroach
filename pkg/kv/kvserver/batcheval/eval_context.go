@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -118,6 +119,10 @@ type EvalContext interface {
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
 	GetExternalStorageFromURI(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
 		error)
+
+	// NewLongLivedSnapshot returns a new long-lived snapshot of the current
+	// engine. Long lived as it can outlast the current command's evaluation.
+	NewLongLivedSnapshot() storage.Reader
 
 	// RevokeLease stops the replica from using its current lease, if that lease
 	// matches the provided lease sequence. All future calls to leaseStatus on
@@ -255,5 +260,9 @@ func (m *mockEvalCtxImpl) RevokeLease(_ context.Context, seq roachpb.LeaseSequen
 	m.RevokedLeaseSeq = seq
 }
 func (m *mockEvalCtxImpl) WatchForMerge(ctx context.Context) error {
+	panic("unimplemented")
+}
+
+func (m *mockEvalCtxImpl) NewLongLivedSnapshot() storage.Reader {
 	panic("unimplemented")
 }

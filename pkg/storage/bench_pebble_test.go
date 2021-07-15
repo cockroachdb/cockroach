@@ -42,7 +42,7 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 			StorageConfig: base.StorageConfig{
 				Dir: dir,
 				Settings: makeSettingsForSeparatedIntents(
-					false /* oldClusterVersion */, true /* enabled */),
+					false /* oldClusterVersion */),
 			},
 			Opts: opts,
 		})
@@ -54,10 +54,12 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 
 func setupMVCCInMemPebble(b testing.TB, loc string) Engine {
 	return setupMVCCInMemPebbleWithSettings(b, makeSettingsForSeparatedIntents(
-		false /* oldClusterVersion */, true /* enabled */))
+		false /* oldClusterVersion */), false /* disabledSeparatedIntents */)
 }
 
-func setupMVCCInMemPebbleWithSettings(b testing.TB, settings *cluster.Settings) Engine {
+func setupMVCCInMemPebbleWithSettings(
+	b testing.TB, settings *cluster.Settings, disableSeparatedIntents bool,
+) Engine {
 	opts := DefaultPebbleOptions()
 	opts.FS = vfs.NewMem()
 	opts.Cache = pebble.NewCache(testCacheSize)
@@ -68,7 +70,8 @@ func setupMVCCInMemPebbleWithSettings(b testing.TB, settings *cluster.Settings) 
 		PebbleConfig{
 			Opts: opts,
 			StorageConfig: base.StorageConfig{
-				Settings: settings,
+				Settings:                settings,
+				DisableSeparatedIntents: disableSeparatedIntents,
 			},
 		})
 	if err != nil {

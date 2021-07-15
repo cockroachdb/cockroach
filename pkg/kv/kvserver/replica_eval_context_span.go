@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -242,6 +243,11 @@ func (rec *SpanSetReplicaEvalContext) GetExternalStorageFromURI(
 // RevokeLease stops the replica from using its current lease.
 func (rec *SpanSetReplicaEvalContext) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
 	rec.i.RevokeLease(ctx, seq)
+}
+
+// NewLongLivedSnapshot returns a new snapshot of the underlying Engine.
+func (rec *SpanSetReplicaEvalContext) NewLongLivedSnapshot() storage.Reader {
+	return rec.i.NewLongLivedSnapshot()
 }
 
 // WatchForMerge arranges to block all requests until the in-progress merge

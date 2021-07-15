@@ -1665,13 +1665,17 @@ func TestScanSeparatedIntents(t *testing.T) {
 
 	for name, enableSeparatedIntents := range map[string]bool{"interleaved": false, "separated": true} {
 		t.Run(name, func(t *testing.T) {
-			settings := makeSettingsForSeparatedIntents(false, enableSeparatedIntents)
-			eng := NewInMem(
+			settings := makeSettingsForSeparatedIntents(false)
+			knobs := &TestingKnobs{DisableSeparatedIntents: !enableSeparatedIntents}
+			eng := newPebbleInMem(
 				ctx,
 				roachpb.Attributes{},
 				1<<20,   /* cacheSize */
 				512<<20, /* storeSize */
+				vfs.NewMem(),
+				"", /* dir */
 				settings,
+				knobs,
 			)
 			defer eng.Close()
 

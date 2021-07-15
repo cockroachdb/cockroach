@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc"
@@ -48,6 +49,9 @@ type ClusterConfig struct {
 	// to expose only relevant, vetted bits of kv.DB. It'll make our tests less
 	// "integration-ey".
 	DB *kv.DB
+
+	// Stopper is a reference to a stop.Stopper for spawning tasks.
+	Stopper *stop.Stopper
 }
 
 // NodeDialer abstracts connecting to other nodes in the cluster.
@@ -185,4 +189,9 @@ func (c *Cluster) IterateRangeDescriptors(
 // DB provides exposes the underlying *kv.DB instance.
 func (c *Cluster) DB() *kv.DB {
 	return c.c.DB
+}
+
+// Stopper exposes the stored Stopper instance.
+func (c *Cluster) Stopper() *stop.Stopper {
+	return c.c.Stopper
 }

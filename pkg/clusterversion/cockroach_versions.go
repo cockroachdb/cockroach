@@ -309,6 +309,12 @@ const (
 	// SQLStatsTable adds the system tables for storing persisted SQL statistics
 	// for statements and transactions.
 	SQLStatsTable
+	// SeparatedIntentsMigration adds the migration to move over all remaining
+	// intents to the separated lock table space.
+	SeparatedIntentsMigration
+	// PostSeparatedIntentsMigration runs a cleanup migration after the main
+	// SeparatedIntentsMigration.
+	PostSeparatedIntentsMigration
 
 	// Step (1): Add new versions here.
 )
@@ -530,6 +536,15 @@ var versionsSingleton = keyedVersions{
 		Key:     SQLStatsTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 116},
 	},
+	{
+		Key:     SeparatedIntentsMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 118},
+	},
+	{
+		Key:     PostSeparatedIntentsMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 120},
+	},
+
 	// Step (2): Add new versions here.
 }
 

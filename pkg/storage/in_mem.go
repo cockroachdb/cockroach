@@ -31,7 +31,7 @@ func NewInMem(
 	cacheSize, storeSize int64,
 	settings *cluster.Settings,
 ) Engine {
-	return newPebbleInMem(ctx, attrs, cacheSize, storeSize, vfs.NewMem(), "", settings)
+	return newPebbleInMem(ctx, attrs, cacheSize, storeSize, vfs.NewMem(), "", settings, nil /* knobs */)
 }
 
 // InMemFromFS allocates and returns new, opened in-memory engine. Engine
@@ -46,7 +46,7 @@ func InMemFromFS(
 	dir string,
 	settings *cluster.Settings,
 ) Engine {
-	return newPebbleInMem(ctx, attrs, cacheSize, storeSize, fs, dir, settings)
+	return newPebbleInMem(ctx, attrs, cacheSize, storeSize, fs, dir, settings, nil /* knobs */)
 }
 
 // The ForTesting functions randomize the settings for separated intents. This
@@ -64,7 +64,14 @@ func InMemFromFS(
 // must call the engine's Close method when the engine is no longer needed.
 func NewInMemForTesting(ctx context.Context, attrs roachpb.Attributes, storeSize int64) Engine {
 	settings := MakeRandomSettingsForSeparatedIntents()
-	return newPebbleInMem(ctx, attrs, 0 /* cacheSize */, storeSize, vfs.NewMem(), "", settings)
+	disableSeparatedIntents := rand.Intn(2) == 0
+	knobs := &TestingKnobs{DisableSeparatedIntents: disableSeparatedIntents}
+	log.Infof(context.Background(),
+		"engine creation is randomly setting disableSeparatedIntents: %t",
+		disableSeparatedIntents)
+	return newPebbleInMem(
+		ctx, attrs, 0 /* cacheSize */, storeSize, vfs.NewMem(), "",
+		settings, knobs /* knobs */)
 }
 
 // NewDefaultInMemForTesting allocates and returns a new, opened in-memory engine with
@@ -75,23 +82,21 @@ func NewDefaultInMemForTesting() Engine {
 }
 
 // MakeRandomSettingsForSeparatedIntents makes settings for which it randomly
-// picks whether the cluster understands separated intents, and if yes,
-// whether to write separated intents. Once made, these setting do not change.
+// picks whether the cluster understands and writes separated intents.
+// Once made, these setting do not change.
 func MakeRandomSettingsForSeparatedIntents() *cluster.Settings {
 	oldClusterVersion := rand.Intn(2) == 0
-	enabledSeparated := rand.Intn(2) == 0
 	log.Infof(context.Background(),
-		"engine creation is randomly setting oldClusterVersion: %t, enabledSeparated: %t",
-		oldClusterVersion, enabledSeparated)
-	return makeSettingsForSeparatedIntents(oldClusterVersion, enabledSeparated)
+		"engine creation is randomly setting oldClusterVersion: %t",
+		oldClusterVersion)
+	return makeSettingsForSeparatedIntents(oldClusterVersion)
 }
 
-func makeSettingsForSeparatedIntents(oldClusterVersion bool, enabled bool) *cluster.Settings {
+func makeSettingsForSeparatedIntents(oldClusterVersion bool) *cluster.Settings {
 	version := clusterversion.ByKey(clusterversion.SeparatedIntents)
 	if oldClusterVersion {
 		version = clusterversion.ByKey(clusterversion.V20_2)
 	}
 	settings := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
-	SeparatedIntentsEnabled.Override(context.TODO(), &settings.SV, enabled)
 	return settings
 }

@@ -130,6 +130,14 @@ func NewManager(cfg Config) Manager {
 	return m
 }
 
+// WaitFor implements the ReadLatchBarrierProvider interface.
+func (m *managerImpl) WaitFor(ctx context.Context, span spanset.Span) *Error {
+	ss := spanset.New()
+	ss.AddMVCC(spanset.SpanReadOnly, span.Span, span.Timestamp)
+	defer ss.Release()
+	return m.lm.WaitFor(ctx, ss)
+}
+
 // SequenceReq implements the RequestSequencer interface.
 func (m *managerImpl) SequenceReq(
 	ctx context.Context, prev *Guard, req Request, evalKind RequestEvalKind,

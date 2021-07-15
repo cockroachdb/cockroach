@@ -159,6 +159,12 @@ const (
 	// VerifyProtectedTimestamp determines whether the specified protection record
 	// will be respected by this Range.
 	AdminVerifyProtectedTimestamp
+	// MigrateLockTable is a special command to facilitate the separated intents
+	// migration
+	MigrateLockTable
+	// Barrier is a command that ensures all in-flight write operations on this
+	// range before this command have finished by the time it returns.
+	Barrier
 	// NumMethods represents the total number of API methods.
 	NumMethods
 )
