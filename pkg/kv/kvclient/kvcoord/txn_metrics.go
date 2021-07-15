@@ -35,6 +35,7 @@ type TxnMetrics struct {
 
 	TxnsWithCondensedIntents      *metric.Counter
 	TxnsWithCondensedIntentsGauge *metric.Gauge
+	TxnsRejectedByLockSpanBudget  *metric.Counter
 
 	// Restarts is the number of times we had to restart the transaction.
 	Restarts *metric.Histogram
@@ -148,6 +149,15 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaTxnsRejectedByLockSpanBudget = metric.Metadata{
+		Name: "txn.condensed_intent_spans_rejected",
+		Help: "KV transactions that have been aborted because they exceeded their intent tracking " +
+			"memory budget (kv.transaction.max_intents_bytes). " +
+			"Rejection is caused by kv.transaction.reject_over_max_intents_budget.",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	metaRestartsHistogram = metric.Metadata{
 		Name:        "txn.restarts",
 		Help:        "Number of restarted KV transactions",
@@ -260,6 +270,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Durations:                     metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		TxnsWithCondensedIntents:      metric.NewCounter(metaTxnsWithCondensedIntentSpans),
 		TxnsWithCondensedIntentsGauge: metric.NewGauge(metaTxnsWithCondensedIntentSpansGauge),
+		TxnsRejectedByLockSpanBudget:  metric.NewCounter(metaTxnsRejectedByLockSpanBudget),
 		Restarts:                      metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
 		RestartsWriteTooOldMulti:      telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),

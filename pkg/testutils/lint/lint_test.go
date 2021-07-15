@@ -1145,6 +1145,7 @@ func TestLint(t *testing.T) {
 			"*.go",
 			":!*.pb.go",
 			":!*.pb.gw.go",
+			":!kv/kvclient/kvcoord/txn_interceptor_pipeliner.go",
 			":!sql/pgwire/pgerror/constraint_name.go",
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
