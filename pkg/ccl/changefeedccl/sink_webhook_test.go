@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,7 +40,17 @@ func setupWebhookSinkWithDetails(details jobspb.ChangefeedDetails, parallelism i
 		return nil, err
 	}
 
-	sinkSrc, err := makeWebhookSink(context.Background(), sinkURL{URL: u}, details.Opts, parallelism)
+	// unlimited memory for testing purposes only
+	memMon := mon.NewUnlimitedMonitor(context.Background(),
+		"test mon",
+		mon.MemoryResource,
+		nil,  /* curCount */
+		nil,  /* maxHist */
+		1000, /* noteworthy */
+		cluster.MakeTestingClusterSettings(),
+	)
+
+	sinkSrc, err := makeWebhookSink(context.Background(), sinkURL{URL: u}, details.Opts, parallelism, memMon.MakeBoundAccount())
 	if err != nil {
 		return nil, err
 	}
