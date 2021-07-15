@@ -133,6 +133,9 @@ type Table interface {
 	// Unique returns the ith unique constraint defined on this table, where
 	// i < UniqueCount.
 	Unique(i UniqueOrdinal) UniqueConstraint
+
+	// GetRegionalByRowTableRegionColumnName returns the RBR column name if one exists and returns an error otherwise.
+	GetRegionalByRowTableRegionColumnName() (tree.Name, error)
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check
