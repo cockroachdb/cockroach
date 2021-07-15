@@ -4151,6 +4151,7 @@ deallocate_stmt:
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 //   TYPE <typename> [, <typename>]...
 //   SCHEMA [<databasename> .]<schemaname> [, [<databasename> .]<schemaname>]...
+//   ALL TABLES IN SCHEMA schema_name [, ...]
 //
 // %SeeAlso: REVOKE, WEBDOCS/grant.html
 grant_stmt:
@@ -4184,6 +4185,17 @@ grant_stmt:
   {
     return unimplemented(sqllex, "grant privileges on schema with")
   }
+| GRANT privileges ON ALL TABLES IN SCHEMA schema_name_list TO name_list
+  {
+    $$.val = &tree.Grant{
+      Privileges: $2.privilegeList(),
+      Targets: tree.TargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllTablesInSchema: true,
+      },
+      Grantees: $10.nameList(),
+    }
+  }
 | GRANT privileges ON SEQUENCE error
   {
     return unimplemented(sqllex, "grant privileges on sequence")
@@ -4206,6 +4218,7 @@ grant_stmt:
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 //   TYPE <typename> [, <typename>]...
 //   SCHEMA [<databasename> .]<schemaname> [, [<databasename> .]<schemaname]...
+//   ALL TABLES IN SCHEMA schema_name [, ...]
 //
 // %SeeAlso: GRANT, WEBDOCS/revoke.html
 revoke_stmt:
@@ -4233,6 +4246,17 @@ revoke_stmt:
         Schemas: $5.objectNamePrefixList(),
       },
       Grantees: $7.nameList(),
+    }
+  }
+| REVOKE privileges ON ALL TABLES IN SCHEMA schema_name_list FROM name_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $2.privilegeList(),
+      Targets: tree.TargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllTablesInSchema: true,
+      },
+      Grantees: $10.nameList(),
     }
   }
 | REVOKE privileges ON SEQUENCE error

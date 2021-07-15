@@ -559,6 +559,34 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		if len(targets.Schemas) == 0 {
 			return nil, errNoSchema
 		}
+		if targets.AllTablesInSchema {
+			// Get all the descriptors for the tables in the specified schemas.
+			db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, p.CurrentDatabase(), flags)
+			if err != nil {
+				return nil, err
+			}
+			var descs []catalog.Descriptor
+			for _, sc := range targets.Schemas {
+				_, objectIDs, err := resolver.GetObjectNamesAndIDs(
+					ctx, p.txn, p, p.ExecCfg().Codec, db, sc.Schema(), true, /* explicitPrefix */
+				)
+				if err != nil {
+					return nil, err
+				}
+				for i := range objectIDs {
+					descriptor, err := p.Descriptors().GetMutableDescriptorByID(ctx, objectIDs[i], p.txn)
+					if err != nil {
+						return nil, err
+					}
+					if descriptor != nil && descriptor.DescriptorType() == catalog.Table {
+						descs = append(descs, descriptor)
+					}
+				}
+			}
+
+			return descs, nil
+		}
+
 		descs := make([]catalog.Descriptor, 0, len(targets.Schemas))
 
 		// Resolve the databases being changed
