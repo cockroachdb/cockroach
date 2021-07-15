@@ -47,6 +47,7 @@ type Outbox struct {
 
 	typs []*types.T
 
+	allocator  *colmem.Allocator
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
 
@@ -97,6 +98,7 @@ func NewOutbox(
 		// be).
 		OneInputNode:    colexecop.NewOneInputNode(colexecutils.NewDeselectorOp(allocator, input, typs)),
 		typs:            typs,
+		allocator:       allocator,
 		converter:       c,
 		serializer:      s,
 		getStats:        getStats,
@@ -109,6 +111,14 @@ func NewOutbox(
 }
 
 func (o *Outbox) close(ctx context.Context) {
+	o.scratch.buf = nil
+	o.scratch.msg = nil
+	// Unset the input (which is a deselector operator) so that its output batch
+	// could be garbage collected. This allows us to release all memory
+	// registered with the allocator (the allocator is shared by the outbox and
+	// the deselector).
+	o.Input = nil
+	o.allocator.ReleaseMemory(o.allocator.Used())
 	o.closers.CloseAndLogOnErr(ctx, "outbox")
 }
 
@@ -273,14 +283,26 @@ func (o *Outbox) sendBatches(
 				return
 			}
 
-			o.scratch.buf.Reset()
+			// Note that for certain types (like Decimals, Intervals,
+			// datum-backed types) BatchToArrow allocates some memory in order
+			// to perform the conversion, and we consciously choose to ignore it
+			// for the purposes of the memory accounting because the references
+			// to those slices are lost in Serialize call below.
 			d, err := o.converter.BatchToArrow(batch)
 			if err != nil {
 				colexecerror.InternalError(errors.Wrap(err, "Outbox BatchToArrow data serialization error"))
 			}
+
+			oldBufCap := o.scratch.buf.Cap()
+			o.scratch.buf.Reset()
 			if _, _, err := o.serializer.Serialize(o.scratch.buf, d, n); err != nil {
 				colexecerror.InternalError(errors.Wrap(err, "Outbox Serialize data error"))
 			}
+			// Account for the increase in the capacity of the scratch buffer.
+			// Note that because we never truncate the buffer, we are only
+			// adjusting the memory usage whenever the buffer's capacity
+			// increases (if it didn't increase, this call becomes a noop).
+			o.allocator.AdjustMemoryUsage(int64(o.scratch.buf.Cap() - oldBufCap))
 			o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
 
 			// o.scratch.msg can be reused as soon as Send returns since it returns as
