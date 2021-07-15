@@ -5,28 +5,10 @@
     "TotalColumns": 628,
     "MissingTables": 0,
     "MissingColumns": 12,
-    "DatatypeMismatches": 3
+    "DatatypeMismatches": 0
   },
   "pgMetadata": {
     "routines": {
-      "interval_precision": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 20,
-        "expectedDataType": "INT8"
-      },
-      "result_cast_char_octet_length": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 20,
-        "expectedDataType": "INT8"
-      },
-      "result_cast_datetime_precision": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 20,
-        "expectedDataType": "INT8"
-      },
       "scope_schema": null
     },
     "schemata": {

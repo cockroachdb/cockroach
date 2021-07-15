@@ -641,6 +641,12 @@ func registerTPCC(r registry.Registry) {
 								},
 								ch:         chaosEventCh,
 								promClient: promv1.NewAPI(client),
+								// We see a slow trickle of errors after a server has been
+								// force shutdown due to queries before the shutdown not
+								// fully completing.
+								maxErrorsDuringUptime: 10,
+								// "delivery" does not trigger often.
+								allowZeroSuccessDuringUptime: true,
 							}, nil
 						},
 						SetupType:         usingInit,
