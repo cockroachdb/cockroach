@@ -780,9 +780,21 @@ func loadBackupSQLDescs(
 
 	allDescs, latestBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
 
+	for _, m := range details.DatabaseModifiers {
+		for _, typ := range m.ExtraTypeDescs {
+			allDescs = append(allDescs, typedesc.NewBuilder(typ).BuildCreatedMutableType())
+		}
+	}
+
 	var sqlDescs []catalog.Descriptor
 	for _, desc := range allDescs {
 		id := desc.GetID()
+		switch desc := desc.(type) {
+		case *dbdesc.Mutable:
+			if m, ok := details.DatabaseModifiers[id]; ok {
+				desc.SetRegionConfig(m.RegionConfig)
+			}
+		}
 		if _, ok := details.DescriptorRewrites[id]; ok {
 			sqlDescs = append(sqlDescs, desc)
 		}
