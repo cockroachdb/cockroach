@@ -712,7 +712,7 @@ such as "node" or "root"). If multiple mappings are provided for the same
 principal not specified in the map is passed through as-is via the identity
 function. A cert is allowed to authenticate a DB principal if the DB principal
 name is contained in the mapped CommonName or DNS-type SubjectAlternateName
-fields.
+fields. It is permissible for the <cert-principal> string to contain colons.
 `,
 	}
 

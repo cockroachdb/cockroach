@@ -149,6 +149,8 @@ func TestGetCertificateUsersMapped(t *testing.T) {
 		{"bar,foo", "foo:blah", "bar,blah"},
 		// Both principals mapped.
 		{"foo,bar", "foo:bar,bar:foo", "bar,foo"},
+		// Verify desired string splits.
+		{"foo:has:colon", "foo:has:colon:bar", "bar"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
