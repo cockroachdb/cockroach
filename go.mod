@@ -94,7 +94,7 @@ require (
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jackc/pgx/v4 v4.6.0
 	github.com/jaegertracing/jaeger v1.18.1
-	github.com/jordanlewis/gcassert v0.0.0-20200706043056-bf61eb72ee48
+	github.com/jordanlewis/gcassert v0.0.0-20210709222130-81f5df3faab8
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.5.0
 	github.com/kisielk/gotool v1.0.0
