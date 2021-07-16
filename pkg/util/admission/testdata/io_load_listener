@@ -3,7 +3,7 @@ set-state admitted=0 l0-bytes=10000 l0-added=1000 l0-files=11 l0-sublevels=11
 ----
 admitted: 0, bytes: 10000, added-bytes: 1000,
 smoothed-removed: 0, smoothed-admit: 0,
-tokens: unlimited, tokens-allocated: unlimited
+tokens: unlimited, tokens-allocated: 0
 tick: 0, setAvailableIOTokens: unlimited
 tick: 1, setAvailableIOTokens: unlimited
 tick: 2, setAvailableIOTokens: unlimited
@@ -73,7 +73,7 @@ set-state admitted=10000 l0-bytes=10000 l0-added=101000 l0-files=11 l0-sublevels
 ----
 admitted: 10000, bytes: 10000, added-bytes: 101000,
 smoothed-removed: 50000, smoothed-admit: 1250,
-tokens: 1250, tokens-allocated: 21
+tokens: 1250, tokens-allocated: 0
 tick: 0, setAvailableIOTokens: 21
 tick: 1, setAvailableIOTokens: 21
 tick: 2, setAvailableIOTokens: 21
@@ -140,7 +140,7 @@ set-state admitted=20000 l0-bytes=10000 l0-added=201000 l0-files=11 l0-sublevels
 ----
 admitted: 20000, bytes: 10000, added-bytes: 201000,
 smoothed-removed: 75000, smoothed-admit: 2500,
-tokens: 2500, tokens-allocated: 42
+tokens: 2500, tokens-allocated: 0
 tick: 0, setAvailableIOTokens: 42
 tick: 1, setAvailableIOTokens: 42
 tick: 2, setAvailableIOTokens: 42
@@ -208,7 +208,7 @@ set-state admitted=30000 l0-bytes=10000 l0-added=301000 l0-files=11 l0-sublevels
 ----
 admitted: 30000, bytes: 10000, added-bytes: 301000,
 smoothed-removed: 87500, smoothed-admit: 6250,
-tokens: unlimited, tokens-allocated: unlimited
+tokens: unlimited, tokens-allocated: 0
 tick: 0, setAvailableIOTokens: unlimited
 tick: 1, setAvailableIOTokens: unlimited
 tick: 2, setAvailableIOTokens: unlimited
