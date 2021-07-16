@@ -84,6 +84,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/jackc/pgx"
 	"github.com/kr/pretty"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -99,10 +100,11 @@ type sqlDBKey struct {
 }
 
 type datadrivenTestState struct {
-	servers    map[string]serverutils.TestServerInterface
-	dataDirs   map[string]string
-	sqlDBs     map[sqlDBKey]*gosql.DB
-	cleanupFns []func()
+	servers      map[string]serverutils.TestServerInterface
+	dataDirs     map[string]string
+	sqlDBs       map[sqlDBKey]*gosql.DB
+	noticeBuffer []string
+	cleanupFns   []func()
 }
 
 var localityCfgs = map[string]roachpb.Locality{
@@ -142,6 +144,7 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 	for _, f := range d.cleanupFns {
 		f()
 	}
+	d.noticeBuffer = nil
 }
 
 func (d *datadrivenTestState) addServer(
@@ -209,12 +212,22 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 	addr := d.servers[server].ServingSQLAddr()
 	pgURL, cleanup := sqlutils.PGUrl(t, addr, "TestBackupRestoreDataDriven", url.User(user))
 	d.cleanupFns = append(d.cleanupFns, cleanup)
-	db, err := gosql.Open("postgres", pgURL.String())
+
+	base, err := pq.NewConnector(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.sqlDBs[key] = db
-	return db
+	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+		d.noticeBuffer = append(d.noticeBuffer, notice.Severity+": "+notice.Message)
+		if notice.Detail != "" {
+			d.noticeBuffer = append(d.noticeBuffer, "DETAIL: "+notice.Detail)
+		}
+		if notice.Hint != "" {
+			d.noticeBuffer = append(d.noticeBuffer, "HINT: "+notice.Hint)
+		}
+	})
+	d.sqlDBs[key] = gosql.OpenDB(connector)
+	return d.sqlDBs[key]
 }
 
 func newDatadrivenTestState() datadrivenTestState {
@@ -299,11 +312,21 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				if d.HasArg("user") {
 					d.ScanArgs(t, "user", &user)
 				}
+				ds.noticeBuffer = nil
 				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
-				if err == nil {
-					return ""
+				ret := ds.noticeBuffer
+				if err != nil {
+					ret = append(ds.noticeBuffer, err.Error())
+					if err, ok := err.(*pq.Error); ok {
+						if err.Detail != "" {
+							ret = append(ret, "DETAIL: "+err.Detail)
+						}
+						if err.Hint != "" {
+							ret = append(ret, "HINT: "+err.Hint)
+						}
+					}
 				}
-				return err.Error()
+				return strings.Join(ret, "\n")
 			case "query-sql":
 				server := lastCreatedServer
 				user := "root"
