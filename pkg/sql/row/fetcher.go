@@ -558,12 +558,27 @@ func (rf *Fetcher) GetTables() []catalog.Descriptor {
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
+//
+// limitBatches controls whether bytes and keys limits are placed on the
+// batches. If set, bytes limits will be used to protect against running out of
+// memory (on both this client node, and on the server).
+//
+// If limitBatches is set, rowLimitHint can also be set to control the number of
+// rows that will be scanned by the first batch. If set, subsequent batches (if
+// any) will have progressively higher limits (up to a fixed max). The idea with
+// row limits is to make the execution of LIMIT queries efficient: if the caller
+// has some idea about how many rows need to be read to ultimately satisfy the
+// query, the Fetcher uses it. Even if this hint proves insufficient, the
+// Fetcher continues to set row limits (in addition to bytes limits) on the
+// argument that some number of rows will eventually satisfy the query and we
+// likely don't need to scan `spans` fully. The bytes limit, on the other hand,
+// is simply intended to protect against OOMs.
 func (rf *Fetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
 	limitBatches bool,
-	limitHint int64,
+	rowLimitHint int64,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
@@ -577,7 +592,7 @@ func (rf *Fetcher) StartScan(
 		spans,
 		rf.reverse,
 		limitBatches,
-		rf.rowLimitToKeyLimit(limitHint),
+		rf.rowLimitToKeyLimit(rowLimitHint),
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
@@ -612,7 +627,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,
 	limitBatches bool,
-	limitHint int64,
+	rowLimitHint int64,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
@@ -670,7 +685,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		spans,
 		rf.reverse,
 		limitBatches,
-		rf.rowLimitToKeyLimit(limitHint),
+		rf.rowLimitToKeyLimit(rowLimitHint),
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
@@ -684,19 +699,19 @@ func (rf *Fetcher) StartInconsistentScan(
 	return rf.StartScanFrom(ctx, &f)
 }
 
-func (rf *Fetcher) rowLimitToKeyLimit(keyLimitHint int64) int64 {
-	if keyLimitHint == 0 {
+func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint int64) int64 {
+	if rowLimitHint == 0 {
 		return 0
 	}
 	// If we have a limit hint, we limit the first batch size. Subsequent
 	// batches get larger to avoid making things too slow (e.g. in case we have
 	// a very restrictive filter and actually have to retrieve a lot of rows).
-	// The keyLimitHint is a row limit, but each row could be made up of more than
+	// The rowLimitHint is a row limit, but each row could be made up of more than
 	// one key. We take the maximum possible keys per row out of all the table
 	// rows we could potentially scan over.
 	//
 	// We add an extra key to make sure we form the last row.
-	return keyLimitHint*int64(rf.maxKeysPerRow) + 1
+	return rowLimitHint*int64(rf.maxKeysPerRow) + 1
 }
 
 // StartScanFrom initializes and starts a scan from the given kvBatchFetcher. Can be

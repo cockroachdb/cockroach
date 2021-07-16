@@ -48,7 +48,7 @@ var defaultKVBatchSize = int64(util.ConstantWithMetamorphicTestValue(
 	1,                     /* metamorphicValue */
 ))
 
-const productionKVBatchSize = 10000
+const productionKVBatchSize = 100000
 
 // TestingSetKVBatchSize changes the kvBatchFetcher batch size, and returns a function that restores it.
 // This is to be used only in tests - we have no test coverage for arbitrary kv batch sizes at this time.
@@ -72,12 +72,23 @@ type txnKVFetcher struct {
 	// individual Span has only a start key, it will be interpreted as a
 	// single-key fetch and may use a GetRequest under the hood.
 	spans roachpb.Spans
-	// If useBatchLimit is true, batches are limited to kvBatchSize. If
-	// firstBatchKeyLimit is also set, the first batch is limited to that value.
-	// Subsequent batches are larger, up to kvBatchSize.
+
+	// If firstBatchKeyLimit is set, the first batch is limited in number of keys
+	// to this value and subsequent batches are larger, up to kvBatchSize. If not
+	// set, batches do not have a key limit (they might still have a bytes limit
+	// as per useBatchBytesLimit).
 	firstBatchKeyLimit int64
-	useBatchLimit      bool
-	reverse            bool
+	// If useBatchBytesLimit is set, the batches are limited in bytes size. This
+	// protects from OOMs, but comes at the cost of inhibiting DistSender-level
+	// parallelism within a batch.
+	//
+	// If useBatchBytesLimit is not set, the assumption is that SQL *knows* that
+	// there is only a "small" amount of data to be read (i.e. scanning `spans`
+	// doesn't result in too much data), and wants to preserve concurrency for
+	// this scans inside of DistSender.
+	useBatchBytesLimit bool
+
+	reverse bool
 	// lockStrength represents the locking mode to use when fetching KVs.
 	lockStrength descpb.ScanLockingStrength
 	// lockWaitPolicy represents the policy to be used for handling conflicting
@@ -116,11 +127,12 @@ func (f *txnKVFetcher) getBatchKeyLimit() int64 {
 }
 
 func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) int64 {
-	if !f.useBatchLimit {
+	if f.firstBatchKeyLimit == 0 {
 		return 0
 	}
+
 	kvBatchSize := getKVBatchSize(f.forceProductionKVBatchSize)
-	if f.firstBatchKeyLimit == 0 || f.firstBatchKeyLimit >= kvBatchSize {
+	if f.firstBatchKeyLimit >= kvBatchSize {
 		return kvBatchSize
 	}
 
@@ -205,7 +217,7 @@ func (f *txnKVFetcher) getWaitPolicy() lock.WaitPolicy {
 }
 
 // makeKVBatchFetcher initializes a kvBatchFetcher for the given spans. If
-// useBatchLimit is true, the number of result keys per batch is limited; the
+// useBatchBytesLimit is true, the number of result keys per batch is limited; the
 // limit grows between subsequent batches, starting at firstBatchKeyLimit (if not
 // 0) to productionKVBatchSize.
 //
@@ -242,7 +254,7 @@ func makeKVBatchFetcherWithSendFunc(
 	spans roachpb.Spans,
 	reverse bool,
 	useBatchLimit bool,
-	firstBatchLimit int64,
+	firstBatchKeyLimit int64,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
@@ -250,9 +262,12 @@ func makeKVBatchFetcherWithSendFunc(
 	requestAdmissionHeader roachpb.AdmissionHeader,
 	responseAdmissionQ *admission.WorkQueue,
 ) (txnKVFetcher, error) {
-	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
-		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
-			firstBatchLimit, useBatchLimit)
+	if firstBatchKeyLimit < 0 || (!useBatchLimit && firstBatchKeyLimit != 0) {
+		// Passing firstBatchKeyLimit without useBatchLimit doesn't make sense - the
+		// only reason to not set useBatchLimit is in order to get DistSender-level
+		// parallelism, and setting firstBatchKeyLimit inhibits that.
+		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchBytesLimit: %t)",
+			firstBatchKeyLimit, useBatchLimit)
 	}
 
 	if useBatchLimit {
@@ -310,8 +325,8 @@ func makeKVBatchFetcherWithSendFunc(
 		sendFn:                     sendFn,
 		spans:                      copySpans,
 		reverse:                    reverse,
-		useBatchLimit:              useBatchLimit,
-		firstBatchKeyLimit:         firstBatchLimit,
+		useBatchBytesLimit:         useBatchLimit,
+		firstBatchKeyLimit:         firstBatchKeyLimit,
 		lockStrength:               lockStrength,
 		lockWaitPolicy:             lockWaitPolicy,
 		mon:                        mon,
@@ -330,17 +345,10 @@ const maxScanResponseBytes = 10 * (1 << 20) // 10MB
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	var ba roachpb.BatchRequest
 	ba.Header.WaitPolicy = f.getWaitPolicy()
-	ba.Header.MaxSpanRequestKeys = f.getBatchKeyLimit()
-	if ba.Header.MaxSpanRequestKeys > 0 {
-		// If this kvfetcher limits the number of rows returned, also use
-		// target bytes to guard against the case in which the average row
-		// is very large.
-		// If no limit is set, the assumption is that SQL *knows* that there
-		// is only a "small" amount of data to be read, and wants to preserve
-		// concurrency for this request inside of DistSender, which setting
-		// TargetBytes would interfere with.
+	if f.useBatchBytesLimit {
 		ba.Header.TargetBytes = maxScanResponseBytes
 	}
+	ba.Header.MaxSpanRequestKeys = f.getBatchKeyLimit()
 	ba.AdmissionHeader = f.requestAdmissionHeader
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
 	keyLocking := f.getKeyLockingStrength()
