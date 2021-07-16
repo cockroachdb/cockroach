@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -469,15 +468,15 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "debug-latch-manager":
-				global, local := m.LatchMetrics()
+				metrics := m.LatchMetrics()
 				output := []string{
-					fmt.Sprintf("write count: %d", global.WriteCount+local.WriteCount),
-					fmt.Sprintf(" read count: %d", global.ReadCount+local.ReadCount),
+					fmt.Sprintf("write count: %d", metrics.WriteCount),
+					fmt.Sprintf(" read count: %d", metrics.ReadCount),
 				}
 				return strings.Join(output, "\n")
 
 			case "debug-lock-table":
-				return m.LockTableDebug()
+				return m.TestingLockTableString()
 
 			case "debug-disable-txn-pushes":
 				c.disableTxnPushes()
@@ -604,8 +603,7 @@ func (c *cluster) makeConfig() concurrency.Config {
 		OnContentionEvent: func(ev *roachpb.ContentionEvent) {
 			ev.Duration = 1234 * time.Millisecond // for determinism
 		},
-		TxnWaitMetrics:                     txnwait.NewMetrics(time.Minute),
-		ConflictingIntentCleanupRejections: metric.NewCounter(metric.Metadata{}),
+		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
 	}
 }
 
@@ -867,9 +865,8 @@ func (c *cluster) reset() error {
 		return errors.Errorf("unfinished guard for request: %s", name)
 	}
 	// There should be no outstanding latches.
-	global, local := c.m.LatchMetrics()
-	if global.ReadCount > 0 || global.WriteCount > 0 ||
-		local.ReadCount > 0 || local.WriteCount > 0 {
+	metrics := c.m.LatchMetrics()
+	if metrics.ReadCount+metrics.WriteCount > 0 {
 		return errors.Errorf("outstanding latches")
 	}
 	// Clear the lock table by transferring the lease away and reacquiring it.

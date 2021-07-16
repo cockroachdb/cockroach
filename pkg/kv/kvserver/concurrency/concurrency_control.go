@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -152,6 +151,7 @@ type Manager interface {
 	TransactionManager
 	RangeStateListener
 	MetricExporter
+	TestStateExporter
 }
 
 // RequestSequencer is concerned with the sequencing of concurrent requests. It
@@ -295,23 +295,27 @@ type RangeStateListener interface {
 // the concurrency manager. It is one of the roles of Manager.
 type MetricExporter interface {
 	// LatchMetrics returns information about the state of the latchManager.
-	LatchMetrics() (global, local kvserverpb.LatchManagerInfo)
+	LatchMetrics() LatchMetrics
 
-	// LockTableDebug returns a debug string representing the state of the
-	// lockTable.
-	LockTableDebug() string
+	// LockTableMetrics returns information about the state of the lockTable.
+	LockTableMetrics() LockTableMetrics
 
-	// TxnWaitQueue returns the concurrency manager's txnWaitQueue.
-	// TODO(nvanbenschoten): this doesn't really fit into this interface. It
-	// would be nice if the txnWaitQueue was hidden behind the concurrency
-	// manager abstraction entirely, but tests want to access it directly.
-	TxnWaitQueue() *txnwait.Queue
-
-	// TODO(nvanbenschoten): fill out this interface to provide observability
-	// into the state of the concurrency manager.
-	// LatchMetrics()
-	// LockTableMetrics()
+	// TODO(nvanbenschoten): provide better observability into the state of the
+	// txn wait queue. Currently, all observability is provided by metrics that
+	// are passed to the txn wait queue constructor.
 	// TxnWaitQueueMetrics()
+}
+
+// TestStateExporter is concerned with providing testing hooks that expose the
+// state of the concurrency manager, to be used by unit tests outside of the
+// concurrency package. It is one of the roles of Manager.
+type TestStateExporter interface {
+	// TestingLockTableString returns a debug string representing the state of the
+	// lockTable.
+	TestingLockTableString() string
+
+	// TestingTxnWaitQueue returns the concurrency manager's txnWaitQueue.
+	TestingTxnWaitQueue() *txnwait.Queue
 }
 
 ///////////////////////////////////
@@ -446,8 +450,8 @@ type latchManager interface {
 	// Releases latches, relinquish its protection from conflicting requests.
 	Release(latchGuard)
 
-	// Info returns information about the state of the latchManager.
-	Info() (global, local kvserverpb.LatchManagerInfo)
+	// Metrics returns information about the state of the latchManager.
+	Metrics() LatchMetrics
 }
 
 // latchGuard is a handle to a set of acquired key latches.
@@ -644,11 +648,14 @@ type lockTable interface {
 	//     txn.WriteTimestamp.
 	UpdateLocks(*roachpb.LockUpdate) error
 
-	// Informs the lock table that a transaction is finalized. This is used
-	// by the lock table in a best-effort manner to avoid waiting on locks
-	// of finalized transactions and telling the caller via
+	// TransactionIsFinalized informs the lock table that a transaction is
+	// finalized. This is used by the lock table in a best-effort manner to avoid
+	// waiting on locks of finalized transactions and telling the caller via
 	// lockTableGuard.ResolveBeforeEvaluation to resolve a batch of intents.
 	TransactionIsFinalized(*roachpb.Transaction)
+
+	// Metrics returns information about the state of the lockTable.
+	Metrics() LockTableMetrics
 
 	// String returns a debug string representing the state of the lockTable.
 	String() string
