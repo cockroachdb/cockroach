@@ -283,10 +283,10 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 		mb.fetchScope = b.buildScan(
 			b.addTable(cb.childTable, &mb.alias),
 			tableOrdinals(cb.childTable, columnKinds{
-				includeMutations:       false,
-				includeSystem:          false,
-				includeVirtualInverted: false,
-				includeVirtualComputed: false,
+				includeMutations:          false,
+				includeSystem:             false,
+				includeArtificialInverted: false,
+				includeVirtualComputed:    false,
 			}),
 			nil, /* indexFlags */
 			noRowLocking,
@@ -512,10 +512,10 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
-			includeMutations:       false,
-			includeSystem:          false,
-			includeVirtualInverted: false,
-			includeVirtualComputed: fetchVirtualComputedCols,
+			includeMutations:          false,
+			includeSystem:             false,
+			includeArtificialInverted: false,
+			includeVirtualComputed:    fetchVirtualComputedCols,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -756,10 +756,10 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
-			includeMutations:       false,
-			includeSystem:          false,
-			includeVirtualInverted: false,
-			includeVirtualComputed: true,
+			includeMutations:          false,
+			includeSystem:             false,
+			includeArtificialInverted: false,
+			includeVirtualComputed:    true,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
