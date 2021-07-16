@@ -73,6 +73,7 @@ lets engineers do a few things:
 	ret.cli.AddCommand(
 		makeBenchCmd(ret.bench),
 		makeBuildCmd(ret.build),
+		makeBuilderCmd(ret.builder),
 		makeGenerateCmd(ret.generate),
 		makeLintCmd(ret.lint),
 		makeTestCmd(ret.test),
