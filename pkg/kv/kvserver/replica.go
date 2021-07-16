@@ -67,6 +67,11 @@ const (
 	// the key space being written is starting out empty.
 	optimizePutThreshold = 10
 
+	// Transaction names used for range changes.
+	// Note that those names are used by tests to perform request filtering
+	// in absence of better criteria. If names are changed, tests should be
+	// updated accordingly to avoid flakiness.
+
 	replicaChangeTxnName = "change-replica"
 	splitTxnName         = "split"
 	mergeTxnName         = "merge"

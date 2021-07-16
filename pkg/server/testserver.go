@@ -1239,7 +1239,7 @@ func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
 // ScratchRangeEx splits off a range suitable to be used as KV scratch space.
 // (it doesn't overlap system spans or SQL tables).
 func (ts *TestServer) ScratchRangeEx() (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
-	scratchKey := keys.TableDataMax
+	scratchKey := keys.ScratchRangeMin
 	return ts.SplitRange(scratchKey)
 }
 
