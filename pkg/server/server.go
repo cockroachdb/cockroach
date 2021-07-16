@@ -178,7 +178,7 @@ type Server struct {
 	// Created in NewServer but initialized (made usable) in `(*Server).Start`.
 	externalStorageBuilder *externalStorageBuilder
 
-	gcoord *admission.GrantCoordinator
+	storeGrantCoords *admission.StoreGrantCoordinators
 	// kvMemoryMonitor is a child of the rootSQLMemoryMonitor and is used to
 	// account for and bound the memory used for request processing in the KV
 	// layer.
@@ -435,7 +435,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
-	gcoord, metrics := admission.NewGrantCoordinator(admission.Options{
+	gcoords, metrics := admission.NewGrantCoordinators(admission.Options{
 		MinCPUSlots:                    1,
 		MaxCPUSlots:                    100000, /* TODO(sumeer): add cluster setting */
 		SQLKVResponseBurstTokens:       100000, /* TODO(sumeer): add cluster setting */
@@ -447,17 +447,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	for i := range metrics {
 		registry.AddMetricStruct(metrics[i])
 	}
-	cbID := goschedstats.RegisterRunnableCountCallback(gcoord.CPULoad)
+	cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
 	stopper.AddCloser(stop.CloserFn(func() {
 		goschedstats.UnregisterRunnableCountCallback(cbID)
 	}))
-	stopper.AddCloser(gcoord)
+	stopper.AddCloser(gcoords)
 
 	dbCtx := kv.DefaultDBContext(stopper)
 	dbCtx.NodeID = idContainer
 	dbCtx.Stopper = stopper
 	db := kv.NewDBWithContext(cfg.AmbientCtx, tcsFactory, clock, dbCtx)
-	db.SQLKVResponseAdmissionQ = gcoord.GetWorkQueue(admission.SQLKVResponseWork)
+	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
 
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	if knobs := cfg.TestingKnobs.NodeLiveness; knobs != nil {
@@ -654,7 +654,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID,
-		gcoord.GetWorkQueue(admission.KVWork),
+		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
 		tenantUsage,
 	)
 	lateBoundNode = node
@@ -738,7 +738,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			externalStorage:          externalStorage,
 			externalStorageFromURI:   externalStorageFromURI,
 			isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
-			sqlSQLResponseAdmissionQ: gcoord.GetWorkQueue(admission.SQLSQLResponseWork),
+			sqlSQLResponseAdmissionQ: gcoords.Regular.GetWorkQueue(admission.SQLSQLResponseWork),
 		},
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,
@@ -810,7 +810,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		sqlServer:              sqlServer,
 		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
-		gcoord:                 gcoord,
+		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
 	}
 	return lateBoundServer, err
@@ -1673,7 +1673,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 	// Stores have been initialized, so Node can now provide Pebble metrics.
-	s.gcoord.SetPebbleMetricsProvider(s.node)
+	s.storeGrantCoords.SetPebbleMetricsProvider(s.node)
 
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(
