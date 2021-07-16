@@ -4148,9 +4148,18 @@ func TestMergeQueue(t *testing.T) {
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
-	setZones := func(zone zonepb.ZoneConfig) {
-		lhs().SetZoneConfig(&zone)
-		rhs().SetZoneConfig(&zone)
+	setZones := func(t *testing.T, zone zonepb.ZoneConfig) {
+		t.Helper()
+		if l := lhs(); l == nil {
+			t.Fatal("left-hand side range not found")
+		} else {
+			l.SetZoneConfig(&zone)
+		}
+		if r := rhs(); r == nil {
+			t.Fatal("right-hand side range not found")
+		} else {
+			r.SetZoneConfig(&zone)
+		}
 	}
 
 	reset := func(t *testing.T) {
@@ -4161,7 +4170,11 @@ func TestMergeQueue(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		setZones(zoneConfig)
+		setZones(t, zoneConfig)
+		// Disable load-based splitting, so that the absence of sufficient QPS
+		// measurements do not prevent ranges from merging. Certain subtests
+		// re-enable the functionality.
+		kvserver.SplitByLoadEnabled.Override(sv, false)
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
 		split(t, rhsStartKey.AsRawKey(), hlc.Timestamp{} /* expirationTime */)
 	}
@@ -4192,7 +4205,7 @@ func TestMergeQueue(t *testing.T) {
 		verifyMerged(t, store, lhsStartKey, rhsStartKey)
 	})
 
-	t.Run("combined-threshold", func(t *testing.T) {
+	t.Run("combined-size-threshold", func(t *testing.T) {
 		reset(t)
 
 		// The ranges are individually beneath the minimum size threshold, but
@@ -4200,13 +4213,13 @@ func TestMergeQueue(t *testing.T) {
 		zone := protoutil.Clone(&zoneConfig).(*zonepb.ZoneConfig)
 		zone.RangeMinBytes = proto.Int64(rhs().GetMVCCStats().Total() + 1)
 		zone.RangeMaxBytes = proto.Int64(lhs().GetMVCCStats().Total() + rhs().GetMVCCStats().Total() - 1)
-		setZones(*zone)
+		setZones(t, *zone)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 
 		// Once the maximum size threshold is increased, the merge can occur.
 		zone.RangeMaxBytes = proto.Int64(*zone.RangeMaxBytes + 1)
-		setZones(*zone)
+		setZones(t, *zone)
 		l := lhs().RangeID
 		r := rhs().RangeID
 		log.Infof(ctx, "Left=%s, Right=%s", l, r)
@@ -4229,8 +4242,88 @@ func TestMergeQueue(t *testing.T) {
 		verifyMerged(t, store, lhsStartKey, rhsStartKey)
 	})
 
-	// TODO(jeffreyxiao): Add subtest to consider load when making merging
-	// decisions.
+	t.Run("load-based-merging", func(t *testing.T) {
+		const splitByLoadQPS = 10
+		const mergeByLoadQPS = splitByLoadQPS / 2 // see conservativeLoadBasedSplitThreshold
+		const splitByLoadMergeDelay = 500 * time.Millisecond
+
+		resetForLoadBasedSubtest := func(t *testing.T) {
+			reset(t)
+
+			// Enable load-based splitting for these subtests, which also instructs
+			// the mergeQueue to consider load when making range merge decisions. When
+			// load is a consideration, the mergeQueue is fairly conservative. In an
+			// effort to avoid thrashing and to avoid overreacting to temporary
+			// fluctuations in load, the mergeQueue will only consider a merge when
+			// the combined load across the RHS and LHS ranges is below half the
+			// threshold required to split a range due to load. Furthermore, to ensure
+			// that transient drops in load do not trigger range merges, the
+			// mergeQueue will only consider a merge when it deems the maximum qps
+			// measurement from both sides to be sufficiently stable and reliable,
+			// meaning that it was a maximum measurement over some extended period of
+			// time.
+			kvserver.SplitByLoadEnabled.Override(sv, true)
+			kvserver.SplitByLoadQPSThreshold.Override(sv, splitByLoadQPS)
+
+			// Drop the load-based splitting merge delay setting, which also dictates
+			// the duration that a leaseholder must measure QPS before considering its
+			// measurements to be reliable enough to base range merging decisions on.
+			kvserver.SplitByLoadMergeDelay.Override(sv, splitByLoadMergeDelay)
+
+			// Reset both range's load-based splitters, so that QPS measurements do
+			// not leak over between subtests. Then, bump the manual clock so that
+			// both range's load-based splitters consider their measurements to be
+			// reliable.
+			lhs().LoadBasedSplitter().Reset(tc.Servers[0].Clock().PhysicalTime())
+			rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().PhysicalTime())
+			manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
+		}
+
+		t.Run("unreliable-lhs-qps", func(t *testing.T) {
+			resetForLoadBasedSubtest(t)
+
+			lhs().LoadBasedSplitter().Reset(tc.Servers[0].Clock().PhysicalTime())
+
+			clearRange(t, lhsStartKey, rhsEndKey)
+			store.MustForceMergeScanAndProcess()
+			verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
+		})
+
+		t.Run("unreliable-rhs-qps", func(t *testing.T) {
+			resetForLoadBasedSubtest(t)
+
+			rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().PhysicalTime())
+
+			clearRange(t, lhsStartKey, rhsEndKey)
+			store.MustForceMergeScanAndProcess()
+			verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
+		})
+
+		t.Run("combined-qps-above-threshold", func(t *testing.T) {
+			resetForLoadBasedSubtest(t)
+
+			moreThanHalfQPS := mergeByLoadQPS/2 + 1
+			rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), float64(moreThanHalfQPS))
+			lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), float64(moreThanHalfQPS))
+
+			clearRange(t, lhsStartKey, rhsEndKey)
+			store.MustForceMergeScanAndProcess()
+			verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
+		})
+
+		t.Run("combined-qps-below-threshold", func(t *testing.T) {
+			resetForLoadBasedSubtest(t)
+
+			manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
+			lessThanHalfQPS := mergeByLoadQPS/2 - 1
+			rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), float64(lessThanHalfQPS))
+			lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), float64(lessThanHalfQPS))
+
+			clearRange(t, lhsStartKey, rhsEndKey)
+			store.MustForceMergeScanAndProcess()
+			verifyMerged(t, store, lhsStartKey, rhsStartKey)
+		})
+	})
 
 	t.Run("sticky-bit", func(t *testing.T) {
 		reset(t)
@@ -4404,6 +4497,15 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 	var clusterArgs = base.TestClusterArgs{
 		// We dont want the replicate queue mucking with our test, so disable it.
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// Disable load-based splitting, so that the absence of sufficient QPS
+					// measurements do not prevent ranges from merging.
+					DisableLoadBasedSplitting: true,
+				},
+			},
+		},
 	}
 	ctx := context.Background()
 
@@ -4491,6 +4593,15 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 	var clusterArgs = base.TestClusterArgs{
 		// We dont want the replicate queue mucking with our test, so disable it.
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// Disable load-based splitting, so that the absence of sufficient QPS
+					// measurements do not prevent ranges from merging.
+					DisableLoadBasedSplitting: true,
+				},
+			},
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			1: {
 				Knobs: base.TestingKnobs{
@@ -4503,6 +4614,8 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 							}
 							return nil
 						},
+						// See above.
+						DisableLoadBasedSplitting: true,
 					},
 				},
 			},
