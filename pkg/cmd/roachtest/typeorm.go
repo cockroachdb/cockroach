@@ -35,12 +35,12 @@ func registerTypeORM(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		cockroachVersion, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(ctx, cockroachVersion, c, node[0]); err != nil {
 			t.Fatal(err)
 		}
 
@@ -155,12 +155,8 @@ func registerTypeORM(r *testRegistry) {
 		rawResultsStr := string(rawResults)
 		c.l.Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
-			// Ignore the failure discussed in #38180 and in
-			// https://github.com/typeorm/typeorm/pull/4298.
-			// TODO(jordanlewis): remove this once the failure is resolved.
-			if t.IsBuildVersion("v19.2.0") &&
-				strings.Contains(rawResultsStr, "1 failing") &&
-				strings.Contains(rawResultsStr, "AssertionError: expected 2147483647 to equal '2147483647'") {
+			if strings.Contains(rawResultsStr, "1 failing") &&
+				strings.Contains(rawResultsStr, "Error: Cannot find connection better-sqlite3 because its not defined in any orm configuration files.") {
 				err = nil
 			}
 			if err != nil {
