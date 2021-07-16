@@ -251,6 +251,9 @@ func (r *Registry) runJob(
 	typ := job.mu.payload.Type()
 	job.mu.Unlock()
 
+	// Make sure that we remove the job from the running set when this returns.
+	defer r.unregister(job.ID())
+
 	// Bookkeeping.
 	execCtx, cleanup := r.execCtx("resume-"+taskName, username)
 	defer cleanup()
@@ -263,18 +266,24 @@ func (r *Registry) runJob(
 	//
 	// A new root span will be created on every resumption of the job.
 	var spanOptions []tracing.SpanOption
-	if _, ok := resumer.(TraceableJob); ok {
+	if tj, ok := resumer.(TraceableJob); ok && tj.ForceRealSpan() {
 		spanOptions = append(spanOptions, tracing.WithForceRealSpan())
 	}
+	// TODO(ajwerner): Move this writing up the trace ID down into
+	// stepThroughStateMachine where we're already often (and soon with
+	// exponential backoff, always) updating the job in that call.
 	ctx, span = r.settings.Tracer.StartSpanCtx(ctx, spanName, spanOptions...)
 	defer span.Finish()
-	if err := job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md JobMetadata,
-		ju *JobUpdater) error {
-		md.Progress.TraceID = span.TraceID()
-		ju.UpdateProgress(md.Progress)
-		return nil
-	}); err != nil {
-		return err
+	if span.TraceID() != 0 {
+		if err := job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md JobMetadata,
+			ju *JobUpdater) error {
+			progress := *md.Progress
+			progress.TraceID = span.TraceID()
+			ju.UpdateProgress(&progress)
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
 
 	// Run the actual job.
@@ -285,7 +294,6 @@ func (r *Registry) runJob(
 	if err != nil && ctx.Err() == nil {
 		log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
 	}
-	r.unregister(job.ID())
 	return err
 }
 

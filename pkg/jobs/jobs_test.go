@@ -179,6 +179,9 @@ type registryTestSuite struct {
 	// Instead of a ch for success, use a variable because it can retry since it
 	// is in a transaction.
 	successErr error
+
+	// controls whether job resumers will ask for a real tracing span.
+	traceRealSpan bool
 }
 
 func noopPauseRequestFunc(
@@ -186,6 +189,8 @@ func noopPauseRequestFunc(
 ) error {
 	return nil
 }
+
+var _ jobs.TraceableJob = (*jobs.FakeResumer)(nil)
 
 func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.ctx = context.Background()
@@ -217,6 +222,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
+			TraceRealSpan: rts.traceRealSpan,
 			OnResume: func(ctx context.Context) error {
 				t.Log("Starting resume")
 				rts.mu.Lock()
@@ -877,6 +883,90 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.Success = true
 		rts.mu.e.ResumeExit++
 		rts.check(t, jobs.StatusSucceeded)
+	})
+	t.Run("fail setting trace ID", func(t *testing.T) {
+		// The trace ID is set on the job above the state machine loop.
+		// This tests a regression where we fail to set trace ID and then
+		// don't clear the in-memory state that we were running this job.
+		// That prevents the job from being re-run.
+
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+		rts.traceRealSpan = true
+
+		// Inject an error in the update to record the trace ID.
+		var failed atomic.Value
+		failed.Store(false)
+		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
+			if !failed.Load().(bool) &&
+				orig.Progress.TraceID == 0 &&
+				updated.Progress != nil &&
+				updated.Progress.TraceID != 0 {
+				failed.Store(true)
+				return errors.New("boom")
+			}
+			return nil
+		}
+
+		j, err := jobs.TestingCreateAndStartJob(context.Background(), rts.registry, rts.s.DB(), rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		testutils.SucceedsSoon(t, func() error {
+			if !failed.Load().(bool) {
+				return errors.New("not yet failed")
+			}
+			return nil
+		})
+
+		// Make sure the job retries and then succeeds.
+		rts.resumeCheckCh <- struct{}{}
+		rts.resumeCh <- nil
+		rts.mu.e.ResumeStart = true
+		rts.mu.e.ResumeExit++
+		rts.mu.e.Success = true
+		rts.check(t, jobs.StatusSucceeded)
+	})
+	t.Run("trace ID only set if requested", func(t *testing.T) {
+		// The trace ID can be set on the job if the job should be traced.
+		// Not all jobs should be traced. If the job is not being traced,
+		// ensure that we do not do an extra write to set it.
+
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		// Inject an error in the update to record the trace ID.
+		var updateCalls int
+		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
+			updateCalls++
+			return nil
+		}
+
+		runJob := func(t *testing.T) int {
+			t.Helper()
+			j, err := jobs.TestingCreateAndStartJob(context.Background(), rts.registry, rts.s.DB(), rts.mockJob)
+			require.NoError(t, err)
+			rts.job = j
+
+			// Make sure the job succeeds.
+			rts.resumeCheckCh <- struct{}{}
+			rts.resumeCh <- nil
+			rts.mu.e.ResumeStart = true
+			rts.mu.e.ResumeExit++
+			rts.mu.e.Success = true
+			rts.check(t, jobs.StatusSucceeded)
+			return updateCalls
+		}
+
+		updatedWithoutTracing := runJob(t)
+		updateCalls = 0
+		rts.traceRealSpan = true
+		updatedWithTracing := runJob(t)
+		require.Equal(t, updatedWithoutTracing, updatedWithTracing-1)
 	})
 }
 

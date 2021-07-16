@@ -1172,7 +1172,9 @@ type importResumer struct {
 	}
 }
 
-func (r *importResumer) ForceRealSpan() {}
+func (r *importResumer) ForceRealSpan() bool {
+	return true
+}
 
 var _ jobs.TraceableJob = &importResumer{}
 
