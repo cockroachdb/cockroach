@@ -394,6 +394,11 @@ func (desc *Mutable) SetInitialMultiRegionConfig(config *multiregion.RegionConfi
 	return nil
 }
 
+// SetRegionConfig sets the region configuration of a database descriptor.
+func (desc *Mutable) SetRegionConfig(cfg *descpb.DatabaseDescriptor_RegionConfig) {
+	desc.RegionConfig = cfg
+}
+
 // HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 // RunPostDeserializationChanges.
 func (desc *Mutable) HasPostDeserializationChanges() bool {

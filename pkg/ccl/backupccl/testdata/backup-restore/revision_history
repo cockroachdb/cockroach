@@ -15,3 +15,5 @@ CREATE INDEX test_idx_3 ON d.t(c);
 DROP INDEX d.test_idx_2;
 BACKUP DATABASE d INTO 'nodelocal://0/my_backups' WITH revision_history;
 ----
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.

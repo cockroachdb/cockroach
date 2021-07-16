@@ -42,11 +42,14 @@ type createTypeNode struct {
 	dbDesc   catalog.DatabaseDescriptor
 }
 
-type enumType int
+// EnumType is the type of an enum.
+type EnumType int
 
 const (
-	enumTypeUserDefined = iota
-	enumTypeMultiRegion
+	// EnumTypeUserDefined is a user defined enum.
+	EnumTypeUserDefined = iota
+	// EnumTypeMultiRegion is a multi-region related enum.
+	EnumTypeMultiRegion
 )
 
 // Use to satisfy the linter.
@@ -207,6 +210,39 @@ func findFreeArrayTypeName(
 	return arrayName, nil
 }
 
+// CreateEnumArrayTypeDesc creates a type descriptor for the array of the
+// given enum.
+func CreateEnumArrayTypeDesc(
+	params runParams,
+	typDesc *typedesc.Mutable,
+	db catalog.DatabaseDescriptor,
+	schemaID descpb.ID,
+	id descpb.ID,
+	arrayTypeName string,
+) (*typedesc.Mutable, error) {
+	// Create the element type for the array. Note that it must know about the
+	// ID of the array type in order for the array type to correctly created.
+	var elemTyp *types.T
+	switch t := typDesc.Kind; t {
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
+		elemTyp = types.MakeEnum(typedesc.TypeIDToOID(typDesc.GetID()), typedesc.TypeIDToOID(id))
+	default:
+		return nil, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
+	}
+
+	// Construct the descriptor for the array type.
+	return typedesc.NewBuilder(&descpb.TypeDescriptor{
+		Name:           arrayTypeName,
+		ID:             id,
+		ParentID:       db.GetID(),
+		ParentSchemaID: schemaID,
+		Kind:           descpb.TypeDescriptor_ALIAS,
+		Alias:          types.MakeArray(elemTyp),
+		Version:        1,
+		Privileges:     typDesc.Privileges,
+	}).BuildCreatedMutableType(), nil
+}
+
 // createArrayType performs the implicit array type creation logic of Postgres.
 // When a type is created in Postgres, Postgres will implicitly create an array
 // type of that user defined type. This array type tracks changes to the
@@ -239,29 +275,17 @@ func (p *planner) createArrayType(
 		return 0, err
 	}
 
-	// Create the element type for the array. Note that it must know about the
-	// ID of the array type in order for the array type to correctly created.
-	var elemTyp *types.T
-	switch t := typDesc.Kind; t {
-	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		elemTyp = types.MakeEnum(typedesc.TypeIDToOID(typDesc.GetID()), typedesc.TypeIDToOID(id))
-	default:
-		return 0, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
+	arrayTypDesc, err := CreateEnumArrayTypeDesc(
+		params,
+		typDesc,
+		db,
+		schemaID,
+		id,
+		arrayTypeName,
+	)
+	if err != nil {
+		return 0, err
 	}
-
-	// Construct the descriptor for the array type.
-	// TODO(ajwerner): This is getting fixed up in a later commit to deal with
-	// meta, just hold on.
-	arrayTypDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
-		Name:           arrayTypeName,
-		ID:             id,
-		ParentID:       db.GetID(),
-		ParentSchemaID: schemaID,
-		Kind:           descpb.TypeDescriptor_ALIAS,
-		Alias:          types.MakeArray(elemTyp),
-		Version:        1,
-		Privileges:     typDesc.Privileges,
-	}).BuildCreatedMutable()
 
 	jobStr := fmt.Sprintf("implicit array type creation for %s", typ)
 	if err := p.createDescriptorWithID(
@@ -286,36 +310,29 @@ func (p *planner) createUserDefinedEnum(params runParams, n *createTypeNode) err
 		return err
 	}
 	return params.p.createEnumWithID(
-		params, id, n.n.EnumLabels, n.dbDesc, n.typeName, enumTypeUserDefined,
+		params, id, n.n.EnumLabels, n.dbDesc, n.typeName, EnumTypeUserDefined,
 	)
 }
 
-func (p *planner) createEnumWithID(
+// CreateEnumTypeDesc creates a new enum type descriptor.
+func CreateEnumTypeDesc(
 	params runParams,
 	id descpb.ID,
 	enumLabels tree.EnumValueList,
 	dbDesc catalog.DatabaseDescriptor,
+	schema catalog.SchemaDescriptor,
 	typeName *tree.TypeName,
-	enumType enumType,
-) error {
-
-	sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumCreate)
-
+	enumType EnumType,
+) (*typedesc.Mutable, error) {
 	// Ensure there are no duplicates in the input enum values.
 	seenVals := make(map[tree.EnumValue]struct{})
 	for _, value := range enumLabels {
 		_, ok := seenVals[value]
 		if ok {
-			return pgerror.Newf(pgcode.InvalidObjectDefinition,
+			return nil, pgerror.Newf(pgcode.InvalidObjectDefinition,
 				"enum definition contains duplicate value %q", value)
 		}
 		seenVals[value] = struct{}{}
-	}
-
-	// Generate a key in the namespace table and a new id for this type.
-	schema, err := getCreateTypeParams(params, typeName, dbDesc)
-	if err != nil {
-		return err
 	}
 
 	members := make([]descpb.TypeDescriptor_EnumMember, len(enumLabels))
@@ -339,11 +356,11 @@ func (p *planner) createEnumWithID(
 
 	enumKind := descpb.TypeDescriptor_ENUM
 	var regionConfig *descpb.TypeDescriptor_RegionConfig
-	if enumType == enumTypeMultiRegion {
+	if enumType == EnumTypeMultiRegion {
 		enumKind = descpb.TypeDescriptor_MULTIREGION_ENUM
 		primaryRegion, err := dbDesc.PrimaryRegionName()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		regionConfig = &descpb.TypeDescriptor_RegionConfig{
 			PrimaryRegion: primaryRegion,
@@ -355,7 +372,7 @@ func (p *planner) createEnumWithID(
 	//  a free list of descriptor ID's (#48438), we should allocate an ID from
 	//  there if id + oidext.CockroachPredefinedOIDMax overflows past the
 	//  maximum uint32 value.
-	typeDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
+	return typedesc.NewBuilder(&descpb.TypeDescriptor{
 		Name:           typeName.Type(),
 		ID:             id,
 		ParentID:       dbDesc.GetID(),
@@ -365,7 +382,29 @@ func (p *planner) createEnumWithID(
 		Version:        1,
 		Privileges:     privs,
 		RegionConfig:   regionConfig,
-	}).BuildCreatedMutableType()
+	}).BuildCreatedMutableType(), nil
+}
+
+func (p *planner) createEnumWithID(
+	params runParams,
+	id descpb.ID,
+	enumLabels tree.EnumValueList,
+	dbDesc catalog.DatabaseDescriptor,
+	typeName *tree.TypeName,
+	enumType EnumType,
+) error {
+	sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumCreate)
+
+	// Generate a key in the namespace table and a new id for this type.
+	schema, err := getCreateTypeParams(params, typeName, dbDesc)
+	if err != nil {
+		return err
+	}
+
+	typeDesc, err := CreateEnumTypeDesc(params, id, enumLabels, dbDesc, schema, typeName, enumType)
+	if err != nil {
+		return err
+	}
 
 	// Create the implicit array type for this type before finishing the type.
 	arrayTypeID, err := p.createArrayType(params, typeName, typeDesc, dbDesc, schema.GetID())

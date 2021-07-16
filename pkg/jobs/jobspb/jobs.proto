@@ -198,7 +198,21 @@ message RestoreDetails {
   }
   repeated RevalidateIndex revalidate_indexes = 18 [(gogoproto.nullable) = false];
 
-  // NEXT ID: 19.
+  message DatabaseModifier {
+    // ExtraTypeDescs enumerates additional type descriptors to add as part of
+    // restoring this database.
+    repeated sqlbase.TypeDescriptor extra_type_descs = 1;
+    // RegionConfig describes the region config to override the database descriptor
+    // with.
+    sqlbase.DatabaseDescriptor.RegionConfig region_config = 2;
+  }
+  // DatabaseModifiers contains extra modifications to make to the databases
+  // being restored.
+  map<uint32, DatabaseModifier> database_modifiers = 19 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+
+  // NEXT ID: 20.
 }
 
 message RestoreProgress {
