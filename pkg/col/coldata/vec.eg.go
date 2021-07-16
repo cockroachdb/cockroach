@@ -1354,3 +1354,155 @@ func GetValueAt(v Vec, rowIdx int) interface{} {
 	}
 	panic(fmt.Sprintf("unhandled type %s", t))
 }
+
+// ExpandValue copies a value at src[srcIdx] into all positions in range
+// [destStartIdx, destEndIdx) of dest.
+func ExpandValue(dest, src Vec, destStartIdx, destEndIdx, srcIdx int) {
+	if destStartIdx <= destEndIdx {
+		return
+	}
+	if src.Nulls().NullAt(srcIdx) {
+		dest.Nulls().SetNullRange(destStartIdx, destEndIdx)
+		return
+	}
+	switch dest.CanonicalTypeFamily() {
+	case types.BoolFamily:
+		switch dest.Type().Width() {
+		case -1:
+		default:
+			val := src.Bool().Get(srcIdx)
+			target := dest.Bool()
+			_ = target.Get(destStartIdx)
+			_ = target.Get(destEndIdx - 1)
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				//gcassert:bce
+				target.Set(idx, val)
+			}
+			return
+		}
+	case types.BytesFamily:
+		switch dest.Type().Width() {
+		case -1:
+		default:
+			val := src.Bytes().Get(srcIdx)
+			target := dest.Bytes()
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				target.Set(idx, val)
+			}
+			return
+		}
+	case types.DecimalFamily:
+		switch dest.Type().Width() {
+		case -1:
+		default:
+			val := src.Decimal().Get(srcIdx)
+			target := dest.Decimal()
+			_ = target.Get(destStartIdx)
+			_ = target.Get(destEndIdx - 1)
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				//gcassert:bce
+				target.Set(idx, val)
+			}
+			return
+		}
+	case types.IntFamily:
+		switch dest.Type().Width() {
+		case 16:
+			val := src.Int16().Get(srcIdx)
+			target := dest.Int16()
+			_ = target.Get(destStartIdx)
+			_ = target.Get(destEndIdx - 1)
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				//gcassert:bce
+				target.Set(idx, val)
+			}
+			return
+		case 32:
+			val := src.Int32().Get(srcIdx)
+			target := dest.Int32()
+			_ = target.Get(destStartIdx)
+			_ = target.Get(destEndIdx - 1)
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				//gcassert:bce
+				target.Set(idx, val)
+			}
+			return
+		case -1:
+		default:
+			val := src.Int64().Get(srcIdx)
+			target := dest.Int64()
+			_ = target.Get(destStartIdx)
+			_ = target.Get(destEndIdx - 1)
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				//gcassert:bce
+				target.Set(idx, val)
+			}
+			return
+		}
+	case types.FloatFamily:
+		switch dest.Type().Width() {
+		case -1:
+		default:
+			val := src.Float64().Get(srcIdx)
+			target := dest.Float64()
+			_ = target.Get(destStartIdx)
+			_ = target.Get(destEndIdx - 1)
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				//gcassert:bce
+				target.Set(idx, val)
+			}
+			return
+		}
+	case types.TimestampTZFamily:
+		switch dest.Type().Width() {
+		case -1:
+		default:
+			val := src.Timestamp().Get(srcIdx)
+			target := dest.Timestamp()
+			_ = target.Get(destStartIdx)
+			_ = target.Get(destEndIdx - 1)
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				//gcassert:bce
+				target.Set(idx, val)
+			}
+			return
+		}
+	case types.IntervalFamily:
+		switch dest.Type().Width() {
+		case -1:
+		default:
+			val := src.Interval().Get(srcIdx)
+			target := dest.Interval()
+			_ = target.Get(destStartIdx)
+			_ = target.Get(destEndIdx - 1)
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				//gcassert:bce
+				target.Set(idx, val)
+			}
+			return
+		}
+	case types.JsonFamily:
+		switch dest.Type().Width() {
+		case -1:
+		default:
+			val := src.JSON().Get(srcIdx)
+			target := dest.JSON()
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				target.Set(idx, val)
+			}
+			return
+		}
+	case typeconv.DatumVecCanonicalTypeFamily:
+		switch dest.Type().Width() {
+		case -1:
+		default:
+			val := src.Datum().Get(srcIdx)
+			target := dest.Datum()
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				target.Set(idx, val)
+			}
+			return
+		}
+	}
+	panic(fmt.Sprintf("unhandled type %s", dest.Type()))
+}

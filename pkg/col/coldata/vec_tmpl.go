@@ -275,3 +275,39 @@ func GetValueAt(v Vec, rowIdx int) interface{} {
 	}
 	panic(fmt.Sprintf("unhandled type %s", t))
 }
+
+// ExpandValue copies a value at src[srcIdx] into all positions in range
+// [destStartIdx, destEndIdx) of dest.
+func ExpandValue(dest, src Vec, destStartIdx, destEndIdx, srcIdx int) {
+	if destStartIdx <= destEndIdx {
+		return
+	}
+	if src.Nulls().NullAt(srcIdx) {
+		dest.Nulls().SetNullRange(destStartIdx, destEndIdx)
+		return
+	}
+	switch dest.CanonicalTypeFamily() {
+	// {{range .}}
+	case _CANONICAL_TYPE_FAMILY:
+		switch dest.Type().Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			val := src.TemplateType().Get(srcIdx)
+			target := dest.TemplateType()
+			// {{if .Sliceable}}
+			_ = target.Get(destStartIdx)
+			_ = target.Get(destEndIdx - 1)
+			// {{end}}
+			for idx := destStartIdx; idx < destEndIdx; idx++ {
+				// {{if .Sliceable}}
+				//gcassert:bce
+				// {{end}}
+				target.Set(idx, val)
+			}
+			return
+			// {{end}}
+		}
+		// {{end}}
+	}
+	panic(fmt.Sprintf("unhandled type %s", dest.Type()))
+}
