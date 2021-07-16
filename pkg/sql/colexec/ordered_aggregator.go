@@ -332,12 +332,10 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
 						a.unsafeBatch.ColVec(i).Copy(
-							coldata.CopySliceArgs{
-								SliceArgs: coldata.SliceArgs{
-									Src:         a.scratch.ColVec(i),
-									SrcStartIdx: 0,
-									SrcEndIdx:   coldata.BatchSize(),
-								},
+							coldata.SliceArgs{
+								Src:         a.scratch.ColVec(i),
+								SrcStartIdx: 0,
+								SrcEndIdx:   coldata.BatchSize(),
 							},
 						)
 					}
@@ -359,12 +357,10 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				a.allocator.PerformOperation(a.scratch.tempBuffer.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
 						a.scratch.tempBuffer.ColVec(i).Copy(
-							coldata.CopySliceArgs{
-								SliceArgs: coldata.SliceArgs{
-									Src:         a.scratch.ColVec(i),
-									SrcStartIdx: coldata.BatchSize(),
-									SrcEndIdx:   a.scratch.resumeIdx,
-								},
+							coldata.SliceArgs{
+								Src:         a.scratch.ColVec(i),
+								SrcStartIdx: coldata.BatchSize(),
+								SrcEndIdx:   a.scratch.resumeIdx,
 							},
 						)
 					}
@@ -373,11 +369,9 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
 						a.scratch.ColVec(i).Copy(
-							coldata.CopySliceArgs{
-								SliceArgs: coldata.SliceArgs{
-									Src:       a.scratch.tempBuffer.ColVec(i),
-									SrcEndIdx: newResumeIdx,
-								},
+							coldata.SliceArgs{
+								Src:       a.scratch.tempBuffer.ColVec(i),
+								SrcEndIdx: newResumeIdx,
 							},
 						)
 					}

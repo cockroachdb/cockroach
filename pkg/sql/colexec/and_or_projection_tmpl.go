@@ -161,6 +161,15 @@ func (o *_OP_LOWERProjOp) Init(ctx context.Context) {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
+// {{/*
+//     TODO(yuzefovich): this operator is a bit sketchy because it works only
+//     under the assumption that the projection arms return exactly the same
+//     batch as they are fed (i.e. the projection operators aren't allowed to
+//     populate their own output batches from scratch) and that the deselection
+//     step isn't performed. Refactor this to make more resilient, and this will
+//     allow for simplifying the CASE operator by planning a deselector on top
+//     of its input.
+// */}}
 func (o *_OP_LOWERProjOp) Next() coldata.Batch {
 	batch := o.input.Next()
 	origLen := batch.Length()

@@ -297,13 +297,11 @@ func (p *sortOp) Next() coldata.Batch {
 				// variable-sized types like Bytes). Nonetheless, for performance reasons
 				// it would be sad to fallback to disk at this point.
 				p.output.ColVec(j).Copy(
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							Sel:         p.order,
-							Src:         p.input.getValues(j),
-							SrcStartIdx: p.emitted,
-							SrcEndIdx:   newEmitted,
-						},
+					coldata.SliceArgs{
+						Sel:         p.order,
+						Src:         p.input.getValues(j),
+						SrcStartIdx: p.emitted,
+						SrcEndIdx:   newEmitted,
 					},
 				)
 			}
