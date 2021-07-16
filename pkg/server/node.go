@@ -622,8 +622,12 @@ func (n *Node) startGossiping(ctx context.Context, stopper *stop.Stopper) {
 		statusTicker := time.NewTicker(gossipStatusInterval)
 		storesTicker := time.NewTicker(gossip.StoresInterval)
 		nodeTicker := time.NewTicker(gossip.NodeDescriptorInterval)
-		defer storesTicker.Stop()
-		defer nodeTicker.Stop()
+		defer func() {
+			nodeTicker.Stop()
+			storesTicker.Stop()
+			statusTicker.Stop()
+		}()
+
 		n.gossipStores(ctx) // one-off run before going to sleep
 		for {
 			select {
