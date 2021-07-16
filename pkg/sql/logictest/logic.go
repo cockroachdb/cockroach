@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -265,10 +264,6 @@ import (
 //
 //  - traceoff
 //    Stops tracing.
-//
-//  - kv-batch-size <num>
-//    Limits the kvfetcher batch size; it can be used to trigger certain error
-//    conditions or corner cases around limited batches.
 //
 //  - subtest <testname>
 //    Defines the start of a subtest. The subtest is any number of statements
@@ -2378,22 +2373,6 @@ func (t *logicTest) processSubtest(
 				return errors.Errorf("no trace active")
 			}
 			t.traceStop()
-
-		case "kv-batch-size":
-			// kv-batch-size limits the kvfetcher batch size. It can be used to
-			// trigger certain error conditions around limited batches.
-			if len(fields) != 2 {
-				return errors.Errorf(
-					"kv-batch-size needs an integer argument, found: %v",
-					fields[1:],
-				)
-			}
-			batchSize, err := strconv.Atoi(fields[1])
-			if err != nil {
-				return errors.Errorf("kv-batch-size needs an integer argument; %s", err)
-			}
-			t.outf("Setting kv batch size %d", batchSize)
-			defer row.TestingSetKVBatchSize(int64(batchSize))()
 
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",

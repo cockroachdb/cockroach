@@ -210,6 +210,15 @@ type TestingKnobs struct {
 	// Cannot be set together with ForceDiskSpill.
 	MemoryLimitBytes int64
 
+	// TableReaderBatchBytesLimit, if not 0, overrides the limit that the
+	// TableReader will set on the size of results it wants to get for individual
+	// requests.
+	TableReaderBatchBytesLimit int64
+	// JoinReaderBatchBytesLimit, if not 0, overrides the limit that the
+	// joinReader will set on the size of results it wants to get for individual
+	// lookup requests.
+	JoinReaderBatchBytesLimit int64
+
 	// DrainFast, if enabled, causes the server to not wait for any currently
 	// running flows to complete or give a grace period of minFlowDrainWait
 	// to incoming flows to register.

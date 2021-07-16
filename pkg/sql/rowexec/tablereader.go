@@ -34,9 +34,10 @@ import (
 type tableReader struct {
 	execinfra.ProcessorBase
 
-	spans       roachpb.Spans
-	limitHint   int64
-	parallelize bool
+	spans           roachpb.Spans
+	limitHint       row.RowLimit
+	parallelize     bool
+	batchBytesLimit row.BytesLimit
 
 	scanStarted bool
 
@@ -80,12 +81,24 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
+	if spec.LimitHint > 0 || spec.BatchBytesLimit > 0 {
+		// Parallelize shouldn't be set when there's a limit hint, but double-check
+		// just in case.
+		spec.Parallelize = false
+	}
+	var batchBytesLimit row.BytesLimit
+	if !spec.Parallelize {
+		batchBytesLimit = row.BytesLimit(spec.BatchBytesLimit)
+		if batchBytesLimit == 0 {
+			batchBytesLimit = row.DefaultBatchBytesLimit
+		}
+	}
+
 	tr := trPool.Get().(*tableReader)
 
-	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
-	// Parallelize shouldn't be set when there's a limit hint, but double-check
-	// just in case.
-	tr.parallelize = spec.Parallelize && tr.limitHint == 0
+	tr.limitHint = row.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
+	tr.parallelize = spec.Parallelize
+	tr.batchBytesLimit = batchBytesLimit
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	tableDesc := spec.BuildTableDescriptor()
@@ -191,11 +204,17 @@ func (tr *tableReader) Start(ctx context.Context) {
 
 func (tr *tableReader) startScan(ctx context.Context) error {
 	limitBatches := !tr.parallelize
+	var bytesLimit row.BytesLimit
+	if !limitBatches {
+		bytesLimit = row.NoBytesLimit
+	} else {
+		bytesLimit = tr.batchBytesLimit
+	}
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			ctx, tr.FlowCtx.Txn, tr.spans, limitBatches, tr.limitHint,
+			ctx, tr.FlowCtx.Txn, tr.spans, bytesLimit, tr.limitHint,
 			tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
@@ -203,7 +222,7 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
 		err = tr.fetcher.StartInconsistentScan(
 			ctx, tr.FlowCtx.Cfg.DB, initialTS, tr.maxTimestampAge, tr.spans,
-			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
+			bytesLimit, tr.limitHint, tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	}

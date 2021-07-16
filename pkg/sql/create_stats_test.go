@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -39,9 +40,14 @@ func TestStatsWithLowTTL(t *testing.T) {
 	// The test depends on reasonable timings, so don't run under race.
 	skip.UnderRace(t)
 
-	// Set the KV batch size to 1 to avoid having to use a large number of rows.
-	defer row.TestingSetKVBatchSize(1)()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				// Set the batch size small to avoid having to use a large number of rows.
+				TableReaderBatchBytesLimit: 100,
+			},
+		},
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	r := sqlutils.MakeSQLRunner(db)
@@ -51,7 +57,7 @@ func TestStatsWithLowTTL(t *testing.T) {
 		USE test;
 		CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT);
 	`)
-	const numRows = 5
+	const numRows = 20
 	r.Exec(t, `INSERT INTO t SELECT k, 2*k, 3*k FROM generate_series(0, $1) AS g(k)`, numRows-1)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(t,
@@ -109,7 +115,7 @@ func TestStatsWithLowTTL(t *testing.T) {
 	}()
 
 	// Sleep 500ms after every scanned row (note that we set the KV batch size to
-	// 1 above), to simulate a long-running operation.
+	// a small limit above), to simulate a long-running operation.
 	row.TestingInconsistentScanSleep = 500 * time.Millisecond
 	defer func() { row.TestingInconsistentScanSleep = 0 }()
 
