@@ -1358,6 +1358,9 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		}
 
 		tr.Parallelize = info.parallelize
+		if !tr.Parallelize {
+			tr.BatchBytesLimit = dsp.distSQLSrv.TestingKnobs.TableReaderBatchBytesLimit
+		}
 		p.TotalEstimatedScannedRows += info.estimatedRowCount
 
 		corePlacement[i].NodeID = sp.Node
@@ -2136,6 +2139,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		MaintainOrdering:         len(n.reqOrdering) > 0,
 		HasSystemColumns:         n.table.containsSystemColumns,
 		LeftJoinWithPairedJoiner: n.isSecondJoinInPairedJoiner,
+		LookupBatchBytesLimit:    dsp.distSQLSrv.TestingKnobs.JoinReaderBatchBytesLimit,
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
 	if err != nil {

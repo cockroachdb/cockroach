@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -299,14 +299,16 @@ func TestCreateStatsProgress(t *testing.T) {
 	}(rowexec.SamplerProgressInterval)
 	rowexec.SamplerProgressInterval = 10
 
-	resetKVBatchSize := row.TestingSetKVBatchSize(10)
-	defer resetKVBatchSize()
-
 	var allowRequest chan struct{}
 	var serverArgs base.TestServerArgs
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: createStatsRequestFilter(&allowRequest),
+	}
+	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
+		// Force the stats job to iterate through the input rows instead of reading
+		// them all at once.
+		TableReaderBatchBytesLimit: 100,
 	}
 
 	ctx := context.Background()
@@ -348,7 +350,11 @@ func TestCreateStatsProgress(t *testing.T) {
 		select {
 		case allowRequest <- struct{}{}:
 		case err := <-errCh:
-			t.Fatal(err)
+			if err == nil {
+				t.Fatalf("query unexpectedly finished")
+			} else {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -400,7 +406,11 @@ func TestCreateStatsProgress(t *testing.T) {
 		select {
 		case allowRequest <- struct{}{}:
 		case err := <-errCh:
-			t.Fatal(err)
+			if err == nil {
+				t.Fatalf("query unexpectedly finished")
+			} else {
+				t.Fatal(err)
+			}
 		}
 	}
 

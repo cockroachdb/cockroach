@@ -107,6 +107,7 @@ go_test(
         "inverted_expr_evaluator_test.go",
         "inverted_filterer_test.go",
         "inverted_joiner_test.go",
+        "joinreader_blackbox_test.go",
         "joinreader_test.go",
         "main_test.go",
         "mergejoiner_test.go",
