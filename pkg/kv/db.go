@@ -703,6 +703,29 @@ func (db *DB) Migrate(ctx context.Context, begin, end interface{}, version roach
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// QueryResolvedTimestamp requests the resolved timestamp of the key span it is
+// issued over. See documentation on QueryResolvedTimestampRequest for details
+// about the meaning and semantics of this resolved timestamp.
+//
+// If local is false, the request will always be routed to the leaseholder(s) of
+// the range(s) that it targets. If local is true, the request will be routed to
+// the nearest replica(s) of the range(s) that it targets.
+func (db *DB) QueryResolvedTimestamp(
+	ctx context.Context, begin, end interface{}, local bool,
+) (hlc.Timestamp, error) {
+	b := &Batch{}
+	b.queryResolvedTimestamp(begin, end)
+	b.Header.ReadConsistency = roachpb.READ_UNCOMMITTED
+	if local {
+		b.Header.ReadConsistency = roachpb.INCONSISTENT
+	}
+	if err := getOneErr(db.Run(ctx, b), b); err != nil {
+		return hlc.Timestamp{}, err
+	}
+	r := b.RawResponse().Responses[0].GetQueryResolvedTimestamp()
+	return r.ResolvedTS, nil
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.

@@ -173,9 +173,9 @@ func (r *Replica) maxClosedRLocked(
 	return maxClosed, true
 }
 
-// ClosedTimestampV2 returns the closed timestamp. Unlike MaxClosedTimestamp, it
-// only looks at the "new" closed timestamp mechanism, ignoring the old one. It
-// returns an empty result if the new mechanism is not enabled yet. The new
+// GetClosedTimestampV2 returns the closed timestamp. Unlike MaxClosedTimestamp,
+// it only looks at the "new" closed timestamp mechanism, ignoring the old one.
+// It returns an empty result if the new mechanism is not enabled yet. The new
 // mechanism has better properties than the old one - namely the closing of
 // timestamps is synchronized with lease transfers and subsumption requests.
 // Callers who need that property should be prepared to get an empty result
@@ -183,7 +183,7 @@ func (r *Replica) maxClosedRLocked(
 //
 // TODO(andrei): Remove this in favor of maxClosed() once the old closed
 // timestamp mechanism is deleted. At that point, the two should be equivalent.
-func (r *Replica) ClosedTimestampV2(ctx context.Context) hlc.Timestamp {
+func (r *Replica) GetClosedTimestampV2(ctx context.Context) hlc.Timestamp {
 	r.mu.RLock()
 	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
 	leaseholder := r.mu.state.Lease.Replica.NodeID
