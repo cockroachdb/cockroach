@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -173,7 +172,9 @@ type Node struct {
 
 	perReplicaServer kvserver.Server
 
-	admissionQ *admission.WorkQueue
+	// Admission control queues and coordinators. Both should be nil or non-nil.
+	kvAdmissionQ     *admission.WorkQueue
+	storeGrantCoords *admission.StoreGrantCoordinators
 }
 
 var _ roachpb.InternalServer = &Node{}
@@ -685,11 +686,12 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 }
 
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
-func (n *Node) GetPebbleMetrics() []*pebble.Metrics {
-	var metrics []*pebble.Metrics
+func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
+	var metrics []admission.StoreMetrics
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 		m := store.Engine().GetMetrics()
-		metrics = append(metrics, m.Metrics)
+		metrics = append(
+			metrics, admission.StoreMetrics{StoreID: int32(store.StoreID()), Metrics: m.Metrics})
 		return nil
 	})
 	return metrics
@@ -913,9 +915,10 @@ func (n *Node) Batch(
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
 
-	var callAdmittedWorkDone bool
+	var callAdmittedWorkDoneOnKVAdmissionQ bool
 	var tenantID roachpb.TenantID
-	if n.admissionQ != nil {
+	var storeAdmissionQ *admission.WorkQueue
+	if n.kvAdmissionQ != nil {
 		var ok bool
 		tenantID, ok = roachpb.TenantFromContext(ctx)
 		if !ok {
@@ -944,14 +947,31 @@ func (n *Node) Batch(
 			BypassAdmission: bypassAdmission,
 		}
 		var err error
-		callAdmittedWorkDone, err = n.admissionQ.Admit(ctx, admissionInfo)
-		if err != nil {
-			return nil, err
+		if args.IsWrite() {
+			storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(args.Replica.StoreID))
+		}
+		continueToSecondQ := true
+		if storeAdmissionQ != nil {
+			if continueToSecondQ, err = storeAdmissionQ.Admit(ctx, admissionInfo); err != nil {
+				return nil, err
+			}
+			if !continueToSecondQ {
+				storeAdmissionQ = nil
+			}
+		}
+		if continueToSecondQ {
+			callAdmittedWorkDoneOnKVAdmissionQ, err = n.kvAdmissionQ.Admit(ctx, admissionInfo)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	br, err := n.batchInternal(ctx, args)
-	if callAdmittedWorkDone {
-		n.admissionQ.AdmittedWorkDone(tenantID)
+	if callAdmittedWorkDoneOnKVAdmissionQ {
+		n.kvAdmissionQ.AdmittedWorkDone(tenantID)
+	}
+	if storeAdmissionQ != nil {
+		storeAdmissionQ.AdmittedWorkDone(tenantID)
 	}
 
 	// We always return errors via BatchResponse.Error so structure is
