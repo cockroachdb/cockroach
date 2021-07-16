@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -174,7 +173,9 @@ type Node struct {
 
 	perReplicaServer kvserver.Server
 
-	admissionQ *admission.WorkQueue
+	// Admission control queues and coordinators. Both should be nil or non-nil.
+	kvAdmissionQ     *admission.WorkQueue
+	storeGrantCoords *admission.StoreGrantCoordinators
 
 	tenantUsage multitenant.TenantUsageServer
 }
@@ -297,7 +298,8 @@ func NewNode(
 	stores *kvserver.Stores,
 	execCfg *sql.ExecutorConfig,
 	clusterID *base.ClusterIDContainer,
-	admissionQ *admission.WorkQueue,
+	kvAdmissionQ *admission.WorkQueue,
+	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
 ) *Node {
 	var sqlExec *sql.InternalExecutor
@@ -305,16 +307,17 @@ func NewNode(
 		sqlExec = execCfg.InternalExecutor
 	}
 	n := &Node{
-		storeCfg:    cfg,
-		stopper:     stopper,
-		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:      stores,
-		txnMetrics:  txnMetrics,
-		sqlExec:     sqlExec,
-		clusterID:   clusterID,
-		admissionQ:  admissionQ,
-		tenantUsage: tenantUsage,
+		storeCfg:         cfg,
+		stopper:          stopper,
+		recorder:         recorder,
+		metrics:          makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:           stores,
+		txnMetrics:       txnMetrics,
+		sqlExec:          sqlExec,
+		clusterID:        clusterID,
+		kvAdmissionQ:     kvAdmissionQ,
+		storeGrantCoords: storeGrantCoords,
+		tenantUsage:      tenantUsage,
 	}
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -696,11 +699,12 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 }
 
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
-func (n *Node) GetPebbleMetrics() []*pebble.Metrics {
-	var metrics []*pebble.Metrics
+func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
+	var metrics []admission.StoreMetrics
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 		m := store.Engine().GetMetrics()
-		metrics = append(metrics, m.Metrics)
+		metrics = append(
+			metrics, admission.StoreMetrics{StoreID: int32(store.StoreID()), Metrics: m.Metrics})
 		return nil
 	})
 	return metrics
@@ -924,9 +928,10 @@ func (n *Node) Batch(
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
 
-	var callAdmittedWorkDone bool
+	var callAdmittedWorkDoneOnKVAdmissionQ bool
 	var tenantID roachpb.TenantID
-	if n.admissionQ != nil {
+	var storeAdmissionQ *admission.WorkQueue
+	if n.kvAdmissionQ != nil {
 		var ok bool
 		tenantID, ok = roachpb.TenantFromContext(ctx)
 		if !ok {
@@ -955,14 +960,35 @@ func (n *Node) Batch(
 			BypassAdmission: bypassAdmission,
 		}
 		var err error
-		callAdmittedWorkDone, err = n.admissionQ.Admit(ctx, admissionInfo)
-		if err != nil {
-			return nil, err
+		if args.IsWrite() {
+			storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(args.Replica.StoreID))
+		}
+		admissionEnabled := true
+		if storeAdmissionQ != nil {
+			if admissionEnabled, err = storeAdmissionQ.Admit(ctx, admissionInfo); err != nil {
+				return nil, err
+			}
+			if !admissionEnabled {
+				// Set storeAdmissionQ to nil so that we don't call AdmittedWorkDone
+				// on it. Additionally, the code below will not call
+				// kvAdmissionQ.Admit, and so callAdmittedWorkDoneOnKVAdmissionQ will
+				// stay false.
+				storeAdmissionQ = nil
+			}
+		}
+		if admissionEnabled {
+			callAdmittedWorkDoneOnKVAdmissionQ, err = n.kvAdmissionQ.Admit(ctx, admissionInfo)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	br, err := n.batchInternal(ctx, args)
-	if callAdmittedWorkDone {
-		n.admissionQ.AdmittedWorkDone(tenantID)
+	if callAdmittedWorkDoneOnKVAdmissionQ {
+		n.kvAdmissionQ.AdmittedWorkDone(tenantID)
+	}
+	if storeAdmissionQ != nil {
+		storeAdmissionQ.AdmittedWorkDone(tenantID)
 	}
 
 	// We always return errors via BatchResponse.Error so structure is
