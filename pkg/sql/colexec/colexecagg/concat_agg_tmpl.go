@@ -59,7 +59,7 @@ func (a *concat_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *concat_AGGKINDAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
@@ -75,20 +75,20 @@ func (a *concat_AGGKINDAgg) Compute(
 		// sel to specify the tuples to be aggregated.
 		// */}}
 		if sel == nil {
-			_ = groups[inputLen-1]
+			_, _ = groups[endIdx-1], groups[startIdx]
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					_ACCUMULATE_CONCAT(a, nulls, i, true, false)
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					_ACCUMULATE_CONCAT(a, nulls, i, false, false)
 				}
 			}
 		} else
 		// {{end}}
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 					_ACCUMULATE_CONCAT(a, nulls, i, true, true)

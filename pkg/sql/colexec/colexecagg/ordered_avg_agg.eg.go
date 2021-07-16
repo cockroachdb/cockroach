@@ -93,7 +93,7 @@ func (a *avgInt16OrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *avgInt16OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
@@ -107,10 +107,10 @@ func (a *avgInt16OrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -155,7 +155,7 @@ func (a *avgInt16OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -200,7 +200,7 @@ func (a *avgInt16OrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -368,7 +368,7 @@ func (a *avgInt32OrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *avgInt32OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
@@ -382,10 +382,10 @@ func (a *avgInt32OrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -430,7 +430,7 @@ func (a *avgInt32OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -475,7 +475,7 @@ func (a *avgInt32OrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -643,7 +643,7 @@ func (a *avgInt64OrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *avgInt64OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
@@ -657,10 +657,10 @@ func (a *avgInt64OrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -705,7 +705,7 @@ func (a *avgInt64OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -750,7 +750,7 @@ func (a *avgInt64OrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -917,7 +917,7 @@ func (a *avgDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *avgDecimalOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
 	vec := vecs[inputIdxs[0]]
@@ -928,10 +928,10 @@ func (a *avgDecimalOrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -975,7 +975,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -1019,7 +1019,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -1184,7 +1184,7 @@ func (a *avgFloat64OrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *avgFloat64OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurSumSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -1195,10 +1195,10 @@ func (a *avgFloat64OrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -1235,7 +1235,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -1272,7 +1272,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -1419,7 +1419,7 @@ func (a *avgIntervalOrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *avgIntervalOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurSumSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -1430,10 +1430,10 @@ func (a *avgIntervalOrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -1465,7 +1465,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -1497,7 +1497,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 

@@ -46,7 +46,7 @@ func (a *boolAndOrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *boolAndOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -57,10 +57,10 @@ func (a *boolAndOrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -86,7 +86,7 @@ func (a *boolAndOrderedAgg) Compute(
 
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -113,7 +113,7 @@ func (a *boolAndOrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 					if groups[i] {
@@ -238,7 +238,7 @@ func (a *boolOrOrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *boolOrOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -249,10 +249,10 @@ func (a *boolOrOrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -278,7 +278,7 @@ func (a *boolOrOrderedAgg) Compute(
 
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -305,7 +305,7 @@ func (a *boolOrOrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 					if groups[i] {
