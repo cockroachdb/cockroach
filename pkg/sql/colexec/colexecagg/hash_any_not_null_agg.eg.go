@@ -121,7 +121,7 @@ func (a *anyNotNullBoolHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullBoolHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -135,7 +135,7 @@ func (a *anyNotNullBoolHashAgg) Compute(
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -234,7 +234,7 @@ func (a *anyNotNullBytesHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullBytesHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -248,7 +248,7 @@ func (a *anyNotNullBytesHashAgg) Compute(
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -351,7 +351,7 @@ func (a *anyNotNullDecimalHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullDecimalHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -365,7 +365,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -464,7 +464,7 @@ func (a *anyNotNullInt16HashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullInt16HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -478,7 +478,7 @@ func (a *anyNotNullInt16HashAgg) Compute(
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -577,7 +577,7 @@ func (a *anyNotNullInt32HashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullInt32HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -591,7 +591,7 @@ func (a *anyNotNullInt32HashAgg) Compute(
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -690,7 +690,7 @@ func (a *anyNotNullInt64HashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullInt64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -704,7 +704,7 @@ func (a *anyNotNullInt64HashAgg) Compute(
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -803,7 +803,7 @@ func (a *anyNotNullFloat64HashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullFloat64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -817,7 +817,7 @@ func (a *anyNotNullFloat64HashAgg) Compute(
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -916,7 +916,7 @@ func (a *anyNotNullTimestampHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullTimestampHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -930,7 +930,7 @@ func (a *anyNotNullTimestampHashAgg) Compute(
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -1029,7 +1029,7 @@ func (a *anyNotNullIntervalHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullIntervalHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -1043,7 +1043,7 @@ func (a *anyNotNullIntervalHashAgg) Compute(
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -1142,7 +1142,7 @@ func (a *anyNotNullJSONHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullJSONHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -1159,7 +1159,7 @@ func (a *anyNotNullJSONHashAgg) Compute(
 	col, nulls := vec.JSON(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -1290,7 +1290,7 @@ func (a *anyNotNullDatumHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *anyNotNullDatumHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -1307,7 +1307,7 @@ func (a *anyNotNullDatumHashAgg) Compute(
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 

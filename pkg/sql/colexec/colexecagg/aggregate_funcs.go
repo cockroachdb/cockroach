@@ -76,8 +76,8 @@ type AggregateFunc interface {
 	// Compute computes the aggregation on the input batch.
 	// Note: the implementations should be careful to account for their memory
 	// usage.
-	// Note: inputLen is assumed to be greater than zero.
-	Compute(vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int)
+	// Note: endIdx is assumed to be greater than zero.
+	Compute(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int)
 
 	// Flush flushes the result of aggregation on the last group. It should be
 	// called once after input batches have been Compute()'d. outputIdx is only

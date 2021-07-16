@@ -89,7 +89,7 @@ func (a *sumInt16HashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *sumInt16HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
@@ -99,7 +99,7 @@ func (a *sumInt16HashAgg) Compute(
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -208,7 +208,7 @@ func (a *sumInt32HashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *sumInt32HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
@@ -218,7 +218,7 @@ func (a *sumInt32HashAgg) Compute(
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -327,7 +327,7 @@ func (a *sumInt64HashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *sumInt64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
@@ -337,7 +337,7 @@ func (a *sumInt64HashAgg) Compute(
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -445,14 +445,14 @@ func (a *sumDecimalHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *sumDecimalHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -558,14 +558,14 @@ func (a *sumFloat64HashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *sumFloat64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -665,14 +665,14 @@ func (a *sumIntervalHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *sumIntervalHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
