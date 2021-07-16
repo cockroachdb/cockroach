@@ -33,7 +33,8 @@ type UserAuthHook func(context.Context, SQLUsername, bool) (connClose func(), _ 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
 // list must either be empty or have the format <source>:<dest>. The principal
 // map is used to transform principal names found in the Subject.CommonName or
-// DNS-type SubjectAlternateNames fields of certificates.
+// DNS-type SubjectAlternateNames fields of certificates. This function splits
+// each list entry on the final colon, allowing <source> to contain colons.
 func SetCertPrincipalMap(mappings []string) error {
 	m := make(map[string]string, len(mappings))
 	for _, v := range mappings {
@@ -41,10 +42,12 @@ func SetCertPrincipalMap(mappings []string) error {
 			continue
 		}
 		parts := strings.Split(v, ":")
-		if len(parts) != 2 {
+		l := len(parts)
+		if l < 2 {
 			return errors.Errorf("invalid <cert-principal>:<db-principal> mapping: %q", v)
 		}
-		m[parts[0]] = parts[1]
+		prn := strings.Join(parts[:l-1], ":")
+		m[prn] = parts[l-1]
 	}
 	certPrincipalMap.Lock()
 	certPrincipalMap.m = m
