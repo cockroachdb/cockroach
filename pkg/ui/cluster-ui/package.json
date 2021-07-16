@@ -132,13 +132,12 @@
     "webpackbar": "^4.0.0"
   },
   "peerDependencies": {
-    "protobufjs": "6.8.6",
-    "react": "^16.12.0",
-    "react-dom": "^16.12.0",
-    "react-redux": "7.1.3",
-    "react-router-dom": "^5.1.2",
-    "redux": "4.0.5",
-    "redux-saga": "1.1.3"
+    "react": ">=16.12.0",
+    "react-dom": ">=16.12.0",
+    "react-redux": ">=7.1.3",
+    "react-router-dom": ">=5.1.2",
+    "redux": ">=4.0.5",
+    "redux-saga": ">=1.1.3"
   },
   "resolutions": {
     "node-fetch": "~2.6.1",
