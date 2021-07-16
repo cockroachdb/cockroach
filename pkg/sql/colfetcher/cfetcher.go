@@ -1043,8 +1043,9 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
 			}
 
-			// TODO(jordan): optimize this prefix check by skipping span prefix.
-			if !bytes.HasPrefix(kv.Key, rf.machine.lastRowPrefix) {
+			// TODO(yuzefovich): optimize this prefix check by skipping logical
+			// longest common span prefix.
+			if !bytes.HasPrefix(kv.Key[rf.table.knownPrefixLength:], rf.machine.lastRowPrefix[rf.table.knownPrefixLength:]) {
 				// The kv we just found is from a different row.
 				rf.machine.state[0] = stateFinalizeRow
 				rf.machine.state[1] = stateDecodeFirstKVOfRow
