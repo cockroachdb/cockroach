@@ -207,9 +207,7 @@ func (rec SpanSetReplicaEvalContext) GetRangeInfo(ctx context.Context) roachpb.R
 }
 
 // GetCurrentReadSummary is part of the EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(
-	ctx context.Context,
-) (rspb.ReadSummary, hlc.Timestamp) {
+func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	// To capture a read summary over the range, all keys must be latched for
 	// writing to prevent any concurrent reads or writes.
 	desc := rec.i.Desc()
@@ -222,6 +220,11 @@ func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(
 		EndKey: desc.EndKey.AsRawKey(),
 	})
 	return rec.i.GetCurrentReadSummary(ctx)
+}
+
+// GetClosedTimestampV2 is part of the EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetClosedTimestampV2(ctx context.Context) hlc.Timestamp {
+	return rec.i.GetClosedTimestampV2(ctx)
 }
 
 // GetExternalStorage returns an ExternalStorage object, based on

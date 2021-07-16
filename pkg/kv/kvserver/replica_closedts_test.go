@@ -12,25 +12,30 @@ package kvserver_test
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 // TestBumpSideTransportClosed tests the various states that a replica can find
@@ -721,4 +726,128 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 			b.Fatal("BumpSideTransportClosed unexpectedly failed")
 		}
 	}
+}
+
+// TestNonBlockingReadsAtResolvedTimestamp tests that reads served at or below a
+// key span's resolved timestamp never block or redirect to the leaseholder. The
+// test also verifies that the resolved timestamp on each replica increases
+// monotonically.
+func TestNonBlockingReadsAtResolvedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const testTime = 3 * time.Second
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a scratch range. Then add one voting follower and one non-voting
+	// follower to the range.
+	scratchKey := tc.ScratchRange(t)
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+	tc.AddNonVotersOrFatal(t, scratchKey, tc.Target(2))
+
+	// Drop the closed timestamp interval far enough so that we can create
+	// situations where an active intent is at a lower timestamp than the
+	// range's closed timestamp - thereby being the limiting factor for the
+	// range's resolved timestamp.
+	sqlRunner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5ms'")
+
+	keySet := make([]roachpb.Key, 5)
+	for i := range keySet {
+		n := len(scratchKey)
+		keySet[i] = append(scratchKey[:n:n], byte(i))
+	}
+	keySpan := roachpb.Span{Key: scratchKey, EndKey: scratchKey.PrefixEnd()}
+
+	var g errgroup.Group
+	var done int32
+	sleep := func() {
+		time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+	}
+
+	// Writer goroutines: write intents and commit them.
+	for _, key := range keySet {
+		key := key // copy for goroutine
+		g.Go(func() error {
+			for ; atomic.LoadInt32(&done) == 0; sleep() {
+				if err := tc.Server(0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					if _, err := txn.Inc(ctx, key, 1); err != nil {
+						return err
+					}
+					// Let the intent stick around for a bit.
+					sleep()
+					return nil
+				}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	// Reader goroutines: query resolved timestamp and read at that time.
+	for _, s := range tc.Servers {
+		store, err := s.Stores().GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+		g.Go(func() error {
+			var lastResTS hlc.Timestamp
+			for ; atomic.LoadInt32(&done) == 0; sleep() {
+				// Query the key span's resolved timestamp.
+				queryResTS := roachpb.QueryResolvedTimestampRequest{
+					RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+				}
+				queryResTSHeader := roachpb.Header{
+					RangeID:         scratchRange.RangeID,
+					ReadConsistency: roachpb.INCONSISTENT,
+				}
+				resp, pErr := kv.SendWrappedWith(ctx, store, queryResTSHeader, &queryResTS)
+				if pErr != nil {
+					return pErr.GoError()
+				}
+
+				// Validate that the resolved timestamp increases monotonically.
+				resTS := resp.(*roachpb.QueryResolvedTimestampResponse).ResolvedTS
+				if resTS.Less(lastResTS) {
+					return errors.Errorf("resolved timestamp regression: %s -> %s", lastResTS, resTS)
+				}
+				lastResTS = resTS
+
+				// Issue a transactional scan over the keys at the resolved timestamp on
+				// the same store. Use an error wait policy so that we'll hear an error
+				// (WriteIntentError) under conditions that would otherwise cause us to
+				// block on an intent. Send to a specific store instead of through a
+				// DistSender so that we'll hear an error (NotLeaseholderError) if the
+				// request would otherwise be redirected to the leaseholder.
+				scan := roachpb.ScanRequest{
+					RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+				}
+				txn := roachpb.MakeTransaction("test", scratchKey, 0, resTS, 0)
+				scanHeader := roachpb.Header{
+					RangeID:         scratchRange.RangeID,
+					ReadConsistency: roachpb.CONSISTENT,
+					Txn:             &txn,
+					WaitPolicy:      lock.WaitPolicy_Error,
+				}
+				_, pErr = kv.SendWrappedWith(ctx, store, scanHeader, &scan)
+				if pErr != nil {
+					return pErr.GoError()
+				}
+			}
+
+			// Confirm that the resolved timestamp was not stuck at 0 for the entire time.
+			if lastResTS.IsEmpty() {
+				return errors.Errorf("resolved timestamp never progressed: %s", lastResTS)
+			}
+			return nil
+		})
+	}
+
+	time.Sleep(testTime)
+	atomic.StoreInt32(&done, 1)
+	require.NoError(t, g.Wait())
 }

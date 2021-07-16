@@ -72,6 +72,13 @@ type Batch struct {
 	rowsStaticIdx int
 }
 
+// ApproximateMutationBytes returns the approximate byte size of the mutations
+// added to this batch via Put, CPut, InitPut, Del, etc methods. Mutations added
+// via AddRawRequest are not tracked.
+func (b *Batch) ApproximateMutationBytes() int {
+	return b.approxMutationReqBytes
+}
+
 // RawResponse returns the BatchResponse which was the result of a successful
 // execution of the batch, and nil otherwise.
 func (b *Batch) RawResponse() *roachpb.BatchResponse {
@@ -263,6 +270,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.AdminScatterRequest:
 			case *roachpb.AddSSTableRequest:
 			case *roachpb.MigrateRequest:
+			case *roachpb.QueryResolvedTimestampRequest:
 			default:
 				if result.Err == nil {
 					result.Err = errors.Errorf("unsupported reply: %T for %T",
@@ -814,9 +822,24 @@ func (b *Batch) migrate(s, e interface{}, version roachpb.Version) {
 	b.initResult(1, 0, notRaw, nil)
 }
 
-// ApproximateMutationBytes returns the approximate byte size of the mutations
-// added to this batch via Put, CPut, InitPut, Del, etc methods. Mutations added
-// via AddRawRequest are not tracked.
-func (b *Batch) ApproximateMutationBytes() int {
-	return b.approxMutationReqBytes
+// queryResolvedTimestamp is only exported on DB.
+func (b *Batch) queryResolvedTimestamp(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.QueryResolvedTimestampRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
 }
