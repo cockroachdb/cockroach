@@ -103,7 +103,7 @@ func optBuildScalar(evalCtx *tree.EvalContext, e tree.Expr) (tree.TypedExpr, err
 	}
 
 	bld := execbuilder.New(
-		nil /* factory */, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
+		nil /* factory */, &o, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
 		evalCtx, false, /* allowAutoCommit */
 	)
 	ivh := tree.MakeIndexedVarHelper(nil /* container */, 0)
