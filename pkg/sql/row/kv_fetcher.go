@@ -32,7 +32,6 @@ type KVFetcher struct {
 	kvs []roachpb.KeyValue
 
 	batchResponse []byte
-	newSpan       bool
 
 	// Observability fields.
 	mu struct {
@@ -100,9 +99,18 @@ const (
 // of new memory, so the returned KeyValue should be copied into a small slice
 // that the caller owns to avoid retaining two large backing byte slices at once
 // unexpectedly.
+// If this kv was fetched for a new key span (either it was the first fetch ever
+// or the previous key span has been fully exhausted), then newSpan contains
+// that key span.
 func (f *KVFetcher) NextKV(
 	ctx context.Context, mvccDecodeStrategy MVCCDecodingStrategy,
-) (moreKVs bool, kv roachpb.KeyValue, finalReferenceToBatch bool, err error) {
+) (
+	moreKVs bool,
+	kv roachpb.KeyValue,
+	finalReferenceToBatch bool,
+	newSpan roachpb.Span,
+	err error,
+) {
 	for {
 		// Only one of f.kvs or f.batchResponse will be set at a given time. Which
 		// one is set depends on the format returned by a given BatchRequest.
@@ -113,7 +121,7 @@ func (f *KVFetcher) NextKV(
 			// We always return "false" for finalReferenceToBatch when returning data in the
 			// KV format, because each of the KVs doesn't share any backing memory -
 			// they are all independently garbage collectable.
-			return true, kv, false, nil
+			return true, kv, false, newSpan, nil
 		}
 		if len(f.batchResponse) > 0 {
 			var key []byte
@@ -127,7 +135,7 @@ func (f *KVFetcher) NextKV(
 				key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
 			}
 			if err != nil {
-				return false, kv, false, err
+				return false, kv, false, newSpan, err
 			}
 			// If we're finished decoding the batch response, nil our reference to it
 			// so that the garbage collector can reclaim the backing memory.
@@ -141,17 +149,16 @@ func (f *KVFetcher) NextKV(
 					RawBytes:  rawBytes[:len(rawBytes):len(rawBytes)],
 					Timestamp: ts,
 				},
-			}, lastKey, nil
+			}, lastKey, newSpan, nil
 		}
 
-		moreKVs, f.kvs, f.batchResponse, err = f.nextBatch(ctx)
+		moreKVs, f.kvs, f.batchResponse, newSpan, err = f.nextBatch(ctx)
 		if err != nil {
-			return moreKVs, kv, false, err
+			return moreKVs, kv, false, newSpan, err
 		}
 		if !moreKVs {
-			return false, kv, false, nil
+			return false, kv, false, newSpan, nil
 		}
-		f.newSpan = true
 		f.mu.Lock()
 		f.mu.bytesRead += int64(len(f.batchResponse))
 		f.mu.Unlock()
@@ -173,13 +180,13 @@ type SpanKVFetcher struct {
 // nextBatch implements the kvBatchFetcher interface.
 func (f *SpanKVFetcher) nextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, newSpan roachpb.Span, err error) {
 	if len(f.KVs) == 0 {
-		return false, nil, nil, nil
+		return false, nil, nil, roachpb.Span{}, nil
 	}
 	res := f.KVs
 	f.KVs = nil
-	return true, res, nil, nil
+	return true, res, nil, roachpb.Span{}, nil
 }
 
 func (f *SpanKVFetcher) close(context.Context) {}
@@ -216,7 +223,7 @@ func MakeBackupSSTKVFetcher(
 
 func (f *BackupSSTKVFetcher) nextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, newSpan roachpb.Span, err error) {
 	res := make([]roachpb.KeyValue, 0)
 
 	copyKV := func(mvccKey storage.MVCCKey, value []byte) roachpb.KeyValue {
@@ -234,7 +241,7 @@ func (f *BackupSSTKVFetcher) nextBatch(
 		valid, err := f.iter.Valid()
 		if err != nil {
 			err = errors.Wrapf(err, "iter key value of table data")
-			return false, nil, nil, err
+			return false, nil, nil, roachpb.Span{}, err
 		}
 
 		if !valid || !f.iter.UnsafeKey().Less(f.endKeyMVCC) {
@@ -277,9 +284,9 @@ func (f *BackupSSTKVFetcher) nextBatch(
 
 	}
 	if len(res) == 0 {
-		return false, nil, nil, err
+		return false, nil, nil, roachpb.Span{}, err
 	}
-	return true, res, nil, nil
+	return true, res, nil, roachpb.Span{}, nil
 }
 
 func (f *BackupSSTKVFetcher) close(context.Context) {

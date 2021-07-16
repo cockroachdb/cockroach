@@ -527,11 +527,9 @@ func popBatch(batches [][]byte) (batch []byte, remainingBatches [][]byte) {
 
 // nextBatch returns the next batch of key/value pairs. If there are none
 // available, a fetch is initiated. When there are no more keys, ok is false.
-// atBatchBoundary indicates whether the next call to nextBatch will request
-// another fetch from the KV system.
 func (f *txnKVFetcher) nextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResp []byte, err error) {
+) (ok bool, kvs []roachpb.KeyValue, batchResp []byte, newSpan roachpb.Span, err error) {
 	// The purpose of this loop is to unpack the two-level batch structure that is
 	// returned from the KV layer.
 	//
@@ -545,7 +543,7 @@ func (f *txnKVFetcher) nextBatch(
 		// Are there remaining data batches? If so, just pop one off from the
 		// list and return it.
 		batchResp, f.remainingBatches = popBatch(f.remainingBatches)
-		return true, nil, batchResp, nil
+		return true, nil, batchResp, newSpan, nil
 	}
 	// There are no remaining data batches. Find the first non-empty ResponseUnion
 	// in the list of unprocessed responses from the last BatchResponse we sent,
@@ -554,7 +552,7 @@ func (f *txnKVFetcher) nextBatch(
 		reply := f.responses[0].GetInner()
 		f.responses[0] = roachpb.ResponseUnion{}
 		f.responses = f.responses[1:]
-		origSpan := f.requestSpans[0]
+		newSpan = f.requestSpans[0]
 		f.requestSpans[0] = roachpb.Span{}
 		f.requestSpans = f.requestSpans[1:]
 		switch t := reply.(type) {
@@ -562,32 +560,32 @@ func (f *txnKVFetcher) nextBatch(
 			if len(t.BatchResponses) > 0 {
 				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
-			return true, t.Rows, batchResp, nil
+			return true, t.Rows, batchResp, newSpan, nil
 		case *roachpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
 				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
-			return true, t.Rows, batchResp, nil
+			return true, t.Rows, batchResp, newSpan, nil
 		case *roachpb.GetResponse:
 			if t.IntentValue != nil {
-				return false, nil, nil, errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
+				return false, nil, nil, newSpan, errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
 			}
 			if t.Value == nil {
 				// Nothing found in this particular response, let's continue to the next
 				// one.
 				continue
 			}
-			return true, []roachpb.KeyValue{{Key: origSpan.Key, Value: *t.Value}}, nil, nil
+			return true, []roachpb.KeyValue{{Key: newSpan.Key, Value: *t.Value}}, nil, newSpan, nil
 		}
 	}
 	// No more responses from the last BatchRequest. If we are out of keys, we can
 	// return and we're finished with the fetch.
 	if f.fetchEnd {
-		return false, nil, nil, nil
+		return false, nil, nil, newSpan, nil
 	}
 	// We have more work to do. Ask the KV layer to continue where it left off.
 	if err := f.fetch(ctx); err != nil {
-		return false, nil, nil, err
+		return false, nil, nil, newSpan, err
 	}
 	// We've got more data to process, recurse and process it.
 	return f.nextBatch(ctx)

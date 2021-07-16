@@ -99,9 +99,13 @@ type cTableInfo struct {
 	// table.
 	maxColumnFamilyID descpb.FamilyID
 
+	// keyPreambleLength is the number of bytes in the index key prefix
+	// corresponding to the table id and the index id.
+	keyPreambleLength int
 	// knownPrefixLength is the number of bytes in the index key prefix this
-	// Fetcher is configured for. The index key prefix is the table id, index
-	// id pair at the start of the key.
+	// Fetcher is configured for. This will always be at least keyPreambleLength
+	// but can be more when some index key columns have fixed values for the
+	// whole key span.
 	knownPrefixLength int
 
 	// The following fields contain MVCC metadata for each row and may be
@@ -289,7 +293,7 @@ type cFetcher struct {
 		remainingValueColsByIdx util.FastIntSet
 		// lastRowPrefix is the row prefix for the last row we saw a key for. New
 		// keys are compared against this prefix to determine whether they're part
-		// of a new row or not.
+		// of a new row or not. It should never include the column family ID.
 		lastRowPrefix roachpb.Key
 		// prettyValueBuf is a temp buffer used to create strings for tracing.
 		prettyValueBuf *bytes.Buffer
@@ -307,6 +311,14 @@ type cFetcher struct {
 		timestampCol []apd.Decimal
 		// tableoidCol is the same as timestampCol but for the tableoid system column.
 		tableoidCol coldata.DatumVec
+	}
+
+	llcpState struct {
+		outputBatchStartIdx   int
+		commonValues          []coldata.Vec
+		needCopyingFromCommon bool
+		foundNull             bool
+		numConstIndexKeyCols  int
 	}
 
 	typs        []*types.T
@@ -466,7 +478,8 @@ func (rf *cFetcher) Init(
 	sort.Ints(table.neededColsList)
 	sort.Ints(table.notNeededColOrdinals)
 
-	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
+	table.keyPreambleLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
+	table.knownPrefixLength = table.keyPreambleLength
 
 	var indexColumnIDs []descpb.ColumnID
 	indexColumnIDs, table.indexColumnDirs = catalog.FullIndexColumnIDs(table.index)
@@ -489,6 +502,9 @@ func (rf *cFetcher) Init(
 	if table.oidOutputIdx != noOutputColumn {
 		table.neededValueColsByIdx.Remove(table.oidOutputIdx)
 	}
+
+	tableName := table.desc.GetName()
+	_ = tableName
 
 	neededIndexCols := 0
 	nIndexCols := len(indexColumnIDs)
@@ -821,6 +837,145 @@ func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 	rf.machine.nextKV = kvCopy
 }
 
+// TODO(jordan): parse the logical longest common prefix of the span
+// into a buffer. The logical longest common prefix is the longest
+// common prefix that contains only full key components. For example,
+// the keys /Table/53/1/foo/bar/10 and /Table/53/1/foo/bop/10 would
+// have LLCS of /Table/53/1/foo, even though they share a b prefix of
+// the next key, since that prefix isn't a complete key component.
+/*
+	if newSpan {
+	lcs := rf.fetcher.span.LongestCommonPrefix()
+	// parse lcs into stuff
+	key, matches, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
+		rf.table.desc, rf.table.info.index, rf.table.info.keyValTypes,
+		rf.table.keyVals, rf.table.info.indexColumnDirs, kv.Key[rf.table.info.knownPrefixLength:],
+	)
+	if err != nil {
+		// This is expected - the longest common prefix of the keyspan might
+		// end half way through a key. Suppress the error and set the actual
+		// LCS we'll use later to the decodable components of the key.
+	}
+	}
+*/
+func (rf *cFetcher) handleNewSpan(newSpan roachpb.Span) error {
+	if len(newSpan.Key) == 0 || rf.table.maxColumnFamilyID > 0 {
+		// We're still processing the old key span, so there is nothing to do.
+		// TODO(yuzefovich): we also currently don't support the cases when
+		// tables have multiple column families. Lift that restriction.
+		return nil
+	}
+
+	if s := newSpan.String(); strings.HasPrefix(s, "/Table/53") {
+		fmt.Println(newSpan.String())
+	}
+
+	// We have a new span. Populate constant index key column values from the
+	// previous span if applicable.
+	if rf.mustDecodeIndexKey || rf.traceKV {
+		indexOrds := rf.table.indexColOrdinals
+		if rf.traceKV {
+			indexOrds = rf.table.allIndexColOrdinals
+		}
+		if rf.llcpState.needCopyingFromCommon {
+			for _, colIdx := range indexOrds[:rf.llcpState.numConstIndexKeyCols] {
+				if colIdx != -1 {
+					coldata.ExpandValue(
+						rf.machine.colvecs[colIdx],
+						rf.llcpState.commonValues[colIdx],
+						rf.llcpState.outputBatchStartIdx,
+						rf.machine.rowIdx,
+						0, /* srcIdx */
+					)
+				}
+			}
+			rf.llcpState.needCopyingFromCommon = false
+		}
+	}
+
+	key := newSpan.Key[rf.table.keyPreambleLength:]
+	endKey := newSpan.EndKey[rf.table.keyPreambleLength:]
+	commonPrefixLength := 0
+	rf.llcpState.numConstIndexKeyCols = 0
+	for len(key) > 0 && len(endKey) > 0 {
+		startElementLength, err := encoding.PeekLength(key)
+		if err != nil {
+			break
+		}
+		endElementLength, err := encoding.PeekLength(endKey)
+		if err != nil {
+			break
+		}
+		if startElementLength != endElementLength {
+			break
+		}
+		if !bytes.Equal(key[:startElementLength], endKey[:startElementLength]) {
+			break
+		}
+		commonPrefixLength += startElementLength
+		rf.llcpState.numConstIndexKeyCols++
+		key = key[startElementLength:]
+		endKey = endKey[startElementLength:]
+	}
+
+	if commonPrefixLength == 0 || rf.llcpState.numConstIndexKeyCols == len(rf.table.indexColOrdinals) {
+		// We either have an unconstrained span or a  point lookup. In either
+		// case there are no constant values for index key columns.
+		rf.table.knownPrefixLength = rf.table.keyPreambleLength
+		rf.llcpState.numConstIndexKeyCols = 0
+		rf.llcpState.needCopyingFromCommon = false
+		rf.llcpState.foundNull = false
+		return nil
+	}
+
+	rf.table.knownPrefixLength = rf.table.keyPreambleLength + commonPrefixLength
+	if rf.mustDecodeIndexKey || rf.traceKV {
+		if rf.llcpState.commonValues == nil {
+			rf.llcpState.commonValues = make([]coldata.Vec, len(rf.typs))
+		}
+
+		indexOrds := rf.table.indexColOrdinals
+		if rf.traceKV {
+			indexOrds = rf.table.allIndexColOrdinals
+		}
+
+		for _, colIdx := range indexOrds[:rf.llcpState.numConstIndexKeyCols] {
+			if colIdx != -1 {
+				if rf.llcpState.commonValues[colIdx] == nil {
+					rf.llcpState.commonValues[colIdx] = rf.allocator.NewMemColumn(rf.typs[colIdx], 1 /* capacity */)
+				} else if rf.llcpState.commonValues[colIdx].IsBytesLike() {
+					coldata.Reset(rf.llcpState.commonValues[colIdx])
+				}
+			}
+		}
+		var matches bool
+		var err error
+		// TODO(yuzefovich): debug state.
+		_, matches, rf.llcpState.foundNull, err = colencoding.DecodeIndexKeyToCols(
+			&rf.table.da,
+			rf.llcpState.commonValues,
+			0, /* idx */
+			rf.table.desc,
+			rf.table.index,
+			indexOrds[:rf.llcpState.numConstIndexKeyCols],
+			rf.table.keyValTypes[:rf.llcpState.numConstIndexKeyCols],
+			rf.table.indexColumnDirs[:rf.llcpState.numConstIndexKeyCols],
+			newSpan.Key[rf.table.keyPreambleLength:rf.table.knownPrefixLength],
+			rf.table.invertedColOrdinal,
+		)
+		if err != nil {
+			return scrub.WrapError(scrub.IndexKeyDecodingError, err)
+		}
+		if !matches {
+			// We found an interleave. Set our skip prefix.
+			// TODO(yuzefovich): handle interleaved tables.
+		}
+		rf.llcpState.outputBatchStartIdx = rf.machine.rowIdx
+		rf.llcpState.needCopyingFromCommon = true
+	}
+	return nil
+}
+
 // nextBatch processes keys until we complete one batch of rows,
 // coldata.BatchSize() in length, which are returned in columnar format as a
 // coldata.Batch. The batch contains one Vec per table column, regardless of
@@ -828,6 +983,8 @@ func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 // The Batch should not be modified and is only valid until the next call.
 // When there are no more rows, the Batch.Length is 0.
 func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
+	tableName := rf.table.desc.GetName()
+	_ = tableName
 	for {
 		if debugState {
 			log.Infof(ctx, "State %s", rf.machine.state[0])
@@ -836,7 +993,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			moreKVs, kv, finalReferenceToBatch, newSpan, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, rf.convertFetchError(ctx, err)
 			}
@@ -844,28 +1001,9 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				rf.machine.state[0] = stateEmitLastBatch
 				continue
 			}
-			// TODO(jordan): parse the logical longest common prefix of the span
-			// into a buffer. The logical longest common prefix is the longest
-			// common prefix that contains only full key components. For example,
-			// the keys /Table/53/1/foo/bar/10 and /Table/53/1/foo/bop/10 would
-			// have LLCS of /Table/53/1/foo, even though they share a b prefix of
-			// the next key, since that prefix isn't a complete key component.
-			/*
-				if newSpan {
-				lcs := rf.fetcher.span.LongestCommonPrefix()
-				// parse lcs into stuff
-				key, matches, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-					rf.table.desc, rf.table.info.index, rf.table.info.keyValTypes,
-					rf.table.keyVals, rf.table.info.indexColumnDirs, kv.Key[rf.table.info.knownPrefixLength:],
-				)
-				if err != nil {
-					// This is expected - the longest common prefix of the keyspan might
-					// end half way through a key. Suppress the error and set the actual
-					// LCS we'll use later to the decodable components of the key.
-				}
-				}
-			*/
-
+			if err = rf.handleNewSpan(newSpan); err != nil {
+				return nil, err
+			}
 			rf.setNextKV(kv, finalReferenceToBatch)
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
@@ -899,9 +1037,9 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 					rf.machine.rowIdx,
 					rf.table.desc,
 					rf.table.index,
-					indexOrds,
-					rf.table.keyValTypes,
-					rf.table.indexColumnDirs,
+					indexOrds[rf.llcpState.numConstIndexKeyCols:],
+					rf.table.keyValTypes[rf.llcpState.numConstIndexKeyCols:],
+					rf.table.indexColumnDirs[rf.llcpState.numConstIndexKeyCols:],
 					rf.machine.nextKV.Key[rf.table.knownPrefixLength:],
 					rf.table.invertedColOrdinal,
 				)
@@ -910,7 +1048,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				}
 				if !matches {
 					// We found an interleave. Set our skip prefix.
-					seekPrefix := rf.machine.nextKV.Key[:len(key)+rf.table.knownPrefixLength]
+					seekPrefix := rf.machine.nextKV.Key[:len(key)+rf.table.keyPreambleLength]
 					if debugState {
 						log.Infof(ctx, "setting seek prefix to %s", seekPrefix)
 					}
@@ -931,6 +1069,8 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				}
 				rf.machine.lastRowPrefix = rf.machine.nextKV.Key[:prefixLen]
 			}
+
+			foundNull = foundNull || rf.llcpState.foundNull
 
 			// For unique secondary indexes, the index-key does not distinguish one row
 			// from the next if both rows contain identical values along with a NULL.
@@ -994,7 +1134,8 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateSeekPrefix:
 			// Note: seekPrefix is only used for interleaved tables.
 			for {
-				moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+				// TODO(yuzefovich): handle interleaved tables.
+				moreKVs, kv, finalReferenceToBatch, _, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 				if err != nil {
 					return nil, rf.convertFetchError(ctx, err)
 				}
@@ -1026,7 +1167,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.shiftState()
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			moreKVs, kv, finalReferenceToBatch, newSpan, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, rf.convertFetchError(ctx, err)
 			}
@@ -1036,15 +1177,14 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				rf.machine.state[1] = stateEmitLastBatch
 				continue
 			}
-			// TODO(jordan): if nextKV returns newSpan = true, set the new span
-			// prefix and indicate that it needs decoding.
+			if err = rf.handleNewSpan(newSpan); err != nil {
+				return nil, err
+			}
 			rf.setNextKV(kv, finalReferenceToBatch)
 			if debugState {
 				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
 			}
 
-			// TODO(yuzefovich): optimize this prefix check by skipping logical
-			// longest common span prefix.
 			if !bytes.HasPrefix(kv.Key[rf.table.knownPrefixLength:], rf.machine.lastRowPrefix[rf.table.knownPrefixLength:]) {
 				// The kv we just found is from a different row.
 				rf.machine.state[0] = stateFinalizeRow
@@ -1504,6 +1644,24 @@ func (rf *cFetcher) fillNulls() error {
 }
 
 func (rf *cFetcher) finalizeBatch() {
+	if rf.llcpState.needCopyingFromCommon && (rf.mustDecodeIndexKey || rf.traceKV) {
+		indexOrds := rf.table.indexColOrdinals
+		if rf.traceKV {
+			indexOrds = rf.table.allIndexColOrdinals
+		}
+		for _, colIdx := range indexOrds[:rf.llcpState.numConstIndexKeyCols] {
+			if colIdx != -1 {
+				coldata.ExpandValue(
+					rf.machine.colvecs[colIdx],
+					rf.llcpState.commonValues[colIdx],
+					rf.llcpState.outputBatchStartIdx,
+					rf.machine.rowIdx,
+					0, /* srcIdx */
+				)
+			}
+		}
+	}
+
 	// We need to set all values in "not needed" vectors to nulls because if the
 	// batch is materialized (i.e. values are converted to datums), the
 	// conversion of unset values might encounter an error.
@@ -1512,6 +1670,7 @@ func (rf *cFetcher) finalizeBatch() {
 	}
 	rf.machine.batch.SetLength(rf.machine.rowIdx)
 	rf.machine.rowIdx = 0
+	rf.llcpState.outputBatchStartIdx = 0
 }
 
 // getCurrentColumnFamilyID returns the column family id of the key in
@@ -1547,7 +1706,7 @@ func (rf *cFetcher) convertFetchError(ctx context.Context, err error) error {
 // KeyToDesc implements the KeyToDescTranslator interface. The implementation is
 // used by convertFetchError.
 func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
-	if len(key) < rf.table.knownPrefixLength {
+	if len(key) < rf.table.keyPreambleLength {
 		return nil, false
 	}
 	nIndexCols := rf.table.index.NumKeyColumns() + rf.table.index.NumKeySuffixColumns()
@@ -1558,7 +1717,7 @@ func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 		rf.table.keyValTypes,
 		tableKeyVals,
 		rf.table.indexColumnDirs,
-		key[rf.table.knownPrefixLength:],
+		key[rf.table.keyPreambleLength:],
 	)
 	if !ok || err != nil {
 		return nil, false

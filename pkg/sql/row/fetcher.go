@@ -48,10 +48,11 @@ const noOutputColumn = -1
 
 type kvBatchFetcher interface {
 	// nextBatch returns the next batch of rows. Returns false in the first
-	// parameter if there are no more keys in the scan. May return either a slice
-	// of KeyValues or a batchResponse, numKvs pair, depending on the server
-	// version - both must be handled by calling code.
-	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error)
+	// parameter if there are no more keys in the scan. May return either a
+	// slice of KeyValues or a batchResponse, depending on the server version -
+	// both must be handled by calling code. maybeNewSpan indicates whether this
+	// batch might belong to a new key span.
+	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, newSpan roachpb.Span, err error)
 
 	close(ctx context.Context)
 }
@@ -743,7 +744,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	for {
 		var finalReferenceToBatch bool
 		var kv roachpb.KeyValue
-		moreKVs, kv, finalReferenceToBatch, err = rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+		moreKVs, kv, finalReferenceToBatch, _, err = rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 		if err != nil {
 			return false, ConvertFetchError(ctx, rf, err)
 		}
