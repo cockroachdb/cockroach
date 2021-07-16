@@ -108,13 +108,21 @@ type cTableInfo struct {
 	// that column.
 	invertedColOrdinal int
 
+	// checkAllColsForNull indicates whether all columns need to be checked
+	// for nullity (even if those columns don't need to be decoded).
+	checkAllColsForNull bool
+
 	// maxColumnFamilyID is the maximum possible family id for the configured
 	// table.
 	maxColumnFamilyID descpb.FamilyID
 
-	// knownPrefixLength is the number of bytes in the index key prefix this
-	// Fetcher is configured for. The index key prefix is the table id, index
-	// id pair at the start of the key.
+	// keyPreambleLength is the number of bytes in the index key prefix
+	// corresponding to the table id and the index id.
+	keyPreambleLength int
+	// knownPrefixLength is the length of LLCP (logical longest common prefix)
+	// of the key span that we're currently fetching from. This will always be
+	// at least keyPreambleLength but can be more when some index key columns
+	// have fixed values for the whole key span.
 	knownPrefixLength int
 
 	// The following fields contain MVCC metadata for each row and may be
@@ -305,7 +313,7 @@ type cFetcher struct {
 		remainingValueColsByIdx util.FastIntSet
 		// lastRowPrefix is the row prefix for the last row we saw a key for. New
 		// keys are compared against this prefix to determine whether they're part
-		// of a new row or not.
+		// of a new row or not. It should never include the column family ID.
 		lastRowPrefix roachpb.Key
 		// prettyValueBuf is a temp buffer used to create strings for tracing.
 		prettyValueBuf *bytes.Buffer
@@ -323,6 +331,31 @@ type cFetcher struct {
 		timestampCol []apd.Decimal
 		// tableoidCol is the same as timestampCol but for the tableoid system column.
 		tableoidCol coldata.DatumVec
+	}
+
+	// llcpState tracks the state about LLCP of the current span.
+	//
+	// LLCP (the logical longest common prefix) of the span is the longest
+	// common prefix that contains only full key components. For example, the
+	// keys /Table/53/1/foo/bar/10 and /Table/53/1/foo/bop/10 would have LLCP of
+	// /Table/53/1/foo, even though they share a b prefix of the next key, since
+	// that prefix isn't a complete key component.
+	llcpState struct {
+		// outputBatchStartIdx is the index of the first row in the batch that
+		// corresponds to the key span currently being tracked by llcpState.
+		outputBatchStartIdx int
+		// commonValues are vectors of length 1 containing the decoded index key
+		// columns from LLCP.
+		commonValues []coldata.Vec
+		// needCopyingFromCommon if true indicates that we need to copy
+		// commonValues into the batch.
+		needCopyingFromCommon bool
+		// foundNull indicates whether there is a NULL value in LLCP of the key
+		// span.
+		foundNull bool
+		// numConstIndexKeyCols is the length of LLCP in the number of table
+		// columns.
+		numConstIndexKeyCols int
 	}
 
 	typs             []*types.T
@@ -476,7 +509,8 @@ func (rf *cFetcher) Init(
 	sort.Ints(table.neededColsList)
 	sort.Ints(table.notNeededColOrdinals)
 
-	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
+	table.keyPreambleLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
+	table.knownPrefixLength = table.keyPreambleLength
 
 	var indexColumnIDs []descpb.ColumnID
 	indexColumnIDs, table.indexColumnDirs = catalog.FullIndexColumnIDs(table.index)
@@ -631,6 +665,10 @@ func (rf *cFetcher) Init(
 	})
 
 	rf.table = table
+	// For unique secondary indexes on tables with multiple column families, we
+	// must check all columns for NULL values in order to determine whether a KV
+	// belongs to the same row as the previous KV or a different row.
+	rf.table.checkAllColsForNull = rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1
 	rf.accountingHelper.Init(allocator, rf.typs, rf.table.notNeededColOrdinals)
 
 	return nil
@@ -788,6 +826,145 @@ func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 	rf.machine.nextKV = kvCopy
 }
 
+func (rf *cFetcher) handleNewSpan(ctx context.Context, newSpan roachpb.Span) error {
+	if len(newSpan.Key) == 0 {
+		// We're still processing the old key span, so there is nothing to do.
+		return nil
+	}
+	if len(newSpan.EndKey) == 0 {
+		// We have a point lookup, so there is no point in calculating LLCP.
+		rf.resetLLCP()
+		return nil
+	}
+	if rf.table.desc.NumFamilies() != 1 {
+		// TODO(yuzefovich): we currently don't support the cases when tables
+		// have multiple column families. Lift that restriction.
+		return nil
+	}
+
+	// We have a new span. Populate constant index key column values from the
+	// previous span if applicable.
+	if rf.mustDecodeIndexKey {
+		if rf.llcpState.needCopyingFromCommon {
+			// Copy over the decoded values from LLCP of the previous key span.
+			for _, colIdx := range rf.table.indexColOrdinals[:rf.llcpState.numConstIndexKeyCols] {
+				if colIdx != -1 {
+					coldata.ExpandValue(
+						rf.machine.colvecs[colIdx],
+						rf.llcpState.commonValues[colIdx],
+						rf.llcpState.outputBatchStartIdx,
+						rf.machine.rowIdx,
+						0, /* srcIdx */
+					)
+				}
+			}
+			rf.llcpState.needCopyingFromCommon = false
+		}
+	}
+
+	// Skip the preamble right away.
+	key := newSpan.Key[rf.table.keyPreambleLength:]
+	endKey := newSpan.EndKey[rf.table.keyPreambleLength:]
+
+	// Find the length of LLCP.
+	commonPrefixLength := 0
+	rf.llcpState.numConstIndexKeyCols = 0
+	for len(key) > 0 && len(endKey) > 0 {
+		startElementLength, err := encoding.PeekLength(key)
+		if err != nil {
+			break
+		}
+		endElementLength, err := encoding.PeekLength(endKey)
+		if err != nil {
+			break
+		}
+		if startElementLength != endElementLength {
+			break
+		}
+		if !bytes.Equal(key[:startElementLength], endKey[:startElementLength]) {
+			break
+		}
+		colIdx := rf.table.indexColOrdinals[rf.llcpState.numConstIndexKeyCols]
+		if colIdx != -1 && colinfo.CanHaveCompositeKeyEncoding(rf.typs[colIdx]) {
+			// If we need to decode this index key column and it has a composite
+			// encoding, we omit the column from LLCP.
+			// TODO(yuzefovich): lift this restriction.
+			break
+		}
+		commonPrefixLength += startElementLength
+		rf.llcpState.numConstIndexKeyCols++
+		key = key[startElementLength:]
+		endKey = endKey[startElementLength:]
+	}
+
+	if commonPrefixLength == 0 || rf.llcpState.numConstIndexKeyCols == len(rf.table.indexColOrdinals) {
+		// We either have no constant values for the index key columns or a
+		// point scan.
+		rf.resetLLCP()
+		return nil
+	}
+
+	rf.table.knownPrefixLength = rf.table.keyPreambleLength + commonPrefixLength
+	if rf.mustDecodeIndexKey {
+		if cap(rf.llcpState.commonValues) < len(rf.typs) {
+			rf.llcpState.commonValues = make([]coldata.Vec, len(rf.typs))
+		} else {
+			rf.llcpState.commonValues = rf.llcpState.commonValues[:len(rf.typs)]
+		}
+
+		// Prepare commonValues vectors so that we can decode the constant
+		// values into them.
+		for _, colIdx := range rf.table.indexColOrdinals[:rf.llcpState.numConstIndexKeyCols] {
+			if colIdx != -1 {
+				if rf.llcpState.commonValues[colIdx] == nil {
+					rf.llcpState.commonValues[colIdx] = rf.accountingHelper.Allocator.NewMemColumn(rf.typs[colIdx], 1 /* capacity */)
+				} else {
+					rf.llcpState.commonValues[colIdx].Nulls().UnsetNulls()
+					if rf.llcpState.commonValues[colIdx].IsBytesLike() {
+						coldata.Reset(rf.llcpState.commonValues[colIdx])
+					}
+				}
+			}
+		}
+
+		if debugState {
+			log.Infof(
+				ctx, "decoding constant values of LLCP (num constant columns = %d), key %s",
+				rf.llcpState.numConstIndexKeyCols, rf.machine.nextKV.Key,
+			)
+		}
+
+		var err error
+		_, rf.llcpState.foundNull, err = colencoding.DecodeKeyValsToCols(
+			&rf.table.da,
+			rf.llcpState.commonValues,
+			0, /* idx */
+			rf.table.indexColOrdinals[:rf.llcpState.numConstIndexKeyCols],
+			rf.table.checkAllColsForNull,
+			rf.table.keyValTypes[:rf.llcpState.numConstIndexKeyCols],
+			rf.table.indexColumnDirs[:rf.llcpState.numConstIndexKeyCols],
+			nil, /* unseen */
+			newSpan.Key[rf.table.keyPreambleLength:rf.table.knownPrefixLength],
+			rf.table.invertedColOrdinal,
+		)
+		if err != nil {
+			return scrub.WrapError(scrub.IndexKeyDecodingError, err)
+		}
+		rf.llcpState.outputBatchStartIdx = rf.machine.rowIdx
+		rf.llcpState.needCopyingFromCommon = true
+	}
+	return nil
+}
+
+// resetLLCP resets the cFetcher when LLCP only contains the table id and the
+// index id.
+func (rf *cFetcher) resetLLCP() {
+	rf.table.knownPrefixLength = rf.table.keyPreambleLength
+	rf.llcpState.needCopyingFromCommon = false
+	rf.llcpState.foundNull = false
+	rf.llcpState.numConstIndexKeyCols = 0
+}
+
 // NextBatch processes keys until we complete one batch of rows (subject to the
 // limit hint and the memory limit while being max coldata.BatchSize() in
 // length), which are returned in columnar format as a coldata.Batch. The batch
@@ -804,7 +981,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			moreKVs, kv, finalReferenceToBatch, newSpan, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, rf.convertFetchError(ctx, err)
 			}
@@ -812,28 +989,9 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				rf.machine.state[0] = stateEmitLastBatch
 				continue
 			}
-			// TODO(jordan): parse the logical longest common prefix of the span
-			// into a buffer. The logical longest common prefix is the longest
-			// common prefix that contains only full key components. For example,
-			// the keys /Table/53/1/foo/bar/10 and /Table/53/1/foo/bop/10 would
-			// have LLCS of /Table/53/1/foo, even though they share a b prefix of
-			// the next key, since that prefix isn't a complete key component.
-			/*
-				if newSpan {
-				lcs := rf.fetcher.span.LongestCommonPrefix()
-				// parse lcs into stuff
-				key, matches, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-					rf.table.desc, rf.table.info.index, rf.table.info.keyValTypes,
-					rf.table.keyVals, rf.table.info.indexColumnDirs, kv.Key[rf.table.info.knownPrefixLength:],
-				)
-				if err != nil {
-					// This is expected - the longest common prefix of the keyspan might
-					// end half way through a key. Suppress the error and set the actual
-					// LCS we'll use later to the decodable components of the key.
-				}
-				}
-			*/
-
+			if err = rf.handleNewSpan(ctx, newSpan); err != nil {
+				return nil, err
+			}
 			rf.setNextKV(kv, finalReferenceToBatch)
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
@@ -856,19 +1014,14 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 					key []byte
 					err error
 				)
-				// For unique secondary indexes on tables with multiple column
-				// families, we must check all columns for NULL values in order
-				// to determine whether a KV belongs to the same row as the
-				// previous KV or a different row.
-				checkAllColsForNull := rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1
 				key, foundNull, err = colencoding.DecodeKeyValsToCols(
 					&rf.table.da,
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
-					rf.table.indexColOrdinals,
-					checkAllColsForNull,
-					rf.table.keyValTypes,
-					rf.table.indexColumnDirs,
+					rf.table.indexColOrdinals[rf.llcpState.numConstIndexKeyCols:],
+					rf.table.checkAllColsForNull,
+					rf.table.keyValTypes[rf.llcpState.numConstIndexKeyCols:],
+					rf.table.indexColumnDirs[rf.llcpState.numConstIndexKeyCols:],
 					nil, /* unseen */
 					rf.machine.nextKV.Key[rf.table.knownPrefixLength:],
 					rf.table.invertedColOrdinal,
@@ -876,6 +1029,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				if err != nil {
 					return nil, err
 				}
+				foundNull = foundNull || rf.llcpState.foundNull
 				prefix := rf.machine.nextKV.Key[:len(rf.machine.nextKV.Key)-len(key)]
 				rf.machine.lastRowPrefix = prefix
 			} else {
@@ -911,7 +1065,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// family because it is guaranteed that there is only one KV per
 			// row. We entirely skip the check that determines if the row is
 			// unfinished.
-			if foundNull && rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1 {
+			if foundNull && rf.table.checkAllColsForNull {
 				// We get the remaining bytes after the computed prefix, and then
 				// slice off the extra encoded columns from those bytes. We calculate
 				// how many bytes were sliced away, and then extend lastRowPrefix
@@ -955,7 +1109,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			moreKVs, kv, finalReferenceToBatch, newSpan, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, rf.convertFetchError(ctx, err)
 			}
@@ -965,15 +1119,14 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				rf.machine.state[1] = stateEmitLastBatch
 				continue
 			}
-			// TODO(jordan): if nextKV returns newSpan = true, set the new span
-			// prefix and indicate that it needs decoding.
+			if err = rf.handleNewSpan(ctx, newSpan); err != nil {
+				return nil, err
+			}
 			rf.setNextKV(kv, finalReferenceToBatch)
 			if debugState {
 				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
 			}
 
-			// TODO(yuzefovich): optimize this prefix check by skipping logical
-			// longest common span prefix.
 			if !bytes.HasPrefix(kv.Key[rf.table.knownPrefixLength:], rf.machine.lastRowPrefix[rf.table.knownPrefixLength:]) {
 				// The kv we just found is from a different row.
 				rf.machine.state[0] = stateFinalizeRow
@@ -1412,6 +1565,20 @@ func (rf *cFetcher) fillNulls() error {
 }
 
 func (rf *cFetcher) finalizeBatch() {
+	if rf.llcpState.needCopyingFromCommon && rf.mustDecodeIndexKey {
+		for _, colIdx := range rf.table.indexColOrdinals[:rf.llcpState.numConstIndexKeyCols] {
+			if colIdx != -1 {
+				coldata.ExpandValue(
+					rf.machine.colvecs[colIdx],
+					rf.llcpState.commonValues[colIdx],
+					rf.llcpState.outputBatchStartIdx,
+					rf.machine.rowIdx,
+					0, /* srcIdx */
+				)
+			}
+		}
+	}
+
 	// We need to set all values in "not needed" vectors to nulls because if the
 	// batch is materialized (i.e. values are converted to datums), the
 	// conversion of unset values might encounter an error.
@@ -1420,6 +1587,7 @@ func (rf *cFetcher) finalizeBatch() {
 	}
 	rf.machine.batch.SetLength(rf.machine.rowIdx)
 	rf.machine.rowIdx = 0
+	rf.llcpState.outputBatchStartIdx = 0
 }
 
 // getCurrentColumnFamilyID returns the column family id of the key in
@@ -1434,7 +1602,6 @@ func (rf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 	// byte of the key is the length of the column family id encoding
 	// itself. See encoding.md for more details, and see MakeFamilyKey for
 	// the routine that performs this encoding.
-	var id uint64
 	_, id, err := encoding.DecodeUvarintAscending(rf.machine.nextKV.Key[len(rf.machine.lastRowPrefix):])
 	if err != nil {
 		return 0, scrub.WrapError(scrub.IndexKeyDecodingError, err)
@@ -1455,7 +1622,7 @@ func (rf *cFetcher) convertFetchError(ctx context.Context, err error) error {
 // KeyToDesc implements the KeyToDescTranslator interface. The implementation is
 // used by convertFetchError.
 func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
-	if len(key) < rf.table.knownPrefixLength {
+	if len(key) < rf.table.keyPreambleLength {
 		return nil, false
 	}
 	nIndexCols := rf.table.index.NumKeyColumns() + rf.table.index.NumKeySuffixColumns()
@@ -1466,7 +1633,7 @@ func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 		rf.table.keyValTypes,
 		tableKeyVals,
 		rf.table.indexColumnDirs,
-		key[rf.table.knownPrefixLength:],
+		key[rf.table.keyPreambleLength:],
 	)
 	if !ok || err != nil {
 		return nil, false
@@ -1483,11 +1650,16 @@ var cFetcherPool = sync.Pool{
 func (rf *cFetcher) Release() {
 	rf.accountingHelper.Release()
 	rf.table.Release()
+	oldCommonValues := rf.llcpState.commonValues
+	for i := range oldCommonValues {
+		oldCommonValues[i] = nil
+	}
 	*rf = cFetcher{
 		// The types are small objects, so we don't bother deeply resetting this
 		// slice.
 		typs: rf.typs[:0],
 	}
+	rf.llcpState.commonValues = oldCommonValues[:0]
 	cFetcherPool.Put(rf)
 }
 
