@@ -175,7 +175,7 @@ func Subsume(
 	// leaseholder. This is used to instruct the LHS on how to update its
 	// timestamp cache to ensure that no future writes are allowed to invalidate
 	// prior reads performed to this point on the RHS range.
-	priorReadSum, closedTS := cArgs.EvalCtx.GetCurrentReadSummary(ctx)
+	priorReadSum := cArgs.EvalCtx.GetCurrentReadSummary(ctx)
 	// For now, forward this summary to the freeze time. This may appear to
 	// undermine the benefit of the read summary, but it doesn't entirely. Until
 	// we ship higher-resolution read summaries, the read summary doesn't
@@ -188,7 +188,7 @@ func Subsume(
 	// think about.
 	priorReadSum.Merge(rspb.FromTimestamp(reply.FreezeStart.ToTimestamp()))
 	reply.ReadSummary = &priorReadSum
-	// NOTE FOR v21.1: GetCurrentReadSummary might return an empty timestamp if
+	// NOTE FOR v21.1: GetClosedTimestampV2 might return an empty timestamp if
 	// the Raft-based closed timestamp transport hasn't been enabled yet. That's
 	// OK because, if the new transport is not enabled, then ranges with leading
 	// closed timestamps can't exist yet, and so the closed timestamp must be
@@ -197,7 +197,7 @@ func Subsume(
 	// when the leases are collocated also works out because then the closed
 	// timestamp (according to the old mechanism) is the same for both ranges
 	// being merged.
-	reply.ClosedTimestamp = closedTS
+	reply.ClosedTimestamp = cArgs.EvalCtx.GetClosedTimestampV2(ctx)
 
 	return result.Result{}, nil
 }

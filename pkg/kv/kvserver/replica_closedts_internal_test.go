@@ -15,8 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -146,7 +149,7 @@ func (r *mockReceiver) HTML() string {
 	return ""
 }
 
-// Test that r.ClosedTimestampV2() mixes its sources of information correctly.
+// Test that r.GetClosedTimestampV2() mixes its sources of information correctly.
 func TestReplicaClosedTimestampV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -205,7 +208,193 @@ func TestReplicaClosedTimestampV2(t *testing.T) {
 			tc.repl.mu.state.RaftClosedTimestamp = test.raftClosed
 			tc.repl.mu.state.LeaseAppliedIndex = uint64(test.applied)
 			tc.repl.mu.Unlock()
-			require.Equal(t, test.expClosed, tc.repl.ClosedTimestampV2(ctx))
+			require.Equal(t, test.expClosed, tc.repl.GetClosedTimestampV2(ctx))
 		})
 	}
+}
+
+// TestQueryResolvedTimestamp verifies that QueryResolvedTimestamp requests
+// behave as expected.
+func TestQueryResolvedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	ts10 := hlc.Timestamp{WallTime: 10}
+	ts20 := hlc.Timestamp{WallTime: 20}
+	ts30 := hlc.Timestamp{WallTime: 30}
+	intentKey := roachpb.Key("b")
+	intentTS := ts20
+
+	for _, test := range []struct {
+		name          string
+		span          [2]string
+		closedTS      hlc.Timestamp
+		expResolvedTS hlc.Timestamp
+	}{
+		{
+			name:          "closed timestamp before earliest intent",
+			span:          [2]string{"b", "d"},
+			closedTS:      ts10,
+			expResolvedTS: ts10,
+		},
+		{
+			name:          "closed timestamp equal to earliest intent",
+			span:          [2]string{"b", "d"},
+			closedTS:      ts20,
+			expResolvedTS: ts20.Prev(),
+		},
+		{
+			name:          "closed timestamp after earliest intent",
+			span:          [2]string{"b", "d"},
+			closedTS:      ts30,
+			expResolvedTS: ts20.Prev(),
+		},
+		{
+			name:          "closed timestamp before non-overlapping intent",
+			span:          [2]string{"c", "d"},
+			closedTS:      ts10,
+			expResolvedTS: ts10,
+		},
+		{
+			name:          "closed timestamp equal to non-overlapping intent",
+			span:          [2]string{"c", "d"},
+			closedTS:      ts20,
+			expResolvedTS: ts20,
+		},
+		{
+			name:          "closed timestamp after non-overlapping intent",
+			span:          [2]string{"c", "d"},
+			closedTS:      ts30,
+			expResolvedTS: ts30,
+		},
+		{
+			name:          "closed timestamp before intent at end key",
+			span:          [2]string{"a", "b"},
+			closedTS:      ts10,
+			expResolvedTS: ts10,
+		},
+		{
+			name:          "closed timestamp equal to intent at end key",
+			span:          [2]string{"a", "b"},
+			closedTS:      ts20,
+			expResolvedTS: ts20,
+		},
+		{
+			name:          "closed timestamp after intent at end key",
+			span:          [2]string{"a", "b"},
+			closedTS:      ts30,
+			expResolvedTS: ts30,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			// Create a single range.
+			var tc testContext
+			tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
+			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+			cfg.TestingKnobs.DontCloseTimestamps = true
+			tc.StartWithStoreConfig(t, stopper, cfg)
+
+			// Write an intent.
+			txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0)
+			pArgs := putArgs(intentKey, []byte("val"))
+			assignSeqNumsForReqs(&txn, &pArgs)
+			_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
+			require.Nil(t, pErr)
+
+			// Inject a closed timestamp.
+			tc.repl.mu.Lock()
+			tc.repl.mu.state.RaftClosedTimestamp = test.closedTS
+			tc.repl.mu.Unlock()
+
+			// Issue a QueryResolvedTimestamp request.
+			resTS, err := tc.store.DB().QueryResolvedTimestamp(ctx, test.span[0], test.span[1], true)
+			require.NoError(t, err)
+			require.Equal(t, test.expResolvedTS, resTS)
+		})
+	}
+}
+
+// TestQueryResolvedTimestampResolvesAbandonedIntents verifies that
+// QueryResolvedTimestamp requests attempt to asynchronously resolve intents
+// that they encounter once the encountered intents are sufficiently stale.
+func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	ts10 := hlc.Timestamp{WallTime: 10}
+	ts20 := hlc.Timestamp{WallTime: 20}
+
+	// Create a single range.
+	var tc testContext
+	tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+	cfg.TestingKnobs.DontCloseTimestamps = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
+	// Write an intent.
+	key := roachpb.Key("a")
+	txn := roachpb.MakeTransaction("test", key, 0, ts10, 0)
+	pArgs := putArgs(key, []byte("val"))
+	assignSeqNumsForReqs(&txn, &pArgs)
+	_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
+	require.Nil(t, pErr)
+
+	intentExists := func() bool {
+		t.Helper()
+		gArgs := getArgs(key)
+		assignSeqNumsForReqs(&txn, &gArgs)
+		resp, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &gArgs)
+
+		abortErr, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError)
+		if ok && abortErr.Reason == roachpb.ABORT_REASON_ABORT_SPAN {
+			// When the intent is resolved, it will be replaced by an abort span entry.
+			return false
+		}
+		require.Nil(t, pErr)
+		require.NotNil(t, resp.(*roachpb.GetResponse).Value)
+		return true
+	}
+	require.True(t, intentExists())
+
+	// Abort the txn, but don't resolve the intent (by not attaching lock spans).
+	et, etH := endTxnArgs(&txn, false /* commit */)
+	_, pErr = kv.SendWrappedWith(ctx, tc.Sender(), etH, &et)
+	require.Nil(t, pErr)
+	require.True(t, intentExists())
+
+	// Inject a closed timestamp.
+	tc.repl.mu.Lock()
+	tc.repl.mu.state.RaftClosedTimestamp = ts20
+	tc.repl.mu.Unlock()
+
+	// Issue a QueryResolvedTimestamp request. Should return resolved timestamp
+	// derived from the intent's write timestamp (which precedes the closed
+	// timestamp). Should not trigger async intent resolution, because the intent
+	// is not old enough.
+	resTS, err := tc.store.DB().QueryResolvedTimestamp(ctx, "a", "c", true)
+	require.NoError(t, err)
+	require.Equal(t, ts10.Prev(), resTS)
+	require.True(t, intentExists())
+
+	// Drop kv.query_resolved_timestamp.intent_cleanup_age, then re-issue
+	// QueryResolvedTimestamp request. Should return the same result, but
+	// this time it should trigger async intent resolution.
+	batcheval.QueryResolvedTimestampIntentCleanupAge.Override(ctx, &tc.store.ClusterSettings().SV, 0)
+	resTS, err = tc.store.DB().QueryResolvedTimestamp(ctx, "a", "c", true)
+	require.NoError(t, err)
+	require.Equal(t, ts10.Prev(), resTS)
+	require.Eventually(t, func() bool {
+		return !intentExists()
+	}, testutils.DefaultSucceedsSoonDuration, 10*time.Millisecond)
+
+	// Now that the intent is removed, the resolved timestamp should have
+	// advanced.
+	resTS, err = tc.store.DB().QueryResolvedTimestamp(ctx, "a", "c", true)
+	require.NoError(t, err)
+	require.Equal(t, ts20, resTS)
 }
