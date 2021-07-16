@@ -73,11 +73,11 @@ type txnKVFetcher struct {
 	// single-key fetch and may use a GetRequest under the hood.
 	spans roachpb.Spans
 	// If useBatchLimit is true, batches are limited to kvBatchSize. If
-	// firstBatchLimit is also set, the first batch is limited to that value.
+	// firstBatchKeyLimit is also set, the first batch is limited to that value.
 	// Subsequent batches are larger, up to kvBatchSize.
-	firstBatchLimit int64
-	useBatchLimit   bool
-	reverse         bool
+	firstBatchKeyLimit int64
+	useBatchLimit      bool
+	reverse            bool
 	// lockStrength represents the locking mode to use when fetching KVs.
 	lockStrength descpb.ScanLockingStrength
 	// lockWaitPolicy represents the policy to be used for handling conflicting
@@ -108,18 +108,19 @@ type txnKVFetcher struct {
 
 var _ kvBatchFetcher = &txnKVFetcher{}
 
-// getBatchSize returns the max size of the next batch. The size is expressed in
-// number of result keys (i.e. this size will be used for MaxSpanRequestKeys).
-func (f *txnKVFetcher) getBatchSize() int64 {
-	return f.getBatchSizeForIdx(f.batchIdx)
+// getBatchKeyLimit returns the max size of the next batch. The size is
+// expressed in number of result keys (i.e. this size will be used for
+// MaxSpanRequestKeys).
+func (f *txnKVFetcher) getBatchKeyLimit() int64 {
+	return f.getBatchKeyLimitForIdx(f.batchIdx)
 }
 
-func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
+func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) int64 {
 	if !f.useBatchLimit {
 		return 0
 	}
 	kvBatchSize := getKVBatchSize(f.forceProductionKVBatchSize)
-	if f.firstBatchLimit == 0 || f.firstBatchLimit >= kvBatchSize {
+	if f.firstBatchKeyLimit == 0 || f.firstBatchKeyLimit >= kvBatchSize {
 		return kvBatchSize
 	}
 
@@ -128,7 +129,7 @@ func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 	// we revert to the default batch size.
 	switch batchIdx {
 	case 0:
-		return f.firstBatchLimit
+		return f.firstBatchKeyLimit
 
 	case 1:
 		// Make the second batch 10 times larger (but at most the default batch
@@ -141,7 +142,7 @@ func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 		//       100    |     1,000     |     10,000
 		//       500    |     5,000     |     10,000
 		//      1000    |    10,000     |     10,000
-		secondBatch := f.firstBatchLimit * 10
+		secondBatch := f.firstBatchKeyLimit * 10
 		switch {
 		case secondBatch < kvBatchSize/10:
 			return kvBatchSize / 10
@@ -205,7 +206,7 @@ func (f *txnKVFetcher) getWaitPolicy() lock.WaitPolicy {
 
 // makeKVBatchFetcher initializes a kvBatchFetcher for the given spans. If
 // useBatchLimit is true, the number of result keys per batch is limited; the
-// limit grows between subsequent batches, starting at firstBatchLimit (if not
+// limit grows between subsequent batches, starting at firstBatchKeyLimit (if not
 // 0) to productionKVBatchSize.
 //
 // Batch limits can only be used if the spans are ordered.
@@ -310,7 +311,7 @@ func makeKVBatchFetcherWithSendFunc(
 		spans:                      copySpans,
 		reverse:                    reverse,
 		useBatchLimit:              useBatchLimit,
-		firstBatchLimit:            firstBatchLimit,
+		firstBatchKeyLimit:         firstBatchLimit,
 		lockStrength:               lockStrength,
 		lockWaitPolicy:             lockWaitPolicy,
 		mon:                        mon,
@@ -329,7 +330,7 @@ const maxScanResponseBytes = 10 * (1 << 20) // 10MB
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	var ba roachpb.BatchRequest
 	ba.Header.WaitPolicy = f.getWaitPolicy()
-	ba.Header.MaxSpanRequestKeys = f.getBatchSize()
+	ba.Header.MaxSpanRequestKeys = f.getBatchKeyLimit()
 	if ba.Header.MaxSpanRequestKeys > 0 {
 		// If this kvfetcher limits the number of rows returned, also use
 		// target bytes to guard against the case in which the average row
