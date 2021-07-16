@@ -604,3 +604,124 @@ k  a   b    c    comp
 2  20  200  FOO  30
 3  10  100  foo  20
 4  40  400  BAR  50
+
+# Querying inverted expression indexes.
+
+statement ok
+CREATE TABLE inv (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSON,
+  INVERTED INDEX j_a ((j->'a')),
+  INVERTED INDEX j_a_b ((j->'a'->'b')),
+  INVERTED INDEX i_j_a (i, (j->'a')),
+  INVERTED INDEX i_plus_100_j_a ((i+100), (j->'a'))
+);
+
+statement ok
+INSERT INTO inv VALUES
+  (1, 1, 'null'),
+  (2, 1, 'true'),
+  (3, 1, '1'),
+  (4, 1, '""'),
+  (5, 1, '"x"'),
+  (6, 1, '{}'),
+  (7, 1, '[]'),
+  (8, 1, '{"a": null}'),
+  (9, 1, '{"a": true}'),
+  (10, 1, '{"a": 1}'),
+  (11, 1, '{"a": ""}'),
+  (12, 1, '{"a": "x"}'),
+  (13, 1, '{"a": []}'),
+  (14, 1, '{"a": [null, 1, true, ""]}'),
+  (15, 1, '{"a": ["x", "y", "z"]}'),
+  (16, 2, '{"a": ["x", "y", "z"]}'),
+  (17, 1, '{"a": ["p", "q"]}'),
+  (18, 1, '{"a": [1, "x"]}'),
+  (19, 2, '{"a": [1, "x"]}'),
+  (20, 1, '{"a": {}}'),
+  (21, 1, '{"a": {"b": null}}'),
+  (22, 1, '{"a": {"b": true}}'),
+  (23, 1, '{"a": {"b": 1}}'),
+  (24, 1, '{"a": {"b": ""}}'),
+  (25, 1, '{"a": {"b": "x"}}'),
+  (26, 1, '{"a": {"b": []}}'),
+  (27, 1, '{"a": {"b": [null, 1, true, ""]}}'),
+  (28, 1, '{"a": {"b": ["x", "y", "z"]}}'),
+  (29, 1, '{"a": {"b": ["p", "q"]}}'),
+  (30, 1, '{"a": {"b": [1, "x"]}}'),
+  (31, 1, '{"a": {"b": {}}}'),
+  (32, 1, '{"a": {"b": {"x": "y"}}}'),
+  (33, 1, '{"a": {"b": {"p": "q"}}}')
+
+query T
+SELECT j FROM inv@j_a WHERE j->'a' @> '"x"' ORDER BY k
+----
+{"a": "x"}
+{"a": ["x", "y", "z"]}
+{"a": ["x", "y", "z"]}
+{"a": [1, "x"]}
+{"a": [1, "x"]}
+
+query T
+SELECT j FROM inv@j_a_b WHERE j->'a'->'b' @> '"x"' ORDER BY k
+----
+{"a": {"b": "x"}}
+{"a": {"b": ["x", "y", "z"]}}
+{"a": {"b": [1, "x"]}}
+
+query IT
+SELECT i, j FROM inv@i_j_a WHERE i = 1 AND j->'a' @> '"x"' ORDER BY k
+----
+1  {"a": "x"}
+1  {"a": ["x", "y", "z"]}
+1  {"a": [1, "x"]}
+
+query IT
+SELECT i, j FROM inv@i_plus_100_j_a WHERE i+100 = 101 AND j->'a' @> '"x"' ORDER BY k
+----
+1  {"a": "x"}
+1  {"a": ["x", "y", "z"]}
+1  {"a": [1, "x"]}
+
+# Backfilling inverted expression indexes.
+
+statement ok
+DROP INDEX j_a;
+DROP INDEX j_a_b;
+DROP INDEX i_j_a
+
+statement ok
+CREATE INVERTED INDEX j_a ON inv ((j->'a'));
+CREATE INVERTED INDEX j_a_b ON inv ((j->'a'->'b'));
+CREATE INVERTED INDEX i_j_a ON inv (i, (j->'a'))
+
+query T
+SELECT j FROM inv@j_a WHERE j->'a' @> '"x"' ORDER BY k
+----
+{"a": "x"}
+{"a": ["x", "y", "z"]}
+{"a": ["x", "y", "z"]}
+{"a": [1, "x"]}
+{"a": [1, "x"]}
+
+query T
+SELECT j FROM inv@j_a_b WHERE j->'a'->'b' @> '"x"' ORDER BY k
+----
+{"a": {"b": "x"}}
+{"a": {"b": ["x", "y", "z"]}}
+{"a": {"b": [1, "x"]}}
+
+query IT
+SELECT i, j FROM inv@i_j_a WHERE i = 1 AND j->'a' @> '"x"' ORDER BY k
+----
+1  {"a": "x"}
+1  {"a": ["x", "y", "z"]}
+1  {"a": [1, "x"]}
+
+query IT
+SELECT i, j FROM inv@i_plus_100_j_a WHERE i+100 = 101 AND j->'a' @> '"x"' ORDER BY k
+----
+1  {"a": "x"}
+1  {"a": ["x", "y", "z"]}
+1  {"a": [1, "x"]}
