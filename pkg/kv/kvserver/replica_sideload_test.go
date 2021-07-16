@@ -24,7 +24,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -698,12 +697,10 @@ func (mr *mockSender) Recv() (*SnapshotResponse, error) {
 
 func newOnDiskEngine(t *testing.T) (func(), storage.Engine) {
 	dir, cleanup := testutils.TempDir(t)
-	eng, err := storage.NewDefaultEngine(
-		1<<20,
-		base.StorageConfig{
-			Dir:       dir,
-			MustExist: false,
-		})
+	eng, err := storage.Open(
+		context.Background(),
+		storage.Filesystem(dir),
+		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {
 		t.Fatal(err)
 	}

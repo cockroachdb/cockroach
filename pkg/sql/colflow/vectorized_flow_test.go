@@ -252,7 +252,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 	// We use an on-disk engine for this test since we're testing FS interactions
 	// and want to get the same behavior as a non-testing environment.
 	tempPath, dirCleanup := testutils.TempDir(t)
-	ngn, err := storage.NewDefaultEngine(0 /* cacheSize */, base.StorageConfig{Dir: tempPath})
+	ngn, err := storage.Open(ctx, storage.Filesystem(tempPath), storage.CacheSize(0))
 	require.NoError(t, err)
 	defer ngn.Close()
 	defer dirCleanup()

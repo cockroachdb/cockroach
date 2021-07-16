@@ -15,38 +15,24 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-// NewInMem allocates and returns a new, opened in-memory engine. The caller
-// must call the engine's Close method when the engine is no longer needed.
-//
-// FIXME(tschottdorf): make the signature similar to NewPebble (require a cfg).
-func NewInMem(
-	ctx context.Context,
-	attrs roachpb.Attributes,
-	cacheSize, storeSize int64,
-	settings *cluster.Settings,
-) Engine {
-	return newPebbleInMem(ctx, attrs, cacheSize, storeSize, vfs.NewMem(), "", settings)
-}
-
 // InMemFromFS allocates and returns new, opened in-memory engine. Engine
 // uses provided in mem file system and base directory to store data. The
 // caller must call obtained engine's Close method when engine is no longer
 // needed.
-func InMemFromFS(
-	ctx context.Context,
-	attrs roachpb.Attributes,
-	cacheSize, storeSize int64,
-	fs vfs.FS,
-	dir string,
-	settings *cluster.Settings,
-) Engine {
-	return newPebbleInMem(ctx, attrs, cacheSize, storeSize, fs, dir, settings)
+func InMemFromFS(ctx context.Context, fs vfs.FS, dir string, opts ...ConfigOption) Engine {
+	// TODO(jackson): Replace this function with a special Location
+	// constructor that allows both specifying a directory and supplying your
+	// own VFS?
+	eng, err := Open(ctx, Location{dir: dir, fs: fs}, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return eng
 }
 
 // The ForTesting functions randomize the settings for separated intents. This
@@ -60,24 +46,21 @@ func InMemFromFS(
 // other than configuring separated intents. So the fact that we have two
 // inconsistent cluster.Settings is harmless.
 
-// NewInMemForTesting allocates and returns a new, opened in-memory engine. The caller
-// must call the engine's Close method when the engine is no longer needed.
-func NewInMemForTesting(ctx context.Context, attrs roachpb.Attributes, storeSize int64) Engine {
-	settings := MakeRandomSettingsForSeparatedIntents()
-	return newPebbleInMem(ctx, attrs, 0 /* cacheSize */, storeSize, vfs.NewMem(), "", settings)
-}
-
 // NewDefaultInMemForTesting allocates and returns a new, opened in-memory engine with
 // the default configuration. The caller must call the engine's Close method
 // when the engine is no longer needed.
 func NewDefaultInMemForTesting() Engine {
-	return NewInMemForTesting(context.Background(), roachpb.Attributes{}, 1<<20)
+	eng, err := Open(context.Background(), InMemory(), SettingsForTesting(), MaxSize(1<<20))
+	if err != nil {
+		panic(err)
+	}
+	return eng
 }
 
-// MakeRandomSettingsForSeparatedIntents makes settings for which it randomly
+// makeRandomSettingsForSeparatedIntents makes settings for which it randomly
 // picks whether the cluster understands separated intents, and if yes,
 // whether to write separated intents. Once made, these setting do not change.
-func MakeRandomSettingsForSeparatedIntents() *cluster.Settings {
+func makeRandomSettingsForSeparatedIntents() *cluster.Settings {
 	oldClusterVersion := rand.Intn(2) == 0
 	enabledSeparated := rand.Intn(2) == 0
 	log.Infof(context.Background(),
