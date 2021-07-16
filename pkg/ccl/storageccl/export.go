@@ -30,15 +30,22 @@ import (
 	"github.com/gogo/protobuf/types"
 )
 
+// SSTTargetSizeSetting is the cluster setting name for the
+// ExportRequestTargetFileSize setting.
+const SSTTargetSizeSetting = "kv.bulk_sst.target_size"
+
 // ExportRequestTargetFileSize controls the target file size for SSTs created
 // during backups.
 var ExportRequestTargetFileSize = settings.RegisterByteSizeSetting(
-	"kv.bulk_sst.target_size",
-	"target size for SSTs emitted from export requests",
+	SSTTargetSizeSetting,
+	fmt.Sprintf("target size for SSTs emitted from export requests; "+
+		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",
+		SSTTargetSizeSetting, MaxExportOverageSetting,
+	),
 	64<<20, /* 64 MiB */
-)
+).WithPublic()
 
-// MaxOverageSetting is the cluster setting name for the
+// MaxExportOverageSetting is the cluster setting name for the
 // ExportRequestMaxAllowedFileSizeOverage setting.
 const MaxExportOverageSetting = "kv.bulk_sst.max_allowed_overage"
 
@@ -48,16 +55,17 @@ const MaxExportOverageSetting = "kv.bulk_sst.max_allowed_overage"
 // versions), then the export will fail.
 var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 	MaxExportOverageSetting,
-	"if positive, allowed size in excess of target size for SSTs from export requests",
+	fmt.Sprintf("if positive, allowed size in excess of target size for SSTs from export requests; "+
+		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",
+		SSTTargetSizeSetting, MaxExportOverageSetting,
+	),
 	64<<20, /* 64 MiB */
-)
+).WithPublic()
 
 const maxUploadRetries = 5
 
 func init() {
 	batcheval.RegisterReadOnlyCommand(roachpb.Export, declareKeysExport, evalExport)
-	ExportRequestTargetFileSize.SetVisibility(settings.Reserved)
-	ExportRequestMaxAllowedFileSizeOverage.SetVisibility(settings.Reserved)
 }
 
 func declareKeysExport(
