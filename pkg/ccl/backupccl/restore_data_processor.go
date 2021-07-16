@@ -417,6 +417,9 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 		if rd.metaCh != nil {
 			close(rd.metaCh)
 		}
+		if rd.concurrentWorkerLimit != nil {
+			rd.concurrentWorkerLimit.Close("")
+		}
 	}
 }
 
