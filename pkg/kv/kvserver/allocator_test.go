@@ -5641,12 +5641,14 @@ func TestAllocatorComputeActionSuspect(t *testing.T) {
 			suspect:        []roachpb.StoreID{3},
 			expectedAction: AllocatorConsiderRebalance,
 		},
-		// Needs three replicas, two are suspect (i.e. the range lacks a quorum).
 		{
+			// When trying to determine whether a range can achieve quorum, we count
+			// suspect nodes as live because they _currently_ have a "live" node
+			// liveness record.
 			desc:           threeReplDesc,
 			live:           []roachpb.StoreID{1, 4},
 			suspect:        []roachpb.StoreID{2, 3},
-			expectedAction: AllocatorRangeUnavailable,
+			expectedAction: AllocatorConsiderRebalance,
 		},
 	}
 

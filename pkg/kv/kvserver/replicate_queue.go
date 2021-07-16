@@ -368,12 +368,16 @@ func (rq *replicateQueue) processOneChange(
 	// range descriptor.
 	desc, zone := repl.DescAndZone()
 
-	// Avoid taking action if the range has too many dead replicas to make
-	// quorum.
+	// Avoid taking action if the range has too many dead replicas to make quorum.
+	// Consider stores marked suspect as live in order to make this determination.
 	voterReplicas := desc.Replicas().VoterDescriptors()
 	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
-	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(voterReplicas)
-	liveNonVoterReplicas, deadNonVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(nonVoterReplicas)
+	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
+		voterReplicas, true, /* includeSuspectStores */
+	)
+	liveNonVoterReplicas, deadNonVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
+		nonVoterReplicas, true, /* includeSuspectStores */
+	)
 
 	// NB: the replication layer ensures that the below operations don't cause
 	// unavailability; see:
