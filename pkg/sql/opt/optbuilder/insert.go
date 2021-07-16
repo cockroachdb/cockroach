@@ -378,8 +378,8 @@ func (mb *mutationBuilder) needExistingRows() bool {
 			// #1: Don't consider key columns.
 			continue
 		}
-		if kind := mb.tab.Column(i).Kind(); kind == cat.System || kind == cat.VirtualInverted {
-			// #2: Don't consider system or virtual inverted columns.
+		if kind := mb.tab.Column(i).Kind(); kind == cat.System || kind == cat.Inverted {
+			// #2: Don't consider system or inverted columns.
 			continue
 		}
 		insertColID := mb.insertColIDs[i]

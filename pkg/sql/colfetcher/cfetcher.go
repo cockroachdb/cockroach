@@ -90,9 +90,9 @@ type cTableInfo struct {
 	// does not contain any -1's. It is meant to be used only in logging.
 	allExtraValColOrdinals []int
 
-	// invertedColOrdinal is a column index (into cols), indicating the virtual
-	// inverted column; -1 if there is no virtual inverted column or we don't
-	// need the value for that column.
+	// invertedColOrdinal is a column index (into cols), indicating the inverted
+	// column; -1 if there is no inverted column or we don't need the value for
+	// that column.
 	invertedColOrdinal int
 
 	// maxColumnFamilyID is the maximum possible family id for the configured

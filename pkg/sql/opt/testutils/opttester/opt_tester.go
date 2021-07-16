@@ -1832,7 +1832,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 		colMeta := rel.Memo().Metadata().ColumnMeta(col)
 		colName := colNameGen.GenerateName(col)
 
-		columns[i].InitNonVirtual(
+		columns[i].Init(
 			i,
 			cat.StableID(i+1),
 			tree.Name(colName),

@@ -280,7 +280,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations:       true,
 			includeSystem:          true,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		}),
 		indexFlags,
@@ -396,7 +396,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations:       true,
 			includeSystem:          true,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		}),
 		indexFlags,

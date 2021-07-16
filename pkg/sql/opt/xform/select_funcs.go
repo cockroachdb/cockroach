@@ -792,7 +792,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		newScanPrivate.Cols = pkCols.Copy()
 		var invertedCol opt.ColumnID
 		if needInvertedFilter {
-			invertedCol = scanPrivate.Table.ColumnID(index.VirtualInvertedColumn().Ordinal())
+			invertedCol = scanPrivate.Table.ColumnID(index.InvertedColumn().Ordinal())
 			newScanPrivate.Cols.Add(invertedCol)
 		}
 
@@ -1386,7 +1386,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		leftTypes[invertedColIdx] = leftVal.ResolvedType()
 		rightVals[invertedColIdx] = c.e.f.ConstructConstVal(&rightVal, rightVal.ResolvedType())
 		rightTypes[invertedColIdx] = rightVal.ResolvedType()
-		invertedCol := scanPrivate.Table.ColumnID(index.VirtualInvertedColumn().Ordinal())
+		invertedCol := scanPrivate.Table.ColumnID(index.InvertedColumn().Ordinal())
 		zigzagJoin.LeftFixedCols[invertedColIdx] = invertedCol
 		zigzagJoin.RightFixedCols[invertedColIdx] = invertedCol
 
@@ -1632,7 +1632,7 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 		for j, n := 0, index.KeyColumnCount(); j < n; j++ {
 			col := index.Column(j)
 			ord := col.Ordinal()
-			if col.Kind() == cat.VirtualInverted {
+			if col.Kind() == cat.Inverted {
 				ord = col.InvertedSourceColumnOrdinal()
 			}
 			if cols.Contains(tabMeta.MetaID.ColumnID(ord)) {

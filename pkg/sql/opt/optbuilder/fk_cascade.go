@@ -285,7 +285,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 			tableOrdinals(cb.childTable, columnKinds{
 				includeMutations:       false,
 				includeSystem:          false,
-				includeVirtualInverted: false,
+				includeInverted:        false,
 				includeVirtualComputed: false,
 			}),
 			nil, /* indexFlags */
@@ -514,7 +514,7 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 		tableOrdinals(childTable, columnKinds{
 			includeMutations:       false,
 			includeSystem:          false,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: fetchVirtualComputedCols,
 		}),
 		nil, /* indexFlags */
@@ -758,7 +758,7 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 		tableOrdinals(childTable, columnKinds{
 			includeMutations:       false,
 			includeSystem:          false,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		}),
 		nil, /* indexFlags */
