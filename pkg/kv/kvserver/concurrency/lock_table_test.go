@@ -38,6 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
+	"gopkg.in/yaml.v2"
 )
 
 /*
@@ -146,6 +147,10 @@ clear [disable]
 print
 ----
 <state of lock table>
+
+metrics
+----
+<metrics for lock table>
 
  Calls lockTable.String.
 */
@@ -311,7 +316,7 @@ func TestLockTableBasic(t *testing.T) {
 				if err := lt.AcquireLock(&req.Txn.TxnMeta, roachpb.Key(key), lock.Exclusive, durability); err != nil {
 					return err.Error()
 				}
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "release":
 				var txnName string
@@ -328,7 +333,7 @@ func TestLockTableBasic(t *testing.T) {
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "update":
 				var txnName string
@@ -379,7 +384,7 @@ func TestLockTableBasic(t *testing.T) {
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "add-discovered":
 				var reqName string
@@ -410,7 +415,7 @@ func TestLockTableBasic(t *testing.T) {
 					&intent, leaseSeq, consultFinalizedTxnCache, g); err != nil {
 					return err.Error()
 				}
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "check-opt-no-conflicts":
 				var reqName string
@@ -436,7 +441,7 @@ func TestLockTableBasic(t *testing.T) {
 				lt.Dequeue(g)
 				delete(guardsByReqName, reqName)
 				delete(requestsByName, reqName)
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "should-wait":
 				var reqName string
@@ -514,10 +519,18 @@ func TestLockTableBasic(t *testing.T) {
 
 			case "clear":
 				lt.Clear(d.HasArg("disable"))
-				return lt.(*lockTableImpl).String()
+				return lt.String()
 
 			case "print":
-				return lt.(*lockTableImpl).String()
+				return lt.String()
+
+			case "metrics":
+				metrics := lt.Metrics()
+				b, err := yaml.Marshal(&metrics)
+				if err != nil {
+					d.Fatalf(t, "marshaling metrics: %v", err)
+				}
+				return string(b)
 
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
@@ -1551,6 +1564,32 @@ func BenchmarkLockTable(b *testing.B) {
 					})
 			}
 		}
+	}
+}
+
+// BenchmarkLockTableMetrics populates variable sized lock-tables and ensures
+// that grabbing metrics from them is reasonably fast.
+func BenchmarkLockTableMetrics(b *testing.B) {
+	for _, locks := range []int{0, 1 << 0, 1 << 4, 1 << 8, 1 << 12} {
+		b.Run(fmt.Sprintf("locks=%d", locks), func(b *testing.B) {
+			const maxLocks = 100000
+			lt := newLockTable(maxLocks)
+			lt.enabled = true
+
+			txn := &enginepb.TxnMeta{ID: uuid.MakeV4()}
+			for i := 0; i < locks; i++ {
+				k := roachpb.Key(fmt.Sprintf("%03d", i))
+				err := lt.AcquireLock(txn, k, lock.Exclusive, lock.Unreplicated)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = lt.Metrics()
+			}
+		})
 	}
 }
 

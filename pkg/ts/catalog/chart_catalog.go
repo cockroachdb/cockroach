@@ -904,8 +904,26 @@ var charts = []sectionDescription{
 					"queue.gc.info.transactionresolvefailed",
 					"queue.gc.info.resolvefailed",
 					"intentresolver.finalized_txns.failed",
-					"intents.resolve_conflicting.rejected",
-					"intents.finalized_txns.timed_out",
+					"intentresolver.intents.failed",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "LockTable"}},
+		Charts: []chartDescription{
+			{
+				Title: "Locks",
+				Metrics: []string{
+					"kv.concurrency.locks",
+					"kv.concurrency.locks_with_wait_queues",
+				},
+			},
+			{
+				Title: "Waiters",
+				Metrics: []string{
+					"kv.concurrency.lock_wait_queue_waiters",
+					"kv.concurrency.max_lock_wait_queue_waiters_for_lock",
 				},
 			},
 		},

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -109,12 +108,11 @@ func setupLockTableWaiterTest() (*lockTableWaiterImpl, *mockIntentResolver, *moc
 		signal: make(chan struct{}, 1),
 	}
 	w := &lockTableWaiterImpl{
-		st:                                  st,
-		clock:                               hlc.NewClock(manual.UnixNano, time.Nanosecond),
-		stopper:                             stop.NewStopper(),
-		ir:                                  ir,
-		lt:                                  &mockLockTable{},
-		conflictingIntentsResolveRejections: metric.NewCounter(metric.Metadata{}),
+		st:      st,
+		clock:   hlc.NewClock(manual.UnixNano, time.Nanosecond),
+		stopper: stop.NewStopper(),
+		ir:      ir,
+		lt:      &mockLockTable{},
 	}
 	return w, ir, guard
 }

@@ -125,23 +125,27 @@ const rangeTableDisplayList: RangeTableRow[] = [
     compareToLeader: true,
   },
   {
-    variable: "GCAvgAge",
+    variable: "gcAvgAge",
     display: "Dead Value average age",
     compareToLeader: true,
   },
   {
-    variable: "GCBytesAge",
+    variable: "gcBytesAge",
     display: "GC Bytes Age (score)",
     compareToLeader: true,
   },
-  { variable: "NumIntents", display: "Intents", compareToLeader: true },
   {
-    variable: "IntentAvgAge",
+    variable: "numIntents",
+    display: "Intents",
+    compareToLeader: true,
+  },
+  {
+    variable: "intentAvgAge",
     display: "Intent Average Age",
     compareToLeader: true,
   },
   {
-    variable: "IntentAge",
+    variable: "intentAge",
     display: "Intent Age (score)",
     compareToLeader: true,
   },
@@ -176,18 +180,38 @@ const rangeTableDisplayList: RangeTableRow[] = [
     compareToLeader: true,
   },
   {
-    variable: "writeLatches",
-    display: "Write Latches Local/Global",
+    variable: "readLatches",
+    display: "Read Latches",
     compareToLeader: false,
   },
   {
-    variable: "readLatches",
-    display: "Read Latches Local/Global",
+    variable: "writeLatches",
+    display: "Write Latches",
+    compareToLeader: false,
+  },
+  {
+    variable: "locks",
+    display: "Locks",
+    compareToLeader: false,
+  },
+  {
+    variable: "locksWithWaitQueues",
+    display: "Locks With Wait-Queues",
+    compareToLeader: false,
+  },
+  {
+    variable: "lockWaitQueueWaiters",
+    display: "Lock Wait-Queue Waiters",
+    compareToLeader: false,
+  },
+  {
+    variable: "top_k_locks_by_wait_queue_waiters",
+    display: "Top Locks By Wait-Queue Waiters",
     compareToLeader: false,
   },
   {
     variable: "closedTimestampPolicy",
-    display: "Closed timestamp policy",
+    display: "Closed timestamp Policy",
     compareToLeader: true,
   },
   {
@@ -363,25 +387,6 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       value: [value.toString()],
       className: [className],
     };
-  }
-
-  contentLatchInfo(
-    local: Long | number,
-    global: Long | number,
-    isRaftLeader: boolean,
-  ): RangeTableCellContent {
-    if (isRaftLeader) {
-      return this.createContent(
-        `${local.toString()} local / ${global.toString()} global`,
-      );
-    }
-    if (local.toString() === "0" && global.toString() === "0") {
-      return rangeTableEmptyContent;
-    }
-    return this.createContent(
-      `${local.toString()} local / ${global.toString()} global`,
-      "range-table__cell--warning",
-    );
   }
 
   contentTimestamp(
@@ -782,23 +787,32 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         rangeMaxBytes: this.contentBytes(FixLong(info.state.range_max_bytes)),
         mvccIntentAge: this.contentDuration(FixLong(mvcc.intent_age)),
 
-        GCAvgAge: this.contentGCAvgAge(mvcc),
-        GCBytesAge: this.createContent(FixLong(mvcc.gc_bytes_age)),
+        gcAvgAge: this.contentGCAvgAge(mvcc),
+        gcBytesAge: this.createContent(FixLong(mvcc.gc_bytes_age)),
 
-        NumIntents: this.createContent(FixLong(mvcc.intent_count)),
-        IntentAvgAge: this.createContentIntentAvgAge(mvcc),
-        IntentAge: this.createContent(FixLong(mvcc.intent_age)),
+        numIntents: this.createContent(FixLong(mvcc.intent_count)),
+        intentAvgAge: this.createContentIntentAvgAge(mvcc),
+        intentAge: this.createContent(FixLong(mvcc.intent_age)),
 
-        writeLatches: this.contentLatchInfo(
-          FixLong(info.latches_local.write_count),
-          FixLong(info.latches_global.write_count),
-          raftLeader,
+        readLatches: this.createContent(FixLong(info.read_latches)),
+        writeLatches: this.createContent(FixLong(info.write_latches)),
+        locks: this.createContent(FixLong(info.locks)),
+        locksWithWaitQueues: this.createContent(
+          FixLong(info.locks_with_wait_queues),
         ),
-        readLatches: this.contentLatchInfo(
-          FixLong(info.latches_local.read_count),
-          FixLong(info.latches_global.read_count),
-          raftLeader,
+        lockWaitQueueWaiters: this.createContent(
+          FixLong(info.lock_wait_queue_waiters),
         ),
+        top_k_locks_by_wait_queue_waiters: this.contentIf(
+          _.size(info.top_k_locks_by_wait_queue_waiters) > 0,
+          () => ({
+            value: _.map(
+              info.top_k_locks_by_wait_queue_waiters,
+              (lock) => `${lock.pretty_key} (${lock.waiters} waiters)`,
+            ),
+          }),
+        ),
+
         closedTimestampPolicy: this.createContent(
           // We index into the enum in order to get the label string, instead of
           // the numeric value.

@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -73,9 +72,8 @@ type Config struct {
 	Stopper        *stop.Stopper
 	IntentResolver IntentResolver
 	// Metrics.
-	TxnWaitMetrics                     *txnwait.Metrics
-	SlowLatchGauge                     *metric.Gauge
-	ConflictingIntentCleanupRejections *metric.Counter
+	TxnWaitMetrics *txnwait.Metrics
+	SlowLatchGauge *metric.Gauge
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
@@ -107,14 +105,13 @@ func NewManager(cfg Config) Manager {
 		},
 		lt: lt,
 		ltw: &lockTableWaiterImpl{
-			st:                                  cfg.Settings,
-			clock:                               cfg.Clock,
-			stopper:                             cfg.Stopper,
-			ir:                                  cfg.IntentResolver,
-			lt:                                  lt,
-			disableTxnPushing:                   cfg.DisableTxnPushing,
-			onContentionEvent:                   cfg.OnContentionEvent,
-			conflictingIntentsResolveRejections: cfg.ConflictingIntentCleanupRejections,
+			st:                cfg.Settings,
+			clock:             cfg.Clock,
+			stopper:           cfg.Stopper,
+			ir:                cfg.IntentResolver,
+			lt:                lt,
+			disableTxnPushing: cfg.DisableTxnPushing,
+			onContentionEvent: cfg.OnContentionEvent,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.
@@ -491,17 +488,22 @@ func (m *managerImpl) OnReplicaSnapshotApplied() {
 }
 
 // LatchMetrics implements the MetricExporter interface.
-func (m *managerImpl) LatchMetrics() (global, local kvserverpb.LatchManagerInfo) {
-	return m.lm.Info()
+func (m *managerImpl) LatchMetrics() LatchMetrics {
+	return m.lm.Metrics()
 }
 
-// LockTableDebug implements the MetricExporter interface.
-func (m *managerImpl) LockTableDebug() string {
+// LockTableMetrics implements the MetricExporter interface.
+func (m *managerImpl) LockTableMetrics() LockTableMetrics {
+	return m.lt.Metrics()
+}
+
+// TestingLockTableString implements the MetricExporter interface.
+func (m *managerImpl) TestingLockTableString() string {
 	return m.lt.String()
 }
 
-// TxnWaitQueue implements the MetricExporter interface.
-func (m *managerImpl) TxnWaitQueue() *txnwait.Queue {
+// TestingTxnWaitQueue implements the MetricExporter interface.
+func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
 	return m.twq.(*txnwait.Queue)
 }
 

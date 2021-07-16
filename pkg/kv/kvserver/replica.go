@@ -1151,8 +1151,6 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	// it's best to keep it out of the Replica.mu critical section.
 	ri.RangefeedRegistrations = int64(r.numRangefeedRegistrations())
 
-	ri.LockTable = r.concMgr.LockTableDebug()
-
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*kvserverpb.ReplicaState)

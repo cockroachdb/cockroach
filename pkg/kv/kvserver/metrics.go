@@ -1063,9 +1063,35 @@ var (
 	// TODO(mberhault): metrics for key age, per-key file/bytes counts.
 	metaEncryptionAlgorithm = metric.Metadata{
 		Name:        "rocksdb.encryption.algorithm",
-		Help:        "algorithm in use for encryption-at-rest, see ccl/storageccl/engineccl/enginepbccl/key_registry.proto",
+		Help:        "Algorithm in use for encryption-at-rest, see ccl/storageccl/engineccl/enginepbccl/key_registry.proto",
 		Measurement: "Encryption At Rest",
 		Unit:        metric.Unit_CONST,
+	}
+
+	// Concurrency control metrics.
+	metaConcurrencyLocks = metric.Metadata{
+		Name:        "kv.concurrency.locks",
+		Help:        "Number of active locks held in lock tables. Does not include replicated locks (intents) that are not held in memory",
+		Measurement: "Locks",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyLocksWithWaitQueues = metric.Metadata{
+		Name:        "kv.concurrency.locks_with_wait_queues",
+		Help:        "Number of active locks held in lock tables with active wait-queues",
+		Measurement: "Locks",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyLockWaitQueueWaiters = metric.Metadata{
+		Name:        "kv.concurrency.lock_wait_queue_waiters",
+		Help:        "Number of requests actively waiting in a lock wait-queue",
+		Measurement: "Lock-Queue Waiters",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyMaxLockWaitQueueWaitersForLock = metric.Metadata{
+		Name:        "kv.concurrency.max_lock_wait_queue_waiters_for_lock",
+		Help:        "Maximum number of requests actively waiting in any single lock wait-queue",
+		Measurement: "Lock-Queue Waiters",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Closed timestamp metrics.
@@ -1079,19 +1105,6 @@ var (
 		Name:        "kv.closed_timestamp.failures_to_close",
 		Help:        "Number of times the min prop tracker failed to close timestamps due to epoch mismatch or pending evaluations",
 		Measurement: "Attempts",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaConflictingIntentsResolveRejected = metric.Metadata{
-		Name:        "intents.resolve_conflicting.rejected",
-		Help:        "Number of conflicting intents resolutions rejected",
-		Measurement: "Intent Resolutions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaFinalizedTxnCleanupTimedOut = metric.Metadata{
-		Name:        "intents.finalized_txns.timed_out",
-		Help:        "Number of finalized transaction resolution timeouts",
-		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -1300,13 +1313,15 @@ type StoreMetrics struct {
 	// RangeFeed counts.
 	RangeFeedMetrics *rangefeed.Metrics
 
+	// Concurrency control metrics.
+	Locks                          *metric.Gauge
+	LocksWithWaitQueues            *metric.Gauge
+	LockWaitQueueWaiters           *metric.Gauge
+	MaxLockWaitQueueWaitersForLock *metric.Gauge
+
 	// Closed timestamp metrics.
 	ClosedTimestampMaxBehindNanos  *metric.Gauge
 	ClosedTimestampFailuresToClose *metric.Gauge
-
-	// Intent cleanup failures
-	ConflictingIntentsResolveRejected *metric.Counter
-	FinalizedTxnCleanupTimedOut       *metric.Counter
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -1666,6 +1681,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
 		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
+		GCResolveFailed:              metric.NewCounter(metaGCResolveFailed),
 		GCTxnIntentsResolveFailed:    metric.NewCounter(metaGCTxnIntentsResolveFailed),
 
 		// Wedge request counters.
@@ -1692,14 +1708,15 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// RangeFeed counters.
 		RangeFeedMetrics: rangefeed.NewMetrics(),
 
+		// Concurrency control metrics.
+		Locks:                          metric.NewGauge(metaConcurrencyLocks),
+		LocksWithWaitQueues:            metric.NewGauge(metaConcurrencyLocksWithWaitQueues),
+		LockWaitQueueWaiters:           metric.NewGauge(metaConcurrencyLockWaitQueueWaiters),
+		MaxLockWaitQueueWaitersForLock: metric.NewGauge(metaConcurrencyMaxLockWaitQueueWaitersForLock),
+
 		// Closed timestamp metrics.
 		ClosedTimestampMaxBehindNanos:  metric.NewGauge(metaClosedTimestampMaxBehindNanos),
 		ClosedTimestampFailuresToClose: metric.NewGauge(metaClosedTimestampFailuresToClose),
-
-		// Intent leak metrics
-		ConflictingIntentsResolveRejected: metric.NewCounter(metaConflictingIntentsResolveRejected),
-		FinalizedTxnCleanupTimedOut:       metric.NewCounter(metaFinalizedTxnCleanupTimedOut),
-		GCResolveFailed:                   metric.NewCounter(metaGCResolveFailed),
 	}
 	storeRegistry.AddMetricStruct(sm)
 
