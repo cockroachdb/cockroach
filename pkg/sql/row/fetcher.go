@@ -229,7 +229,7 @@ type Fetcher struct {
 
 	// maxKeysPerRow memoizes the maximum number of keys per row
 	// out of all the tables. This is used to calculate the kvBatchFetcher's
-	// firstBatchLimit.
+	// rowLimitToKeyLimit.
 	maxKeysPerRow int
 
 	// True if the index key must be decoded.
@@ -577,7 +577,7 @@ func (rf *Fetcher) StartScan(
 		spans,
 		rf.reverse,
 		limitBatches,
-		rf.firstBatchLimit(limitHint),
+		rf.rowLimitToKeyLimit(limitHint),
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
@@ -670,7 +670,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		spans,
 		rf.reverse,
 		limitBatches,
-		rf.firstBatchLimit(limitHint),
+		rf.rowLimitToKeyLimit(limitHint),
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
@@ -684,19 +684,19 @@ func (rf *Fetcher) StartInconsistentScan(
 	return rf.StartScanFrom(ctx, &f)
 }
 
-func (rf *Fetcher) firstBatchLimit(limitHint int64) int64 {
-	if limitHint == 0 {
+func (rf *Fetcher) rowLimitToKeyLimit(keyLimitHint int64) int64 {
+	if keyLimitHint == 0 {
 		return 0
 	}
 	// If we have a limit hint, we limit the first batch size. Subsequent
 	// batches get larger to avoid making things too slow (e.g. in case we have
 	// a very restrictive filter and actually have to retrieve a lot of rows).
-	// The limitHint is a row limit, but each row could be made up of more than
+	// The keyLimitHint is a row limit, but each row could be made up of more than
 	// one key. We take the maximum possible keys per row out of all the table
 	// rows we could potentially scan over.
 	//
 	// We add an extra key to make sure we form the last row.
-	return limitHint*int64(rf.maxKeysPerRow) + 1
+	return keyLimitHint*int64(rf.maxKeysPerRow) + 1
 }
 
 // StartScanFrom initializes and starts a scan from the given kvBatchFetcher. Can be
