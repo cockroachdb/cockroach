@@ -42,17 +42,6 @@ type SliceArgs struct {
 	SrcEndIdx int
 }
 
-// CopySliceArgs represents the extension of SliceArgs that is passed in to
-// Vec.Copy.
-type CopySliceArgs struct {
-	SliceArgs
-	// SelOnDest, if true, uses the selection vector as a lens into the
-	// destination as well as the source. Normally, when SelOnDest is false, the
-	// selection vector is applied to the source vector, but the results are
-	// copied densely into the destination vector.
-	SelOnDest bool
-}
-
 // Vec is an interface that represents a column vector that's accessible by
 // Go native types.
 type Vec interface {
@@ -111,13 +100,19 @@ type Vec interface {
 	// undefined).
 	Append(SliceArgs)
 
-	// Copy uses CopySliceArgs to copy elements of a source Vec into this Vec. It is
+	// Copy uses SliceArgs to copy elements of a source Vec into this Vec. It is
 	// logically equivalent to:
 	// copy(destVec[args.DestIdx:], args.Src[args.SrcStartIdx:args.SrcEndIdx])
 	// An optional Sel slice can also be provided to apply a filter on the source
 	// Vec.
-	// Refer to the CopySliceArgs comment for specifics and TestCopy for examples.
-	Copy(CopySliceArgs)
+	// Refer to the SliceArgs comment for specifics and TestCopy for examples.
+	Copy(SliceArgs)
+
+	// CopyWithReorderedSource copies a value at position order[sel[i]] in src
+	// into the receiver at position sel[i]. len(sel) elements are copied.
+	// Resulting values of elements not mentioned in sel are undefined after
+	// this function.
+	CopyWithReorderedSource(src Vec, sel, order []int)
 
 	// Window returns a "window" into the Vec. A "window" is similar to Golang's
 	// slice of the current Vec from [start, end), but the returned object is NOT

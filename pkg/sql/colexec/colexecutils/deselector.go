@@ -73,12 +73,10 @@ func (p *deselectorOp) Next() coldata.Batch {
 			toCol := p.output.ColVec(i)
 			fromCol := batch.ColVec(i)
 			toCol.Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						Src:       fromCol,
-						Sel:       sel,
-						SrcEndIdx: batch.Length(),
-					},
+				coldata.SliceArgs{
+					Src:       fromCol,
+					Sel:       sel,
+					SrcEndIdx: batch.Length(),
 				},
 			)
 		}

@@ -247,13 +247,11 @@ func (t *topKSorter) emit() coldata.Batch {
 		// variable-sized types like Bytes). Nonetheless, for performance reasons
 		// it would be sad to fallback to disk at this point.
 		vec.Copy(
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					Src:         t.topK.ColVec(i),
-					Sel:         t.sel,
-					SrcStartIdx: t.emitted,
-					SrcEndIdx:   t.emitted + toEmit,
-				},
+			coldata.SliceArgs{
+				Src:         t.topK.ColVec(i),
+				Sel:         t.sel,
+				SrcStartIdx: t.emitted,
+				SrcEndIdx:   t.emitted + toEmit,
 			},
 		)
 	}
