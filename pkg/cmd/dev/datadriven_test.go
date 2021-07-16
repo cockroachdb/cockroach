@@ -44,7 +44,7 @@ var (
 )
 
 func init() {
-	predictableDevProfile = true
+	isTesting = true
 }
 
 // TestDatadriven makes use of datadriven and recorder to capture all operations

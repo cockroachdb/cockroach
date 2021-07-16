@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "bench.go",
         "build.go",
+        "builder.go",
         "dev.go",
         "generate.go",
         "lint.go",

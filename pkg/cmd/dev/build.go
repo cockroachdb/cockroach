@@ -97,7 +97,7 @@ func (d *dev) build(cmd *cobra.Command, targets []string) (err error) {
 		args = append(args, buildTarget)
 	}
 
-	if _, err := d.exec.CommandContext(ctx, "bazel", args...); err != nil {
+	if err := d.exec.CommandContextNoRecord(ctx, "bazel", args...); err != nil {
 		return err
 	}
 

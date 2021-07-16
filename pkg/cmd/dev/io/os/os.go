@@ -12,6 +12,7 @@ package os
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 
@@ -150,6 +151,33 @@ func (o *OS) Symlink(to, from string) error {
 	}
 	_, err := o.replay(command)
 	return err
+}
+
+// ReadFile wraps around ioutil.ReadFile, reading a file from disk and
+// returning the contents.
+func (o *OS) ReadFile(filename string) (string, error) {
+	command := fmt.Sprintf("cat %s", filename)
+	o.logger.Print(command)
+
+	var out string
+	if o.Recorder == nil || o.Recorder.Recording() {
+		// Do the real thing.
+		buf, err := ioutil.ReadFile(filename)
+		if err != nil {
+			return "", err
+		}
+		out = string(buf)
+	}
+
+	if o.Recorder == nil {
+		return out, nil
+	}
+
+	if o.Recording() {
+		return out, o.record(command, out)
+	}
+	ret, err := o.replay(command)
+	return ret, err
 }
 
 // replay replays the specified command, erroring out if it's mismatched with
