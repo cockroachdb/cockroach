@@ -563,7 +563,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var containsFullIndexScan bool
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
-		bld := execbuilder.New(f, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -575,7 +575,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
-		bld := execbuilder.New(explainFactory, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld := execbuilder.New(
+			explainFactory, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit,
+		)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
