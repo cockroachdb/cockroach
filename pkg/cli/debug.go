@@ -61,7 +61,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
 	humanize "github.com/dustin/go-humanize"
@@ -131,6 +130,17 @@ type OpenEngineOptions struct {
 	MustExist bool
 }
 
+func (opts OpenEngineOptions) configOptions() []storage.ConfigOption {
+	var cfgOpts []storage.ConfigOption
+	if opts.ReadOnly {
+		cfgOpts = append(cfgOpts, storage.ReadOnly)
+	}
+	if opts.MustExist {
+		cfgOpts = append(cfgOpts, storage.MustExist)
+	}
+	return cfgOpts
+}
+
 // OpenExistingStore opens the rocksdb engine rooted at 'dir'.
 // If 'readOnly' is true, opens the store in read-only mode.
 func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (storage.Engine, error) {
@@ -144,32 +154,13 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 	if err != nil {
 		return nil, err
 	}
-
-	storageConfig := base.StorageConfig{
-		Settings:  serverCfg.Settings,
-		Dir:       dir,
-		MustExist: opts.MustExist,
-	}
-	if PopulateRocksDBConfigHook != nil {
-		if err := PopulateRocksDBConfigHook(&storageConfig); err != nil {
-			return nil, err
-		}
-	}
-
-	var db storage.Engine
-
-	cfg := storage.PebbleConfig{
-		StorageConfig: storageConfig,
-		Opts:          storage.DefaultPebbleOptions(),
-	}
-	cfg.Opts.Cache = pebble.NewCache(server.DefaultCacheSize)
-	defer cfg.Opts.Cache.Unref()
-
-	cfg.Opts.MaxOpenFiles = int(maxOpenFiles)
-	cfg.Opts.ReadOnly = opts.ReadOnly
-
-	db, err = storage.NewPebble(context.Background(), cfg)
-
+	db, err := storage.Open(context.Background(),
+		storage.Filesystem(dir),
+		storage.MaxOpenFiles(int(maxOpenFiles)),
+		storage.CacheSize(server.DefaultCacheSize),
+		storage.Settings(serverCfg.Settings),
+		storage.Hook(PopulateRocksDBConfigHook),
+		storage.CombineOptions(opts.configOptions()...))
 	if err != nil {
 		return nil, err
 	}

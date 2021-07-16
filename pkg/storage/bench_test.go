@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -531,15 +530,10 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 		exists = false
 	}
 
-	eng, err := NewPebble(
+	eng, err := Open(
 		context.Background(),
-		PebbleConfig{
-			StorageConfig: base.StorageConfig{
-				Settings: cluster.MakeTestingClusterSettings(),
-				Dir:      dir,
-			},
-		},
-	)
+		Filesystem(dir),
+		Settings(cluster.MakeTestingClusterSettings()))
 	if err != nil {
 		return nil, err
 	}
