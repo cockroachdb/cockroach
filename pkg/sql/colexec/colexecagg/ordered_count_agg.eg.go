@@ -40,7 +40,7 @@ func (a *countRowsOrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *countRowsOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -48,9 +48,9 @@ func (a *countRowsOrderedAgg) Compute(
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups
 		if sel == nil {
-			_ = groups[inputLen-1]
+			_, _ = groups[endIdx-1], groups[startIdx]
 			{
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -68,7 +68,7 @@ func (a *countRowsOrderedAgg) Compute(
 			}
 		} else {
 			{
-				for _, i := range sel[:inputLen] {
+				for _, i := range sel[startIdx:endIdx] {
 					if groups[i] {
 						if !a.isFirstGroup {
 							a.col[a.curIdx] = a.curAgg
@@ -156,7 +156,7 @@ func (a *countOrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *countOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
@@ -168,9 +168,9 @@ func (a *countOrderedAgg) Compute(
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups
 		if sel == nil {
-			_ = groups[inputLen-1]
+			_, _ = groups[endIdx-1], groups[startIdx]
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -189,7 +189,7 @@ func (a *countOrderedAgg) Compute(
 					a.curAgg += y
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -207,7 +207,7 @@ func (a *countOrderedAgg) Compute(
 			}
 		} else {
 			if nulls.MaybeHasNulls() {
-				for _, i := range sel[:inputLen] {
+				for _, i := range sel[startIdx:endIdx] {
 					if groups[i] {
 						if !a.isFirstGroup {
 							a.col[a.curIdx] = a.curAgg
@@ -225,7 +225,7 @@ func (a *countOrderedAgg) Compute(
 					a.curAgg += y
 				}
 			} else {
-				for _, i := range sel[:inputLen] {
+				for _, i := range sel[startIdx:endIdx] {
 					if groups[i] {
 						if !a.isFirstGroup {
 							a.col[a.curIdx] = a.curAgg

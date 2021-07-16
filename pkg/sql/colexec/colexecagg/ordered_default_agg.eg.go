@@ -45,7 +45,7 @@ func (a *defaultOrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *defaultOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// Note that we only need to account for the memory of the output vector
 	// and not for the intermediate results of aggregation since the aggregate
@@ -55,8 +55,8 @@ func (a *defaultOrderedAgg) Compute(
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups
 		if sel == nil {
-			_ = groups[inputLen-1]
-			for tupleIdx := 0; tupleIdx < inputLen; tupleIdx++ {
+			_, _ = groups[endIdx-1], groups[startIdx]
+			for tupleIdx := startIdx; tupleIdx < endIdx; tupleIdx++ {
 				//gcassert:bce
 				if groups[tupleIdx] {
 					if !a.isFirstGroup {
@@ -89,7 +89,7 @@ func (a *defaultOrderedAgg) Compute(
 			// Both aggregators convert the batch "sparsely" - without
 			// deselection - so converted values are at the same positions as
 			// the original ones.
-			for _, tupleIdx := range sel[:inputLen] {
+			for _, tupleIdx := range sel[startIdx:endIdx] {
 				if groups[tupleIdx] {
 					if !a.isFirstGroup {
 						res, err := a.fn.Result()

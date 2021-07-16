@@ -40,7 +40,7 @@ func (a *countRowsHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *countRowsHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -49,8 +49,8 @@ func (a *countRowsHashAgg) Compute(
 				// We don't need to pay attention to nulls (either because it's a
 				// COUNT_ROWS aggregate or because there are no nulls), and we're
 				// performing a hash aggregation (meaning there is a single group),
-				// so all inputLen tuples contribute to the count.
-				a.curAgg += int64(inputLen)
+				// so all endIdx-startIdx tuples contribute to the count.
+				a.curAgg += int64(endIdx - startIdx)
 			}
 		}
 	},
@@ -114,7 +114,7 @@ func (a *countHashAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *countHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
@@ -124,7 +124,7 @@ func (a *countHashAgg) Compute(
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
 			if nulls.MaybeHasNulls() {
-				for _, i := range sel[:inputLen] {
+				for _, i := range sel[startIdx:endIdx] {
 
 					var y int64
 					y = int64(0)
@@ -137,8 +137,8 @@ func (a *countHashAgg) Compute(
 				// We don't need to pay attention to nulls (either because it's a
 				// COUNT_ROWS aggregate or because there are no nulls), and we're
 				// performing a hash aggregation (meaning there is a single group),
-				// so all inputLen tuples contribute to the count.
-				a.curAgg += int64(inputLen)
+				// so all endIdx-startIdx tuples contribute to the count.
+				a.curAgg += int64(endIdx - startIdx)
 			}
 		}
 	},

@@ -69,7 +69,7 @@ func (a *sumIntInt16OrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *sumIntInt16OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -80,10 +80,10 @@ func (a *sumIntInt16OrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -121,7 +121,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -159,7 +159,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -303,7 +303,7 @@ func (a *sumIntInt32OrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *sumIntInt32OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -314,10 +314,10 @@ func (a *sumIntInt32OrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -355,7 +355,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -393,7 +393,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -537,7 +537,7 @@ func (a *sumIntInt64OrderedAgg) SetOutput(vec coldata.Vec) {
 }
 
 func (a *sumIntInt64OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -548,10 +548,10 @@ func (a *sumIntInt64OrderedAgg) Compute(
 		groups := a.groups
 		col := col
 		if sel == nil {
-			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -589,7 +589,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 
 					//gcassert:bce
 					if groups[i] {
@@ -627,7 +627,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 				}
 			}
 		} else {
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
