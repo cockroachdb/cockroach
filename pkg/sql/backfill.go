@@ -1609,20 +1609,40 @@ func ValidateInvertedIndexes(
 			defer close(countReady[i])
 
 			start := timeutil.Now()
-			col := idx.InvertedColumnName()
+
+			colID := idx.InvertedColumnID()
+			col, err := tableDesc.FindColumnWithID(colID)
+			if err != nil {
+				return err
+			}
+
+			// colNameOrExpr is the column or expression indexed by the inverted
+			// index. It is used in the query below that verifies that the
+			// number of entries in the inverted index is correct. If the index
+			// is an expression index, the column name cannot be used because it
+			// is inaccessible; the query would result in a "column does not
+			// exist" error.
+			var colNameOrExpr string
+			if col.IsExpressionIndexColumn() {
+				colNameOrExpr = col.GetComputeExpr()
+			} else {
+				// Wrap the column name in double-quotes because it might
+				// contain special characters, like "-".
+				colNameOrExpr = fmt.Sprintf("%q", col.ColName())
+			}
 
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error {
 				var stmt string
 				geoConfig := idx.GetGeoConfig()
 				if geoindex.IsEmptyConfig(&geoConfig) {
 					stmt = fmt.Sprintf(
-						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%q, %d)), 0) FROM [%d AS t]`,
-						col, idx.GetVersion(), tableDesc.GetID(),
+						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%s, %d)), 0) FROM [%d AS t]`,
+						colNameOrExpr, idx.GetVersion(), tableDesc.GetID(),
 					)
 				} else {
 					stmt = fmt.Sprintf(
-						`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %q)), 0) FROM [%d AS t]`,
-						tableDesc.GetID(), idx.GetID(), col, tableDesc.GetID(),
+						`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %s)), 0) FROM [%d AS t]`,
+						tableDesc.GetID(), idx.GetID(), colNameOrExpr, tableDesc.GetID(),
 					)
 				}
 				// If the index is a partial index the predicate must be added
@@ -1644,8 +1664,8 @@ func ValidateInvertedIndexes(
 			}); err != nil {
 				return err
 			}
-			log.Infof(ctx, "column %s/%s expected inverted index count = %d, took %s",
-				tableDesc.GetName(), col, expectedCount[i], timeutil.Since(start))
+			log.Infof(ctx, "%s %s expected inverted index count = %d, took %s",
+				tableDesc.GetName(), colNameOrExpr, expectedCount[i], timeutil.Since(start))
 			return nil
 		})
 	}
