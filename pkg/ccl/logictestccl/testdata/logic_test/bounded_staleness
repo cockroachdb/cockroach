@@ -1,0 +1,20 @@
+query B
+SELECT with_min_timestamp(now()) = now()
+----
+true
+
+query B
+SELECT with_min_timestamp(now() - '5s'::interval) = now() - '5s'::interval
+----
+true
+
+statement error timestamp for with_min_timestamp must be less than or equal to now\(\)
+SELECT with_min_timestamp(now() + '5s'::interval) = now()
+
+query B
+SELECT with_max_staleness('10s') = now() - '10s'::interval
+----
+true
+
+statement error interval duration for with_max_staleness must be greater or equal to 0
+SELECT with_max_staleness(-'1s')

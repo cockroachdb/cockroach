@@ -10,6 +10,7 @@ package kvccl
 
 import (
 	// ccl init hooks.
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvboundedstalenessccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 )
