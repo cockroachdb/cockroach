@@ -100,7 +100,7 @@ func WithWorkingDir(dir string) func(e *Exec) {
 // CommandContext wraps around exec.CommandContext, executing the named program
 // with the given arguments.
 func (e *Exec) CommandContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return e.commandContextImpl(ctx, false, name, args...)
+	return e.commandContextImpl(ctx, nil, false, name, args...)
 }
 
 // CommandContextSilent is like CommandContext, but does not take over
@@ -108,7 +108,16 @@ func (e *Exec) CommandContext(ctx context.Context, name string, args ...string) 
 func (e *Exec) CommandContextSilent(
 	ctx context.Context, name string, args ...string,
 ) ([]byte, error) {
-	return e.commandContextImpl(ctx, true, name, args...)
+	return e.commandContextImpl(ctx, nil, true, name, args...)
+}
+
+// CommandContextWithInput is like CommandContext, but stdin is piped from an
+// in-memory string.
+func (e *Exec) CommandContextWithInput(
+	ctx context.Context, stdin, name string, args ...string,
+) ([]byte, error) {
+	r := strings.NewReader(stdin)
+	return e.commandContextImpl(ctx, r, false, name, args...)
 }
 
 // CommandContextNoRecord is like CommandContext, but doesn't capture stdout.
@@ -150,7 +159,7 @@ func (e *Exec) CommandContextNoRecord(ctx context.Context, name string, args ...
 }
 
 func (e *Exec) commandContextImpl(
-	ctx context.Context, silent bool, name string, args ...string,
+	ctx context.Context, stdin io.Reader, silent bool, name string, args ...string,
 ) ([]byte, error) {
 	var command string
 	if len(args) > 0 {
@@ -170,6 +179,9 @@ func (e *Exec) commandContextImpl(
 		} else {
 			cmd.Stdout = io.MultiWriter(e.stdout, &buffer)
 			cmd.Stderr = e.stderr
+		}
+		if stdin != nil {
+			cmd.Stdin = stdin
 		}
 		cmd.Dir = e.dir
 

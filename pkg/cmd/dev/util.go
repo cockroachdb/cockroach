@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os/exec"
 	"runtime"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// To be turned on for tests.
+// To be turned on for tests. Turns off some deeper checks for reproducibility.
 var isTesting bool
 
 func mustGetFlagString(cmd *cobra.Command, name string) string {
@@ -102,4 +103,13 @@ func getConfigFlags() []string {
 func addCommonTestFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP(filterFlag, "f", "", "run unit tests matching this regex")
 	cmd.Flags().Duration(timeoutFlag, 0*time.Minute, "timeout for test")
+}
+
+func ensureBinaryInPath(bin string) error {
+	if !isTesting {
+		if _, err := exec.LookPath(bin); err != nil {
+			return errors.Newf("Could not find %s in PATH", bin)
+		}
+	}
+	return nil
 }
