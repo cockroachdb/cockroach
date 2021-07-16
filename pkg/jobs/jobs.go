@@ -96,7 +96,7 @@ type StartableJob struct {
 type TraceableJob interface {
 	// ForceRealSpan forces the registry to create a real Span instead of a
 	// low-overhead non-recordable noop span.
-	ForceRealSpan()
+	ForceRealSpan() bool
 }
 
 func init() {

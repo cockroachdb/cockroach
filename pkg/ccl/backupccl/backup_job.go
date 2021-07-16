@@ -405,7 +405,9 @@ type backupResumer struct {
 var _ jobs.TraceableJob = &backupResumer{}
 
 // ForceRealSpan implements the TraceableJob interface.
-func (b *backupResumer) ForceRealSpan() {}
+func (b *backupResumer) ForceRealSpan() bool {
+	return true
+}
 
 // Resume is part of the jobs.Resumer interface.
 func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
