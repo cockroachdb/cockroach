@@ -46,9 +46,6 @@ import (
 type cTableInfo struct {
 	// -- Fields initialized once --
 
-	// Used to determine whether a key retrieved belongs to the span we
-	// want to scan.
-	spans            roachpb.Spans
 	desc             catalog.TableDescriptor
 	index            catalog.Index
 	isSecondaryIndex bool
@@ -337,7 +334,7 @@ func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 	} else {
 		// Otherwise, use the estimate. Note that if the estimate is not
 		// present, it'll be 0 and ResetMaybeReallocate will allocate the
-		// initial batch of capacity 1 which is the esired behavior.
+		// initial batch of capacity 1 which is the desired behavior.
 		//
 		// We need to transform our rf.estimatedRowCount, which is a uint64,
 		// into an int. We have to be careful: if we just cast it directly, a
@@ -360,6 +357,9 @@ func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 		if tableOidOutputIdx != noOutputColumn {
 			rf.machine.tableoidCol = rf.machine.colvecs[tableOidOutputIdx].Datum()
 		}
+		// Change the allocation size to be the same as the capacity of the
+		// batch we allocated above.
+		rf.table.da.AllocSize = rf.machine.batch.Capacity()
 	}
 }
 
@@ -405,7 +405,6 @@ func (rf *cFetcher) Init(
 	}
 	sort.Sort(table.colIdxMap)
 	*table = cTableInfo{
-		spans:                  tableArgs.Spans,
 		desc:                   tableArgs.Desc,
 		colIdxMap:              table.colIdxMap,
 		index:                  tableArgs.Index,
@@ -643,9 +642,6 @@ func (rf *cFetcher) Init(
 	})
 
 	rf.table = table
-	// Change the allocation size to be the same as the capacity of the batch
-	// we allocated above.
-	rf.table.da.AllocSize = coldata.BatchSize()
 
 	return nil
 }
