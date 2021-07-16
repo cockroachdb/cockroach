@@ -1,0 +1,50 @@
+put
+----
+ts=1
+
+nop
+----
+ts=2
+
+put
+----
+ts=3
+
+get ts=3
+----
+v3
+
+revert_to ts=2
+----
+ts=4
+
+get ts=4
+----
+v1
+
+get ts=3
+----
+v3
+
+get ts=2
+----
+v1
+
+get ts=1
+----
+v1
+
+revert_to ts=3
+----
+ts=5
+
+breakpoint
+----
+
+get ts=5
+----
+v3
+
+get ts=4
+----
+v1

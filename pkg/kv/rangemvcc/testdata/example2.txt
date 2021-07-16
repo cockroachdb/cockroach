@@ -1,0 +1,38 @@
+# Bottom half of https://cockroachlabs.slack.com/archives/C021WMUML04/p1626436063054000
+
+# Setup
+
+put
+----
+ts=1
+
+revert_to ts=0
+----
+ts=2
+
+put
+----
+ts=3
+
+revert_to ts=2
+----
+ts=4
+
+revert_to ts=4
+----
+ts=5
+
+revert_to ts=3
+----
+ts=6
+
+# Verification
+
+get
+----
+get(1): v1
+get(2): -
+get(3): v3
+get(4): -
+get(5): -
+get(6): v3
