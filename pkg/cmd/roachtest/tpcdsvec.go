@@ -100,7 +100,7 @@ func registerTPCDSVec(r *testRegistry) {
 			// A sanity check that we have different values of 'vectorize'
 			// session variable on two connections and that the comparator will
 			// emit an error because of that difference.
-			if err := cmpconn.CompareConns(
+			if _, err := cmpconn.CompareConns(
 				ctx, timeout, conns, "", "SHOW vectorize;", false, /* ignoreSQLErrors */
 			); err == nil {
 				t.Fatal("unexpectedly SHOW vectorize didn't trigger an error on comparison")
@@ -133,7 +133,7 @@ func registerTPCDSVec(r *testRegistry) {
 				// around issues with cancellation.
 				conns, cleanup := openNewConnections()
 				start := timeutil.Now()
-				if err := cmpconn.CompareConns(
+				if _, err := cmpconn.CompareConns(
 					ctx, 3*timeout, conns, "", query, false, /* ignoreSQLErrors */
 				); err != nil {
 					t.Status(fmt.Sprintf("encountered an error: %s\n", err))
