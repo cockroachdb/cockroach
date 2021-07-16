@@ -133,13 +133,16 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	clusterID := &cfg.RPCContext.ClusterID
 	server := rpc.NewServer(cfg.RPCContext) // never started
 	ltc.Gossip = gossip.New(ambient, clusterID, nc, cfg.RPCContext, server, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
-	ltc.Eng = storage.NewInMem(
+	var err error
+	ltc.Eng, err = storage.Open(
 		ambient.AnnotateCtx(context.Background()),
-		roachpb.Attributes{},
-		0,      /* cacheSize */
-		50<<20, /* storeSize */
-		storage.MakeRandomSettingsForSeparatedIntents(),
-	)
+		storage.InMemory(),
+		storage.CacheSize(0),
+		storage.MaxSize(50<<20 /* 50 MiB */),
+		storage.SettingsForTesting())
+	if err != nil {
+		t.Fatal(err)
+	}
 	ltc.stopper.AddCloser(ltc.Eng)
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)

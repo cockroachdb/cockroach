@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -82,16 +81,6 @@ var (
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine() Engine {
 	return NewDefaultInMemForTesting()
-}
-
-func createTestPebbleEngineWithSettings(settings *cluster.Settings) Engine {
-	return NewInMem(
-		context.Background(),
-		roachpb.Attributes{},
-		1<<20,   /* cacheSize */
-		512<<20, /* storeSize */
-		settings,
-	)
 }
 
 // TODO(sumeer): the following is legacy from when we had multiple engine

@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -122,10 +121,10 @@ type Options struct {
 	LogOnly     bool
 }
 
-// Run a test of writing synchronously to the RocksDB WAL.
+// Run a test of writing synchronously to the Pebble WAL.
 //
-// TODO(tschottdorf): this should receive a RocksDB instance so that the caller
-// in cli can use OpenEngine (which in turn allows to use encryption, etc).
+// TODO(tschottdorf): this should receive an engine so that the caller in cli
+// can use OpenEngine (which in turn allows to use encryption, etc).
 func Run(opts Options) error {
 	// Check if the directory exists.
 	_, err := os.Stat(opts.Dir)
@@ -139,12 +138,11 @@ func Run(opts Options) error {
 
 	fmt.Printf("writing to %s\n", opts.Dir)
 
-	db, err := storage.NewDefaultEngine(
-		0,
-		base.StorageConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      opts.Dir,
-		})
+	db, err := storage.Open(
+		context.Background(),
+		storage.Filesystem(opts.Dir),
+		storage.CacheSize(0),
+		storage.Settings(cluster.MakeTestingClusterSettings()))
 	if err != nil {
 		return err
 	}

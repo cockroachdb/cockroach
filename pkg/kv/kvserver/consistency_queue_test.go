@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -444,7 +443,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		// VFS to verify its contents.
 		fs, err := stickyEngineRegistry.GetUnderlyingFS(base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10)})
 		assert.NoError(t, err)
-		cpEng := storage.InMemFromFS(context.Background(), roachpb.Attributes{}, 1<<20, 0, fs, cps[0], nil)
+		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], storage.CacheSize(1<<20))
 		defer cpEng.Close()
 
 		iter := cpEng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: []byte("\xff")})
@@ -577,17 +576,10 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	const sysCountGarbage = 123000
 
 	func() {
-		cache := pebble.NewCache(1 << 20)
-		defer cache.Unref()
-		opts := storage.DefaultPebbleOptions()
-		opts.Cache = cache
-		eng, err := storage.NewPebble(ctx, storage.PebbleConfig{
-			StorageConfig: base.StorageConfig{
-				Dir:       path,
-				MustExist: true,
-			},
-			Opts: opts,
-		})
+		eng, err := storage.Open(ctx,
+			storage.Filesystem(path),
+			storage.CacheSize(1<<20 /* 1 MiB */),
+			storage.MustExist)
 		if err != nil {
 			t.Fatal(err)
 		}

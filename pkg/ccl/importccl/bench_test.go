@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
-	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,18 +91,14 @@ func benchmarkWriteAndLink(b *testing.B, dir string, tables []tableSSTable) {
 	b.SetBytes(bytes)
 
 	ctx := context.Background()
-	cache := pebble.NewCache(server.DefaultCacheSize)
-	defer cache.Unref()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		cfg := storage.PebbleConfig{
-			StorageConfig: base.StorageConfig{
-				Dir: filepath.Join(dir, `pebble`, timeutil.Now().String())}}
-		cfg.Opts = storage.DefaultPebbleOptions()
-		cfg.Opts.Cache = cache
-		db, err := storage.NewPebble(context.Background(), cfg)
+		db, err := storage.Open(
+			context.Background(),
+			storage.Filesystem(filepath.Join(dir, `pebble`, timeutil.Now().String())),
+			storage.CacheSize(server.DefaultCacheSize))
 		if err != nil {
 			b.Fatal(err)
 		}

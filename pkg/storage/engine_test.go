@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -40,7 +39,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -582,10 +580,7 @@ func TestEngineMustExist(t *testing.T) {
 		tempDir, dirCleanupFn := testutils.TempDir(t)
 		defer dirCleanupFn()
 
-		_, err := NewEngine(0, base.StorageConfig{
-			Dir:       tempDir,
-			MustExist: true,
-		})
+		_, err := Open(context.Background(), Filesystem(tempDir), MustExist)
 		if err == nil {
 			t.Fatal("expected error related to missing directory")
 		}
@@ -1185,17 +1180,10 @@ func TestCreateCheckpoint(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	opts := DefaultPebbleOptions()
-	db, err := NewPebble(
+	db, err := Open(
 		context.Background(),
-		PebbleConfig{
-			StorageConfig: base.StorageConfig{
-				Settings: cluster.MakeTestingClusterSettings(),
-				Dir:      dir,
-			},
-			Opts: opts,
-		},
-	)
+		Filesystem(dir),
+		Settings(cluster.MakeTestingClusterSettings()))
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -1421,20 +1409,10 @@ type engineImpl struct {
 // These FS implementations are not in-memory.
 var engineRealFSImpls = []engineImpl{
 	{"pebble", func(t *testing.T, dir string) Engine {
-
-		opts := DefaultPebbleOptions()
-		opts.FS = vfs.Default
-		opts.Cache = pebble.NewCache(testCacheSize)
-		defer opts.Cache.Unref()
-
-		db, err := NewPebble(
+		db, err := Open(
 			context.Background(),
-			PebbleConfig{
-				StorageConfig: base.StorageConfig{
-					Dir: dir,
-				},
-				Opts: opts,
-			})
+			Filesystem(dir),
+			CacheSize(testCacheSize))
 		if err != nil {
 			t.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 		}
@@ -1536,13 +1514,8 @@ func TestSupportsPrev(t *testing.T) {
 	}
 	t.Run("pebble", func(t *testing.T) {
 
-		eng := NewInMem(
-			context.Background(),
-			roachpb.Attributes{},
-			1<<20,   /* cacheSize */
-			512<<20, /* storeSize */
-			nil,     /* settings */
-		)
+		eng, err := Open(context.Background(), InMemory(), CacheSize(1<<20 /* 1 MiB */))
+		require.NoError(t, err)
 		defer eng.Close()
 		runTest(t, eng, engineTest{
 			engineIterSupportsPrev:   true,
@@ -1665,14 +1638,9 @@ func TestScanSeparatedIntents(t *testing.T) {
 
 	for name, enableSeparatedIntents := range map[string]bool{"interleaved": false, "separated": true} {
 		t.Run(name, func(t *testing.T) {
-			settings := makeSettingsForSeparatedIntents(false, enableSeparatedIntents)
-			eng := NewInMem(
-				ctx,
-				roachpb.Attributes{},
-				1<<20,   /* cacheSize */
-				512<<20, /* storeSize */
-				settings,
-			)
+			eng, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
+				Settings(makeSettingsForSeparatedIntents(false, enableSeparatedIntents)))
+			require.NoError(t, err)
 			defer eng.Close()
 
 			for _, key := range keys {
