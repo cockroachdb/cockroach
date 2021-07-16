@@ -116,7 +116,7 @@ func (b *Builder) buildDataSource(
 				tableOrdinals(t, columnKinds{
 					includeMutations:       false,
 					includeSystem:          true,
-					includeVirtualInverted: false,
+					includeInverted:        false,
 					includeVirtualComputed: true,
 				}),
 				indexFlags, locking, inScope,
@@ -400,7 +400,7 @@ func (b *Builder) buildScanFromTableRef(
 		ordinals = tableOrdinals(tab, columnKinds{
 			includeMutations:       false,
 			includeSystem:          true,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		})
 	}

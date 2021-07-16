@@ -83,18 +83,18 @@ TABLE g
  ├── geog geography
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── geog_inverted_key geography not null [virtual-inverted]
- ├── geog_inverted_key geography not null [virtual-inverted]
+ ├── geog_inverted_key geography not null [inverted]
+ ├── geog_inverted_key geography not null [inverted]
  ├── PRIMARY INDEX primary
  │    └── k int not null
  ├── INVERTED INDEX secondary
  │    ├── a int
- │    ├── geog_inverted_key geography not null [virtual-inverted]
+ │    ├── geog_inverted_key geography not null [inverted]
  │    └── k int not null
  └── INVERTED INDEX secondary
       ├── a int
       ├── b int
-      ├── geog_inverted_key geography not null [virtual-inverted]
+      ├── geog_inverted_key geography not null [inverted]
       └── k int not null
 
 # Test for expression index columns.
@@ -135,13 +135,13 @@ TABLE xyz
  ├── crdb_internal_idx_expr_3 int as (y + 1) virtual [hidden]
  ├── crdb_internal_idx_expr_4 string as (lower(z)) virtual [hidden]
  ├── crdb_internal_idx_expr_5 jsonb as (j->'a') virtual [hidden]
- ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [virtual-inverted]
+ ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [inverted]
  ├── crdb_internal_idx_expr_6 jsonb as (j->'a') virtual [hidden]
- ├── crdb_internal_idx_expr_6_inverted_key jsonb not null [virtual-inverted]
+ ├── crdb_internal_idx_expr_6_inverted_key jsonb not null [inverted]
  ├── crdb_internal_idx_expr_7 int as (x + y) virtual [hidden]
  ├── crdb_internal_idx_expr_8 int as (x + y) virtual [hidden]
  ├── crdb_internal_idx_expr_9 jsonb as (j->'a') virtual [hidden]
- ├── crdb_internal_idx_expr_9_inverted_key jsonb not null [virtual-inverted]
+ ├── crdb_internal_idx_expr_9_inverted_key jsonb not null [inverted]
  ├── PRIMARY INDEX primary
  │    └── x int not null
  ├── INDEX idx1
@@ -156,12 +156,12 @@ TABLE xyz
  │    ├── crdb_internal_idx_expr_4 string as (lower(z)) virtual [hidden]
  │    └── x int not null
  ├── INVERTED INDEX idx4
- │    ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [virtual-inverted]
+ │    ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [inverted]
  │    └── x int not null
  ├── INVERTED INDEX idx5
  │    ├── y int
  │    ├── z string
- │    ├── crdb_internal_idx_expr_6_inverted_key jsonb not null [virtual-inverted]
+ │    ├── crdb_internal_idx_expr_6_inverted_key jsonb not null [inverted]
  │    └── x int not null
  ├── INDEX idx6
  │    ├── crdb_internal_idx_expr_7 int as (x + y) virtual [hidden]
@@ -171,6 +171,6 @@ TABLE xyz
  │    └── WHERE v > 1
  └── INVERTED INDEX idx7
       ├── crdb_internal_idx_expr_8 int as (x + y) virtual [hidden]
-      ├── crdb_internal_idx_expr_9_inverted_key jsonb not null [virtual-inverted]
+      ├── crdb_internal_idx_expr_9_inverted_key jsonb not null [inverted]
       ├── x int not null
       └── WHERE v > 1

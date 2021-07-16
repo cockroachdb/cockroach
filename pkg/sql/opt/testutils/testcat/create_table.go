@@ -115,7 +115,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	if !hasPrimaryIndex {
 		var rowid cat.Column
 		ordinal := len(tab.Columns)
-		rowid.InitNonVirtual(
+		rowid.Init(
 			ordinal,
 			cat.StableID(1+ordinal),
 			"rowid",
@@ -142,7 +142,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Add the MVCC timestamp system column.
 	var mvcc cat.Column
 	ordinal := len(tab.Columns)
-	mvcc.InitNonVirtual(
+	mvcc.Init(
 		ordinal,
 		cat.StableID(1+ordinal),
 		colinfo.MVCCTimestampColumnName,
@@ -158,7 +158,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Add the tableoid system column.
 	var tableoid cat.Column
 	ordinal = len(tab.Columns)
-	tableoid.InitNonVirtual(
+	tableoid.Init(
 		ordinal,
 		cat.StableID(1+ordinal),
 		colinfo.TableOIDColumnName,
@@ -290,7 +290,7 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 
 	// Add the dummy PK column.
 	var pk cat.Column
-	pk.InitNonVirtual(
+	pk.Init(
 		0, /* ordinal */
 		0, /* stableID */
 		"crdb_internal_vtable_pk",
@@ -346,7 +346,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 
 	var rowid cat.Column
 	ordinal := len(columns)
-	rowid.InitNonVirtual(
+	rowid.Init(
 		ordinal,
 		cat.StableID(1+ordinal),
 		"rowid",
@@ -605,7 +605,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			*computedExpr,
 		)
 	} else {
-		col.InitNonVirtual(
+		col.Init(
 			ordinal,
 			cat.StableID(1+ordinal),
 			name,
@@ -742,7 +742,7 @@ func (tt *Table) addIndexWithVersion(
 		}
 		// Add the rest of the columns in the table.
 		for i, col := range tt.Columns {
-			if !pkOrdinals.Contains(i) && col.Kind() != cat.VirtualInverted && !col.IsVirtualComputed() {
+			if !pkOrdinals.Contains(i) && col.Kind() != cat.Inverted && !col.IsVirtualComputed() {
 				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}
 		}
@@ -921,7 +921,7 @@ func (ti *Index) addColumn(
 		// TODO(radu,mjibson): update this when the corresponding type in the real
 		// catalog is fixed (see sql.newOptTable).
 		typ := tt.Columns[ordinal].DatumType()
-		col.InitVirtualInverted(
+		col.InitInverted(
 			len(tt.Columns),
 			colName+"_inverted_key",
 			typ,
@@ -975,7 +975,7 @@ func (ti *Index) addColumnByOrdinal(
 	col := tt.Column(ord)
 	if colType == keyCol || colType == strictKeyCol {
 		typ := col.DatumType()
-		if col.Kind() == cat.VirtualInverted {
+		if col.Kind() == cat.Inverted {
 			if !colinfo.ColumnTypeIsInvertedIndexable(typ) {
 				panic(fmt.Errorf(
 					"column %s of type %s is not allowed as the last column of an inverted index",

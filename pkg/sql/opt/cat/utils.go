@@ -332,9 +332,9 @@ func formatColumn(col *Column, buf *bytes.Buffer) {
 		fmt.Fprintf(buf, " default (%s)", col.DefaultExprStr())
 	}
 	kind := col.Kind()
-	// Omit the visibility for mutation and virtual inverted columns, which are
-	// always inacessible.
-	if kind != WriteOnly && kind != DeleteOnly && kind != VirtualInverted {
+	// Omit the visibility for mutation and inverted columns, which are always
+	// inaccessible.
+	if kind != WriteOnly && kind != DeleteOnly && kind != Inverted {
 		switch col.Visibility() {
 		case Hidden:
 			fmt.Fprintf(buf, " [hidden]")
@@ -353,8 +353,8 @@ func formatColumn(col *Column, buf *bytes.Buffer) {
 	case System:
 		fmt.Fprintf(buf, " [system]")
 
-	case VirtualInverted:
-		fmt.Fprintf(buf, " [virtual-inverted]")
+	case Inverted:
+		fmt.Fprintf(buf, " [inverted]")
 	}
 }
 

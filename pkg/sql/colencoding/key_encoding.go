@@ -174,8 +174,8 @@ func DecodeKeyValsToCols(
 				unseen.Remove(i)
 			}
 			var isNull bool
-			isVirtualInverted := invertedColIdx == i
-			key, isNull, err = decodeTableKeyToCol(da, vecs[i], idx, types[j], key, enc, isVirtualInverted)
+			isInverted := invertedColIdx == i
+			key, isNull, err = decodeTableKeyToCol(da, vecs[i], idx, types[j], key, enc, isInverted)
 			foundNull = isNull || foundNull
 		}
 		if err != nil {
@@ -196,7 +196,7 @@ func decodeTableKeyToCol(
 	valType *types.T,
 	key []byte,
 	dir descpb.IndexDescriptor_Direction,
-	isVirtualInverted bool,
+	isInverted bool,
 ) ([]byte, bool, error) {
 	if (dir != descpb.IndexDescriptor_ASC) && (dir != descpb.IndexDescriptor_DESC) {
 		return nil, false, errors.AssertionFailedf("invalid direction: %d", log.Safe(dir))
@@ -211,9 +211,9 @@ func decodeTableKeyToCol(
 	// value here.
 	vec.Nulls().UnsetNull(idx)
 
-	// Virtual inverted columns should not be decoded, but should instead be
+	// Inverted columns should not be decoded, but should instead be
 	// passed on as a DBytes datum.
-	if isVirtualInverted {
+	if isInverted {
 		keyLen, err := encoding.PeekLength(key)
 		if err != nil {
 			return nil, false, err

@@ -925,7 +925,7 @@ func (c *CustomFuncs) mapInvertedJoin(
 	// columns, which will be used in the invertedExpr.
 	srcCols := indexCols.Copy()
 	dstCols := newIndexCols.Copy()
-	ord := index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()
+	ord := index.InvertedColumn().InvertedSourceColumnOrdinal()
 	invertedSourceCol := tabID.ColumnID(ord)
 	newInvertedSourceCol := newTabID.ColumnID(ord)
 	srcCols.Add(invertedSourceCol)

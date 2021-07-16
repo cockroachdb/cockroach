@@ -101,7 +101,7 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 	for ord, ok := cols.Next(0); ok; ord, ok = cols.Next(ord + 1) {
 		col := table.Column(ord)
 		colOrd := ord
-		if col.Kind() == cat.VirtualInverted {
+		if col.Kind() == cat.Inverted {
 			typ := col.DatumType()
 			colOrd = col.InvertedSourceColumnOrdinal()
 			col = table.Column(colOrd)

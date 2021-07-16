@@ -208,7 +208,7 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations:       false,
 			includeSystem:          false,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		}),
 		nil, /* indexFlags */
@@ -294,7 +294,7 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations:       true,
 			includeSystem:          true,
-			includeVirtualInverted: false,
+			includeInverted:        false,
 			includeVirtualComputed: true,
 		}),
 		nil, /* indexFlags */
@@ -502,7 +502,7 @@ func (h *arbiterPredicateHelper) tableScope() *scope {
 			h.tabMeta, tableOrdinals(h.tabMeta.Table, columnKinds{
 				includeMutations:       false,
 				includeSystem:          false,
-				includeVirtualInverted: false,
+				includeInverted:        false,
 				includeVirtualComputed: true,
 			}),
 			nil, /* indexFlags */

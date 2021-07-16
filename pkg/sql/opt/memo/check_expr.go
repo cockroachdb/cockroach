@@ -260,8 +260,8 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 				switch kind {
 				case cat.System:
 					panic(errors.AssertionFailedf("system column found in insertion columns"))
-				case cat.VirtualInverted:
-					panic(errors.AssertionFailedf("virtual inverted column found in insertion columns"))
+				case cat.Inverted:
+					panic(errors.AssertionFailedf("inverted column found in insertion columns"))
 				}
 			}
 		}

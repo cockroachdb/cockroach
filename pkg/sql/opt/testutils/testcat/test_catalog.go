@@ -841,7 +841,7 @@ type Index struct {
 	// predicate is the partial index predicate expression, if it exists.
 	predicate string
 
-	// invertedOrd is the ordinal of the VirtualInverted column, if the index is
+	// invertedOrd is the ordinal of the Inverted column, if the index is
 	// an inverted index.
 	invertedOrd int
 
@@ -911,10 +911,10 @@ func (ti *Index) Column(i int) cat.IndexColumn {
 	return ti.Columns[i]
 }
 
-// VirtualInvertedColumn is part of the cat.Index interface.
-func (ti *Index) VirtualInvertedColumn() cat.IndexColumn {
+// InvertedColumn is part of the cat.Index interface.
+func (ti *Index) InvertedColumn() cat.IndexColumn {
 	if !ti.IsInverted() {
-		panic("non-inverted indexes do not have inverted virtual columns")
+		panic("non-inverted indexes do not have inverted columns")
 	}
 	return ti.Column(ti.invertedOrd)
 }
