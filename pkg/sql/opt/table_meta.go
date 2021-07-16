@@ -217,16 +217,16 @@ func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 	return indexCols
 }
 
-// IndexColumnsMapVirtual returns the set of table columns in the given index.
-// Virtual inverted index columns are mapped to their source column.
-func (tm *TableMeta) IndexColumnsMapVirtual(indexOrd int) ColSet {
+// IndexColumnsMapArtificial returns the set of table columns in the given
+// index. Artificial inverted index columns are mapped to their source column.
+func (tm *TableMeta) IndexColumnsMapArtificial(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
 
 	var indexCols ColSet
 	for i, n := 0, index.ColumnCount(); i < n; i++ {
 		col := index.Column(i)
 		ord := col.Ordinal()
-		if col.Kind() == cat.VirtualInverted {
+		if col.Kind() == cat.ArtificialInverted {
 			ord = col.InvertedSourceColumnOrdinal()
 		}
 		indexCols.Add(tm.MetaID.ColumnID(ord))
@@ -246,16 +246,17 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 	return indexCols
 }
 
-// IndexKeyColumnsMapVirtual returns the set of strict key columns in the given
-// index. Inverted index columns are mapped to their source column.
-func (tm *TableMeta) IndexKeyColumnsMapVirtual(indexOrd int) ColSet {
+// IndexKeyColumnsMapArtificial returns the set of strict key columns in the
+// given index. Artificial inverted index columns are mapped to their source
+// column.
+func (tm *TableMeta) IndexKeyColumnsMapArtificial(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
 
 	var indexCols ColSet
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
 		col := index.Column(i)
 		ord := col.Ordinal()
-		if col.Kind() == cat.VirtualInverted {
+		if col.Kind() == cat.ArtificialInverted {
 			ord = col.InvertedSourceColumnOrdinal()
 		}
 		indexCols.Add(tm.MetaID.ColumnID(ord))

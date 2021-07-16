@@ -1711,12 +1711,12 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		lookupCols.Remove(join.ContinuationCol)
 	}
 
-	// Add the virtual inverted column. Its source column will be referenced in
-	// the inverted expression and needs a corresponding indexed var. It will be
-	// projected away below.
-	virtualInvertedCol := idx.VirtualInvertedColumn()
-	virtualInvertedColID := join.Table.ColumnID(virtualInvertedCol.Ordinal())
-	lookupCols.Add(virtualInvertedColID)
+	// Add the artificial inverted column. Its source column will be referenced
+	// in the inverted expression and needs a corresponding indexed var. It will
+	// be projected away below.
+	artificialInvertedColumn := idx.ArtificialInvertedColumn()
+	artificialInvertedColID := join.Table.ColumnID(artificialInvertedColumn.Ordinal())
+	lookupCols.Add(artificialInvertedColID)
 
 	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
 	// allExprCols are the columns used in expressions evaluated by this join.
@@ -1750,15 +1750,15 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	}
 
 	// The inverted filter refers to the inverted source column, but it is
-	// actually evaluated implicitly using the virtual inverted column; the
+	// actually evaluated implicitly using the artificial inverted column; the
 	// inverted source column is not even accessible here.
 	//
 	// TODO(radu): this is sketchy. The inverted column should not even have the
 	// geospatial type (which would make the expression invalid in terms of
 	// typing). Perhaps we need to pass this information in a more specific way
 	// and not as a generic expression?
-	ord, _ := ctx.ivarMap.Get(int(virtualInvertedColID))
-	ctx.ivarMap.Set(int(join.Table.ColumnID(virtualInvertedCol.InvertedSourceColumnOrdinal())), ord)
+	ord, _ := ctx.ivarMap.Get(int(artificialInvertedColID))
+	ctx.ivarMap.Set(int(join.Table.ColumnID(artificialInvertedColumn.InvertedSourceColumnOrdinal())), ord)
 	invertedExpr, err := b.buildScalar(&ctx, join.InvertedExpr)
 	if err != nil {
 		return execPlan{}, err

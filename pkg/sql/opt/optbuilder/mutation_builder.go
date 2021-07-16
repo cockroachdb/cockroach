@@ -278,10 +278,10 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	mb.fetchScope = mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations:       true,
-			includeSystem:          true,
-			includeVirtualInverted: false,
-			includeVirtualComputed: true,
+			includeMutations:          true,
+			includeSystem:             true,
+			includeArtificialInverted: false,
+			includeVirtualComputed:    true,
 		}),
 		indexFlags,
 		noRowLocking,
@@ -394,10 +394,10 @@ func (mb *mutationBuilder) buildInputForDelete(
 	mb.fetchScope = mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations:       true,
-			includeSystem:          true,
-			includeVirtualInverted: false,
-			includeVirtualComputed: true,
+			includeMutations:          true,
+			includeSystem:             true,
+			includeArtificialInverted: false,
+			includeVirtualComputed:    true,
 		}),
 		indexFlags,
 		noRowLocking,

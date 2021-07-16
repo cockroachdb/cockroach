@@ -591,7 +591,7 @@ type optTable struct {
 	// columns contains all the columns presented to the catalog. This includes:
 	//  - ordinary table columns (those in the table descriptor)
 	//  - MVCC timestamp system column
-	//  - virtual columns (for inverted indexes).
+	//  - artificial columns (for inverted indexes).
 	// They are stored in this order, though we shouldn't rely on that anywhere.
 	columns []cat.Column
 
@@ -655,7 +655,7 @@ func newOptTable(
 	// First, determine how many columns we will potentially need.
 	cols := ot.desc.DeletableColumns()
 	numCols := len(ot.desc.AllColumns())
-	// One for each inverted index virtual column.
+	// Add one for each inverted index artificial column.
 	secondaryIndexes := ot.desc.DeletableNonPrimaryIndexes()
 	for _, index := range secondaryIndexes {
 		if index.GetType() == descpb.IndexDescriptor_INVERTED {
@@ -683,7 +683,7 @@ func newOptTable(
 			visibility = cat.Inaccessible
 		}
 		if !col.IsVirtual() {
-			ot.columns[col.Ordinal()].InitNonVirtual(
+			ot.columns[col.Ordinal()].Init(
 				col.Ordinal(),
 				cat.StableID(col.GetID()),
 				col.ColName(),
@@ -724,7 +724,7 @@ func newOptTable(
 		found, _ := desc.FindColumnWithName(sysCol.ColName())
 		if found == nil || found.IsSystemColumn() {
 			col, ord := newColumn()
-			col.InitNonVirtual(
+			col.Init(
 				ord,
 				cat.StableID(sysCol.GetID()),
 				sysCol.ColName(),
@@ -795,24 +795,24 @@ func newOptTable(
 			// descriptors, it looks as if the table column is part of the
 			// index; in fact the key contains values *derived* from that
 			// column. In the catalog, we refer to this key as a separate,
-			// virtual column.
+			// artificial column.
 			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idx.GetKeyColumnID(idx.NumKeyColumns() - 1))
 
-			// Add a virtual column that refers to the inverted index key.
-			virtualCol, virtualColOrd := newColumn()
+			// Add a artificial column that refers to the inverted index key.
+			artificialCol, artificialColOrd := newColumn()
 
-			// All virtual inverted columns have type bytes.
+			// All artificial inverted columns have type bytes.
 			typ := types.Bytes
-			virtualCol.InitVirtualInverted(
-				virtualColOrd,
+			artificialCol.InitArtificialInverted(
+				artificialColOrd,
 				tree.Name(string(ot.Column(invertedSourceColOrdinal).ColName())+"_inverted_key"),
 				typ,
 				false, /* nullable */
 				invertedSourceColOrdinal,
 			)
-			ot.indexes[i].init(ot, i, idx, idxZone, partZones, virtualColOrd)
+			ot.indexes[i].init(ot, i, idx, idxZone, partZones, artificialColOrd)
 		} else {
-			ot.indexes[i].init(ot, i, idx, idxZone, partZones, -1 /* virtualColOrd */)
+			ot.indexes[i].init(ot, i, idx, idxZone, partZones, -1 /* invertedArtificialColOrd */)
 		}
 
 		// Add unique constraints for implicitly partitioned unique indexes.
@@ -1161,10 +1161,10 @@ type optIndex struct {
 	// partitions.
 	partitions []optPartition
 
-	// invertedVirtualColOrd is used if this is an inverted index; it stores the
-	// ordinal of the virtual column created to refer to the key of this index.
-	// It is -1 if this is not an inverted index.
-	invertedVirtualColOrd int
+	// invertedArtificalColOrd is used if this is an inverted index; it stores
+	// the ordinal of the artificial column created to refer to the key of this
+	// index. It is -1 if this is not an inverted index.
+	invertedArtificalColOrd int
 }
 
 var _ cat.Index = &optIndex{}
@@ -1177,13 +1177,13 @@ func (oi *optIndex) init(
 	idx catalog.Index,
 	zone *zonepb.ZoneConfig,
 	partZones map[string]*zonepb.ZoneConfig,
-	invertedVirtualColOrd int,
+	invertedArtificialColOrd int,
 ) {
 	oi.tab = tab
 	oi.idx = idx
 	oi.zone = zone
 	oi.indexOrdinal = indexOrdinal
-	oi.invertedVirtualColOrd = invertedVirtualColOrd
+	oi.invertedArtificalColOrd = invertedArtificialColOrd
 	if idx.Primary() {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
@@ -1195,7 +1195,7 @@ func (oi *optIndex) init(
 			pkCols.Add(int(id))
 		}
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			if col := tab.Column(i); col.Kind() != cat.VirtualInverted && !col.IsVirtualComputed() {
+			if col := tab.Column(i); col.Kind() != cat.ArtificialInverted && !col.IsVirtualComputed() {
 				if id := col.ColID(); !pkCols.Contains(int(id)) {
 					oi.storedCols = append(oi.storedCols, descpb.ColumnID(id))
 				}
@@ -1283,7 +1283,7 @@ func (oi *optIndex) init(
 		var ord int
 		switch {
 		case inverted && i == numKeyCols-1:
-			ord = oi.invertedVirtualColOrd
+			ord = oi.invertedArtificalColOrd
 		case i < numKeyCols:
 			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
 		case i < numKeyCols+numKeySuffixCols:
@@ -1349,10 +1349,10 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 	}
 }
 
-// VirtualInvertedColumn is part of the cat.Index interface.
-func (oi *optIndex) VirtualInvertedColumn() cat.IndexColumn {
+// ArtificialInvertedColumn is part of the cat.Index interface.
+func (oi *optIndex) ArtificialInvertedColumn() cat.IndexColumn {
 	if !oi.IsInverted() {
-		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted virtual columns"))
+		panic(errors.AssertionFailedf("non-inverted indexes do not have artificial inverted columns"))
 	}
 	ord := oi.idx.NumKeyColumns() - 1
 	return oi.Column(ord)
@@ -1799,7 +1799,7 @@ func newOptVirtualTable(
 
 	ot.columns = make([]cat.Column, len(desc.PublicColumns())+1)
 	// Init dummy PK column.
-	ot.columns[0].InitNonVirtual(
+	ot.columns[0].Init(
 		0,
 		math.MaxInt64, /* stableID */
 		"crdb_internal_vtable_pk",
@@ -1811,7 +1811,7 @@ func newOptVirtualTable(
 		nil,        /* computedExpr */
 	)
 	for i, d := range desc.PublicColumns() {
-		ot.columns[i+1].InitNonVirtual(
+		ot.columns[i+1].Init(
 			i+1,
 			cat.StableID(d.GetID()),
 			tree.Name(d.GetName()),
@@ -1984,7 +1984,7 @@ func (ot *optVirtualTable) OutboundForeignKeyCount() int {
 	return 0
 }
 
-// OutboundForeignKeyCount is part of the cat.Table interface.
+// OutboundForeignKey is part of the cat.Table interface.
 func (ot *optVirtualTable) OutboundForeignKey(i int) cat.ForeignKeyConstraint {
 	panic(errors.AssertionFailedf("no FKs"))
 }
@@ -2124,8 +2124,8 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	return cat.IndexColumn{Column: oi.tab.Column(ord)}
 }
 
-// VirtualInvertedColumn is part of the cat.Index interface.
-func (oi *optVirtualIndex) VirtualInvertedColumn() cat.IndexColumn {
+// ArtificialInvertedColumn is part of the cat.Index interface.
+func (oi *optVirtualIndex) ArtificialInvertedColumn() cat.IndexColumn {
 	panic(errors.AssertionFailedf("virtual indexes are not inverted"))
 }
 
