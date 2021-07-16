@@ -1803,6 +1803,20 @@ func pebbleGetProto(
 	return true, keyBytes, valBytes, err
 }
 
+// ExceedMaxSizeError is the error returned when an export request
+// fails due the export size exceeding the budget. This can be caused
+// by large KVs that have many revisions.
+type ExceedMaxSizeError struct {
+	reached int64
+	maxSize uint64
+}
+
+var _ error = &ExceedMaxSizeError{}
+
+func (e *ExceedMaxSizeError) Error() string {
+	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
+}
+
 func pebbleExportToSst(
 	ctx context.Context,
 	reader Reader,
@@ -1887,8 +1901,7 @@ func pebbleExportToSst(
 			}
 			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
 			if maxSize > 0 && newSize > int64(maxSize) {
-				return roachpb.BulkOpSummary{}, nil,
-					errors.Errorf("export size (%d bytes) exceeds max size (%d bytes)", newSize, maxSize)
+				return roachpb.BulkOpSummary{}, nil, &ExceedMaxSizeError{reached: newSize, maxSize: maxSize}
 			}
 			rows.BulkOpSummary.DataSize = newSize
 		}

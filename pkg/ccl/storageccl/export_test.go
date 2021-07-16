@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -283,6 +284,10 @@ INTO
 		const expectedError = `export size \(11 bytes\) exceeds max size \(2 bytes\)`
 		_, pErr := export(t, res5.end, roachpb.MVCCFilter_Latest, noTargetBytes)
 		require.Regexp(t, expectedError, pErr)
+		hints := errors.GetAllHints(pErr.GoError())
+		require.Equal(t, 1, len(hints))
+		const expectedHint = `consider increasing cluster setting "kv.bulk_sst.max_allowed_overage"`
+		require.Regexp(t, expectedHint, hints[0])
 		_, pErr = export(t, res5.end, roachpb.MVCCFilter_All, noTargetBytes)
 		require.Regexp(t, expectedError, pErr)
 

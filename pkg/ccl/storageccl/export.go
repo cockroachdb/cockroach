@@ -38,12 +38,16 @@ var ExportRequestTargetFileSize = settings.RegisterByteSizeSetting(
 	64<<20, /* 64 MiB */
 )
 
+// MaxOverageSetting is the cluster setting name for the
+// ExportRequestMaxAllowedFileSizeOverage setting.
+const MaxExportOverageSetting = "kv.bulk_sst.max_allowed_overage"
+
 // ExportRequestMaxAllowedFileSizeOverage controls the maximum size in excess of
 // the target file size which an exported SST may be. If this value is positive
 // and an SST would exceed this size (due to large rows or large numbers of
 // versions), then the export will fail.
 var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
-	"kv.bulk_sst.max_allowed_overage",
+	MaxExportOverageSetting,
 	"if positive, allowed size in excess of target size for SSTs from export requests",
 	64<<20, /* 64 MiB */
 )
@@ -171,6 +175,10 @@ func evalExport(
 		summary, resume, err := reader.ExportMVCCToSst(ctx, start, args.EndKey, args.StartTime,
 			h.Timestamp, exportAllRevisions, targetSize, maxSize, useTBI, destFile)
 		if err != nil {
+			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
+				err = errors.WithHintf(err,
+					"consider increasing cluster setting %q", MaxExportOverageSetting)
+			}
 			return result.Result{}, err
 		}
 		data := destFile.Data()
