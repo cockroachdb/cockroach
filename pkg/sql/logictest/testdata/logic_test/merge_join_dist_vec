@@ -81,7 +81,7 @@ EXPLAIN (VEC) SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._
 │
 └ Node 1
   └ *colexecjoin.mergeJoinInnerOp
-    ├ *colexecbase.castInt16Int32Op
+    ├ *colexecbase.castInt2Int4Op
     │ └ *colexec.sortOp
     │   └ *colfetcher.ColBatchScan
     └ *colexec.sortOp
@@ -95,7 +95,7 @@ EXPLAIN (VEC) SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._
   └ *colexecjoin.mergeJoinInnerOp
     ├ *colexec.sortOp
     │ └ *colfetcher.ColBatchScan
-    └ *colexecbase.castInt16Int64Op
+    └ *colexecbase.castInt2IntOp
       └ *colexec.sortOp
         └ *colfetcher.ColBatchScan
 

@@ -75,81 +75,61 @@ func GetCastOperator(
 	toType *types.T,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, toType, resultIdx)
+	base := castOpBase{
+		OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+		allocator:                allocator,
+		colIdx:                   colIdx,
+		outputIdx:                resultIdx,
+	}
 	if fromType.Family() == types.UnknownFamily {
-		return &castOpNullAny{
-			OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-			allocator:                allocator,
-			colIdx:                   colIdx,
-			outputIdx:                resultIdx,
-		}, nil
+		return &castOpNullAny{castOpBase: base}, nil
 	}
 	if toType.Identical(fromType) {
 		// We have an identity cast, so we use a custom identity cast operator.
-		return &castIdentityOp{
-			OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-			allocator:                allocator,
-			colIdx:                   colIdx,
-			outputIdx:                resultIdx,
-		}, nil
+		return &castIdentityOp{castOpBase: base}, nil
 	}
-	// TODO(yuzefovich): remove this rebinding in the follow-up commit.
-	leftType, rightType := fromType, toType
-	switch leftType.Family() {
-	// {{range .FromNative}}
-	case _TYPE_FAMILY:
-		switch leftType.Width() {
-		// {{range .Widths}}
-		case _TYPE_WIDTH:
-			switch rightType.Family() {
-			// {{$fromInfo := .}}
-			// {{range .To}}
+	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	if isFromDatum {
+		if isToDatum {
+			return &castDatumDatumOp{castOpBase: base}, nil
+		}
+		switch toType.Family() {
+		// {{range .FromDatum}}
+		// {{$fromInfo := .}}
+		case _TYPE_FAMILY:
+			switch toType.Width() {
+			// {{range .Widths}}
+			case _TYPE_WIDTH:
+				return &cast_NAMEOp{castOpBase: base}, nil
+				// {{end}}
+			}
+			// {{end}}
+		}
+	} else {
+		if !isToDatum {
+			switch fromType.Family() {
+			// {{range .FromNative}}
 			case _TYPE_FAMILY:
-				switch rightType.Width() {
+				switch fromType.Width() {
 				// {{range .Widths}}
 				case _TYPE_WIDTH:
-					return &cast_NAMEOp{
-						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-						allocator:                allocator,
-						colIdx:                   colIdx,
-						outputIdx:                resultIdx,
-						toType:                   toType,
-					}, nil
+					switch toType.Family() {
+					// {{$fromInfo := .}}
+					// {{range .To}}
+					case _TYPE_FAMILY:
+						switch toType.Width() {
+						// {{range .Widths}}
+						case _TYPE_WIDTH:
+							return &cast_NAMEOp{castOpBase: base}, nil
+							// {{end}}
+						}
+						// {{end}}
+					}
 					// {{end}}
 				}
 				// {{end}}
 			}
-			// {{end}}
-		}
-		// {{end}}
-	}
-	if typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
-		switch rightType.Family() {
-		// {{range .FromDatum}}
-		// {{$fromInfo := .}}
-		case _TYPE_FAMILY:
-			switch rightType.Width() {
-			// {{range .Widths}}
-			case _TYPE_WIDTH:
-				return &cast_NAMEOp{
-					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-					allocator:                allocator,
-					colIdx:                   colIdx,
-					outputIdx:                resultIdx,
-					toType:                   toType,
-				}, nil
-				// {{end}}
-			}
-			// {{end}}
-		}
-
-		if typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
-			return &castDatumDatumOp{
-				OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-				allocator:                allocator,
-				colIdx:                   colIdx,
-				outputIdx:                resultIdx,
-				toType:                   toType,
-			}, nil
 		}
 	}
 	return nil, errors.Errorf("unhandled cast %s -> %s", fromType, toType)
@@ -162,34 +142,16 @@ func IsCastSupported(fromType, toType *types.T) bool {
 	if toType.Identical(fromType) {
 		return true
 	}
-	// TODO(yuzefovich): remove this rebinding in the follow-up commit.
-	leftType, rightType := fromType, toType
-	switch leftType.Family() {
-	// {{range .FromNative}}
-	case _TYPE_FAMILY:
-		switch leftType.Width() {
-		// {{range .Widths}}
-		case _TYPE_WIDTH:
-			switch rightType.Family() {
-			// {{range .To}}
-			case _TYPE_FAMILY:
-				switch rightType.Width() {
-				// {{range .Widths}}
-				case _TYPE_WIDTH:
-					return true
-					// {{end}}
-				}
-				// {{end}}
-			}
-			// {{end}}
+	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	if isFromDatum {
+		if isToDatum {
+			return true
 		}
-		// {{end}}
-	}
-	if typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
-		switch rightType.Family() {
+		switch toType.Family() {
 		// {{range .FromDatum}}
 		case _TYPE_FAMILY:
-			switch rightType.Width() {
+			switch toType.Width() {
 			// {{range .Widths}}
 			case _TYPE_WIDTH:
 				return true
@@ -197,20 +159,53 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			}
 			// {{end}}
 		}
-
-		if typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
-			return true
+	} else {
+		if isToDatum {
+			// TODO(yuzefovich): support this case.
+			return false
+		} else {
+			switch fromType.Family() {
+			// {{range .FromNative}}
+			case _TYPE_FAMILY:
+				switch fromType.Width() {
+				// {{range .Widths}}
+				case _TYPE_WIDTH:
+					switch toType.Family() {
+					// {{range .To}}
+					case _TYPE_FAMILY:
+						switch toType.Width() {
+						// {{range .Widths}}
+						case _TYPE_WIDTH:
+							return true
+							// {{end}}
+						}
+						// {{end}}
+					}
+					// {{end}}
+				}
+				// {{end}}
+			}
 		}
 	}
 	return false
 }
 
-type castOpNullAny struct {
+type castOpBase struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+}
+
+func (c *castOpBase) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+type castOpNullAny struct {
+	castOpBase
 }
 
 var _ colexecop.ClosableOperator = &castOpNullAny{}
@@ -264,11 +259,7 @@ func (c *castOpNullAny) Next() coldata.Batch {
 // This operator should be planned rarely enough (if ever) to not be very
 // important.
 type castIdentityOp struct {
-	colexecop.OneInputInitCloserHelper
-
-	allocator *colmem.Allocator
-	colIdx    int
-	outputIdx int
+	castOpBase
 }
 
 var _ colexecop.ClosableOperator = &castIdentityOp{}
@@ -304,12 +295,8 @@ func (c *castIdentityOp) Next() coldata.Batch {
 // {{with .Global}}
 
 type cast_NAMEOp struct {
-	colexecop.OneInputInitCloserHelper
+	castOpBase
 
-	allocator *colmem.Allocator
-	colIdx    int
-	outputIdx int
-	toType    *types.T
 	// {{if and (eq $fromFamily "types.DecimalFamily") (eq $toFamily "types.IntFamily")}}
 	// {{/*
 	// overloadHelper is used only when we perform the cast from decimals to
@@ -321,12 +308,6 @@ type cast_NAMEOp struct {
 
 var _ colexecop.ResettableOperator = &cast_NAMEOp{}
 var _ colexecop.ClosableOperator = &cast_NAMEOp{}
-
-func (c *cast_NAMEOp) Reset(ctx context.Context) {
-	if r, ok := c.Input.(colexecop.Resetter); ok {
-		r.Reset(ctx)
-	}
-}
 
 func (c *cast_NAMEOp) Next() coldata.Batch {
 	batch := c.Input.Next()
@@ -342,6 +323,9 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec._FROM_TYPE()
@@ -365,6 +349,12 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 					_CAST_TUPLES(false, false)
 				}
 			}
+			// {{/*
+			// Although we didn't change the length of the batch, it is
+			// necessary to set the length anyway (this helps maintaining the
+			// invariant of flat bytes).
+			// */}}
+			batch.SetLength(n)
 		},
 	)
 	return batch
@@ -441,7 +431,7 @@ func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
 		// {{end}}
 		v := inputCol.Get(tupleIdx)
 		var r _TO_GO_TYPE
-		_CAST(r, v, inputCol, c.toType)
+		_CAST(r, v, inputCol, toType)
 		// {{if and (.Sliceable) (not $hasSel)}}
 		//gcassert:bce
 		// {{end}}
