@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -150,212 +151,213 @@ func GetCastOperator(
 			}
 		}
 	} else {
-		if !isToDatum {
-			switch fromType.Family() {
-			case types.BoolFamily:
-				switch fromType.Width() {
-				case -1:
-				default:
-					switch toType.Family() {
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castBoolFloatOp{castOpBase: base}, nil
-						}
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return &castBoolInt2Op{castOpBase: base}, nil
-						case 32:
-							return &castBoolInt4Op{castOpBase: base}, nil
-						case -1:
-						default:
-							return &castBoolIntOp{castOpBase: base}, nil
-						}
+		if isToDatum {
+			return &castNativeToDatumOp{castOpBase: base}, nil
+		}
+		switch fromType.Family() {
+		case types.BoolFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castBoolFloatOp{castOpBase: base}, nil
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return &castBoolInt2Op{castOpBase: base}, nil
+					case 32:
+						return &castBoolInt4Op{castOpBase: base}, nil
+					case -1:
+					default:
+						return &castBoolIntOp{castOpBase: base}, nil
 					}
 				}
-			case types.DecimalFamily:
-				switch fromType.Width() {
-				case -1:
-				default:
-					switch toType.Family() {
-					case types.BoolFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castDecimalBoolOp{castOpBase: base}, nil
-						}
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return &castDecimalInt2Op{castOpBase: base}, nil
-						case 32:
-							return &castDecimalInt4Op{castOpBase: base}, nil
-						case -1:
-						default:
-							return &castDecimalIntOp{castOpBase: base}, nil
-						}
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castDecimalFloatOp{castOpBase: base}, nil
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castDecimalDecimalOp{castOpBase: base}, nil
-						}
+			}
+		case types.DecimalFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDecimalBoolOp{castOpBase: base}, nil
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return &castDecimalInt2Op{castOpBase: base}, nil
+					case 32:
+						return &castDecimalInt4Op{castOpBase: base}, nil
+					case -1:
+					default:
+						return &castDecimalIntOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDecimalFloatOp{castOpBase: base}, nil
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDecimalDecimalOp{castOpBase: base}, nil
 					}
 				}
-			case types.IntFamily:
-				switch fromType.Width() {
-				case 16:
-					switch toType.Family() {
-					case types.IntFamily:
-						switch toType.Width() {
-						case 32:
-							return &castInt2Int4Op{castOpBase: base}, nil
-						case -1:
-						default:
-							return &castInt2IntOp{castOpBase: base}, nil
-						}
-					case types.BoolFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castInt2BoolOp{castOpBase: base}, nil
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castInt2DecimalOp{castOpBase: base}, nil
-						}
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castInt2FloatOp{castOpBase: base}, nil
-						}
+			}
+		case types.IntFamily:
+			switch fromType.Width() {
+			case 16:
+				switch toType.Family() {
+				case types.IntFamily:
+					switch toType.Width() {
+					case 32:
+						return &castInt2Int4Op{castOpBase: base}, nil
+					case -1:
+					default:
+						return &castInt2IntOp{castOpBase: base}, nil
 					}
-				case 32:
-					switch toType.Family() {
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return &castInt4Int2Op{castOpBase: base}, nil
-						case -1:
-						default:
-							return &castInt4IntOp{castOpBase: base}, nil
-						}
-					case types.BoolFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castInt4BoolOp{castOpBase: base}, nil
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castInt4DecimalOp{castOpBase: base}, nil
-						}
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castInt4FloatOp{castOpBase: base}, nil
-						}
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt2BoolOp{castOpBase: base}, nil
 					}
-				case -1:
-				default:
-					switch toType.Family() {
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return &castIntInt2Op{castOpBase: base}, nil
-						case 32:
-							return &castIntInt4Op{castOpBase: base}, nil
-						}
-					case types.BoolFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castIntBoolOp{castOpBase: base}, nil
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castIntDecimalOp{castOpBase: base}, nil
-						}
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castIntFloatOp{castOpBase: base}, nil
-						}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt2DecimalOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt2FloatOp{castOpBase: base}, nil
 					}
 				}
-			case types.FloatFamily:
-				switch fromType.Width() {
-				case -1:
-				default:
-					switch toType.Family() {
-					case types.BoolFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castFloatBoolOp{castOpBase: base}, nil
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castFloatDecimalOp{castOpBase: base}, nil
-						}
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return &castFloatInt2Op{castOpBase: base}, nil
-						case 32:
-							return &castFloatInt4Op{castOpBase: base}, nil
-						case -1:
-						default:
-							return &castFloatIntOp{castOpBase: base}, nil
-						}
+			case 32:
+				switch toType.Family() {
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return &castInt4Int2Op{castOpBase: base}, nil
+					case -1:
+					default:
+						return &castInt4IntOp{castOpBase: base}, nil
+					}
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt4BoolOp{castOpBase: base}, nil
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt4DecimalOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt4FloatOp{castOpBase: base}, nil
 					}
 				}
-			case types.DateFamily:
-				switch fromType.Width() {
-				case -1:
-				default:
-					switch toType.Family() {
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return &castDateInt2Op{castOpBase: base}, nil
-						case 32:
-							return &castDateInt4Op{castOpBase: base}, nil
-						case -1:
-						default:
-							return &castDateIntOp{castOpBase: base}, nil
-						}
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castDateFloatOp{castOpBase: base}, nil
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return &castDateDecimalOp{castOpBase: base}, nil
-						}
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return &castIntInt2Op{castOpBase: base}, nil
+					case 32:
+						return &castIntInt4Op{castOpBase: base}, nil
+					}
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castIntBoolOp{castOpBase: base}, nil
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castIntDecimalOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castIntFloatOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.FloatFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castFloatBoolOp{castOpBase: base}, nil
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castFloatDecimalOp{castOpBase: base}, nil
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return &castFloatInt2Op{castOpBase: base}, nil
+					case 32:
+						return &castFloatInt4Op{castOpBase: base}, nil
+					case -1:
+					default:
+						return &castFloatIntOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.DateFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return &castDateInt2Op{castOpBase: base}, nil
+					case 32:
+						return &castDateInt4Op{castOpBase: base}, nil
+					case -1:
+					default:
+						return &castDateIntOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDateFloatOp{castOpBase: base}, nil
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDateDecimalOp{castOpBase: base}, nil
 					}
 				}
 			}
@@ -457,214 +459,212 @@ func IsCastSupported(fromType, toType *types.T) bool {
 		}
 	} else {
 		if isToDatum {
-			// TODO(yuzefovich): support this case.
-			return false
-		} else {
-			switch fromType.Family() {
-			case types.BoolFamily:
-				switch fromType.Width() {
-				case -1:
-				default:
-					switch toType.Family() {
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return true
-						case 32:
-							return true
-						case -1:
-						default:
-							return true
-						}
+			return true
+		}
+		switch fromType.Family() {
+		case types.BoolFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return true
+					case 32:
+						return true
+					case -1:
+					default:
+						return true
 					}
 				}
-			case types.DecimalFamily:
-				switch fromType.Width() {
-				case -1:
-				default:
-					switch toType.Family() {
-					case types.BoolFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return true
-						case 32:
-							return true
-						case -1:
-						default:
-							return true
-						}
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
+			}
+		case types.DecimalFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return true
+					case 32:
+						return true
+					case -1:
+					default:
+						return true
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
 					}
 				}
-			case types.IntFamily:
-				switch fromType.Width() {
-				case 16:
-					switch toType.Family() {
-					case types.IntFamily:
-						switch toType.Width() {
-						case 32:
-							return true
-						case -1:
-						default:
-							return true
-						}
-					case types.BoolFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
+			}
+		case types.IntFamily:
+			switch fromType.Width() {
+			case 16:
+				switch toType.Family() {
+				case types.IntFamily:
+					switch toType.Width() {
+					case 32:
+						return true
+					case -1:
+					default:
+						return true
 					}
-				case 32:
-					switch toType.Family() {
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return true
-						case -1:
-						default:
-							return true
-						}
-					case types.BoolFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
 					}
-				case -1:
-				default:
-					switch toType.Family() {
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return true
-						case 32:
-							return true
-						}
-					case types.BoolFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
 					}
 				}
-			case types.FloatFamily:
-				switch fromType.Width() {
-				case -1:
-				default:
-					switch toType.Family() {
-					case types.BoolFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return true
-						case 32:
-							return true
-						case -1:
-						default:
-							return true
-						}
+			case 32:
+				switch toType.Family() {
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return true
+					case -1:
+					default:
+						return true
+					}
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
 					}
 				}
-			case types.DateFamily:
-				switch fromType.Width() {
-				case -1:
-				default:
-					switch toType.Family() {
-					case types.IntFamily:
-						switch toType.Width() {
-						case 16:
-							return true
-						case 32:
-							return true
-						case -1:
-						default:
-							return true
-						}
-					case types.FloatFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
-					case types.DecimalFamily:
-						switch toType.Width() {
-						case -1:
-						default:
-							return true
-						}
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return true
+					case 32:
+						return true
+					}
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.FloatFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return true
+					case 32:
+						return true
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.DateFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return true
+					case 32:
+						return true
+					case -1:
+					default:
+						return true
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
 					}
 				}
 			}
@@ -769,6 +769,111 @@ func (c *castIdentityOp) Next() coldata.Batch {
 	})
 	return batch
 }
+
+type castNativeToDatumOp struct {
+	castOpBase
+
+	scratch []tree.Datum
+	da      rowenc.DatumAlloc
+}
+
+var _ colexecop.ClosableOperator = &castNativeToDatumOp{}
+
+func (c *castNativeToDatumOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	outputCol := outputVec.Datum()
+	outputNulls := outputVec.Nulls()
+	toType := outputVec.Type()
+	c.allocator.PerformOperation([]coldata.Vec{outputVec}, func() {
+		maxIdx := n
+		sel := batch.Selection()
+		if sel != nil {
+			// We will perform the conversion without deselection.
+			maxIdx = sel[n-1] + 1
+		}
+		if n > c.da.AllocSize {
+			c.da.AllocSize = n
+		}
+		if cap(c.scratch) < maxIdx {
+			c.scratch = make([]tree.Datum, maxIdx)
+		}
+		scratch := c.scratch
+		colconv.ColVecToDatum(scratch, inputVec, n, sel, &c.da)
+		if sel != nil {
+			if inputVec.Nulls().MaybeHasNulls() {
+				for _, idx := range sel[:n] {
+					{
+						converted := scratch[idx]
+						if converted == tree.DNull {
+							outputNulls.SetNull(idx)
+							continue
+						}
+						res, err := coldataext.PerformCast(outputCol, converted, toType)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						outputCol.Set(idx, res)
+					}
+				}
+			} else {
+				for _, idx := range sel[:n] {
+					{
+						converted := scratch[idx]
+						res, err := coldataext.PerformCast(outputCol, converted, toType)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						outputCol.Set(idx, res)
+					}
+				}
+			}
+		} else {
+			_ = scratch[n-1]
+			if inputVec.Nulls().MaybeHasNulls() {
+				for idx := 0; idx < n; idx++ {
+					{
+						//gcassert:bce
+						converted := scratch[idx]
+						if converted == tree.DNull {
+							outputNulls.SetNull(idx)
+							continue
+						}
+						res, err := coldataext.PerformCast(outputCol, converted, toType)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						outputCol.Set(idx, res)
+					}
+				}
+			} else {
+				for idx := 0; idx < n; idx++ {
+					{
+						//gcassert:bce
+						converted := scratch[idx]
+						res, err := coldataext.PerformCast(outputCol, converted, toType)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						outputCol.Set(idx, res)
+					}
+				}
+			}
+		}
+	})
+	return batch
+}
+
+// setNativeToDatumCast performs the cast of the converted datum in scratch[idx]
+// to toType and sets the result into position idx of outputCol (or into the
+// output nulls bitmap).
+// execgen:inline
+const _ = "template_setNativeToDatumCast"
 
 type castBoolFloatOp struct {
 	castOpBase
@@ -6690,3 +6795,27 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 	)
 	return batch
 }
+
+// setNativeToDatumCast performs the cast of the converted datum in scratch[idx]
+// to toType and sets the result into position idx of outputCol (or into the
+// output nulls bitmap).
+// execgen:inline
+const _ = "inlined_setNativeToDatumCast_true_false"
+
+// setNativeToDatumCast performs the cast of the converted datum in scratch[idx]
+// to toType and sets the result into position idx of outputCol (or into the
+// output nulls bitmap).
+// execgen:inline
+const _ = "inlined_setNativeToDatumCast_false_false"
+
+// setNativeToDatumCast performs the cast of the converted datum in scratch[idx]
+// to toType and sets the result into position idx of outputCol (or into the
+// output nulls bitmap).
+// execgen:inline
+const _ = "inlined_setNativeToDatumCast_true_true"
+
+// setNativeToDatumCast performs the cast of the converted datum in scratch[idx]
+// to toType and sets the result into position idx of outputCol (or into the
+// output nulls bitmap).
+// execgen:inline
+const _ = "inlined_setNativeToDatumCast_false_true"

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -117,29 +118,30 @@ func GetCastOperator(
 			// {{end}}
 		}
 	} else {
-		if !isToDatum {
-			switch fromType.Family() {
-			// {{range .FromNative}}
-			case _TYPE_FAMILY:
-				switch fromType.Width() {
-				// {{range .Widths}}
-				case _TYPE_WIDTH:
-					switch toType.Family() {
-					// {{$fromInfo := .}}
-					// {{range .To}}
-					case _TYPE_FAMILY:
-						switch toType.Width() {
-						// {{range .Widths}}
-						case _TYPE_WIDTH:
-							return &cast_NAMEOp{castOpBase: base}, nil
-							// {{end}}
-						}
+		if isToDatum {
+			return &castNativeToDatumOp{castOpBase: base}, nil
+		}
+		switch fromType.Family() {
+		// {{range .FromNative}}
+		case _TYPE_FAMILY:
+			switch fromType.Width() {
+			// {{range .Widths}}
+			case _TYPE_WIDTH:
+				switch toType.Family() {
+				// {{$fromInfo := .}}
+				// {{range .To}}
+				case _TYPE_FAMILY:
+					switch toType.Width() {
+					// {{range .Widths}}
+					case _TYPE_WIDTH:
+						return &cast_NAMEOp{castOpBase: base}, nil
 						// {{end}}
 					}
 					// {{end}}
 				}
 				// {{end}}
 			}
+			// {{end}}
 		}
 	}
 	return nil, errors.Errorf("unhandled cast %s -> %s", fromType, toType)
@@ -171,30 +173,28 @@ func IsCastSupported(fromType, toType *types.T) bool {
 		}
 	} else {
 		if isToDatum {
-			// TODO(yuzefovich): support this case.
-			return false
-		} else {
-			switch fromType.Family() {
-			// {{range .FromNative}}
-			case _TYPE_FAMILY:
-				switch fromType.Width() {
-				// {{range .Widths}}
-				case _TYPE_WIDTH:
-					switch toType.Family() {
-					// {{range .To}}
-					case _TYPE_FAMILY:
-						switch toType.Width() {
-						// {{range .Widths}}
-						case _TYPE_WIDTH:
-							return true
-							// {{end}}
-						}
+			return true
+		}
+		switch fromType.Family() {
+		// {{range .FromNative}}
+		case _TYPE_FAMILY:
+			switch fromType.Width() {
+			// {{range .Widths}}
+			case _TYPE_WIDTH:
+				switch toType.Family() {
+				// {{range .To}}
+				case _TYPE_FAMILY:
+					switch toType.Width() {
+					// {{range .Widths}}
+					case _TYPE_WIDTH:
+						return true
 						// {{end}}
 					}
 					// {{end}}
 				}
 				// {{end}}
 			}
+			// {{end}}
 		}
 	}
 	return false
@@ -295,6 +295,98 @@ func (c *castIdentityOp) Next() coldata.Batch {
 		})
 	})
 	return batch
+}
+
+type castNativeToDatumOp struct {
+	castOpBase
+
+	scratch []tree.Datum
+	da      rowenc.DatumAlloc
+}
+
+var _ colexecop.ClosableOperator = &castNativeToDatumOp{}
+
+func (c *castNativeToDatumOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	outputCol := outputVec.Datum()
+	outputNulls := outputVec.Nulls()
+	toType := outputVec.Type()
+	c.allocator.PerformOperation([]coldata.Vec{outputVec}, func() {
+		maxIdx := n
+		sel := batch.Selection()
+		if sel != nil {
+			// We will perform the conversion without deselection.
+			maxIdx = sel[n-1] + 1
+		}
+		if n > c.da.AllocSize {
+			c.da.AllocSize = n
+		}
+		if cap(c.scratch) < maxIdx {
+			c.scratch = make([]tree.Datum, maxIdx)
+		}
+		scratch := c.scratch
+		colconv.ColVecToDatum(scratch, inputVec, n, sel, &c.da)
+		if sel != nil {
+			if inputVec.Nulls().MaybeHasNulls() {
+				for _, idx := range sel[:n] {
+					setNativeToDatumCast(outputCol, outputNulls, scratch, idx, toType, true, false)
+				}
+			} else {
+				for _, idx := range sel[:n] {
+					setNativeToDatumCast(outputCol, outputNulls, scratch, idx, toType, false, false)
+				}
+			}
+		} else {
+			_ = scratch[n-1]
+			if inputVec.Nulls().MaybeHasNulls() {
+				for idx := 0; idx < n; idx++ {
+					setNativeToDatumCast(outputCol, outputNulls, scratch, idx, toType, true, true)
+				}
+			} else {
+				for idx := 0; idx < n; idx++ {
+					setNativeToDatumCast(outputCol, outputNulls, scratch, idx, toType, false, true)
+				}
+			}
+		}
+	})
+	return batch
+}
+
+// setNativeToDatumCast performs the cast of the converted datum in scratch[idx]
+// to toType and sets the result into position idx of outputCol (or into the
+// output nulls bitmap).
+// execgen:inline
+// execgen:template<hasNulls,scratchBCE>
+func setNativeToDatumCast(
+	outputCol coldata.DatumVec,
+	outputNulls *coldata.Nulls,
+	scratch []tree.Datum,
+	idx int,
+	toType *types.T,
+	hasNulls bool,
+	scratchBCE bool,
+) {
+	if scratchBCE {
+		//gcassert:bce
+	}
+	converted := scratch[idx]
+	if hasNulls {
+		if converted == tree.DNull {
+			outputNulls.SetNull(idx)
+			continue
+		}
+	}
+	res, err := coldataext.PerformCast(outputCol, converted, toType)
+	if err != nil {
+		colexecerror.ExpectedError(err)
+	}
+	outputCol.Set(idx, res)
 }
 
 // {{define "castOp"}}
