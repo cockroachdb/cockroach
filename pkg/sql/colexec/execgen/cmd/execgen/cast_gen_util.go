@@ -385,12 +385,6 @@ func (i castFromWidthTmplInfo) VecMethod() string {
 }
 
 func getTypeName(typ *types.T) string {
-	switch typ.Family() {
-	case types.IntFamily, types.FloatFamily:
-		// TODO(yuzefovich): this is a temporary exception to have smaller diff
-		// for the generated code. Remove this in the follow-up commit.
-		return toVecMethod(typ.Family(), typ.Width())
-	}
 	// typ.Name() returns the type name in the lowercase. We want to capitalize
 	// the first letter (and all type names start with a letter).
 	name := []byte(typ.Name())

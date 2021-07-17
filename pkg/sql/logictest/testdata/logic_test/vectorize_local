@@ -261,7 +261,7 @@ EXPLAIN (VEC) SELECT stddev((t46404_1.c0 > ANY (0, 0))::INT) FROM t46404_0, t464
 │
 └ Node 1
   └ *colexec.hashAggregator
-    └ *colexecbase.castBoolInt64Op
+    └ *colexecbase.castBoolIntOp
       └ *colexecproj.defaultCmpRConstProjOp
         └ *colexecjoin.crossJoiner
           ├ *colfetcher.ColBatchScan
@@ -311,13 +311,13 @@ EXPLAIN (VEC) SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
 │
 └ Node 1
   └ *colexecproj.projMultInt64Int64Op
-    └ *colexecbase.castInt16Int64Op
-      └ *colexecbase.castInt16Int64Op
+    └ *colexecbase.castInt2IntOp
+      └ *colexecbase.castInt2IntOp
         └ *colexecsel.selEQInt64Int64Op
           └ *colexecproj.projPlusInt64Int64ConstOp
             └ *colexecproj.projPlusInt64Int64Op
-              └ *colexecbase.castInt32Int64Op
-                └ *colexecbase.castInt32Int64Op
+              └ *colexecbase.castInt4IntOp
+                └ *colexecbase.castInt4IntOp
                   └ *colfetcher.ColBatchScan
 
 query I
