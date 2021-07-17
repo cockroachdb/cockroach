@@ -99,3 +99,20 @@ func UnsafeFromGoType(v interface{}) *types.T {
 		panic(fmt.Sprintf("type %s not supported yet", t))
 	}
 }
+
+// TypesSupportedNatively contains types that are supported natively by the
+// vectorized engine.
+var TypesSupportedNatively []*types.T
+
+func init() {
+	for _, t := range types.Scalar {
+		if TypeFamilyToCanonicalTypeFamily(t.Family()) == DatumVecCanonicalTypeFamily {
+			continue
+		}
+		if t.Family() == types.IntFamily {
+			TypesSupportedNatively = append(TypesSupportedNatively, types.Int2)
+			TypesSupportedNatively = append(TypesSupportedNatively, types.Int4)
+		}
+		TypesSupportedNatively = append(TypesSupportedNatively, t)
+	}
+}
