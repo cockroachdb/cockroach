@@ -17,8 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// castInfos contains supported "from -> to" mappings. This mapping has to be on
-// the actual types and not the canonical type families.
+// nativeCastInfos contains supported "from -> to" mappings where both types are
+// supported natively. This mapping has to be on the actual types and not the
+// canonical type families.
 //
 // The information in this struct must be structured in such a manner that all
 // supported casts:
@@ -35,7 +36,7 @@ import (
 //    "continuity" requirement is broken)
 // 2. the 'default' case appears before other in the switch statements (when
 //    anyWidth is not the last one).
-var castInfos = []supportedCastInfo{
+var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Bool, types.Float, boolToIntOrFloat},
 	{types.Bool, types.Int2, boolToIntOrFloat},
 	{types.Bool, types.Int4, boolToIntOrFloat},
@@ -71,8 +72,32 @@ var castInfos = []supportedCastInfo{
 	{types.Float, types.Int, floatToInt(anyWidth, 64 /* floatWidth */)},
 }
 
-type supportedCastInfo struct {
+type supportedNativeCastInfo struct {
 	from *types.T
+	to   *types.T
+	cast castFunc
+}
+
+// datumCastInfos contains supported "datum-backed -> to" mappings where to type
+// is supported natively. This mapping has to be on the actual types and not the
+// canonical type families.
+//
+// The information in this struct must be structured in such a manner that all
+// supported casts:
+// 1.  to the same type family are contiguous
+// 2.  for "to" type family, anyWidth "to" width is the last one.
+//
+// If this structure is broken, then the generated code will not compile because
+// either
+// 1. there will be duplicate entries in the switch statements (when
+//    "continuity" requirement is broken)
+// 2. the 'default' case appears before other in the switch statements (when
+//    anyWidth is not the last one).
+var datumCastInfos = []supportedDatumCastInfo{
+	{types.Bool, datumToBool},
+}
+
+type supportedDatumCastInfo struct {
 	to   *types.T
 	cast castFunc
 }
@@ -245,11 +270,6 @@ func floatToInt(intWidth, floatWidth int32) func(string, string, string, string)
 	}
 }
 
-// TODO(yuzefovich): add support for casts from datum-backed types. It is
-// probably better to handle them separately from all other casts.
-var _ = datumToBool
-var _ = datumToDatum
-
 func datumToBool(to, from, fromCol, _ string) string {
 	convStr := `
 		{
@@ -335,6 +355,31 @@ type castToWidthTmplInfo struct {
 	CastFn castFunc
 }
 
+type castDatumTmplInfo struct {
+	// TypeFamily contains the type family of the "to" type this struct is
+	// handling, with "types." prefix.
+	TypeFamily string
+	// Widths contains all of the type widths of the "to" type this struct is
+	// handling. Note that the entry with 'anyWidth' width must be last in the
+	// slice.
+	Widths []castDatumToWidthTmplInfo
+}
+
+type castDatumToWidthTmplInfo struct {
+	toType    *types.T
+	Width     int32
+	VecMethod string
+	GoType    string
+	// CastFn is a function that returns a string which performs the cast
+	// between the datum-backed type and toType.
+	CastFn castFunc
+}
+
+type castBetweenDatumsTmplInfo struct {
+	VecMethod string
+	GoType    string
+}
+
 func (i castFromWidthTmplInfo) VecMethod() string {
 	return toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(i.fromType.Family()), i.Width)
 }
@@ -352,6 +397,8 @@ func getTypeName(typ *types.T) string {
 	return string(name[0]-32) + string(name[1:])
 }
 
+const datumVecTypeName = "Datum"
+
 func (i castFromWidthTmplInfo) TypeName() string {
 	return getTypeName(i.fromType)
 }
@@ -368,6 +415,38 @@ func (i castToWidthTmplInfo) Sliceable() bool {
 	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(i.toType.Family()))
 }
 
+func (i castDatumTmplInfo) VecMethod() string {
+	return toVecMethod(typeconv.DatumVecCanonicalTypeFamily, anyWidth)
+}
+
+func (i castDatumTmplInfo) TypeName() string {
+	return datumVecTypeName
+}
+
+func (i castDatumToWidthTmplInfo) TypeName() string {
+	return getTypeName(i.toType)
+}
+
+func (i castDatumToWidthTmplInfo) Cast(to, from, fromCol, toType string) string {
+	return i.CastFn(to, from, fromCol, toType)
+}
+
+func (i castDatumToWidthTmplInfo) Sliceable() bool {
+	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(i.toType.Family()))
+}
+
+func (i castBetweenDatumsTmplInfo) TypeName() string {
+	return datumVecTypeName
+}
+
+func (i castBetweenDatumsTmplInfo) Cast(to, from, fromCol, toType string) string {
+	return datumToDatum(to, from, fromCol, toType)
+}
+
+func (i castBetweenDatumsTmplInfo) Sliceable() bool {
+	return false
+}
+
 // Remove unused warnings.
 var (
 	_ = castFromWidthTmplInfo.VecMethod
@@ -375,14 +454,23 @@ var (
 	_ = castToWidthTmplInfo.TypeName
 	_ = castToWidthTmplInfo.Cast
 	_ = castToWidthTmplInfo.Sliceable
+	_ = castDatumTmplInfo.VecMethod
+	_ = castDatumTmplInfo.TypeName
+	_ = castDatumToWidthTmplInfo.TypeName
+	_ = castDatumToWidthTmplInfo.Cast
+	_ = castDatumToWidthTmplInfo.Sliceable
+	_ = castBetweenDatumsTmplInfo.TypeName
+	_ = castBetweenDatumsTmplInfo.Cast
+	_ = castBetweenDatumsTmplInfo.Sliceable
 )
 
-// getCastFromTmplInfos populates the 4-leveled hierarchy of structs (mentioned
-// above to be used to execute the cast template) from castInfos.
-//
-// It relies heavily on the structure of castInfos mentioned in the comment to
-// it.
-func getCastFromTmplInfos() []castFromTmplInfo {
+type castTmplInfo struct {
+	FromNative    []castFromTmplInfo
+	FromDatum     []castDatumTmplInfo
+	BetweenDatums castBetweenDatumsTmplInfo
+}
+
+func getCastFromTmplInfos() castTmplInfo {
 	toTypeFamily := func(typ *types.T) string {
 		return "types." + typ.Family().String()
 	}
@@ -393,16 +481,22 @@ func getCastFromTmplInfos() []castFromTmplInfo {
 		}
 		return width
 	}
+	var result castTmplInfo
 
+	// Below we populate the 4-leveled hierarchy of structs (mentioned above to
+	// be used to execute the cast template) from nativeCastInfos.
+	//
+	// It relies heavily on the structure of nativeCastInfos mentioned in the
+	// comment to it.
 	var castFromTmplInfos []castFromTmplInfo
 	var fromFamilyStartIdx int
 	// Single iteration of this loop finds the boundaries of the same "from"
 	// type family and processes all casts for this type family.
-	for fromFamilyStartIdx < len(castInfos) {
-		castInfo := castInfos[fromFamilyStartIdx]
+	for fromFamilyStartIdx < len(nativeCastInfos) {
+		castInfo := nativeCastInfos[fromFamilyStartIdx]
 		fromFamilyEndIdx := fromFamilyStartIdx + 1
-		for fromFamilyEndIdx < len(castInfos) {
-			if castInfo.from.Family() != castInfos[fromFamilyEndIdx].from.Family() {
+		for fromFamilyEndIdx < len(nativeCastInfos) {
+			if castInfo.from.Family() != nativeCastInfos[fromFamilyEndIdx].from.Family() {
 				break
 			}
 			fromFamilyEndIdx++
@@ -417,10 +511,10 @@ func getCastFromTmplInfos() []castFromTmplInfo {
 		// width for the fixed "from" type family and processes all casts for
 		// "from" type.
 		for fromWidthStartIdx < fromFamilyEndIdx {
-			castInfo = castInfos[fromWidthStartIdx]
+			castInfo = nativeCastInfos[fromWidthStartIdx]
 			fromWidthEndIdx := fromWidthStartIdx + 1
 			for fromWidthEndIdx < fromFamilyEndIdx {
-				if castInfo.from.Width() != castInfos[fromWidthEndIdx].from.Width() {
+				if castInfo.from.Width() != nativeCastInfos[fromWidthEndIdx].from.Width() {
 					break
 				}
 				fromWidthEndIdx++
@@ -436,10 +530,10 @@ func getCastFromTmplInfos() []castFromTmplInfo {
 			// "to" type family for the fixed "from" type and processes all
 			// casts for "to" type family.
 			for toFamilyStartIdx < fromWidthEndIdx {
-				castInfo = castInfos[toFamilyStartIdx]
+				castInfo = nativeCastInfos[toFamilyStartIdx]
 				toFamilyEndIdx := toFamilyStartIdx + 1
 				for toFamilyEndIdx < fromWidthEndIdx {
-					if castInfo.to.Family() != castInfos[toFamilyEndIdx].to.Family() {
+					if castInfo.to.Family() != nativeCastInfos[toFamilyEndIdx].to.Family() {
 						break
 					}
 					toFamilyEndIdx++
@@ -452,7 +546,7 @@ func getCastFromTmplInfos() []castFromTmplInfo {
 				// We now have fixed "from family", "from width", and "to
 				// family", so we can populate the "meat" of the cast tmpl info.
 				for castInfoIdx := toFamilyStartIdx; castInfoIdx < toFamilyEndIdx; castInfoIdx++ {
-					castInfo = castInfos[castInfoIdx]
+					castInfo = nativeCastInfos[castInfoIdx]
 
 					toFamilyTmplInfo.Widths = append(toFamilyTmplInfo.Widths, castToWidthTmplInfo{
 						toType:    castInfo.to,
@@ -475,6 +569,54 @@ func getCastFromTmplInfos() []castFromTmplInfo {
 		// We're done processing the current "from" type family.
 		fromFamilyStartIdx = fromFamilyEndIdx
 	}
+	result.FromNative = castFromTmplInfos
 
-	return castFromTmplInfos
+	// Now we populate the 2-leveled hierarchy of structs for casts from
+	// datum-backed to native types.
+	var castDatumTmplInfos []castDatumTmplInfo
+	var toFamilyStartIdx int
+	// Single iteration of this loop finds the boundaries of the same "to" type
+	// family from the datum-backed type and processes all casts for "to" type
+	// family.
+	for toFamilyStartIdx < len(datumCastInfos) {
+		castInfo := datumCastInfos[toFamilyStartIdx]
+		toFamilyEndIdx := toFamilyStartIdx + 1
+		for toFamilyEndIdx < len(datumCastInfos) {
+			if castInfo.to.Family() != nativeCastInfos[toFamilyEndIdx].to.Family() {
+				break
+			}
+			toFamilyEndIdx++
+		}
+
+		castDatumTmplInfos = append(castDatumTmplInfos, castDatumTmplInfo{})
+		datumTmplInfo := &castDatumTmplInfos[len(castDatumTmplInfos)-1]
+		datumTmplInfo.TypeFamily = toTypeFamily(castInfo.to)
+
+		// We now have fixed "to family", so we can populate the "meat" of the
+		// datum cast tmpl info.
+		for castInfoIdx := toFamilyStartIdx; castInfoIdx < toFamilyEndIdx; castInfoIdx++ {
+			castInfo = datumCastInfos[castInfoIdx]
+
+			datumTmplInfo.Widths = append(datumTmplInfo.Widths, castDatumToWidthTmplInfo{
+				toType:    castInfo.to,
+				Width:     getWidth(castInfo.to),
+				VecMethod: toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(castInfo.to.Family()), getWidth(castInfo.to)),
+				GoType:    toPhysicalRepresentation(typeconv.TypeFamilyToCanonicalTypeFamily(castInfo.to.Family()), getWidth(castInfo.to)),
+				CastFn:    castInfo.cast,
+			})
+		}
+
+		// We're done processing the current "to" type family for the
+		// datum-backed type.
+		toFamilyStartIdx = toFamilyEndIdx
+	}
+	result.FromDatum = castDatumTmplInfos
+
+	// Finally, set up the information for casts between datum-backed types.
+	result.BetweenDatums = castBetweenDatumsTmplInfo{
+		VecMethod: toVecMethod(typeconv.DatumVecCanonicalTypeFamily, anyWidth),
+		GoType:    toPhysicalRepresentation(typeconv.DatumVecCanonicalTypeFamily, anyWidth),
+	}
+
+	return result
 }

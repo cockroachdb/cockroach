@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -54,6 +55,10 @@ const _TYPE_FAMILY = types.UnknownFamily
 
 // _TYPE_WIDTH is the template variable.
 const _TYPE_WIDTH = 0
+
+// _GENERATE_CAST_OP is a "fake" value that will be replaced by executing
+// "castOp" template in the scope of this value's "callsite".
+const _GENERATE_CAST_OP = 0
 
 func _CAST(to, from, fromCol, toType interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
@@ -90,7 +95,7 @@ func GetCastOperator(
 	// TODO(yuzefovich): remove this rebinding in the follow-up commit.
 	leftType, rightType := fromType, toType
 	switch leftType.Family() {
-	// {{range .}}
+	// {{range .FromNative}}
 	case _TYPE_FAMILY:
 		switch leftType.Width() {
 		// {{range .Widths}}
@@ -117,6 +122,36 @@ func GetCastOperator(
 		}
 		// {{end}}
 	}
+	if typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		switch rightType.Family() {
+		// {{range .FromDatum}}
+		// {{$fromInfo := .}}
+		case _TYPE_FAMILY:
+			switch rightType.Width() {
+			// {{range .Widths}}
+			case _TYPE_WIDTH:
+				return &cast_NAMEOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+				// {{end}}
+			}
+			// {{end}}
+		}
+
+		if typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+			return &castDatumDatumOp{
+				OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+				allocator:                allocator,
+				colIdx:                   colIdx,
+				outputIdx:                resultIdx,
+				toType:                   toType,
+			}, nil
+		}
+	}
 	return nil, errors.Errorf("unhandled cast %s -> %s", fromType, toType)
 }
 
@@ -130,7 +165,7 @@ func IsCastSupported(fromType, toType *types.T) bool {
 	// TODO(yuzefovich): remove this rebinding in the follow-up commit.
 	leftType, rightType := fromType, toType
 	switch leftType.Family() {
-	// {{range .}}
+	// {{range .FromNative}}
 	case _TYPE_FAMILY:
 		switch leftType.Width() {
 		// {{range .Widths}}
@@ -149,6 +184,23 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			// {{end}}
 		}
 		// {{end}}
+	}
+	if typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		switch rightType.Family() {
+		// {{range .FromDatum}}
+		case _TYPE_FAMILY:
+			switch rightType.Width() {
+			// {{range .Widths}}
+			case _TYPE_WIDTH:
+				return true
+				// {{end}}
+			}
+			// {{end}}
+		}
+
+		if typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+			return true
+		}
 	}
 	return false
 }
@@ -246,13 +298,12 @@ func (c *castIdentityOp) Next() coldata.Batch {
 	return batch
 }
 
-// {{range .}}
-// {{$fromFamily := .TypeFamily}}
-// {{range .Widths}}
-// {{$fromInfo := .}}
-// {{range .To}}
-// {{$toFamily := .TypeFamily}}
-// {{range .Widths}}
+// {{define "castOp"}}
+
+// {{$fromInfo := .FromInfo}}
+// {{$fromFamily := .FromFamily}}
+// {{$toFamily := .ToFamily}}
+// {{with .Global}}
 
 type cast_NAMEOp struct {
 	colexecop.OneInputInitCloserHelper
@@ -323,7 +374,41 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 
 // {{end}}
 // {{end}}
+
+// {{range .FromNative}}
+// {{$fromFamily := .TypeFamily}}
+// {{range .Widths}}
+// {{$fromInfo := .}}
+// {{range .To}}
+// {{$toFamily := .TypeFamily}}
+// {{range .Widths}}
+
+// _GENERATE_CAST_OP
+
 // {{end}}
+// {{end}}
+// {{end}}
+// {{end}}
+
+// {{range .FromDatum}}
+// {{$fromInfo := .}}
+// {{$fromFamily := "DatumVecCanonicalTypeFamily"}}
+// {{$toFamily := .TypeFamily}}
+// {{range .Widths}}
+
+// _GENERATE_CAST_OP
+
+// {{end}}
+// {{end}}
+
+// {{$fromInfo := .BetweenDatums}}
+// {{$fromFamily := "DatumVecCanonicalTypeFamily"}}
+// {{$toFamily := "DatumVecCanonicalTypeFamily"}}
+
+// {{with .BetweenDatums}}
+
+// _GENERATE_CAST_OP
+
 // {{end}}
 
 // {{/*
