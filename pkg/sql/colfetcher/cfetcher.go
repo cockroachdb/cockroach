@@ -1043,8 +1043,9 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
 			}
 
-			// TODO(jordan): optimize this prefix check by skipping span prefix.
-			if !bytes.HasPrefix(kv.Key, rf.machine.lastRowPrefix) {
+			// TODO(yuzefovich): optimize this prefix check by skipping logical
+			// longest common span prefix.
+			if !bytes.HasPrefix(kv.Key[rf.table.knownPrefixLength:], rf.machine.lastRowPrefix[rf.table.knownPrefixLength:]) {
 				// The kv we just found is from a different row.
 				rf.machine.state[0] = stateFinalizeRow
 				rf.machine.state[1] = stateDecodeFirstKVOfRow
@@ -1216,25 +1217,19 @@ func (rf *cFetcher) processValue(
 			// In this case, we don't need to decode the column family ID, because
 			// the ValueType_TUPLE encoding includes the column id with every encoded
 			// column value.
-			tupleBytes, err := val.GetTuple()
+			var tupleBytes []byte
+			tupleBytes, err = val.GetTuple()
 			if err != nil {
-				return "", "", err
+				break
 			}
 			prettyKey, prettyValue, err = rf.processValueTuple(ctx, table, tupleBytes, prettyKey)
-			if err != nil {
-				return "", "", err
-			}
 		default:
 			var family *descpb.ColumnFamilyDescriptor
 			family, err = table.desc.FindFamilyByID(familyID)
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
 			}
-
 			prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, family, prettyKey)
-			if err != nil {
-				return "", "", err
-			}
 		}
 		if err != nil {
 			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
@@ -1255,7 +1250,6 @@ func (rf *cFetcher) processValue(
 			if table.isSecondaryIndex && table.index.IsUnique() {
 				// This is a unique secondary index; decode the extra
 				// column values from the value.
-				var err error
 				extraColOrds := table.extraValColOrdinals
 				if rf.traceKV {
 					extraColOrds = table.allExtraValColOrdinals
