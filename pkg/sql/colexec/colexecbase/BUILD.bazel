@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/colmem",  # keep
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/rowenc",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
         "//pkg/util/duration",  # keep
