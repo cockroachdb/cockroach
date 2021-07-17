@@ -33,7 +33,13 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 	s := r.Replace(inputFileContents)
 
 	setValues := makeFunctionRegex("_CAST_TUPLES", 2)
-	s = setValues.ReplaceAllString(s, `{{template "castTuples" buildDict "Global" . "HasNulls" $1 "HasSel" $2}}`)
+	// We have to be a bit tricky with this replacement because we want to
+	// propagate $fromInfo into the template; however, it contains $ symbol
+	// which is treated specially by the regex matcher. In order to go around
+	// that, we propagate a fake object that is replaced with the actual target
+	// right away.
+	s = setValues.ReplaceAllString(s, `{{template "castTuples" buildDict "Global" . "HasNulls" $1 "HasSel" $2 "FromInfo" _FROM_INFO}}`)
+	s = strings.ReplaceAll(s, "_FROM_INFO", "$fromInfo")
 
 	castRe := makeFunctionRegex("_CAST", 4)
 	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Cast", 4))

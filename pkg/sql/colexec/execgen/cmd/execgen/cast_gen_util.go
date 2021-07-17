@@ -80,6 +80,15 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Date, types.Int, getIntToIntCastFunc(64 /* fromWidth */, anyWidth)},
 	{types.Date, types.Float, intToFloat},
 	{types.Date, types.Decimal, intToDecimal},
+
+	{types.Bytes, types.Uuid, bytesToUuid},
+
+	{types.String, types.Bool, stringToBool},
+	{types.String, types.Bytes, stringToBytes},
+	{types.String, types.String, stringToString},
+	{types.String, types.Uuid, stringToUuid},
+
+	{types.Jsonb, types.String, jsonToString},
 }
 
 type supportedNativeCastInfo struct {
@@ -256,6 +265,96 @@ func floatToInt(intWidth, floatWidth int32) func(string, string, string, string)
 	}
 }
 
+func bytesToUuid(to, from, _, _ string) string {
+	convStr := `
+		_uuid, err := uuid.FromBytes(%[2]s)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = _uuid.GetBytes()
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func stringToBool(to, from, _, _ string) string {
+	convStr := `
+		var err error
+		%[1]s, err = tree.ParseBool(string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func stringToBytes(to, from, _, _ string) string {
+	convStr := `
+		var err error
+		%[1]s, err = lex.DecodeRawBytesToByteArrayAuto(%[2]s)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+func stringToString(to, from, _, toType string) string {
+	convStr := `
+		if %[3]s.Oid() == oid.T_name {
+			// For Names we don't perform the truncation, and there is no need
+			// to do anything about the Oids since those are stored in the type.
+			%[1]s = %[2]s
+		} else {
+			// bpchar types truncate trailing whitespace.
+			if %[3]s.Oid() == oid.T_bpchar {
+				%[2]s = bytes.TrimRight(%[2]s, " ")
+			}
+			// If the string type specifies a limit we truncate to that limit:
+			//   'hello'::CHAR(2) -> 'he'
+			// This is true of all the string type variants.
+			if %[3]s.Width() > 0 {
+				// TODO(yuzefovich): figure out whether we can avoid converting
+				// to a string.
+				%[2]s = []byte(util.TruncateString(string(%[2]s), int(%[3]s.Width())))
+			}
+			if %[3]s.Oid() == oid.T_char {
+				// "char" is supposed to truncate long values.
+				// TODO(yuzefovich): figure out whether we can avoid converting
+				// to a string.
+				%[2]s = []byte(util.TruncateString(string(%[2]s), 1))
+			}
+			%[1]s = %[2]s
+		}
+	`
+	return fmt.Sprintf(convStr, to, from, toType)
+}
+
+func stringToUuid(to, from, _, _ string) string {
+	convStr := `
+		_uuid, err := uuid.FromString(string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = _uuid.GetBytes()
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func jsonToString(to, from, _, toType string) string {
+	convStr := `
+		_string := %[2]s.String()
+		switch %[3]s.Oid() {
+		case oid.T_char:
+			// "char" is supposed to truncate long values.
+			_string = util.TruncateString(_string, 1)
+		case oid.T_bpchar:
+			// bpchar types truncate trailing whitespace.
+			_string = strings.TrimRight(_string, " ")
+		}
+		%[1]s = []byte(_string)
+	`
+	return fmt.Sprintf(convStr, to, from, toType)
+}
+
 // getDatumToNativeCastFunc returns a castFunc for casting datum-backed value
 // to a value of the specified physical representation (i.e. to natively
 // supported type). The returned castFunc assumes that there is a converter
@@ -391,6 +490,10 @@ func (i castFromWidthTmplInfo) TypeName() string {
 	return getTypeName(i.fromType)
 }
 
+func (i castFromWidthTmplInfo) Sliceable() bool {
+	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(i.fromType.Family()))
+}
+
 func (i castToWidthTmplInfo) TypeName() string {
 	return getTypeName(i.toType)
 }
@@ -409,6 +512,10 @@ func (i castDatumTmplInfo) VecMethod() string {
 
 func (i castDatumTmplInfo) TypeName() string {
 	return datumVecTypeName
+}
+
+func (i castDatumTmplInfo) Sliceable() bool {
+	return false
 }
 
 func (i castDatumToWidthTmplInfo) TypeName() string {
@@ -439,11 +546,13 @@ func (i castBetweenDatumsTmplInfo) Sliceable() bool {
 var (
 	_ = castFromWidthTmplInfo.VecMethod
 	_ = castFromWidthTmplInfo.TypeName
+	_ = castFromWidthTmplInfo.Sliceable
 	_ = castToWidthTmplInfo.TypeName
 	_ = castToWidthTmplInfo.Cast
 	_ = castToWidthTmplInfo.Sliceable
 	_ = castDatumTmplInfo.VecMethod
 	_ = castDatumTmplInfo.TypeName
+	_ = castDatumTmplInfo.Sliceable
 	_ = castDatumToWidthTmplInfo.TypeName
 	_ = castDatumToWidthTmplInfo.Cast
 	_ = castDatumToWidthTmplInfo.Sliceable
