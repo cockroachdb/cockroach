@@ -18,6 +18,8 @@ import (
 
 const castTmpl = "pkg/sql/colexec/colexecbase/cast_tmpl.go"
 
+const castOpInvocation = `{{template "castOp" buildDict "Global" . "FromInfo" $fromInfo "FromFamily" $fromFamily "ToFamily" $toFamily}}`
+
 func genCastOperators(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_TYPE_FAMILY", "{{.TypeFamily}}",
@@ -26,6 +28,7 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 		"_FROM_TYPE", "{{$fromInfo.VecMethod}}",
 		"_TO_TYPE", "{{.VecMethod}}",
 		"_NAME", "{{$fromInfo.TypeName}}{{.TypeName}}",
+		"_GENERATE_CAST_OP", castOpInvocation,
 	)
 	s := r.Replace(inputFileContents)
 
