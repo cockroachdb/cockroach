@@ -286,50 +286,64 @@ func isCaseInsensitivePrefix(prefix, s string) bool {
 	return strings.EqualFold(prefix, s[:len(prefix)])
 }
 
-// ParseDBool parses and returns the *DBool Datum value represented by the provided
+// ParseBool parses and returns the boolean value represented by the provided
 // string, or an error if parsing is unsuccessful.
 // See https://github.com/postgres/postgres/blob/90627cf98a8e7d0531789391fd798c9bfcc3bc1a/src/backend/utils/adt/bool.c#L36
-func ParseDBool(s string) (*DBool, error) {
+func ParseBool(s string) (bool, error) {
 	s = strings.TrimSpace(s)
 	if len(s) >= 1 {
 		switch s[0] {
 		case 't', 'T':
 			if isCaseInsensitivePrefix(s, "true") {
-				return DBoolTrue, nil
+				return true, nil
 			}
 		case 'f', 'F':
 			if isCaseInsensitivePrefix(s, "false") {
-				return DBoolFalse, nil
+				return false, nil
 			}
 		case 'y', 'Y':
 			if isCaseInsensitivePrefix(s, "yes") {
-				return DBoolTrue, nil
+				return true, nil
 			}
 		case 'n', 'N':
 			if isCaseInsensitivePrefix(s, "no") {
-				return DBoolFalse, nil
+				return false, nil
 			}
 		case '1':
 			if s == "1" {
-				return DBoolTrue, nil
+				return true, nil
 			}
 		case '0':
 			if s == "0" {
-				return DBoolFalse, nil
+				return false, nil
 			}
 		case 'o', 'O':
 			// Just 'o' is ambiguous between 'on' and 'off'.
 			if len(s) > 1 {
 				if isCaseInsensitivePrefix(s, "on") {
-					return DBoolTrue, nil
+					return true, nil
 				}
 				if isCaseInsensitivePrefix(s, "off") {
-					return DBoolFalse, nil
+					return false, nil
 				}
 			}
 		}
 	}
-	return nil, makeParseError(s, types.Bool, pgerror.New(pgcode.InvalidTextRepresentation, "invalid bool value"))
+	return false, makeParseError(s, types.Bool, pgerror.New(pgcode.InvalidTextRepresentation, "invalid bool value"))
+}
+
+// ParseDBool parses and returns the *DBool Datum value represented by the provided
+// string, or an error if parsing is unsuccessful.
+// See https://github.com/postgres/postgres/blob/90627cf98a8e7d0531789391fd798c9bfcc3bc1a/src/backend/utils/adt/bool.c#L36
+func ParseDBool(s string) (*DBool, error) {
+	v, err := ParseBool(s)
+	if err != nil {
+		return nil, err
+	}
+	if v {
+		return DBoolTrue, nil
+	}
+	return DBoolFalse, nil
 }
 
 // ParseDByte parses a string representation of hex encoded binary

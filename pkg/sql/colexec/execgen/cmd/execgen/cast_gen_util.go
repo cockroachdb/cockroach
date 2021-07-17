@@ -70,6 +70,8 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Float, types.Int2, floatToInt(16, 64 /* floatWidth */)},
 	{types.Float, types.Int4, floatToInt(32, 64 /* floatWidth */)},
 	{types.Float, types.Int, floatToInt(anyWidth, 64 /* floatWidth */)},
+
+	{types.String, types.Bool, stringToBool},
 }
 
 type supportedNativeCastInfo struct {
@@ -244,6 +246,17 @@ func floatToInt(intWidth, floatWidth int32) func(string, string, string, string)
 		}
 		return fmt.Sprintf(convStr, to, from, intWidth, floatWidth)
 	}
+}
+
+func stringToBool(to, from, _, _ string) string {
+	convStr := `
+		var err error
+		%[1]s, err = tree.ParseBool(string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+	`
+	return fmt.Sprintf(convStr, to, from)
 }
 
 // getDatumToNativeCastFunc returns a castFunc for casting datum-backed value

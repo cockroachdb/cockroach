@@ -325,6 +325,19 @@ func GetCastOperator(
 						}
 					}
 				}
+			case types.StringFamily:
+				switch fromType.Width() {
+				case -1:
+				default:
+					switch toType.Family() {
+					case types.BoolFamily:
+						switch toType.Width() {
+						case -1:
+						default:
+							return &castStringBoolOp{castOpBase: base}, nil
+						}
+					}
+				}
 			}
 		}
 	}
@@ -598,6 +611,19 @@ func IsCastSupported(fromType, toType *types.T) bool {
 							return true
 						case 32:
 							return true
+						case -1:
+						default:
+							return true
+						}
+					}
+				}
+			case types.StringFamily:
+				switch fromType.Width() {
+				case -1:
+				default:
+					switch toType.Family() {
+					case types.BoolFamily:
+						switch toType.Width() {
 						case -1:
 						default:
 							return true
@@ -4263,6 +4289,124 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 						}
 						r = int64(v)
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castStringBoolOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringBoolOp{}
+var _ colexecop.ClosableOperator = &castStringBoolOp{}
+
+func (c *castStringBoolOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						var err error
+						r, err = tree.ParseBool(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						var err error
+						r, err = tree.ParseBool(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						var err error
+						r, err = tree.ParseBool(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						var err error
+						r, err = tree.ParseBool(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
 
 						//gcassert:bce
 						outputCol.Set(tupleIdx, r)
