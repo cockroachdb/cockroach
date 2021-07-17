@@ -150,12 +150,6 @@ func TestRandomizedCast(t *testing.T) {
 	}
 
 	for _, c := range tc {
-		if c.fromTyp == collatedStringType {
-			// Temporarily skipped.
-			// TODO(yuzefovich): unskip it once the casts from datum-backed
-			// types are added back.
-			continue
-		}
 		log.Infof(ctx, "%s to %s", c.fromTyp.String(), c.toTyp.String())
 		n := 100
 		// Make an input vector of length n.
