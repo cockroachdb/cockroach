@@ -10,9 +10,11 @@
 package colexecbase
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
@@ -25,12 +27,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // Workaround for bazel auto-generated code. goimports does not automatically
@@ -39,7 +45,28 @@ var (
 	_ coldataext.Datum
 	_ duration.Duration
 	_ json.JSON
+	_ = lex.DecodeRawBytesToByteArrayAuto
+	_ = uuid.FromBytes
+	_ = oid.T_name
+	_ = util.TruncateString
 )
+
+func isIdentityCast(fromType, toType *types.T) bool {
+	if fromType.Identical(toType) {
+		return true
+	}
+	if fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily {
+		// Casts between floats are identical because all floats are represented
+		// by float64 physically.
+		return true
+	}
+	if fromType.Family() == types.UuidFamily && toType.Family() == types.BytesFamily {
+		// The cast from UUID to Bytes is an identity because we don't need to
+		// perform any conversion since both are represented in the same way.
+		return true
+	}
+	return false
+}
 
 func GetCastOperator(
 	allocator *colmem.Allocator,
@@ -59,11 +86,7 @@ func GetCastOperator(
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{castOpBase: base}, nil
 	}
-	if toType.Identical(fromType) || (fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily) {
-		// We either have an identity cast or we have a cast between floats (and
-		// all floats are represented by float64 physically, so they are
-		// essentially identical too), so we use a custom identity cast
-		// operator.
+	if isIdentityCast(fromType, toType) {
 		return &castIdentityOp{castOpBase: base}, nil
 	}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
@@ -361,6 +384,63 @@ func GetCastOperator(
 					}
 				}
 			}
+		case types.BytesFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castBytesUuidOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.StringFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringBoolOp{castOpBase: base}, nil
+					}
+				case types.BytesFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringBytesOp{castOpBase: base}, nil
+					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringStringOp{castOpBase: base}, nil
+					}
+				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringUuidOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.JsonFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castJsonbStringOp{castOpBase: base}, nil
+					}
+				}
+			}
 		}
 	}
 	return nil, errors.Errorf("unhandled cast %s -> %s", fromType.SQLString(), toType.SQLString())
@@ -370,7 +450,7 @@ func IsCastSupported(fromType, toType *types.T) bool {
 	if fromType.Family() == types.UnknownFamily {
 		return true
 	}
-	if toType.Identical(fromType) || (fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily) {
+	if isIdentityCast(fromType, toType) {
 		return true
 	}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
@@ -668,6 +748,63 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					}
 				}
 			}
+		case types.BytesFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.StringFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.BytesFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.JsonFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
 		}
 	}
 	return false
@@ -931,7 +1068,6 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -973,7 +1109,6 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1045,7 +1180,6 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1087,7 +1221,6 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1159,7 +1292,6 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1201,7 +1333,6 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1273,7 +1404,6 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1315,7 +1445,6 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1382,7 +1511,6 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1414,7 +1542,6 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1500,7 +1627,6 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1570,7 +1696,6 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1675,7 +1800,6 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1745,7 +1869,6 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1844,7 +1967,6 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1902,7 +2024,6 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1985,7 +2106,6 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2033,7 +2153,6 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2108,7 +2227,6 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2150,7 +2268,6 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2217,7 +2334,6 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2249,7 +2365,6 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2311,7 +2426,6 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2343,7 +2457,6 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2407,7 +2520,6 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2443,7 +2555,6 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2513,7 +2624,6 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2557,7 +2667,6 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2627,7 +2736,6 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2663,7 +2771,6 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2733,7 +2840,6 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2777,7 +2883,6 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2845,7 +2950,6 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2877,7 +2981,6 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2941,7 +3044,6 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2977,7 +3079,6 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3047,7 +3148,6 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3091,7 +3191,6 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3161,7 +3260,6 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3197,7 +3295,6 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3267,7 +3364,6 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3311,7 +3407,6 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3385,7 +3480,6 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3429,7 +3523,6 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3499,7 +3592,6 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3535,7 +3627,6 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3605,7 +3696,6 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3649,7 +3739,6 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3719,7 +3808,6 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3755,7 +3843,6 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3821,7 +3908,6 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3857,7 +3943,6 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3929,7 +4014,6 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3977,7 +4061,6 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4052,7 +4135,6 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4094,7 +4176,6 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4166,7 +4247,6 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4208,7 +4288,6 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4280,7 +4359,6 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4322,7 +4400,6 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4395,7 +4472,6 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4439,7 +4515,6 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4513,7 +4588,6 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4557,7 +4631,6 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4625,7 +4698,6 @@ func (c *castDateIntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4657,7 +4729,6 @@ func (c *castDateIntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4721,7 +4792,6 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4757,7 +4827,6 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4827,7 +4896,6 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4871,7 +4939,6 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4888,6 +4955,758 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castBytesUuidOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castBytesUuidOp{}
+var _ colexecop.ClosableOperator = &castBytesUuidOp{}
+
+func (c *castBytesUuidOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_uuid, err := uuid.FromBytes(v)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						r = _uuid.GetBytes()
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_uuid, err := uuid.FromBytes(v)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						r = _uuid.GetBytes()
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_uuid, err := uuid.FromBytes(v)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						r = _uuid.GetBytes()
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_uuid, err := uuid.FromBytes(v)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						r = _uuid.GetBytes()
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castStringBoolOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringBoolOp{}
+var _ colexecop.ClosableOperator = &castStringBoolOp{}
+
+func (c *castStringBoolOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						var err error
+						r, err = tree.ParseBool(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						var err error
+						r, err = tree.ParseBool(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						var err error
+						r, err = tree.ParseBool(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
+						var r bool
+
+						var err error
+						r, err = tree.ParseBool(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castStringBytesOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringBytesOp{}
+var _ colexecop.ClosableOperator = &castStringBytesOp{}
+
+func (c *castStringBytesOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						var err error
+						r, err = lex.DecodeRawBytesToByteArrayAuto(v)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						var err error
+						r, err = lex.DecodeRawBytesToByteArrayAuto(v)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						var err error
+						r, err = lex.DecodeRawBytesToByteArrayAuto(v)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						var err error
+						r, err = lex.DecodeRawBytesToByteArrayAuto(v)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castStringStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringStringOp{}
+var _ colexecop.ClosableOperator = &castStringStringOp{}
+
+func (c *castStringStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						if toType.Oid() == oid.T_name {
+							// For Names we don't perform the truncation, and there is no need
+							// to do anything about the Oids since those are stored in the type.
+							r = v
+						} else {
+							// bpchar types truncate trailing whitespace.
+							if toType.Oid() == oid.T_bpchar {
+								v = bytes.TrimRight(v, " ")
+							}
+							// If the string type specifies a limit we truncate to that limit:
+							//   'hello'::CHAR(2) -> 'he'
+							// This is true of all the string type variants.
+							if toType.Width() > 0 {
+								// TODO(yuzefovich): figure out whether we can avoid converting
+								// to a string.
+								v = []byte(util.TruncateString(string(v), int(toType.Width())))
+							}
+							if toType.Oid() == oid.T_char {
+								// "char" is supposed to truncate long values.
+								// TODO(yuzefovich): figure out whether we can avoid converting
+								// to a string.
+								v = []byte(util.TruncateString(string(v), 1))
+							}
+							r = v
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						if toType.Oid() == oid.T_name {
+							// For Names we don't perform the truncation, and there is no need
+							// to do anything about the Oids since those are stored in the type.
+							r = v
+						} else {
+							// bpchar types truncate trailing whitespace.
+							if toType.Oid() == oid.T_bpchar {
+								v = bytes.TrimRight(v, " ")
+							}
+							// If the string type specifies a limit we truncate to that limit:
+							//   'hello'::CHAR(2) -> 'he'
+							// This is true of all the string type variants.
+							if toType.Width() > 0 {
+								// TODO(yuzefovich): figure out whether we can avoid converting
+								// to a string.
+								v = []byte(util.TruncateString(string(v), int(toType.Width())))
+							}
+							if toType.Oid() == oid.T_char {
+								// "char" is supposed to truncate long values.
+								// TODO(yuzefovich): figure out whether we can avoid converting
+								// to a string.
+								v = []byte(util.TruncateString(string(v), 1))
+							}
+							r = v
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						if toType.Oid() == oid.T_name {
+							// For Names we don't perform the truncation, and there is no need
+							// to do anything about the Oids since those are stored in the type.
+							r = v
+						} else {
+							// bpchar types truncate trailing whitespace.
+							if toType.Oid() == oid.T_bpchar {
+								v = bytes.TrimRight(v, " ")
+							}
+							// If the string type specifies a limit we truncate to that limit:
+							//   'hello'::CHAR(2) -> 'he'
+							// This is true of all the string type variants.
+							if toType.Width() > 0 {
+								// TODO(yuzefovich): figure out whether we can avoid converting
+								// to a string.
+								v = []byte(util.TruncateString(string(v), int(toType.Width())))
+							}
+							if toType.Oid() == oid.T_char {
+								// "char" is supposed to truncate long values.
+								// TODO(yuzefovich): figure out whether we can avoid converting
+								// to a string.
+								v = []byte(util.TruncateString(string(v), 1))
+							}
+							r = v
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						if toType.Oid() == oid.T_name {
+							// For Names we don't perform the truncation, and there is no need
+							// to do anything about the Oids since those are stored in the type.
+							r = v
+						} else {
+							// bpchar types truncate trailing whitespace.
+							if toType.Oid() == oid.T_bpchar {
+								v = bytes.TrimRight(v, " ")
+							}
+							// If the string type specifies a limit we truncate to that limit:
+							//   'hello'::CHAR(2) -> 'he'
+							// This is true of all the string type variants.
+							if toType.Width() > 0 {
+								// TODO(yuzefovich): figure out whether we can avoid converting
+								// to a string.
+								v = []byte(util.TruncateString(string(v), int(toType.Width())))
+							}
+							if toType.Oid() == oid.T_char {
+								// "char" is supposed to truncate long values.
+								// TODO(yuzefovich): figure out whether we can avoid converting
+								// to a string.
+								v = []byte(util.TruncateString(string(v), 1))
+							}
+							r = v
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castStringUuidOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringUuidOp{}
+var _ colexecop.ClosableOperator = &castStringUuidOp{}
+
+func (c *castStringUuidOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_uuid, err := uuid.FromString(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						r = _uuid.GetBytes()
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_uuid, err := uuid.FromString(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						r = _uuid.GetBytes()
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_uuid, err := uuid.FromString(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						r = _uuid.GetBytes()
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_uuid, err := uuid.FromString(string(v))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						r = _uuid.GetBytes()
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castJsonbStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castJsonbStringOp{}
+var _ colexecop.ClosableOperator = &castJsonbStringOp{}
+
+func (c *castJsonbStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.JSON()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_string := v.String()
+						switch toType.Oid() {
+						case oid.T_char:
+							// "char" is supposed to truncate long values.
+							_string = util.TruncateString(_string, 1)
+						case oid.T_bpchar:
+							// bpchar types truncate trailing whitespace.
+							_string = strings.TrimRight(_string, " ")
+						}
+						r = []byte(_string)
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_string := v.String()
+						switch toType.Oid() {
+						case oid.T_char:
+							// "char" is supposed to truncate long values.
+							_string = util.TruncateString(_string, 1)
+						case oid.T_bpchar:
+							// bpchar types truncate trailing whitespace.
+							_string = strings.TrimRight(_string, " ")
+						}
+						r = []byte(_string)
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_string := v.String()
+						switch toType.Oid() {
+						case oid.T_char:
+							// "char" is supposed to truncate long values.
+							_string = util.TruncateString(_string, 1)
+						case oid.T_bpchar:
+							// bpchar types truncate trailing whitespace.
+							_string = strings.TrimRight(_string, " ")
+						}
+						r = []byte(_string)
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						_string := v.String()
+						switch toType.Oid() {
+						case oid.T_char:
+							// "char" is supposed to truncate long values.
+							_string = util.TruncateString(_string, 1)
+						case oid.T_bpchar:
+							// bpchar types truncate trailing whitespace.
+							_string = strings.TrimRight(_string, " ")
+						}
+						r = []byte(_string)
+
 						outputCol.Set(tupleIdx, r)
 					}
 				}
@@ -4948,8 +5767,6 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
@@ -4957,7 +5774,6 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r bool
 
@@ -4996,13 +5812,10 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r bool
 
@@ -5075,8 +5888,6 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
@@ -5084,7 +5895,6 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int16
 
@@ -5123,13 +5933,10 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int16
 
@@ -5202,8 +6009,6 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
@@ -5211,7 +6016,6 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int32
 
@@ -5250,13 +6054,10 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int32
 
@@ -5329,8 +6130,6 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
@@ -5338,7 +6137,6 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int64
 
@@ -5377,13 +6175,10 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int64
 
@@ -5456,8 +6251,6 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
@@ -5465,7 +6258,6 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r float64
 
@@ -5504,13 +6296,10 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r float64
 
@@ -5583,8 +6372,6 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
@@ -5592,7 +6379,6 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r apd.Decimal
 
@@ -5631,13 +6417,10 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r apd.Decimal
 
@@ -5710,8 +6493,6 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
@@ -5719,7 +6500,6 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int64
 
@@ -5758,13 +6538,10 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int64
 
@@ -5837,8 +6614,6 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
@@ -5846,7 +6621,6 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r time.Time
 
@@ -5885,13 +6659,10 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r time.Time
 
@@ -5964,8 +6735,6 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
@@ -5973,7 +6742,6 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r duration.Duration
 
@@ -6012,13 +6780,10 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r duration.Duration
 
@@ -6091,15 +6856,12 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r []byte
 
@@ -6137,12 +6899,9 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r []byte
 
@@ -6214,15 +6973,12 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r []byte
 
@@ -6260,12 +7016,9 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r []byte
 
@@ -6337,8 +7090,6 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
@@ -6346,7 +7097,6 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r time.Time
 
@@ -6385,13 +7135,10 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r time.Time
 
@@ -6464,15 +7211,12 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r []byte
 
@@ -6510,12 +7254,9 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r []byte
 
@@ -6587,15 +7328,12 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r json.JSON
 
@@ -6633,12 +7371,9 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r json.JSON
 
@@ -6715,15 +7450,12 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
 						if inputNulls.NullAt(tupleIdx) {
 							continue
 						}
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r interface{}
 
@@ -6773,12 +7505,9 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
-						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r interface{}
 
