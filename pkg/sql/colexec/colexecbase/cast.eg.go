@@ -13,11 +13,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -25,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -431,6 +435,154 @@ func GetCastOperator(
 					toType:                   toType,
 				}, nil
 			}
+		case types.IntFamily:
+			switch toType.Width() {
+			case 16:
+				return &castDatumInt2Op{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			case 32:
+				return &castDatumInt4Op{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			case -1:
+			default:
+				return &castDatumIntOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
+		case types.FloatFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumFloatOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
+		case types.DecimalFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumDecimalOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
+		case types.DateFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumDateOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
+		case types.TimestampFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumTimestampOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
+		case types.IntervalFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumIntervalOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
+		case types.StringFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumStringOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
+		case types.BytesFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumBytesOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
+		case types.TimestampTZFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumTimestamptzOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
+		case types.UuidFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumUuidOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
+		case types.JsonFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumJsonbOp{
+					OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+					allocator:                allocator,
+					colIdx:                   colIdx,
+					outputIdx:                resultIdx,
+					toType:                   toType,
+				}, nil
+			}
 		}
 
 		if typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
@@ -635,6 +787,76 @@ func IsCastSupported(fromType, toType *types.T) bool {
 	if typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
 		switch toType.Family() {
 		case types.BoolFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.IntFamily:
+			switch toType.Width() {
+			case 16:
+				return true
+			case 32:
+				return true
+			case -1:
+			default:
+				return true
+			}
+		case types.FloatFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.DecimalFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.DateFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.TimestampFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.IntervalFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.StringFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.BytesFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.TimestampTZFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.UuidFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.JsonFamily:
 			switch toType.Width() {
 			case -1:
 			default:
@@ -4442,6 +4664,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 			inputCol := inputVec.Datum()
 			outputCol := outputVec.Bool()
 			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
@@ -4457,11 +4680,11 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 						var r bool
 
 						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							r = _castedDatum == tree.DBoolTrue
+							r = converter(_castedDatum).(bool)
 						}
 
 						outputCol.Set(tupleIdx, r)
@@ -4481,11 +4704,11 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 						var r bool
 
 						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							r = _castedDatum == tree.DBoolTrue
+							r = converter(_castedDatum).(bool)
 						}
 
 						//gcassert:bce
@@ -4505,11 +4728,11 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 						var r bool
 
 						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							r = _castedDatum == tree.DBoolTrue
+							r = converter(_castedDatum).(bool)
 						}
 
 						outputCol.Set(tupleIdx, r)
@@ -4526,14 +4749,1740 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 						var r bool
 
 						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							r = _castedDatum == tree.DBoolTrue
+							r = converter(_castedDatum).(bool)
 						}
 
 						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumInt2Op struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumInt2Op{}
+var _ colexecop.ClosableOperator = &castDatumInt2Op{}
+
+func (c *castDatumInt2Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumInt2Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Int16()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int16)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int16)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int16)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int16)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumInt4Op struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumInt4Op{}
+var _ colexecop.ClosableOperator = &castDatumInt4Op{}
+
+func (c *castDatumInt4Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumInt4Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int32)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int32)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int32)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int32)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumIntOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumIntOp{}
+var _ colexecop.ClosableOperator = &castDatumIntOp{}
+
+func (c *castDatumIntOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumIntOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int64)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int64)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int64)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int64)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumFloatOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumFloatOp{}
+var _ colexecop.ClosableOperator = &castDatumFloatOp{}
+
+func (c *castDatumFloatOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumFloatOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(float64)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(float64)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(float64)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(float64)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumDecimalOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumDecimalOp{}
+var _ colexecop.ClosableOperator = &castDatumDecimalOp{}
+
+func (c *castDatumDecimalOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumDecimalOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Decimal()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(apd.Decimal)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(apd.Decimal)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(apd.Decimal)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r apd.Decimal
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(apd.Decimal)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumDateOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumDateOp{}
+var _ colexecop.ClosableOperator = &castDatumDateOp{}
+
+func (c *castDatumDateOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumDateOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int64)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int64)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int64)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(int64)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumTimestampOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumTimestampOp{}
+var _ colexecop.ClosableOperator = &castDatumTimestampOp{}
+
+func (c *castDatumTimestampOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumTimestampOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Timestamp()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r time.Time
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(time.Time)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r time.Time
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(time.Time)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r time.Time
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(time.Time)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r time.Time
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(time.Time)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumIntervalOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumIntervalOp{}
+var _ colexecop.ClosableOperator = &castDatumIntervalOp{}
+
+func (c *castDatumIntervalOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumIntervalOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Interval()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r duration.Duration
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(duration.Duration)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r duration.Duration
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(duration.Duration)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r duration.Duration
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(duration.Duration)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r duration.Duration
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(duration.Duration)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumStringOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumStringOp{}
+var _ colexecop.ClosableOperator = &castDatumStringOp{}
+
+func (c *castDatumStringOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumBytesOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumBytesOp{}
+var _ colexecop.ClosableOperator = &castDatumBytesOp{}
+
+func (c *castDatumBytesOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumBytesOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumTimestamptzOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumTimestamptzOp{}
+var _ colexecop.ClosableOperator = &castDatumTimestamptzOp{}
+
+func (c *castDatumTimestamptzOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumTimestamptzOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Timestamp()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r time.Time
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(time.Time)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r time.Time
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(time.Time)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r time.Time
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(time.Time)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r time.Time
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(time.Time)
+						}
+
+						//gcassert:bce
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumUuidOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumUuidOp{}
+var _ colexecop.ClosableOperator = &castDatumUuidOp{}
+
+func (c *castDatumUuidOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumUuidOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r []byte
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).([]byte)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumJsonbOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDatumJsonbOp{}
+var _ colexecop.ClosableOperator = &castDatumJsonbOp{}
+
+func (c *castDatumJsonbOp) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDatumJsonbOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.JSON()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r json.JSON
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(json.JSON)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r json.JSON
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(json.JSON)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r json.JSON
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(json.JSON)
+						}
+
+						outputCol.Set(tupleIdx, r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r json.JSON
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, c.toType)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = converter(_castedDatum).(json.JSON)
+						}
+
 						outputCol.Set(tupleIdx, r)
 					}
 				}
@@ -4608,7 +6557,6 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i
@@ -4667,7 +6615,6 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
 					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
 					var tupleIdx int
 					for i := 0; i < n; i++ {
 						tupleIdx = i

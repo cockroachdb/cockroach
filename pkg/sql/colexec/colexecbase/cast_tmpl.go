@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -343,6 +344,9 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 			inputCol := inputVec._FROM_TYPE()
 			outputCol := outputVec._TO_TYPE()
 			outputNulls := outputVec.Nulls()
+			// {{if and (eq $fromFamily "DatumVecCanonicalTypeFamily") (not (eq $toFamily "DatumVecCanonicalTypeFamily"))}}
+			converter := colconv.GetDatumToPhysicalFn(c.toType)
+			// {{end}}
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
@@ -418,7 +422,9 @@ func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
 	// {{else}}
 	// Remove bounds checks for inputCol[i] and outputCol[i].
 	_ = inputCol.Get(n - 1)
+	// {{if .Sliceable}}
 	_ = outputCol.Get(n - 1)
+	// {{end}}
 	// {{end}}
 	var tupleIdx int
 	for i := 0; i < n; i++ {
