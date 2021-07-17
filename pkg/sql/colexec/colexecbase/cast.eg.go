@@ -58,19 +58,17 @@ func GetCastOperator(
 			outputIdx:                resultIdx,
 		}, nil
 	}
-	// TODO(yuzefovich): remove this rebinding in the follow-up commit.
-	leftType, rightType := fromType, toType
-	switch leftType.Family() {
+	switch fromType.Family() {
 	case types.BoolFamily:
-		switch leftType.Width() {
+		switch fromType.Width() {
 		case -1:
 		default:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.FloatFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castBoolFloat64Op{
+					return &castBoolFloatOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -79,9 +77,9 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 16:
-					return &castBoolInt16Op{
+					return &castBoolInt2Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -89,7 +87,7 @@ func GetCastOperator(
 						toType:                   toType,
 					}, nil
 				case 32:
-					return &castBoolInt32Op{
+					return &castBoolInt4Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -98,7 +96,7 @@ func GetCastOperator(
 					}, nil
 				case -1:
 				default:
-					return &castBoolInt64Op{
+					return &castBoolIntOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -109,12 +107,12 @@ func GetCastOperator(
 			}
 		}
 	case types.DecimalFamily:
-		switch leftType.Width() {
+		switch fromType.Width() {
 		case -1:
 		default:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.BoolFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return &castDecimalBoolOp{
@@ -126,9 +124,9 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 16:
-					return &castDecimalInt16Op{
+					return &castDecimalInt2Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -136,7 +134,7 @@ func GetCastOperator(
 						toType:                   toType,
 					}, nil
 				case 32:
-					return &castDecimalInt32Op{
+					return &castDecimalInt4Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -145,7 +143,7 @@ func GetCastOperator(
 					}, nil
 				case -1:
 				default:
-					return &castDecimalInt64Op{
+					return &castDecimalIntOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -154,10 +152,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.FloatFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castDecimalFloat64Op{
+					return &castDecimalFloatOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -166,7 +164,7 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.DecimalFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return &castDecimalDecimalOp{
@@ -180,13 +178,13 @@ func GetCastOperator(
 			}
 		}
 	case types.IntFamily:
-		switch leftType.Width() {
+		switch fromType.Width() {
 		case 16:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 32:
-					return &castInt16Int32Op{
+					return &castInt2Int4Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -195,7 +193,7 @@ func GetCastOperator(
 					}, nil
 				case -1:
 				default:
-					return &castInt16Int64Op{
+					return &castInt2IntOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -204,10 +202,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.BoolFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castInt16BoolOp{
+					return &castInt2BoolOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -216,10 +214,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.DecimalFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castInt16DecimalOp{
+					return &castInt2DecimalOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -228,10 +226,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.FloatFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castInt16Float64Op{
+					return &castInt2FloatOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -241,11 +239,11 @@ func GetCastOperator(
 				}
 			}
 		case 32:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 16:
-					return &castInt32Int16Op{
+					return &castInt4Int2Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -254,7 +252,7 @@ func GetCastOperator(
 					}, nil
 				case -1:
 				default:
-					return &castInt32Int64Op{
+					return &castInt4IntOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -263,10 +261,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.BoolFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castInt32BoolOp{
+					return &castInt4BoolOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -275,10 +273,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.DecimalFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castInt32DecimalOp{
+					return &castInt4DecimalOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -287,10 +285,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.FloatFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castInt32Float64Op{
+					return &castInt4FloatOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -301,11 +299,11 @@ func GetCastOperator(
 			}
 		case -1:
 		default:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 16:
-					return &castInt64Int16Op{
+					return &castIntInt2Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -313,7 +311,7 @@ func GetCastOperator(
 						toType:                   toType,
 					}, nil
 				case 32:
-					return &castInt64Int32Op{
+					return &castIntInt4Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -322,10 +320,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.BoolFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castInt64BoolOp{
+					return &castIntBoolOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -334,10 +332,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.DecimalFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castInt64DecimalOp{
+					return &castIntDecimalOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -346,10 +344,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.FloatFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castInt64Float64Op{
+					return &castIntFloatOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -360,15 +358,15 @@ func GetCastOperator(
 			}
 		}
 	case types.FloatFamily:
-		switch leftType.Width() {
+		switch fromType.Width() {
 		case -1:
 		default:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.BoolFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castFloat64BoolOp{
+					return &castFloatBoolOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -377,10 +375,10 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.DecimalFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
-					return &castFloat64DecimalOp{
+					return &castFloatDecimalOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -389,9 +387,9 @@ func GetCastOperator(
 					}, nil
 				}
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 16:
-					return &castFloat64Int16Op{
+					return &castFloatInt2Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -399,7 +397,7 @@ func GetCastOperator(
 						toType:                   toType,
 					}, nil
 				case 32:
-					return &castFloat64Int32Op{
+					return &castFloatInt4Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -408,7 +406,7 @@ func GetCastOperator(
 					}, nil
 				case -1:
 				default:
-					return &castFloat64Int64Op{
+					return &castFloatIntOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -419,10 +417,10 @@ func GetCastOperator(
 			}
 		}
 	}
-	if typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
-		switch rightType.Family() {
+	if typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		switch toType.Family() {
 		case types.BoolFamily:
-			switch rightType.Width() {
+			switch toType.Width() {
 			case -1:
 			default:
 				return &castDatumBoolOp{
@@ -435,7 +433,7 @@ func GetCastOperator(
 			}
 		}
 
-		if typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
 			return &castDatumDatumOp{
 				OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 				allocator:                allocator,
@@ -455,22 +453,20 @@ func IsCastSupported(fromType, toType *types.T) bool {
 	if toType.Identical(fromType) {
 		return true
 	}
-	// TODO(yuzefovich): remove this rebinding in the follow-up commit.
-	leftType, rightType := fromType, toType
-	switch leftType.Family() {
+	switch fromType.Family() {
 	case types.BoolFamily:
-		switch leftType.Width() {
+		switch fromType.Width() {
 		case -1:
 		default:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.FloatFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 16:
 					return true
 				case 32:
@@ -482,18 +478,18 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			}
 		}
 	case types.DecimalFamily:
-		switch leftType.Width() {
+		switch fromType.Width() {
 		case -1:
 		default:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.BoolFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 16:
 					return true
 				case 32:
@@ -503,13 +499,13 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					return true
 				}
 			case types.FloatFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.DecimalFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
@@ -517,11 +513,11 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			}
 		}
 	case types.IntFamily:
-		switch leftType.Width() {
+		switch fromType.Width() {
 		case 16:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 32:
 					return true
 				case -1:
@@ -529,28 +525,28 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					return true
 				}
 			case types.BoolFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.DecimalFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.FloatFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			}
 		case 32:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 16:
 					return true
 				case -1:
@@ -558,19 +554,19 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					return true
 				}
 			case types.BoolFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.DecimalFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.FloatFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
@@ -578,28 +574,28 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			}
 		case -1:
 		default:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 16:
 					return true
 				case 32:
 					return true
 				}
 			case types.BoolFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.DecimalFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.FloatFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
@@ -607,24 +603,24 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			}
 		}
 	case types.FloatFamily:
-		switch leftType.Width() {
+		switch fromType.Width() {
 		case -1:
 		default:
-			switch rightType.Family() {
+			switch toType.Family() {
 			case types.BoolFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.DecimalFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case -1:
 				default:
 					return true
 				}
 			case types.IntFamily:
-				switch rightType.Width() {
+				switch toType.Width() {
 				case 16:
 					return true
 				case 32:
@@ -636,17 +632,17 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			}
 		}
 	}
-	if typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
-		switch rightType.Family() {
+	if typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		switch toType.Family() {
 		case types.BoolFamily:
-			switch rightType.Width() {
+			switch toType.Width() {
 			case -1:
 			default:
 				return true
 			}
 		}
 
-		if typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
 			return true
 		}
 	}
@@ -746,7 +742,7 @@ func (c *castIdentityOp) Next() coldata.Batch {
 	return batch
 }
 
-type castBoolFloat64Op struct {
+type castBoolFloatOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -755,16 +751,16 @@ type castBoolFloat64Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castBoolFloat64Op{}
-var _ colexecop.ClosableOperator = &castBoolFloat64Op{}
+var _ colexecop.ResettableOperator = &castBoolFloatOp{}
+var _ colexecop.ClosableOperator = &castBoolFloatOp{}
 
-func (c *castBoolFloat64Op) Reset(ctx context.Context) {
+func (c *castBoolFloatOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castBoolFloat64Op) Next() coldata.Batch {
+func (c *castBoolFloatOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -867,7 +863,7 @@ func (c *castBoolFloat64Op) Next() coldata.Batch {
 	return batch
 }
 
-type castBoolInt16Op struct {
+type castBoolInt2Op struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -876,16 +872,16 @@ type castBoolInt16Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castBoolInt16Op{}
-var _ colexecop.ClosableOperator = &castBoolInt16Op{}
+var _ colexecop.ResettableOperator = &castBoolInt2Op{}
+var _ colexecop.ClosableOperator = &castBoolInt2Op{}
 
-func (c *castBoolInt16Op) Reset(ctx context.Context) {
+func (c *castBoolInt2Op) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castBoolInt16Op) Next() coldata.Batch {
+func (c *castBoolInt2Op) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -988,7 +984,7 @@ func (c *castBoolInt16Op) Next() coldata.Batch {
 	return batch
 }
 
-type castBoolInt32Op struct {
+type castBoolInt4Op struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -997,16 +993,16 @@ type castBoolInt32Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castBoolInt32Op{}
-var _ colexecop.ClosableOperator = &castBoolInt32Op{}
+var _ colexecop.ResettableOperator = &castBoolInt4Op{}
+var _ colexecop.ClosableOperator = &castBoolInt4Op{}
 
-func (c *castBoolInt32Op) Reset(ctx context.Context) {
+func (c *castBoolInt4Op) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castBoolInt32Op) Next() coldata.Batch {
+func (c *castBoolInt4Op) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1109,7 +1105,7 @@ func (c *castBoolInt32Op) Next() coldata.Batch {
 	return batch
 }
 
-type castBoolInt64Op struct {
+type castBoolIntOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -1118,16 +1114,16 @@ type castBoolInt64Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castBoolInt64Op{}
-var _ colexecop.ClosableOperator = &castBoolInt64Op{}
+var _ colexecop.ResettableOperator = &castBoolIntOp{}
+var _ colexecop.ClosableOperator = &castBoolIntOp{}
 
-func (c *castBoolInt64Op) Reset(ctx context.Context) {
+func (c *castBoolIntOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castBoolInt64Op) Next() coldata.Batch {
+func (c *castBoolIntOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1331,7 +1327,7 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 	return batch
 }
 
-type castDecimalInt16Op struct {
+type castDecimalInt2Op struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator      *colmem.Allocator
@@ -1341,16 +1337,16 @@ type castDecimalInt16Op struct {
 	overloadHelper execgen.OverloadHelper
 }
 
-var _ colexecop.ResettableOperator = &castDecimalInt16Op{}
-var _ colexecop.ClosableOperator = &castDecimalInt16Op{}
+var _ colexecop.ResettableOperator = &castDecimalInt2Op{}
+var _ colexecop.ClosableOperator = &castDecimalInt2Op{}
 
-func (c *castDecimalInt16Op) Reset(ctx context.Context) {
+func (c *castDecimalInt2Op) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castDecimalInt16Op) Next() coldata.Batch {
+func (c *castDecimalInt2Op) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1512,7 +1508,7 @@ func (c *castDecimalInt16Op) Next() coldata.Batch {
 	return batch
 }
 
-type castDecimalInt32Op struct {
+type castDecimalInt4Op struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator      *colmem.Allocator
@@ -1522,16 +1518,16 @@ type castDecimalInt32Op struct {
 	overloadHelper execgen.OverloadHelper
 }
 
-var _ colexecop.ResettableOperator = &castDecimalInt32Op{}
-var _ colexecop.ClosableOperator = &castDecimalInt32Op{}
+var _ colexecop.ResettableOperator = &castDecimalInt4Op{}
+var _ colexecop.ClosableOperator = &castDecimalInt4Op{}
 
-func (c *castDecimalInt32Op) Reset(ctx context.Context) {
+func (c *castDecimalInt4Op) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castDecimalInt32Op) Next() coldata.Batch {
+func (c *castDecimalInt4Op) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1693,7 +1689,7 @@ func (c *castDecimalInt32Op) Next() coldata.Batch {
 	return batch
 }
 
-type castDecimalInt64Op struct {
+type castDecimalIntOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator      *colmem.Allocator
@@ -1703,16 +1699,16 @@ type castDecimalInt64Op struct {
 	overloadHelper execgen.OverloadHelper
 }
 
-var _ colexecop.ResettableOperator = &castDecimalInt64Op{}
-var _ colexecop.ClosableOperator = &castDecimalInt64Op{}
+var _ colexecop.ResettableOperator = &castDecimalIntOp{}
+var _ colexecop.ClosableOperator = &castDecimalIntOp{}
 
-func (c *castDecimalInt64Op) Reset(ctx context.Context) {
+func (c *castDecimalIntOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castDecimalInt64Op) Next() coldata.Batch {
+func (c *castDecimalIntOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1850,7 +1846,7 @@ func (c *castDecimalInt64Op) Next() coldata.Batch {
 	return batch
 }
 
-type castDecimalFloat64Op struct {
+type castDecimalFloatOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -1859,16 +1855,16 @@ type castDecimalFloat64Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castDecimalFloat64Op{}
-var _ colexecop.ClosableOperator = &castDecimalFloat64Op{}
+var _ colexecop.ResettableOperator = &castDecimalFloatOp{}
+var _ colexecop.ClosableOperator = &castDecimalFloatOp{}
 
-func (c *castDecimalFloat64Op) Reset(ctx context.Context) {
+func (c *castDecimalFloatOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castDecimalFloat64Op) Next() coldata.Batch {
+func (c *castDecimalFloatOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2104,7 +2100,7 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 	return batch
 }
 
-type castInt16Int32Op struct {
+type castInt2Int4Op struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -2113,16 +2109,16 @@ type castInt16Int32Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt16Int32Op{}
-var _ colexecop.ClosableOperator = &castInt16Int32Op{}
+var _ colexecop.ResettableOperator = &castInt2Int4Op{}
+var _ colexecop.ClosableOperator = &castInt2Int4Op{}
 
-func (c *castInt16Int32Op) Reset(ctx context.Context) {
+func (c *castInt2Int4Op) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt16Int32Op) Next() coldata.Batch {
+func (c *castInt2Int4Op) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2205,7 +2201,7 @@ func (c *castInt16Int32Op) Next() coldata.Batch {
 	return batch
 }
 
-type castInt16Int64Op struct {
+type castInt2IntOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -2214,16 +2210,16 @@ type castInt16Int64Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt16Int64Op{}
-var _ colexecop.ClosableOperator = &castInt16Int64Op{}
+var _ colexecop.ResettableOperator = &castInt2IntOp{}
+var _ colexecop.ClosableOperator = &castInt2IntOp{}
 
-func (c *castInt16Int64Op) Reset(ctx context.Context) {
+func (c *castInt2IntOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt16Int64Op) Next() coldata.Batch {
+func (c *castInt2IntOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2306,7 +2302,7 @@ func (c *castInt16Int64Op) Next() coldata.Batch {
 	return batch
 }
 
-type castInt16BoolOp struct {
+type castInt2BoolOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -2315,16 +2311,16 @@ type castInt16BoolOp struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt16BoolOp{}
-var _ colexecop.ClosableOperator = &castInt16BoolOp{}
+var _ colexecop.ResettableOperator = &castInt2BoolOp{}
+var _ colexecop.ClosableOperator = &castInt2BoolOp{}
 
-func (c *castInt16BoolOp) Reset(ctx context.Context) {
+func (c *castInt2BoolOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt16BoolOp) Next() coldata.Batch {
+func (c *castInt2BoolOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2415,7 +2411,7 @@ func (c *castInt16BoolOp) Next() coldata.Batch {
 	return batch
 }
 
-type castInt16DecimalOp struct {
+type castInt2DecimalOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -2424,16 +2420,16 @@ type castInt16DecimalOp struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt16DecimalOp{}
-var _ colexecop.ClosableOperator = &castInt16DecimalOp{}
+var _ colexecop.ResettableOperator = &castInt2DecimalOp{}
+var _ colexecop.ClosableOperator = &castInt2DecimalOp{}
 
-func (c *castInt16DecimalOp) Reset(ctx context.Context) {
+func (c *castInt2DecimalOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt16DecimalOp) Next() coldata.Batch {
+func (c *castInt2DecimalOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2540,7 +2536,7 @@ func (c *castInt16DecimalOp) Next() coldata.Batch {
 	return batch
 }
 
-type castInt16Float64Op struct {
+type castInt2FloatOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -2549,16 +2545,16 @@ type castInt16Float64Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt16Float64Op{}
-var _ colexecop.ClosableOperator = &castInt16Float64Op{}
+var _ colexecop.ResettableOperator = &castInt2FloatOp{}
+var _ colexecop.ClosableOperator = &castInt2FloatOp{}
 
-func (c *castInt16Float64Op) Reset(ctx context.Context) {
+func (c *castInt2FloatOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt16Float64Op) Next() coldata.Batch {
+func (c *castInt2FloatOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2649,7 +2645,7 @@ func (c *castInt16Float64Op) Next() coldata.Batch {
 	return batch
 }
 
-type castInt32Int16Op struct {
+type castInt4Int2Op struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -2658,16 +2654,16 @@ type castInt32Int16Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt32Int16Op{}
-var _ colexecop.ClosableOperator = &castInt32Int16Op{}
+var _ colexecop.ResettableOperator = &castInt4Int2Op{}
+var _ colexecop.ClosableOperator = &castInt4Int2Op{}
 
-func (c *castInt32Int16Op) Reset(ctx context.Context) {
+func (c *castInt4Int2Op) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt32Int16Op) Next() coldata.Batch {
+func (c *castInt4Int2Op) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2774,7 +2770,7 @@ func (c *castInt32Int16Op) Next() coldata.Batch {
 	return batch
 }
 
-type castInt32Int64Op struct {
+type castInt4IntOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -2783,16 +2779,16 @@ type castInt32Int64Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt32Int64Op{}
-var _ colexecop.ClosableOperator = &castInt32Int64Op{}
+var _ colexecop.ResettableOperator = &castInt4IntOp{}
+var _ colexecop.ClosableOperator = &castInt4IntOp{}
 
-func (c *castInt32Int64Op) Reset(ctx context.Context) {
+func (c *castInt4IntOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt32Int64Op) Next() coldata.Batch {
+func (c *castInt4IntOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2875,7 +2871,7 @@ func (c *castInt32Int64Op) Next() coldata.Batch {
 	return batch
 }
 
-type castInt32BoolOp struct {
+type castInt4BoolOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -2884,16 +2880,16 @@ type castInt32BoolOp struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt32BoolOp{}
-var _ colexecop.ClosableOperator = &castInt32BoolOp{}
+var _ colexecop.ResettableOperator = &castInt4BoolOp{}
+var _ colexecop.ClosableOperator = &castInt4BoolOp{}
 
-func (c *castInt32BoolOp) Reset(ctx context.Context) {
+func (c *castInt4BoolOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt32BoolOp) Next() coldata.Batch {
+func (c *castInt4BoolOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2984,7 +2980,7 @@ func (c *castInt32BoolOp) Next() coldata.Batch {
 	return batch
 }
 
-type castInt32DecimalOp struct {
+type castInt4DecimalOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -2993,16 +2989,16 @@ type castInt32DecimalOp struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt32DecimalOp{}
-var _ colexecop.ClosableOperator = &castInt32DecimalOp{}
+var _ colexecop.ResettableOperator = &castInt4DecimalOp{}
+var _ colexecop.ClosableOperator = &castInt4DecimalOp{}
 
-func (c *castInt32DecimalOp) Reset(ctx context.Context) {
+func (c *castInt4DecimalOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt32DecimalOp) Next() coldata.Batch {
+func (c *castInt4DecimalOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3109,7 +3105,7 @@ func (c *castInt32DecimalOp) Next() coldata.Batch {
 	return batch
 }
 
-type castInt32Float64Op struct {
+type castInt4FloatOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -3118,16 +3114,16 @@ type castInt32Float64Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt32Float64Op{}
-var _ colexecop.ClosableOperator = &castInt32Float64Op{}
+var _ colexecop.ResettableOperator = &castInt4FloatOp{}
+var _ colexecop.ClosableOperator = &castInt4FloatOp{}
 
-func (c *castInt32Float64Op) Reset(ctx context.Context) {
+func (c *castInt4FloatOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt32Float64Op) Next() coldata.Batch {
+func (c *castInt4FloatOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3218,7 +3214,7 @@ func (c *castInt32Float64Op) Next() coldata.Batch {
 	return batch
 }
 
-type castInt64Int16Op struct {
+type castIntInt2Op struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -3227,16 +3223,16 @@ type castInt64Int16Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt64Int16Op{}
-var _ colexecop.ClosableOperator = &castInt64Int16Op{}
+var _ colexecop.ResettableOperator = &castIntInt2Op{}
+var _ colexecop.ClosableOperator = &castIntInt2Op{}
 
-func (c *castInt64Int16Op) Reset(ctx context.Context) {
+func (c *castIntInt2Op) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt64Int16Op) Next() coldata.Batch {
+func (c *castIntInt2Op) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3343,7 +3339,7 @@ func (c *castInt64Int16Op) Next() coldata.Batch {
 	return batch
 }
 
-type castInt64Int32Op struct {
+type castIntInt4Op struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -3352,16 +3348,16 @@ type castInt64Int32Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt64Int32Op{}
-var _ colexecop.ClosableOperator = &castInt64Int32Op{}
+var _ colexecop.ResettableOperator = &castIntInt4Op{}
+var _ colexecop.ClosableOperator = &castIntInt4Op{}
 
-func (c *castInt64Int32Op) Reset(ctx context.Context) {
+func (c *castIntInt4Op) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt64Int32Op) Next() coldata.Batch {
+func (c *castIntInt4Op) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3468,7 +3464,7 @@ func (c *castInt64Int32Op) Next() coldata.Batch {
 	return batch
 }
 
-type castInt64BoolOp struct {
+type castIntBoolOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -3477,16 +3473,16 @@ type castInt64BoolOp struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt64BoolOp{}
-var _ colexecop.ClosableOperator = &castInt64BoolOp{}
+var _ colexecop.ResettableOperator = &castIntBoolOp{}
+var _ colexecop.ClosableOperator = &castIntBoolOp{}
 
-func (c *castInt64BoolOp) Reset(ctx context.Context) {
+func (c *castIntBoolOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt64BoolOp) Next() coldata.Batch {
+func (c *castIntBoolOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3577,7 +3573,7 @@ func (c *castInt64BoolOp) Next() coldata.Batch {
 	return batch
 }
 
-type castInt64DecimalOp struct {
+type castIntDecimalOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -3586,16 +3582,16 @@ type castInt64DecimalOp struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt64DecimalOp{}
-var _ colexecop.ClosableOperator = &castInt64DecimalOp{}
+var _ colexecop.ResettableOperator = &castIntDecimalOp{}
+var _ colexecop.ClosableOperator = &castIntDecimalOp{}
 
-func (c *castInt64DecimalOp) Reset(ctx context.Context) {
+func (c *castIntDecimalOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt64DecimalOp) Next() coldata.Batch {
+func (c *castIntDecimalOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3702,7 +3698,7 @@ func (c *castInt64DecimalOp) Next() coldata.Batch {
 	return batch
 }
 
-type castInt64Float64Op struct {
+type castIntFloatOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -3711,16 +3707,16 @@ type castInt64Float64Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castInt64Float64Op{}
-var _ colexecop.ClosableOperator = &castInt64Float64Op{}
+var _ colexecop.ResettableOperator = &castIntFloatOp{}
+var _ colexecop.ClosableOperator = &castIntFloatOp{}
 
-func (c *castInt64Float64Op) Reset(ctx context.Context) {
+func (c *castIntFloatOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castInt64Float64Op) Next() coldata.Batch {
+func (c *castIntFloatOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3811,7 +3807,7 @@ func (c *castInt64Float64Op) Next() coldata.Batch {
 	return batch
 }
 
-type castFloat64BoolOp struct {
+type castFloatBoolOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -3820,16 +3816,16 @@ type castFloat64BoolOp struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castFloat64BoolOp{}
-var _ colexecop.ClosableOperator = &castFloat64BoolOp{}
+var _ colexecop.ResettableOperator = &castFloatBoolOp{}
+var _ colexecop.ClosableOperator = &castFloatBoolOp{}
 
-func (c *castFloat64BoolOp) Reset(ctx context.Context) {
+func (c *castFloatBoolOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castFloat64BoolOp) Next() coldata.Batch {
+func (c *castFloatBoolOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3920,7 +3916,7 @@ func (c *castFloat64BoolOp) Next() coldata.Batch {
 	return batch
 }
 
-type castFloat64DecimalOp struct {
+type castFloatDecimalOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -3929,16 +3925,16 @@ type castFloat64DecimalOp struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castFloat64DecimalOp{}
-var _ colexecop.ClosableOperator = &castFloat64DecimalOp{}
+var _ colexecop.ResettableOperator = &castFloatDecimalOp{}
+var _ colexecop.ClosableOperator = &castFloatDecimalOp{}
 
-func (c *castFloat64DecimalOp) Reset(ctx context.Context) {
+func (c *castFloatDecimalOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castFloat64DecimalOp) Next() coldata.Batch {
+func (c *castFloatDecimalOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4053,7 +4049,7 @@ func (c *castFloat64DecimalOp) Next() coldata.Batch {
 	return batch
 }
 
-type castFloat64Int16Op struct {
+type castFloatInt2Op struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -4062,16 +4058,16 @@ type castFloat64Int16Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castFloat64Int16Op{}
-var _ colexecop.ClosableOperator = &castFloat64Int16Op{}
+var _ colexecop.ResettableOperator = &castFloatInt2Op{}
+var _ colexecop.ClosableOperator = &castFloatInt2Op{}
 
-func (c *castFloat64Int16Op) Reset(ctx context.Context) {
+func (c *castFloatInt2Op) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castFloat64Int16Op) Next() coldata.Batch {
+func (c *castFloatInt2Op) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4174,7 +4170,7 @@ func (c *castFloat64Int16Op) Next() coldata.Batch {
 	return batch
 }
 
-type castFloat64Int32Op struct {
+type castFloatInt4Op struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -4183,16 +4179,16 @@ type castFloat64Int32Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castFloat64Int32Op{}
-var _ colexecop.ClosableOperator = &castFloat64Int32Op{}
+var _ colexecop.ResettableOperator = &castFloatInt4Op{}
+var _ colexecop.ClosableOperator = &castFloatInt4Op{}
 
-func (c *castFloat64Int32Op) Reset(ctx context.Context) {
+func (c *castFloatInt4Op) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castFloat64Int32Op) Next() coldata.Batch {
+func (c *castFloatInt4Op) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4295,7 +4291,7 @@ func (c *castFloat64Int32Op) Next() coldata.Batch {
 	return batch
 }
 
-type castFloat64Int64Op struct {
+type castFloatIntOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
@@ -4304,16 +4300,16 @@ type castFloat64Int64Op struct {
 	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castFloat64Int64Op{}
-var _ colexecop.ClosableOperator = &castFloat64Int64Op{}
+var _ colexecop.ResettableOperator = &castFloatIntOp{}
+var _ colexecop.ClosableOperator = &castFloatIntOp{}
 
-func (c *castFloat64Int64Op) Reset(ctx context.Context) {
+func (c *castFloatIntOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *castFloat64Int64Op) Next() coldata.Batch {
+func (c *castFloatIntOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {

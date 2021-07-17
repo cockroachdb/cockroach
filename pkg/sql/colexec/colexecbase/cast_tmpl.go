@@ -92,19 +92,17 @@ func GetCastOperator(
 			outputIdx:                resultIdx,
 		}, nil
 	}
-	// TODO(yuzefovich): remove this rebinding in the follow-up commit.
-	leftType, rightType := fromType, toType
-	switch leftType.Family() {
+	switch fromType.Family() {
 	// {{range .FromNative}}
 	case _TYPE_FAMILY:
-		switch leftType.Width() {
+		switch fromType.Width() {
 		// {{range .Widths}}
 		case _TYPE_WIDTH:
-			switch rightType.Family() {
+			switch toType.Family() {
 			// {{$fromInfo := .}}
 			// {{range .To}}
 			case _TYPE_FAMILY:
-				switch rightType.Width() {
+				switch toType.Width() {
 				// {{range .Widths}}
 				case _TYPE_WIDTH:
 					return &cast_NAMEOp{
@@ -122,12 +120,12 @@ func GetCastOperator(
 		}
 		// {{end}}
 	}
-	if typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
-		switch rightType.Family() {
+	if typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		switch toType.Family() {
 		// {{range .FromDatum}}
 		// {{$fromInfo := .}}
 		case _TYPE_FAMILY:
-			switch rightType.Width() {
+			switch toType.Width() {
 			// {{range .Widths}}
 			case _TYPE_WIDTH:
 				return &cast_NAMEOp{
@@ -142,7 +140,7 @@ func GetCastOperator(
 			// {{end}}
 		}
 
-		if typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
 			return &castDatumDatumOp{
 				OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 				allocator:                allocator,
@@ -162,18 +160,16 @@ func IsCastSupported(fromType, toType *types.T) bool {
 	if toType.Identical(fromType) {
 		return true
 	}
-	// TODO(yuzefovich): remove this rebinding in the follow-up commit.
-	leftType, rightType := fromType, toType
-	switch leftType.Family() {
+	switch fromType.Family() {
 	// {{range .FromNative}}
 	case _TYPE_FAMILY:
-		switch leftType.Width() {
+		switch fromType.Width() {
 		// {{range .Widths}}
 		case _TYPE_WIDTH:
-			switch rightType.Family() {
+			switch toType.Family() {
 			// {{range .To}}
 			case _TYPE_FAMILY:
-				switch rightType.Width() {
+				switch toType.Width() {
 				// {{range .Widths}}
 				case _TYPE_WIDTH:
 					return true
@@ -185,11 +181,11 @@ func IsCastSupported(fromType, toType *types.T) bool {
 		}
 		// {{end}}
 	}
-	if typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
-		switch rightType.Family() {
+	if typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		switch toType.Family() {
 		// {{range .FromDatum}}
 		case _TYPE_FAMILY:
-			switch rightType.Width() {
+			switch toType.Width() {
 			// {{range .Widths}}
 			case _TYPE_WIDTH:
 				return true
@@ -198,7 +194,7 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			// {{end}}
 		}
 
-		if typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily {
 			return true
 		}
 	}
