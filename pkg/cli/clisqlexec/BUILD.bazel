@@ -22,7 +22,6 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/util",
         "//pkg/util/encoding/csv",
-        "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
