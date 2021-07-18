@@ -41,17 +41,17 @@ func evalMaxStaleness(ctx *tree.EvalContext, d duration.Duration) (time.Time, er
 			tree.WithMaxStalenessFunctionName,
 		)
 	}
-	return duration.Add(ctx.GetTxnTimestamp(time.Microsecond).Time, d.Mul(-1)), nil
+	return duration.Add(ctx.GetStmtTimestamp(), d.Mul(-1)), nil
 }
 
 func evalMinTimestamp(ctx *tree.EvalContext, t time.Time) (time.Time, error) {
 	if err := checkEnterpriseEnabledForBoundedStaleness(ctx); err != nil {
 		return time.Time{}, err
 	}
-	if t.After(ctx.GetTxnTimestamp(time.Microsecond).Time) {
+	if t.After(ctx.GetStmtTimestamp()) {
 		return time.Time{}, pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			"timestamp for %s must be less than or equal to now()",
+			"timestamp for %s must be less than or equal to statement_timestamp()",
 			tree.WithMinTimestampFunctionName,
 		)
 	}
