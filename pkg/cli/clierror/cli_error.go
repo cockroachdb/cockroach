@@ -14,7 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 )
@@ -24,7 +24,7 @@ import (
 // a given exit code.
 type Error struct {
 	exitCode exit.Code
-	severity log.Severity
+	severity logpb.Severity
 	cause    error
 }
 
@@ -34,7 +34,7 @@ func NewError(cause error, exitCode exit.Code) error {
 }
 
 // NewErrorWithSeverity instantiates an Error with an explicit severity.
-func NewErrorWithSeverity(cause error, exitCode exit.Code, severity log.Severity) error {
+func NewErrorWithSeverity(cause error, exitCode exit.Code, severity logpb.Severity) error {
 	return &Error{
 		exitCode: exitCode,
 		severity: severity,
@@ -46,7 +46,7 @@ func NewErrorWithSeverity(cause error, exitCode exit.Code, severity log.Severity
 func (e *Error) GetExitCode() exit.Code { return e.exitCode }
 
 // GetSeverity extracts the severity.
-func (e *Error) GetSeverity() log.Severity { return e.severity }
+func (e *Error) GetSeverity() logpb.Severity { return e.severity }
 
 // Error implements the error interface.
 func (e *Error) Error() string { return e.cause.Error() }
