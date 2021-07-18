@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 )
 
 // LoadSecurityOptions extends a url.Values with SSL settings suitable for
@@ -76,7 +76,7 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.
 // PGURL constructs a URL for the postgres endpoint, given a server
 // config. There is no default database set.
 func (ctx *SecurityContext) PGURL(user *url.Userinfo) (*pgurl.URL, error) {
-	host, port, _ := netutil.SplitHostPort(ctx.config.SQLAdvertiseAddr, base.DefaultPort)
+	host, port, _ := addr.SplitHostPort(ctx.config.SQLAdvertiseAddr, base.DefaultPort)
 	u := pgurl.New().
 		WithNet(pgurl.NetTCP(host, port)).
 		WithDatabase(catalogkeys.DefaultDatabaseName)

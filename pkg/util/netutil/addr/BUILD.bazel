@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "addr",
+    srcs = ["addr.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/netutil/addr",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_test(
+    name = "addr_test",
+    srcs = ["addr_test.go"],
+    deps = [
+        ":addr",
+        "//pkg/testutils",
+    ],
+)

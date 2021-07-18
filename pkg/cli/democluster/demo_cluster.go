@@ -41,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -944,7 +944,7 @@ func (c *transientCluster) getNetworkURLForServer(
 			return nil, err
 		}
 	}
-	host, port, _ := netutil.SplitHostPort(c.servers[serverIdx].ServingSQLAddr(), "")
+	host, port, _ := addr.SplitHostPort(c.servers[serverIdx].ServingSQLAddr(), "")
 	u.
 		WithNet(pgurl.NetTCP(host, port)).
 		WithDatabase(c.defaultDB)
