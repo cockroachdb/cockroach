@@ -11,7 +11,6 @@
 package clisqlexec
 
 import (
-	"context"
 	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -26,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
 )
@@ -42,8 +40,6 @@ func isNotGraphicUnicodeOrTabOrNewline(r rune) bool {
 func FormatVal(
 	val driver.Value, colType string, showPrintableUnicode bool, showNewLinesAndTabs bool,
 ) string {
-	log.VInfof(context.Background(), 2, "value: go %T, sql %q", val, colType)
-
 	if b, ok := val.([]byte); ok {
 		if strings.HasPrefix(colType, "_") && len(b) > 0 && b[0] == '{' {
 			return formatArray(b, colType[1:], showPrintableUnicode, showNewLinesAndTabs)
@@ -169,7 +165,6 @@ func formatArray(
 	if err := parsingArray.Scan(b); err != nil {
 		// A parsing failure is not a catastrophe; we can still print out
 		// the array as a byte slice. This will do in many cases.
-		log.VInfof(context.Background(), 1, "unable to parse %q (sql %q) as array: %v", b, colType, err)
 		return FormatVal(b, "BYTEA", showPrintableUnicode, showNewLinesAndTabs)
 	}
 
