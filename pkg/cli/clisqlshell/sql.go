@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -650,21 +649,14 @@ func (c *cliState) handleHelp(cmd []string, nextState, errState cliStateEnum) cl
 // handleFunctionHelp prints help about built-in functions.
 func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	funcName := strings.TrimSpace(strings.Join(cmd, " "))
-	if funcName == "" {
-		for _, f := range builtins.AllBuiltinNames {
-			fmt.Fprintln(c.iCtx.stdout, f)
-		}
-		fmt.Fprintln(c.iCtx.stdout)
+	helpText, _ := c.serverSideParse(fmt.Sprintf("select %s(??", funcName))
+	if helpText != "" {
+		fmt.Fprintln(c.iCtx.stdout, helpText)
 	} else {
-		helpText, _ := c.serverSideParse(fmt.Sprintf("select %s(??", funcName))
-		if helpText != "" {
-			fmt.Fprintln(c.iCtx.stdout, helpText)
-		} else {
-			fmt.Fprintf(c.iCtx.stderr,
-				"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
-			c.exitErr = errors.New("no help available")
-			return errState
-		}
+		fmt.Fprintf(c.iCtx.stderr,
+			"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
+		c.exitErr = errors.New("no help available")
+		return errState
 	}
 	return nextState
 }
@@ -1139,6 +1131,10 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.handleHelp(cmd[1:], loopState, errState)
 
 	case `\hf`:
+		if len(cmd) == 1 {
+			c.concatLines = `SELECT DISTINCT proname AS function FROM pg_proc ORDER BY 1`
+			return cliRunStatement
+		}
 		return c.handleFunctionHelp(cmd[1:], loopState, errState)
 
 	case `\l`:
