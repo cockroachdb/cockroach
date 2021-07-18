@@ -178,8 +178,15 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 // compact. We are trading a little more time during the encoding to
 // have a little less bytes on the wire.
 func EncodeSQLBytes(buf *bytes.Buffer, in string) {
-	start := 0
 	buf.WriteString("b'")
+	EncodeSQLBytesInner(buf, in)
+	buf.WriteByte('\'')
+}
+
+// EncodeSQLBytesInner is like EncodeSQLBytes but does not include the
+// outer quote delimiter and the 'b' prefix.
+func EncodeSQLBytesInner(buf *bytes.Buffer, in string) {
+	start := 0
 	// Loop over the bytes of the string (i.e., don't use range over unicode
 	// code points).
 	for i, n := 0, len(in); i < n; i++ {
@@ -205,5 +212,4 @@ func EncodeSQLBytes(buf *bytes.Buffer, in string) {
 		}
 	}
 	buf.WriteString(in[start:])
-	buf.WriteByte('\'')
 }
