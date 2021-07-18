@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
@@ -627,21 +626,15 @@ func (c *cliState) handleDemoNodeCommands(
 
 // handleHelp prints SQL help.
 func (c *cliState) handleHelp(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
-	cmdrest := strings.TrimSpace(strings.Join(cmd, " "))
-	command := strings.ToUpper(cmdrest)
-	if command == "" {
-		fmt.Print(parser.AllHelp)
+	command := strings.TrimSpace(strings.Join(cmd, " "))
+	helpText, _ := c.serverSideParse(command + " ??")
+	if helpText != "" {
+		fmt.Fprintln(c.iCtx.stdout, helpText)
 	} else {
-		if h, ok := parser.HelpMessages[command]; ok {
-			msg := parser.HelpMessage{Command: command, HelpMessageBody: h}
-			msg.Format(c.iCtx.stdout)
-			fmt.Fprintln(c.iCtx.stdout)
-		} else {
-			fmt.Fprintf(c.iCtx.stderr,
-				"no help available for %q.\nTry \\h with no argument to see available help.\n", cmdrest)
-			c.exitErr = errors.New("no help available")
-			return errState
-		}
+		fmt.Fprintf(c.iCtx.stderr,
+			"no help available for %q.\nTry \\h with no argument to see available help.\n", command)
+		c.exitErr = errors.New("no help available")
+		return errState
 	}
 	return nextState
 }
