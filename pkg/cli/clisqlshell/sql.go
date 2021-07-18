@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
@@ -529,7 +530,7 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 }
 
 func isEndOfStatement(lastTok int) bool {
-	return lastTok == ';' || lastTok == parser.HELPTOKEN
+	return lastTok == ';' || lastTok == lexbase.HELPTOKEN
 }
 
 // handleDemo handles operations on \demo.
@@ -1289,7 +1290,7 @@ func (c *cliState) doPrepareStatementLine(
 		return startState
 	}
 
-	lastTok, ok := parser.LastLexicalToken(c.concatLines)
+	lastTok, ok := scanner.LastLexicalToken(c.concatLines)
 	endOfStmt := isEndOfStatement(lastTok)
 	if c.partialStmtsLen == 0 && !ok {
 		// More whitespace, or comments. Still nothing to do. However

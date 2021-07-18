@@ -12,4 +12,5 @@ go_test(
     name = "scanner_test",
     srcs = ["scan_test.go"],
     embed = [":scanner"],
+    deps = ["//pkg/sql/lexbase"],
 )
