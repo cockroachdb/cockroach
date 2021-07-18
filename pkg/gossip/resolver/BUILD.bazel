@@ -12,7 +12,7 @@ go_library(
         "//pkg/base",
         "//pkg/util",
         "//pkg/util/log",
-        "//pkg/util/netutil",
+        "//pkg/util/netutil/addr",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

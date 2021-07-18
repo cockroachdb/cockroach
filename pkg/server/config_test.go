@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -221,7 +221,7 @@ func TestParseBootstrapResolvers(t *testing.T) {
 		if len(resolvers) != 1 {
 			t.Fatalf("expected 1 resolver, got %# v", pretty.Formatter(resolvers))
 		}
-		host, port, err := netutil.SplitHostPort(resolvers[0].Addr(), "UNKNOWN")
+		host, port, err := addr.SplitHostPort(resolvers[0].Addr(), "UNKNOWN")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -248,7 +248,7 @@ func TestParseBootstrapResolvers(t *testing.T) {
 		if len(resolvers) != 1 {
 			t.Fatalf("expected 1 resolver, got %# v", pretty.Formatter(resolvers))
 		}
-		host, port, err := netutil.SplitHostPort(resolvers[0].Addr(), "UNKNOWN")
+		host, port, err := addr.SplitHostPort(resolvers[0].Addr(), "UNKNOWN")
 		if err != nil {
 			t.Fatal(err)
 		}

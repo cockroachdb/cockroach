@@ -1,11 +1,8 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "netutil",
-    srcs = [
-        "addr.go",
-        "net.go",
-    ],
+    srcs = ["net.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/netutil",
     visibility = ["//visibility:public"],
     deps = [
@@ -17,15 +14,5 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_x_net//http2",
-    ],
-)
-
-go_test(
-    name = "netutil_test",
-    size = "small",
-    srcs = ["addr_test.go"],
-    deps = [
-        ":netutil",
-        "//pkg/testutils",
     ],
 )
