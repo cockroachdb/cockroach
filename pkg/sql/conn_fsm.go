@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -28,7 +29,7 @@ import (
 // Constants for the String() representation of the session states. Shared with
 // the CLI code which needs to recognize them.
 const (
-	NoTxnStateStr         = sqlfsm.NoTxnStatestr
+	NoTxnStateStr         = sqlfsm.NoTxnStateStr
 	OpenStateStr          = sqlfsm.OpenStateStr
 	AbortedStateStr       = sqlfsm.AbortedStateStr
 	CommitWaitStateStr    = sqlfsm.CommitWaitStateStr
