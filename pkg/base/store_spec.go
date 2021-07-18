@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
@@ -529,7 +529,7 @@ func (jls *JoinListType) Set(value string) error {
 		// Try splitting the address. This validates the format
 		// of the address and tolerates a missing delimiter colon
 		// between the address and port number.
-		addr, port, err := netutil.SplitHostPort(v, "")
+		addr, port, err := addr.SplitHostPort(v, "")
 		if err != nil {
 			return err
 		}

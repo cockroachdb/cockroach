@@ -14,7 +14,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,7 +45,7 @@ func Parse(s string) (*URL, error) {
 	}
 
 	if u.Host != "" {
-		host, port, err := netutil.SplitHostPort(u.Host, "0")
+		host, port, err := addr.SplitHostPort(u.Host, "0")
 		if err != nil {
 			return nil, err
 		}
