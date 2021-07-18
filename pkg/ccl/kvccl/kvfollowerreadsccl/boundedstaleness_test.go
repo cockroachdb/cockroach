@@ -30,7 +30,7 @@ func TestBoundedStalenessEnterpriseLicense(t *testing.T) {
 
 	queries := []string{
 		`SELECT with_max_staleness('10s')`,
-		`SELECT with_min_timestamp(now())`,
+		`SELECT with_min_timestamp(statement_timestamp())`,
 	}
 
 	defer utilccl.TestingDisableEnterprise()()
