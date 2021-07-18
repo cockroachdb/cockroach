@@ -11,6 +11,7 @@
 package clisqlexec
 
 import (
+	"bytes"
 	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -23,8 +24,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
 )
@@ -100,8 +100,9 @@ func FormatVal(
 		// not interpret the bytes and for us here to print that as-is, so
 		// that we can let the user see and control the result using
 		// `bytea_output`.
-		return lex.EncodeByteArrayToRawBytes(string(t),
-			sessiondatapb.BytesEncodeEscape, false /* skipHexPrefix */)
+		var buf bytes.Buffer
+		lexbase.EncodeSQLBytesInner(&buf, string(t))
+		return buf.String()
 
 	case time.Time:
 		tfmt, ok := timeOutputFormats[colType]
