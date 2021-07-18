@@ -19,7 +19,6 @@ go_library(
         "//pkg/cli/democluster/api",
         "//pkg/docs",
         "//pkg/sql/lexbase",
-        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/scanner",
