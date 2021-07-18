@@ -23,12 +23,12 @@ import (
 func (p *planner) SetTransaction(ctx context.Context, n *tree.SetTransaction) (planNode, error) {
 	var asOfTs hlc.Timestamp
 	if n.Modes.AsOf.Expr != nil {
-		var err error
-		asOfTs, err = p.EvalAsOfTimestamp(ctx, n.Modes.AsOf)
+		asOf, err := p.EvalAsOfTimestamp(ctx, n.Modes.AsOf)
 		if err != nil {
 			return nil, err
 		}
-		p.semaCtx.AsOfTimestamp = &asOfTs
+		p.semaCtx.AsOfSystemTime = &asOf
+		asOfTs = asOf.Timestamp
 	}
 	if n.Modes.Deferrable == tree.Deferrable {
 		return nil, unimplemented.NewWithIssue(53432, "DEFERRABLE transactions")

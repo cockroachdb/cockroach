@@ -61,10 +61,16 @@ func IsFollowerReadTimestampFunction(asOf AsOfClause, searchPath sessiondata.Sea
 	return def.Name == FollowerReadTimestampFunctionName || def.Name == FollowerReadTimestampExperimentalFunctionName
 }
 
+// AsOfSystemTime represents the result from the AS OF SYSTEM TIME clause.
+type AsOfSystemTime struct {
+	// Timestamp is the HLC timestamp evaluated from the AS OF SYSTEM TIME clause.
+	Timestamp hlc.Timestamp
+}
+
 // EvalAsOfTimestamp evaluates the timestamp argument to an AS OF SYSTEM TIME query.
 func EvalAsOfTimestamp(
 	ctx context.Context, asOf AsOfClause, semaCtx *SemaContext, evalCtx *EvalContext,
-) (tsss hlc.Timestamp, err error) {
+) (AsOfSystemTime, error) {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
 	// context.
@@ -80,32 +86,37 @@ func EvalAsOfTimestamp(
 	var te TypedExpr
 	if _, ok := asOf.Expr.(*FuncExpr); ok {
 		if !IsFollowerReadTimestampFunction(asOf, semaCtx.SearchPath) {
-			return hlc.Timestamp{}, errInvalidExprForAsOf
+			return AsOfSystemTime{}, errInvalidExprForAsOf
 		}
 		var err error
 		te, err = asOf.Expr.TypeCheck(ctx, semaCtx, types.TimestampTZ)
 		if err != nil {
-			return hlc.Timestamp{}, err
+			return AsOfSystemTime{}, err
 		}
 	} else {
 		var err error
 		te, err = asOf.Expr.TypeCheck(ctx, semaCtx, types.String)
 		if err != nil {
-			return hlc.Timestamp{}, err
+			return AsOfSystemTime{}, err
 		}
 		if !IsConst(evalCtx, te) {
-			return hlc.Timestamp{}, errInvalidExprForAsOf
+			return AsOfSystemTime{}, errInvalidExprForAsOf
 		}
 	}
 
 	d, err := te.Eval(evalCtx)
 	if err != nil {
-		return hlc.Timestamp{}, err
+		return AsOfSystemTime{}, err
 	}
 
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
 	ts, err := DatumToHLC(evalCtx, stmtTimestamp, d)
-	return ts, errors.Wrap(err, "AS OF SYSTEM TIME")
+	if err != nil {
+		return AsOfSystemTime{}, errors.Wrap(err, "AS OF SYSTEM TIME")
+	}
+	return AsOfSystemTime{
+		Timestamp: ts,
+	}, nil
 }
 
 // DatumToHLC performs the conversion from a Datum to an HLC timestamp.

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -48,14 +47,14 @@ type SemaContext struct {
 	// TypeResolver manages resolving type names into *types.T's.
 	TypeResolver TypeReferenceResolver
 
-	// AsOfTimestamp denotes the explicit AS OF SYSTEM TIME timestamp for the
+	// AsOfSystemTime denotes the explicit AS OF SYSTEM TIME timestamp for the
 	// query, if any. If the query is not an AS OF SYSTEM TIME query,
-	// AsOfTimestamp is nil.
+	// AsOfSystemTime is nil.
 	// TODO(knz): we may want to support table readers at arbitrary
 	// timestamps, so that each FROM clause can have its own
 	// timestamp. In that case, the timestamp would not be set
 	// globally for the entire txn and this field would not be needed.
-	AsOfTimestamp *hlc.Timestamp
+	AsOfSystemTime *AsOfSystemTime
 
 	// TableNameResolver is used to resolve the fully qualified
 	// name of a table given its ID.
