@@ -96,7 +96,7 @@ func TestErrorReporting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			got := &logger{TB: t}
-			checked := checkAndMaybeShoutTo(tt.err, got.Log)
+			checked := CheckAndMaybeLog(tt.err, got.Log)
 			assert.Equal(t, tt.err, checked, "should return error unchanged")
 			assert.Equal(t, tt.wantSeverity, got.Severity, "wrong severity log")
 			assert.Equal(t, channel.SESSIONS, got.Channel, "wrong channel")

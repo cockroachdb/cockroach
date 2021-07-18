@@ -13,24 +13,19 @@ package clierror
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 )
 
-// CheckAndMaybeShout shouts the error, if non-nil to the OPS logging
-// channel.
-func CheckAndMaybeShout(err error) error {
-	return checkAndMaybeShoutTo(err, log.Ops.Shoutf)
-}
-
-func checkAndMaybeShoutTo(
-	err error, logger func(context.Context, log.Severity, string, ...interface{}),
+// CheckAndMaybeLog reports the error, if non-nil, to the givven
+// logger.
+func CheckAndMaybeLog(
+	err error, logger func(context.Context, logpb.Severity, string, ...interface{}),
 ) error {
 	if err == nil {
 		return nil
 	}
-	severity := severity.ERROR
+	severity := logpb.Severity_ERROR
 	cause := err
 	var ec *Error
 	if errors.As(err, &ec) {

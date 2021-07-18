@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -242,6 +243,12 @@ func maybeShoutError(
 ) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		err := wrapped(cmd, args)
-		return clierror.CheckAndMaybeShout(err)
+		return CheckAndMaybeShout(err)
 	}
+}
+
+// CheckAndMaybeShout shouts the error, if non-nil to the OPS logging
+// channel.
+func CheckAndMaybeShout(err error) error {
+	return clierror.CheckAndMaybeLog(err, log.Ops.Shoutf)
 }
