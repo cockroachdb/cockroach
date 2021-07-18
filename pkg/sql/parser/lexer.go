@@ -276,6 +276,11 @@ func (l *lexer) SetHelp(msg HelpMessage) {
 	}
 }
 
+// specialHelpErrorPrefix is a special prefix that must be present at
+// the start of an error message to be considered a valid help
+// response payload by the CLI shell.
+const specialHelpErrorPrefix = "help token in input"
+
 func (l *lexer) populateHelpMsg(msg string) {
-	l.lastError = errors.WithHint(errors.Wrap(l.lastError, "help token in input"), msg)
+	l.lastError = errors.WithHint(errors.Wrap(l.lastError, specialHelpErrorPrefix), msg)
 }
