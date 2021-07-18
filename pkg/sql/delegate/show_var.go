@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -45,7 +45,7 @@ func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
 			"unrecognized configuration parameter %q", origName)
 	}
 
-	varName := lex.EscapeSQLString(name)
+	varName := lexbase.EscapeSQLString(name)
 	nm := tree.Name(name)
 	return parse(fmt.Sprintf(
 		`SELECT value AS %[1]s FROM crdb_internal.session_variables WHERE variable = %[2]s`,

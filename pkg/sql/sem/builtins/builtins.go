@@ -1828,7 +1828,7 @@ var builtins = map[string]builtinDefinition{
 			PreferredOverload: true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				s := tree.MustBeDString(args[0])
-				return tree.NewDString(lex.EscapeSQLString(string(s))), nil
+				return tree.NewDString(lexbase.EscapeSQLString(string(s))), nil
 			},
 			Info:       "Return `val` suitably quoted to serve as string literal in a SQL statement.",
 			Volatility: tree.VolatilityImmutable,
@@ -1866,7 +1866,7 @@ var builtins = map[string]builtinDefinition{
 					return tree.NewDString("NULL"), nil
 				}
 				s := tree.MustBeDString(args[0])
-				return tree.NewDString(lex.EscapeSQLString(string(s))), nil
+				return tree.NewDString(lexbase.EscapeSQLString(string(s))), nil
 			},
 			Info:       "Coerce `val` to a string and then quote it as a literal. If `val` is NULL, returns 'NULL'.",
 			Volatility: tree.VolatilityImmutable,
