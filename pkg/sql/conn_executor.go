@@ -2387,7 +2387,7 @@ func (ex *connExecutor) resetPlanner(
 
 	p.semaCtx = tree.MakeSemaContext()
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
-	p.semaCtx.AsOfTimestamp = nil
+	p.semaCtx.AsOfSystemTime = nil
 	p.semaCtx.Annotations = nil
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.TableNameResolver = p

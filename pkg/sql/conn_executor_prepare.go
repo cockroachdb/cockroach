@@ -262,13 +262,13 @@ func (ex *connExecutor) populatePrepared(
 	}
 	p.extendedEvalCtx.PrepareOnly = true
 
-	protoTS, err := p.isAsOf(ctx, stmt.AST)
+	asOf, err := p.isAsOf(ctx, stmt.AST)
 	if err != nil {
 		return 0, err
 	}
-	if protoTS != nil {
-		p.semaCtx.AsOfTimestamp = protoTS
-		txn.SetFixedTimestamp(ctx, *protoTS)
+	if asOf != nil {
+		p.semaCtx.AsOfSystemTime = asOf
+		txn.SetFixedTimestamp(ctx, asOf.Timestamp)
 	}
 
 	// PREPARE has a limited subset of statements it can be run with. Postgres
