@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -207,12 +207,12 @@ func StringTuple(datums []interface{}) []string {
 		case uint64:
 			s[i] = strconv.FormatUint(x, 10)
 		case string:
-			s[i] = lex.EscapeSQLString(x)
+			s[i] = lexbase.EscapeSQLString(x)
 		case float64:
 			s[i] = fmt.Sprintf(`%f`, x)
 		case []byte:
 			// See the HACK comment in ColBatchToRows.
-			s[i] = lex.EscapeSQLString(string(x))
+			s[i] = lexbase.EscapeSQLString(string(x))
 		default:
 			panic(errors.AssertionFailedf("unsupported type %T: %v", x, x))
 		}

@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -164,7 +164,7 @@ func CopyInFileStmt(destination, schema, table string) string {
 		`COPY %s.%s FROM STDIN WITH destination = %s`,
 		pq.QuoteIdentifier(schema),
 		pq.QuoteIdentifier(table),
-		lex.EscapeSQLString(destination),
+		lexbase.EscapeSQLString(destination),
 	)
 }
 

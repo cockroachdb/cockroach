@@ -20,7 +20,7 @@ go_library(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/lex",
+        "//pkg/sql/lexbase",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",

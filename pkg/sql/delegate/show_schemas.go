@@ -13,7 +13,7 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -34,7 +34,7 @@ func (d *delegator) delegateShowSchemas(n *tree.ShowSchemas) (tree.Statement, er
 			WHERE catalog_name = %[2]s
 			ORDER BY schema_name`,
 		name.String(), // note: (tree.Name).String() != string(name)
-		lex.EscapeSQLString(string(name)),
+		lexbase.EscapeSQLString(string(name)),
 	)
 
 	return parse(getSchemasQuery)

@@ -13,7 +13,7 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
@@ -31,7 +31,7 @@ func (d *delegator) delegateShowSurvivalGoal(n *tree.ShowSurvivalGoal) (tree.Sta
 	survival_goal
 FROM crdb_internal.databases
 WHERE name = %s`,
-		lex.EscapeSQLString(dbName),
+		lexbase.EscapeSQLString(dbName),
 	)
 	return parse(query)
 }
