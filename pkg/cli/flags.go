@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -184,7 +184,7 @@ func (a addrSetter) Type() string { return "<addr/host>[:<port>]" }
 
 // Set implements the pflag.Value interface.
 func (a addrSetter) Set(v string) error {
-	addr, port, err := netutil.SplitHostPort(v, *a.port)
+	addr, port, err := addr.SplitHostPort(v, *a.port)
 	if err != nil {
 		return err
 	}
@@ -1177,8 +1177,8 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
 
 	// Fill the advertise port into the locality advertise addresses.
-	for i, addr := range localityAdvertiseHosts {
-		host, port, err := netutil.SplitHostPort(addr.Address.AddressField, serverAdvertisePort)
+	for i, a := range localityAdvertiseHosts {
+		host, port, err := addr.SplitHostPort(a.Address.AddressField, serverAdvertisePort)
 		if err != nil {
 			return err
 		}
