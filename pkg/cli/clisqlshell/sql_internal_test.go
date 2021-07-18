@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
@@ -78,7 +78,7 @@ func TestIsEndOfStatement(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		lastTok, isNotEmpty := parser.LastLexicalToken(test.in)
+		lastTok, isNotEmpty := scanner.LastLexicalToken(test.in)
 		if isNotEmpty != test.isNotEmpty {
 			t.Errorf("%q: isNotEmpty expected %v, got %v", test.in, test.isNotEmpty, isNotEmpty)
 		}
