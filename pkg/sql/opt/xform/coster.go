@@ -152,9 +152,9 @@ const (
 	// are stale.
 	largeMaxCardinalityScanRowCountPenalty = unboundedMaxCardinalityScanRowCountPenalty / 2
 
-	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
-	// we have a hint for preferring a lookup join.
-	preferLookupJoinFactor = 1e-6
+	// preferJoinFactor is a scale factor for the cost of a join when we have a
+	// hint for preferring a lookup join.
+	preferJoinFactor = 1e-6
 
 	// noSpillRowCount represents the maximum number of rows that should have no
 	// buffering cost because we expect they will never need to be spilled to
@@ -911,7 +911,7 @@ func (c *coster) computeIndexLookupJoinCost(
 
 	if flags.Has(memo.PreferLookupJoinIntoRight) {
 		// If we prefer a lookup join, make the cost much smaller.
-		cost *= preferLookupJoinFactor
+		cost *= preferJoinFactor
 	}
 
 	// If this lookup join is locality optimized, divide the cost by 2.5 in order to make
@@ -1059,6 +1059,11 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	// given two indexes will be accessed.
 	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seqIOCostFactor) + scanCost + filterPerRow)
 	cost += filterSetup
+
+	if join.HintProvided {
+		cost *= preferJoinFactor
+	}
+
 	return cost
 }
 

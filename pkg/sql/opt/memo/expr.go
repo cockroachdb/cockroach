@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -354,6 +355,9 @@ type ScanFlags struct {
 	ForceIndex bool
 	Direction  tree.Direction
 	Index      int
+
+	ZigzagHint    bool
+	ZigzagIndices util.FastIntSet
 }
 
 // Empty returns true if there are no flags set.

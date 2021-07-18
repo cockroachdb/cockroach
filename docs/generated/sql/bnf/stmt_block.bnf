@@ -1136,6 +1136,7 @@ unreserved_keyword ::=
 	| 'WITHOUT'
 	| 'WRITE'
 	| 'YEAR'
+	| 'ZIGZAG'
 	| 'ZONE'
 
 col_name_keyword ::=
@@ -2700,6 +2701,8 @@ materialize_clause ::=
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
+	| 'ZIGZAG'
+	| 'ZIGZAG' '=' index_name
 
 opt_asc_desc ::=
 	'ASC'

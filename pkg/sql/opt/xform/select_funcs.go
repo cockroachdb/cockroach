@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1079,6 +1080,19 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			)
 			zigzagCols := leftCols.Copy()
 			zigzagCols.UnionWith(rightCols)
+
+			zigzagJoin.ZigzagJoinPrivate.HintProvided = scanPrivate.Flags.ZigzagHint
+			if scanPrivate.Flags.ZigzagIndices.Len() > 0 {
+				// If any of the hinted indices are in the set of indices being
+				// used set the hint flag. Arguably we should hint harder on exact
+				// matches (in the case of multiple possible zigzag possibilities) but
+				// if user wants that they can achieve it by not over or under
+				// specifying index hints.
+				indices := util.MakeFastIntSet(leftIndex.Ordinal(), rightIndex.Ordinal())
+				if scanPrivate.Flags.ZigzagIndices.Union(indices).Len() > 0 {
+					zigzagJoin.ZigzagJoinPrivate.HintProvided = true
+				}
+			}
 
 			if scanPrivate.Cols.SubsetOf(zigzagCols) {
 				// Case 1 (zigzagged indexes contain all requested columns).

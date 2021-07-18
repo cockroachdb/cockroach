@@ -784,7 +784,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 
 %token <str> YEAR
 
-%token <str> ZONE
+%token <str> ZIGZAG ZONE
 
 // The grammar thinks these are keywords, but they are not in any category
 // and so can never be entered directly. The filter in scan.go creates these
@@ -9237,6 +9237,16 @@ index_flags_param:
     /* SKIP DOC */
     $$.val = &tree.IndexFlags{IgnoreForeignKeys: true}
   }
+|
+  ZIGZAG
+  {
+     $$.val = &tree.IndexFlags{HintZigzag: true}
+  }
+|
+  ZIGZAG '=' index_name
+  {
+     $$.val = &tree.IndexFlags{ZigzagIndices: []tree.UnrestrictedName{tree.UnrestrictedName($3)}}
+  }
 
 index_flags_param_list:
   index_flags_param
@@ -12902,6 +12912,7 @@ unreserved_keyword:
 | WITHOUT
 | WRITE
 | YEAR
+| ZIGZAG
 | ZONE
 
 // Column identifier --- keywords that can be column, table, etc names.

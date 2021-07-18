@@ -574,6 +574,9 @@ define ZigzagJoinPrivate {
     # Cols is the set of columns produced by the zigzag join. This set can
     # contain columns from either side's index.
     Cols ColSet
+
+    # HintProvided is true if user supplied a hint asking for a zigzag join.
+    HintProvided bool
 }
 
 # InnerJoinApply has the same join semantics as InnerJoin. However, unlike

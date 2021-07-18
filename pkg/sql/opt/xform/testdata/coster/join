@@ -990,3 +990,157 @@ project
       │    └── filters
       │         └── attname:3 = 'descriptor_id' [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id']; tight), fd=()-->(3)]
       └── filters (true)
+
+exec-ddl
+CREATE TABLE zigzag (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b));
+----
+
+# Output full cost for reference.
+opt
+SELECT * FROM zigzag WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ ├── cost: 28.4722162
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ │    ├── cost: 22.9427027
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify costing was affected by naked hint.
+opt
+SELECT * FROM zigzag@{ZIGZAG} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ ├── cost: 5.53953645
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ │    ├── cost: 0.0100229327
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify costing was affected by hint with one index.
+opt
+SELECT * FROM zigzag@{ZIGZAG=a_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ ├── cost: 5.53953645
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ │    ├── cost: 0.0100229327
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify costing was affected by hint with other index.
+opt
+SELECT * FROM zigzag@{ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ ├── cost: 5.53953645
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ │    ├── cost: 0.0100229327
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify costing was affected by hint with both indexes.
+opt
+SELECT * FROM zigzag@{ZIGZAG=a_idx,ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ ├── cost: 5.53953645
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ │    ├── cost: 0.0100229327
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify costing was affected by hint with too many indexes.
+opt
+SELECT * FROM zigzag@{ZIGZAG=a_idx,ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ ├── cost: 5.53953645
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ │    ├── cost: 0.0100229327
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)

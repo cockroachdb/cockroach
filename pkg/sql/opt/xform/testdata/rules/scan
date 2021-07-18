@@ -53,7 +53,7 @@ scan a,rev
 memo
 SELECT k,f FROM a ORDER BY k DESC LIMIT 10
 ----
-memo (optimized, ~3KB, required=[presentation: k:1,f:3] [ordering: -1])
+memo (optimized, ~4KB, required=[presentation: k:1,f:3] [ordering: -1])
  ├── G1: (limit G2 G3 ordering=-1) (scan a,rev,cols=(1,3),lim=10(rev))
  │    ├── [presentation: k:1,f:3] [ordering: -1]
  │    │    ├── best: (scan a,rev,cols=(1,3),lim=10(rev))
@@ -149,7 +149,7 @@ scan a@si_idx,rev
 memo
 SELECT k FROM a ORDER BY k ASC
 ----
-memo (optimized, ~2KB, required=[presentation: k:1] [ordering: +1])
+memo (optimized, ~3KB, required=[presentation: k:1] [ordering: +1])
  └── G1: (scan a,cols=(1)) (scan a@s_idx,cols=(1)) (scan a@si_idx,cols=(1))
       ├── [presentation: k:1] [ordering: +1]
       │    ├── best: (scan a,cols=(1))
@@ -357,7 +357,7 @@ sort (segmented)
 memo
 SELECT i, k FROM a ORDER BY s DESC, i, k
 ----
-memo (optimized, ~2KB, required=[presentation: i:2,k:1] [ordering: -4,+2,+1])
+memo (optimized, ~3KB, required=[presentation: i:2,k:1] [ordering: -4,+2,+1])
  └── G1: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
       ├── [presentation: i:2,k:1] [ordering: -4,+2,+1]
       │    ├── best: (sort G1="[ordering: -4]")

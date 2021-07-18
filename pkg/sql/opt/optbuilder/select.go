@@ -534,6 +534,22 @@ func (b *Builder) buildScan(
 			private.Flags.Index = idx
 			private.Flags.Direction = indexFlags.Direction
 		}
+		private.Flags.ZigzagHint = indexFlags.HintZigzag
+		if indexFlags.ZigzagIndices != nil {
+			for _, name := range indexFlags.ZigzagIndices {
+				idx := -1
+				for i := 0; i < tab.IndexCount(); i++ {
+					if tab.Index(i).Name() == tree.Name(name) {
+						idx = i
+						break
+					}
+				}
+				if idx == -1 {
+					panic(pgerror.Newf(pgcode.UndefinedObject, "index %q not found", tree.ErrString(&name)))
+				}
+				private.Flags.ZigzagIndices.Add(idx)
+			}
+		}
 	}
 	if locking.isSet() {
 		private.Locking = locking.get()

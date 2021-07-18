@@ -53,8 +53,8 @@ statement ok
 DROP INDEX a@a_idx;
 DROP INDEX a@b_idx;
 CREATE INDEX c_idx ON a(c);
-CREATE INDEX a_idx_2 ON a(a);
-CREATE INDEX b_idx_2 ON a(b);
+CREATE INDEX a_idx ON a(a);
+CREATE INDEX b_idx ON a(b);
 SELECT n,a,b FROM a WHERE a = 4 AND b = 1;
 
 # Regression test for 48003 ("non-values node passed as fixed value to zigzag
@@ -184,3 +184,26 @@ query IT
 SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 16  [{"a": {"b": [1, [2]]}}, "d"]
+
+# Zigzag hinting syntax tests, functional tests in opt.xform coster tests.
+# zigzag join hinting
+statement error syntax error
+SELECT * FROM a@{ZIGZAG=} WHERE a = 3 AND b = 7;
+
+statement error index "foo" not found
+SELECT * FROM a@{ZIGZAG=foo} WHERE a = 3 AND b = 7;
+
+statement error syntax error
+SELECT * FROM a@{ZIGZAG=foo,bar} WHERE a = 3 AND b = 7;
+
+# Dupes are okay.
+statement ok
+SELECT * FROM a@{ZIGZAG=a_idx,ZIGZAG=a_idx} WHERE a = 3 AND b = 7;
+
+# Over specifying is okay, if any of the hinted indexes is discovered during
+# exploration we'll hint it.
+statement ok
+SELECT * FROM a@{ZIGZAG=a_idx,ZIGZAG=b_idx,ZIGZAG=c_idx} WHERE a = 3 AND b = 7;
+
+statement ok
+SELECT * FROM a@{ZIGZAG=a_idx,ZIGZAG=b_idx} WHERE a = 3 AND b = 7;

@@ -269,6 +269,8 @@ type IndexID uint32
 //  - ASC / DESC
 //  - NO_INDEX_JOIN
 //  - IGNORE_FOREIGN_KEYS
+//  - ZIGZAG
+//  - ZIGZAG=idx1*
 // It is used optionally after a table name in SELECT statements.
 type IndexFlags struct {
 	Index   UnrestrictedName
@@ -285,6 +287,10 @@ type IndexFlags struct {
 	// IgnoreUniqueWithoutIndexKeys disables optimizations based on unique without
 	// index constraints.
 	IgnoreUniqueWithoutIndexKeys bool
+	// HintZigzag enables costing hints to prefer a zigzag join.
+	HintZigzag bool
+	// ZigzagIndices makes planner to prefer a zigzag with particular indices.
+	ZigzagIndices []UnrestrictedName
 }
 
 // ForceIndex returns true if a forced index was specified, either using a name
@@ -324,6 +330,12 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 		}
 		result.Index = other.Index
 		result.IndexID = other.IndexID
+	}
+
+	result.HintZigzag = ih.HintZigzag || other.HintZigzag
+	// We can have N zigzag indices (in theory, we only support 2 now).
+	if len(other.ZigzagIndices) > 0 {
+		result.ZigzagIndices = append(result.ZigzagIndices, other.ZigzagIndices...)
 	}
 
 	// We only set at the end to avoid a partially changed structure in one of the
