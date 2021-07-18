@@ -493,6 +493,8 @@ func DecodeDatum(
 		}
 	case FormatBinary:
 		switch id {
+		case oid.T_record:
+			return decodeBinaryTuple(evalCtx, t, b)
 		case oid.T_bool:
 			if len(b) > 0 {
 				switch b[0] {
@@ -948,6 +950,60 @@ func decodeBinaryArray(
 		}
 	}
 	return arr, nil
+}
+
+func decodeBinaryTuple(evalCtx *tree.EvalContext, t *types.T, b []byte) (tree.Datum, error) {
+	if len(b) < 4 {
+		return nil, pgerror.Newf(pgcode.Syntax, "tuple requires a 4 byte header for binary format")
+	}
+
+	totalLength := int32(len(b))
+	numberOfElements := int32(binary.BigEndian.Uint32(b[0:4]))
+	typs := make([]*types.T, numberOfElements)
+	datums := make(tree.Datums, numberOfElements)
+	curByte := int32(4)
+	curIdx := int32(0)
+
+	for curIdx < numberOfElements {
+
+		if totalLength < curByte+4 {
+			return nil, pgerror.Newf(pgcode.Syntax, "tuple requires 4 bytes for each element OID for binary format")
+		}
+
+		elementOID := int32(binary.BigEndian.Uint32(b[curByte : curByte+4]))
+		elementType := types.OidToType[oid.Oid(elementOID)]
+		typs[curIdx] = elementType
+		curByte = curByte + 4
+
+		if totalLength < curByte+4 {
+			return nil, pgerror.Newf(pgcode.Syntax, "tuple requires 4 bytes for the size of each element for binary format")
+		}
+
+		elementLength := int32(binary.BigEndian.Uint32(b[curByte : curByte+4]))
+		curByte = curByte + 4
+
+		if elementLength == -1 {
+			datums[curIdx] = tree.DNull
+		} else {
+			if totalLength < curByte+elementLength {
+				return nil, pgerror.Newf(pgcode.Syntax, "tuple requires %d bytes for element %d for binary format", elementLength, curIdx)
+			}
+
+			colDatum, err := DecodeDatum(evalCtx, elementType, FormatBinary, b[curByte:curByte+elementLength])
+
+			if err != nil {
+				return nil, err
+			}
+
+			curByte = curByte + elementLength
+			datums[curIdx] = colDatum
+		}
+		curIdx++
+	}
+
+	tupleTyps := types.MakeTuple(typs)
+	return tree.NewDTuple(tupleTyps, datums...), nil
+
 }
 
 var invalidUTF8Error = pgerror.Newf(pgcode.CharacterNotInRepertoire, "invalid UTF-8 sequence")
