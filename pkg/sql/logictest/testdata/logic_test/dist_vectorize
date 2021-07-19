@@ -508,6 +508,6 @@ EXPLAIN (VEC) SELECT 1::INT2, s COLLATE en FROM t66306;
 │ └ *colrpc.Inbox
 └ Node 2
   └ *colrpc.Outbox
-    └ *colexecbase.castInt64Int16Op
+    └ *colexecbase.castIntInt2Op
       └ *rowexec.noopProcessor
         └ *colfetcher.ColBatchScan
