@@ -120,7 +120,7 @@ func (u *DefaultPrivilegesForRole) User() security.SQLUsername {
 	return u.UserProto.Decode()
 }
 
-// findUser looks for a specific user in the list.
+// GetDefaultPrivilegesForRole looks for a specific user in the list.
 // Returns (nil, false) if not found, or (obj, true) if found.
 func (p *DefaultPrivilegeDescriptor) GetDefaultPrivilegesForRole(
 	user security.SQLUsername,
@@ -187,7 +187,7 @@ func (p *DefaultPrivilegeDescriptor) Validate() error {
 			privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 			valid, u, remaining := defaultPrivileges.IsValidPrivilegesForObjectType(privilegeObjectType)
 			if !valid {
-				return errors.AssertionFailedf("user %s must not have %s privileges on %s",
+				return errors.AssertionFailedf("user %s must not have %v privileges on %s",
 					u.User(), privilege.ListFromBitField(remaining, privilege.Any), objectType)
 			}
 		}
@@ -198,7 +198,8 @@ func (p *DefaultPrivilegeDescriptor) Validate() error {
 
 // InitDefaultPrivilegeDescriptor returns a new DefaultPrivilegeDescriptor.
 func InitDefaultPrivilegeDescriptor() *DefaultPrivilegeDescriptor {
+	var defaultPrivilegesForRole []DefaultPrivilegesForRole
 	return &DefaultPrivilegeDescriptor{
-		DefaultPrivileges: []DefaultPrivilegesForRole{},
+		DefaultPrivileges: defaultPrivilegesForRole,
 	}
 }

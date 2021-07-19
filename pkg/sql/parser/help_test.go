@@ -85,6 +85,8 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER PARTITION ??`, `ALTER PARTITION`},
 		{`ALTER PARTITION p OF INDEX tbl@idx ??`, `ALTER PARTITION`},
 
+		{`ALTER DEFAULT PRIVILEGES ??`, `ALTER DEFAULT PRIVILEGES`},
+
 		{`ANALYZE ??`, `ANALYZE`},
 		{`ANALYZE blah ??`, `ANALYZE`},
 		{`ANALYSE ??`, `ANALYZE`},
