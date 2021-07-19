@@ -1181,7 +1181,14 @@ func (b *Builder) buildFromWithLateral(
 // validateAsOf ensures that any AS OF SYSTEM TIME timestamp is consistent with
 // that of the root statement.
 func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
-	asOf, err := tree.EvalAsOfTimestamp(b.ctx, asOfClause, b.semaCtx, b.evalCtx)
+	// TODO(#67558): prohibit bounded staleness in subqueries.
+	asOf, err := tree.EvalAsOfTimestamp(
+		b.ctx,
+		asOfClause,
+		b.semaCtx,
+		b.evalCtx,
+		tree.EvalAsOfTimestampOptionAllowBoundedStaleness,
+	)
 	if err != nil {
 		panic(err)
 	}

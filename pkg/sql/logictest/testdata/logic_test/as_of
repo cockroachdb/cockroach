@@ -26,7 +26,7 @@ SELECT * FROM t AS OF SYSTEM TIME -( ('1000' || 'us')::INTERVAL )
 ----
 2
 
-statement error pq: AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
+statement error pq: AS OF SYSTEM TIME: only constant expressions, with_min_timestamp, with_max_staleness, or follower_read_timestamp are allowed
 SELECT * FROM t AS OF SYSTEM TIME cluster_logical_timestamp()
 
 statement error pq: subqueries are not allowed in AS OF SYSTEM TIME
@@ -50,7 +50,7 @@ NOTICE: follower reads disabled because you are running a non-CCL distribution
 statement error pq: unknown signature: follower_read_timestamp\(string\) \(desired <timestamptz>\)
 SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp('boom')
 
-statement error pq: AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
+statement error pq: AS OF SYSTEM TIME: only constant expressions, with_min_timestamp, with_max_staleness, or follower_read_timestamp are allowed
 SELECT * FROM t AS OF SYSTEM TIME now()
 
 statement error cannot specify timestamp in the future
@@ -95,3 +95,12 @@ SELECT with_min_timestamp(statement_timestamp())
 
 statement error pgcode XXC01 with_max_staleness can only be used with a CCL distribution
 SELECT with_max_staleness('1s')
+
+statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp('2020-01-15 15:16:17')
+
+statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp())
+
+statement error pgcode XXC01 with_max_staleness can only be used with a CCL distribution
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1s'::interval)
