@@ -776,8 +776,9 @@ func registerCDC(r registry.Registry) {
 			})
 		},
 	})
-	// TODO(ryan min): uncomment once parallelism is implemented for webhook
-	// sink, currently fails with "initial scan did not complete"
+	// TODO(ryan min): uncomment once connectivity issue is fixed,
+	// currently fails with "initial scan did not complete" because sink
+	// URI is set as localhost, need to expose it to the other nodes via IP
 	/*
 		r.Add(testSpec{
 			Name:            "cdc/webhook-sink",
