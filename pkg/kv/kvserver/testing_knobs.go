@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -89,6 +90,8 @@ type StoreTestingKnobs struct {
 	// DisableAutomaticLeaseRenewal enables turning off the background worker
 	// that attempts to automatically renew expiration-based leases.
 	DisableAutomaticLeaseRenewal bool
+	// DisableSpanConfigWatcher turns off the span config watcher process.
+	DisableSpanConfigWatcher bool
 	// LeaseRequestEvent, if set, is called when replica.requestLeaseLocked() is
 	// called to acquire a new lease. This can be used to assert that a request
 	// triggers a lease acquisition.
@@ -323,6 +326,9 @@ type StoreTestingKnobs struct {
 	// PurgeOutdatedReplicasInterceptor intercepts attempts to purge outdated
 	// replicas in the store.
 	PurgeOutdatedReplicasInterceptor func()
+	// SpanConfigUpdateInterceptor is called after the store hears about a span
+	// config update.
+	SpanConfigUpdateInterceptor func(update spanconfig.Update)
 	// If set, use the given truncated state type when bootstrapping ranges.
 	// This is used for testing the truncated state migration.
 	TruncatedStateTypeOverride *stateloader.TruncatedStateType
