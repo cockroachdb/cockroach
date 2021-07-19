@@ -7967,7 +7967,6 @@ abbreviated_revoke_stmt:
       Privileges: $2.privilegeList(),
       Target: $4.alterDefaultPrivilegesTargetObject(),
       Grantees: $6.nameList(),
-      Drop: $7.dropBehavior(),
     }
   }
 | REVOKE GRANT OPTION FOR privileges ON alter_default_privileges_target_object FROM name_list opt_drop_behavior
@@ -7976,7 +7975,6 @@ abbreviated_revoke_stmt:
       Privileges: $5.privilegeList(),
       Target: $7.alterDefaultPrivilegesTargetObject(),
       Grantees: $9.nameList(),
-      Drop: $10.dropBehavior(),
       GrantOptionFor: true,
     }
   }

@@ -83,6 +83,10 @@ func CreatePrivilegesFromDefaultPrivileges(
 		return NewDefaultPrivilegeDescriptor(security.NodeUserName())
 	}
 
+	if defaultPrivileges == nil {
+		defaultPrivileges = InitDefaultPrivilegeDescriptor()
+	}
+
 	defaultPrivilegesForRole, found := defaultPrivileges.GetDefaultPrivilegesForRole(user)
 	var newPrivs *PrivilegeDescriptor
 	if !found {
@@ -95,11 +99,6 @@ func CreatePrivilegesFromDefaultPrivileges(
 		newPrivs.SetOwner(user)
 		newPrivs.Version = Version21_2
 	}
-	// TODO (richardjcai): We also have to handle the "public role" for types.
-	//   "Public" has USAGE by default but it can be revoked.
-	//    We need to use a Version field to determine what a missing Public role
-	//    entry in the DefaultPrivileges map means.
-	//    Issue #67377.
 
 	// TODO(richardjcai): Remove this depending on how we handle the migration.
 	//   For backwards compatibility, also "inherit" privileges from the dbDesc.
@@ -146,6 +145,8 @@ func (p *DefaultPrivilegeDescriptor) findUserIndex(user security.SQLUsername) in
 }
 
 // findOrCreateUser looks for a specific user in the list, creating it if needed.
+// If a new user is created, it must be added in the correct sorted order
+// in the list.
 func (p *DefaultPrivilegeDescriptor) findOrCreateUser(
 	user security.SQLUsername,
 ) *DefaultPrivilegesForRole {
@@ -174,9 +175,14 @@ func (p *DefaultPrivilegeDescriptor) findOrCreateUser(
 	return &p.DefaultPrivileges[idx]
 }
 
-// Validate returns an assertion error if the default privilege descriptor is invalid.
-func (p DefaultPrivilegeDescriptor) Validate() error {
-	for _, defaultPrivilegesForRole := range p.DefaultPrivileges {
+// Validate returns an assertion error if the default privilege descriptor
+// is invalid.
+func (p *DefaultPrivilegeDescriptor) Validate() error {
+	for i, defaultPrivilegesForRole := range p.DefaultPrivileges {
+		if i+1 < len(p.DefaultPrivileges) &&
+			!defaultPrivilegesForRole.User().LessThan(p.DefaultPrivileges[i+1].User()) {
+			return errors.AssertionFailedf("default privilege list is not sorted")
+		}
 		for objectType, defaultPrivileges := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
 			privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 			valid, u, remaining := defaultPrivileges.IsValidPrivilegesForObjectType(privilegeObjectType)
@@ -186,5 +192,13 @@ func (p DefaultPrivilegeDescriptor) Validate() error {
 			}
 		}
 	}
+
 	return nil
+}
+
+// InitDefaultPrivilegeDescriptor returns a new DefaultPrivilegeDescriptor.
+func InitDefaultPrivilegeDescriptor() *DefaultPrivilegeDescriptor {
+	return &DefaultPrivilegeDescriptor{
+		DefaultPrivileges: []DefaultPrivilegesForRole{},
+	}
 }

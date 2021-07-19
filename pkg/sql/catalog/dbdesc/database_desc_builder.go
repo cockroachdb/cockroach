@@ -151,10 +151,11 @@ func NewInitialWithPrivileges(
 	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor, options ...NewInitialOption,
 ) *Mutable {
 	ret := descpb.DatabaseDescriptor{
-		Name:       name,
-		ID:         id,
-		Version:    1,
-		Privileges: privileges,
+		Name:              name,
+		ID:                id,
+		Version:           1,
+		Privileges:        privileges,
+		DefaultPrivileges: descpb.InitDefaultPrivilegeDescriptor(),
 	}
 	for _, option := range options {
 		option(&ret)

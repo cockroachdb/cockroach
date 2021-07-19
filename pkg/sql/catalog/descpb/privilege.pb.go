@@ -108,7 +108,7 @@ var xxx_messageInfo_PrivilegeDescriptor proto.InternalMessageInfo
 //   2: Sequences
 //   3: Types
 //   4: Schemas
-// default_privileges_per_object are keyed on AlterDefaultPrivilegesTargetObject
+// DefaultPrivilegesPerObject are keyed on AlterDefaultPrivilegesTargetObject
 // and it's value is a PrivilegeDescriptor that is only used for
 // the list of UserPrivileges for that object.
 type DefaultPrivilegesForRole struct {
@@ -147,7 +147,7 @@ var xxx_messageInfo_DefaultPrivilegesForRole proto.InternalMessageInfo
 
 // DefaultPrivilegeDescriptor describes the set of default privileges for a
 // given role + object type.
-// The default_privileges list must be sorted for fast access and user lookups.
+// The DefaultPrivileges list must be sorted for fast access and user lookups.
 type DefaultPrivilegeDescriptor struct {
 	DefaultPrivileges []DefaultPrivilegesForRole `protobuf:"bytes,1,rep,name=default_privileges,json=defaultPrivileges" json:"default_privileges"`
 }
