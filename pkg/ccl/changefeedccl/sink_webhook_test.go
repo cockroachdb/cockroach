@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +36,9 @@ func getGenericWebhookSinkOptions() map[string]string {
 	return opts
 }
 
-func setupWebhookSinkWithDetails(details jobspb.ChangefeedDetails, parallelism int) (Sink, error) {
+func setupWebhookSinkWithDetails(
+	details jobspb.ChangefeedDetails, parallelism int, retryCfg retry.Options,
+) (Sink, error) {
 	u, err := url.Parse(details.SinkURI)
 	if err != nil {
 		return nil, err
@@ -50,7 +54,7 @@ func setupWebhookSinkWithDetails(details jobspb.ChangefeedDetails, parallelism i
 		cluster.MakeTestingClusterSettings(),
 	)
 
-	sinkSrc, err := makeWebhookSink(context.Background(), sinkURL{URL: u}, details.Opts, parallelism, memMon.MakeBoundAccount())
+	sinkSrc, err := makeWebhookSink(context.Background(), sinkURL{URL: u}, details.Opts, parallelism, memMon.MakeBoundAccount(), retryCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +154,7 @@ func TestWebhookSink(t *testing.T) {
 			Opts:    opts,
 		}
 
-		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism, defaultRetryConfig())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -161,7 +165,7 @@ func TestWebhookSink(t *testing.T) {
 		params.Del(changefeedbase.SinkParamCACert)
 		sinkDestHost.RawQuery = params.Encode()
 		details.SinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
-		sinkSrcNoCert, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrcNoCert, err := setupWebhookSinkWithDetails(details, parallelism, defaultRetryConfig())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -179,7 +183,7 @@ func TestWebhookSink(t *testing.T) {
 		params.Set(changefeedbase.SinkParamSkipTLSVerify, "true")
 		sinkDestHost.RawQuery = params.Encode()
 		details.SinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
-		sinkSrcInsecure, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrcInsecure, err := setupWebhookSinkWithDetails(details, parallelism, defaultRetryConfig())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -188,7 +192,7 @@ func TestWebhookSink(t *testing.T) {
 		testSendAndReceiveRows(t, sinkSrcInsecure, sinkDest)
 
 		// sink should throw an error if a non-2XX status code is returned
-		sinkDest.SetStatusCode(http.StatusBadGateway)
+		sinkDest.SetStatusCodes([]int{http.StatusBadGateway})
 		err = sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"),
 			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{})
 		if err != nil {
@@ -266,7 +270,7 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 			Opts:    opts,
 		}
 
-		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism, defaultRetryConfig())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -275,7 +279,7 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 
 		// no credentials should result in a 401
 		delete(opts, changefeedbase.OptWebhookAuthHeader)
-		sinkSrcNoCreds, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrcNoCreds, err := setupWebhookSinkWithDetails(details, parallelism, defaultRetryConfig())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -292,7 +296,7 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 		var wrongAuthHeader string
 		cdctest.EncodeBase64ToString([]byte(fmt.Sprintf("%s:%s", username, "wrong-password")), &wrongAuthHeader)
 		opts[changefeedbase.OptWebhookAuthHeader] = fmt.Sprintf("Basic %s", wrongAuthHeader)
-		sinkSrcWrongCreds, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrcWrongCreds, err := setupWebhookSinkWithDetails(details, parallelism, defaultRetryConfig())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -324,5 +328,119 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 	// run tests with parallelism from 1-16 (1,2,4,8,16)
 	for i := 1; i <= 16; i *= 2 {
 		webhookSinkTestfn(i)
+	}
+}
+
+func TestWebhookSinkRetriesRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defaultRetryCfg := defaultRetryConfig()
+	// speed up test by using faster backoff times
+	shortRetryCfg := retry.Options{
+		MaxRetries:     defaultRetryCfg.MaxRetries,
+		InitialBackoff: 5 * time.Millisecond,
+	}
+
+	opts := getGenericWebhookSinkOptions()
+
+	retryThenSuccessFn := func(parallelism int) {
+		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// alternates returning 2 errors (2 retries), then OK
+		sinkDest.SetStatusCodes([]int{http.StatusInternalServerError,
+			http.StatusBadGateway, http.StatusOK})
+
+		sinkDestHost, err := url.Parse(sinkDest.URL())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		params := sinkDestHost.Query()
+		params.Set(changefeedbase.SinkParamCACert, certEncoded)
+		sinkDestHost.RawQuery = params.Encode()
+
+		details := jobspb.ChangefeedDetails{
+			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
+			Opts:    opts,
+		}
+
+		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism, shortRetryCfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		testSendAndReceiveRows(t, sinkSrc, sinkDest)
+		// ensure that failures are retried twice (+1 for initial) before success
+		// 4 messages sent, 4 * 3 = 12 in total
+		require.Equal(t, 12, sinkDest.GetNumCalls())
+
+		err = sinkSrc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkDest.Close()
+	}
+
+	retryThenFailureFn := func(parallelism int) {
+		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// error out indefinitely
+		sinkDest.SetStatusCodes([]int{http.StatusInternalServerError})
+
+		sinkDestHost, err := url.Parse(sinkDest.URL())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		params := sinkDestHost.Query()
+		params.Set(changefeedbase.SinkParamCACert, certEncoded)
+		sinkDestHost.RawQuery = params.Encode()
+
+		details := jobspb.ChangefeedDetails{
+			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
+			Opts:    opts,
+		}
+
+		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism, shortRetryCfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"),
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = sinkSrc.Flush(context.Background())
+		require.EqualError(t, err, "500 Internal Server Error: ")
+
+		// ensure that failures are retried the default maximum number of times
+		// before returning error
+		require.Equal(t, shortRetryCfg.MaxRetries+1, sinkDest.GetNumCalls())
+
+		err = sinkSrc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkDest.Close()
+	}
+
+	// run tests with parallelism from 1-16 (1,2,4,8,16)
+	for i := 1; i <= 16; i *= 2 {
+		retryThenSuccessFn(i)
+		retryThenFailureFn(i)
 	}
 }
