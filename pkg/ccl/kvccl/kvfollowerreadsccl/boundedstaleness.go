@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/errors"
 )
 
 func checkEnterpriseEnabledForBoundedStaleness(ctx *tree.EvalContext) error {
@@ -41,18 +42,23 @@ func evalMaxStaleness(ctx *tree.EvalContext, d duration.Duration) (time.Time, er
 			tree.WithMaxStalenessFunctionName,
 		)
 	}
-	return duration.Add(ctx.GetTxnTimestamp(time.Microsecond).Time, d.Mul(-1)), nil
+	return duration.Add(ctx.GetStmtTimestamp(), d.Mul(-1)), nil
 }
 
 func evalMinTimestamp(ctx *tree.EvalContext, t time.Time) (time.Time, error) {
 	if err := checkEnterpriseEnabledForBoundedStaleness(ctx); err != nil {
 		return time.Time{}, err
 	}
-	if t.After(ctx.GetTxnTimestamp(time.Microsecond).Time) {
-		return time.Time{}, pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"timestamp for %s must be less than or equal to now()",
-			tree.WithMinTimestampFunctionName,
+	if stmtTimestamp := ctx.GetStmtTimestamp(); t.After(stmtTimestamp) {
+		return time.Time{}, errors.WithDetailf(
+			pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"timestamp for %s must be less than or equal to statement_timestamp()",
+				tree.WithMinTimestampFunctionName,
+			),
+			"statement timestamp: %s, min_timestamp: %s",
+			stmtTimestamp.Format(time.RFC3339),
+			t.Format(time.RFC3339),
 		)
 	}
 	return t, nil
