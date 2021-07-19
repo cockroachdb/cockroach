@@ -249,6 +249,7 @@ CREATE TABLE crdb_internal.databases (
 	primary_region STRING,
 	regions STRING[],
 	survival_goal STRING,
+	data_placement STRING,
 	create_statement STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -256,6 +257,7 @@ CREATE TABLE crdb_internal.databases (
 			func(db catalog.DatabaseDescriptor) error {
 				var survivalGoal tree.Datum = tree.DNull
 				var primaryRegion tree.Datum = tree.DNull
+				var placement tree.Datum = tree.DNull
 				regions := tree.NewDArray(types.String)
 
 				createNode := tree.CreateDatabase{}
@@ -290,6 +292,17 @@ CREATE TABLE crdb_internal.databases (
 					default:
 						return errors.Newf("unknown survival goal: %d", db.GetRegionConfig().SurvivalGoal)
 					}
+
+					switch db.GetRegionConfig().Placement {
+					case descpb.DataPlacement_DEFAULT:
+						placement = tree.NewDString("default")
+						createNode.Placement = tree.DataPlacementDefault
+					case descpb.DataPlacement_RESTRICTED:
+						placement = tree.NewDString("strict")
+						createNode.Placement = tree.DataPlacementRestricted
+					default:
+						return errors.Newf("unknown data placement: %d", db.GetRegionConfig().Placement)
+					}
 				}
 
 				return addRow(
@@ -299,6 +312,7 @@ CREATE TABLE crdb_internal.databases (
 					primaryRegion,                        // primary_region
 					regions,                              // regions
 					survivalGoal,                         // survival_goal
+					placement,                            // data_placement
 					tree.NewDString(createNode.String()), // create_statement
 				)
 			})

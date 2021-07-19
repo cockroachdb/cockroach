@@ -2153,11 +2153,16 @@ func planDatabaseModifiersForRestore(
 		if err != nil {
 			return nil, nil, err
 		}
+		dp, err := sql.TranslateDataPlacement(tree.DataPlacementDefault)
+		if err != nil {
+			return nil, nil, err
+		}
 		regionConfig := multiregion.MakeRegionConfig(
 			[]descpb.RegionName{defaultPrimaryRegion},
 			defaultPrimaryRegion,
 			sg,
 			regionEnumID,
+			dp,
 		)
 		if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
 			return nil, nil, err

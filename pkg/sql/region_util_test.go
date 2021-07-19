@@ -38,6 +38,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_a",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
@@ -77,6 +78,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_a",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(4),
@@ -123,6 +125,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
@@ -175,6 +178,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
@@ -228,6 +232,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(6),
@@ -287,6 +292,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
@@ -376,6 +382,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				GlobalReads:               proto.Bool(true),
@@ -400,6 +407,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				GlobalReads:               proto.Bool(true),
@@ -424,6 +432,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -444,6 +453,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -466,6 +476,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -488,6 +499,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -510,6 +522,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: nil, // Set at the database level.
@@ -551,6 +564,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: nil, // Set at the database level.
@@ -606,6 +620,7 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas:                 nil, // Set at the database level.
@@ -641,6 +656,7 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas:                 nil, // Set at the database level.

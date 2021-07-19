@@ -210,6 +210,9 @@ type LocalOnlySessionData struct {
 	// AllowPrepareAsOptPlan must be set to allow use of
 	//   PREPARE name AS OPT PLAN '...'
 	AllowPrepareAsOptPlan bool
+	// DomicilingEnabled indicates whether PLACEMENT RESTRICTED can be used or
+	// not.
+	DomicilingEnabled bool
 	// TempTablesEnabled indicates whether temporary tables can be created or not.
 	TempTablesEnabled bool
 	// ImplicitPartitioningEnabled indicates whether implicit column partitioning

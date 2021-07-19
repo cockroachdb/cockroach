@@ -228,6 +228,12 @@ var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var domicilingEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_domiciling.enabled",
+	"default value for experimental_enable_domiciling; allows for use of PLACEMENT STRICT",
+	false,
+)
+
 var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_temporary_tables.enabled",
 	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
@@ -2482,6 +2488,10 @@ func (m *sessionDataMutator) SetAllowPrepareAsOptPlan(val bool) {
 
 func (m *sessionDataMutator) SetSaveTablesPrefix(prefix string) {
 	m.data.SaveTablesPrefix = prefix
+}
+
+func (m *sessionDataMutator) SetDomicilingEnabled(val bool) {
+	m.data.DomicilingEnabled = val
 }
 
 func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {

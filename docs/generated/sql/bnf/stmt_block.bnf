@@ -1005,6 +1005,7 @@ unreserved_keyword ::=
 	| 'PAUSE'
 	| 'PAUSED'
 	| 'PHYSICAL'
+	| 'PLACEMENT'
 	| 'PLAN'
 	| 'PLANS'
 	| 'POINTM'
@@ -1042,6 +1043,7 @@ unreserved_keyword ::=
 	| 'RESET'
 	| 'RESTORE'
 	| 'RESTRICT'
+	| 'RESTRICTED'
 	| 'RESUME'
 	| 'RETRY'
 	| 'REVISION_HISTORY'
@@ -1292,6 +1294,7 @@ alter_database_stmt ::=
 	| alter_database_drop_region_stmt
 	| alter_database_survival_goal_stmt
 	| alter_database_primary_region_stmt
+	| alter_database_placement_stmt
 
 alter_range_stmt ::=
 	alter_zone_range_stmt
@@ -1338,8 +1341,8 @@ for_schedules_clause ::=
 	| 'FOR' 'SCHEDULE' a_expr
 
 create_database_stmt ::=
-	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
-	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
+	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause
 
 create_index_stmt ::=
 	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
@@ -1771,6 +1774,9 @@ alter_database_primary_region_stmt ::=
 	'ALTER' 'DATABASE' database_name primary_region_clause
 	| 'ALTER' 'DATABASE' database_name 'SET' primary_region_clause
 
+alter_database_placement_stmt ::=
+	'ALTER' 'DATABASE' database_name 'SET' placement_clause
+
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
 
@@ -1881,6 +1887,10 @@ opt_regions_list ::=
 
 opt_survival_goal_clause ::=
 	survival_goal_clause
+	| 
+
+opt_placement_clause ::=
+	placement_clause
 	| 
 
 opt_unique ::=
@@ -2271,6 +2281,10 @@ survival_goal_clause ::=
 
 primary_region_clause ::=
 	'PRIMARY' 'REGION' opt_equal region_name
+
+placement_clause ::=
+	'PLACEMENT' 'RESTRICTED'
+	| 'PLACEMENT' 'DEFAULT'
 
 alter_default_privileges_target_object ::=
 	'TABLES'

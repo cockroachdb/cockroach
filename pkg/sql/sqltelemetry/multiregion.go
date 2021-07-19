@@ -90,6 +90,12 @@ func AlterDatabaseSurvivalGoalCounter(goal string) telemetry.Counter {
 	return telemetry.GetCounter(fmt.Sprintf("sql.multiregion.alter_database.survival_goal.%s", goal))
 }
 
+// AlterDatabasePlacementCounter is to be incremented when the placement
+// strategy on a multi-region database is being altered.
+func AlterDatabasePlacementCounter(goal string) telemetry.Counter {
+	return telemetry.GetCounter(fmt.Sprintf("sql.multiregion.alter_database.data_placement.%s", goal))
+}
+
 // CreateTableLocalityCounter is to be incremented every time a locality
 // is set on a table.
 func CreateTableLocalityCounter(locality string) telemetry.Counter {

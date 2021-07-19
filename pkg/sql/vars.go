@@ -1154,6 +1154,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`experimental_enable_domiciling`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_domiciling`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("experimental_enable_domiciling", s)
+			if err != nil {
+				return err
+			}
+			m.SetDomicilingEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.DomicilingEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(domicilingEnabledClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_enable_temp_tables`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_temp_tables`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

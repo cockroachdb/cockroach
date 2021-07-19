@@ -192,6 +192,14 @@ func zoneConfigForMultiRegionPartition(
 	zc.LeasePreferences = []zonepb.LeasePreference{
 		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(partitionRegion)}},
 	}
+
+	// If we're in restricted placement, don't allow use of any nonvoters.
+	if regionConfig.Placement() == descpb.DataPlacement_RESTRICTED {
+		zc.InheritedConstraints = false
+		zc.NumReplicas = zc.NumVoters
+		zc.Constraints = []zonepb.ConstraintsConjunction{}
+	}
+
 	return *zc, err
 }
 
@@ -375,11 +383,24 @@ func zoneConfigForMultiRegionTable(
 		// nothing here because `NewZoneConfig()` already marks those fields as
 		// 'inherited'.
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-		// Use the same configuration as the database and return nil here.
+		strictPlacement := regionConfig.Placement() == descpb.DataPlacement_RESTRICTED
+		preferredRegion := descpb.RegionName("")
 		if l.RegionalByTable.Region == nil {
-			return ret, nil
+			if strictPlacement {
+				// If we don't have an explicit primary region but want to use strict
+				// placement, use the database's primary region.
+				preferredRegion = regionConfig.PrimaryRegion()
+			} else {
+				// If we're not doing domiciling and don't have an explicit primary
+				// region, use the same configuration as the database and return a blank
+				// zcfg here.
+				return ret, nil
+			}
+		} else {
+			// If the table has a user-specified primary region, use it.
+			preferredRegion = *l.RegionalByTable.Region
 		}
-		preferredRegion := *l.RegionalByTable.Region
+
 		voterConstraints, err := synthesizeVoterConstraints(preferredRegion, regionConfig)
 		if err != nil {
 			return nil, err
@@ -393,6 +414,14 @@ func zoneConfigForMultiRegionTable(
 		ret.LeasePreferences = []zonepb.LeasePreference{
 			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(preferredRegion)}},
 		}
+
+		// If we're in restricted placement, don't allow use of any nonvoters.
+		if strictPlacement {
+			ret.InheritedConstraints = false
+			ret.NumReplicas = ret.NumVoters
+			ret.Constraints = []zonepb.ConstraintsConjunction{}
+		}
+
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 		// We purposely do not set anything here at table level - this should be done at
 		// partition level instead.
@@ -1032,6 +1061,7 @@ func SynthesizeRegionConfig(
 		dbDesc.GetRegionConfig().PrimaryRegion,
 		dbDesc.GetRegionConfig().SurvivalGoal,
 		regionEnumID,
+		dbDesc.GetRegionConfig().Placement,
 		multiregion.WithTransitioningRegions(transitioningRegionNames),
 	)
 
