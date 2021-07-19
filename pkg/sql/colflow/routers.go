@@ -653,9 +653,7 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 	selections := r.tupleDistributor.Distribute(b, r.hashCols)
 	for i, o := range r.outputs {
 		if len(selections[i]) > 0 {
-			b.SetSelection(true)
-			copy(b.Selection(), selections[i])
-			b.SetLength(len(selections[i]))
+			colexecutils.UpdateBatchState(b, len(selections[i]), true /* usesSel */, selections[i])
 			if o.addBatch(ctx, b) {
 				// This batch blocked the output.
 				r.numBlockedOutputs++

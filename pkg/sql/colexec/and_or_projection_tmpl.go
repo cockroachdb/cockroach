@@ -267,13 +267,7 @@ func (o *_OP_LOWERProjOp) Next() coldata.Batch {
 	// {{end}}
 
 	// Now we need to restore the original selection vector and length.
-	if usesSel {
-		sel := batch.Selection()
-		copy(sel[:origLen], o.origSel[:origLen])
-	} else {
-		batch.SetSelection(false)
-	}
-	batch.SetLength(origLen)
+	colexecutils.UpdateBatchState(batch, origLen, usesSel, o.origSel)
 
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()

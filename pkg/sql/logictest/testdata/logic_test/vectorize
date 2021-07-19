@@ -1210,3 +1210,24 @@ statement ok
 CREATE TYPE greeting AS ENUM ('hello');
 CREATE TABLE greeting_table (x greeting);
 EXPLAIN (VEC) SELECT * FROM greeting_table;
+
+# Regression test for incorrectly updating the batch in the CASE operator.
+statement ok
+SET vectorize=on;
+CREATE TABLE t64793 AS
+  SELECT
+    g % 2 = 1 AS _bool, g::STRING AS _string
+  FROM
+    ROWS FROM (generate_series(1, 5)) AS g;
+SET vectorize=experimental_always;
+INSERT INTO t64793 DEFAULT VALUES;
+
+query T rowsort
+SELECT CASE WHEN _bool THEN _string ELSE _string END FROM t64793;
+----
+1
+2
+3
+4
+5
+NULL
