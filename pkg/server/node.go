@@ -1360,3 +1360,17 @@ func (dummyTenantUsageServer) TokenBucketRequest(
 ) (*roachpb.TokenBucketResponse, error) {
 	return nil, errors.Errorf("tenant usage requires a CCL binary")
 }
+
+// TokenBucketRequest is defined in the TenantUsageServer interface.
+func (dummyTenantUsageServer) ReconfigureTokenBucket(
+	ctx context.Context,
+	txn *kv.Txn,
+	tenantID roachpb.TenantID,
+	availableRU float64,
+	refillRate float64,
+	maxBurstRU float64,
+	asOf time.Time,
+	asOfConsumedRequestUnits float64,
+) error {
+	return errors.Errorf("tenant resource limits require a CCL binary")
+}
