@@ -103,14 +103,21 @@ CREATE TABLE xyz (
     x INT PRIMARY KEY,
     y INT,
     z STRING,
+    j JSON,
     INDEX idx1 (lower(z)),
-    INDEX idx2 (lower(z),y),
-    INDEX idx3 ((y+1),lower(z))
+    INDEX idx2 (lower(z), y),
+    INDEX idx3 ((y+1), lower(z)),
+    INVERTED INDEX idx4 ((j->'a')),
+    INVERTED INDEX idx5 (y, z, (j->'a'))
 )
 ----
 
 exec-ddl
-CREATE INDEX idx4 ON xyz ((x+y), y) STORING (z) WHERE v > 1
+CREATE INDEX idx6 ON xyz ((x+y), y) STORING (z) WHERE v > 1
+----
+
+exec-ddl
+CREATE INVERTED INDEX idx7 ON xyz ((x+y), (j->'a')) WHERE v > 1
 ----
 
 exec-ddl
@@ -120,27 +127,50 @@ TABLE xyz
  ├── x int not null
  ├── y int
  ├── z string
+ ├── j jsonb
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── idx_expr_1 string as (lower(z)) virtual [hidden]
- ├── idx_expr_2 int as (y + 1) virtual [hidden]
- ├── idx_expr_3 int as (x + y) virtual [hidden]
+ ├── crdb_internal_idx_expr_1 string as (lower(z)) virtual [hidden]
+ ├── crdb_internal_idx_expr_2 string as (lower(z)) virtual [hidden]
+ ├── crdb_internal_idx_expr_3 int as (y + 1) virtual [hidden]
+ ├── crdb_internal_idx_expr_4 string as (lower(z)) virtual [hidden]
+ ├── crdb_internal_idx_expr_5 jsonb as (j->'a') virtual [hidden]
+ ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [virtual-inverted]
+ ├── crdb_internal_idx_expr_6 jsonb as (j->'a') virtual [hidden]
+ ├── crdb_internal_idx_expr_6_inverted_key jsonb not null [virtual-inverted]
+ ├── crdb_internal_idx_expr_7 int as (x + y) virtual [hidden]
+ ├── crdb_internal_idx_expr_8 int as (x + y) virtual [hidden]
+ ├── crdb_internal_idx_expr_9 jsonb as (j->'a') virtual [hidden]
+ ├── crdb_internal_idx_expr_9_inverted_key jsonb not null [virtual-inverted]
  ├── PRIMARY INDEX primary
  │    └── x int not null
  ├── INDEX idx1
- │    ├── idx_expr_1 string as (lower(z)) virtual [hidden]
+ │    ├── crdb_internal_idx_expr_1 string as (lower(z)) virtual [hidden]
  │    └── x int not null
  ├── INDEX idx2
- │    ├── idx_expr_1 string as (lower(z)) virtual [hidden]
+ │    ├── crdb_internal_idx_expr_2 string as (lower(z)) virtual [hidden]
  │    ├── y int
  │    └── x int not null
  ├── INDEX idx3
- │    ├── idx_expr_2 int as (y + 1) virtual [hidden]
- │    ├── idx_expr_1 string as (lower(z)) virtual [hidden]
+ │    ├── crdb_internal_idx_expr_3 int as (y + 1) virtual [hidden]
+ │    ├── crdb_internal_idx_expr_4 string as (lower(z)) virtual [hidden]
  │    └── x int not null
- └── INDEX idx4
-      ├── idx_expr_3 int as (x + y) virtual [hidden]
-      ├── y int
+ ├── INVERTED INDEX idx4
+ │    ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [virtual-inverted]
+ │    └── x int not null
+ ├── INVERTED INDEX idx5
+ │    ├── y int
+ │    ├── z string
+ │    ├── crdb_internal_idx_expr_6_inverted_key jsonb not null [virtual-inverted]
+ │    └── x int not null
+ ├── INDEX idx6
+ │    ├── crdb_internal_idx_expr_7 int as (x + y) virtual [hidden]
+ │    ├── y int
+ │    ├── x int not null
+ │    ├── z string (storing)
+ │    └── WHERE v > 1
+ └── INVERTED INDEX idx7
+      ├── crdb_internal_idx_expr_8 int as (x + y) virtual [hidden]
+      ├── crdb_internal_idx_expr_9_inverted_key jsonb not null [virtual-inverted]
       ├── x int not null
-      ├── z string (storing)
       └── WHERE v > 1
