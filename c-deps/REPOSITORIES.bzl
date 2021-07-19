@@ -18,11 +18,6 @@ BUILD_JEMALLOC_CONTENT = """filegroup(name = "all", srcs = glob(["**"], exclude=
 # We do need to add native as new_local_repository is defined in Bazel core.
 def c_deps():
     native.new_local_repository(
-        name = "proj",
-        path = "c-deps/proj",
-        build_file_content = BUILD_ALL_CONTENT,
-    )
-    native.new_local_repository(
         name = "geos",
         path = "c-deps/geos",
         build_file_content = BUILD_ALL_CONTENT,
@@ -31,4 +26,14 @@ def c_deps():
         name = "jemalloc",
         path = "c-deps/jemalloc",
         build_file_content = BUILD_JEMALLOC_CONTENT,
+    )
+    native.new_local_repository(
+        name = "krb5",
+        path = "c-deps/krb5",
+        build_file_content = BUILD_ALL_CONTENT,
+    )
+    native.new_local_repository(
+        name = "proj",
+        path = "c-deps/proj",
+        build_file_content = BUILD_ALL_CONTENT,
     )
