@@ -152,6 +152,12 @@ func makeConstExpr(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
 	// In Postgres mode, make sure the datum is resolved as the type we want.
 	// CockroachDB and Postgres differ in how constants are typed otherwise.
 	if s.postgres {
+		// Casts to REGTYPE, REGCLASS, etc are not deterministic since they
+		// involve OID->name resolution, and the OIDs will not match across
+		// two different databases.
+		if typ.Family() == types.OidFamily {
+			typ = types.Oid
+		}
 		expr = tree.NewTypedCastExpr(expr, typ)
 	}
 	return expr
