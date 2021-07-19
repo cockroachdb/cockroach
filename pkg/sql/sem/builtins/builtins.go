@@ -2461,6 +2461,37 @@ nearest replica.`, defaultFollowerReadDuration),
 		},
 	),
 
+	tree.WithMinTimestampFunctionName: makeBuiltin(
+		tree.FunctionProperties{},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"min_timestamp", types.TimestampTZ},
+			},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return withMinTimestamp(ctx, tree.MustBeDTimestampTZ(args[0]).Time)
+			},
+			PreferredOverload: true,
+			Info:              withMinTimestampInfo,
+			Volatility:        tree.VolatilityVolatile,
+		},
+	),
+
+	tree.WithMaxStalenessFunctionName: makeBuiltin(
+		tree.FunctionProperties{},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"max_staleness", types.Interval},
+			},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return withMaxStaleness(ctx, tree.MustBeDInterval(args[0]).Duration)
+			},
+			Info:       withMaxStalenessInfo,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"cluster_logical_timestamp": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
@@ -7567,6 +7598,55 @@ func followerReadTimestamp(ctx *tree.EvalContext, _ tree.Datums) (tree.Datum, er
 		return nil, err
 	}
 	return tree.MakeDTimestampTZ(ts, time.Microsecond)
+}
+
+var (
+	// WithMinTimestamp is an injectable function containing the implementation of the
+	// with_min_timestamp builtin.
+	WithMinTimestamp = func(ctx *tree.EvalContext, t time.Time) (time.Time, error) {
+		return time.Time{}, pgerror.Newf(
+			pgcode.CCLRequired,
+			"%s can only be used with a CCL distribution",
+			tree.WithMinTimestampFunctionName,
+		)
+	}
+	// WithMaxStaleness is an injectable function containing the implementation of the
+	// with_max_staleness builtin.
+	WithMaxStaleness = func(ctx *tree.EvalContext, d duration.Duration) (time.Time, error) {
+		return time.Time{}, pgerror.Newf(
+			pgcode.CCLRequired,
+			"%s can only be used with a CCL distribution",
+			tree.WithMaxStalenessFunctionName,
+		)
+	}
+)
+
+const withMinTimestampInfo = `When used in the AS OF SYSTEM TIME clause of an single-statement,
+read-only transaction, CockroachDB chooses the newest timestamp before the min_timestamp
+that allows execution of the reads at the closest available replica without blocking.
+
+Note this function requires an enterprise license on a CCL distribution.`
+
+const withMaxStalenessInfo = `When used in the AS OF SYSTEM TIME clause of an single-statement,
+read-only transaction, CockroachDB chooses the newest timestamp within the staleness
+bound that allows execution of the reads at the closest available replica without blocking.
+
+Note this function requires an enterprise license on a CCL distribution.`
+
+func withMinTimestamp(ctx *tree.EvalContext, t time.Time) (tree.Datum, error) {
+	t, err := WithMinTimestamp(ctx, t)
+	if err != nil {
+		return nil, err
+	}
+	return tree.MakeDTimestampTZ(t, time.Microsecond)
+}
+
+func withMaxStaleness(ctx *tree.EvalContext, d duration.Duration) (tree.Datum, error) {
+	t, err := WithMaxStaleness(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	return tree.MakeDTimestampTZ(t, time.Microsecond)
 }
 
 func jsonNumInvertedIndexEntries(_ *tree.EvalContext, val tree.Datum) (tree.Datum, error) {

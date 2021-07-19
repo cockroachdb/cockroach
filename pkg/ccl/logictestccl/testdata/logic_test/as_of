@@ -92,3 +92,24 @@ ROLLBACK
 
 statement ok
 SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
+
+query B
+SELECT with_min_timestamp(statement_timestamp()) = statement_timestamp()
+----
+true
+
+query B
+SELECT with_min_timestamp(statement_timestamp() - '5s'::interval) = statement_timestamp() - '5s'::interval
+----
+true
+
+statement error timestamp for with_min_timestamp must be less than or equal to statement_timestamp\(\)
+SELECT with_min_timestamp(statement_timestamp() + '5s'::interval) = statement_timestamp()
+
+query B
+SELECT with_max_staleness('10s') = statement_timestamp() - '10s'::interval
+----
+true
+
+statement error interval duration for with_max_staleness must be greater or equal to 0
+SELECT with_max_staleness(-'1s')

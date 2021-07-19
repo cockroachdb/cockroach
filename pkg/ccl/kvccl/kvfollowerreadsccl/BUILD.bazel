@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kvfollowerreadsccl",
-    srcs = ["followerreads.go"],
+    srcs = [
+        "boundedstaleness.go",
+        "followerreads.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl",
     visibility = ["//visibility:public"],
     deps = [
@@ -16,10 +19,15 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/duration",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -27,6 +35,7 @@ go_test(
     name = "kvfollowerreadsccl_test",
     size = "medium",
     srcs = [
+        "boundedstaleness_test.go",
         "followerreads_test.go",
         "main_test.go",
     ],
