@@ -901,15 +901,17 @@ func (tt *Table) addFamily(def *tree.FamilyTableDef) {
 func (ti *Index) addColumn(
 	tt *Table, elem tree.IndexElem, colType colType, isLastIndexCol bool,
 ) *cat.Column {
+	var ordinal int
+	var colName tree.Name
 	if elem.Expr != nil {
-		if ti.Inverted && isLastIndexCol {
-			panic("inverted index expression element not supported")
-		}
 		col := columnForIndexElemExpr(tt, elem.Expr)
-		return ti.addColumnByOrdinal(tt, col.Ordinal(), elem.Direction, colType)
+		ordinal = col.Ordinal()
+		colName = col.ColName()
+	} else {
+		ordinal = tt.FindOrdinal(string(elem.Column))
+		colName = elem.Column
 	}
 
-	ordinal := tt.FindOrdinal(string(elem.Column))
 	if ti.Inverted && isLastIndexCol {
 		// The last column of an inverted index is special: the index key does not
 		// contain values from the column itself, but contains inverted index
@@ -921,7 +923,7 @@ func (ti *Index) addColumn(
 		typ := tt.Columns[ordinal].DatumType()
 		col.InitVirtualInverted(
 			len(tt.Columns),
-			elem.Column+"_inverted_key",
+			colName+"_inverted_key",
 			typ,
 			false,   /* nullable */
 			ordinal, /* invertedSourceColumnOrdinal */
@@ -939,17 +941,11 @@ func (ti *Index) addColumn(
 // reused. Otherwise, a new column is added to the table.
 func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 	exprStr := serializeTableDefExpr(expr)
-	// Find an existing virtual computed column with the same expression.
-	for _, col := range tt.Columns {
-		if col.IsVirtualComputed() && col.ComputedExprStr() == exprStr {
-			return col
-		}
-	}
 	// Add a new virtual computed column with a unique name.
 	var name tree.Name
 	for n, done := 1, false; !done; n++ {
 		done = true
-		name = tree.Name(fmt.Sprintf("idx_expr_%d", n))
+		name = tree.Name(fmt.Sprintf("crdb_internal_idx_expr_%d", n))
 		for _, col := range tt.Columns {
 			if col.ColName() == name {
 				done = false
