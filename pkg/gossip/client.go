@@ -121,7 +121,7 @@ func (c *client) startLocked(
 		}
 
 		// Start gossiping.
-		log.Infof(ctx, "started gossip client to %s", c.addr)
+		log.Infof(ctx, "started gossip client to n%d (%s)", c.peerID, c.addr)
 		if err := c.gossip(ctx, g, stream, stopper, &wg); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				g.mu.RLock()
@@ -267,7 +267,7 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 				reply.AlternateAddr, reply.AlternateNodeID, err)
 		}
 		c.forwardAddr = reply.AlternateAddr
-		return errors.Errorf("received forward from n%d to %d (%s)",
+		return errors.Errorf("received forward from n%d to n%d (%s)",
 			reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 	}
 
