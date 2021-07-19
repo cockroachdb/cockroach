@@ -303,23 +303,25 @@ func typeName(typeFamily types.Family, typeWidth int32) string {
 	return toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily), typeWidth)
 }
 
+const dateToTimeCastStr = `
+		d_casted, err := pgdate.MakeDateFromUnixEpoch(%s)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%s, err := d_casted.ToTime()
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+`
+
 func dateAssignFunc(
 	op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string,
 ) string {
 	// Date rows are stored as int64s representing the number of days since the
 	// unix epoch. We have to convert to timestamps before executing the binary
 	// operator.
-	const castVarName = "t"
-	castStr := fmt.Sprintf(`
-		d, err := pgdate.MakeDateFromUnixEpoch(%s)
-		if err != nil {
-			colexecerror.ExpectedError(err)
-		}
-		%s, err := d.ToTime()
-		if err != nil {
-			colexecerror.ExpectedError(err)
-		}
-		`, leftElem, castVarName)
+	const castVarName = "t_casted"
+	castStr := fmt.Sprintf(dateToTimeCastStr, leftElem, castVarName)
 	var o timestampIntervalCustomizer
 	return castStr + o.getBinOpAssignFunc()(
 		op, targetElem, castVarName, rightElem, targetCol, leftCol, rightCol)
@@ -329,17 +331,8 @@ func dateCmpFunc(targetElem, leftElem, rightElem, leftCol, rightCol string) stri
 	// Date rows are stored as int64s representing the number of days since the
 	// unix epoch. We have to convert to timestamps before executing the
 	// comparison operator.
-	const castVarName = "t"
-	castStr := fmt.Sprintf(`
-		d, err := pgdate.MakeDateFromUnixEpoch(%s)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-		%s, err := d.ToTime()
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-		`, leftElem, castVarName)
+	const castVarName = "t_casted"
+	castStr := fmt.Sprintf(dateToTimeCastStr, leftElem, castVarName)
 	var o timestampCustomizer
 	return castStr + o.getCmpOpCompareFunc()(targetElem, castVarName, rightElem, leftCol, rightCol)
 }

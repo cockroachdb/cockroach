@@ -12,6 +12,7 @@ package colexecproj
 import (
 	"bytes"
 	"math"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -6262,7 +6263,11 @@ func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
 						// null.
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg1, arg2)
+						t_res := duration.Add(arg1, arg2)
+						if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			} else {
@@ -6277,7 +6282,11 @@ func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						//gcassert:bce
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg1, arg2)
+						t_res := duration.Add(arg1, arg2)
+						if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			}
@@ -6293,7 +6302,11 @@ func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
 				for _, i := range sel {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg1, arg2)
+					t_res := duration.Add(arg1, arg2)
+					if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			} else {
 				_ = projCol.Get(n - 1)
@@ -6304,7 +6317,11 @@ func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					//gcassert:bce
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg1, arg2)
+					t_res := duration.Add(arg1, arg2)
+					if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			}
 			// _outNulls has been updated from within the _ASSIGN function to include
@@ -6364,7 +6381,11 @@ func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
 						// null.
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg2, arg1)
+						t_res := duration.Add(arg2, arg1)
+						if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			} else {
@@ -6379,7 +6400,11 @@ func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						//gcassert:bce
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg2, arg1)
+						t_res := duration.Add(arg2, arg1)
+						if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			}
@@ -6395,7 +6420,11 @@ func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
 				for _, i := range sel {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg2, arg1)
+					t_res := duration.Add(arg2, arg1)
+					if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			} else {
 				_ = projCol.Get(n - 1)
@@ -6406,7 +6435,11 @@ func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					//gcassert:bce
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg2, arg1)
+					t_res := duration.Add(arg2, arg1)
+					if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			}
 			// _outNulls has been updated from within the _ASSIGN function to include
@@ -10232,7 +10265,11 @@ func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
 						// null.
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg1, arg2.Mul(-1))
+						t_res := duration.Add(arg1, arg2.Mul(-1))
+						if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			} else {
@@ -10247,7 +10284,11 @@ func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
 						arg1 := col1.Get(i)
 						//gcassert:bce
 						arg2 := col2.Get(i)
-						projCol[i] = duration.Add(arg1, arg2.Mul(-1))
+						t_res := duration.Add(arg1, arg2.Mul(-1))
+						if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+							colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+						}
+						projCol[i] = t_res
 					}
 				}
 			}
@@ -10263,7 +10304,11 @@ func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
 				for _, i := range sel {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg1, arg2.Mul(-1))
+					t_res := duration.Add(arg1, arg2.Mul(-1))
+					if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			} else {
 				_ = projCol.Get(n - 1)
@@ -10274,7 +10319,11 @@ func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
 					arg1 := col1.Get(i)
 					//gcassert:bce
 					arg2 := col2.Get(i)
-					projCol[i] = duration.Add(arg1, arg2.Mul(-1))
+					t_res := duration.Add(arg1, arg2.Mul(-1))
+					if t_res.After(tree.MaxSupportedTime) || t_res.Before(tree.MinSupportedTime) {
+						colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+					}
+					projCol[i] = t_res
 				}
 			}
 			// _outNulls has been updated from within the _ASSIGN function to include
