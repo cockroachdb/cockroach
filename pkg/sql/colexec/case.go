@@ -213,21 +213,21 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 				// Set the buffered batch into the desired state.
-				c.buffer.batch.SetLength(curIdx)
-				prevLen = curIdx
 				c.buffer.batch.SetSelection(true)
 				prevHasSel = true
 				copy(c.buffer.batch.Selection()[:curIdx], c.prevSel)
 				c.prevSel = c.prevSel[:curIdx]
+				c.buffer.batch.SetLength(curIdx)
+				prevLen = curIdx
 			} else {
 				// There were no matches with the current WHEN arm, so we simply need
 				// to restore the buffered batch into the previous state.
-				c.buffer.batch.SetLength(prevLen)
 				c.buffer.batch.SetSelection(prevHasSel)
 				if prevHasSel {
 					copy(c.buffer.batch.Selection()[:prevLen], c.prevSel)
 					c.prevSel = c.prevSel[:prevLen]
 				}
+				c.buffer.batch.SetLength(prevLen)
 			}
 			// Now our selection vector is set to exclude all the things that have
 			// matched so far. Reset the buffer and run the next case arm.
@@ -252,10 +252,10 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 		}
 	})
 	// Restore the original state of the buffered batch.
-	c.buffer.batch.SetLength(origLen)
 	c.buffer.batch.SetSelection(origHasSel)
 	if origHasSel {
 		copy(c.buffer.batch.Selection()[:origLen], c.origSel[:origLen])
 	}
+	c.buffer.batch.SetLength(origLen)
 	return c.buffer.batch
 }
