@@ -160,11 +160,8 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	// it does not exist: add it to the list of all users and roles.
 	users[security.PublicRoleName()] = true // isRole
 
-	for i, grantee := range n.grantees {
-		if _, ok := users[grantee]; !ok {
-			sqlName := tree.Name(n.grantees[i].Normalized())
-			return errors.Errorf("user or role %s does not exist", &sqlName)
-		}
+	if err = validateGrantees(users, n.grantees); err != nil {
+		return err
 	}
 
 	var descriptors []catalog.Descriptor
@@ -328,3 +325,16 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 func (*changePrivilegesNode) Next(runParams) (bool, error) { return false, nil }
 func (*changePrivilegesNode) Values() tree.Datums          { return tree.Datums{} }
 func (*changePrivilegesNode) Close(context.Context)        {}
+
+// validateGrantees checks that all the grantees are valid users.
+// users should be returned the result of GetAllRoles.
+func validateGrantees(users map[security.SQLUsername]bool, grantees []security.SQLUsername) error {
+	for i, grantee := range grantees {
+		if _, ok := users[grantee]; !ok {
+			sqlName := tree.Name(grantees[i].Normalized())
+			return errors.Errorf("user or role %s does not exist", &sqlName)
+		}
+	}
+
+	return nil
+}

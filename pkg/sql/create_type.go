@@ -329,14 +329,13 @@ func (p *planner) createEnumWithID(
 	}
 
 	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
-		dbDesc.GetID(), dbDesc.GetDefaultPrivilegeDescriptor(),
+		dbDesc.GetID(), dbDesc.DatabaseDesc().GetDefaultPrivileges(),
 		params.p.User(), tree.Types, dbDesc.GetPrivileges(),
 	)
 
 	// TODO(richardjcai): Remove this once we figure out the migration from
 	//   our current "inheritance" model to default privileges.
 	inheritUsagePrivilegeFromSchema(schema, privs)
-	privs.Grant(params.p.User(), privilege.List{privilege.ALL})
 
 	enumKind := descpb.TypeDescriptor_ENUM
 	var regionConfig *descpb.TypeDescriptor_RegionConfig
