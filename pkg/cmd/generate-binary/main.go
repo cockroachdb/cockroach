@@ -544,5 +544,7 @@ var inputs = map[string][]string{
 		`1::char(1) COLLATE "en_US"`,
 		`1::varchar(4) COLLATE "en_US"`,
 		`1::text COLLATE "en_US"`,
+		`1::int8,(2::int8,3::int8)`,
+		`1::int8,('hi'::TEXT,3::int2)`,
 	},
 }

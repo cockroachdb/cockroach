@@ -657,17 +657,22 @@ func writeBinaryDatumNotNull(
 		writeBinaryInterval(b, v.Duration)
 
 	case *tree.DTuple:
-		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
-		subWriter := newWriteBuffer(nil /* bytecount */)
+		initialLen := b.Len()
+
+		// Reserve bytes for writing length later.
+		b.putInt32(int32(0))
+
 		// Put the number of datums.
-		subWriter.putInt32(int32(len(v.D)))
+		b.putInt32(int32(len(v.D)))
 		tupleTypes := t.TupleContents()
 		for i, elem := range v.D {
 			oid := tupleTypes[i].Oid()
-			subWriter.putInt32(int32(oid))
-			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
+			b.putInt32(int32(oid))
+			b.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
 		}
-		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+
+		lengthToWrite := b.Len() - (initialLen + 4)
+		b.putInt32AtIndex(initialLen /* index to write at */, int32(lengthToWrite))
 
 	case *tree.DBox2D:
 		b.putInt32(32)
@@ -690,30 +695,36 @@ func writeBinaryDatumNotNull(
 				"binenc", "unsupported binary serialization of multidimensional arrays"))
 			return
 		}
-		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
-		subWriter := newWriteBuffer(nil /* bytecount */)
+
+		initialLen := b.Len()
+
+		// Reserve bytes for writing length later.
+		b.putInt32(int32(0))
+
 		// Put the number of dimensions. We currently support 1d arrays only.
 		var ndims int32 = 1
 		if v.Len() == 0 {
 			ndims = 0
 		}
-		subWriter.putInt32(ndims)
+		b.putInt32(ndims)
 		hasNulls := 0
 		if v.HasNulls {
 			hasNulls = 1
 		}
 		oid := v.ParamTyp.Oid()
-		subWriter.putInt32(int32(hasNulls))
-		subWriter.putInt32(int32(oid))
+		b.putInt32(int32(hasNulls))
+		b.putInt32(int32(oid))
 		if v.Len() > 0 {
-			subWriter.putInt32(int32(v.Len()))
+			b.putInt32(int32(v.Len()))
 			// Lower bound, we only support a lower bound of 1.
-			subWriter.putInt32(1)
+			b.putInt32(1)
 			for _, elem := range v.Array {
-				subWriter.writeBinaryDatum(ctx, elem, sessionLoc, v.ParamTyp)
+				b.writeBinaryDatum(ctx, elem, sessionLoc, v.ParamTyp)
 			}
 		}
-		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+
+		lengthToWrite := b.Len() - (initialLen + 4)
+		b.putInt32AtIndex(initialLen /* index to write at */, int32(lengthToWrite))
 
 	case *tree.DJSON:
 		writeBinaryJSON(b, v.JSON)
