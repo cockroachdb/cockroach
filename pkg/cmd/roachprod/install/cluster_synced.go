@@ -1638,16 +1638,28 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 }
 
 func (c *SyncedCluster) scp(src, dest string) error {
-	args := []string{
-		"scp", "-r", "-C",
-		"-o", "StrictHostKeyChecking=no",
-	}
-	args = append(args, sshAuthArgs()...)
-	args = append(args, src, dest)
-	cmd := exec.Command(args[0], args[1:]...)
+	//tarArgs1 := []string{
+	//	"tar", "-c", "-j", "-C", src, ".",
+	//}
+	//sshArgs := []string{
+	//	"ssh", "-o", "StrictHostKeyChecking=no",
+	//}
+	//tarArgs2 := []string{
+	//	"tar", "-C", dest, "-x",
+	//	"-j", "-f",
+	//}
+	//var args []string
+
+	cmd := exec.Command("bin/sh", "-c", fmt.Sprintf("tar -cjf- %s ./ | ssh ... tar %s -x", src, dest))
+
+	//args = append(tarArgs1, "|")
+	//args = append(args, sshArgs...)
+	//args = append(args, sshAuthArgs()...)
+	//args = append(args, tarArgs2...)
+	//cmd := exec.Command(args[0], args[1:]...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "~ %s\n%s", strings.Join(args, " "), out)
+		return errors.Wrapf(err, "~ %s\n%s", out)
 	}
 	return nil
 }
