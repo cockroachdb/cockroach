@@ -2406,12 +2406,9 @@ func getRestoringPrivileges(
 				return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
 			}
 
-			// Default is to copy privs from restoring parent db, like CREATE {TABLE,
-			// SCHEMA}. But also like CREATE {TABLE,SCHEMA}, we set the owner to the
-			// user creating the table (the one running the restore).
 			// TODO(dt): Make this more configurable.
 			updatedPrivileges = descpb.CreatePrivilegesFromDefaultPrivileges(
-				parentDB.GetID(), parentDB.GetDefaultPrivilegeDescriptor(), user, tree.Tables,
+				parentDB.GetID(), parentDB.DatabaseDesc().GetDefaultPrivileges(), user, tree.Tables,
 				parentDB.GetPrivileges(),
 			)
 		}

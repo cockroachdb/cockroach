@@ -66,11 +66,10 @@ CREATE TYPE t4 AS ENUM()
 query TTTTT colnames
 SHOW GRANTS ON TYPE t4
 ----
-database_name  schema_name  type_name  grantee   privilege_type
-d              public       t4         admin     ALL
-d              public       t4         public    USAGE
-d              public       t4         root      ALL
-d              public       t4         testuser  ALL
+database_name  schema_name  type_name  grantee  privilege_type
+d              public       t4         admin    ALL
+d              public       t4         public   USAGE
+d              public       t4         root     ALL
 
 user root
 statement ok
@@ -92,8 +91,7 @@ CREATE TYPE t5 AS ENUM()
 query TTTTT colnames
 SHOW GRANTS ON TYPE t5
 ----
-database_name  schema_name  type_name  grantee   privilege_type
-d              public       t5         admin     ALL
-d              public       t5         public    USAGE
-d              public       t5         root      ALL
-d              public       t5         testuser  ALL
+database_name  schema_name  type_name  grantee  privilege_type
+d              public       t5         admin    ALL
+d              public       t5         public   USAGE
+d              public       t5         root     ALL

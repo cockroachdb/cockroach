@@ -161,7 +161,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
-		n.dbDesc.GetID(), n.dbDesc.GetDefaultPrivilegeDescriptor(),
+		n.dbDesc.GetID(), n.dbDesc.DatabaseDesc().GetDefaultPrivileges(),
 		params.SessionData().User(), tree.Tables, n.dbDesc.GetPrivileges(),
 	)
 

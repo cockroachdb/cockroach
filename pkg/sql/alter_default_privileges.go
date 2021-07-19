@@ -12,11 +12,10 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -34,9 +33,7 @@ var targetObjectToPrivilegeObject = map[tree.AlterDefaultPrivilegesTargetObject]
 type alterDefaultPrivilegesNode struct {
 	n *tree.AlterDefaultPrivileges
 
-	// Only one of dbDesc or schemaDesc should be populated.
-	dbDesc     *dbdesc.Mutable
-	schemaDesc *schemadesc.Mutable
+	dbDesc *dbdesc.Mutable
 }
 
 func (n *alterDefaultPrivilegesNode) Next(runParams) (bool, error) { return false, nil }
@@ -80,11 +77,8 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		return err
 	}
 
-	for _, targetRole := range targetRoles {
-		if _, found := users[targetRole]; !found {
-			return pgerror.Newf(pgcode.UndefinedObject,
-				"role %s does not exist", targetRole.Normalized())
-		}
+	if err = validateGrantees(users, targetRoles); err != nil {
+		return err
 	}
 
 	privileges := n.n.Grant.Privileges
@@ -101,11 +95,8 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		granteesSQLUsername[i] = security.MakeSQLUsernameFromPreNormalizedString(string(grantee))
 	}
 
-	for _, grantee := range granteesSQLUsername {
-		if _, found := users[grantee]; !found {
-			return pgerror.Newf(pgcode.UndefinedObject,
-				"role %s does not exist", grantee.Normalized())
-		}
+	if err = validateGrantees(users, granteesSQLUsername); err != nil {
+		return err
 	}
 
 	// You can change default privileges only for objects that will be created
@@ -131,7 +122,11 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		return err
 	}
 
-	defaultPrivs := n.dbDesc.GetDefaultPrivilegeDescriptor()
+	if n.dbDesc.DatabaseDesc().GetDefaultPrivileges() == nil {
+		n.dbDesc.DatabaseDesc().DefaultPrivileges = descpb.InitDefaultPrivilegeDescriptor()
+	}
+
+	defaultPrivs := n.dbDesc.DatabaseDesc().GetDefaultPrivileges()
 
 	for _, targetRole := range targetRoles {
 		if n.n.IsGrant {
@@ -145,16 +140,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		}
 	}
 
-	err = params.p.writeNonDropDatabaseChange(
+	return params.p.writeNonDropDatabaseChange(
 		params.ctx, n.dbDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
-	if err != nil {
-		return err
-	}
-
-	if err := params.p.createNonDropDatabaseChangeJob(params.ctx, n.dbDesc.ID,
-		fmt.Sprintf("updating privileges for database %d", n.dbDesc.ID)); err != nil {
-		return err
-	}
-	return nil
 }

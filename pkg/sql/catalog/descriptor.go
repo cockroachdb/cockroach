@@ -178,7 +178,6 @@ type DatabaseDescriptor interface {
 	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error
 	GetSchemaID(name string) descpb.ID
 	GetNonDroppedSchemaName(schemaID descpb.ID) string
-	GetDefaultPrivilegeDescriptor() *descpb.DefaultPrivilegeDescriptor
 }
 
 // TableDescriptor is an interface around the table descriptor types.

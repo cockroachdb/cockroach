@@ -214,8 +214,11 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate the privilege descriptor.
 	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Database))
 
-	// Validate the default privilege descriptor.
-	vea.Report(desc.GetDefaultPrivilegeDescriptor().Validate())
+	// The DefaultPrivilegeDescriptor may be nil.
+	if desc.GetDefaultPrivileges() != nil {
+		// Validate the default privilege descriptor.
+		vea.Report(desc.GetDefaultPrivileges().Validate())
+	}
 
 	if desc.IsMultiRegion() {
 		desc.validateMultiRegion(vea)
@@ -336,17 +339,6 @@ func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	imm := NewBuilder(desc.DatabaseDesc()).BuildImmutableDatabase()
 	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
 	return imm
-}
-
-// GetDefaultPrivilegeDescriptor gets or creates the DefaultPrivilegeDescriptor
-// for the database.
-func (desc *immutable) GetDefaultPrivilegeDescriptor() *descpb.DefaultPrivilegeDescriptor {
-	if desc.DefaultPrivileges == nil {
-		defaultPrivileges := descpb.DefaultPrivilegeDescriptor{}
-		desc.DefaultPrivileges = &defaultPrivileges
-	}
-
-	return desc.DefaultPrivileges
 }
 
 // IsNew implements the MutableDescriptor interface.

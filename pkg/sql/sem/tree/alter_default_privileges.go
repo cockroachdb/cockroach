@@ -100,7 +100,6 @@ type AbbreviatedRevoke struct {
 	Target         AlterDefaultPrivilegesTargetObject
 	Grantees       NameList
 	GrantOptionFor bool
-	Drop           DropBehavior
 }
 
 func (n *AbbreviatedRevoke) Format(ctx *FmtCtx) {

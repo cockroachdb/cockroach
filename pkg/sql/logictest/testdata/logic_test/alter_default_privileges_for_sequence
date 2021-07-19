@@ -84,6 +84,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON SEQUENCES FROM testuser
 statement ok
 CREATE SEQUENCE s4
 
+# testuser still has CREATE due to "inheriting" it from the parent database.
 query TTTTT colnames
 SHOW GRANTS ON s4
 ----
@@ -109,6 +110,7 @@ USE d
 statement ok
 CREATE SEQUENCE s5
 
+# testuser still has CREATE due to "inheriting" it from the parent database.
 query TTTTT colnames
 SHOW GRANTS ON s5
 ----

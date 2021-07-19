@@ -62,6 +62,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON SCHEMAS FROM testuser, 
 statement ok
 CREATE SCHEMA s4
 
+# testuser still has CREATE due to "inheriting" it from the parent database.
 query TTTT colnames
 SHOW GRANTS ON SCHEMA s4
 ----
@@ -74,6 +75,7 @@ user root
 statement ok
 USE d
 
+# root must be a member of testuser to ALTER DEFAULT PRIVILEGES FOR ROLE testuser.
 statement ok
 GRANT testuser TO root
 
@@ -87,6 +89,7 @@ USE d
 statement ok
 CREATE SCHEMA s5
 
+# testuser still has CREATE due to "inheriting" it from the parent database.
 query TTTT colnames
 SHOW GRANTS ON SCHEMA s5
 ----
