@@ -12,7 +12,9 @@ package multitenant
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -26,5 +28,36 @@ type TenantUsageServer interface {
 		ctx context.Context, tenantID roachpb.TenantID, in *roachpb.TokenBucketRequest,
 	) (*roachpb.TokenBucketResponse, error)
 
-	// TODO(radu): add Reconfigure API.
+	// ReconfigureTokenBucket updates a tenant's token bucket settings.
+	//
+	// Arguments:
+	//
+	//  - availableRU is the amount of Request Units that the tenant can consume at
+	//    will. Also known as "burst RUs".
+	//
+	//  - refillRate is the amount of Request Units per second that the tenant
+	//    receives.
+	//
+	//  - maxBurstRU is the maximum amount of Request Units that can be accumulated
+	//    from the refill rate, or 0 if there is no limit.
+	//
+	//  - asOf is a timestamp; the reconfiguration request is assumed to be based on
+	//    the consumption at that time. This timestamp is used to compensate for any
+	//    refill that would have happened in the meantime.
+	//
+	//  - asOfConsumedRequestUnits is the total number of consumed RUs based on
+	//    which the reconfiguration values were calculated (i.e. at the asOf time).
+	//    It is used to adjust availableRU with the consumption that happened in the
+	//    meantime.
+	//
+	ReconfigureTokenBucket(
+		ctx context.Context,
+		txn *kv.Txn,
+		tenantID roachpb.TenantID,
+		availableRU float64,
+		refillRate float64,
+		maxBurstRU float64,
+		asOf time.Time,
+		asOfConsumedRequestUnits float64,
+	) error
 }
