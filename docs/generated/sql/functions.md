@@ -529,6 +529,16 @@ has no relationship with the commit order of concurrent transactions.</p>
 and which stays constant throughout the transaction. This timestamp
 has no relationship with the commit order of concurrent transactions.</p>
 <p>This function is the preferred overload and will be evaluated by default.</p>
+</span></td></tr>
+<tr><td><a name="with_max_staleness"></a><code>with_max_staleness(max_staleness: <a href="interval.html">interval</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>When used in the AS OF SYSTEM TIME clause of an single-statement,
+read-only transaction, CockroachDB chooses the newest timestamp within the staleness
+bound that allows execution of the reads at the closest available replica without blocking.</p>
+<p>Note this function requires an enterprise license on a CCL distribution.</p>
+</span></td></tr>
+<tr><td><a name="with_min_timestamp"></a><code>with_min_timestamp(min_timestamp: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>When used in the AS OF SYSTEM TIME clause of an single-statement,
+read-only transaction, CockroachDB chooses the newest timestamp before the min_timestamp
+that allows execution of the reads at the closest available replica without blocking.</p>
+<p>Note this function requires an enterprise license on a CCL distribution.</p>
 </span></td></tr></tbody>
 </table>
 
