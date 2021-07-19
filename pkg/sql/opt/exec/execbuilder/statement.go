@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -94,6 +95,11 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 		// TODO(radu): add views, sequences
 	}
 
+	// If MEMO option was passed, show the memo.
+	if explain.Options.Flags[tree.ExplainFlagMemo] {
+		planText.WriteString(b.optimizer.FormatMemo(xform.FmtPretty))
+	}
+
 	f := memo.MakeExprFmtCtx(fmtFlags, b.mem, b.catalog)
 	f.FormatExpr(explain.Input)
 	planText.WriteString(f.Buffer.String())
@@ -123,7 +129,9 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		explain.StmtType,
 		func(ef exec.ExplainFactory) (exec.Plan, error) {
 			// Create a separate builder for the explain query.
-			explainBld := New(ef, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit)
+			explainBld := New(
+				ef, b.optimizer, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit,
+			)
 			explainBld.disableTelemetry = true
 			return explainBld.Build()
 		},
