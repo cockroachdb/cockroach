@@ -2415,7 +2415,7 @@ months and years, use the timestamptz subtraction operator.`,
 				return tree.MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond)
 			},
 			Info:       "Returns the start time of the current statement.",
-			Volatility: tree.VolatilityStable,
+			Volatility: tree.VolatilityVolatile,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -2424,7 +2424,7 @@ months and years, use the timestamptz subtraction operator.`,
 				return tree.MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond)
 			},
 			Info:       "Returns the start time of the current statement.",
-			Volatility: tree.VolatilityStable,
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 
