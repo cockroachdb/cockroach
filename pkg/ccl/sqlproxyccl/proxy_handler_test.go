@@ -604,7 +604,12 @@ func TestDirectoryConnect(t *testing.T) {
 	t.Run("drain connection", func(t *testing.T) {
 		url := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable&options=--cluster=tenant-cluster-28", addr)
 		te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-			require.Equal(t, int64(1), proxy.metrics.CurConnCount.Value())
+			// Previous successful connection asynchronously closes - PGX cuts
+			// the connection and it can take time for the proxy to get the
+			// notification and react.
+			require.Eventually(t, func() bool {
+				return proxy.metrics.CurConnCount.Value() == 1
+			}, 10*time.Second, 10*time.Millisecond)
 
 			// Connection should be terminated after draining.
 			require.Eventually(t, func() bool {
