@@ -1301,7 +1301,7 @@ project
 
 # Sample testcase using exprgen.
 expr colstat=1 colstat=2
-(Select 
+(Select
   (FakeRel
     [
       (OutputCols [ (NewColumn "a" "int") (NewColumn "b" "int") (NewColumn "c" "int")] )
@@ -1310,15 +1310,15 @@ expr colstat=1 colstat=2
         {
           "columns": ["a"],
           "distinct_count": 100,
-          "null_count": 0, 
-          "row_count": 100, 
+          "null_count": 0,
+          "row_count": 100,
           "created_at": "2018-01-01 1:00:00.00000+00:00"
         },
         {
           "columns": ["b"],
           "distinct_count": 20,
-          "null_count": 5, 
-          "row_count": 100, 
+          "null_count": 5,
+          "row_count": 100,
           "created_at": "2018-01-01 1:00:00.00000+00:00"
         }
       ]`)
