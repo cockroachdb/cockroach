@@ -29,6 +29,7 @@ type AlterDefaultPrivileges struct {
 	Revoke  AbbreviatedRevoke
 }
 
+// Format implements the NodeFormatter interface.
 func (n *AlterDefaultPrivileges) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DEFAULT PRIVILEGES ")
 	if len(n.Roles) > 0 {
@@ -67,6 +68,8 @@ const (
 	Schemas   AlterDefaultPrivilegesTargetObject = 4
 )
 
+// AbbreviatedGrant represents an the GRANT part of an
+// ALTER DEFAULT PRIVILEGES statement.
 type AbbreviatedGrant struct {
 	Privileges      privilege.List
 	Target          AlterDefaultPrivilegesTargetObject
@@ -74,6 +77,7 @@ type AbbreviatedGrant struct {
 	WithGrantOption bool
 }
 
+// Format implements the NodeFormatter interface.
 func (n *AbbreviatedGrant) Format(ctx *FmtCtx) {
 	ctx.WriteString("GRANT ")
 	n.Privileges.Format(&ctx.Buffer)
@@ -95,6 +99,8 @@ func (n *AbbreviatedGrant) Format(ctx *FmtCtx) {
 	}
 }
 
+// AbbreviatedRevoke represents an the REVOKE part of an
+// ALTER DEFAULT PRIVILEGES statement.
 type AbbreviatedRevoke struct {
 	Privileges     privilege.List
 	Target         AlterDefaultPrivilegesTargetObject
@@ -102,6 +108,7 @@ type AbbreviatedRevoke struct {
 	GrantOptionFor bool
 }
 
+// Format implements the NodeFormatter interface.
 func (n *AbbreviatedRevoke) Format(ctx *FmtCtx) {
 	ctx.WriteString("REVOKE ")
 	if n.GrantOptionFor {

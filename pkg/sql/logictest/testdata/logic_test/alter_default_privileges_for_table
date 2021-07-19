@@ -1,14 +1,14 @@
 # Should error when a role that does not exist is provided.
-statement error pq: role who does not exist
+statement error pq: user or role who does not exist
 ALTER DEFAULT PRIVILEGES FOR ROLE who GRANT SELECT ON TABLES to testuser
 
-statement error pq: role who does not exist
+statement error pq: user or role who does not exist
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES to who
 
-statement error pq: role who does not exist
+statement error pq: user or role who does not exist
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT SELECT ON TABLES to who
 
-statement error pq: role who does not exist
+statement error pq: user or role who does not exist
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT SELECT ON TABLES to testuser, who
 
 # Should not be able to use invalid privileges.
