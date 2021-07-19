@@ -406,3 +406,26 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 
 	return GCTenantJob(ctx, p.ExecCfg(), p.Txn(), p.User(), tenID)
 }
+
+// UpdateTenantResourceLimits implements the tree.TenantOperator interface.
+func (p *planner) UpdateTenantResourceLimits(
+	ctx context.Context,
+	tenantID uint64,
+	availableRU float64,
+	refillRate float64,
+	maxBurstRU float64,
+	asOf time.Time,
+	asOfConsumedRequestUnits float64,
+) error {
+	const op = "update-resource-limits"
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(tenantID, op); err != nil {
+		return err
+	}
+	return p.ExecCfg().TenantUsageServer.ReconfigureTokenBucket(
+		ctx, p.Txn(), roachpb.MakeTenantID(tenantID),
+		availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
+	)
+}
