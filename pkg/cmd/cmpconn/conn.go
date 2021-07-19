@@ -175,7 +175,7 @@ func CompareConns(
 	conns map[string]Conn,
 	prep, exec string,
 	ignoreSQLErrors bool,
-) (err error) {
+) (ignoredErr bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	connRows := make(map[string]*pgx.Rows)
@@ -187,7 +187,7 @@ func CompareConns(
 		}
 		rows, err := conn.Values(ctx, prep, connExecs[name])
 		if err != nil {
-			return nil //nolint:returnerrcheck
+			return true, nil //nolint:returnerrcheck
 		}
 		defer rows.Close()
 		connRows[name] = rows
@@ -220,7 +220,9 @@ func CompareConns(
 // It always returns an error if there are any differences. Additionally,
 // ignoreSQLErrors specifies whether SQL errors should be ignored (in which
 // case the function returns nil if SQL error occurs).
-func compareRows(connRows map[string]*pgx.Rows, ignoreSQLErrors bool) error {
+func compareRows(
+	connRows map[string]*pgx.Rows, ignoreSQLErrors bool,
+) (ignoredErr bool, retErr error) {
 	var first []interface{}
 	var firstName string
 	var minCount int
@@ -241,16 +243,16 @@ ReadRows:
 					// This function can fail if, for example,
 					// a number doesn't fit into a float64. Ignore
 					// them and move along to another query.
-					err = nil
+					return true, nil
 				}
-				return err
+				return false, err
 			}
 			if firstName == "" {
 				firstName = name
 				first = vals
 			} else {
 				if err := CompareVals(first, vals); err != nil {
-					return fmt.Errorf("compare %s to %s:\n%v", firstName, name, err)
+					return false, fmt.Errorf("compare %s to %s:\n%v", firstName, name, err)
 				}
 			}
 		}
@@ -264,16 +266,16 @@ ReadRows:
 			if ignoreSQLErrors {
 				// Aww someone had a SQL error maybe, so we can't use this
 				// query.
-				err = nil
+				return true, nil
 			}
-			return err
+			return false, err
 		}
 	}
 	// Ensure each connection returned the same number of rows.
 	for name, count := range rowCounts {
 		if minCount != count {
-			return fmt.Errorf("%s had %d rows, expected %d", name, count, minCount)
+			return false, fmt.Errorf("%s had %d rows, expected %d", name, count, minCount)
 		}
 	}
-	return nil
+	return false, nil
 }

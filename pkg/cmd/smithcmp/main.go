@@ -165,9 +165,10 @@ func main() {
 	var prep, exec string
 	ctx := context.Background()
 	done := time.After(timeout)
-	for i := 0; true; i++ {
+	for i, ignoredErrCount := 0, 0; true; i++ {
 		select {
 		case <-done:
+			fmt.Printf("executed query count: %d\nignored error count: %d\n", i, ignoredErrCount)
 			return
 		default:
 		}
@@ -198,11 +199,13 @@ func main() {
 			fmt.Println(exec)
 		}
 		if compare {
-			if err := cmpconn.CompareConns(
+			if ignoredErr, err := cmpconn.CompareConns(
 				ctx, stmtTimeout, conns, prep, exec, true, /* ignoreSQLErrors */
 			); err != nil {
 				fmt.Printf("prep:\n%s;\nexec:\n%s;\nERR: %s\n\n", prep, exec, err)
 				os.Exit(1)
+			} else if ignoredErr {
+				ignoredErrCount++
 			}
 		} else {
 			for _, conn := range conns {
