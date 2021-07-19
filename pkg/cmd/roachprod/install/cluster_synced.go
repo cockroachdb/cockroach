@@ -19,6 +19,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
+	"math/rand"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -1637,17 +1638,54 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 	return syscall.Exec(sshPath, allArgs, os.Environ())
 }
 
+func tarFile() (string, error) {
+	// Generating a random filename
+	fileName := rand.Int()
+	// Creating a temporary tarball file
+	tarCmd := exec.Command("bash", "-c", fmt.Sprintf("tar cjf ../%d.tar.gz .", fileName))
+	out, err := tarCmd.CombinedOutput()
+	if err != nil {
+		return "", errors.Wrapf(err, "~ %s\n%s", out)
+	}
+	return string(out[0]), nil
+}
+
+func cleanFile(name string) {
+	err := os.Remove(name)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+}
+
 func (c *SyncedCluster) scp(src, dest string) error {
+	// Generating a random filename
+	fileName := rand.Int()
+	// Creating a temporary tarball file
+	tarCmd := exec.Command("bash", "-c", fmt.Sprintf("tar cjf ../%d.tar.gz .", fileName))
+	out, err := tarCmd.CombinedOutput()
+	fmt.Println(out)
+	if err != nil {
+		return errors.Wrapf(err, "~ %s\n%s", out)
+	}
+	// Scp tarball file
 	args := []string{
 		"scp", "-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
 	}
 	args = append(args, sshAuthArgs()...)
-	args = append(args, src, dest)
+	args = append(args, string(out[0]), src, dest)
 	cmd := exec.Command(args[0], args[1:]...)
-	out, err := cmd.CombinedOutput()
+
+	out, err = cmd.CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "~ %s\n%s", strings.Join(args, " "), out)
+		return errors.Wrapf(err, "~ %s\n%s", out)
+	}
+	//Extract tarball file in source
+	extractCmd := exec.Command("bash", "-c", fmt.Sprintf("ssh %s | tar -xzvf temp_tar.tar.gz", dest))
+	out, err = extractCmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "~ %s\n%s", out)
 	}
 	return nil
 }
