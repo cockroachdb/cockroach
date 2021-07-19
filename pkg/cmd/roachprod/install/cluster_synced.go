@@ -1636,12 +1636,22 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 }
 
 func (c *SyncedCluster) scp(src, dest string) error {
-	args := []string{
-		"scp", "-r", "-C",
-		"-o", "StrictHostKeyChecking=no",
+	tarArgs1 := []string{
+		"tar", "-c", "-j", "-f",
 	}
+	sshArgs := []string{
+		"ssh", "-o", "StrictHostKeyChecking=no",
+	}
+	tarArgs2 := []string{
+		"tar", "-C", "dst", "-x",
+		"-j", "-f",
+	}
+	var args []string
+	args = append(tarArgs1, "|")
+	args = append(args, sshArgs...)
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
+	args = append(args, tarArgs2...)
 	cmd := exec.Command(args[0], args[1:]...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
