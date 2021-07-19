@@ -1308,13 +1308,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
 	s.migrationServer = migrationServer // only for testing via TestServer
 
-	// Pebble does its own engine health checks, that call back into an event
-	// handler registered in storage/pebble.go when a slow disk event is
-	// detected. Starting a separate routine for Pebble is unnecessary.
-	if s.engines[0].Type() != enginepb.EngineTypePebble {
-		s.node.startAssertEngineHealth(ctx, s.engines, s.cfg.Settings)
-	}
-
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
