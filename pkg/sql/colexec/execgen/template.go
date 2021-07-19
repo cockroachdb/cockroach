@@ -14,11 +14,18 @@ import (
 	"fmt"
 	"go/token"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/dstutil"
 )
+
+type templateInfo struct {
+	funcInfos map[string]*funcInfo
+
+	letInfos map[string]*letInfo
+}
 
 type templateParamInfo struct {
 	fieldOrdinal int
@@ -28,19 +35,33 @@ type templateParamInfo struct {
 type funcInfo struct {
 	decl           *dst.FuncDecl
 	templateParams []templateParamInfo
+
+	// instantiateArgs is a list of lists of arguments that were passed explicitly
+	// as execgen:instantiate declarations.
+	instantiateArgs [][]string
+}
+
+// letInfo contains a list of all of the values in an execgen:let declaration.
+type letInfo struct {
+	// typ is a type literal.
+	typ  *dst.ArrayType
+	vals []string
 }
 
 // Match // execgen:template<foo, bar>
 var templateRe = regexp.MustCompile(`\/\/ execgen:template<((?:(?:\w+),?\W*)+)>`)
+
+// Match // execgen:instantiate<foo, bar>
+var instantiateRe = regexp.MustCompile(`\/\/ execgen:instantiate<((?:(?:\w+),?\W*)+)>`)
 
 // replaceTemplateVars removes the template arguments from a callsite of a
 // templated function. It returns the template arguments that were used, and a
 // new CallExpr that doesn't have the template arguments.
 func replaceTemplateVars(
 	info *funcInfo, call *dst.CallExpr,
-) (templateArgs []dst.Expr, newCall *dst.CallExpr) {
+) (templateArgs []dst.Expr, newCall *dst.CallExpr, mangledName string) {
 	if len(info.templateParams) == 0 {
-		return nil, call
+		return nil, call, ""
 	}
 	templateArgs = make([]dst.Expr, len(info.templateParams))
 	// Collect template arguments.
@@ -62,12 +83,14 @@ func replaceTemplateVars(
 			}
 		}
 		if !skip {
-			newArgs = append(newArgs, call.Args[i])
+			newArgs = append(newArgs, dst.Clone(call.Args[i]).(dst.Expr))
 		}
 	}
 	ret := dst.Clone(call).(*dst.CallExpr)
+	newName := getTemplateVariantName(info, templateArgs)
+	ret.Fun = newName
 	ret.Args = newArgs
-	return templateArgs, ret
+	return templateArgs, ret, newName.Name
 }
 
 // monomorphizeTemplate produces a variant of the input function body, given the
@@ -302,40 +325,64 @@ func insertBlockStmt(cursor *dstutil.Cursor, block *dst.BlockStmt) {
 	}
 }
 
-// findTemplateFuncs, given an AST, finds all functions annotated with
-// execgen:template<foo,bar>, and returns a funcInfo for each of them.
-func findTemplateFuncs(f *dst.File) map[string]*funcInfo {
-	ret := make(map[string]*funcInfo)
+// trimTemplateDeclMatches takes a list of matches from an execgen:blah<a,b,c>
+// regexp match and returns the trimmed list of a, b, and c.
+func trimTemplateDeclMatches(matches []string) []string {
+	match := matches[1]
+
+	templateVars := strings.Split(match, ",")
+	for i, v := range templateVars {
+		templateVars[i] = strings.TrimSpace(v)
+	}
+	return templateVars
+}
+
+const runtimeToTemplateSuffix = "_runtime_to_template"
+
+// findTemplateDecls, given an AST, finds all functions annotated with
+// execgen:template<foo,bar>, and returns a funcInfo for each of them, and
+// finds all var decls annotated with execgen:let, returning a letInfo for
+// each of them.
+func findTemplateDecls(f *dst.File) templateInfo {
+	ret := templateInfo{
+		funcInfos: make(map[string]*funcInfo),
+		letInfos:  make(map[string]*letInfo),
+	}
 
 	dstutil.Apply(f, func(cursor *dstutil.Cursor) bool {
 		n := cursor.Node()
 		switch n := n.(type) {
 		case *dst.FuncDecl:
 			var templateVars []string
-			var templateDecPosition int
-			for i, dec := range n.Decorations().Start.All() {
+			var instantiateArgs [][]string
+			i := 0
+			for _, dec := range n.Decs.Start {
 				if matches := templateRe.FindStringSubmatch(dec); matches != nil {
-					match := matches[1]
-					// Match now looks like foo, bar
-					templateVars = strings.Split(match, ",")
-					for i, v := range templateVars {
-						templateVars[i] = strings.TrimSpace(v)
-					}
-					templateDecPosition = i
-					break
+					templateVars = trimTemplateDeclMatches(matches)
+					continue
 				}
+
+				if matches := instantiateRe.FindStringSubmatch(dec); matches != nil {
+					instantiateMatches := trimTemplateDeclMatches(matches)
+					newInstantiateArgs := expandInstantiateArgs(instantiateMatches, ret.letInfos)
+					instantiateArgs = append(instantiateArgs, newInstantiateArgs...)
+					// Eventually let's delete the instantiate comments as well.
+					continue
+				}
+				// Filter decorations in place.
+				n.Decs.Start[i] = dec
+				i++
 			}
+			n.Decs.Start = n.Decs.Start[:i]
 			if templateVars == nil {
 				return false
 			}
-			// Remove the template decoration.
-			n.Decs.Start = append(
-				n.Decs.Start[:templateDecPosition],
-				n.Decs.Start[templateDecPosition+1:]...)
 
 			// Process template funcs: find template params from runtime definition
 			// and save in funcInfo.
-			info := &funcInfo{}
+			info := &funcInfo{
+				instantiateArgs: instantiateArgs,
+			}
 			for _, v := range templateVars {
 				var found bool
 				for i, f := range n.Type.Params.List {
@@ -389,15 +436,216 @@ func findTemplateFuncs(f *dst.File) map[string]*funcInfo {
 					NodeDecs: funcDecs.NodeDecs,
 				},
 			})
+			oldParamList := n.Type.Params.List
 			n.Type.Params.List = newParamList
 			n.Decs.Start = trimStartDecs(n)
 			info.decl = n
-			ret[info.decl.Name.Name] = info
+			ret.funcInfos[info.decl.Name.Name] = info
+
+			for _, args := range info.instantiateArgs {
+				exprList := make([]dst.Expr, len(args))
+				for j := range args {
+					exprList[j] = dst.NewIdent(args[j])
+				}
+				createTemplateFuncVariant(f, info, exprList)
+			}
+
+			// Now, we need to generate the "look up table" that allows us to convert
+			// runtime values into template values for the template args.
+
+			// We only do this if there were execgen:instantiate statements, since we
+			// assume that if there were no such statements, the concrete callsites
+			// were already present.
+
+			if info.instantiateArgs != nil {
+				runtimeArgs := make([]dst.Expr, len(n.Type.Params.List))
+				for i, p := range n.Type.Params.List {
+					runtimeArgs[i] = dst.NewIdent(p.Names[0].Name)
+				}
+				decl := &dst.FuncDecl{
+					Name: dst.NewIdent(fmt.Sprintf("%s%s", info.decl.Name.Name, runtimeToTemplateSuffix)),
+					Type: dst.Clone(info.decl.Type).(*dst.FuncType),
+					Body: &dst.BlockStmt{
+						List: []dst.Stmt{
+							generateSwitchStatementLookup(info, runtimeArgs, templateVars, info.instantiateArgs),
+						},
+					},
+				}
+				decl.Type.Params.List = oldParamList
+				cursor.InsertAfter(decl)
+			}
+			cursor.Delete()
+
+		case *dst.GenDecl:
+			// Search for execgen:let declarations.
+			isLet := false
+			for _, dec := range n.Decs.Start {
+				if dec == "// execgen:let" {
+					isLet = true
+					break
+				}
+			}
+			if !isLet {
+				return true
+			}
+			if n.Tok != token.VAR {
+				panic("execgen:let only allowed on vars")
+			}
+			for _, spec := range n.Specs {
+				n := spec.(*dst.ValueSpec)
+				if len(n.Names) != 1 || len(n.Values) != 1 {
+					panic("execgen:let must have 1 name and one value per var")
+				}
+				info := &letInfo{}
+				name := n.Names[0].Name
+				c, ok := n.Values[0].(*dst.CompositeLit)
+				if !ok {
+					panic("execgen:let must use a composite literal value")
+				}
+				typ, ok := c.Type.(*dst.ArrayType)
+				if !ok {
+					panic("execgen:let must be on an array type literal")
+				}
+				info.vals = make([]string, len(c.Elts))
+				info.typ = typ
+				for i := range c.Elts {
+					info.vals[i] = prettyPrintExprs(c.Elts[i])
+				}
+				ret.letInfos[name] = info
+			}
+
 			cursor.Delete()
 		}
 		return true
 	}, nil)
 
+	return ret
+}
+
+// expandInstantiateArgs takes a list of strings, the arguments to an
+// execgen:instantiate annotation, and returns a list of list of strings, after
+// combinatorially expanding any execgen:let lists in the instantiate arguments.
+// For example, given the instantiateArgs:
+// ["Bools", "Bools", 3]
+// and an execgen:let that maps "Bools" to ["true", "false"], we'd return the
+// list of lists:
+// [true, true, 3]
+// [true, false, 3]
+// [false, true, 3]
+// [false, false, 3]
+func expandInstantiateArgs(instantiateArgs []string, letInfos map[string]*letInfo) [][]string {
+	expandedArgs := make([][]string, len(instantiateArgs))
+	for i, arg := range instantiateArgs {
+		if info := letInfos[arg]; info != nil {
+			expandedArgs[i] = info.vals
+		} else {
+			expandedArgs[i] = []string{arg}
+		}
+	}
+	return generateInstantiateCombinations(expandedArgs)
+}
+
+func generateInstantiateCombinations(args [][]string) [][]string {
+	if len(args) == 1 {
+		// Base case: transform the final options list into an arguments list of
+		// lists where each arguments list is a single element containing one of
+		// the final options.
+		// For example, given [[true, false]], we'll return:
+		// [[true], [false]]
+		ret := make([][]string, len(args[0]))
+		for i, arg := range args[0] {
+			ret[i] = []string{arg}
+		}
+		return ret
+	}
+	rest := generateInstantiateCombinations(args[1:])
+	ret := make([][]string, 0, len(rest)*len(args[0]))
+	for _, argOption := range args[0] {
+		// For every option of argument, prepend it to every args list from
+		// the recursive step.
+		for _, args := range rest {
+			ret = append(ret, append([]string{argOption}, args...))
+		}
+	}
+	return ret
+}
+
+// generateSwitchStatementLookup ...
+// remainingArgs is a list of lists of actual instantiations. For example, if
+// we had:
+// execgen:instantiate<red, potato>
+// execgen:instantiate<red, orange>
+// execgen:instantiate<yellow, orange>
+//
+// remainingArgs would be {{red, potato}, {red, orange}, {yellow orange}}
+func generateSwitchStatementLookup(
+	info *funcInfo, curArgs []dst.Expr, remainingTemplateParams []string, remainingArgs [][]string,
+) *dst.SwitchStmt {
+	ret := &dst.SwitchStmt{
+		Tag:  dst.NewIdent(remainingTemplateParams[0]),
+		Body: &dst.BlockStmt{},
+	}
+	defaultCase := &dst.CaseClause{
+		Body: []dst.Stmt{
+			mustParseStmt(`panic(fmt.Sprint("unknown value", ` + remainingTemplateParams[0] + `))`),
+		},
+	}
+	if len(remainingArgs[0]) == 1 {
+		// Base case. We finished switching on all template params, time to actually
+		// invoke the fully specialized function.
+		stmtList := make([]dst.Stmt, len(remainingArgs)+1)
+		for i := range remainingArgs {
+			argList := append(curArgs, dst.NewIdent(remainingArgs[i][0]))
+			call := &dst.CallExpr{
+				Fun:  dst.NewIdent(info.decl.Name.Name),
+				Args: argList,
+			}
+			_, call, _ = replaceTemplateVars(info, call)
+			var stmt dst.Stmt
+			if info.decl.Type.Results != nil {
+				stmt = &dst.ReturnStmt{Results: []dst.Expr{call}}
+			} else {
+				stmt = &dst.ExprStmt{X: call}
+			}
+			stmtList[i] = &dst.CaseClause{
+				List: []dst.Expr{dst.NewIdent(remainingArgs[i][0])},
+				Body: []dst.Stmt{stmt},
+			}
+		}
+		stmtList[len(stmtList)-1] = defaultCase
+		ret.Body.List = stmtList
+		return ret
+	}
+
+	// Recursive case: we have more args to deal with
+	groupedArgs := make(map[string][][]string)
+	for _, argList := range remainingArgs {
+		firstArg := argList[0]
+		groupedArgs[firstArg] = append(groupedArgs[firstArg], argList[1:])
+	}
+	stmtList := make([]dst.Stmt, len(groupedArgs)+1)
+	// Sort firstArgs lexicographically, so we have a consistent output order.
+	firstArgs := make([]string, 0, len(groupedArgs))
+	for firstArg := range groupedArgs {
+		firstArgs = append(firstArgs, firstArg)
+	}
+	sort.Strings(firstArgs)
+
+	for i, firstArg := range firstArgs {
+		restArgs := groupedArgs[firstArg]
+		argList := append(curArgs, dst.NewIdent(firstArg))
+		stmtList[i] = &dst.CaseClause{
+			List: []dst.Expr{dst.NewIdent(firstArg)},
+			Body: []dst.Stmt{generateSwitchStatementLookup(
+				info,
+				argList,
+				remainingTemplateParams[1:],
+				restArgs,
+			)},
+		}
+	}
+	stmtList[len(stmtList)-1] = defaultCase
+	ret.Body.List = stmtList
 	return ret
 }
 
@@ -509,12 +757,17 @@ func replaceAndExpandTemplates(f *dst.File, templateFuncInfos map[string]*funcIn
 					// Nothing to do, it's not a templated function.
 					return true
 				}
-				templateArgs, newCall := replaceTemplateVars(info, n)
-				name := getTemplateVariantName(info, templateArgs)
-				newCall.Fun = name
+				// Critical moment: We need to know whether to replace with concrete
+				// input args or to replace the call with the lookup version.
+				if info.instantiateArgs != nil {
+					n.Fun = dst.NewIdent(fmt.Sprintf("%s%s", info.decl.Name.Name, runtimeToTemplateSuffix))
+					cursor.Replace(n)
+					return true
+				}
+				templateArgs, newCall, newName := replaceTemplateVars(info, n)
 				cursor.Replace(newCall)
 				// Have we already replaced this template function with these args?
-				funcInstance := name.Name + prettyPrintExprs(templateArgs...)
+				funcInstance := newName + prettyPrintExprs(templateArgs...)
 				if _, ok := seenCallsites[funcInstance]; !ok {
 					seenCallsites[funcInstance] = struct{}{}
 					newFuncVariant := createTemplateFuncVariant(f, info, templateArgs)
@@ -578,8 +831,8 @@ func findConcreteTemplateCallSites(
 // it modifies the dst.File to include all expanded template functions, and
 // edits call sites to call the newly expanded functions.
 func expandTemplates(f *dst.File) {
-	funcInfos := findTemplateFuncs(f)
-	replaceAndExpandTemplates(f, funcInfos)
+	templateInfo := findTemplateDecls(f)
+	replaceAndExpandTemplates(f, templateInfo.funcInfos)
 }
 
 // createTemplateFuncVariant creates a variant of the input funcInfo given the
