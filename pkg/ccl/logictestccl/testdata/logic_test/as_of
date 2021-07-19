@@ -94,20 +94,20 @@ statement ok
 SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
 
 query B
-SELECT with_min_timestamp(now()) = now()
+SELECT with_min_timestamp(statement_timestamp()) = statement_timestamp()
 ----
 true
 
 query B
-SELECT with_min_timestamp(now() - '5s'::interval) = now() - '5s'::interval
+SELECT with_min_timestamp(statement_timestamp() - '5s'::interval) = statement_timestamp() - '5s'::interval
 ----
 true
 
-statement error timestamp for with_min_timestamp must be less than or equal to now\(\)
-SELECT with_min_timestamp(now() + '5s'::interval) = now()
+statement error timestamp for with_min_timestamp must be less than or equal to statement_timestamp\(\)
+SELECT with_min_timestamp(statement_timestamp() + '5s'::interval) = statement_timestamp()
 
 query B
-SELECT with_max_staleness('10s') = now() - '10s'::interval
+SELECT with_max_staleness('10s') = statement_timestamp() - '10s'::interval
 ----
 true
 

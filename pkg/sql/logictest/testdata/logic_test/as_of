@@ -91,7 +91,7 @@ statement error pgcode XXC01 with_min_timestamp can only be used with a CCL dist
 SELECT with_min_timestamp('2020-01-15 15:16:17')
 
 statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
-SELECT with_min_timestamp(now())
+SELECT with_min_timestamp(statement_timestamp())
 
 statement error pgcode XXC01 with_max_staleness can only be used with a CCL distribution
 SELECT with_max_staleness('1s')
