@@ -14,7 +14,7 @@ go_library(
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs/jobspb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -31,7 +31,7 @@ go_test(
     deps = [
         ":kvevent",
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",

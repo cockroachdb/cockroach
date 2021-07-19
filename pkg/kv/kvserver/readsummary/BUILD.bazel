@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/readsummary/rspb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",

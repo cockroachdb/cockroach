@@ -2,7 +2,7 @@ load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "rangefeed_base",
+    name = "rangefeed",
     srcs = [
         "config.go",
         "db_adapter.go",
@@ -14,8 +14,8 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord",
-        "//pkg/roachpb",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/retry",
@@ -27,29 +27,39 @@ go_library(
     ],
 )
 
-# keep
-go_library(
-    name = "rangefeed",
-    srcs = [
-        ":mocks_rangefeed",  # keep
-    ],
-    embed = [":rangefeed_base"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@com_github_golang_mock//gomock",
-        "@org_golang_google_grpc//metadata",
-    ],
-)
+# We create a stand-alone go_library target that also includes the generated
+# mocks. Generating mocks depends on the base library being mocked (making
+# this round-about necessary). See top-level BUILD.bazel for the necessary
+# resolve directive to help other packages distinguish between the two.
+#
+# NB: We could alternatively avoid the resolve directive and have the
+# mocks-included target be named as "rangefeed" instead. That unfortunately
+# doesn't play well with gazelle, which will overwrite the "rangefeed" named
+# target whenever files/dependencies are changed.
 
 gomock(
-    name = "mocks_rangefeed",
+    name = "mock_rangefeed",
     out = "mocks_generated.go",
-    interfaces = [""],  # required, yet ignored when using source -- bug?
-    library = ":rangefeed_base",
+    interfaces = [""],  # work-around for https://github.com/jmhodges/bazel_gomock/issues/58
+    library = ":rangefeed",
     package = "rangefeed",
     self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed",
     source = "rangefeed.go",
 )
+
+go_library(
+    name = "with-mocks",
+    srcs = [":mock_rangefeed"],
+    embed = [":rangefeed"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+    ],
+)
+
+# This noop target is a workaround for https://github.com/bazelbuild/bazel-gazelle/issues/1078.
+#
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed //build/bazelutil:noop
 
 go_test(
     name = "rangefeed_test",
@@ -60,11 +70,12 @@ go_test(
         "rangefeed_external_test.go",
         "rangefeed_mock_test.go",
     ],
-    embed = [":rangefeed"],
+    embed = [":with-mocks"],  # keep
     deps = [
+        "//build/bazelutil:noop",
         "//pkg/base",
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

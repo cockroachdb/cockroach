@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
@@ -60,6 +62,9 @@ type restoreDataProcessor struct {
 	// progress updates are accumulated on this channel. It is populated by the
 	// concurrent workers and sent down the flow by the processor.
 	progCh chan RestoreProgress
+	// doneCh is a channel used to signal the background worker that the
+	// processor is done and it can be cleaned up.
+	doneCh chan struct{}
 }
 
 var _ execinfra.Processor = &restoreDataProcessor{}
@@ -100,15 +105,12 @@ func newRestoreDataProcessor(
 		output:  output,
 		progCh:  make(chan RestoreProgress, maxConcurrentRestoreWorkers),
 		metaCh:  make(chan *execinfrapb.ProducerMetadata, 1),
+		doneCh:  make(chan struct{}),
 		concurrentWorkerLimit: quotapool.NewIntPool(
 			"restore worker concurrency",
 			uint64(numRestoreWorkers.Get(sv)),
 		),
 	}
-
-	numRestoreWorkers.SetOnChange(sv, func(_ context.Context) {
-		rd.concurrentWorkerLimit.UpdateCapacity(uint64(numRestoreWorkers.Get(sv)))
-	})
 
 	var err error
 	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
@@ -129,12 +131,42 @@ func newRestoreDataProcessor(
 	return rd, nil
 }
 
+// concurrencyWatcher is a background goroutine that polls the concurrency
+// factor to update the size of the quota pool as needed.
+func (rd *restoreDataProcessor) concurrencyWatcher(ctx context.Context) error {
+	timer := timeutil.NewTimer()
+	defer timer.Stop()
+
+	pollFrequency := 30 * time.Second
+
+	sv := &rd.flowCtx.Cfg.Settings.SV
+
+	ctxDone := ctx.Done()
+	for {
+		select {
+		case <-timer.C:
+			timer.Read = true
+			newConcurrency := uint64(numRestoreWorkers.Get(sv))
+			if rd.concurrentWorkerLimit.Capacity() != newConcurrency {
+				rd.concurrentWorkerLimit.UpdateCapacity(newConcurrency)
+			}
+			timer.Reset(pollFrequency)
+		case <-ctxDone:
+			return ctx.Err()
+		case <-rd.doneCh:
+			return nil
+		}
+	}
+}
+
 // Start is part of the RowSource interface.
 func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	ctx = rd.StartInternal(ctx, restoreDataProcName)
 	rd.input.Start(ctx)
 
 	rd.phaseGroup = ctxgroup.WithContext(ctx)
+	rd.phaseGroup.GoCtx(rd.concurrencyWatcher)
+
 	entries := make(chan execinfrapb.RestoreSpanEntry, maxConcurrentRestoreWorkers)
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(entries)
@@ -143,6 +175,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(rd.progCh)
+		defer close(rd.doneCh)
 		return rd.runRestoreWorkers(entries)
 	})
 }
@@ -416,6 +449,9 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 	if rd.InternalClose() {
 		if rd.metaCh != nil {
 			close(rd.metaCh)
+		}
+		if rd.concurrentWorkerLimit != nil {
+			rd.concurrentWorkerLimit.Close("")
 		}
 	}
 }

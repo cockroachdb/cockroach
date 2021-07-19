@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/gossip",
         "//pkg/kv",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -38,7 +38,7 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

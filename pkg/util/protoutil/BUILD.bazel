@@ -31,7 +31,7 @@ go_test(
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/descpb",
         "//pkg/storage/enginepb",
         "@com_github_gogo_protobuf//proto",

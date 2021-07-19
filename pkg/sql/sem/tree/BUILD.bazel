@@ -117,7 +117,7 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/server/telemetry",
         "//pkg/settings",
@@ -210,7 +210,7 @@ go_test(
     deps = [
         "//pkg/internal/rsg",
         "//pkg/kv",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",

@@ -26,7 +26,6 @@ go_library(
         ":gen-batch-generated",  # keep
         ":gen-errordetailtype-stringer",  # keep
         ":gen-method-stringer",  # keep
-        ":mocks_api",  # keep
     ],
     embed = [":roachpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
@@ -109,15 +108,25 @@ go_library(
 )
 
 gomock(
-    name = "mocks_api",
+    name = "mock_roachpb",
     out = "mocks_generated.go",
     interfaces = [
         "Internal_RangeFeedClient",
         "InternalClient",
     ],
-    library = ":bootstrap",
+    library = ":roachpb",
     package = "roachpb",
     self_package = "github.com/cockroachdb/cockroach/pkg/roachpb",
+)
+
+go_library(
+    name = "with-mocks",
+    srcs = [":mock_roachpb"],
+    embed = [":roachpb"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+    ],
 )
 
 go_test(
@@ -139,7 +148,7 @@ go_test(
         "tenant_test.go",
         "version_test.go",
     ],
-    embed = [":roachpb"],
+    embed = [":with-mocks"],  # keep
     deps = [
         "//pkg/cli/exit",
         "//pkg/kv/kvserver/concurrency/lock",
@@ -179,7 +188,7 @@ go_test(
     size = "small",
     srcs = ["string_test.go"],
     deps = [
-        ":roachpb",
+        ":with-mocks",
         "//pkg/cli/exit",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
