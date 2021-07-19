@@ -36,6 +36,14 @@ const FollowerReadTimestampFunctionName = "follower_read_timestamp"
 // "experimental_" function, which we keep for backwards compatibility.
 const FollowerReadTimestampExperimentalFunctionName = "experimental_follower_read_timestamp"
 
+// WithMinTimestampFunctionName is the name of the function that can be used
+// with AOST clauses to generate a bounded staleness at a fixed timestamp.
+const WithMinTimestampFunctionName = "with_min_timestamp"
+
+// WithMaxStalenessFunctionName is the name of the function that can be used
+// with AOST clauses to generate a bounded staleness at a maximum interval.
+const WithMaxStalenessFunctionName = "with_max_staleness"
+
 var errInvalidExprForAsOf = errors.Errorf("AS OF SYSTEM TIME: only constant expressions or " +
 	FollowerReadTimestampFunctionName + " are allowed")
 

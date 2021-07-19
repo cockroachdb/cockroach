@@ -30,7 +30,7 @@ Bounded staleness queries are limited in use to single-statement read-only
 queries, and only a subset of read-only queries at that. They will be accessed
 similarly to exact bounded staleness reads - through a pair of new functions
 that can be passed to an `AS OF SYSTEM TIME` clause:
-- `SELECT ... FROM ... AS OF SYSTEM TIME with_min_timestamp(TIMESTAMP)`
+- `SELECT ... FROM ... AS OF SYSTEM TIME with_min_timestamp(TIMESTAMPTZ)`
 - `SELECT ... FROM ... AS OF SYSTEM TIME with_max_staleness(INTERVAL)`
 
 The approach discussed in this RFC has a prototype in
@@ -71,10 +71,10 @@ locally without blocking is used.
 
 Bounded staleness reads will be exposed through a pair of new functions that can
 be passed to an `AS OF SYSTEM TIME` clause:
-- `SELECT ... FROM ... AS OF SYSTEM TIME with_min_timestamp(TIMESTAMP)`
+- `SELECT ... FROM ... AS OF SYSTEM TIME with_min_timestamp(TIMESTAMPTZ)`
 - `SELECT ... FROM ... AS OF SYSTEM TIME with_max_staleness(INTERVAL)`
 
-`with_min_timestamp(TIMESTAMP)` defines a minimum timestamp to perform the
+`with_min_timestamp(TIMESTAMPTZ)` defines a minimum timestamp to perform the
 bounded staleness read at. The actual timestamp of the read may be equal to or
 later than the provided timestamp, but can not be before the provided timestamp.
 This is useful to request a read from nearby followers, if possible, while
@@ -452,8 +452,8 @@ read.
 ### SQL Parser
 
 The change will introduce two new SQL builtin functions: 
-- `with_min_timestamp(TIMESTAMP) -> TIMESTAMP`
-- `with_max_staleness(INTERVAL) -> INTERVAL`
+- `with_min_timestamp(TIMESTAMPTZ) -> TIMESTAMPTZ
+- `with_max_staleness(INTERVAL) -> TIMESTAMPTZ`
 
 These functions will need special casing in `tree.EvalAsOfTimestamp`.
 
