@@ -19,6 +19,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
+	"math/rand"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -926,7 +927,7 @@ tar cvf certs.tar certs
 		}()
 
 		if err := func() error {
-			return c.scp(fmt.Sprintf("%s@%s:certs.tar", c.user(1), c.host(1)), tmpfile.Name())
+			return c.scp(fmt.Sprintf("%s@%s:certs.tar", c.user(1), c.host(1)), tmpfile.Name(), false)
 		}(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -1110,7 +1111,7 @@ func (c *SyncedCluster) Put(src, dest string) {
 				return
 			}
 
-			err = c.scp(from, to)
+			err = c.scp(from, to, true)
 			results <- result{i, err}
 
 			if err != nil {
@@ -1458,7 +1459,7 @@ func (c *SyncedCluster) Get(src, dest string) {
 				return
 			}
 
-			err := c.scp(fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[0]), c.host(c.Nodes[i]), src), dest)
+			err := c.scp(fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[0]), c.host(c.Nodes[i]), src), dest, false)
 			if err == nil {
 				// Make sure all created files and directories are world readable.
 				// The CRDB process intentionally sets a 0007 umask (resulting in
@@ -1637,11 +1638,55 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 	return syscall.Exec(sshPath, allArgs, os.Environ())
 }
 
-func (c *SyncedCluster) scp(src, dest string) error {
+func tarFile(string) (string, error) {
+	// Generating a random filename.
+	fileName := rand.Int()
+	// Creating a temporary tarball file.
+	tarCmd := exec.Command("bash", "-c", fmt.Sprintf("tar cjf ../%d.tar.gz .", fileName))
+	out, err := tarCmd.CombinedOutput()
+	if err != nil {
+		return "", errors.Wrapf(err, "~ %s\n%s", out)
+	}
+	return string(out[0]), nil
+}
+
+func cleanFile(name string) {
+	err := os.Remove(name)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+}
+
+func (c *SyncedCluster) scp(src, dest string, put bool) error {
+	// Defining common args.
 	args := []string{
 		"scp", "-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
 	}
+	// If put is true, need to clean tarball from dest and source after untar it.
+	if put {
+		// tarball the file
+		tmpFile, _ := tarFile(src)
+		// scp the file
+		args = append(args, sshAuthArgs()...)
+		args = append(args, tmpFile, dest)
+		cmd := exec.Command(args[0], args[1:]...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return errors.Wrapf(err, "~ %s\n%s", strings.Join(args, " "), out)
+		}
+		// Clean tmpFile in src.
+		defer cleanFile(tmpFile)
+		//Extract tarball file in source and remove.
+		extractCmd := exec.Command("bash", "-c", fmt.Sprintf("ssh %s | tar -xzvf %s && rm %s", dest, tmpFile, tmpFile))
+		out, err = extractCmd.CombinedOutput()
+		if err != nil {
+			return errors.Wrapf(err, "~ %s\n%s", out)
+		}
+		return nil
+	}
+
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
 	cmd := exec.Command(args[0], args[1:]...)
