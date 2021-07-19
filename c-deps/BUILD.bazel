@@ -120,30 +120,35 @@ cmake(
 )
 
 # Define the build target for kerberos.
-#
-# TODO(irfansharif): Kerboros is not used for anything other than Linux.
-# The following has not been tested as yet.
 configure_make(
     name = "libkrb5",
     autoreconf = True,
+    autoreconf_directory = "src",
     configure_command = "src/configure",
-    configure_env_vars = {
-        "CPFLAGS": "",
-        "CXXFLAGS": "",
-    },
+    configure_in_place = True,
     configure_options = [
         "--enable-static",
         "--disable-shared",
-    ] + select({
-        "//conditions:default": ["AR=/usr/bin/ar"],
-    }),
+    ],
     lib_source = "@krb5//:all",
     make_commands = [
         "make",
         "mkdir -p libkrb5/lib",
-        "cp libkrb5/libgssapi_krb5.a libkrb5/lib",
+        "cp lib/libcom_err.a libkrb5/lib",
+        "cp lib/libgssapi_krb5.a libkrb5/lib",
+        "cp lib/libkrb5.a libkrb5/lib",
+        "cp lib/libkrb5support.a libkrb5/lib",
+        "cp lib/libk5crypto.a libkrb5/lib",
+        "mkdir -p libkrb5/include/gssapi",
+        "cp include/gssapi/gssapi.h libkrb5/include/gssapi",
     ],
-    out_static_libs = ["libgssapi_krb5.a"],
+    out_static_libs = [
+        "libgssapi_krb5.a",
+        "libkrb5.a",
+        "libkrb5support.a",
+        "libk5crypto.a",
+        "libcom_err.a",
+    ],
     visibility = ["//visibility:public"],
 )
 
