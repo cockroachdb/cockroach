@@ -151,3 +151,6 @@ ORDER BY id
 ----
 id  active  crdb_internal.pb_to_json
 10  true    {"id": "10", "state": "ACTIVE"}
+
+query error tenant resource limits require a CCL binary
+SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)
