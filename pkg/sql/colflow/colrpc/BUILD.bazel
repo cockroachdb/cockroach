@@ -11,7 +11,7 @@ go_library(
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/colserde",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
@@ -47,7 +47,7 @@ go_test(
         "//pkg/col/coldata",
         "//pkg/col/coldatatestutils",
         "//pkg/col/colserde",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexec/colexecutils",

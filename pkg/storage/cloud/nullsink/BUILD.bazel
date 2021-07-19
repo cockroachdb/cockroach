@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/storage/cloud",
@@ -20,7 +20,7 @@ go_test(
     embed = [":nullsink"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/storage/cloud",
         "//pkg/util/leaktest",

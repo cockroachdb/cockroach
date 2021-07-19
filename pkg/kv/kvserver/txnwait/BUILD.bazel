@@ -12,7 +12,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/storage/enginepb",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
@@ -33,7 +33,7 @@ go_test(
     embed = [":txnwait"],
     deps = [
         "//pkg/kv",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/util/hlc",

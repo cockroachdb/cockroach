@@ -19,7 +19,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/migration",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/server/serverpb",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catalogkv",

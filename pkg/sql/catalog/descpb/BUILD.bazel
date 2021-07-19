@@ -86,7 +86,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex",
-        "//pkg/roachpb",  # keep
+        "//pkg/roachpb:with-mocks",  # keep
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",

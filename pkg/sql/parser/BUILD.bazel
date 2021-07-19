@@ -22,7 +22,7 @@ go_library(
     deps = [
         "//pkg/docs",
         "//pkg/geo/geopb",  # keep
-        "//pkg/roachpb",  # keep
+        "//pkg/roachpb:with-mocks",  # keep
         "//pkg/security",  # keep
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",

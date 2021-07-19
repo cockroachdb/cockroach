@@ -11,7 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
@@ -30,7 +30,7 @@ go_test(
     embed = [":spanset"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

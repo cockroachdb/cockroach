@@ -11,7 +11,7 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/syncutil",
         "@com_github_olekukonko_tablewriter//:tablewriter",
     ],
@@ -24,7 +24,7 @@ go_test(
     embed = [":storage"],
     deps = [
         "//pkg/kv/kvserver/closedts/ctpb",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
