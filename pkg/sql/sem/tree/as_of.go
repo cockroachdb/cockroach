@@ -12,6 +12,7 @@ package tree
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -44,39 +45,102 @@ const WithMinTimestampFunctionName = "with_min_timestamp"
 // with AOST clauses to generate a bounded staleness at a maximum interval.
 const WithMaxStalenessFunctionName = "with_max_staleness"
 
-var errInvalidExprForAsOf = errors.Errorf("AS OF SYSTEM TIME: only constant expressions or " +
-	FollowerReadTimestampFunctionName + " are allowed")
-
 // IsFollowerReadTimestampFunction determines whether the AS OF SYSTEM TIME
 // clause contains a simple invocation of the follower_read_timestamp function.
 func IsFollowerReadTimestampFunction(asOf AsOfClause, searchPath sessiondata.SearchPath) bool {
+	return resolveAsOfFuncType(asOf, searchPath) == asOfFuncTypeFollowerRead
+}
+
+type asOfFuncType int
+
+const (
+	asOfFuncTypeInvalid asOfFuncType = iota
+	asOfFuncTypeFollowerRead
+	asOfFuncTypeBoundedStaleness
+)
+
+func resolveAsOfFuncType(asOf AsOfClause, searchPath sessiondata.SearchPath) asOfFuncType {
 	fe, ok := asOf.Expr.(*FuncExpr)
 	if !ok {
-		return false
+		return asOfFuncTypeInvalid
 	}
 	def, err := fe.Func.Resolve(searchPath)
 	if err != nil {
-		return false
+		return asOfFuncTypeInvalid
 	}
-	return def.Name == FollowerReadTimestampFunctionName || def.Name == FollowerReadTimestampExperimentalFunctionName
+	switch def.Name {
+	case FollowerReadTimestampFunctionName, FollowerReadTimestampExperimentalFunctionName:
+		return asOfFuncTypeFollowerRead
+	case WithMinTimestampFunctionName, WithMaxStalenessFunctionName:
+		return asOfFuncTypeBoundedStaleness
+	}
+	return asOfFuncTypeInvalid
 }
 
 // AsOfSystemTime represents the result from the AS OF SYSTEM TIME clause.
 type AsOfSystemTime struct {
 	// Timestamp is the HLC timestamp evaluated from the AS OF SYSTEM TIME clause.
 	Timestamp hlc.Timestamp
+	// BoundedStaleness is true if the AS OF SYSTEM TIME clause specifies bounded
+	// staleness should be used. If true, Timestamp specifies a minimum bound
+	// to read from - data can be read from a time later than Timestamp.
+	// If false, data is returned at the exact Timestamp specified.
+	BoundedStaleness bool
+}
+
+type evalAsOfTimestampOptions struct {
+	allowBoundedStaleness bool
+}
+
+// EvalAsOfTimestampOption is an option to pass into EvalAsOfTimestamp.
+type EvalAsOfTimestampOption func(o evalAsOfTimestampOptions) evalAsOfTimestampOptions
+
+// EvalAsOfTimestampOptionAllowBoundedStaleness signifies EvalAsOfTimestamp
+// should not error if a bounded staleness query is found.
+var EvalAsOfTimestampOptionAllowBoundedStaleness EvalAsOfTimestampOption = func(
+	o evalAsOfTimestampOptions,
+) evalAsOfTimestampOptions {
+	o.allowBoundedStaleness = true
+	return o
 }
 
 // EvalAsOfTimestamp evaluates the timestamp argument to an AS OF SYSTEM TIME query.
 func EvalAsOfTimestamp(
-	ctx context.Context, asOf AsOfClause, semaCtx *SemaContext, evalCtx *EvalContext,
+	ctx context.Context,
+	asOf AsOfClause,
+	semaCtx *SemaContext,
+	evalCtx *EvalContext,
+	opts ...EvalAsOfTimestampOption,
 ) (AsOfSystemTime, error) {
+	o := evalAsOfTimestampOptions{}
+	for _, f := range opts {
+		o = f(o)
+	}
+
+	newInvalidExprError := func() error {
+		var optFuncs string
+		if o.allowBoundedStaleness {
+			optFuncs = fmt.Sprintf(
+				", %s, %s,",
+				WithMinTimestampFunctionName,
+				WithMaxStalenessFunctionName,
+			)
+		}
+		return errors.Errorf(
+			"AS OF SYSTEM TIME: only constant expressions%s or %s are allowed",
+			optFuncs,
+			FollowerReadTimestampFunctionName,
+		)
+	}
+
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
 	// context.
 	scalarProps := &semaCtx.Properties
 	defer scalarProps.Restore(*scalarProps)
 	scalarProps.Require("AS OF SYSTEM TIME", RejectSpecial|RejectSubqueries)
+
+	var ret AsOfSystemTime
 
 	// In order to support the follower reads feature we permit this expression
 	// to be a simple invocation of the follower_read_timestamp function.
@@ -85,8 +149,15 @@ func EvalAsOfTimestamp(
 	// string.
 	var te TypedExpr
 	if _, ok := asOf.Expr.(*FuncExpr); ok {
-		if !IsFollowerReadTimestampFunction(asOf, semaCtx.SearchPath) {
-			return AsOfSystemTime{}, errInvalidExprForAsOf
+		switch resolveAsOfFuncType(asOf, semaCtx.SearchPath) {
+		case asOfFuncTypeFollowerRead:
+		case asOfFuncTypeBoundedStaleness:
+			if !o.allowBoundedStaleness {
+				return AsOfSystemTime{}, newInvalidExprError()
+			}
+			ret.BoundedStaleness = true
+		default:
+			return AsOfSystemTime{}, newInvalidExprError()
 		}
 		var err error
 		te, err = asOf.Expr.TypeCheck(ctx, semaCtx, types.TimestampTZ)
@@ -100,7 +171,7 @@ func EvalAsOfTimestamp(
 			return AsOfSystemTime{}, err
 		}
 		if !IsConst(evalCtx, te) {
-			return AsOfSystemTime{}, errInvalidExprForAsOf
+			return AsOfSystemTime{}, newInvalidExprError()
 		}
 	}
 
@@ -110,13 +181,11 @@ func EvalAsOfTimestamp(
 	}
 
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
-	ts, err := DatumToHLC(evalCtx, stmtTimestamp, d)
+	ret.Timestamp, err = DatumToHLC(evalCtx, stmtTimestamp, d)
 	if err != nil {
 		return AsOfSystemTime{}, errors.Wrap(err, "AS OF SYSTEM TIME")
 	}
-	return AsOfSystemTime{
-		Timestamp: ts,
-	}, nil
+	return ret, nil
 }
 
 // DatumToHLC performs the conversion from a Datum to an HLC timestamp.
