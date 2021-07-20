@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1515,9 +1514,6 @@ func NewTableDesc(
 					"to enable, use SET experimental_enable_implicit_column_partitioning = true",
 				)
 			}
-			if err := checkClusterSupportsPartitionByAll(evalCtx); err != nil {
-				return nil, err
-			}
 			desc.PartitionAllBy = true
 			partitionAllBy = n.PartitionByTable.PartitionBy
 		}
@@ -2734,14 +2730,4 @@ func hashShardedIndexesOnRegionalByRowError() error {
 
 func interleaveOnRegionalByRowError() error {
 	return pgerror.New(pgcode.FeatureNotSupported, "interleaved tables are not compatible with REGIONAL BY ROW tables")
-}
-
-func checkClusterSupportsPartitionByAll(evalCtx *tree.EvalContext) error {
-	if !evalCtx.Settings.Version.IsActive(evalCtx.Context, clusterversion.MultiRegionFeatures) {
-		return pgerror.Newf(
-			pgcode.ObjectNotInPrerequisiteState,
-			`cannot use PARTITION ALL BY until the cluster upgrade is finalized`,
-		)
-	}
-	return nil
 }

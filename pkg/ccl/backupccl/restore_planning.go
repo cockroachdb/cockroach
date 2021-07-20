@@ -2076,10 +2076,7 @@ func planDatabaseModifiersForRestore(
 	if defaultPrimaryRegion == "" {
 		return nil, nil, nil
 	}
-	if err := multiregionccl.CheckClusterSupportsMultiRegion(
-		&p.ExtendedEvalContext().EvalContext,
-		p.ExecCfg(),
-	); err != nil {
+	if err := multiregionccl.CheckClusterSupportsMultiRegion(p.ExecCfg()); err != nil {
 		return nil, nil, errors.WithHintf(
 			err,
 			"try disabling the default PRIMARY REGION by using RESET CLUSTER SETTING %s",
