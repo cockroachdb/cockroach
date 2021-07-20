@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -81,18 +80,9 @@ func (b *buildContext) alterTableAddColumn(
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.EvalCtx.SessionData)
 	}
 
-	version := b.EvalCtx.Settings.Version.ActiveVersionOrEmpty(ctx)
 	toType, err := tree.ResolveType(ctx, d.Type, b.SemaCtx.GetTypeResolver())
 	if err != nil {
 		panic(err)
-	}
-	supported := isTypeSupportedInVersion(version, toType)
-	if !supported {
-		panic(pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"type %s is not supported until version upgrade is finalized",
-			toType.SQLString(),
-		))
 	}
 
 	// User defined columns are not supported, since we don't
@@ -583,30 +573,6 @@ func (b *buildContext) nextIndexID(table catalog.TableDescriptor) descpb.IndexID
 		nextMaxID = maxIdxID + 1
 	}
 	return nextMaxID
-}
-
-// minimumTypeUsageVersions defines the minimum version needed for a new
-// data type.
-var minimumTypeUsageVersions = map[types.Family]clusterversion.Key{
-	types.GeographyFamily: clusterversion.GeospatialType,
-	types.GeometryFamily:  clusterversion.GeospatialType,
-	types.Box2DFamily:     clusterversion.Box2DType,
-}
-
-// isTypeSupportedInVersion returns whether a given type is supported in the given version.
-// This is copied straight from the sql package.
-func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) bool {
-	// For these checks, if we have an array, we only want to find whether
-	// we support the array contents.
-	if t.Family() == types.ArrayFamily {
-		t = t.ArrayContents()
-	}
-
-	minVersion, ok := minimumTypeUsageVersions[t.Family()]
-	if !ok {
-		return true
-	}
-	return v.IsActive(minVersion)
 }
 
 func (b *buildContext) maybeCleanTableSequenceRefs(
