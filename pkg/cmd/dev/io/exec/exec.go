@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recorder"
+	"github.com/cockroachdb/errors"
 )
 
 // Exec is a convenience wrapper around the stdlib os/exec package. It lets us:
@@ -99,6 +100,22 @@ func WithWorkingDir(dir string) func(e *Exec) {
 // CommandContext wraps around exec.CommandContext, executing the named program
 // with the given arguments.
 func (e *Exec) CommandContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return e.commandContextImpl(ctx, false, name, args...)
+}
+
+// CommandContextSilent is like CommandContext, but does not take over
+// stdout/stderr. It's to be used for "internal" operations.
+func (e *Exec) CommandContextSilent(
+	ctx context.Context, name string, args ...string,
+) ([]byte, error) {
+	return e.commandContextImpl(ctx, true, name, args...)
+}
+
+// CommandContextNoRecord is like CommandContext, but doesn't capture stdout.
+// To be used when we want to run a subprocess but deliberately want to pass
+// stdin, stdout, and stderr right to the terminal. Note that this can't be
+// used for recording and the process will panic if you try to record with it.
+func (e *Exec) CommandContextNoRecord(ctx context.Context, name string, args ...string) error {
 	var command string
 	if len(args) > 0 {
 		command = fmt.Sprintf("%s %s", name, strings.Join(args, " "))
@@ -107,45 +124,33 @@ func (e *Exec) CommandContext(ctx context.Context, name string, args ...string) 
 	}
 	e.logger.Print(command)
 
-	var buffer bytes.Buffer
-	if e.Recorder == nil || e.Recorder.Recording() {
+	if e.Recorder != nil && e.Recorder.Recording() {
+		return errors.New("Can't call CommandContextNoRecord while recording")
+	}
+
+	if e.Recorder == nil {
 		// Do the real thing.
 		cmd := exec.CommandContext(ctx, name, args...)
-		cmd.Stdout = io.MultiWriter(e.stdout, &buffer)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = e.stdout
 		cmd.Stderr = e.stderr
 		cmd.Dir = e.dir
 
 		if err := cmd.Start(); err != nil {
-			return nil, err
+			return err
 		}
 		if err := cmd.Wait(); err != nil {
-			return nil, err
+			return err
 		}
+		return nil
 	}
 
-	if e.Recorder == nil {
-		return buffer.Bytes(), nil
-	}
-
-	if e.Recording() {
-		if err := e.record(command, buffer.String()); err != nil {
-			return nil, err
-		}
-		return buffer.Bytes(), nil
-	}
-
-	output, err := e.replay(command)
-	if err != nil {
-		return nil, err
-	}
-
-	return []byte(output), nil
+	_, err := e.replay(command)
+	return err
 }
 
-// CommandContextSilent is like CommandContext, but does not take over
-// stdout/stderr. It's to be used for "internal" operations.
-func (e *Exec) CommandContextSilent(
-	ctx context.Context, name string, args ...string,
+func (e *Exec) commandContextImpl(
+	ctx context.Context, silent bool, name string, args ...string,
 ) ([]byte, error) {
 	var command string
 	if len(args) > 0 {
@@ -159,8 +164,13 @@ func (e *Exec) CommandContextSilent(
 	if e.Recorder == nil || e.Recorder.Recording() {
 		// Do the real thing.
 		cmd := exec.CommandContext(ctx, name, args...)
-		cmd.Stdout = &buffer
-		cmd.Stderr = ioutil.Discard
+		if silent {
+			cmd.Stdout = &buffer
+			cmd.Stderr = ioutil.Discard
+		} else {
+			cmd.Stdout = io.MultiWriter(e.stdout, &buffer)
+			cmd.Stderr = e.stderr
+		}
 		cmd.Dir = e.dir
 
 		if err := cmd.Start(); err != nil {

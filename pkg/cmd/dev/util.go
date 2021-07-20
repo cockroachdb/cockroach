@@ -24,7 +24,7 @@ import (
 )
 
 // To be turned on for tests.
-var predictableDevProfile bool
+var isTesting bool
 
 func mustGetFlagString(cmd *cobra.Command, name string) string {
 	val, err := cmd.Flags().GetString(name)
@@ -93,7 +93,7 @@ func getConfigFlags() []string {
 	if skipDevConfig {
 		return []string{}
 	}
-	if !predictableDevProfile && runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
+	if !isTesting && runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
 		return []string{"--config=devdarwinx86_64"}
 	}
 	return []string{"--config=dev"}

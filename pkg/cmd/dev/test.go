@@ -186,7 +186,7 @@ func (d *dev) runUnitTest(cmd *cobra.Command, pkgs []string) error {
 		args = append(args, "--test_output", "errors")
 	}
 
-	_, err := d.exec.CommandContext(ctx, "bazel", args...)
+	err := d.exec.CommandContextNoRecord(ctx, "bazel", args...)
 	return err
 }
 
