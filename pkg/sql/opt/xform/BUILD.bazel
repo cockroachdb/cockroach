@@ -56,6 +56,8 @@ go_test(
     srcs = [
         "coster_test.go",
         "general_funcs_test.go",
+        "join_funcs_export_test.go",
+        "join_funcs_test.go",
         "join_order_builder_test.go",
         "main_test.go",
         "optimizer_test.go",
@@ -73,6 +75,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
+        "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/testutils",
