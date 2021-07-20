@@ -298,6 +298,9 @@ const (
 	DefaultPrivileges
 	// ZonesTableForSecondaryTenants adds system.zones for all secondary tenants.
 	ZonesTableForSecondaryTenants
+	// UseKeyEncodeForHashShardedIndexes changes the expression used in hash
+	// sharded indexes from string casts to crdb_internal.datums_to_bytes.
+	UseKeyEncodeForHashShardedIndexes
 	// Step (1): Add new versions here.
 )
 
@@ -500,9 +503,14 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DefaultPrivileges,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 142},
-	}, {
+	},
+	{
 		Key:     ZonesTableForSecondaryTenants,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 144},
+	},
+	{
+		Key:     UseKeyEncodeForHashShardedIndexes,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 146},
 	},
 	// Step (2): Add new versions here.
 }
