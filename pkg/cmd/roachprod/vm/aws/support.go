@@ -159,6 +159,7 @@ func writeStartupScript(extraMountOpts string, useMultiple bool) (string, error)
 	type tmplParams struct {
 		ExtraMountOpts   string
 		UseMultipleDisks bool
+		Zfs              bool
 	}
 
 	args := tmplParams{ExtraMountOpts: extraMountOpts, UseMultipleDisks: useMultiple}

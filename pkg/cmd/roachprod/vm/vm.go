@@ -128,6 +128,13 @@ func (vl List) ProviderIDs() []string {
 	return ret
 }
 
+const (
+	// Zfs refers to the zfs file system.
+	Zfs = "zfs"
+	// Ext4 refers to the ext4 file system.
+	Ext4 = "ext4"
+)
+
 // CreateOpts is the set of options when creating VMs.
 type CreateOpts struct {
 	ClusterName    string
@@ -139,6 +146,8 @@ type CreateOpts struct {
 		// NoExt4Barrier, if set, makes the "-o nobarrier" flag be used when
 		// mounting the SSD. Ignored if UseLocalSSD is not set.
 		NoExt4Barrier bool
+		// The file system to be used. This is set to "ext4" by default.
+		FileSystem string
 	}
 	OsVolumeSize int
 }
