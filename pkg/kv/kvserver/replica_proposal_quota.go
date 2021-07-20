@@ -15,6 +15,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -74,6 +75,10 @@ func quotaPoolEnabledForRange(desc roachpb.RangeDescriptor) bool {
 	return !bytes.HasPrefix(desc.StartKey, keys.NodeLivenessPrefix)
 }
 
+var logSlowRaftProposalQuotaAcquisition = quotapool.OnSlowAcquisition(
+	base.SlowRequestThreshold, quotapool.LogSlowAcquisition,
+)
+
 func (r *Replica) updateProposalQuotaRaftMuLocked(
 	ctx context.Context, lastLeaderID roachpb.ReplicaID,
 ) {
@@ -101,7 +106,11 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// through the code paths where we acquire quota from the pool. To
 			// offset this we reset the quota pool whenever leadership changes
 			// hands.
-			r.mu.proposalQuota = quotapool.NewIntPool(r.rangeStr.String(), uint64(r.store.cfg.RaftProposalQuota))
+			r.mu.proposalQuota = quotapool.NewIntPool(
+				"raft proposal",
+				uint64(r.store.cfg.RaftProposalQuota),
+				logSlowRaftProposalQuotaAcquisition,
+			)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), timeutil.Now())
 		} else if r.mu.proposalQuota != nil {
