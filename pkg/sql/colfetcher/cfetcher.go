@@ -678,11 +678,15 @@ func (rf *cFetcher) StartScan(
 
 	// Note that we pass a nil memMonitor here, because the cfetcher does its own
 	// memory accounting.
+	bytesLimit := row.DefaultBatchBytesLimit
+	if !limitBatches {
+		bytesLimit = row.NoBytesLimit
+	}
 	f, err := row.NewKVFetcher(
 		txn,
 		spans,
 		rf.reverse,
-		limitBatches,
+		bytesLimit,
 		firstBatchLimit,
 		rf.lockStrength,
 		rf.lockWaitPolicy,

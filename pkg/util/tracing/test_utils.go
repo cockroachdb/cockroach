@@ -40,3 +40,18 @@ func LogsContainMsg(sp tracingpb.RecordedSpan, msg string) bool {
 	}
 	return false
 }
+
+// CountLogMessages counts the messages containing msg.
+func CountLogMessages(sp tracingpb.RecordedSpan, msg string) int {
+	res := 0
+	for _, l := range sp.Logs {
+		// NOTE: With out logs, each LogRecord has a single field ("event") and
+		// value.
+		for _, f := range l.Fields {
+			if strings.Contains(f.Value, msg) {
+				res++
+			}
+		}
+	}
+	return res
+}

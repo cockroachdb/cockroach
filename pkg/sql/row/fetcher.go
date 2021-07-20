@@ -556,6 +556,16 @@ func (rf *Fetcher) GetTables() []catalog.Descriptor {
 	return ret
 }
 
+// NoRowLimit can be passed to Fetcher.StartScan to signify that the caller
+// doesn't want to limit the number of result rows for each scan request.
+const NoRowLimit int64 = 0
+
+// NoBytesLimit can be passed to Fetcher.StartScan to signify that the caller
+// doesn't want to limit the size of results for each scan request.
+//
+// See also DefaultBatchBytesLimit.
+const NoBytesLimit int64 = 0
+
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 //
@@ -577,7 +587,7 @@ func (rf *Fetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
-	limitBatches bool,
+	batchBytesLimit int64,
 	rowLimitHint int64,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
@@ -591,7 +601,7 @@ func (rf *Fetcher) StartScan(
 		txn,
 		spans,
 		rf.reverse,
-		limitBatches,
+		batchBytesLimit,
 		rf.rowLimitToKeyLimit(rowLimitHint),
 		rf.lockStrength,
 		rf.lockWaitPolicy,
@@ -626,7 +636,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	initialTimestamp hlc.Timestamp,
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,
-	limitBatches bool,
+	batchBytesLimit int64,
 	rowLimitHint int64,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
@@ -684,7 +694,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		sendFunc(sendFn),
 		spans,
 		rf.reverse,
-		limitBatches,
+		batchBytesLimit,
 		rf.rowLimitToKeyLimit(rowLimitHint),
 		rf.lockStrength,
 		rf.lockWaitPolicy,

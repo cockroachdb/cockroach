@@ -34,9 +34,10 @@ import (
 type tableReader struct {
 	execinfra.ProcessorBase
 
-	spans       roachpb.Spans
-	limitHint   int64
-	parallelize bool
+	spans           roachpb.Spans
+	limitHint       int64
+	parallelize     bool
+	batchBytesLimit int64
 
 	scanStarted bool
 
@@ -86,6 +87,12 @@ func newTableReader(
 	// Parallelize shouldn't be set when there's a limit hint, but double-check
 	// just in case.
 	tr.parallelize = spec.Parallelize && tr.limitHint == 0
+	if !tr.parallelize {
+		tr.batchBytesLimit = spec.BatchBytesLimit
+		if tr.batchBytesLimit == 0 {
+			tr.batchBytesLimit = row.DefaultBatchBytesLimit
+		}
+	}
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	tableDesc := spec.BuildTableDescriptor()
@@ -191,11 +198,20 @@ func (tr *tableReader) Start(ctx context.Context) {
 
 func (tr *tableReader) startScan(ctx context.Context) error {
 	limitBatches := !tr.parallelize
+	var bytesLimit int64
+	if !limitBatches {
+		bytesLimit = row.NoBytesLimit
+	} else {
+		bytesLimit = tr.batchBytesLimit
+		if bytesLimit == 0 {
+			bytesLimit = row.DefaultBatchBytesLimit
+		}
+	}
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			ctx, tr.FlowCtx.Txn, tr.spans, limitBatches, tr.limitHint,
+			ctx, tr.FlowCtx.Txn, tr.spans, bytesLimit, tr.limitHint,
 			tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
@@ -203,7 +219,7 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
 		err = tr.fetcher.StartInconsistentScan(
 			ctx, tr.FlowCtx.Cfg.DB, initialTS, tr.maxTimestampAge, tr.spans,
-			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
+			bytesLimit, tr.limitHint, tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	}
