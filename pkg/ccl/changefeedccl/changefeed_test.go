@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -4143,4 +4144,44 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		t.Run(fmt.Sprintf("cloudstorage-limit=%s", humanize.Bytes(uint64(sz))), cloudStorageTest(testFn, feedTestNoTenants))
 		t.Run(fmt.Sprintf("kafka-limit=%s", humanize.Bytes(uint64(sz))), kafkaTest(testFn, feedTestNoTenants))
 	}
+}
+
+func TestCheckpointFrequency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const frontierAdvanced = true
+	const frontierDidNotAdvance = false
+
+	// Test the logic around throttling of job progress updates.
+	// It's pretty difficult to set up a fast end-to-end test since we need to simulate slow
+	// job table update.  Instead, we just test canCheckpointHighWatermark directly.
+	ts := timeutil.NewManualTime(timeutil.Now())
+	js := newJobState(nil /* job */, cluster.MakeTestingClusterSettings(), ts)
+	ctx := context.Background()
+
+	require.False(t, js.canCheckpointHighWatermark(ctx, frontierDidNotAdvance))
+	require.True(t, js.canCheckpointHighWatermark(ctx, frontierAdvanced))
+
+	// Pretend our mean time to update progress is 1 minute, and we just updated progress.
+	js.lastProgressUpdate = ts.Now()
+	js.checkpointDuration = time.Minute
+
+	// Even though frontier advanced, we shouldn't checkpoint.
+	require.False(t, js.canCheckpointHighWatermark(ctx, frontierAdvanced))
+	require.True(t, js.progressUpdatesSkipped)
+
+	// Once enough time elapsed, we allow progress update, even if frontier did not advance.
+	ts.Advance(js.checkpointDuration)
+	require.True(t, js.canCheckpointHighWatermark(ctx, frontierDidNotAdvance))
+	require.False(t, js.progressUpdatesSkipped)
+
+	// If we also specify minimum amount of time between updates, we would skip updates
+	// until enough time has elapsed.
+	minAdvance := 10 * time.Minute
+	changefeedbase.MinHighWaterMarkCheckpointAdvance.Override(ctx, &js.settings.SV, minAdvance)
+
+	require.False(t, js.canCheckpointHighWatermark(ctx, frontierAdvanced))
+	ts.Advance(minAdvance)
+	require.True(t, js.canCheckpointHighWatermark(ctx, frontierAdvanced))
 }
