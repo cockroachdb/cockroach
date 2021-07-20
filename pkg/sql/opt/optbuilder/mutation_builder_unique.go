@@ -400,7 +400,7 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 	ordinals = tableOrdinals(tabMeta.Table, columnKinds{
 		includeMutations:       false,
 		includeSystem:          false,
-		includeVirtualInverted: false,
+		includeInverted:        false,
 		includeVirtualComputed: true,
 	})
 	return h.mb.b.buildScan(

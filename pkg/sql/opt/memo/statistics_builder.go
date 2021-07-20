@@ -511,22 +511,20 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 
 	tab := sb.md.Table(tabID)
 
-	// Create a mapping from table column ordinals to inverted index virtual column
-	// ordinals. This allows us to do a fast lookup while iterating over all stats
-	// from a statistic's column to any associated virtual columns. We don't merely
-	// loop over all table columns looking for virtual columns here because other
-	// things may one day use virtual columns and we want these to be explicitly
-	// tied to inverted indexes.
-	invIndexVirtualCols := make(map[int][]int)
+	// Create a mapping from table column ordinals to inverted index column
+	// ordinals. This allows us to do a fast lookup while iterating over all
+	// stats from a statistic's column to any associated inverted columns.
+	// TODO(mgartner): It might be simpler to iterate over all the table columns
+	// looking for inverted columns.
+	invertedIndexCols := make(map[int][]int)
 	for indexI, indexN := 0, tab.IndexCount(); indexI < indexN; indexI++ {
 		index := tab.Index(indexI)
 		if !index.IsInverted() {
 			continue
 		}
-		// The inverted column of an inverted index is virtual.
-		col := index.VirtualInvertedColumn()
+		col := index.InvertedColumn()
 		srcOrd := col.InvertedSourceColumnOrdinal()
-		invIndexVirtualCols[srcOrd] = append(invIndexVirtualCols[srcOrd], col.Ordinal())
+		invertedIndexCols[srcOrd] = append(invertedIndexCols[srcOrd], col.Ordinal())
 	}
 
 	// Make now and annotate the metadata table with it for next time.
@@ -568,13 +566,13 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 					// If this column is invertable, the histogram describes the inverted index
 					// entries, and we need to create a new stat for it, and not apply a histogram
 					// to the source column.
-					virtualColOrds := invIndexVirtualCols[stat.ColumnOrdinal(0)]
-					if len(virtualColOrds) == 0 {
+					invertedColOrds := invertedIndexCols[stat.ColumnOrdinal(0)]
+					if len(invertedColOrds) == 0 {
 						colStat.Histogram = &props.Histogram{}
 						colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram())
 					} else {
-						for _, virtualColOrd := range virtualColOrds {
-							invCol := tabID.ColumnID(virtualColOrd)
+						for _, invertedColOrd := range invertedColOrds {
+							invCol := tabID.ColumnID(invertedColOrd)
 							invCols := opt.MakeColSet(invCol)
 							if invColStat, ok := stats.ColStats.Add(invCols); ok {
 								invColStat.Histogram = &props.Histogram{}
@@ -735,10 +733,9 @@ func (sb *statisticsBuilder) constrainScan(
 	// Calculate distinct counts and histograms for inverted constrained columns
 	// -------------------------------------------------------------------------
 	if scan.InvertedConstraint != nil {
-		// The constrained column is the virtual inverted column in the inverted
-		// index. Using scan.Cols here would also include the PK, which we don't
-		// want.
-		invertedConstrainedCol := scan.Table.ColumnID(idx.VirtualInvertedColumn().Ordinal())
+		// The constrained column is the inverted column in the inverted index.
+		// Using scan.Cols here would also include the PK, which we don't want.
+		invertedConstrainedCol := scan.Table.ColumnID(idx.InvertedColumn().Ordinal())
 		constrainedCols.Add(invertedConstrainedCol)
 		if sb.shouldUseHistogram(relProps) {
 			// TODO(mjibson): set distinctCount to something correct. Max is
