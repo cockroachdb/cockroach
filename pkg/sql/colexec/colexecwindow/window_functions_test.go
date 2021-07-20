@@ -930,34 +930,26 @@ func BenchmarkWindowFunctions(b *testing.B) {
 		return batch
 	}
 
-	windowFns := []execinfrapb.WindowerSpec_WindowFunc{
-		execinfrapb.WindowerSpec_ROW_NUMBER,
-		execinfrapb.WindowerSpec_RANK,
-		execinfrapb.WindowerSpec_DENSE_RANK,
-		execinfrapb.WindowerSpec_PERCENT_RANK,
-		execinfrapb.WindowerSpec_CUME_DIST,
-		execinfrapb.WindowerSpec_NTILE,
-		execinfrapb.WindowerSpec_LAG,
-		execinfrapb.WindowerSpec_LEAD,
-		execinfrapb.WindowerSpec_FIRST_VALUE,
-		execinfrapb.WindowerSpec_LAST_VALUE,
-		execinfrapb.WindowerSpec_NTH_VALUE,
-	}
-
 	// The number of rows should be a multiple of coldata.BatchSize().
 	rowsOptions := []int{4 * coldata.BatchSize(), 32 * coldata.BatchSize()}
 
-	for _, windowFn := range windowFns {
+	for windowFnIdx := 0; windowFnIdx < len(execinfrapb.WindowerSpec_WindowFunc_name); windowFnIdx++ {
+		windowFn := execinfrapb.WindowerSpec_WindowFunc(windowFnIdx)
 		b.Run(fmt.Sprintf("%v", windowFn), func(b *testing.B) {
 			for _, nRows := range rowsOptions {
 				b.Run(fmt.Sprintf("rows=%d", nRows), func(b *testing.B) {
 					nBatches := nRows / coldata.BatchSize()
 					batch := batchCreator(coldata.BatchSize())
-					b.SetBytes(int64(nRows * (8*numIntCols + numBoolCols)))
 					for _, partitionInput := range []bool{true, false} {
 						b.Run(fmt.Sprintf("partition=%v", partitionInput), func(b *testing.B) {
 							for _, orderInput := range []bool{true, false} {
 								b.Run(fmt.Sprintf("order=%v", orderInput), func(b *testing.B) {
+									// Account only for the argument columns as
+									// well as the output column. All other
+									// columns are internal and should be
+									// ignored.
+									numArgs := windowFnMaxNumArgs[windowFn]
+									b.SetBytes(int64(nRows * 8 * (numArgs + 1)))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
 										source := colexectestutils.NewFiniteChunksSource(

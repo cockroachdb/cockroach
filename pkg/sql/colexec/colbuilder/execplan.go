@@ -217,10 +217,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 			if wf.Func.AggregateFunc != nil {
 				return errors.Newf("aggregate functions used as window functions are not supported")
 			}
-
-			if _, supported := colexecwindow.SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
-				return errors.Newf("window function %s is not supported", wf.String())
-			}
 		}
 		return nil
 
