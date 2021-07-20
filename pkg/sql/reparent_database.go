@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -54,13 +53,6 @@ func (p *planner) ReparentDatabase(
 	// We'll only allow the admin to perform this reparenting action.
 	if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... CONVERT TO SCHEMA"); err != nil {
 		return nil, err
-	}
-
-	// Ensure that the cluster version is high enough to create the schema.
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.UserDefinedSchemas) {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			`creating schemas requires all nodes to be upgraded to %s`,
-			clusterversion.ByKey(clusterversion.UserDefinedSchemas))
 	}
 
 	if string(n.Name) == p.CurrentDatabase() {
