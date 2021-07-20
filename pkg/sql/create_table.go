@@ -1590,15 +1590,8 @@ func NewTableDesc(
 				n.Defs = append(n.Defs, checkConstraint)
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
-			if d.IsVirtual() {
-				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.VirtualComputedColumns) {
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-						"version %v must be finalized to use virtual columns",
-						clusterversion.VirtualComputedColumns)
-				}
-				if d.HasColumnFamily() {
-					return nil, pgerror.Newf(pgcode.Syntax, "virtual columns cannot have family specifications")
-				}
+			if d.IsVirtual() && d.HasColumnFamily() {
+				return nil, pgerror.Newf(pgcode.Syntax, "virtual columns cannot have family specifications")
 			}
 
 			col, idx, expr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
