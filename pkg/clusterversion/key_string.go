@@ -20,7 +20,7 @@ func _() {
 	_ = x[ReplicaVersions-9]
 	_ = x[replacedTruncatedAndRangeAppliedStateMigration-10]
 	_ = x[replacedPostTruncatedAndRangeAppliedStateMigration-11]
-	_ = x[LongRunningMigrations-12]
+	_ = x[deletedLongRunningMigrations-12]
 	_ = x[TruncatedAndRangeAppliedStateMigration-13]
 	_ = x[PostTruncatedAndRangeAppliedStateMigration-14]
 	_ = x[SeparatedIntents-15]
@@ -40,9 +40,9 @@ func _() {
 	_ = x[SQLStatsTable-29]
 }
 
-const _Key_name = "Start20_2NodeMembershipStatusMinPasswordLengthAbortSpanBytesCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1CPutInlineReplicaVersionsreplacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationLongRunningMigrationsTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationSeparatedIntentsTracingVerbosityIndependentSemanticsClosedTimestampsRaftTransportPriorReadSummariesNonVotingReplicasV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTable"
+const _Key_name = "Start20_2NodeMembershipStatusMinPasswordLengthAbortSpanBytesCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1CPutInlineReplicaVersionsreplacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationdeletedLongRunningMigrationsTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationSeparatedIntentsTracingVerbosityIndependentSemanticsClosedTimestampsRaftTransportPriorReadSummariesNonVotingReplicasV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTable"
 
-var _Key_index = [...]uint16{0, 9, 29, 46, 60, 80, 92, 97, 106, 116, 131, 177, 227, 248, 286, 328, 344, 380, 409, 427, 444, 449, 462, 471, 486, 515, 532, 549, 598, 612, 625}
+var _Key_index = [...]uint16{0, 9, 29, 46, 60, 80, 92, 97, 106, 116, 131, 177, 227, 255, 293, 335, 351, 387, 416, 434, 451, 456, 469, 478, 493, 522, 539, 556, 605, 619, 632}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
