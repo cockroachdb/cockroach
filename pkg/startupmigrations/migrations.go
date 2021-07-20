@@ -281,10 +281,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v20.2.
 		name:   "create new system.tenants table",
 		workFn: createTenantsTable,
-		// NB: no dedicated cluster version was introduced for this table at the
-		// time (4272248e573cbaa4fac436b0ea07195fcd648845). The below is the first
-		// cluster version that was added after the system.tenants table.
-		includedInBootstrap: clusterversion.ByKey(clusterversion.AlterColumnTypeGeneral),
+		// This migration does not have a dedicated cluster version key but was
+		// added just before 20.1.5. With the upcoming 21.2 release, all 20.2 and
+		// 21.1 version keys are deprecated and we are certainly not adding any new
+		// ones in those ranges. Until these deprecated version keys are all deleted
+		// we tie this migration to the last 20.2 version key.
+		includedInBootstrap: clusterversion.ByKey(clusterversion.V20_2),
 		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
 	},
 	{

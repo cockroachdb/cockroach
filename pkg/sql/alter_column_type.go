@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -148,16 +147,6 @@ func alterColumnTypeGeneral(
 	cmds tree.AlterTableCmds,
 	tn *tree.TableName,
 ) error {
-	// Make sure that all nodes in the cluster are able to perform
-	// general alter column type conversions.
-	if !params.p.ExecCfg().Settings.Version.IsActive(
-		params.ctx,
-		clusterversion.AlterColumnTypeGeneral,
-	) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to run this alter column type",
-			clusterversion.AlterColumnTypeGeneral)
-	}
 	if !params.SessionData().AlterColumnTypeGeneralEnabled {
 		return pgerror.WithCandidateCode(
 			errors.WithHint(
