@@ -36,7 +36,7 @@ SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = 
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
 colbatchscan            Scan /Table/55/1/2/0
 batch flow coordinator  CPut /Table/55/1/2/0 -> /TUPLE/2:2:Int/3
@@ -49,7 +49,7 @@ SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = 
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
 colbatchscan            Scan /Table/55/1/1/0
 batch flow coordinator  CPut /Table/55/1/1/0 -> /TUPLE/2:2:Int/2
@@ -63,7 +63,7 @@ SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = 
 query TT
 set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
 colbatchscan            Scan /Table/55/1/2/0
 colbatchscan            fetched: /kv/primary/2/v -> /3

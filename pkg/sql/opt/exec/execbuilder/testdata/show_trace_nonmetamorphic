@@ -73,7 +73,7 @@ SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = 
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
 batch flow coordinator  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
 batch flow coordinator  InitPut /Table/54/2/2/0 -> /BYTES/0x89
@@ -87,7 +87,7 @@ SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = 
 query TT
 set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
 batch flow coordinator  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
 batch flow coordinator  InitPut /Table/54/2/2/0 -> /BYTES/0x89
@@ -99,7 +99,7 @@ SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = 
 query TT
 set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
 batch flow coordinator  CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
 batch flow coordinator  InitPut /Table/54/2/2/0 -> /BYTES/0x8a
@@ -176,7 +176,7 @@ SET tracing = on,kv,results; DELETE FROM t.kv; SET tracing = off
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
 colbatchscan            Scan /Table/54/{1-2}
 colbatchscan            fetched: /kv/primary/1/v -> /2
