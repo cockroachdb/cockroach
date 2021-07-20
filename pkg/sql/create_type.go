@@ -346,7 +346,7 @@ func CreateEnumTypeDesc(
 	}
 
 	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
-		dbDesc.GetID(), dbDesc.DatabaseDesc().GetDefaultPrivileges(),
+		dbDesc.GetID(), dbDesc.GetDefaultPrivileges(),
 		params.p.User(), tree.Types, dbDesc.GetPrivileges(),
 	)
 
