@@ -46,7 +46,7 @@ type Cache struct {
 		state      ptpb.State
 
 		// Updated in doUpdate but mutable. The records in the map are not mutated
-		// and should not be by any client.
+		// and should not be modified by any client.
 		recordsByID map[uuid.UUID]*ptpb.Record
 
 		// TODO(ajwerner): add a more efficient lookup structure such as an
