@@ -36,7 +36,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -3799,56 +3798,6 @@ INSERT INTO bar VALUES (6, 'f');
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-}
-
-// Primary key changes are supported by changefeeds starting in 21.1.
-func TestChangefeedPrimaryKeyChangeMixedVersion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t)
-	skip.UnderShort(t)
-
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING NOT NULL)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
-
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		defer closeFeed(t, foo)
-
-		// 'initial' is skipped because only the latest value ('updated') is
-		// emitted by the initial scan.
-		assertPayloads(t, foo, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
-		})
-
-		// Expect to see an error because primary key changes are not supported
-		// in the mixed version state.
-		sqlDB.Exec(t, `ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b)`)
-		_, err := foo.Next()
-		require.Regexp(t, `primary key change occurred`, err)
-	}
-
-	setMixedVersion := func(knobs *base.TestingKnobs) {
-		knobs.Server = &server.TestingKnobs{
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V20_2),
-			DisableAutomaticVersionUpgrade: 1,
-		}
-	}
-
-	// TODO(ssd): tenant setup currently returns the wrong cluster
-	// version despite installing the server knob.
-	opts := []feedTestOption{
-		feedTestNoTenants,
-		withKnobsFn(setMixedVersion),
-	}
-
-	t.Run("enterprise", enterpriseTest(testFn, opts...))
-	t.Run("cloudstorage", cloudStorageTest(testFn, opts...))
-	t.Run("kafka", kafkaTest(testFn, opts...))
-	t.Run("webhook", webhookTest(testFn, opts...))
 }
 
 // TestChangefeedCheckpointSchemaChange tests to make sure that writes that
