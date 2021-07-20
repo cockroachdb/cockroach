@@ -66,7 +66,7 @@ func segmentizeCoords(a geom.Coord, b geom.Coord, maxSegmentLength float64) ([]f
 
 	doubleNumberOfSegmentsToCreate := math.Ceil(distanceBetweenPoints / maxSegmentLength)
 	doubleNumPoints := float64(len(a)) * (1 + doubleNumberOfSegmentsToCreate)
-	if err := geosegmentize.CheckSegmentizeTooManyPoints(doubleNumPoints, a, b); err != nil {
+	if err := geosegmentize.CheckSegmentizeValidNumPoints(doubleNumPoints, a, b); err != nil {
 		return nil, err
 	}
 
