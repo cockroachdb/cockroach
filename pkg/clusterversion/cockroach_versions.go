@@ -242,9 +242,6 @@ const (
 	PriorReadSummaries
 	// NonVotingReplicas enables the creation of non-voting replicas.
 	NonVotingReplicas
-	// ProtectedTsMetaPrivilegesMigration is for the migration which fixes the
-	// privileges of the protected_ts_meta system table.
-	ProtectedTsMetaPrivilegesMigration
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	V21_1
 
@@ -388,10 +385,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     NonVotingReplicas,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 46},
-	},
-	{
-		Key:     ProtectedTsMetaPrivilegesMigration,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 48},
 	},
 	{
 		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
