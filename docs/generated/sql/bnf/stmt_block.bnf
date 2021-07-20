@@ -1788,7 +1788,7 @@ opt_add_val_placement ::=
 	| 
 
 opt_for_roles ::=
-	'FOR' role_or_group_or_user role_spec_list
+	'FOR' role_or_group_or_user name_list
 	| 
 
 opt_in_schemas ::=

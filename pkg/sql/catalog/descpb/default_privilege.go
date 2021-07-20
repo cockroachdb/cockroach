@@ -187,7 +187,7 @@ func (p *DefaultPrivilegeDescriptor) Validate() error {
 			privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 			valid, u, remaining := defaultPrivileges.IsValidPrivilegesForObjectType(privilegeObjectType)
 			if !valid {
-				return errors.AssertionFailedf("user %s must not have %v privileges on %s",
+				return errors.AssertionFailedf("user %s must not have sv privileges on %s",
 					u.User(), privilege.ListFromBitField(remaining, privilege.Any), objectType)
 			}
 		}
