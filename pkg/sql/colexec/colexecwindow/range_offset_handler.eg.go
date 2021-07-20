@@ -1852,15 +1852,20 @@ func (h *rangeHandlerOffsetPrecedingStartAscDate) getIdx(ctx context.Context, cu
 	col := vec.Int64()
 	currRowVal := col.Get(vecIdx)
 
-	d, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
+	d_casted, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	t, err := d.ToTime()
+	t_casted, err := d_casted.ToTime()
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	seekVal = duration.Add(t, h.offset.Mul(-1))
+	t_res := duration.Add(t_casted, h.offset.Mul(-1))
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -1917,18 +1922,18 @@ func (h *rangeHandlerOffsetPrecedingStartAscDate) getIdx(ctx context.Context, cu
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
 
-				d, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
+				d_casted, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
-				t, err := d.ToTime()
+				t_casted, err := d_casted.ToTime()
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
 
-				if t.Before(seekVal) {
+				if t_casted.Before(seekVal) {
 					cmpResult = -1
-				} else if seekVal.Before(t) {
+				} else if seekVal.Before(t_casted) {
 					cmpResult = 1
 				} else {
 					cmpResult = 0
@@ -2007,7 +2012,12 @@ func (h *rangeHandlerOffsetPrecedingStartAscTimestamp) getIdx(ctx context.Contex
 	)
 	col := vec.Timestamp()
 	currRowVal := col.Get(vecIdx)
-	seekVal = duration.Add(currRowVal, h.offset.Mul(-1))
+	t_res := duration.Add(currRowVal, h.offset.Mul(-1))
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -2992,15 +3002,20 @@ func (h *rangeHandlerOffsetPrecedingStartDescDate) getIdx(ctx context.Context, c
 	col := vec.Int64()
 	currRowVal := col.Get(vecIdx)
 
-	d, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
+	d_casted, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	t, err := d.ToTime()
+	t_casted, err := d_casted.ToTime()
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	seekVal = duration.Add(t, h.offset)
+	t_res := duration.Add(t_casted, h.offset)
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -3030,18 +3045,18 @@ func (h *rangeHandlerOffsetPrecedingStartDescDate) getIdx(ctx context.Context, c
 				}
 				cmpVal := col.Get(vecIdx)
 
-				d, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
+				d_casted, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
-				t, err := d.ToTime()
+				t_casted, err := d_casted.ToTime()
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
 
-				if t.Before(seekVal) {
+				if t_casted.Before(seekVal) {
 					cmpResult = -1
-				} else if seekVal.Before(t) {
+				} else if seekVal.Before(t_casted) {
 					cmpResult = 1
 				} else {
 					cmpResult = 0
@@ -3120,7 +3135,12 @@ func (h *rangeHandlerOffsetPrecedingStartDescTimestamp) getIdx(ctx context.Conte
 	)
 	col := vec.Timestamp()
 	currRowVal := col.Get(vecIdx)
-	seekVal = duration.Add(currRowVal, h.offset)
+	t_res := duration.Add(currRowVal, h.offset)
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -4332,15 +4352,20 @@ func (h *rangeHandlerOffsetPrecedingEndAscDate) getIdx(ctx context.Context, curr
 	col := vec.Int64()
 	currRowVal := col.Get(vecIdx)
 
-	d, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
+	d_casted, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	t, err := d.ToTime()
+	t_casted, err := d_casted.ToTime()
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	seekVal = duration.Add(t, h.offset.Mul(-1))
+	t_res := duration.Add(t_casted, h.offset.Mul(-1))
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -4397,18 +4422,18 @@ func (h *rangeHandlerOffsetPrecedingEndAscDate) getIdx(ctx context.Context, curr
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
 
-				d, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
+				d_casted, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
-				t, err := d.ToTime()
+				t_casted, err := d_casted.ToTime()
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
 
-				if t.Before(seekVal) {
+				if t_casted.Before(seekVal) {
 					cmpResult = -1
-				} else if seekVal.Before(t) {
+				} else if seekVal.Before(t_casted) {
 					cmpResult = 1
 				} else {
 					cmpResult = 0
@@ -4504,7 +4529,12 @@ func (h *rangeHandlerOffsetPrecedingEndAscTimestamp) getIdx(ctx context.Context,
 	)
 	col := vec.Timestamp()
 	currRowVal := col.Get(vecIdx)
-	seekVal = duration.Add(currRowVal, h.offset.Mul(-1))
+	t_res := duration.Add(currRowVal, h.offset.Mul(-1))
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -5625,15 +5655,20 @@ func (h *rangeHandlerOffsetPrecedingEndDescDate) getIdx(ctx context.Context, cur
 	col := vec.Int64()
 	currRowVal := col.Get(vecIdx)
 
-	d, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
+	d_casted, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	t, err := d.ToTime()
+	t_casted, err := d_casted.ToTime()
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	seekVal = duration.Add(t, h.offset)
+	t_res := duration.Add(t_casted, h.offset)
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -5663,18 +5698,18 @@ func (h *rangeHandlerOffsetPrecedingEndDescDate) getIdx(ctx context.Context, cur
 				}
 				cmpVal := col.Get(vecIdx)
 
-				d, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
+				d_casted, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
-				t, err := d.ToTime()
+				t_casted, err := d_casted.ToTime()
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
 
-				if t.Before(seekVal) {
+				if t_casted.Before(seekVal) {
 					cmpResult = -1
-				} else if seekVal.Before(t) {
+				} else if seekVal.Before(t_casted) {
 					cmpResult = 1
 				} else {
 					cmpResult = 0
@@ -5770,7 +5805,12 @@ func (h *rangeHandlerOffsetPrecedingEndDescTimestamp) getIdx(ctx context.Context
 	)
 	col := vec.Timestamp()
 	currRowVal := col.Get(vecIdx)
-	seekVal = duration.Add(currRowVal, h.offset)
+	t_res := duration.Add(currRowVal, h.offset)
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -6880,15 +6920,20 @@ func (h *rangeHandlerOffsetFollowingStartAscDate) getIdx(ctx context.Context, cu
 	col := vec.Int64()
 	currRowVal := col.Get(vecIdx)
 
-	d, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
+	d_casted, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	t, err := d.ToTime()
+	t_casted, err := d_casted.ToTime()
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	seekVal = duration.Add(t, h.offset)
+	t_res := duration.Add(t_casted, h.offset)
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -6945,18 +6990,18 @@ func (h *rangeHandlerOffsetFollowingStartAscDate) getIdx(ctx context.Context, cu
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
 
-				d, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
+				d_casted, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
-				t, err := d.ToTime()
+				t_casted, err := d_casted.ToTime()
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
 
-				if t.Before(seekVal) {
+				if t_casted.Before(seekVal) {
 					cmpResult = -1
-				} else if seekVal.Before(t) {
+				} else if seekVal.Before(t_casted) {
 					cmpResult = 1
 				} else {
 					cmpResult = 0
@@ -7035,7 +7080,12 @@ func (h *rangeHandlerOffsetFollowingStartAscTimestamp) getIdx(ctx context.Contex
 	)
 	col := vec.Timestamp()
 	currRowVal := col.Get(vecIdx)
-	seekVal = duration.Add(currRowVal, h.offset)
+	t_res := duration.Add(currRowVal, h.offset)
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -8020,15 +8070,20 @@ func (h *rangeHandlerOffsetFollowingStartDescDate) getIdx(ctx context.Context, c
 	col := vec.Int64()
 	currRowVal := col.Get(vecIdx)
 
-	d, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
+	d_casted, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	t, err := d.ToTime()
+	t_casted, err := d_casted.ToTime()
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	seekVal = duration.Add(t, h.offset.Mul(-1))
+	t_res := duration.Add(t_casted, h.offset.Mul(-1))
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -8058,18 +8113,18 @@ func (h *rangeHandlerOffsetFollowingStartDescDate) getIdx(ctx context.Context, c
 				}
 				cmpVal := col.Get(vecIdx)
 
-				d, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
+				d_casted, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
-				t, err := d.ToTime()
+				t_casted, err := d_casted.ToTime()
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
 
-				if t.Before(seekVal) {
+				if t_casted.Before(seekVal) {
 					cmpResult = -1
-				} else if seekVal.Before(t) {
+				} else if seekVal.Before(t_casted) {
 					cmpResult = 1
 				} else {
 					cmpResult = 0
@@ -8148,7 +8203,12 @@ func (h *rangeHandlerOffsetFollowingStartDescTimestamp) getIdx(ctx context.Conte
 	)
 	col := vec.Timestamp()
 	currRowVal := col.Get(vecIdx)
-	seekVal = duration.Add(currRowVal, h.offset.Mul(-1))
+	t_res := duration.Add(currRowVal, h.offset.Mul(-1))
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -9360,15 +9420,20 @@ func (h *rangeHandlerOffsetFollowingEndAscDate) getIdx(ctx context.Context, curr
 	col := vec.Int64()
 	currRowVal := col.Get(vecIdx)
 
-	d, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
+	d_casted, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	t, err := d.ToTime()
+	t_casted, err := d_casted.ToTime()
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	seekVal = duration.Add(t, h.offset)
+	t_res := duration.Add(t_casted, h.offset)
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -9425,18 +9490,18 @@ func (h *rangeHandlerOffsetFollowingEndAscDate) getIdx(ctx context.Context, curr
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
 
-				d, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
+				d_casted, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
-				t, err := d.ToTime()
+				t_casted, err := d_casted.ToTime()
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
 
-				if t.Before(seekVal) {
+				if t_casted.Before(seekVal) {
 					cmpResult = -1
-				} else if seekVal.Before(t) {
+				} else if seekVal.Before(t_casted) {
 					cmpResult = 1
 				} else {
 					cmpResult = 0
@@ -9532,7 +9597,12 @@ func (h *rangeHandlerOffsetFollowingEndAscTimestamp) getIdx(ctx context.Context,
 	)
 	col := vec.Timestamp()
 	currRowVal := col.Get(vecIdx)
-	seekVal = duration.Add(currRowVal, h.offset)
+	t_res := duration.Add(currRowVal, h.offset)
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -10653,15 +10723,20 @@ func (h *rangeHandlerOffsetFollowingEndDescDate) getIdx(ctx context.Context, cur
 	col := vec.Int64()
 	currRowVal := col.Get(vecIdx)
 
-	d, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
+	d_casted, err := pgdate.MakeDateFromUnixEpoch(currRowVal)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	t, err := d.ToTime()
+	t_casted, err := d_casted.ToTime()
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	seekVal = duration.Add(t, h.offset.Mul(-1))
+	t_res := duration.Add(t_casted, h.offset.Mul(-1))
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.
@@ -10691,18 +10766,18 @@ func (h *rangeHandlerOffsetFollowingEndDescDate) getIdx(ctx context.Context, cur
 				}
 				cmpVal := col.Get(vecIdx)
 
-				d, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
+				d_casted, err := pgdate.MakeDateFromUnixEpoch(cmpVal)
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
-				t, err := d.ToTime()
+				t_casted, err := d_casted.ToTime()
 				if err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
 
-				if t.Before(seekVal) {
+				if t_casted.Before(seekVal) {
 					cmpResult = -1
-				} else if seekVal.Before(t) {
+				} else if seekVal.Before(t_casted) {
 					cmpResult = 1
 				} else {
 					cmpResult = 0
@@ -10798,7 +10873,12 @@ func (h *rangeHandlerOffsetFollowingEndDescTimestamp) getIdx(ctx context.Context
 	)
 	col := vec.Timestamp()
 	currRowVal := col.Get(vecIdx)
-	seekVal = duration.Add(currRowVal, h.offset.Mul(-1))
+	t_res := duration.Add(currRowVal, h.offset.Mul(-1))
+	rounded_res := t_res.Round(time.Microsecond)
+	if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+	}
+	seekVal = t_res
 
 	// Pick up where the last index left off, since the start and indexes of each
 	// successive window frame are non-decreasing as we increment the current row.

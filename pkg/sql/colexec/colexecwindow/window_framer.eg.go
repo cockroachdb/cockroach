@@ -1169,8 +1169,8 @@ func (b *windowFramerBase) incrementPeerGroup(ctx context.Context, index, groups
 		return b.partitionSize
 	}
 	// We have to iterate to the beginning of the next peer group.
+	index++
 	for {
-		index++
 		if index >= b.partitionSize {
 			return b.partitionSize
 		}

@@ -11,9 +11,10 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for lag.eg.go and lead.eg.go. It's
-// formatted in a special way, so it's both valid Go and a valid text/template
-// input. This permits editing this file with editor support.
+// This file is the execgen template for first_value.eg.go, last_value.eg.go,
+// and nth_value.eg.go. It's formatted in a special way, so it's both valid Go
+// and a valid text/template input. This permits editing this file with editor
+// support.
 //
 // */}}
 
@@ -26,8 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -50,6 +55,9 @@ const _TYPE_WIDTH = 0
 // function _OP_NAME. outputColIdx specifies in which coldata.Vec the operator
 // should put its output (if there is no such column, a new column is appended).
 func New_UPPERCASE_NAMEOperator(
+	evalCtx *tree.EvalContext,
+	frame *execinfrapb.WindowerSpec_Frame,
+	ordering *execinfrapb.Ordering,
 	unlimitedAllocator *colmem.Allocator,
 	bufferAllocator *colmem.Allocator,
 	memoryLimit int64,
@@ -60,10 +68,13 @@ func New_UPPERCASE_NAMEOperator(
 	inputTypes []*types.T,
 	outputColIdx int,
 	partitionColIdx int,
-	argIdx int,
-	offsetIdx int,
-	defaultIdx int,
+	peersColIdx int,
+	argIdxs []int,
 ) (colexecop.Operator, error) {
+	framer := newWindowFramer(evalCtx, frame, ordering, inputTypes, peersColIdx)
+	colsToStore := []int{argIdxs[0]}
+	colsToStore = framer.getColsToStore(colsToStore)
+
 	// Allow the direct-access buffer 10% of the available memory. The rest will
 	// be given to the bufferedWindowOp queue. While it is somewhat more important
 	// for the direct-access buffer tuples to be kept in-memory, it only has to
@@ -71,27 +82,30 @@ func New_UPPERCASE_NAMEOperator(
 	// good empirically-supported fraction to use.
 	bufferMemLimit := int64(float64(memoryLimit) * 0.10)
 	buffer := colexecutils.NewSpillingBuffer(
-		bufferAllocator, bufferMemLimit, diskQueueCfg, fdSemaphore, inputTypes, diskAcc, argIdx)
+		bufferAllocator, bufferMemLimit, diskQueueCfg, fdSemaphore, inputTypes, diskAcc, colsToStore...)
 	base := _OP_NAMEBase{
 		partitionSeekerBase: partitionSeekerBase{
 			buffer:          buffer,
 			partitionColIdx: partitionColIdx,
 		},
+		framer:       framer,
 		outputColIdx: outputColIdx,
-		argIdx:       argIdx,
-		offsetIdx:    offsetIdx,
-		defaultIdx:   defaultIdx,
+		bufferArgIdx: 0, // The arg column is the first column in the buffer.
 	}
-	argType := inputTypes[argIdx]
+	argType := inputTypes[argIdxs[0]]
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch argType.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
+			windower := &_OP_NAME_TYPEWindow{_OP_NAMEBase: base}
+			// {{if .IsNthValue}}
+			windower.nColIdx = argIdxs[1]
+			// {{end}}
 			return newBufferedWindowOperator(
-				&_OP_NAME_TYPEWindow{_OP_NAMEBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
+				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
+				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
 			), nil
 			// {{end}}
 		}
@@ -100,24 +114,13 @@ func New_UPPERCASE_NAMEOperator(
 	return nil, errors.Errorf("unsupported _OP_NAME window operator type %s", argType.Name())
 }
 
-// _OP_NAMEBase extracts common fields and methods of the _OP_NAME windower
-// variations.
 type _OP_NAMEBase struct {
 	partitionSeekerBase
 	colexecop.CloserHelper
-	_OP_NAMEComputeFields
+	framer windowFramer
 
-	outputColIdx    int
-	partitionColIdx int
-	argIdx          int
-	offsetIdx       int
-	defaultIdx      int
-}
-
-// _OP_NAMEComputeFields extracts the fields that are used to calculate _OP_NAME
-// output values.
-type _OP_NAMEComputeFields struct {
-	idx int
+	outputColIdx int
+	bufferArgIdx int
 }
 
 // {{range .}}
@@ -125,130 +128,104 @@ type _OP_NAMEComputeFields struct {
 
 type _OP_NAME_TYPEWindow struct {
 	_OP_NAMEBase
+	// {{if .IsNthValue}}
+	nColIdx int
+	// {{end}}
 }
 
 var _ bufferedWindower = &_OP_NAME_TYPEWindow{}
 
+// processBatch implements the bufferedWindower interface.
 func (w *_OP_NAME_TYPEWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) {
 	if startIdx >= endIdx {
 		// No processing needs to be done for this portion of the current partition.
 		return
 	}
-	leadLagVec := batch.ColVec(w.outputColIdx)
-	leadLagCol := leadLagVec.TemplateType()
-	leadLagNulls := leadLagVec.Nulls()
+	outputVec := batch.ColVec(w.outputColIdx)
+	outputCol := outputVec.TemplateType()
+	outputNulls := outputVec.Nulls()
 	// {{if .Sliceable}}
-	_ = leadLagCol.Get(startIdx)
-	_ = leadLagCol.Get(endIdx - 1)
+	_, _ = outputCol.Get(startIdx), outputCol.Get(endIdx-1)
 	// {{end}}
 
-	offsetVec := batch.ColVec(w.offsetIdx)
-	offsetCol := offsetVec.Int64()
-	offsetNulls := offsetVec.Nulls()
-	_ = offsetCol[startIdx]
-	_ = offsetCol[endIdx-1]
-
-	defaultVec := batch.ColVec(w.defaultIdx)
-	defaultCol := defaultVec.TemplateType()
-	defaultNulls := defaultVec.Nulls()
-	// {{if .Sliceable}}
-	_ = defaultCol.Get(startIdx)
-	_ = defaultCol.Get(endIdx - 1)
+	// {{if .IsNthValue}}
+	nVec := batch.ColVec(w.nColIdx)
+	nCol := nVec.Int64()
+	nNulls := nVec.Nulls()
+	_, _ = nCol[startIdx], nCol[endIdx-1]
 	// {{end}}
 
-	if offsetNulls.MaybeHasNulls() {
-		if defaultNulls.MaybeHasNulls() {
-			_PROCESS_BATCH(true, true)
-			return
-		}
-		_PROCESS_BATCH(true, false)
-		return
-	}
-	if defaultNulls.MaybeHasNulls() {
-		_PROCESS_BATCH(false, true)
-		return
-	}
-	_PROCESS_BATCH(false, false)
-}
-
-// {{end}}
-// {{end}}
-
-func (b *_OP_NAMEBase) transitionToProcessing() {}
-
-func (b *_OP_NAMEBase) startNewPartition() {
-	b.idx = 0
-	b.partitionSize = 0
-	b.buffer.Reset(b.Ctx)
-}
-
-func (b *_OP_NAMEBase) Init(ctx context.Context) {
-	if !b.InitHelper.Init(ctx) {
-		return
-	}
-}
-
-func (b *_OP_NAMEBase) Close() {
-	if !b.CloserHelper.Close() {
-		return
-	}
-	b.buffer.Close(b.EnsureCtx())
-}
-
-// {{/*
-// _PROCESS_BATCH is a code fragment that iterates over the given batch and
-// sets the lag or lead output value.
-func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
-	// {{define "processBatchTmpl" -}}
 	for i := startIdx; i < endIdx; i++ {
-		// {{if .OffsetHasNulls}}
-		if offsetNulls.NullAt(i) {
-			// When the offset is null, the output value is also null.
-			leadLagNulls.SetNull(i)
-			w.idx++
-			continue
-		}
-		// {{end}}
-		// {{if eq "_OP_NAME" "lag"}}
-		requestedIdx := w.idx - int(offsetCol[i])
+		w.framer.next(w.Ctx)
+		// {{if .IsFirstValue}}
+		requestedIdx := w.framer.frameFirstIdx()
+		// {{else if .IsLastValue}}
+		requestedIdx := w.framer.frameLastIdx()
 		// {{else}}
-		requestedIdx := w.idx + int(offsetCol[i])
-		// {{end}}
-		w.idx++
-		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
-			// The offset is out of range, so set the output value to the default.
-			// {{if .DefaultHasNulls}}
-			if defaultNulls.NullAt(i) {
-				leadLagNulls.SetNull(i)
-				continue
-			}
-			// {{end}}
-			// {{if .IsBytesLike}}
-			leadLagCol.CopySlice(defaultCol, i, i, i+1)
-			// {{else}}
-			val := defaultCol.Get(i)
-			leadLagCol.Set(i, val)
-			// {{end}}
+		if nNulls.MaybeHasNulls() && nNulls.NullAt(i) {
+			// TODO(drewk): this could be pulled out of the loop, but for now keep the
+			// templating simple.
+			outputNulls.SetNull(i)
 			continue
 		}
-		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		// gcassert:bce
+		nVal := int(nCol[i])
+		if nVal <= 0 {
+			colexecerror.ExpectedError(builtins.ErrInvalidArgumentForNthValue)
+		}
+		requestedIdx := w.framer.frameNthIdx(nVal)
+		// {{end}}
+		if requestedIdx == -1 {
+			// The requested row does not exist.
+			outputNulls.SetNull(i)
+			continue
+		}
+
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, w.bufferArgIdx, requestedIdx)
 		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
-			leadLagNulls.SetNull(i)
+			outputNulls.SetNull(i)
 			continue
 		}
 		col := vec.TemplateType()
 		// {{if .IsBytesLike}}
 		// We have to use CopySlice here because the column already has a length of
 		// n elements, and Set cannot set values before the last one.
-		leadLagCol.CopySlice(col, i, idx, idx+1)
+		outputCol.CopySlice(col, i, idx, idx+1)
 		// {{else}}
 		val := col.Get(idx)
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
-		leadLagCol.Set(i, val)
+		outputCol.Set(i, val)
 		// {{end}}
 	}
-	// {{end}}
-	// {{/*
-} // */}}
+}
+
+// {{end}}
+// {{end}}
+
+// transitionToProcessing implements the bufferedWindower interface.
+func (b *_OP_NAMEBase) transitionToProcessing() {
+	b.framer.startPartition(b.Ctx, b.partitionSize, b.buffer)
+}
+
+// startNewPartition implements the bufferedWindower interface.
+func (b *_OP_NAMEBase) startNewPartition() {
+	b.partitionSize = 0
+	b.buffer.Reset(b.Ctx)
+}
+
+// Init implements the bufferedWindower interface.
+func (b *_OP_NAMEBase) Init(ctx context.Context) {
+	if !b.InitHelper.Init(ctx) {
+		return
+	}
+}
+
+// Close implements the bufferedWindower interface.
+func (b *_OP_NAMEBase) Close() {
+	if !b.CloserHelper.Close() {
+		return
+	}
+	b.buffer.Close(b.EnsureCtx())
+}

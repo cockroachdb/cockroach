@@ -211,15 +211,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 
 	case spec.Core.Windower != nil:
 		for _, wf := range spec.Core.Windower.WindowFns {
-			if wf.Frame != nil {
-				frame, err := wf.Frame.ConvertToAST()
-				if err != nil {
-					return err
-				}
-				if !frame.IsDefaultFrame() {
-					return errors.Newf("window functions with non-default window frames are not supported")
-				}
-			}
 			if wf.FilterColIdx != tree.NoColumnIdx {
 				return errors.Newf("window functions with FILTER clause are not supported")
 			}
@@ -1186,6 +1177,9 @@ func NewColOperator(
 				typs := make([]*types.T, len(result.ColumnTypes), len(result.ColumnTypes)+len(wf.ArgsIdxs)+2)
 				copy(typs, result.ColumnTypes)
 
+				// Set any nil values in the window frame to their default values.
+				wf.Frame = colexecwindow.NormalizeWindowFrame(wf.Frame)
+
 				tempColOffset := uint32(0)
 				argTypes := make([]*types.T, len(wf.ArgsIdxs))
 				argIdxs := make([]int, len(wf.ArgsIdxs))
@@ -1246,7 +1240,7 @@ func NewColOperator(
 				if err != nil {
 					return r, err
 				}
-				if colexecwindow.WindowFnNeedsPeersInfo(*wf.Func.WindowFunc) {
+				if colexecwindow.WindowFnNeedsPeersInfo(&wf) {
 					peersColIdx = int(wf.OutputColIdx + tempColOffset)
 					input, err = colexecwindow.NewWindowPeerGrouper(
 						streamingAllocator, input, typs, wf.Ordering.Columns,
@@ -1323,6 +1317,45 @@ func NewColOperator(
 						unlimitedAllocator, bufferAllocator, execinfra.GetWorkMemLimit(flowCtx),
 						args.DiskQueueCfg, args.FDSemaphore, diskAcc, input, typs,
 						outputIdx, partitionColIdx, argIdxs[0], argIdxs[1], argIdxs[2],
+					)
+				case execinfrapb.WindowerSpec_FIRST_VALUE:
+					opName := opNamePrefix + "first_value"
+					unlimitedAllocator, diskAcc := result.getDiskBackedWindowFnFields(
+						ctx, opName, flowCtx, spec.ProcessorID, factory)
+					// FirstValue operators need an extra allocator.
+					bufferAllocator := colmem.NewAllocator(
+						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+					)
+					result.Root, err = colexecwindow.NewFirstValueOperator(
+						evalCtx, wf.Frame, &wf.Ordering, unlimitedAllocator, bufferAllocator,
+						execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg, args.FDSemaphore,
+						diskAcc, input, typs, outputIdx, partitionColIdx, peersColIdx, argIdxs,
+					)
+				case execinfrapb.WindowerSpec_LAST_VALUE:
+					opName := opNamePrefix + "last_value"
+					unlimitedAllocator, diskAcc := result.getDiskBackedWindowFnFields(
+						ctx, opName, flowCtx, spec.ProcessorID, factory)
+					// LastValue operators need an extra allocator.
+					bufferAllocator := colmem.NewAllocator(
+						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+					)
+					result.Root, err = colexecwindow.NewLastValueOperator(
+						evalCtx, wf.Frame, &wf.Ordering, unlimitedAllocator, bufferAllocator,
+						execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg, args.FDSemaphore,
+						diskAcc, input, typs, outputIdx, partitionColIdx, peersColIdx, argIdxs,
+					)
+				case execinfrapb.WindowerSpec_NTH_VALUE:
+					opName := opNamePrefix + "nth_value"
+					unlimitedAllocator, diskAcc := result.getDiskBackedWindowFnFields(
+						ctx, opName, flowCtx, spec.ProcessorID, factory)
+					// NthValue operators need an extra allocator.
+					bufferAllocator := colmem.NewAllocator(
+						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+					)
+					result.Root, err = colexecwindow.NewNthValueOperator(
+						evalCtx, wf.Frame, &wf.Ordering, unlimitedAllocator, bufferAllocator,
+						execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg, args.FDSemaphore,
+						diskAcc, input, typs, outputIdx, partitionColIdx, peersColIdx, argIdxs,
 					)
 				default:
 					return r, errors.AssertionFailedf("window function %s is not supported", wf.String())

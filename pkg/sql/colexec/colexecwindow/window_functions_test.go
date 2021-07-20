@@ -68,9 +68,12 @@ func TestWindowFunctions(t *testing.T) {
 	nTileFn := execinfrapb.WindowerSpec_NTILE
 	lagFn := execinfrapb.WindowerSpec_LAG
 	leadFn := execinfrapb.WindowerSpec_LEAD
+	firstValueFn := execinfrapb.WindowerSpec_FIRST_VALUE
+	lastValueFn := execinfrapb.WindowerSpec_LAST_VALUE
+	nthValueFn := execinfrapb.WindowerSpec_NTH_VALUE
 	accounts := make([]*mon.BoundAccount, 0)
 	monitors := make([]*mon.BytesMonitor, 0)
-	for _, spillForced := range []bool{false, true} {
+	for _, spillForced := range []bool{true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, tc := range []windowFnTestCase{
 			// With PARTITION BY, no ORDER BY.
@@ -193,6 +196,48 @@ func TestWindowFunctions(t *testing.T) {
 					},
 				},
 			},
+			{
+				tuples:   colexectestutils.Tuples{{1, 1}, {1, 2}, {1, 3}, {2, 4}, {2, 5}, {3, 6}},
+				expected: colexectestutils.Tuples{{1, 1, 1}, {1, 2, 1}, {1, 3, 1}, {2, 4, 4}, {2, 5, 4}, {3, 6, 6}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &firstValueFn},
+							ArgsIdxs:     []uint32{1},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{1, 1}, {1, 2}, {1, 3}, {2, 4}, {2, 5}, {3, 6}},
+				expected: colexectestutils.Tuples{{1, 1, 3}, {1, 2, 3}, {1, 3, 3}, {2, 4, 5}, {2, 5, 5}, {3, 6, 6}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &lastValueFn},
+							ArgsIdxs:     []uint32{1},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{1, 2, 4}, {1, 2, 1}, {1, 2, 2}, {2, 4, 1}, {2, 5, 1}, {3, 6, 1}},
+				expected: colexectestutils.Tuples{{1, 2, 4, nil}, {1, 2, 1, 2}, {1, 2, 2, 2}, {2, 4, 1, 4}, {2, 5, 1, 4}, {3, 6, 1, 6}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &nthValueFn},
+							ArgsIdxs:     []uint32{1, 2},
+							OutputColIdx: 3,
+						},
+					},
+				},
+			},
 
 			// No PARTITION BY, with ORDER BY.
 			{
@@ -310,6 +355,48 @@ func TestWindowFunctions(t *testing.T) {
 							ArgsIdxs:     []uint32{1, 2, 3},
 							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}}},
 							OutputColIdx: 4,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{3, 1}, {1, 2}, {2, 3}, {nil, 4}, {1, 5}, {nil, 6}, {3, 7}},
+				expected: colexectestutils.Tuples{{nil, 4, 4}, {nil, 6, 4}, {1, 2, 4}, {1, 5, 4}, {2, 3, 4}, {3, 1, 4}, {3, 7, 4}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &firstValueFn},
+							ArgsIdxs:     []uint32{1},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{3, 1}, {1, 2}, {2, 3}, {nil, 4}, {1, 5}, {nil, 6}, {3, 7}},
+				expected: colexectestutils.Tuples{{nil, 4, 6}, {nil, 6, 6}, {1, 2, 5}, {1, 5, 5}, {2, 3, 3}, {3, 1, 7}, {3, 7, 7}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &lastValueFn},
+							ArgsIdxs:     []uint32{1},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{nil, 4, 1}, {nil, 6, 2}, {1, 2, 2}, {1, 5, 1}, {2, 3, 1}, {3, 1, 8}, {3, 7, 4}},
+				expected: colexectestutils.Tuples{{nil, 4, 1, 4}, {nil, 6, 2, 6}, {1, 2, 2, 6}, {1, 5, 1, 4}, {2, 3, 1, 4}, {3, 1, 8, nil}, {3, 7, 4, 5}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &nthValueFn},
+							ArgsIdxs:     []uint32{1, 2},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
+							OutputColIdx: 3,
 						},
 					},
 				},
@@ -443,6 +530,69 @@ func TestWindowFunctions(t *testing.T) {
 					},
 				},
 			},
+			{
+				tuples: colexectestutils.Tuples{
+					{3, 2, 1}, {1, nil, 2}, {2, 1, 3}, {nil, nil, 4},
+					{1, 2, 5}, {nil, 1, 6}, {nil, nil, 4}, {3, 1, 8},
+				},
+				expected: colexectestutils.Tuples{
+					{nil, nil, 4, 4}, {nil, nil, 4, 4}, {nil, 1, 6, 4}, {1, nil, 2, 2},
+					{1, 2, 5, 2}, {2, 1, 3, 3}, {3, 1, 8, 8}, {3, 2, 1, 8},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &firstValueFn},
+							ArgsIdxs:     []uint32{2},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 1}}},
+							OutputColIdx: 3,
+						},
+					},
+				},
+			},
+			{
+				tuples: colexectestutils.Tuples{
+					{3, 2, 1}, {1, nil, 2}, {2, 1, 3}, {nil, nil, 4},
+					{1, 2, 5}, {nil, 1, 6}, {nil, nil, 4}, {3, 1, 8},
+				},
+				expected: colexectestutils.Tuples{
+					{nil, nil, 4, 4}, {nil, nil, 4, 4}, {nil, 1, 6, 6}, {1, nil, 2, 2},
+					{1, 2, 5, 5}, {2, 1, 3, 3}, {3, 1, 8, 8}, {3, 2, 1, 1},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &lastValueFn},
+							ArgsIdxs:     []uint32{2},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 1}}},
+							OutputColIdx: 3,
+						},
+					},
+				},
+			},
+			{
+				tuples: colexectestutils.Tuples{
+					{nil, nil, 4, 2}, {nil, nil, 4, 5}, {nil, 1, 6, 1}, {1, nil, 2, 2},
+					{1, 2, 5, 1}, {2, 1, 3, 2}, {3, 1, 8, 1}, {3, 2, 1, 2},
+				},
+				expected: colexectestutils.Tuples{
+					{nil, nil, 4, 2, 4}, {nil, nil, 4, 5, nil}, {nil, 1, 6, 1, 4}, {1, nil, 2, 2, nil},
+					{1, 2, 5, 1, 2}, {2, 1, 3, 2, nil}, {3, 1, 8, 1, 8}, {3, 2, 1, 2, 1},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &nthValueFn},
+							ArgsIdxs:     []uint32{2, 3},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 1}}},
+							OutputColIdx: 4,
+						},
+					},
+				},
+			},
 
 			// With neither PARTITION BY nor ORDER BY.
 			{
@@ -556,6 +706,45 @@ func TestWindowFunctions(t *testing.T) {
 					},
 				},
 			},
+			{
+				tuples:   colexectestutils.Tuples{{1}, {2}, {3}, {4}, {5}, {6}},
+				expected: colexectestutils.Tuples{{1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &firstValueFn},
+							ArgsIdxs:     []uint32{0},
+							OutputColIdx: 1,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{1}, {2}, {3}, {4}, {5}, {6}},
+				expected: colexectestutils.Tuples{{1, 6}, {2, 6}, {3, 6}, {4, 6}, {5, 6}, {6, 6}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &lastValueFn},
+							ArgsIdxs:     []uint32{0},
+							OutputColIdx: 1,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{1, 1}, {2, 1}, {3, 5}, {4, 7}, {5, 3}, {6, 2}},
+				expected: colexectestutils.Tuples{{1, 1, 1}, {2, 1, 1}, {3, 5, 5}, {4, 7, nil}, {5, 3, 3}, {6, 2, 2}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &nthValueFn},
+							ArgsIdxs:     []uint32{0, 1},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
 		} {
 			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
 			var semsToCheck []semaphore.Semaphore
@@ -612,6 +801,7 @@ func TestWindowFunctions(t *testing.T) {
 func BenchmarkWindowFunctions(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	const (
 		memLimit        = 64 << 20
@@ -691,6 +881,24 @@ func BenchmarkWindowFunctions(b *testing.B) {
 				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
 				outputIdx, partitionCol, arg1ColIdx, arg2ColIdx, arg3ColIdx,
 			)
+		case execinfrapb.WindowerSpec_FIRST_VALUE:
+			op, err = NewFirstValueOperator(
+				&evalCtx, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
+				mainAllocator, bufferAllocator, memLimit, queueCfg,
+				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
+				outputIdx, partitionColIdx, peersColIdx, []int{arg1ColIdx})
+		case execinfrapb.WindowerSpec_LAST_VALUE:
+			op, err = NewLastValueOperator(
+				&evalCtx, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
+				mainAllocator, bufferAllocator, memLimit, queueCfg,
+				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
+				outputIdx, partitionColIdx, peersColIdx, []int{arg1ColIdx})
+		case execinfrapb.WindowerSpec_NTH_VALUE:
+			op, err = NewFirstValueOperator(
+				&evalCtx, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
+				mainAllocator, bufferAllocator, memLimit, queueCfg,
+				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
+				outputIdx, partitionColIdx, peersColIdx, []int{arg1ColIdx, arg2ColIdx})
 		}
 		require.NoError(b, err)
 		return op
@@ -731,6 +939,9 @@ func BenchmarkWindowFunctions(b *testing.B) {
 		execinfrapb.WindowerSpec_NTILE,
 		execinfrapb.WindowerSpec_LAG,
 		execinfrapb.WindowerSpec_LEAD,
+		execinfrapb.WindowerSpec_FIRST_VALUE,
+		execinfrapb.WindowerSpec_LAST_VALUE,
+		execinfrapb.WindowerSpec_NTH_VALUE,
 	}
 
 	// The number of rows should be a multiple of coldata.BatchSize().

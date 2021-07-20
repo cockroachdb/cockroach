@@ -803,15 +803,25 @@ if _path == nil {
 	}
 }
 
+// timestampRangeCheck should be added at the end of operations that modify and
+// return timestamps in order to ensure that the vectorized engine returns the
+// same errors as the row engine. The range check expects the timestamp to be
+// stored in a local variable named 't_res'.
+const timestampRangeCheck = `	
+rounded_res := t_res.Round(time.Microsecond)
+if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSupportedTime) {
+		colexecerror.ExpectedError(errors.Newf("timestamp %q exceeds supported timestamp bounds", t_res.Format(time.RFC3339)))
+}`
+
 func (c timestampIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Plus:
-			return fmt.Sprintf(`%[1]s = duration.Add(%[2]s, %[3]s)`,
-				targetElem, leftElem, rightElem)
+			return fmt.Sprintf(`t_res := duration.Add(%[1]s, %[2]s)`,
+				leftElem, rightElem) + timestampRangeCheck + fmt.Sprintf("\n%s = t_res", targetElem)
 		case tree.Minus:
-			return fmt.Sprintf(`%[1]s = duration.Add(%[2]s, %[3]s.Mul(-1))`,
-				targetElem, leftElem, rightElem)
+			return fmt.Sprintf(`t_res := duration.Add(%[1]s, %[2]s.Mul(-1))`,
+				leftElem, rightElem) + timestampRangeCheck + fmt.Sprintf("\n%s = t_res", targetElem)
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -824,8 +834,8 @@ func (c intervalTimestampCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
 		case tree.Plus:
-			return fmt.Sprintf(`%[1]s = duration.Add(%[3]s, %[2]s)`,
-				targetElem, leftElem, rightElem)
+			return fmt.Sprintf(`t_res := duration.Add(%[2]s, %[1]s)`,
+				leftElem, rightElem) + timestampRangeCheck + fmt.Sprintf("\n%s = t_res", targetElem)
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}

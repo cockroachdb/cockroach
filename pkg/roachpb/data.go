@@ -2244,6 +2244,18 @@ func (s Span) ContainsKey(key Key) bool {
 	return bytes.Compare(key, s.Key) >= 0 && bytes.Compare(key, s.EndKey) < 0
 }
 
+// CompareKey returns -1 if the key precedes the span start, 0 if its contained
+// by the span and 1 if its after the end of the span.
+func (s Span) CompareKey(key Key) int {
+	if bytes.Compare(key, s.Key) >= 0 {
+		if bytes.Compare(key, s.EndKey) < 0 {
+			return 0
+		}
+		return 1
+	}
+	return -1
+}
+
 // ProperlyContainsKey returns whether the span properly contains the given key.
 func (s Span) ProperlyContainsKey(key Key) bool {
 	return bytes.Compare(key, s.Key) > 0 && bytes.Compare(key, s.EndKey) < 0

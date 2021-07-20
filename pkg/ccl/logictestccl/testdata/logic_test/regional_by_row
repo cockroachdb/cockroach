@@ -1652,6 +1652,9 @@ ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
 
 # We should plan uniqueness checks for all unique indexes in
 # REGIONAL BY ROW tables.
+# TODO(treilly): The constraint check for uniq_idx should use uniq_idx but due
+# to stats issues w/ empty stats, partial indexes and multicol stats its not.
+# Hopefully fixing #67583 (and possibly #67479) will resolve this.
 query T
 SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
 ----
@@ -1698,9 +1701,9 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │   └── • error if rows
 │       │
 │       └── • lookup join (semi)
-│           │ table: regional_by_row_table@uniq_idx (partial index)
-│           │ lookup condition: (column3 = a) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column3 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ table: regional_by_row_table@new_idx
+│           │ lookup condition: ((column3 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
+│           │ remote lookup condition: ((column3 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
 │           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │           │
 │           └── • filter
@@ -1728,6 +1731,9 @@ INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-
 
 # The conflict columns in an upsert should only include the primary key,
 # not the region column.
+# TODO(treilly): The constraint check for uniq_idx should use uniq_idx but due
+# to stats issues w/ empty stats, partial indexes and multicol stats its not.
+# Hopefully fixing #67583 (and possibly #67479) will resolve this.
 query T
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)] OFFSET 2
 ----
@@ -1779,9 +1785,9 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
 │   └── • error if rows
 │       │
 │       └── • lookup join (semi)
-│           │ table: regional_by_row_table@uniq_idx (partial index)
-│           │ lookup condition: (column4 = a) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column4 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ table: regional_by_row_table@new_idx
+│           │ lookup condition: ((column4 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
+│           │ remote lookup condition: ((column4 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • filter
@@ -1803,6 +1809,9 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
             └── • scan buffer
                   label: buffer 1
 
+# TODO(treilly): The constraint check for uniq_idx should use uniq_idx but due
+# to stats issues w/ empty stats, partial indexes and multicol stats its not.
+# Hopefully fixing #67583 (and possibly #67479) will resolve this.
 query T
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
 VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
@@ -1850,9 +1859,9 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │   └── • error if rows
 │       │
 │       └── • lookup join (semi)
-│           │ table: regional_by_row_table@uniq_idx (partial index)
-│           │ lookup condition: (column4 = a) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column4 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ table: regional_by_row_table@new_idx
+│           │ lookup condition: ((column4 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
+│           │ remote lookup condition: ((column4 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • filter
