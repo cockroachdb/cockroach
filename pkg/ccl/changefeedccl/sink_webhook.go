@@ -240,9 +240,6 @@ func (s *webhookSink) setupWorkers() {
 	}
 }
 
-// TODO (ryan min): Address potential ordering issue where errored message can
-// be followed by successful messages. Solution is to immediately stop sending
-// messages upon receiving a single error.
 func (s *webhookSink) workerLoop(workerCh chan []byte) {
 	for {
 		select {
@@ -253,6 +250,10 @@ func (s *webhookSink) workerLoop(workerCh chan []byte) {
 			s.inflight.maybeSetError(err)
 			// reduce inflight count by one and reduce memory counter
 			s.inflight.FinishRequest(s.ctx, int64(len(msg)))
+			// shut down all other workers immediately if error encountered
+			if err != nil {
+				s.cancelFunc()
+			}
 		}
 	}
 }
@@ -398,15 +399,23 @@ func (s *webhookSink) EmitRow(
 		return err
 	}
 
+	select {
+	// non-blocking check for error, restart changefeed if encountered
+	case <-s.inflight.errChan:
+		return err
+	default:
+	}
 	err = s.inflight.StartRequest(ctx, int64(len(j)))
 	if err != nil {
 		return err
 	}
 
 	select {
+	// check the webhook sink context in case workers have been terminated
+	case <-s.ctx.Done():
+		return s.ctx.Err()
 	case <-ctx.Done():
 		return ctx.Err()
-	// Errors resulting from sending the message will be expressed in Flush.
 	case s.eventsChans[s.workerIndex(key)] <- j:
 	}
 	return nil
@@ -420,6 +429,16 @@ func (s *webhookSink) EmitResolvedTimestamp(
 		return err
 	}
 
+	select {
+	// check the webhook sink context in case workers have been terminated
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	// non-blocking check for error, restart changefeed if encountered
+	case <-s.inflight.errChan:
+		return err
+	default:
+	}
+
 	err = s.inflight.StartRequest(ctx, int64(len(j)))
 	if err != nil {
 		return err
@@ -431,7 +450,7 @@ func (s *webhookSink) EmitResolvedTimestamp(
 	err = s.sendMessageWithRetries(ctx, j)
 	s.inflight.maybeSetError(err)
 	s.inflight.FinishRequest(ctx, int64(len(j)))
-	return nil
+	return err
 }
 
 func (s *webhookSink) Flush(ctx context.Context) error {
