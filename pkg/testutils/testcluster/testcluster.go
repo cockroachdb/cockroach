@@ -969,7 +969,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		ls, err := r.TestingAcquireLease(ctx)
 		if err != nil {
 			log.Infof(ctx, "TestingAcquireLease failed: %s", err)
-			if lErr := (*roachpb.NotLeaseHolderError)(nil); errors.As(err, &lErr) {
+			if lErr := (*roachpb.NotLeaseHolderError)(nil); errors.As(err, &lErr) && lErr.Lease != nil {
 				newLease = lErr.Lease
 			} else {
 				return err
