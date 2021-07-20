@@ -163,8 +163,6 @@ const (
 	// the 21.1 release. This is because we now support tenants at the
 	// predecessor binary interacting with a fully upgraded KV cluster.
 	Start20_2
-	// UserDefinedSchemas enables the creation of user defined schemas.
-	UserDefinedSchemas
 	// NoOriginFKIndexes allows for foreign keys to no longer need indexes on
 	// the origin side of the relationship.
 	NoOriginFKIndexes
@@ -329,10 +327,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start20_2,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 1},
-	},
-	{
-		Key:     UserDefinedSchemas,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 8},
 	},
 	{
 		Key:     NoOriginFKIndexes,
