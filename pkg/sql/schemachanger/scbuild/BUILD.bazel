@@ -33,7 +33,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
-        "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/protoutil",
         "//pkg/util/sequence",
