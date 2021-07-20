@@ -163,9 +163,6 @@ const (
 	// the 21.1 release. This is because we now support tenants at the
 	// predecessor binary interacting with a fully upgraded KV cluster.
 	Start20_2
-	// NoOriginFKIndexes allows for foreign keys to no longer need indexes on
-	// the origin side of the relationship.
-	NoOriginFKIndexes
 	// NodeMembershipStatus gates the usage of the MembershipStatus enum in the
 	// Liveness proto. See comment on proto definition for more details.
 	NodeMembershipStatus
@@ -327,10 +324,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start20_2,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 1},
-	},
-	{
-		Key:     NoOriginFKIndexes,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 9},
 	},
 	{
 		Key:     NodeMembershipStatus,

@@ -16,7 +16,6 @@ import (
 	gojson "encoding/json"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -688,22 +687,20 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// Since we are able to drop indexes used by foreign keys on the origin side,
 			// the drop index codepaths aren't going to remove dependent FKs, so we
 			// need to do that here.
-			if params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.NoOriginFKIndexes) {
-				// We update the FK's slice in place here.
-				sliceIdx := 0
-				for i := range n.tableDesc.OutboundFKs {
-					n.tableDesc.OutboundFKs[sliceIdx] = n.tableDesc.OutboundFKs[i]
-					sliceIdx++
-					fk := &n.tableDesc.OutboundFKs[i]
-					if descpb.ColumnIDs(fk.OriginColumnIDs).Contains(colToDrop.GetID()) {
-						sliceIdx--
-						if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, fk); err != nil {
-							return err
-						}
+			// We update the FK's slice in place here.
+			sliceIdx = 0
+			for i := range n.tableDesc.OutboundFKs {
+				n.tableDesc.OutboundFKs[sliceIdx] = n.tableDesc.OutboundFKs[i]
+				sliceIdx++
+				fk := &n.tableDesc.OutboundFKs[i]
+				if descpb.ColumnIDs(fk.OriginColumnIDs).Contains(colToDrop.GetID()) {
+					sliceIdx--
+					if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, fk); err != nil {
+						return err
 					}
 				}
-				n.tableDesc.OutboundFKs = n.tableDesc.OutboundFKs[:sliceIdx]
 			}
+			n.tableDesc.OutboundFKs = n.tableDesc.OutboundFKs[:sliceIdx]
 
 			found := false
 			for i := range n.tableDesc.Columns {
