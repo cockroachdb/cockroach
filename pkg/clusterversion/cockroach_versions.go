@@ -186,9 +186,6 @@ const (
 	//
 	// Start21_1 demarcates work towards CockroachDB v21.1.
 	Start21_1
-	// EmptyArraysInInvertedIndexes is when empty arrays are added to array
-	// inverted indexes.
-	EmptyArraysInInvertedIndexes
 	// UniqueWithoutIndexConstraints is when adding UNIQUE WITHOUT INDEX
 	// constraints is supported.
 	UniqueWithoutIndexConstraints
@@ -352,10 +349,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_1,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     EmptyArraysInInvertedIndexes,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 4},
 	},
 	{
 		Key:     UniqueWithoutIndexConstraints,
