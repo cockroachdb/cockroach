@@ -84,8 +84,11 @@ func GetCastOperator(
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{castOpBase: base}, nil
 	}
-	if toType.Identical(fromType) {
-		// We have an identity cast, so we use a custom identity cast operator.
+	if toType.Identical(fromType) || (fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily) {
+		// We either have an identity cast or we have a cast between floats (and
+		// all floats are represented by float64 physically, so they are
+		// essentially identical too), so we use a custom identity cast
+		// operator.
 		return &castIdentityOp{castOpBase: base}, nil
 	}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
@@ -139,7 +142,7 @@ func IsCastSupported(fromType, toType *types.T) bool {
 	if fromType.Family() == types.UnknownFamily {
 		return true
 	}
-	if toType.Identical(fromType) {
+	if toType.Identical(fromType) || (fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily) {
 		return true
 	}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
