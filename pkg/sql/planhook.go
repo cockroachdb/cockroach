@@ -86,7 +86,11 @@ type PlanHookState interface {
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
 	GetAllRoles(ctx context.Context) (map[security.SQLUsername]bool, error)
 	BumpRoleMembershipTableVersion(ctx context.Context) error
-	EvalAsOfTimestamp(ctx context.Context, asOf tree.AsOfClause) (tree.AsOfSystemTime, error)
+	EvalAsOfTimestamp(
+		ctx context.Context,
+		asOf tree.AsOfClause,
+		opts ...tree.EvalAsOfTimestampOption,
+	) (tree.AsOfSystemTime, error)
 	ResolveMutableTableDescriptor(ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind) (prefix catalog.ResolvedObjectPrefix, table *tabledesc.Mutable, err error)
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc catalog.TableDescriptor, displayOptions ShowCreateDisplayOptions,

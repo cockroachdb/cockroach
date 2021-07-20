@@ -600,6 +600,14 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		if asOf != nil {
+			if asOf.BoundedStaleness {
+				return makeErrEvent(
+					pgerror.Newf(
+						pgcode.FeatureNotSupported,
+						"cannot use a bounded staleness query in a transaction",
+					),
+				)
+			}
 			if readTs := ex.state.getReadTimestamp(); asOf.Timestamp != readTs {
 				err = pgerror.Newf(pgcode.Syntax,
 					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", readTs)
