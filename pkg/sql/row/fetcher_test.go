@@ -170,8 +170,8 @@ func TestNextRowSingle(t *testing.T) {
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
-				false, /*limitBatches*/
-				0,     /*limitHint*/
+				NoBytesLimit,
+				NoRowLimit,
 				false, /*traceKV*/
 				false, /*forceProductionKVBatchSize*/
 			); err != nil {
@@ -291,7 +291,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
-				true,  /*limitBatches*/
+				DefaultBatchBytesLimit,
 				10,    /*limitHint*/
 				false, /*traceKV*/
 				false, /*forceProductionKVBatchSize*/
@@ -402,8 +402,8 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 		context.Background(),
 		kv.NewTxn(ctx, kvDB, 0),
 		roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
-		false, /*limitBatches*/
-		0,     /*limitHint*/
+		NoBytesLimit,
+		NoRowLimit,
 		false, /*traceKV*/
 		false, /*forceProductionKVBatchSize*/
 	)
@@ -488,7 +488,7 @@ INDEX(c)
 		roachpb.Spans{indexSpan,
 			roachpb.Span{Key: midKey, EndKey: endKey},
 		},
-		true, /*limitBatches*/
+		DefaultBatchBytesLimit,
 		// Set a limitHint of 1 to more quickly end the first batch, causing a
 		// batch that ends between rows.
 		1,     /*limitHint*/
@@ -651,8 +651,8 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PublicNonPrimaryIndexes()[0].GetID())},
-				false, /*limitBatches*/
-				0,     /*limitHint*/
+				NoBytesLimit,
+				NoRowLimit,
 				false, /*traceKV*/
 				false, /*forceProductionKVBatchSize*/
 			); err != nil {
@@ -1009,8 +1009,8 @@ func TestNextRowInterleaved(t *testing.T) {
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				lookupSpans,
-				false, /*limitBatches*/
-				0,     /*limitHint*/
+				NoBytesLimit,
+				NoRowLimit,
 				false, /*traceKV*/
 				false, /*forceProductionKVBatchSize*/
 			); err != nil {

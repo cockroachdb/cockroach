@@ -162,6 +162,10 @@ type joinReader struct {
 	// detailed comment in the spec). This can never be true for index joins,
 	// and requires that the spec has MaintainOrdering set to true.
 	outputGroupContinuationForLeftRow bool
+	// lookupBatchBytesLimit controls the TargetBytes of lookup requests. If 0, a
+	// default will be used. Regardless of this value, bytes limits aren't always
+	// used.
+	lookupBatchBytesLimit int64
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -236,8 +240,9 @@ func newJoinReader(
 		// row for each input row. Similarly, in case of spec.LookupColumnsAreKey,
 		// we know that there's at most one lookup row per input row. In other
 		// cases, we use limits.
-		shouldLimitBatches: !spec.LookupColumnsAreKey && readerType == lookupJoinReaderType,
-		readerType:         readerType,
+		shouldLimitBatches:    !spec.LookupColumnsAreKey && readerType == lookupJoinReaderType,
+		readerType:            readerType,
+		lookupBatchBytesLimit: spec.LookupBatchBytesLimit,
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
@@ -694,8 +699,17 @@ func (jr *joinReader) readInput() (
 	}
 
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
+	var bytesLimit int64
+	if !jr.shouldLimitBatches {
+		bytesLimit = row.NoBytesLimit
+	} else {
+		bytesLimit = jr.lookupBatchBytesLimit
+		if jr.lookupBatchBytesLimit == 0 {
+			bytesLimit = row.DefaultBatchBytesLimit
+		}
+	}
 	if err := jr.fetcher.StartScan(
-		jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
+		jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, row.NoRowLimit,
 		jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		jr.MoveToDraining(err)
@@ -764,8 +778,12 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			sort.Sort(spans)
 
 			log.VEventf(jr.Ctx, 1, "scanning %d remote spans", len(spans))
+			bytesLimit := row.DefaultBatchBytesLimit
+			if !jr.shouldLimitBatches {
+				bytesLimit = row.NoBytesLimit
+			}
 			if err := jr.fetcher.StartScan(
-				jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
+				jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, row.NoRowLimit,
 				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 			); err != nil {
 				jr.MoveToDraining(err)
