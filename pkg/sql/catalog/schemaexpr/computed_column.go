@@ -135,12 +135,11 @@ func ValidateComputedColumnExpression(
 					"index element expression referencing mutation columns",
 					"index element expression referencing columns (%s) added in the current transaction",
 					strings.Join(mutationColumnNames, ", "))
-			} else {
-				return "", nil, unimplemented.Newf(
-					"virtual computed columns referencing mutation columns",
-					"virtual computed column %q referencing columns (%s) added in the "+
-						"current transaction", d.Name, strings.Join(mutationColumnNames, ", "))
 			}
+			return "", nil, unimplemented.Newf(
+				"virtual computed columns referencing mutation columns",
+				"virtual computed column %q referencing columns (%s) added in the "+
+					"current transaction", d.Name, strings.Join(mutationColumnNames, ", "))
 		}
 	}
 
