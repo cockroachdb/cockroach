@@ -13,8 +13,6 @@ package scbuild
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -109,9 +107,7 @@ func (b *buildContext) alterTableAddColumn(
 	// If the new column has a DEFAULT expression that uses a sequence, add
 	// references between its descriptor and this column descriptor.
 	if d.HasDefaultExpr() {
-		b.maybeAddSequenceReferenceDependencies(
-			ctx, b.EvalCtx.Settings, table.GetID(), col, defaultExpr,
-		)
+		b.maybeAddSequenceReferenceDependencies(ctx, table.GetID(), col, defaultExpr)
 	}
 
 	b.validateColumnName(table, d, col, t.IfNotExists)
@@ -355,19 +351,12 @@ func (b *buildContext) alterTableDropColumn(
 var _ = (*buildContext)(nil).alterTableDropColumn
 
 func (b *buildContext) maybeAddSequenceReferenceDependencies(
-	ctx context.Context,
-	st *cluster.Settings,
-	tableID descpb.ID,
-	col *descpb.ColumnDescriptor,
-	defaultExpr tree.TypedExpr,
+	ctx context.Context, tableID descpb.ID, col *descpb.ColumnDescriptor, defaultExpr tree.TypedExpr,
 ) {
 	seqIdentifiers, err := sequence.GetUsedSequences(defaultExpr)
 	if err != nil {
 		panic(err)
 	}
-	version := st.Version.ActiveVersionOrEmpty(ctx)
-	byID := version != (clusterversion.ClusterVersion{}) &&
-		version.IsActive(clusterversion.SequencesRegclass)
 
 	var tn tree.TableName
 	seqNameToID := make(map[string]int64)
@@ -398,11 +387,10 @@ func (b *buildContext) maybeAddSequenceReferenceDependencies(
 			SequenceID: seqDesc.GetID(),
 			TableID:    tableID,
 			ColumnID:   col.ID,
-			ByID:       byID,
 		})
 	}
 
-	if len(seqIdentifiers) > 0 && byID {
+	if len(seqIdentifiers) > 0 {
 		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(defaultExpr, seqNameToID)
 		if err != nil {
 			panic(err)

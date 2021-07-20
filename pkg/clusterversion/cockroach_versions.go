@@ -226,10 +226,6 @@ const (
 	// are propagated across RPC boundaries independently of their verbosity setting.
 	// This requires a version gate this violates implicit assumptions in v20.2.
 	TracingVerbosityIndependentSemantics
-	// SequencesRegclass starts storing sequences used in DEFAULT expressions
-	// via their IDs instead of their names, which leads to allowing such
-	// sequences to be renamed.
-	SequencesRegclass
 	// ImplicitColumnPartitioning introduces implicit column partitioning to
 	// tables.
 	ImplicitColumnPartitioning
@@ -381,10 +377,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TracingVerbosityIndependentSemantics,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 28},
-	},
-	{
-		Key:     SequencesRegclass,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 30},
 	},
 	{
 		Key:     ImplicitColumnPartitioning,

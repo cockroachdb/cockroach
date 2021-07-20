@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -642,9 +641,6 @@ func maybeAddSequenceDependencies(
 	if err != nil {
 		return nil, err
 	}
-	version := st.Version.ActiveVersionOrEmpty(ctx)
-	byID := version != (clusterversion.ClusterVersion{}) &&
-		version.IsActive(clusterversion.SequencesRegclass)
 
 	var seqDescs []*tabledesc.Mutable
 	seqNameToID := make(map[string]int64)
@@ -673,7 +669,7 @@ func maybeAddSequenceDependencies(
 			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
 				ID:        tableDesc.ID,
 				ColumnIDs: []descpb.ColumnID{col.ID},
-				ByID:      byID,
+				ByID:      true,
 			})
 		} else {
 			seqDesc.DependedOnBy[refIdx].ColumnIDs = append(seqDesc.DependedOnBy[refIdx].ColumnIDs, col.ID)
@@ -683,7 +679,7 @@ func maybeAddSequenceDependencies(
 
 	// If sequences are present in the expr (and the cluster is the right version),
 	// walk the expr tree and replace any sequences names with their IDs.
-	if len(seqIdentifiers) > 0 && byID {
+	if len(seqIdentifiers) > 0 {
 		newExpr, err := sequence.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
 		if err != nil {
 			return nil, err
