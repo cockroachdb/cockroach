@@ -66,10 +66,10 @@ func OnSlowAcquisition(threshold time.Duration, f SlowAcquisitionFunc) Option {
 // LogSlowAcquisition is a SlowAcquisitionFunc.
 func LogSlowAcquisition(ctx context.Context, poolName string, r Request, start time.Time) func() {
 	log.Warningf(ctx, "have been waiting %s attempting to acquire %s quota",
-		timeutil.Since(start), poolName)
+		timeutil.Since(start), log.Safe(poolName))
 	return func() {
 		log.Infof(ctx, "acquired %s quota after %s",
-			poolName, timeutil.Since(start))
+			log.Safe(poolName), timeutil.Since(start))
 	}
 }
 
