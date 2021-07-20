@@ -26,20 +26,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// SupportedWindowFns contains all window functions supported by the
-// vectorized engine.
-var SupportedWindowFns = map[execinfrapb.WindowerSpec_WindowFunc]struct{}{
-	execinfrapb.WindowerSpec_ROW_NUMBER:   {},
-	execinfrapb.WindowerSpec_RANK:         {},
-	execinfrapb.WindowerSpec_DENSE_RANK:   {},
-	execinfrapb.WindowerSpec_PERCENT_RANK: {},
-	execinfrapb.WindowerSpec_CUME_DIST:    {},
-	execinfrapb.WindowerSpec_NTILE:        {},
-	execinfrapb.WindowerSpec_LAG:          {},
-	execinfrapb.WindowerSpec_LEAD:         {},
-	execinfrapb.WindowerSpec_FIRST_VALUE:  {},
-	execinfrapb.WindowerSpec_LAST_VALUE:   {},
-	execinfrapb.WindowerSpec_NTH_VALUE:    {},
+// windowFnMaxNumArgs is a mapping from the window function to the maximum
+// number of arguments it takes.
+var windowFnMaxNumArgs = map[execinfrapb.WindowerSpec_WindowFunc]int{
+	execinfrapb.WindowerSpec_ROW_NUMBER:   0,
+	execinfrapb.WindowerSpec_RANK:         0,
+	execinfrapb.WindowerSpec_DENSE_RANK:   0,
+	execinfrapb.WindowerSpec_PERCENT_RANK: 0,
+	execinfrapb.WindowerSpec_CUME_DIST:    0,
+	execinfrapb.WindowerSpec_NTILE:        1,
+	execinfrapb.WindowerSpec_LAG:          3,
+	execinfrapb.WindowerSpec_LEAD:         3,
+	execinfrapb.WindowerSpec_FIRST_VALUE:  1,
+	execinfrapb.WindowerSpec_LAST_VALUE:   1,
+	execinfrapb.WindowerSpec_NTH_VALUE:    2,
 }
 
 // WindowFnNeedsPeersInfo returns whether a window function pays attention to
