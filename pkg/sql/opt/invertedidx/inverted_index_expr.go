@@ -116,7 +116,7 @@ func TryFilterInvertedIndex(
 			index:           index,
 			computedColumns: computedColumns,
 		}
-		col := index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()
+		col := index.InvertedColumn().InvertedSourceColumnOrdinal()
 		typ = factory.Metadata().Table(tabID).Column(col).DatumType()
 	}
 
@@ -509,7 +509,7 @@ func extractInvertedFilterCondition(
 func isIndexColumn(
 	tabID opt.TableID, index cat.Index, e opt.Expr, computedColumns map[opt.ColumnID]opt.ScalarExpr,
 ) bool {
-	invertedSourceCol := tabID.ColumnID(index.VirtualInvertedColumn().InvertedSourceColumnOrdinal())
+	invertedSourceCol := tabID.ColumnID(index.InvertedColumn().InvertedSourceColumnOrdinal())
 	if v, ok := e.(*memo.VariableExpr); ok && v.Col == invertedSourceCol {
 		return true
 	}

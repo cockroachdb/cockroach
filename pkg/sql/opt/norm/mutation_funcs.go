@@ -79,7 +79,7 @@ func (c *CustomFuncs) SimplifiablePartialIndexProjectCols(
 		// are never part of the updated columns. Updates to source columns
 		// trigger index changes.
 		predFilters := *pred.(*memo.FiltersExpr)
-		indexAndPredCols := tabMeta.IndexColumnsMapVirtual(i)
+		indexAndPredCols := tabMeta.IndexColumnsMapInverted(i)
 		indexAndPredCols.UnionWith(predFilters.OuterCols())
 		if indexAndPredCols.Intersects(updateCols) {
 			continue

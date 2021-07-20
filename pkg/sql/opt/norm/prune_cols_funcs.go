@@ -175,7 +175,7 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			// columns have been mapped to their source columns. Virtual columns
 			// are never part of the updated columns. Updates to source columns
 			// trigger index changes.
-			indexCols := tabMeta.IndexColumnsMapVirtual(i)
+			indexCols := tabMeta.IndexColumnsMapInverted(i)
 			pred, isPartialIndex := tabMeta.PartialIndexPredicate(i)
 			indexAndPredCols := indexCols.Copy()
 			if isPartialIndex {
@@ -188,7 +188,7 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 
 			// Always add index strict key columns, since these are needed to fetch
 			// existing rows from the store.
-			keyCols := tabMeta.IndexKeyColumnsMapVirtual(i)
+			keyCols := tabMeta.IndexKeyColumnsMapInverted(i)
 			cols.UnionWith(keyCols)
 
 			// Add all columns in any family that includes an update column.
@@ -228,7 +228,7 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		// it is necessary to delete rows even from indexes that are being added
 		// or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
-			cols.UnionWith(tabMeta.IndexKeyColumnsMapVirtual(i))
+			cols.UnionWith(tabMeta.IndexKeyColumnsMapInverted(i))
 		}
 
 		// Add inbound foreign keys that may require a check or cascade.

@@ -468,7 +468,7 @@ func extractInfoFromExpr(
 	if !ok {
 		return 0, nil, nil, nil, false
 	}
-	if arg2.Col != tabID.ColumnID(index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()) {
+	if arg2.Col != tabID.ColumnID(index.InvertedColumn().InvertedSourceColumnOrdinal()) {
 		// The column in the function does not match the index column.
 		return 0, nil, nil, nil, false
 	}

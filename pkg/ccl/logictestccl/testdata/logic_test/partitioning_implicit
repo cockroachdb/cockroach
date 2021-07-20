@@ -161,7 +161,7 @@ TABLE t
  ├── j jsonb
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── j_inverted_key bytes not null [virtual-inverted]
+ ├── j_inverted_key bytes not null [inverted]
  ├── FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
  ├── PRIMARY INDEX primary
  │    ├── a int not null (implicit)
@@ -198,7 +198,7 @@ TABLE t
  │                   └── (4)
  ├── INVERTED INDEX t_j_idx
  │    ├── a int not null (implicit)
- │    ├── j_inverted_key bytes not null [virtual-inverted]
+ │    ├── j_inverted_key bytes not null [inverted]
  │    ├── pk int not null
  │    └── partitions
  │         └── j_implicit

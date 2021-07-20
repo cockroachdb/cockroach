@@ -133,9 +133,9 @@ type Index interface {
 	// i < ColumnCount.
 	Column(i int) IndexColumn
 
-	// VirtualInvertedColumn returns the VirtualInverted IndexColumn of the
-	// index. Panics if the index is not an inverted index.
-	VirtualInvertedColumn() IndexColumn
+	// InvertedColumn returns the inverted IndexColumn of the index. Panics if
+	// the index is not an inverted index.
+	InvertedColumn() IndexColumn
 
 	// Predicate returns the partial index predicate expression and true if the
 	// index is a partial index. If it is not a partial index, the empty string
