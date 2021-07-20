@@ -821,10 +821,11 @@ func backupPlanHook(
 
 		endTime := p.ExecCfg().Clock.Now()
 		if backupStmt.AsOf.Expr != nil {
-			var err error
-			if endTime, err = p.EvalAsOfTimestamp(ctx, backupStmt.AsOf); err != nil {
+			asOf, err := p.EvalAsOfTimestamp(ctx, backupStmt.AsOf)
+			if err != nil {
 				return err
 			}
+			endTime = asOf.Timestamp
 		}
 
 		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to, "")

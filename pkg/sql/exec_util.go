@@ -1340,17 +1340,18 @@ func checkResultType(typ *types.T) error {
 // EvalAsOfTimestamp evaluates and returns the timestamp from an AS OF SYSTEM
 // TIME clause.
 func (p *planner) EvalAsOfTimestamp(
-	ctx context.Context, asOf tree.AsOfClause,
-) (_ hlc.Timestamp, err error) {
-	ts, err := tree.EvalAsOfTimestamp(ctx, asOf, &p.semaCtx, p.EvalContext())
+	ctx context.Context, asOfClause tree.AsOfClause, opts ...tree.EvalAsOfTimestampOption,
+) (tree.AsOfSystemTime, error) {
+	asOf, err := tree.EvalAsOfTimestamp(ctx, asOfClause, &p.semaCtx, p.EvalContext(), opts...)
 	if err != nil {
-		return hlc.Timestamp{}, err
+		return tree.AsOfSystemTime{}, err
 	}
+	ts := asOf.Timestamp
 	if now := p.execCfg.Clock.Now(); now.Less(ts) && !ts.Synthetic {
-		return hlc.Timestamp{}, errors.Errorf(
+		return tree.AsOfSystemTime{}, errors.Errorf(
 			"AS OF SYSTEM TIME: cannot specify timestamp in the future (%s > %s)", ts, now)
 	}
-	return ts, nil
+	return asOf, nil
 }
 
 // ParseHLC parses a string representation of an `hlc.Timestamp`.
@@ -1379,7 +1380,7 @@ func ParseHLC(s string) (hlc.Timestamp, error) {
 // timestamp is not nil, it is the timestamp to which a transaction
 // should be set. The statements that will be checked are Select,
 // ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
-func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*hlc.Timestamp, error) {
+func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*tree.AsOfSystemTime, error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:
@@ -1416,8 +1417,11 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*hlc.Timesta
 	default:
 		return nil, nil
 	}
-	ts, err := p.EvalAsOfTimestamp(ctx, asOf)
-	return &ts, err
+	asOfRet, err := p.EvalAsOfTimestamp(ctx, asOf, tree.EvalAsOfTimestampOptionAllowBoundedStaleness)
+	if err != nil {
+		return nil, err
+	}
+	return &asOfRet, err
 }
 
 // isSavepoint returns true if ast is a SAVEPOINT statement.

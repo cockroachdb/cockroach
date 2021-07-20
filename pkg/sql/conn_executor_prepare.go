@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -262,13 +263,19 @@ func (ex *connExecutor) populatePrepared(
 	}
 	p.extendedEvalCtx.PrepareOnly = true
 
-	protoTS, err := p.isAsOf(ctx, stmt.AST)
+	asOf, err := p.isAsOf(ctx, stmt.AST)
 	if err != nil {
 		return 0, err
 	}
-	if protoTS != nil {
-		p.semaCtx.AsOfTimestamp = protoTS
-		txn.SetFixedTimestamp(ctx, *protoTS)
+	if asOf != nil {
+		p.semaCtx.AsOfSystemTime = asOf
+		if asOf.BoundedStaleness {
+			return 0, unimplemented.NewWithIssuef(
+				67562,
+				"bounded staleness queries do not yet work with prepared statements",
+			)
+		}
+		txn.SetFixedTimestamp(ctx, asOf.Timestamp)
 	}
 
 	// PREPARE has a limited subset of statements it can be run with. Postgres

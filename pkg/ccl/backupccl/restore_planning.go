@@ -1559,11 +1559,11 @@ func restorePlanHook(
 
 		var endTime hlc.Timestamp
 		if restoreStmt.AsOf.Expr != nil {
-			var err error
-			endTime, err = p.EvalAsOfTimestamp(ctx, restoreStmt.AsOf)
+			asOf, err := p.EvalAsOfTimestamp(ctx, restoreStmt.AsOf)
 			if err != nil {
 				return err
 			}
+			endTime = asOf.Timestamp
 		}
 
 		var passphrase string

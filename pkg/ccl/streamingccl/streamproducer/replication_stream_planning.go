@@ -136,9 +136,11 @@ func doCreateReplicationStream(
 
 	var scanStart hlc.Timestamp
 	if eval.Options.Cursor != nil {
-		if scanStart, err = p.EvalAsOfTimestamp(ctx, tree.AsOfClause{Expr: eval.Options.Cursor}); err != nil {
+		asOf, err := p.EvalAsOfTimestamp(ctx, tree.AsOfClause{Expr: eval.Options.Cursor})
+		if err != nil {
 			return err
 		}
+		scanStart = asOf.Timestamp
 	}
 
 	var spans []roachpb.Span

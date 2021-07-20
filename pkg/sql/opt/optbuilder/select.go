@@ -1180,18 +1180,25 @@ func (b *Builder) buildFromWithLateral(
 
 // validateAsOf ensures that any AS OF SYSTEM TIME timestamp is consistent with
 // that of the root statement.
-func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
-	ts, err := tree.EvalAsOfTimestamp(b.ctx, asOf, b.semaCtx, b.evalCtx)
+func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
+	// TODO(#67558): prohibit bounded staleness in subqueries.
+	asOf, err := tree.EvalAsOfTimestamp(
+		b.ctx,
+		asOfClause,
+		b.semaCtx,
+		b.evalCtx,
+		tree.EvalAsOfTimestampOptionAllowBoundedStaleness,
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	if b.semaCtx.AsOfTimestamp == nil {
+	if b.semaCtx.AsOfSystemTime == nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
 	}
 
-	if *b.semaCtx.AsOfTimestamp != ts {
+	if *b.semaCtx.AsOfSystemTime != asOf {
 		panic(unimplementedWithIssueDetailf(35712, "",
 			"cannot specify AS OF SYSTEM TIME with different timestamps"))
 	}

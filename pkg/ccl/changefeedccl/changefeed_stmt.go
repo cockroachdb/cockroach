@@ -163,11 +163,13 @@ func changefeedPlanHook(
 		}
 		var initialHighWater hlc.Timestamp
 		if cursor, ok := opts[changefeedbase.OptCursor]; ok {
-			asOf := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
+			asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
 			var err error
-			if initialHighWater, err = p.EvalAsOfTimestamp(ctx, asOf); err != nil {
+			asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
+			if err != nil {
 				return err
 			}
+			initialHighWater = asOf.Timestamp
 			statementTime = initialHighWater
 		}
 
