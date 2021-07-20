@@ -97,7 +97,7 @@ message SequenceDependency {
   // For example, nextval('foo.public.seq') vs. nextval(12345::REGCLASS),
   // where 12345 is the ID of foo.public.seq.
   // Sequences referenced only by its ID have the ability to be renamed.
-  bool by_id = 5 [(gogoproto.customname) = "ByID"];
+  reserved 5; // This field was used until 21.2.
 }
 
 message UniqueConstraint {
