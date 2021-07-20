@@ -43,11 +43,6 @@ var migrations = []migration.Migration{
 		postTruncatedStateMigration,
 	),
 	migration.NewTenantMigration(
-		"fix system.protected_ts_meta privileges",
-		toCV(clusterversion.ProtectedTsMetaPrivilegesMigration),
-		protectedTsMetaPrivilegesMigration,
-	),
-	migration.NewTenantMigration(
 		"add the systems.join_tokens table",
 		toCV(clusterversion.JoinTokensTable),
 		joinTokensTableMigration,
