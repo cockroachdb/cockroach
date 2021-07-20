@@ -202,8 +202,6 @@ const (
 	// replacedPostTruncatedAndRangeAppliedStateMigration is like the above
 	// version. See its comment.
 	replacedPostTruncatedAndRangeAppliedStateMigration
-	// NewSchemaChanger enables the new schema changer.
-	NewSchemaChanger
 	// LongRunningMigrations introduces the LongRunningMigrations table and jobs.
 	// All versions which have a registered long-running migration must have a
 	// version higher than this version.
@@ -360,10 +358,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     replacedPostTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 16},
-	},
-	{
-		Key:     NewSchemaChanger,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 18},
 	},
 	{
 		Key:     LongRunningMigrations,
