@@ -471,6 +471,9 @@ func withKnobsFn(fn updateKnobsFn) feedTestOption {
 	return func(opts *feedTestOptions) { opts.knobsFn = fn }
 }
 
+// Silence the linter.
+var _ = withKnobsFn(nil /* fn */)
+
 func newTestOptions() feedTestOptions {
 	// percentTenant is the percentange of tests that will be run against
 	// a SQL-node in a multi-tenant server. 1 for all tests to be run on a
