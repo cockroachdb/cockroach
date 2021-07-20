@@ -69,7 +69,13 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	if len(n.n.Roles) == 0 {
 		targetRoles = append(targetRoles, params.p.User())
 	} else {
-		targetRoles = n.n.Roles
+		for _, role := range n.n.Roles {
+			user, err := security.MakeSQLUsernameFromUserInput(string(role), security.UsernameValidation)
+			if err != nil {
+				return err
+			}
+			targetRoles = append(targetRoles, user)
+		}
 	}
 
 	users, err := params.p.GetAllRoles(params.ctx)
@@ -92,7 +98,11 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 
 	granteesSQLUsername := make([]security.SQLUsername, len(grantees))
 	for i, grantee := range grantees {
-		granteesSQLUsername[i] = security.MakeSQLUsernameFromPreNormalizedString(string(grantee))
+		user, err := security.MakeSQLUsernameFromUserInput(string(grantee), security.UsernameValidation)
+		if err != nil {
+			return err
+		}
+		granteesSQLUsername[i] = user
 	}
 
 	if err = validateGrantees(users, granteesSQLUsername); err != nil {

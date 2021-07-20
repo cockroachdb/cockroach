@@ -10,14 +10,11 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
 
 // AlterDefaultPrivileges represents an ALTER DEFAULT PRIVILEGES statement.
 type AlterDefaultPrivileges struct {
-	Roles []security.SQLUsername
+	Roles NameList
 	// If Schema is not specified, ALTER DEFAULT PRIVILEGES is being
 	// run on the current database.
 	Schemas ObjectNamePrefixList
@@ -38,7 +35,7 @@ func (n *AlterDefaultPrivileges) Format(ctx *FmtCtx) {
 			if i > 0 {
 				ctx.WriteString(", ")
 			}
-			ctx.FormatUsername(role)
+			ctx.FormatNode(&role)
 		}
 		ctx.WriteString(" ")
 	}

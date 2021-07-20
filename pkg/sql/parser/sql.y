@@ -1364,7 +1364,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %type <tree.AbbreviatedGrant> abbreviated_grant_stmt
 %type <tree.AbbreviatedRevoke> abbreviated_revoke_stmt
 %type <bool> opt_with_grant_option
-%type <[]security.SQLUsername> opt_for_roles
+%type <tree.NameList> opt_for_roles
 %type <tree.ObjectNamePrefixList>  opt_in_schemas
 %type <tree.AlterDefaultPrivilegesTargetObject> alter_default_privileges_target_object
 
@@ -7923,7 +7923,7 @@ alter_default_privileges_stmt:
  ALTER DEFAULT PRIVILEGES opt_for_roles opt_in_schemas abbreviated_grant_stmt
  {
    $$.val = &tree.AlterDefaultPrivileges{
-     Roles: $4.users(),
+     Roles: $4.nameList(),
      Schemas: $5.objectNamePrefixList(),
      Grant: $6.abbreviatedGrant(),
      IsGrant: true,
@@ -7932,7 +7932,7 @@ alter_default_privileges_stmt:
 | ALTER DEFAULT PRIVILEGES opt_for_roles opt_in_schemas abbreviated_revoke_stmt
  {
    $$.val = &tree.AlterDefaultPrivileges{
-     Roles: $4.users(),
+     Roles: $4.nameList(),
      Schemas: $5.objectNamePrefixList(),
      Revoke: $6.abbreviatedRevoke(),
      IsGrant: false,
@@ -8008,12 +8008,12 @@ alter_default_privileges_target_object:
   }
 
 opt_for_roles:
- FOR role_or_group_or_user role_spec_list
+ FOR role_or_group_or_user name_list
  {
-   $$.val = $3.users()
+   $$.val = $3.nameList()
  }
 | /* EMPTY */ {
-   $$.val = []security.SQLUsername{}
+   $$.val = tree.NameList(nil)
 }
 
 opt_in_schemas:
