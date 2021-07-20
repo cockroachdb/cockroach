@@ -253,13 +253,13 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	}
 
 	// Evaluate the AS OF time, if any.
-	var asOf *hlc.Timestamp
+	var asOfTimestamp *hlc.Timestamp
 	if n.Options.AsOf.Expr != nil {
-		asOfTs, err := n.p.EvalAsOfTimestamp(ctx, n.Options.AsOf)
+		asOf, err := n.p.EvalAsOfTimestamp(ctx, n.Options.AsOf)
 		if err != nil {
 			return nil, err
 		}
-		asOf = &asOfTs
+		asOfTimestamp = &asOf.Timestamp
 	}
 
 	// Create a job to run statistics creation.
@@ -285,7 +285,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			Table:           *tableDesc.TableDesc(),
 			ColumnStats:     colStats,
 			Statement:       eventLogStatement,
-			AsOf:            asOf,
+			AsOf:            asOfTimestamp,
 			MaxFractionIdle: n.Options.Throttling,
 		},
 		Progress: jobspb.CreateStatsProgress{},
@@ -513,7 +513,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		evalCtx.Txn = txn
 
 		if details.AsOf != nil {
-			p.SemaCtx().AsOfTimestamp = details.AsOf
+			p.SemaCtx().AsOfSystemTime = &tree.AsOfSystemTime{Timestamp: *details.AsOf}
 			p.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
 			txn.SetFixedTimestamp(ctx, *details.AsOf)
 		}

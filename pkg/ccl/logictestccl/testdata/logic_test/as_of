@@ -113,3 +113,24 @@ true
 
 statement error interval duration for with_max_staleness must be greater or equal to 0
 SELECT with_max_staleness(-'1s')
+
+statement ok
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
+
+statement ok
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms')
+
+statement error AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
+BEGIN AS OF SYSTEM TIME with_max_staleness('1ms')
+
+statement error cannot use a bounded staleness query in a transaction
+BEGIN; SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
+
+statement ok
+ROLLBACK
+
+statement error bounded staleness queries do not yet work with prepared statements
+PREPARE prep_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '10s'::interval)
+
+statement error bounded staleness queries do not yet work with prepared statements
+PREPARE prep_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')

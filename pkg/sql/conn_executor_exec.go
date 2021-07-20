@@ -581,32 +581,40 @@ func (ex *connExecutor) execStmtInOpenState(
 	// don't return any event unless an error happens.
 
 	if os.ImplicitTxn.Get() {
-		asOfTs, err := p.isAsOf(ctx, ast)
+		asOf, err := p.isAsOf(ctx, ast)
 		if err != nil {
 			return makeErrEvent(err)
 		}
-		if asOfTs != nil {
-			p.semaCtx.AsOfTimestamp = asOfTs
-			p.extendedEvalCtx.SetTxnTimestamp(asOfTs.GoTime())
-			ex.state.setHistoricalTimestamp(ctx, *asOfTs)
+		if asOf != nil {
+			p.semaCtx.AsOfSystemTime = asOf
+			p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
+			ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp)
 		}
 	} else {
 		// If we're in an explicit txn, we allow AOST but only if it matches with
 		// the transaction's timestamp. This is useful for running AOST statements
 		// using the InternalExecutor inside an external transaction; one might want
 		// to do that to force p.avoidCachedDescriptors to be set below.
-		ts, err := p.isAsOf(ctx, ast)
+		asOf, err := p.isAsOf(ctx, ast)
 		if err != nil {
 			return makeErrEvent(err)
 		}
-		if ts != nil {
-			if readTs := ex.state.getReadTimestamp(); *ts != readTs {
+		if asOf != nil {
+			if asOf.BoundedStaleness {
+				return makeErrEvent(
+					pgerror.Newf(
+						pgcode.FeatureNotSupported,
+						"cannot use a bounded staleness query in a transaction",
+					),
+				)
+			}
+			if readTs := ex.state.getReadTimestamp(); asOf.Timestamp != readTs {
 				err = pgerror.Newf(pgcode.Syntax,
 					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", readTs)
 				err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
 				return makeErrEvent(err)
 			}
-			p.semaCtx.AsOfTimestamp = ts
+			p.semaCtx.AsOfSystemTime = asOf
 		}
 	}
 
@@ -1142,8 +1150,8 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	if s != nil {
 		modes = s.Modes
 	}
-	asOf := ex.asOfClauseWithSessionDefault(modes.AsOf)
-	if asOf.Expr == nil {
+	asOfClause := ex.asOfClauseWithSessionDefault(modes.AsOf)
+	if asOfClause.Expr == nil {
 		rwMode = ex.readWriteModeWithSessionDefault(modes.ReadWriteMode)
 		return rwMode, now, nil, nil
 	}
@@ -1160,7 +1168,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	// awful. Instead we ought to clear the planner state when we clear the reset
 	// the connExecutor in finishTxn.
 	ex.resetPlanner(ctx, p, p.txn, now)
-	ts, err := p.EvalAsOfTimestamp(ctx, asOf)
+	asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
 	if err != nil {
 		return 0, time.Time{}, nil, err
 	}
@@ -1172,7 +1180,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	if modes.ReadWriteMode == tree.ReadWrite {
 		return 0, time.Time{}, nil, tree.ErrAsOfSpecifiedWithReadWrite
 	}
-	return tree.ReadOnly, ts.GoTime(), &ts, nil
+	return tree.ReadOnly, asOf.Timestamp.GoTime(), &asOf.Timestamp, nil
 }
 
 // execStmtInNoTxnState "executes" a statement when no transaction is in scope.
