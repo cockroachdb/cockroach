@@ -104,7 +104,7 @@ func (d *dev) bench(cmd *cobra.Command, pkgs []string) error {
 		if timeout > 0 {
 			args = append(args, fmt.Sprintf("-test.timeout=%s", timeout.String()))
 		}
-		_, err := d.exec.CommandContext(ctx, "bazel", args...)
+		err := d.exec.CommandContextNoRecord(ctx, "bazel", args...)
 		if err != nil {
 			return err
 		}
