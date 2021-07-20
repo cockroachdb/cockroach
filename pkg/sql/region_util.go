@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -154,8 +156,9 @@ func zoneConfigForMultiRegionDatabase(
 		LeasePreferences: []zonepb.LeasePreference{
 			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(regionConfig.PrimaryRegion())}},
 		},
-		VoterConstraints: voterConstraints,
-		Constraints:      constraints,
+		NullVoterConstraintsIsEmpty: true,
+		VoterConstraints:            voterConstraints,
+		Constraints:                 constraints,
 	}, nil
 }
 
@@ -177,7 +180,7 @@ func zoneConfigForMultiRegionPartition(
 	}
 	zc.NumVoters = &numVoters
 
-	zc.InheritedVoterConstraints = false
+	zc.NullVoterConstraintsIsEmpty = true
 	zc.VoterConstraints = voterConstraints
 
 	zc.InheritedLeasePreferences = false
@@ -378,7 +381,7 @@ func zoneConfigForMultiRegionTable(
 		}
 		ret.NumVoters = &numVoters
 
-		ret.InheritedVoterConstraints = false
+		ret.NullVoterConstraintsIsEmpty = true
 		ret.VoterConstraints = voterConstraints
 
 		ret.InheritedLeasePreferences = false
@@ -439,11 +442,10 @@ func dropZoneConfigsForMultiRegionIndexes(
 		regionConfig multiregion.RegionConfig,
 		table catalog.TableDescriptor,
 	) (hasNewSubzones bool, newZoneConfig zonepb.ZoneConfig, err error) {
-		for _, indexID := range indexIDs {
-			for _, region := range regionConfig.Regions() {
-				zoneConfig.DeleteSubzone(uint32(indexID), string(region))
-			}
-		}
+		// Clear all multi-region fields of the subzones. If this leaves them
+		// empty, they will automatically be removed.
+		zoneConfig.ClearFieldsOfAllSubzones(zonepb.MultiRegionZoneConfigFields)
+
 		// Strip placeholder status and spans if there are no more subzones.
 		if len(zoneConfig.Subzones) == 0 && zoneConfig.IsSubzonePlaceholder() {
 			zoneConfig.NumReplicas = nil
@@ -506,6 +508,17 @@ var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 	if err != nil {
 		return false, zonepb.ZoneConfig{}, err
 	}
+
+	// Wipe out the subzone multi-region fields before we copy over the
+	// multi-region fields to the zone config down below. We have to do this to
+	// handle the case where users have set a zone config on an index and we're
+	// ALTERing to a table locality that doesn't lay down index zone
+	// configurations (e.g. GLOBAL or REGIONAL BY TABLE). Since the user will
+	// have to override to perform the ALTER, we want to wipe out the index
+	// zone config so that the user won't have to override again the next time
+	// the want to ALTER the table locality.
+	zc.ClearFieldsOfAllSubzones(zonepb.MultiRegionZoneConfigFields)
+
 	zc.CopyFromZone(*localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
 
 	hasNewSubzones := table.IsLocalityRegionalByRow()
@@ -616,7 +629,8 @@ func ApplyZoneConfigForMultiRegionTable(
 			return err
 		}
 	} else if deleteZoneConfig {
-		// Delete the zone configuration if it exists but the new zone config is blank.
+		// Delete the zone configuration if it exists but the new zone config is
+		// blank.
 		if _, err = execCfg.InternalExecutor.Exec(
 			ctx,
 			"delete-zone-multiregion-table",
@@ -718,7 +732,7 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 	return p.forEachMutableTableInDatabase(
 		ctx,
 		desc,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.ID, p.Descriptors())
 			if err != nil {
 				return err
@@ -800,7 +814,7 @@ func partitionByForRegionalByRow(
 
 // ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
 func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error {
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
 		p.EvalContext().Ctx(),
 		p.txn,
 		p.CurrentDatabase(),
@@ -814,7 +828,13 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 	if !dbDesc.IsMultiRegion() {
 		return nil
 	}
-	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(
+		ctx,
+		p.txn,
+		dbDesc.GetID(),
+		p.Descriptors(),
+		SynthesizeRegionConfigOptionForValidation,
+	)
 	if err != nil {
 		return err
 	}
@@ -838,7 +858,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	if err := p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			ids = append(ids, tbDesc.GetID())
 			return nil
 		},
@@ -868,7 +888,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	return p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			return p.validateZoneConfigForMultiRegionTable(
 				tbDesc,
 				zoneConfigs[tbDesc.GetID()],
@@ -880,12 +900,12 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
 // CurrentDatabaseRegionConfig uses the cache to synthesize the RegionConfig
-// and as such is intended for DML use. It returns an empty DatabaseRegionConfig
+// and as such is intended for DML use. It returns nil
 // if the current database is not multi-region enabled.
 func (p *planner) CurrentDatabaseRegionConfig(
 	ctx context.Context,
 ) (tree.DatabaseRegionConfig, error) {
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
 		p.EvalContext().Ctx(),
 		p.txn,
 		p.CurrentDatabase(),
@@ -901,107 +921,64 @@ func (p *planner) CurrentDatabaseRegionConfig(
 		return nil, nil
 	}
 
-	// Construct a region config from leased descriptors.
-	regionEnumID, err := dbDesc.MultiRegionEnumID()
-	if err != nil {
-		return nil, err
-	}
-
-	regionEnum, err := p.Descriptors().GetImmutableTypeByID(
+	return SynthesizeRegionConfig(
 		ctx,
 		p.txn,
-		regionEnumID,
-		tree.ObjectLookupFlags{},
-	)
-	if err != nil {
-		return nil, err
-	}
-	regionNames, err := regionEnum.RegionNames()
-	if err != nil {
-		return nil, err
-	}
-
-	return multiregion.MakeRegionConfig(
-		regionNames,
-		dbDesc.GetRegionConfig().PrimaryRegion,
-		dbDesc.GetRegionConfig().SurvivalGoal,
-		regionEnumID,
-	), nil
-}
-
-// SynthesizeRegionConfigOffline is the public function for the synthesizing
-// region configs in cases where the searched for descriptor may be in
-// the offline state. See synthesizeRegionConfig for more details on what it
-// does under the covers.
-func SynthesizeRegionConfigOffline(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
-) (multiregion.RegionConfig, error) {
-	return synthesizeRegionConfigImpl(
-		ctx,
-		txn,
-		dbID,
-		descsCol,
-		true,  /* includeOffline */
-		false, /* forZoneConfigValidate */
+		dbDesc.GetID(),
+		p.Descriptors(),
+		SynthesizeRegionConfigOptionUseCache,
 	)
 }
 
-// SynthesizeRegionConfig is the public function for the synthesizing region
-// configs in the common case (i.e. not the offline case). See
-// synthesizeRegionConfig for more details on what it does under the covers.
-func SynthesizeRegionConfig(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
-) (multiregion.RegionConfig, error) {
-	return synthesizeRegionConfigImpl(
-		ctx,
-		txn,
-		dbID,
-		descsCol,
-		false, /* includeOffline */
-		false, /* forZoneConfigValidate */
-	)
+type synthesizeRegionConfigOptions struct {
+	includeOffline bool
+	forValidation  bool
+	useCache       bool
 }
 
-// SynthesizeRegionConfigForZoneConfigValidation returns a RegionConfig
-// representing the user configured state of a multi-region database by
-// coalescing state from both the database descriptor and multi-region type
-// descriptor. It avoids the cache and is intended for use by DDL statements.
-// Since it is intended to be called for validation of the RegionConfig against
-// the current database zone configuration, it omits regions that are in the
-// adding state, but includes those that are being dropped.
-func SynthesizeRegionConfigForZoneConfigValidation(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
-) (multiregion.RegionConfig, error) {
-	return synthesizeRegionConfigImpl(
-		ctx,
-		txn,
-		dbID,
-		descsCol,
-		false, /* includeOffline */
-		true,  /* forZoneConfigValidate */
-	)
+// SynthesizeRegionConfigOption is an option to pass into SynthesizeRegionConfig.
+type SynthesizeRegionConfigOption func(o *synthesizeRegionConfigOptions)
+
+// SynthesizeRegionConfigOptionIncludeOffline includes offline descriptors for use
+// in RESTORE.
+var SynthesizeRegionConfigOptionIncludeOffline SynthesizeRegionConfigOption = func(o *synthesizeRegionConfigOptions) {
+	o.includeOffline = true
 }
 
-// SynthesizeRegionConfigImpl returns a RegionConfig representing the user
+// SynthesizeRegionConfigOptionForValidation includes descriptors which are being dropped
+// as part of the regions field, allowing validation to account for regions in the
+// process of being dropped.
+var SynthesizeRegionConfigOptionForValidation SynthesizeRegionConfigOption = func(o *synthesizeRegionConfigOptions) {
+	o.forValidation = true
+}
+
+// SynthesizeRegionConfigOptionUseCache uses a cache for synthesizing the region
+// config.
+var SynthesizeRegionConfigOptionUseCache SynthesizeRegionConfigOption = func(o *synthesizeRegionConfigOptions) {
+	o.useCache = true
+}
+
+// SynthesizeRegionConfig returns a RegionConfig representing the user
 // configured state of a multi-region database by coalescing state from both
-// the database descriptor and multi-region type descriptor. It avoids the cache
-// and is intended for use by DDL statements. It can be called either for a
-// traditional construction, which omits all regions in the non-PUBLIC state, or
-// for zone configuration validation, which only omits region that are being
-// added.
-func synthesizeRegionConfigImpl(
+// the database descriptor and multi-region type descriptor. By default, it
+// avoids the cache and is intended for use by DDL statements.
+func SynthesizeRegionConfig(
 	ctx context.Context,
 	txn *kv.Txn,
 	dbID descpb.ID,
 	descsCol *descs.Collection,
-	includeOffline bool,
-	forZoneConfigValidate bool,
+	opts ...SynthesizeRegionConfigOption,
 ) (multiregion.RegionConfig, error) {
+	var o synthesizeRegionConfigOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	regionConfig := multiregion.RegionConfig{}
 	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidCached:    true,
+		AvoidCached:    !o.useCache,
 		Required:       true,
-		IncludeOffline: includeOffline,
+		IncludeOffline: o.includeOffline,
 	})
 	if err != nil {
 		return regionConfig, err
@@ -1018,20 +995,26 @@ func synthesizeRegionConfigImpl(
 		regionEnumID,
 		tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidCached:    true,
-				IncludeOffline: includeOffline,
+				AvoidCached:    !o.useCache,
+				IncludeOffline: o.includeOffline,
 			},
 		},
 	)
 	if err != nil {
 		return multiregion.RegionConfig{}, err
 	}
+
 	var regionNames descpb.RegionNames
-	if forZoneConfigValidate {
-		regionNames, err = regionEnum.RegionNamesForZoneConfigValidation()
+	if o.forValidation {
+		regionNames, err = regionEnum.RegionNamesForValidation()
 	} else {
 		regionNames, err = regionEnum.RegionNames()
 	}
+	if err != nil {
+		return regionConfig, err
+	}
+
+	transitioningRegionNames, err := regionEnum.TransitioningRegionNames()
 	if err != nil {
 		return regionConfig, err
 	}
@@ -1041,6 +1024,7 @@ func synthesizeRegionConfigImpl(
 		dbDesc.GetRegionConfig().PrimaryRegion,
 		dbDesc.GetRegionConfig().SurvivalGoal,
 		regionEnumID,
+		multiregion.WithTransitioningRegions(transitioningRegionNames),
 	)
 
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
@@ -1050,21 +1034,85 @@ func synthesizeRegionConfigImpl(
 	return regionConfig, nil
 }
 
+// blockDiscardOfZoneConfigForMultiRegionObject determines if discarding the
+// zone configuration of a multi-region table, index or partition should be
+// blocked. We only block the discard if the multi-region abstractions have
+// created the zone configuration. Note that this function relies on internal
+// knowledge of which table locality patterns write zone configurations. We do
+// things this way to avoid having to read the zone configurations directly and
+// do a more explicit comparison (with a generated zone configuration). If, down
+// the road, the rules around writing zone configurations change, the tests in
+// multi_region_zone_configs will fail and this function will need updating.
+func blockDiscardOfZoneConfigForMultiRegionObject(
+	zs tree.ZoneSpecifier, tblDesc catalog.TableDescriptor,
+) (bool, error) {
+	isIndex := zs.TableOrIndex.Index != ""
+	isPartition := zs.Partition != ""
+
+	if isPartition {
+		// Multi-region abstractions only set partition-level zone configs for
+		// REGIONAL BY ROW tables.
+		if tblDesc.IsLocalityRegionalByRow() {
+			return true, nil
+		}
+	} else if isIndex {
+		// Multi-region will never set a zone config on an index, so no need to
+		// error if the user wants to drop the index zone config.
+		return false, nil
+	} else {
+		// It's a table zone config that the user is trying to discard. This
+		// should only be present on GLOBAL and REGIONAL BY TABLE tables in a
+		// specified region.
+		if tblDesc.IsLocalityGlobal() {
+			return true, nil
+		} else if tblDesc.IsLocalityRegionalByTable() {
+			if tblDesc.GetLocalityConfig().GetRegionalByTable().Region != nil &&
+				tree.Name(*tblDesc.GetLocalityConfig().GetRegionalByTable().Region) !=
+					tree.PrimaryRegionNotSpecifiedName {
+				return true, nil
+			}
+		} else if tblDesc.IsLocalityRegionalByRow() {
+			// For REGIONAL BY ROW tables, no need to error if we're setting a
+			// table level zone config.
+			return false, nil
+		} else {
+			return false, errors.AssertionFailedf(
+				"unknown table locality: %v",
+				tblDesc.GetLocalityConfig(),
+			)
+		}
+	}
+	return false, nil
+}
+
 // CheckZoneConfigChangePermittedForMultiRegion checks if a zone config
 // change is permitted for a multi-region database, table, index or partition.
 // The change is permitted iff it is not modifying a protected multi-region
 // field of the zone configs (as defined by zonepb.MultiRegionZoneConfigFields).
 func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
-	ctx context.Context, zs tree.ZoneSpecifier, options tree.KVOptions, force bool,
+	ctx context.Context, zs tree.ZoneSpecifier, options tree.KVOptions,
 ) error {
-	// If the user has specified the FORCE option, the world is their oyster.
-	if force {
+	// If the user has specified that they're overriding, then the world is
+	// their oyster.
+	if p.SessionData().OverrideMultiRegionZoneConfigEnabled {
+		// Note that we increment the telemetry counter unconditionally here.
+		// It's possible that this will lead to over-counting as the user may
+		// have left the override on and is now updating a zone configuration
+		// that is not protected by the multi-region abstractions. To get finer
+		// grained counting however, would be more difficult to code, and may
+		// not even prove to be that valuable, so we have decided to live with
+		// the potential for over-counting.
+		telemetry.Inc(sqltelemetry.OverrideMultiRegionZoneConfigurationUser)
 		return nil
 	}
 
+	var err error
+	var tblDesc catalog.TableDescriptor
+	isDB := false
 	// Check if what we're altering is a multi-region entity.
 	if zs.Database != "" {
-		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+		isDB = true
+		dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
 			ctx,
 			p.txn,
 			string(zs.Database),
@@ -1081,11 +1129,11 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 		// We're dealing with a table, index, or partition zone configuration
 		// change.  Get the table descriptor so we can determine if this is a
 		// multi-region table/index/partition.
-		table, err := p.resolveTableForZone(ctx, &zs)
+		tblDesc, err = p.resolveTableForZone(ctx, &zs)
 		if err != nil {
 			return err
 		}
-		if table == nil || table.GetLocalityConfig() == nil {
+		if tblDesc == nil || tblDesc.GetLocalityConfig() == nil {
 			// Not a multi-region table, we're done here.
 			return nil
 		}
@@ -1093,16 +1141,31 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 
 	hint := "to override this error, SET override_multi_region_zone_config = true and reissue the command"
 
-	// The request is to discard the zone configuration. Error in all discard
-	// cases.
+	// The request is to discard the zone configuration. Error in cases where
+	// the zone configuration being discarded was created by the multi-region
+	// abstractions.
 	if options == nil {
-		// User is trying to update a zone config value that's protected for
-		// multi-region databases. Return the constructed error.
-		err := errors.WithDetail(errors.Newf(
-			"attempting to discard the zone configuration of a multi-region entity"),
-			"discarding a multi-region zone configuration may result in sub-optimal performance or behavior",
-		)
-		return errors.WithHint(err, hint)
+		needToError := false
+		// Determine if this zone config that we're trying to discard is
+		// supposed to be there.
+		if isDB {
+			needToError = true
+		} else {
+			needToError, err = blockDiscardOfZoneConfigForMultiRegionObject(zs, tblDesc)
+			if err != nil {
+				return err
+			}
+		}
+
+		if needToError {
+			// User is trying to update a zone config value that's protected for
+			// multi-region databases. Return the constructed error.
+			err := errors.WithDetail(errors.Newf(
+				"attempting to discard the zone configuration of a multi-region entity"),
+				"discarding a multi-region zone configuration may result in sub-optimal performance or behavior",
+			)
+			return errors.WithHint(err, hint)
+		}
 	}
 
 	// This is clearly an n^2 operation, but since there are only a single
@@ -1130,6 +1193,7 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 type zoneConfigForMultiRegionValidator interface {
 	getExpectedDatabaseZoneConfig() (zonepb.ZoneConfig, error)
 	getExpectedTableZoneConfig(desc catalog.TableDescriptor) (zonepb.ZoneConfig, error)
+	transitioningRegions() descpb.RegionNames
 
 	newMismatchFieldError(descType string, descName string, field string) error
 	newMissingSubzoneError(descType string, descName string, field string) error
@@ -1148,6 +1212,11 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) getExpectedDatabaseZ
 ) {
 	// For set initial region, we want no multi-region fields to be set.
 	return *zonepb.NewZoneConfig(), nil
+}
+
+func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) transitioningRegions() descpb.RegionNames {
+	// There are no transitioning regions at setup time.
+	return nil
 }
 
 func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) getExpectedTableZoneConfig(
@@ -1234,6 +1303,10 @@ func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) getExpected
 		return zonepb.ZoneConfig{}, err
 	}
 	return expectedZoneConfig, err
+}
+
+func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) transitioningRegions() descpb.RegionNames {
+	return v.regionConfig.TransitioningRegions()
 }
 
 // zoneConfigForMultiRegionValidatorModifiedByUser implements
@@ -1350,13 +1423,20 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 ) error {
 	// If the user is overriding, our work here is done.
 	if p.SessionData().OverrideMultiRegionZoneConfigEnabled {
+		telemetry.Inc(sqltelemetry.OverrideMultiRegionDatabaseZoneConfigurationSystem)
 		return nil
 	}
 	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID())
 	if err != nil {
 		return err
 	}
-	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(
+		ctx,
+		p.txn,
+		dbDesc.GetID(),
+		p.Descriptors(),
+		SynthesizeRegionConfigOptionForValidation,
+	)
 	if err != nil {
 		return err
 	}
@@ -1412,21 +1492,25 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 // the user about that before it occurs (and require the
 // override_multi_region_zone_config session variable to be set).
 func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
-	ctx context.Context,
-	dbDesc catalog.DatabaseDescriptor,
-	desc *tabledesc.Mutable,
-	checkIndexZoneConfigs bool,
+	ctx context.Context, dbDesc catalog.DatabaseDescriptor, desc *tabledesc.Mutable,
 ) error {
 	// If the user is overriding, or this is not a multi-region table our work here
 	// is done.
 	if p.SessionData().OverrideMultiRegionZoneConfigEnabled || desc.GetLocalityConfig() == nil {
+		telemetry.Inc(sqltelemetry.OverrideMultiRegionTableZoneConfigurationSystem)
 		return nil
 	}
 	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, desc.GetID())
 	if err != nil {
 		return err
 	}
-	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(
+		ctx,
+		p.txn,
+		dbDesc.GetID(),
+		p.Descriptors(),
+		SynthesizeRegionConfigOptionForValidation,
+	)
 	if err != nil {
 		return err
 	}
@@ -1471,19 +1555,18 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 	regionalByRowNewIndexes := make(map[uint32]struct{})
 	for _, mut := range desc.AllMutations() {
 		if pkSwap := mut.AsPrimaryKeySwap(); pkSwap != nil {
-			swapDesc := pkSwap.PrimaryKeySwapDesc()
-			if swapDesc.LocalityConfigSwap != nil {
-				for _, id := range swapDesc.NewIndexes {
+			if pkSwap.HasLocalityConfig() {
+				_ = pkSwap.ForEachNewIndexIDs(func(id descpb.IndexID) error {
 					regionalByRowNewIndexes[uint32(id)] = struct{}{}
-				}
-				regionalByRowNewIndexes[uint32(swapDesc.NewPrimaryIndexId)] = struct{}{}
+					return nil
+				})
 			}
 			// There can only be one pkSwap at a time, so break now.
 			break
 		}
 	}
 
-	// Some inactive subzones may remain on the zone configuration until it is cleaned up
+	// Some transitioning subzones may remain on the zone configuration until it is cleaned up
 	// at a later step. Remove these as well as the regional by row new indexes.
 	subzoneIndexIDsToDiff := make(map[uint32]tree.Name, len(desc.NonDropIndexes()))
 	for _, idx := range desc.NonDropIndexes() {
@@ -1492,13 +1575,27 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		}
 	}
 
-	// We only want to compare against the list of subzones on active indexes,
-	// so filter the subzone list based on the subzoneIndexIDsToDiff computed above.
+	// Do not compare partitioning for these regions, as they may be in a
+	// transitioning state.
+	transitioningRegions := make(map[string]struct{}, len(zoneConfigForMultiRegionValidator.transitioningRegions()))
+	for _, transitioningRegion := range zoneConfigForMultiRegionValidator.transitioningRegions() {
+		transitioningRegions[string(transitioningRegion)] = struct{}{}
+	}
+
+	// We only want to compare against the list of subzones on active indexes
+	// and partitions, so filter the subzone list based on the
+	// subzoneIndexIDsToDiff computed above.
 	filteredCurrentZoneConfigSubzones := currentZoneConfig.Subzones[:0]
 	for _, c := range currentZoneConfig.Subzones {
-		if _, ok := subzoneIndexIDsToDiff[c.IndexID]; ok {
-			filteredCurrentZoneConfigSubzones = append(filteredCurrentZoneConfigSubzones, c)
+		if c.PartitionName != "" {
+			if _, ok := transitioningRegions[c.PartitionName]; ok {
+				continue
+			}
 		}
+		if _, ok := subzoneIndexIDsToDiff[c.IndexID]; !ok {
+			continue
+		}
+		filteredCurrentZoneConfigSubzones = append(filteredCurrentZoneConfigSubzones, c)
 	}
 	currentZoneConfig.Subzones = filteredCurrentZoneConfigSubzones
 	// Strip the placeholder status if there are no active subzones on the current
@@ -1507,18 +1604,24 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		currentZoneConfig.NumReplicas = nil
 	}
 
-	// Remove regional by row new indexes from the expected zone config.
+	// Remove regional by row new indexes and transitioning partitions from the expected zone config.
 	// These will be incorrect as ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes
 	// will apply the existing locality config on them instead of the
 	// new locality config.
 	filteredExpectedZoneConfigSubzones := expectedZoneConfig.Subzones[:0]
 	for _, c := range expectedZoneConfig.Subzones {
-		if _, ok := regionalByRowNewIndexes[c.IndexID]; !ok {
-			filteredExpectedZoneConfigSubzones = append(
-				filteredExpectedZoneConfigSubzones,
-				c,
-			)
+		if c.PartitionName != "" {
+			if _, ok := transitioningRegions[c.PartitionName]; ok {
+				continue
+			}
 		}
+		if _, ok := regionalByRowNewIndexes[c.IndexID]; ok {
+			continue
+		}
+		filteredExpectedZoneConfigSubzones = append(
+			filteredExpectedZoneConfigSubzones,
+			c,
+		)
 	}
 	expectedZoneConfig.Subzones = filteredExpectedZoneConfigSubzones
 
@@ -1594,5 +1697,105 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		)
 	}
 
+	return nil
+}
+
+// checkNoRegionalByRowChangeUnderway checks that no REGIONAL BY ROW
+// tables are undergoing a schema change that affect their partitions
+// and no tables are transitioning to or from REGIONAL BY ROW.
+func (p *planner) checkNoRegionalByRowChangeUnderway(
+	ctx context.Context, dbDesc catalog.DatabaseDescriptor,
+) error {
+	// forEachTableDesc touches all the table keys, which prevents a race
+	// with ADD/REGION committing at the same time as the user transaction.
+	return p.forEachMutableTableInDatabase(
+		ctx,
+		dbDesc,
+		func(ctx context.Context, scName string, table *tabledesc.Mutable) error {
+			wrapErr := func(err error, detailSuffix string) error {
+				return errors.WithHintf(
+					errors.WithDetailf(
+						err,
+						"table %s.%s %s",
+						tree.Name(scName),
+						tree.Name(table.GetName()),
+						detailSuffix,
+					),
+					"cancel the existing job or try again when the change is complete",
+				)
+			}
+			for _, mut := range table.AllMutations() {
+				// Disallow any locality related swaps.
+				if pkSwap := mut.AsPrimaryKeySwap(); pkSwap != nil {
+					if lcSwap := pkSwap.PrimaryKeySwapDesc().LocalityConfigSwap; lcSwap != nil {
+						return wrapErr(
+							pgerror.Newf(
+								pgcode.ObjectNotInPrerequisiteState,
+								"cannot perform database region changes while a REGIONAL BY ROW transition is underway",
+							),
+							"is currently transitioning to or from REGIONAL BY ROW",
+						)
+					}
+					return wrapErr(
+						pgerror.Newf(
+							pgcode.ObjectNotInPrerequisiteState,
+							"cannot perform database region changes while a ALTER PRIMARY KEY is underway",
+						),
+						"is currently undergoing an ALTER PRIMARY KEY change",
+					)
+				}
+			}
+			// Disallow index changes for REGIONAL BY ROW tables.
+			// We do this on the second loop, as ALTER PRIMARY KEY may push
+			// CREATE/DROP INDEX before the ALTER PRIMARY KEY mutation itself.
+			// We should catch ALTER PRIMARY KEY before this ADD/DROP INDEX.
+			for _, mut := range table.AllMutations() {
+				if table.IsLocalityRegionalByRow() {
+					if idx := mut.AsIndex(); idx != nil {
+						return wrapErr(
+							pgerror.Newf(
+								pgcode.ObjectNotInPrerequisiteState,
+								"cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
+							),
+							fmt.Sprintf("is currently modifying index %s", tree.Name(idx.GetName())),
+						)
+					}
+				}
+			}
+			return nil
+		},
+	)
+}
+
+// checkNoRegionChangeUnderway checks whether the regions on the current
+// database are currently being modified.
+func (p *planner) checkNoRegionChangeUnderway(
+	ctx context.Context, dbID descpb.ID, op string,
+) error {
+	// SynthesizeRegionConfig touches the type descriptor row, which
+	// prevents a race with a racing conflicting schema change.
+	r, err := SynthesizeRegionConfig(
+		ctx,
+		p.txn,
+		dbID,
+		p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+	if len(r.TransitioningRegions()) > 0 {
+		return errors.WithDetailf(
+			errors.WithHintf(
+				pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot %s while a region is being added or dropped on the database",
+					op,
+				),
+				"cancel the job which is adding or dropping the region or try again later",
+			),
+			"region %s is currently being added or dropped",
+			r.TransitioningRegions()[0],
+		)
+	}
 	return nil
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -32,9 +33,9 @@ func runSampler(
 ) []int {
 	rows := make([]rowenc.EncDatumRow, numRows)
 	for i := range rows {
-		rows[i] = rowenc.EncDatumRow{rowenc.IntEncDatum(i)}
+		rows[i] = rowenc.EncDatumRow{randgen.IntEncDatum(i)}
 	}
-	in := distsqlutils.NewRowBuffer(rowenc.OneIntCol, rows, distsqlutils.RowBufferArgs{})
+	in := distsqlutils.NewRowBuffer(types.OneIntCol, rows, distsqlutils.RowBufferArgs{})
 	outTypes := []*types.T{
 		types.Int, // original column
 		types.Int, // rank
@@ -196,8 +197,8 @@ func TestSamplerSketch(t *testing.T) {
 	cardinalities := []int{3, 9, 12}
 	numNulls := []int{4, 2, 1}
 
-	rows := rowenc.GenEncDatumRowsInt(inputRows)
-	in := distsqlutils.NewRowBuffer(rowenc.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
+	rows := randgen.GenEncDatumRowsInt(inputRows)
+	in := distsqlutils.NewRowBuffer(types.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
 	outTypes := []*types.T{
 		types.Int,   // original column
 		types.Int,   // original column

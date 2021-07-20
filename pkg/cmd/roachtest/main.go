@@ -21,8 +21,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
+
+// ExitCodeTestsFailed is the exit code that results from a run of
+// roachtest in which the infrastructure worked, but at least one
+// test failed.
+const ExitCodeTestsFailed = 10
 
 // runnerLogsDir is the dir under the artifacts root where the test runner log
 // and other runner-related logs (i.e. cluster creation logs) will be written.
@@ -40,6 +46,7 @@ func main() {
 	var debugEnabled bool
 	var clusterID string
 	var count = 1
+	var versionsBinaryOverride map[string]string
 
 	cobra.EnableCommandSorting = false
 
@@ -145,18 +152,23 @@ Examples:
 roachtest run takes a list of regex patterns and runs all the matching tests.
 If no pattern is given, all tests are run. See "help list" for more details on
 the test tags.
+
+If all invoked tests passed, the exit status is zero. If at least one test
+failed, it is 10. Any other exit status reports a problem with the test
+runner itself.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runTests(registerTests, cliCfg{
-				args:         args,
-				count:        count,
-				cpuQuota:     cpuQuota,
-				debugEnabled: debugEnabled,
-				httpPort:     httpPort,
-				parallelism:  parallelism,
-				artifactsDir: artifacts,
-				user:         username,
-				clusterID:    clusterID,
+				args:                   args,
+				count:                  count,
+				cpuQuota:               cpuQuota,
+				debugEnabled:           debugEnabled,
+				httpPort:               httpPort,
+				parallelism:            parallelism,
+				artifactsDir:           artifacts,
+				user:                   username,
+				clusterID:              clusterID,
+				versionsBinaryOverride: versionsBinaryOverride,
 			})
 		},
 	}
@@ -180,15 +192,16 @@ the test tags.
 		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runTests(registerBenchmarks, cliCfg{
-				args:         args,
-				count:        count,
-				cpuQuota:     cpuQuota,
-				debugEnabled: debugEnabled,
-				httpPort:     httpPort,
-				parallelism:  parallelism,
-				artifactsDir: artifacts,
-				user:         username,
-				clusterID:    clusterID,
+				args:                   args,
+				count:                  count,
+				cpuQuota:               cpuQuota,
+				debugEnabled:           debugEnabled,
+				httpPort:               httpPort,
+				parallelism:            parallelism,
+				artifactsDir:           artifacts,
+				user:                   username,
+				clusterID:              clusterID,
+				versionsBinaryOverride: versionsBinaryOverride,
 			})
 		},
 	}
@@ -225,9 +238,15 @@ the test tags.
 		cmd.Flags().IntVar(
 			&httpPort, "port", 8080, "the port on which to serve the HTTP interface")
 		cmd.Flags().BoolVar(
-			&localSSD, "local-ssd", true, "Use a local SSD instead of an EBS volume (only for use with AWS) (defaults to true if instance type supports local SSDs)")
+			&localSSDArg, "local-ssd", true, "Use a local SSD instead of an EBS volume (only for use with AWS) (defaults to true if instance type supports local SSDs)")
 		cmd.Flags().StringSliceVar(
 			&createArgs, "create-args", []string{}, "extra args to pass onto the roachprod create command")
+		cmd.Flags().StringToStringVar(
+			&versionsBinaryOverride, "versions-binary-override", nil,
+			"List of <version>=<path to cockroach binary>. If a certain version <ver> "+
+				"is present in the list,"+"the respective binary will be used when a "+
+				"multi-version test asks for the respective binary, instead of "+
+				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
 	}
 
 	rootCmd.AddCommand(listCmd)
@@ -235,21 +254,26 @@ the test tags.
 	rootCmd.AddCommand(benchCmd)
 
 	if err := rootCmd.Execute(); err != nil {
+		code := 1
+		if errors.Is(err, errTestsFailed) {
+			code = ExitCodeTestsFailed
+		}
 		// Cobra has already printed the error message.
-		os.Exit(1)
+		os.Exit(code)
 	}
 }
 
 type cliCfg struct {
-	args         []string
-	count        int
-	cpuQuota     int
-	debugEnabled bool
-	httpPort     int
-	parallelism  int
-	artifactsDir string
-	user         string
-	clusterID    string
+	args                   []string
+	count                  int
+	cpuQuota               int
+	debugEnabled           bool
+	httpPort               int
+	parallelism            int
+	artifactsDir           string
+	user                   string
+	clusterID              string
+	versionsBinaryOverride map[string]string
 }
 
 func runTests(register func(*testRegistry), cfg cliCfg) error {
@@ -312,7 +336,10 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	CtrlC(ctx, l, cancel, cr)
-	err = runner.Run(ctx, tests, cfg.count, cfg.parallelism, opt, cfg.artifactsDir, lopt)
+	err = runner.Run(
+		ctx, tests, cfg.count, cfg.parallelism, opt,
+		testOpts{versionsBinaryOverride: cfg.versionsBinaryOverride},
+		lopt)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's

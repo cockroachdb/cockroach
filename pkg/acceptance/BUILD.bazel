@@ -18,6 +18,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_containerd_containerd//platforms",
         "@com_github_docker_docker//api/types",
         "@com_github_docker_docker//api/types/container",
     ],
@@ -39,7 +40,6 @@ go_test(
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/security",
-        "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/log",
     ],

@@ -31,6 +31,12 @@ func TestNode(t *testing.T) {
 			false,
 		},
 		{
+			"LineString, same point",
+			geo.MustParseGeometry("SRID=4326;LINESTRING (-0.06435 -0.06948, -0.06435 -0.06948)"),
+			geo.MustParseGeometry("SRID=4326;GEOMETRYCOLLECTION EMPTY"),
+			false,
+		},
+		{
 			"LineString, 4 nodes",
 			geo.MustParseGeometry("LINESTRING(0 0, 10 10, 0 10, 10 0, 10 10)"),
 			geo.MustParseGeometry("MULTILINESTRING((0 0,5 5),(5 5,10 10),(10 10,0 10,5 5),(5 5,10 0,10 10))"),

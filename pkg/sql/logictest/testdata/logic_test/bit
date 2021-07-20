@@ -5,7 +5,6 @@ SELECT B'1000101'::BIT(4)::STRING,
 ----
 1000  1000  1000101
 
-
 statement ok
 CREATE TABLE bits (
   a BIT, b BIT(4), c VARBIT, d VARBIT(4),
@@ -293,3 +292,29 @@ SELECT * FROM obitsa
 {01,1001001010101}
 {01,01001001010101}
 {01,11001001010101}
+
+subtest bit_conversions
+
+# Invalid digit in constant literal.
+statement error "A" is not a valid binary digit
+SELECT B'AB'::BIT(8)
+
+# Invalid digit in cast conversion from string.
+statement error "A" is not a valid binary digit
+SELECT 'AB'::BIT(8)
+
+# Conversion from string.
+query T
+SELECT '10101011'::STRING::BIT(8)
+----
+10101011
+
+# Invalid digit in hex cast conversion from string.
+statement error "Z" is not a valid hexadecimal digit
+SELECT 'xZZ'::BIT(8)
+
+# Conversion from string.
+query TT
+SELECT 'xAb'::STRING::BIT(8), 'XaB'::STRING::BIT(8)
+----
+10101011 10101011

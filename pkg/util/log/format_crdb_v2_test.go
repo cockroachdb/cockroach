@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,9 @@ func TestFormatCrdbV2(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "noval", nil)
 	ctx = logtags.AddTag(ctx, "s", "1")
 	ctx = logtags.AddTag(ctx, "long", "2")
+
+	defer func(prev int) { crdbV2LongLineLen.set(prev) }(int(crdbV2LongLineLen))
+	crdbV2LongLineLen.set(1024)
 
 	longLine := string(bytes.Repeat([]byte("a"), 1030))
 
@@ -124,4 +128,53 @@ func TestFormatCrdbV2(t *testing.T) {
 		return buf.String()
 	})
 
+}
+
+func TestFormatCrdbV2LongLineBreaks(t *testing.T) {
+	f := formatCrdbV2{}
+	datadriven.RunTest(t, "testdata/crdb_v2_break_lines", func(t *testing.T, td *datadriven.TestData) string {
+		if td.Cmd != "run" {
+			t.Fatalf("unknown command: %s", td.Cmd)
+		}
+		var maxLen int
+		var redactable bool
+		td.ScanArgs(t, "maxlen", &maxLen)
+		td.ScanArgs(t, "redactable", &redactable)
+
+		defer func(prev int) { crdbV2LongLineLen.set(prev) }(int(crdbV2LongLineLen))
+		crdbV2LongLineLen.set(maxLen)
+
+		entry := logEntry{
+			payload: entryPayload{
+				redactable: redactable,
+				message:    td.Input,
+			},
+		}
+		b := f.formatEntry(entry)
+		out := b.String()
+		putBuffer(b)
+
+		// Sanity check: verify that no payload is longer (in bytes) than the configured max length.
+		const prefix1 = "I000101 00:00:00.000000 0 :0  [-]  "
+		const prefix2 = "I000101 00:00:00.000000 0 :0 ⋮ [-]  "
+		lines := strings.Split(out, "\n")
+		for i, l := range lines {
+			l = strings.TrimSuffix(l, "\n")
+			if len(l) == 0 {
+				continue
+			}
+			l = strings.TrimPrefix(l, prefix1)
+			l = strings.TrimPrefix(l, prefix2)
+			// Remove the start or continutation marker
+			if l[0] != ' ' && l[0] != '|' {
+				t.Fatalf("unexpected continuation marker on line %d: %q", i+1, l)
+			}
+			l = l[1:]
+			if len(l) > maxLen {
+				t.Fatalf("line too large: %d bytes, expected max %d - %q", len(l), maxLen, l)
+			}
+		}
+
+		return out
+	})
 }

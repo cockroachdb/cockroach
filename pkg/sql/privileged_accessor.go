@@ -16,12 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/errors"
 )
 
 // LookupNamespaceID implements tree.PrivilegedAccessor.
@@ -100,12 +101,22 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 // to check the permissions of a descriptor given its ID, or the id given
 // is not a descriptor of a table or database.
 func (p *planner) checkDescriptorPermissions(ctx context.Context, id descpb.ID) error {
-	desc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id)
+	desc, err := p.Descriptors().GetImmutableDescriptorByID(
+		ctx, p.txn, id,
+		tree.CommonLookupFlags{
+			IncludeDropped: true,
+			IncludeOffline: true,
+			// Note that currently the ByID API implies required regardless of whether it
+			// is set. Set it just to be explicit.
+			Required: true,
+		},
+	)
 	if err != nil {
+		// Filter the error due to the descriptor not existing.
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			err = nil
+		}
 		return err
-	}
-	if desc == nil {
-		return nil
 	}
 	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
 		return pgerror.New(pgcode.InsufficientPrivilege, "insufficient privilege")

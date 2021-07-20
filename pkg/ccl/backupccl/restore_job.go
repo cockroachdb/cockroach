@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -44,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -228,7 +226,7 @@ rangeLoop:
 	for _, importRange := range importRanges {
 		needed := false
 		var latestCoveredTime hlc.Timestamp
-		var files []roachpb.ImportRequest_File
+		var files []execinfrapb.RestoreFileSpec
 		payloads := importRange.Payload.([]interface{})
 		for _, p := range payloads {
 			ie := p.(importEntry)
@@ -255,10 +253,9 @@ rangeLoop:
 				}
 			case backupFile:
 				if len(ie.file.Path) > 0 {
-					files = append(files, roachpb.ImportRequest_File{
-						Dir:    ie.dir,
-						Path:   ie.file.Path,
-						Sha512: ie.file.Sha512,
+					files = append(files, execinfrapb.RestoreFileSpec{
+						Dir:  ie.dir,
+						Path: ie.file.Path,
 					})
 				}
 			}
@@ -268,6 +265,17 @@ rangeLoop:
 				if err := onMissing(importRange, latestCoveredTime, maxEndTime); err != nil {
 					return nil, hlc.Timestamp{}, err
 				}
+			}
+			if len(files) == 0 {
+				// There may be import entries that refer to no data, and hence
+				// no files. These are caused because file spans start at a
+				// specific key. E.g. consider the first file backing up data
+				// from table 51. It will cover span ‹/Table/51/1/0/0› -
+				// ‹/Table/51/1/3273›. When merged with the backup span:
+				// ‹/Table/51› - ‹/Table/52›, we get an empty span with no
+				// files: ‹/Table/51› - ‹/Table/51/1/0/0›. We should ignore
+				// these to avoid thrashing during restore's split and scatter.
+				continue
 			}
 			// If needed is false, we have data backed up that is not necessary
 			// for this restore. Skip it.
@@ -318,6 +326,8 @@ func WriteDescriptors(
 						desc.GetID(), desc)
 				}
 			}
+			privilegeDesc := desc.GetPrivileges()
+			descpb.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
 			wroteDBs[desc.GetID()] = desc
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, desc.(catalog.MutableDescriptor), b,
@@ -369,6 +379,8 @@ func WriteDescriptors(
 						table.GetID(), table)
 				}
 			}
+			privilegeDesc := table.GetPrivileges()
+			descpb.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
 			// If the table descriptor is being written to a multi-region database and
 			// the table does not have a locality config setup, set one up here. The
 			// table's locality config will be set to the default locality - REGIONAL
@@ -476,7 +488,7 @@ func WriteDescriptors(
 // some no-op splits and route the work to the same range, but the actual
 // imported data is unaffected.
 func rewriteBackupSpanKey(
-	codec keys.SQLCodec, kr *storageccl.KeyRewriter, key roachpb.Key,
+	codec keys.SQLCodec, kr *KeyRewriter, key roachpb.Key,
 ) (roachpb.Key, error) {
 	// TODO(dt): support rewriting tenant keys.
 	if bytes.HasPrefix(key, keys.TenantPrefix) {
@@ -509,6 +521,7 @@ func rewriteBackupSpanKey(
 func restoreWithRetry(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
+	numNodes int,
 	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
@@ -532,6 +545,7 @@ func restoreWithRetry(
 		res, err = restore(
 			restoreCtx,
 			execCtx,
+			numNodes,
 			backupManifests,
 			backupLocalityInfo,
 			endTime,
@@ -567,7 +581,7 @@ func makeBackupLocalityMap(
 		storesByLocalityKV := make(storeByLocalityKV)
 		if localityInfo.URIsByOriginalLocalityKV != nil {
 			for kv, uri := range localityInfo.URIsByOriginalLocalityKV {
-				conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
+				conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 				if err != nil {
 					return nil, errors.Wrap(err,
 						"creating locality external storage configuration")
@@ -586,6 +600,7 @@ func makeBackupLocalityMap(
 func restore(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
+	numNodes int,
 	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
@@ -601,6 +616,14 @@ func restore(
 
 	// If there isn't any data to restore, then return early.
 	if dataToRestore.isEmpty() {
+		return emptyRowCount, nil
+	}
+
+	// If we've already migrated some of the system tables we're about to
+	// restore, this implies that a previous attempt restored all of this data.
+	// We want to avoid restoring again since we'll be shadowing migrated keys.
+	details := job.Details().(jobspb.RestoreDetails)
+	if alreadyMigrated := checkForMigratedData(details, dataToRestore); alreadyMigrated {
 		return emptyRowCount, nil
 	}
 
@@ -626,37 +649,27 @@ func restore(
 	if err != nil {
 		return emptyRowCount, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
 	}
+	if len(importSpans) == 0 {
+		// There are no files to restore.
+		return emptyRowCount, nil
+	}
 
 	for i := range importSpans {
 		importSpans[i].ProgressIdx = int64(i)
 	}
 	mu.requestsCompleted = make([]bool, len(importSpans))
 
-	progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
-		func(progressedCtx context.Context, details jobspb.ProgressDetails) {
-			switch d := details.(type) {
-			case *jobspb.Progress_Restore:
-				if !dataToRestore.isMainBundle() {
-					// We only update the progress for the primary data bundle (of which there
-					// can only be one).
-					return
-				}
-				mu.Lock()
-				if mu.highWaterMark >= 0 {
-					d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
-				}
-				mu.Unlock()
-			default:
-				log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
-			}
-		})
-
-	g := ctxgroup.WithContext(restoreCtx)
-
-	// TODO(dan): This not super principled. I just wanted something that wasn't
-	// a constant and grew slower than linear with the length of importSpans. It
-	// seems to be working well for BenchmarkRestore2TB but worth revisiting.
-	chunkSize := int(math.Sqrt(float64(len(importSpans))))
+	// TODO(pbardea): This not super principled. I just wanted something that
+	// wasn't a constant and grew slower than linear with the length of
+	// importSpans. It seems to be working well for BenchmarkRestore2TB but
+	// worth revisiting.
+	// It tries to take the cluster size into account so that larger clusters
+	// distribute more chunks amongst them so that after scattering there isn't
+	// a large varience in the distribution of entries.
+	chunkSize := int(math.Sqrt(float64(len(importSpans)))) / numNodes
+	if chunkSize == 0 {
+		chunkSize = 1
+	}
 	importSpanChunks := make([][]execinfrapb.RestoreSpanEntry, 0, len(importSpans)/chunkSize)
 	for start := 0; start < len(importSpans); {
 		importSpanChunk := importSpans[start:]
@@ -669,15 +682,39 @@ func restore(
 	}
 
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
-	g.GoCtx(func(ctx context.Context) error {
-		ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
-		defer progressSpan.Finish()
-		return progressLogger.Loop(ctx, requestFinishedCh)
-	})
-
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
-	g.GoCtx(func(ctx context.Context) error {
+	// tasks are the concurrent tasks that are run during the restore.
+	var tasks []func(ctx context.Context) error
+	if dataToRestore.isMainBundle() {
+		// Only update the job progress on the main data bundle. This should account
+		// for the bulk of the data to restore. Other data (e.g. zone configs in
+		// cluster restores) may be restored first. When restoring that data, we
+		// don't want to update the high-water mark key, so instead progress is just
+		// defined on the main data bundle (of which there should only be one).
+		progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
+			func(progressedCtx context.Context, details jobspb.ProgressDetails) {
+				switch d := details.(type) {
+				case *jobspb.Progress_Restore:
+					mu.Lock()
+					if mu.highWaterMark >= 0 {
+						d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
+					}
+					mu.Unlock()
+				default:
+					log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
+				}
+			})
+
+		jobProgressLoop := func(ctx context.Context) error {
+			ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
+			defer progressSpan.Finish()
+			return progressLogger.Loop(ctx, requestFinishedCh)
+		}
+		tasks = append(tasks, jobProgressLoop)
+	}
+
+	jobCheckpointLoop := func(ctx context.Context) error {
 		// When a processor is done importing a span, it will send a progress update
 		// to progCh.
 		for progress := range progCh {
@@ -708,23 +745,24 @@ func restore(
 			requestFinishedCh <- struct{}{}
 		}
 		return nil
-	})
-
-	// TODO(pbardea): Improve logging in processors.
-	if err := distRestore(
-		restoreCtx,
-		execCtx,
-		importSpanChunks,
-		dataToRestore.getPKIDs(),
-		encryption,
-		dataToRestore.getRekeys(),
-		endTime,
-		progCh,
-	); err != nil {
-		return emptyRowCount, err
 	}
+	tasks = append(tasks, jobCheckpointLoop)
 
-	if err := g.Wait(); err != nil {
+	runRestore := func(ctx context.Context) error {
+		return distRestore(
+			ctx,
+			execCtx,
+			importSpanChunks,
+			dataToRestore.getPKIDs(),
+			encryption,
+			dataToRestore.getRekeys(),
+			endTime,
+			progCh,
+		)
+	}
+	tasks = append(tasks, runRestore)
+
+	if err := ctxgroup.GoAndWait(restoreCtx, tasks...); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
@@ -964,7 +1002,7 @@ func spansForAllRestoreTableIndexes(
 		// TODO(pbardea): Consider and test the interaction between revision_history
 		// backups and OFFLINE tables.
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
-		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
+		if rawTbl != nil && !rawTbl.Dropped() {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			// We only import spans for physical tables.
 			if !tbl.IsPhysicalTable() {
@@ -1345,7 +1383,13 @@ func createImportingDescriptors(
 								return err
 							}
 
-							regionConfig, err := sql.SynthesizeRegionConfigOffline(ctx, txn, desc.GetID(), descsCol)
+							regionConfig, err := sql.SynthesizeRegionConfig(
+								ctx,
+								txn,
+								desc.GetID(),
+								descsCol,
+								sql.SynthesizeRegionConfigOptionIncludeOffline,
+							)
 							if err != nil {
 								return err
 							}
@@ -1394,17 +1438,10 @@ func createImportingDescriptors(
 		if err != nil {
 			return nil, nil, err
 		}
-
-		// Wait for one version on any existing changed types.
-		for existing := range existingTypeIDs {
-			if err := sql.WaitToUpdateLeases(ctx, p.ExecCfg().LeaseManager, existing); err != nil {
-				return nil, nil, err
-			}
-		}
 	}
 
 	// Get TableRekeys to use when importing raw data.
-	var rekeys []roachpb.ImportRequest_TableRekey
+	var rekeys []execinfrapb.TableRekey
 	for i := range tables {
 		tableToSerialize := tables[i]
 		newDescBytes, err := protoutil.Marshal(tableToSerialize.DescriptorProto())
@@ -1412,7 +1449,7 @@ func createImportingDescriptors(
 			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
 		}
-		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
+		rekeys = append(rekeys, execinfrapb.TableRekey{
 			OldID:   uint32(oldTableIDs[i]),
 			NewDesc: newDescBytes,
 		})
@@ -1496,7 +1533,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	if err != nil {
 		return err
 	}
-	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URIs[lastBackupIndex], p.User())
+	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastBackupIndex], p.User())
 	if err != nil {
 		return errors.Wrapf(err, "creating external store configuration")
 	}
@@ -1543,7 +1580,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-			return r.publishDescriptors(ctx, txn, descsCol, details)
+			return r.publishDescriptors(ctx, txn, descsCol, details, nil)
 		}
 		if err := descs.Txn(
 			ctx, r.execCfg.Settings, r.execCfg.LeaseManager, r.execCfg.InternalExecutor,
@@ -1567,11 +1604,21 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		mainData.addTenant(roachpb.MakeTenantID(tenant.ID))
 	}
 
+	numNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
+	if err != nil {
+		if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
+			return err
+		}
+		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
+		numNodes = 1
+	}
+
 	var resTotal RowCount
 	if !preData.isEmpty() {
 		res, err := restoreWithRetry(
 			ctx,
 			p,
+			numNodes,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
@@ -1606,6 +1653,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		res, err := restoreWithRetry(
 			ctx,
 			p,
+			numNodes,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
@@ -1623,8 +1671,23 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
 		return errors.Wrap(err, "inserting table statistics")
 	}
+
+	var devalidateIndexes map[descpb.ID][]descpb.IndexID
+	if toValidate := len(details.RevalidateIndexes); toValidate > 0 {
+		if err := r.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus(fmt.Sprintf("re-validating %d indexes", toValidate)), nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+		}
+		bad, err := revalidateIndexes(ctx, p.ExecCfg(), r.job, details.TableDescs, details.RevalidateIndexes)
+		if err != nil {
+			return err
+		}
+		devalidateIndexes = bad
+	}
+
 	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-		err = r.publishDescriptors(ctx, txn, descsCol, details)
+		err = r.publishDescriptors(ctx, txn, descsCol, details, devalidateIndexes)
 		return err
 	}
 	if err := descs.Txn(
@@ -1649,8 +1712,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		}
 		// Reload the details as we may have updated the job.
 		details = r.job.Details().(jobspb.RestoreDetails)
-	}
-	if details.DescriptorCoverage == tree.AllDescriptors {
+
 		if err := r.cleanupTempSystemTables(ctx); err != nil {
 			return err
 		}
@@ -1671,15 +1733,6 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 
 	// Collect telemetry.
 	{
-		numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
-		if err != nil {
-			if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
-				return err
-			}
-			log.Warningf(ctx, "unable to determine cluster node count: %v", err)
-			numClusterNodes = 1
-		}
-
 		telemetry.Count("restore.total.succeeded")
 		const mb = 1 << 20
 		sizeMb := resTotal.DataSize / mb
@@ -1691,14 +1744,80 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		telemetry.CountBucketed("restore.duration-sec.succeeded", sec)
 		telemetry.CountBucketed("restore.size-mb.full", sizeMb)
 		telemetry.CountBucketed("restore.speed-mbps.total", mbps)
-		telemetry.CountBucketed("restore.speed-mbps.per-node", mbps/int64(numClusterNodes))
+		telemetry.CountBucketed("restore.speed-mbps.per-node", mbps/int64(numNodes))
 		// Tiny restores may skew throughput numbers due to overhead.
 		if sizeMb > 10 {
 			telemetry.CountBucketed("restore.speed-mbps.over10mb", mbps)
-			telemetry.CountBucketed("restore.speed-mbps.over10mb.per-node", mbps/int64(numClusterNodes))
+			telemetry.CountBucketed("restore.speed-mbps.over10mb.per-node", mbps/int64(numNodes))
 		}
 	}
 	return nil
+}
+
+func revalidateIndexes(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	job *jobs.Job,
+	tables []*descpb.TableDescriptor,
+	indexIDs []jobspb.RestoreDetails_RevalidateIndex,
+) (map[descpb.ID][]descpb.IndexID, error) {
+	indexIDsByTable := make(map[descpb.ID]map[descpb.IndexID]struct{})
+	for _, idx := range indexIDs {
+		if indexIDsByTable[idx.TableID] == nil {
+			indexIDsByTable[idx.TableID] = make(map[descpb.IndexID]struct{})
+		}
+		indexIDsByTable[idx.TableID][idx.IndexID] = struct{}{}
+	}
+
+	// We don't actually need the 'historical' read the way the schema change does
+	// since our table is offline.
+	var runner sql.HistoricalInternalExecTxnRunner = func(ctx context.Context, fn sql.InternalExecFn) error {
+		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			ie := job.MakeSessionBoundInternalExecutor(ctx, sql.NewFakeSessionData(execCfg.SV())).(*sql.InternalExecutor)
+			return fn(ctx, txn, ie)
+		})
+	}
+
+	invalidIndexes := make(map[descpb.ID][]descpb.IndexID)
+
+	for _, tbl := range tables {
+		indexes := indexIDsByTable[tbl.ID]
+		if len(indexes) == 0 {
+			continue
+		}
+		tableDesc := tabledesc.NewBuilder(tbl).BuildExistingMutableTable()
+
+		var forward, inverted []catalog.Index
+		for _, idx := range tableDesc.AllIndexes() {
+			if _, ok := indexes[idx.GetID()]; ok {
+				switch idx.GetType() {
+				case descpb.IndexDescriptor_FORWARD:
+					forward = append(forward, idx)
+				case descpb.IndexDescriptor_INVERTED:
+					inverted = append(inverted, idx)
+				}
+			}
+		}
+		if len(forward) > 0 {
+			if err := sql.ValidateForwardIndexes(ctx, tableDesc.MakePublic(), forward, runner, false, true); err != nil {
+				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
+					invalidIndexes[tableDesc.ID] = invalid.Indexes
+				} else {
+					return nil, err
+				}
+			}
+		}
+		if len(inverted) > 0 {
+			if err := sql.ValidateInvertedIndexes(ctx, execCfg.Codec, tableDesc.MakePublic(), inverted, runner, true); err != nil {
+				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
+					invalidIndexes[tableDesc.ID] = append(invalidIndexes[tableDesc.ID], invalid.Indexes...)
+				} else {
+					return nil, err
+				}
+			}
+		}
+	}
+	return invalidIndexes, nil
 }
 
 // ReportResults implements JobResultsReporter interface.
@@ -1766,7 +1885,11 @@ func insertStats(
 // from r.job as the call to r.job.SetDetails will overwrite the job details
 // with a new value even if this transaction does not commit.
 func (r *restoreResumer) publishDescriptors(
-	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, details jobspb.RestoreDetails,
+	ctx context.Context,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	details jobspb.RestoreDetails,
+	devalidateIndexes map[descpb.ID][]descpb.IndexID,
 ) (err error) {
 	if details.DescriptorsPublished {
 		return nil
@@ -1794,7 +1917,6 @@ func (r *restoreResumer) publishDescriptors(
 		return errors.Errorf("version mismatch for descriptor %d, expected version %d, got %v",
 			read.GetID(), read.GetVersion(), exp)
 	}
-
 	// Write the new TableDescriptors and flip state over to public so they can be
 	// accessed.
 	for _, tbl := range details.TableDescs {
@@ -1805,12 +1927,24 @@ func (r *restoreResumer) publishDescriptors(
 		if err := checkVersion(mutTable, tbl.Version); err != nil {
 			return err
 		}
+		badIndexes := devalidateIndexes[mutTable.ID]
+		for _, badIdx := range badIndexes {
+			found, err := mutTable.FindIndexWithID(badIdx)
+			if err != nil {
+				return err
+			}
+			newIdx := found.IndexDescDeepCopy()
+			mutTable.RemovePublicNonPrimaryIndex(found.Ordinal())
+			if err := mutTable.AddIndexMutation(&newIdx, descpb.DescriptorMutation_ADD); err != nil {
+				return err
+			}
+		}
 		allMutDescs = append(allMutDescs, mutTable)
 		newTables = append(newTables, mutTable.TableDesc())
 		// For cluster restores, all the jobs are restored directly from the jobs
 		// table, so there is no need to re-create ongoing schema change jobs,
 		// otherwise we'll create duplicate jobs.
-		if details.DescriptorCoverage != tree.AllDescriptors {
+		if details.DescriptorCoverage != tree.AllDescriptors || len(badIndexes) > 0 {
 			// Convert any mutations that were in progress on the table descriptor
 			// when the backup was taken, and convert them to schema change jobs.
 			if err := createSchemaChangeJobsFromMutations(ctx,
@@ -1866,7 +2000,7 @@ func (r *restoreResumer) publishDescriptors(
 		}
 		mutDB := mutDesc.(*dbdesc.Mutable)
 		// TODO(lucy,ajwerner): Remove this in 21.1.
-		if mutDB.GetState() != descpb.DescriptorState_OFFLINE {
+		if !mutDB.Offline() {
 			newDBs = append(newDBs, dbDesc)
 		} else {
 			allMutDescs = append(allMutDescs, mutDB)
@@ -2009,7 +2143,7 @@ func (r *restoreResumer) dropDescriptors(
 	for i := range mutableTables {
 		tableToDrop := mutableTables[i]
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
-		tableToDrop.State = descpb.DescriptorState_DROP
+		tableToDrop.SetDropped()
 		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
 			ctx,
 			b,
@@ -2019,6 +2153,7 @@ func (r *restoreResumer) dropDescriptors(
 			tableToDrop.Name,
 			false, /* kvTrace */
 		)
+		descsCol.AddDeletedDescriptor(tableToDrop)
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, tableToDrop, b); err != nil {
 			return errors.Wrap(err, "writing dropping table to batch")
 		}
@@ -2048,12 +2183,13 @@ func (r *restoreResumer) dropDescriptors(
 			typDesc.Name,
 			false, /* kvTrace */
 		)
-		mutType.State = descpb.DescriptorState_DROP
+		mutType.SetDropped()
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, mutType, b); err != nil {
 			return errors.Wrap(err, "writing dropping type to batch")
 		}
 		// Remove the system.descriptor entry.
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, typDesc.ID))
+		descsCol.AddDeletedDescriptor(mutType)
 	}
 
 	// Queue a GC job.
@@ -2122,6 +2258,7 @@ func (r *restoreResumer) dropDescriptors(
 			false, /* kvTrace */
 		)
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, sc.GetID()))
+		descsCol.AddDeletedDescriptor(sc)
 		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
 	}
 
@@ -2155,6 +2292,7 @@ func (r *restoreResumer) dropDescriptors(
 		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
 		b.Del(descKey)
 		b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(codec))
+		descsCol.AddDeletedDescriptor(db)
 		deletedDBs[db.GetID()] = struct{}{}
 	}
 
@@ -2324,8 +2462,8 @@ func (r *restoreResumer) restoreSystemTables(
 ) error {
 	tempSystemDBID := getTempSystemDBID(restoreDetails)
 	details := r.job.Details().(jobspb.RestoreDetails)
-	if details.SystemTablesRestored == nil {
-		details.SystemTablesRestored = make(map[string]bool)
+	if details.SystemTablesMigrated == nil {
+		details.SystemTablesMigrated = make(map[string]bool)
 	}
 
 	// Iterate through all the tables that we're restoring, and if it was restored
@@ -2336,18 +2474,36 @@ func (r *restoreResumer) restoreSystemTables(
 			continue
 		}
 		systemTableName := table.GetName()
-		if details.SystemTablesRestored[systemTableName] {
-			// We've already restored this table.
-			continue
+		stagingTableName := restoreTempSystemDB + "." + systemTableName
+
+		config, ok := systemTableBackupConfiguration[systemTableName]
+		if !ok {
+			log.Warningf(ctx, "no configuration specified for table %s... skipping restoration",
+				systemTableName)
+		}
+
+		if config.migrationFunc != nil {
+			if details.SystemTablesMigrated[systemTableName] {
+				continue
+			}
+
+			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				if err := config.migrationFunc(ctx, r.execCfg, txn, stagingTableName); err != nil {
+					return err
+				}
+
+				// Keep track of which system tables we've migrated so that future job
+				// restarts don't try to import data over our migrated data. This would
+				// fail since the restored data would shadow the migrated keys.
+				details.SystemTablesMigrated[systemTableName] = true
+				return r.job.SetDetails(ctx, txn, details)
+			}); err != nil {
+				return err
+			}
 		}
 
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetDebugName("system-restore-txn")
-			config, ok := systemTableBackupConfiguration[systemTableName]
-			if !ok {
-				log.Warningf(ctx, "no configuration specified for table %s... skipping restoration",
-					systemTableName)
-			}
 
 			restoreFunc := defaultSystemTableRestoreFunc
 			if config.customRestoreFunc != nil {
@@ -2356,15 +2512,11 @@ func (r *restoreResumer) restoreSystemTables(
 			}
 
 			log.Eventf(ctx, "restoring system table %s", systemTableName)
-			err := restoreFunc(ctx, r.execCfg, txn, systemTableName, restoreTempSystemDB+"."+systemTableName)
+			err := restoreFunc(ctx, r.execCfg, txn, systemTableName, stagingTableName)
 			if err != nil {
 				return errors.Wrapf(err, "restoring system table %s", systemTableName)
 			}
-
-			// System table restoration may not be idempotent, so we need to keep
-			// track of what we've restored.
-			details.SystemTablesRestored[systemTableName] = true
-			return r.job.SetDetails(ctx, txn, details)
+			return nil
 		}); err != nil {
 			return err
 		}

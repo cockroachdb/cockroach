@@ -175,7 +175,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			var err error
 			params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
-				err = params.p.addColumnImpl(params, n, tn, n.tableDesc, t, params.SessionData())
+				err = params.p.addColumnImpl(params, n, tn, n.tableDesc, t)
 			})
 			if err != nil {
 				return err
@@ -234,7 +234,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
-
+				// If the index is named, ensure that the name is unique.
+				// Unnamed indexes will be given a unique auto-generated name later on.
+				if d.Name != "" && n.tableDesc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
+					return pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
+				}
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
@@ -276,6 +280,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 					idx,
 				); err != nil {
 					return err
+				}
+
+				if n.tableDesc.IsLocalityRegionalByRow() {
+					if err := params.p.checkNoRegionChangeUnderway(
+						params.ctx,
+						n.tableDesc.GetParentID(),
+						"create an UNIQUE CONSTRAINT on a REGIONAL BY ROW table",
+					); err != nil {
+						return err
+					}
 				}
 			case *tree.CheckConstraintTableDef:
 				var err error
@@ -427,18 +441,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			// If the dropped column uses a sequence, remove references to it from that sequence.
 			if colToDrop.NumUsesSequences() > 0 {
-				if err := params.p.removeSequenceDependencies(params.ctx, n.tableDesc, colToDrop.ColumnDesc()); err != nil {
+				if err := params.p.removeSequenceDependencies(params.ctx, n.tableDesc, colToDrop); err != nil {
 					return err
 				}
 			}
 
 			// You can't remove a column that owns a sequence that is depended on
 			// by another column
-			if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, n.tableDesc, colToDrop.ColumnDesc(), t.DropBehavior); err != nil {
+			if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, n.tableDesc, colToDrop, t.DropBehavior); err != nil {
 				return err
 			}
 
-			if err := params.p.dropSequencesOwnedByCol(params.ctx, colToDrop.ColumnDesc(), true /* queueJob */, t.DropBehavior); err != nil {
+			if err := params.p.dropSequencesOwnedByCol(params.ctx, colToDrop, true /* queueJob */, t.DropBehavior); err != nil {
 				return err
 			}
 
@@ -483,17 +497,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// We cannot remove this column if there are computed columns that use it.
-			computedColValidator := schemaexpr.MakeComputedColumnValidator(
-				params.ctx,
-				n.tableDesc,
-				&params.p.semaCtx,
-				tn,
-			)
-			if err := computedColValidator.ValidateNoDependents(colToDrop.ColumnDesc()); err != nil {
+			if err := schemaexpr.ValidateColumnHasNoDependents(n.tableDesc, colToDrop); err != nil {
 				return err
 			}
 
-			if n.tableDesc.GetPrimaryIndex().ContainsColumnID(colToDrop.GetID()) {
+			if n.tableDesc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(colToDrop.GetID()) {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", colToDrop.GetName())
 			}
@@ -507,16 +515,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				containsThisColumn := false
 
 				// Analyze the index.
-				for j := 0; j < idx.NumColumns(); j++ {
-					if idx.GetColumnID(j) == colToDrop.GetID() {
+				for j := 0; j < idx.NumKeyColumns(); j++ {
+					if idx.GetKeyColumnID(j) == colToDrop.GetID() {
 						containsThisColumn = true
 						break
 					}
 				}
 				if !containsThisColumn {
-					for j := 0; j < idx.NumExtraColumns(); j++ {
-						id := idx.GetExtraColumnID(j)
-						if n.tableDesc.GetPrimaryIndex().ContainsColumnID(id) {
+					for j := 0; j < idx.NumKeySuffixColumns(); j++ {
+						id := idx.GetKeySuffixColumnID(j)
+						if n.tableDesc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(id) {
 							// All secondary indices necessary contain the PK
 							// columns, too. (See the comments on the definition of
 							// IndexDescriptor). The presence of a PK column in the
@@ -534,7 +542,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					// The loop above this comment is for the old STORING encoding. The
 					// loop below is for the new encoding (where the STORING columns are
 					// always in the value part of a KV).
-					for j := 0; j < idx.NumStoredColumns(); j++ {
+					for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {
 						if idx.GetStoredColumnID(j) == colToDrop.GetID() {
 							containsThisColumn = true
 							break
@@ -810,7 +818,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
 			// Apply mutations to copy of column descriptor.
-			if err := applyColumnMutation(params.ctx, n.tableDesc, col.ColumnDesc(), t, params, n.n.Cmds, tn); err != nil {
+			if err := applyColumnMutation(params.ctx, n.tableDesc, col, t, params, n.n.Cmds, tn); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -828,18 +836,19 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if n.tableDesc.IsPartitionAllBy() {
 				return unimplemented.NewWithIssue(58736, "changing partition of table with PARTITION ALL BY not yet implemented")
 			}
-			oldPartitioning := n.tableDesc.GetPrimaryIndex().GetPartitioning()
-			if oldPartitioning.NumImplicitColumns > 0 {
+			oldPartitioning := n.tableDesc.GetPrimaryIndex().GetPartitioning().DeepCopy()
+			if oldPartitioning.NumImplicitColumns() > 0 {
 				return unimplemented.NewWithIssue(
 					58731,
 					"cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning",
 				)
 			}
-			newPrimaryIndex, err := CreatePartitioning(
+			newPrimaryIndexDesc := n.tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
+			newImplicitCols, newPartitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
 				n.tableDesc,
-				*n.tableDesc.GetPrimaryIndex().IndexDesc(),
+				newPrimaryIndexDesc,
 				t.PartitionBy,
 				nil, /* allowedNewColumnNames */
 				params.p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
@@ -848,27 +857,27 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			if newPrimaryIndex.Partitioning.NumImplicitColumns > 0 {
+			if newPartitioning.NumImplicitColumns > 0 {
 				return unimplemented.NewWithIssue(
 					58731,
 					"cannot ALTER TABLE and change the partitioning to contain implicit columns",
 				)
 			}
-			descriptorChanged = descriptorChanged || !n.tableDesc.GetPrimaryIndex().IndexDesc().Equal(&newPrimaryIndex)
-			err = deleteRemovedPartitionZoneConfigs(
-				params.ctx,
-				params.p.txn,
-				n.tableDesc,
-				n.tableDesc.GetPrimaryIndex().IndexDesc(),
-				&oldPartitioning,
-				&newPrimaryIndex.Partitioning,
-				params.extendedEvalCtx.ExecCfg,
-			)
-			if err != nil {
-				return err
-			}
-			{
-				n.tableDesc.SetPrimaryIndex(newPrimaryIndex)
+			isIndexAltered := tabledesc.UpdateIndexPartitioning(&newPrimaryIndexDesc, newImplicitCols, newPartitioning)
+			if isIndexAltered {
+				n.tableDesc.SetPrimaryIndex(newPrimaryIndexDesc)
+				descriptorChanged = true
+				if err := deleteRemovedPartitionZoneConfigs(
+					params.ctx,
+					params.p.txn,
+					n.tableDesc,
+					n.tableDesc.GetPrimaryIndexID(),
+					oldPartitioning,
+					n.tableDesc.GetPrimaryIndex().GetPartitioning(),
+					params.extendedEvalCtx.ExecCfg,
+				); err != nil {
+					return err
+				}
 			}
 
 		case *tree.AlterTableSetAudit:
@@ -1020,8 +1029,9 @@ func (n *alterTableNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterTableNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterTableNode) Close(context.Context)        {}
 
-// addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given table descriptor, but sets up
-// the index with ExtraColumnIDs from the given index, rather than the table's primary key.
+// addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given
+// table descriptor, but sets up the index with KeySuffixColumnIDs from the
+// given index, rather than the table's primary key.
 func addIndexMutationWithSpecificPrimaryKey(
 	ctx context.Context,
 	table *tabledesc.Mutable,
@@ -1036,11 +1046,14 @@ func addIndexMutationWithSpecificPrimaryKey(
 	if err := table.AllocateIDs(ctx); err != nil {
 		return err
 	}
-	// Use the columns in the given primary index to construct this indexes ExtraColumnIDs list.
-	toAdd.ExtraColumnIDs = nil
-	for _, colID := range primary.ColumnIDs {
-		if !toAdd.ContainsColumnID(colID) {
-			toAdd.ExtraColumnIDs = append(toAdd.ExtraColumnIDs, colID)
+	// Use the columns in the given primary index to construct this indexes
+	// KeySuffixColumnIDs list.
+	presentColIDs := catalog.MakeTableColSet(toAdd.KeyColumnIDs...)
+	presentColIDs.UnionWith(catalog.MakeTableColSet(toAdd.StoreColumnIDs...))
+	toAdd.KeySuffixColumnIDs = nil
+	for _, colID := range primary.KeyColumnIDs {
+		if !presentColIDs.Contains(colID) {
+			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
 		}
 	}
 	return nil
@@ -1052,7 +1065,7 @@ func addIndexMutationWithSpecificPrimaryKey(
 func applyColumnMutation(
 	ctx context.Context,
 	tableDesc *tabledesc.Mutable,
-	col *descpb.ColumnDescriptor,
+	col catalog.Column,
 	mut tree.ColumnMutationCmd,
 	params runParams,
 	cmds tree.AlterTableCmds,
@@ -1063,15 +1076,15 @@ func applyColumnMutation(
 		return AlterColumnType(ctx, tableDesc, col, t, params, cmds, tn)
 
 	case *tree.AlterTableSetDefault:
-		if len(col.UsesSequenceIds) > 0 {
+		if col.NumUsesSequences() > 0 {
 			if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, col); err != nil {
 				return err
 			}
 		}
 		if t.Default == nil {
-			col.DefaultExpr = nil
+			col.ColumnDesc().DefaultExpr = nil
 		} else {
-			colDatumType := col.Type
+			colDatumType := col.GetType()
 			expr, err := schemaexpr.SanitizeVarFreeExpr(
 				params.ctx, t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, tree.VolatilityVolatile,
 			)
@@ -1079,11 +1092,11 @@ func applyColumnMutation(
 				return pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
 			}
 			s := tree.Serialize(expr)
-			col.DefaultExpr = &s
+			col.ColumnDesc().DefaultExpr = &s
 
 			// Add references to the sequence descriptors this column is now using.
 			changedSeqDescs, err := maybeAddSequenceDependencies(
-				params.ctx, params.p.ExecCfg().Settings, params.p, tableDesc, col, expr, nil, /* backrefs */
+				params.ctx, params.p.ExecCfg().Settings, params.p, tableDesc, col.ColumnDesc(), expr, nil, /* backrefs */
 			)
 			if err != nil {
 				return err
@@ -1100,21 +1113,21 @@ func applyColumnMutation(
 		}
 
 	case *tree.AlterTableSetVisible:
-		col, err := tableDesc.FindActiveOrNewColumnByName(col.ColName())
+		column, err := tableDesc.FindActiveOrNewColumnByName(col.ColName())
 		if err != nil {
 			return err
 		}
-		col.ColumnDesc().Hidden = !t.Visible
+		column.ColumnDesc().Hidden = !t.Visible
 
 	case *tree.AlterTableSetNotNull:
-		if !col.Nullable {
+		if !col.IsNullable() {
 			return nil
 		}
 		// See if there's already a mutation to add a not null constraint
 		for i := range tableDesc.Mutations {
 			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
 				constraint.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL &&
-				constraint.NotNullColumn == col.ID {
+				constraint.NotNullColumn == col.GetID() {
 				if tableDesc.Mutations[i].Direction == descpb.DescriptorMutation_ADD {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint in the middle of being added")
@@ -1132,25 +1145,25 @@ func applyColumnMutation(
 		for k := range info {
 			inuseNames[k] = struct{}{}
 		}
-		check := tabledesc.MakeNotNullCheckConstraint(col.Name, col.ID, inuseNames, descpb.ConstraintValidity_Validating)
+		check := tabledesc.MakeNotNullCheckConstraint(col.GetName(), col.GetID(), inuseNames, descpb.ConstraintValidity_Validating)
 		tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_ADD)
 
 	case *tree.AlterTableDropNotNull:
-		if col.Nullable {
+		if col.IsNullable() {
 			return nil
 		}
 
 		// Prevent a column in a primary key from becoming non-null.
-		if tableDesc.GetPrimaryIndex().ContainsColumnID(col.ID) {
+		if tableDesc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(col.GetID()) {
 			return pgerror.Newf(pgcode.InvalidTableDefinition,
-				`column "%s" is in a primary index`, col.Name)
+				`column "%s" is in a primary index`, col.GetName())
 		}
 
 		// See if there's already a mutation to add/drop a not null constraint.
 		for i := range tableDesc.Mutations {
 			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
 				constraint.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL &&
-				constraint.NotNullColumn == col.ID {
+				constraint.NotNullColumn == col.GetID() {
 				if tableDesc.Mutations[i].Direction == descpb.DescriptorMutation_ADD {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint in the middle of being added, try again later")
@@ -1167,24 +1180,24 @@ func applyColumnMutation(
 		for k := range info {
 			inuseNames[k] = struct{}{}
 		}
-		col.Nullable = true
+		col.ColumnDesc().Nullable = true
 
 		// Add a check constraint equivalent to the non-null constraint and drop
 		// it in the schema changer.
-		check := tabledesc.MakeNotNullCheckConstraint(col.Name, col.ID, inuseNames, descpb.ConstraintValidity_Dropping)
+		check := tabledesc.MakeNotNullCheckConstraint(col.GetName(), col.GetID(), inuseNames, descpb.ConstraintValidity_Dropping)
 		tableDesc.Checks = append(tableDesc.Checks, check)
 		tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_DROP)
 
 	case *tree.AlterTableDropStored:
 		if !col.IsComputed() {
 			return pgerror.Newf(pgcode.InvalidColumnDefinition,
-				"column %q is not a computed column", col.Name)
+				"column %q is not a computed column", col.GetName())
 		}
-		if col.Virtual {
+		if col.IsVirtual() {
 			return pgerror.Newf(pgcode.InvalidColumnDefinition,
-				"column %q is not a stored computed column", col.Name)
+				"column %q is not a stored computed column", col.GetName())
 		}
-		col.ComputeExpr = nil
+		col.ColumnDesc().ComputeExpr = nil
 	}
 	return nil
 }

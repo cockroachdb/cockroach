@@ -48,7 +48,7 @@ func makeScrubTPCCTest(
 
 	return testSpec{
 		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
-		Owner:   OwnerSQLExec,
+		Owner:   OwnerSQLQueries,
 		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{

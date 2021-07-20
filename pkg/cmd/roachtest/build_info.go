@@ -24,8 +24,12 @@ func runBuildInfo(ctx context.Context, t *test, c *cluster) {
 	c.Start(ctx, t)
 
 	var details serverpb.DetailsResponse
-	url := `http://` + c.ExternalAdminUIAddr(ctx, c.Node(1))[0] + `/_status/details/local`
-	err := httputil.GetJSON(http.Client{}, url, &details)
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := `http://` + adminUIAddrs[0] + `/_status/details/local`
+	err = httputil.GetJSON(http.Client{}, url, &details)
 	if err != nil {
 		t.Fatal(err)
 	}

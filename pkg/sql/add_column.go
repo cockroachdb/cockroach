@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -31,7 +30,6 @@ func (p *planner) addColumnImpl(
 	tn *tree.TableName,
 	desc *tabledesc.Mutable,
 	t *tree.AlterTableAddColumn,
-	sessionData *sessiondata.SessionData,
 ) error {
 	d := t.ColumnDef
 	version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
@@ -83,6 +81,16 @@ func (p *planner) addColumnImpl(
 
 	// Ensure all new indexes are partitioned appropriately.
 	if idx != nil {
+		if n.tableDesc.IsLocalityRegionalByRow() {
+			if err := params.p.checkNoRegionChangeUnderway(
+				params.ctx,
+				n.tableDesc.GetParentID(),
+				"add an UNIQUE COLUMN on a REGIONAL BY ROW table",
+			); err != nil {
+				return err
+			}
+		}
+
 		*idx, err = p.configureIndexDescForNewIndexPartitioning(
 			params.ctx,
 			desc,
@@ -147,13 +155,9 @@ func (p *planner) addColumnImpl(
 	}
 
 	if d.IsComputed() {
-		computedColValidator := schemaexpr.MakeComputedColumnValidator(
-			params.ctx,
-			n.tableDesc,
-			&params.p.semaCtx,
-			tn,
+		serializedExpr, err := schemaexpr.ValidateComputedColumnExpression(
+			params.ctx, n.tableDesc, d, tn, params.p.SemaCtx(),
 		)
-		serializedExpr, err := computedColValidator.Validate(d)
 		if err != nil {
 			return err
 		}

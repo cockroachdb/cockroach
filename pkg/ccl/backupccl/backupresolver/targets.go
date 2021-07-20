@@ -38,7 +38,7 @@ type DescriptorsMatched struct {
 	RequestedDBs []catalog.DatabaseDescriptor
 }
 
-// CheckExpansions determines if  matched targets are covered by the specified
+// CheckExpansions determines if matched targets are covered by the specified
 // descriptors.
 func (d DescriptorsMatched) CheckExpansions(coveredDBs []descpb.ID) error {
 	covered := make(map[descpb.ID]bool)

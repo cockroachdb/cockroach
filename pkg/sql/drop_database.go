@@ -62,12 +62,12 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	found, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: !n.IfExists})
 	if err != nil {
 		return nil, err
 	}
-	if !found {
+	if dbDesc == nil {
 		// IfExists was specified and database was not found.
 		return newZeroNode(nil /* columns */), nil
 	}
@@ -84,15 +84,11 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	d := newDropCascadeState()
 
 	for _, schema := range schemas {
-		found, res, err := p.ResolveMutableSchemaDescriptor(ctx, dbDesc.ID, schema, true /* required */)
+		res, err := p.ResolveMutableSchemaDescriptor(ctx, dbDesc.ID, schema, true /* required */)
 		if err != nil {
 			return nil, err
 		}
-		if !found {
-			log.Warningf(ctx, "could not find schema %s under database %d", schema, dbDesc.ID)
-			continue
-		}
-		if err := d.collectObjectsInSchema(ctx, p, dbDesc, &res); err != nil {
+		if err := d.collectObjectsInSchema(ctx, p, dbDesc, res); err != nil {
 			return nil, err
 		}
 	}
@@ -133,7 +129,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	var schemasIDsToDelete []descpb.ID
 	for _, schemaWithDbDesc := range n.d.schemasToDelete {
 		schemaToDelete := schemaWithDbDesc.schema
-		switch schemaToDelete.Kind {
+		switch schemaToDelete.SchemaKind() {
 		case catalog.SchemaTemporary, catalog.SchemaPublic:
 			// The public schema and temporary schemas are cleaned up by just removing
 			// the existing namespace entries.
@@ -142,20 +138,20 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 				p.txn,
 				p.ExecCfg().Codec,
 				n.dbDesc.GetID(),
-				schemaToDelete.Name,
+				schemaToDelete.GetName(),
 			); err != nil {
 				return err
 			}
 		case catalog.SchemaUserDefined:
 			// For user defined schemas, we have to do a bit more work.
-			mutDesc, ok := schemaToDelete.Desc.(*schemadesc.Mutable)
+			mutDesc, ok := schemaToDelete.(*schemadesc.Mutable)
 			if !ok {
-				return errors.AssertionFailedf("expected Mutable, found %T", schemaToDelete.Desc)
+				return errors.AssertionFailedf("expected Mutable, found %T", schemaToDelete)
 			}
 			if err := params.p.dropSchemaImpl(ctx, n.dbDesc, mutDesc); err != nil {
 				return err
 			}
-			schemasIDsToDelete = append(schemasIDsToDelete, schemaToDelete.ID)
+			schemasIDsToDelete = append(schemasIDsToDelete, schemaToDelete.GetID())
 		}
 	}
 

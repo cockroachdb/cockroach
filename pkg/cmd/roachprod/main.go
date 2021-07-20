@@ -42,6 +42,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -86,7 +87,6 @@ var (
 	listDetails       bool
 	listJSON          bool
 	listMine          bool
-	clusterType       = "cockroach"
 	secure            = false
 	nodeEnv           = []string{
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
@@ -157,22 +157,15 @@ Available clusters:
 		return nil, err
 	}
 
-	switch clusterType {
-	case "cockroach":
-		c.Impl = install.Cockroach{}
-		if numRacks > 0 {
-			for i := range c.Localities {
-				rack := fmt.Sprintf("rack=%d", i%numRacks)
-				if c.Localities[i] != "" {
-					rack = "," + rack
-				}
-				c.Localities[i] += rack
+	c.Impl = install.Cockroach{}
+	if numRacks > 0 {
+		for i := range c.Localities {
+			rack := fmt.Sprintf("rack=%d", i%numRacks)
+			if c.Localities[i] != "" {
+				rack = "," + rack
 			}
+			c.Localities[i] += rack
 		}
-	case "cassandra":
-		c.Impl = install.Cassandra{}
-	default:
-		return nil, fmt.Errorf("unknown cluster type: %s", clusterType)
 	}
 
 	nodes, err := install.ListNodes(nodeNames, len(c.VMs))
@@ -231,7 +224,11 @@ func verifyClusterName(clusterName string) (string, error) {
 		for _, account := range active {
 			if !seenAccounts[account] {
 				seenAccounts[account] = true
-				accounts = append(accounts, account)
+				cleanAccount := vm.DNSSafeAccount(account)
+				if cleanAccount != account {
+					log.Printf("WARN: using `%s' as username instead of `%s'", cleanAccount, account)
+				}
+				accounts = append(accounts, cleanAccount)
 			}
 		}
 	}
@@ -510,6 +507,11 @@ directory is removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		type cloudAndName struct {
+			name  string
+			cloud *cld.Cloud
+		}
+		var cns []cloudAndName
 		switch len(args) {
 		case 0:
 			if !destroyAllMine {
@@ -526,19 +528,12 @@ directory is removed.
 				return err
 			}
 
-			var names []string
 			for name := range cloud.Clusters {
 				if destroyPattern.MatchString(name) {
-					names = append(names, name)
+					cns = append(cns, cloudAndName{name: name, cloud: cloud})
 				}
 			}
-			sort.Strings(names)
 
-			for _, clusterName := range names {
-				if err := destroyCluster(cloud, clusterName); err != nil {
-					return err
-				}
-			}
 		default:
 			if destroyAllMine {
 				return errors.New("--all-mine cannot be combined with cluster names")
@@ -559,15 +554,19 @@ directory is removed.
 						}
 					}
 
-					if err := destroyCluster(cloud, clusterName); err != nil {
-						return err
-					}
+					cns = append(cns, cloudAndName{name: clusterName, cloud: cloud})
 				} else {
 					if err := destroyLocalCluster(); err != nil {
 						return err
 					}
 				}
 			}
+		}
+
+		if err := ctxgroup.GroupWorkers(cmd.Context(), len(cns), func(ctx context.Context, idx int) error {
+			return destroyCluster(cns[idx].cloud, cns[idx].name)
+		}); err != nil {
+			return err
 		}
 		fmt.Println("OK")
 		return nil
@@ -1988,8 +1987,6 @@ func main() {
 				&nodeArgs, "args", "a", nil, "node arguments")
 			cmd.Flags().StringArrayVarP(
 				&nodeEnv, "env", "e", nodeEnv, "node environment variables")
-			cmd.Flags().StringVarP(
-				&clusterType, "type", "t", clusterType, `cluster type ("cockroach" or "cassandra")`)
 			cmd.Flags().BoolVar(
 				&install.StartOpts.Encrypt, "encrypt", encrypt, "start nodes with encryption at rest turned on")
 			cmd.Flags().BoolVar(

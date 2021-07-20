@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -82,6 +83,21 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.TimestampTZ.Oid(): {},
 	types.AnyTuple.Oid():    {},
 }
+
+// UpdatableCommand matches update operations in postgres.
+type UpdatableCommand tree.DInt
+
+// The following constants are the values for UpdatableCommand enumeration.
+const (
+	UpdateCommand UpdatableCommand = 2 + iota
+	InsertCommand
+	DeleteCommand
+)
+
+var (
+	nonUpdatableEvents = tree.NewDInt(0)
+	allUpdatableEvents = tree.NewDInt((1 << UpdateCommand) | (1 << InsertCommand) | (1 << DeleteCommand))
+)
 
 // PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This
 // is either the type's postgres display name or the type's postgres display
@@ -1145,6 +1161,92 @@ SELECT description
 		},
 	),
 
+	"pg_relation_is_updatable": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"reloid", types.Oid}, {"include_triggers", types.Bool}},
+			ReturnType: tree.FixedReturnType(types.Int4),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oidArg := tree.MustBeDOid(args[0])
+				oid := int(oidArg.DInt)
+				table, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), oid)
+				if err != nil {
+					// For postgres compatibility, it is expected that rather returning
+					// an error this return nonUpdatableEvents (Zero) because there could
+					// be oid references on deleted tables.
+					if sqlerrors.IsUndefinedRelationError(err) {
+						return nonUpdatableEvents, nil
+					}
+					return nonUpdatableEvents, err
+				}
+				tableDesc, ok := table.(catalog.TableDescriptor)
+				if !ok || !tableDesc.IsTable() || tableDesc.IsVirtualTable() {
+					return nonUpdatableEvents, nil
+				}
+
+				// pg_relation_is_updatable was created for compatibility. This
+				// should return the update events the relation supports, but as crdb
+				// does not support updatable views or foreign tables, right now this
+				// basically return allEvents or none.
+				return allUpdatableEvents, nil
+			},
+			Info:       `Returns the update events the relation supports.`,
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	"pg_column_is_updatable": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"reloid", types.Oid},
+				{"attnum", types.Int2},
+				{"include_triggers", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oidArg := tree.MustBeDOid(args[0])
+				attNumArg := tree.MustBeDInt(args[1])
+				oid := int(oidArg.DInt)
+				attNum := uint32(attNumArg)
+				if attNumArg < 0 {
+					// System columns are not updatable.
+					return tree.DBoolFalse, nil
+				}
+				table, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), oid)
+				if err != nil {
+					if sqlerrors.IsUndefinedRelationError(err) {
+						// For postgres compatibility, it is expected that rather returning
+						// an error this return nonUpdatableEvents (Zero) because there could
+						// be oid references on deleted tables.
+						return tree.DBoolFalse, nil
+					}
+					return tree.DBoolFalse, err
+				}
+				tableDesc, ok := table.(catalog.TableDescriptor)
+				if !ok || !tableDesc.IsTable() || tableDesc.IsVirtualTable() {
+					return tree.DBoolFalse, nil
+				}
+
+				column, err := tableDesc.FindColumnWithID(descpb.ColumnID(attNum))
+				if err != nil {
+					if sqlerrors.IsUndefinedColumnError(err) {
+						// When column does not exist postgres returns true.
+						return tree.DBoolTrue, nil
+					}
+					return tree.DBoolFalse, err
+				}
+
+				// pg_column_is_updatable was created for compatibility. This
+				// will return true if is a table (not virtual) and column is not
+				// a computed column.
+				return tree.MakeDBool(tree.DBool(!column.IsComputed())), nil
+			},
+			Info:       `Returns whether the given column can be updated.`,
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	"pg_sleep": makeBuiltin(
 		tree.FunctionProperties{},
 		tree.Overload{
@@ -1351,14 +1453,13 @@ SELECT description
 				}
 			}
 
-			schemaPrivilegePred := fmt.Sprintf("table_catalog = '%s'", db)
 			databasePrivilegePred := fmt.Sprintf("database_name = '%s'", db)
 			return parsePrivilegeStr(args[1], pgPrivList{
 				"CREATE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "crdb_internal",
+					return evalPrivilegeCheck(ctx, `"".crdb_internal`,
 						"cluster_database_privileges", user, databasePrivilegePred,
 						privilege.CREATE, withGrantOpt)
 				},
@@ -1366,7 +1467,7 @@ SELECT description
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "crdb_internal",
+					return evalPrivilegeCheck(ctx, `"".crdb_internal`,
 						"cluster_database_privileges", user, databasePrivilegePred,
 						privilege.CONNECT, withGrantOpt)
 				},
@@ -1374,16 +1475,16 @@ SELECT description
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"schema_privileges", user, schemaPrivilegePred,
+					return evalPrivilegeCheck(ctx, `"".crdb_internal`,
+						"cluster_database_privileges", user, databasePrivilegePred,
 						privilege.CREATE, withGrantOpt)
 				},
 				"TEMP": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"schema_privileges", user, schemaPrivilegePred,
+					return evalPrivilegeCheck(ctx, `"".crdb_internal`,
+						"cluster_database_privileges", user, databasePrivilegePred,
 						privilege.CREATE, withGrantOpt)
 				},
 			})

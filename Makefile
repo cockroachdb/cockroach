@@ -44,6 +44,8 @@ endif
 	@echo "NCPUS = $$({ getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || nproc; } 2>/dev/null)" >> $@.tmp
 	@echo "UNAME = $$(uname)" >> $@.tmp
 	@echo "HOST_TRIPLE = $$($$($(GO) env CC) -dumpmachine)" >> $@.tmp
+	@echo "GO_ENV_CC = $$(which $$($(GO) env CC))" >> $@.tmp
+	@echo "GO_ENV_CXX = $$(which $$($(GO) env CXX))" >> $@.tmp
 	@echo "GIT_DIR = $$(git rev-parse --git-dir 2>/dev/null)" >> $@.tmp
 	@echo "GITHOOKSDIR = $$(test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)" >> $@.tmp
 	@echo "have-defs = 1" >> $@.tmp
@@ -355,9 +357,8 @@ $(GITHOOKSDIR)/%: githooks/%
 	@ln -s ../../$(basename $<) $(dir $@)
 endif
 
-.SECONDARY: pkg/ui/yarn.installed
-pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobufjs-cli.lock | bin/.submodules-initialized
-	$(NODE_RUN) -C pkg/ui yarn install --offline
+.SECONDARY: protobufjs-cli-fix-deps
+protobufjs-cli-fix-deps:
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
 	# See: https://github.com/dcodeIO/protobuf.js/issues/716.
@@ -366,6 +367,23 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 	$(NODE_RUN) pkg/ui/bin/gen-protobuf-cli-deps.js > pkg/ui/node_modules/protobufjs/cli/package.json
 	ln -sf ../../../yarn.protobufjs-cli.lock pkg/ui/node_modules/protobufjs/cli/yarn.lock
 	$(NODE_RUN) -C pkg/ui/node_modules/protobufjs/cli yarn install --offline
+
+.SECONDARY: pkg/ui/yarn.cluster-ui.installed
+pkg/ui/yarn.cluster-ui.installed: pkg/ui/cluster-ui/package.json pkg/ui/cluster-ui/yarn.lock pkg/ui/src/js/protos.js pkg/ui/src/js/protos.d.ts | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn install --offline
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
+	touch $@
+
+.SECONDARY: pkg/ui/yarn.protobuf.installed
+pkg/ui/yarn.protobuf.installed: pkg/ui/src/js/package.json pkg/ui/src/js/yarn.lock pkg/ui/yarn.protobufjs-cli.lock | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui/src/js yarn install --offline
+	$(MAKE) protobufjs-cli-fix-deps
+	touch $@
+
+.SECONDARY: pkg/ui/yarn.installed
+pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.cluster-ui.installed | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui yarn install --offline
+	$(MAKE) protobufjs-cli-fix-deps
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
 	@# See the comment there for details.
 	rm -rf pkg/ui/node_modules/@types/node
@@ -382,6 +400,7 @@ bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 		github.com/cockroachdb/crlfmt \
 		github.com/cockroachdb/gostdlib/cmd/gofmt \
 		github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
+		github.com/golang/mock/mockgen \
 		github.com/cockroachdb/stress \
 		github.com/goware/modvendor \
 		github.com/go-swagger/go-swagger/cmd/swagger \
@@ -456,6 +475,7 @@ xconfigure-flags := $(configure-flags) $(EXTRA_XCONFIGURE_FLAGS)
 # If we're cross-compiling, inform Autotools and CMake.
 ifdef is-cross-compile
 xconfigure-flags += --host=$(TARGET_TRIPLE) CC=$(XCC) CXX=$(XCXX)
+cmake-flags += -DCMAKE_C_COMPILER=$(GO_ENV_CC) -DCMAKE_CXX_COMPILER=$(GO_ENV_CXX)
 xcmake-flags += -DCMAKE_SYSTEM_NAME=$(XCMAKE_SYSTEM_NAME) -DCMAKE_C_COMPILER=$(XCC) -DCMAKE_CXX_COMPILER=$(XCXX)
 override xgo := GOFLAGS= GOOS=$(XGOOS) GOARCH=$(XGOARCH) CC=$(XCC) CXX=$(XCXX) $(xgo)
 endif
@@ -651,7 +671,7 @@ $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | bin/.submodules-initial
 	mkdir -p $(PROTOC_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/protobuf-rebuild. See above for rationale.
-	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake \
+	cd $(PROTOC_DIR) && cmake $(cmake-flags) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake \
 	  -DCMAKE_BUILD_TYPE=Release
 endif
 
@@ -905,6 +925,9 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecsel/default_cmp_sel_ops.eg.go \
   pkg/sql/colexec/colexecsel/selection_ops.eg.go \
   pkg/sql/colexec/colexecsel/sel_like_ops.eg.go \
+  pkg/sql/colexec/colexecwindow/lag.eg.go \
+  pkg/sql/colexec/colexecwindow/lead.eg.go \
+  pkg/sql/colexec/colexecwindow/ntile.eg.go \
   pkg/sql/colexec/colexecwindow/rank.eg.go \
   pkg/sql/colexec/colexecwindow/relative_rank.eg.go \
   pkg/sql/colexec/colexecwindow/row_number.eg.go \
@@ -1266,9 +1289,10 @@ GRPC_GATEWAY_GOOGLEAPIS_PATH := ./vendor/$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
 
 # Map protobuf includes to the Go package containing the generated Go code.
 PROTO_MAPPINGS :=
-PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api,
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/api/annotations.proto=google.golang.org/genproto/googleapis/api/annotations,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,
 
 GW_SERVER_PROTOS := ./pkg/server/serverpb/admin.proto ./pkg/server/serverpb/status.proto ./pkg/server/serverpb/authentication.proto
 GW_TS_PROTOS := ./pkg/ts/tspb/timeseries.proto
@@ -1320,21 +1344,23 @@ bin/.gw_protobuf_sources: $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PRO
 # typescript definitions for the proto files afterwards.
 
 .SECONDARY: $(UI_JS_CCL)
-$(UI_JS_CCL): $(GW_PROTOS) $(GO_PROTOS) $(JS_PROTOS_CCL) pkg/ui/yarn.installed | bin/.submodules-initialized
+$(UI_JS_CCL): $(GW_PROTOS) $(GO_PROTOS) $(JS_PROTOS_CCL) pkg/ui/yarn.protobuf.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS) $(JS_PROTOS_CCL)) >> $@
 
 .SECONDARY: $(UI_JS_OSS)
-$(UI_JS_OSS): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/yarn.installed | bin/.submodules-initialized
+$(UI_JS_OSS): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/yarn.protobuf.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS)) >> $@
 
 # End of PBJS-generated files.
 
-.SECONDARY: $(UI_TS_OSS) $(UI_TS_CCL)
-protos%.d.ts: protos%.js pkg/ui/yarn.installed
+.SECONDARY: $(UI_TS_CCL) $(UI_TS_OSS)
+$(UI_TS_CCL): $(UI_JS_CCL) pkg/ui/yarn.protobuf.installed
+$(UI_TS_OSS): $(UI_JS_OSS) pkg/ui/yarn.protobuf.installed
+$(UI_TS_CCL) $(UI_TS_OSS):
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBTS) $< >> $@
@@ -1363,6 +1389,7 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui $(TSC)
 	$(NODE_RUN) -C pkg/ui yarn lint
 	@if $(NODE_RUN) -C pkg/ui yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn --cwd pkg/ui/cluster-ui lint
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
@@ -1396,10 +1423,12 @@ pkg/ui/dist/%.ccl.dll.js pkg/ui/%.ccl.manifest.json: pkg/ui/webpack.%.js pkg/ui/
 .PHONY: ui-test
 ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui $(KARMA) start
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn ci
 
 .PHONY: ui-test-watch
 ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
-	$(NODE_RUN) -C pkg/ui $(KARMA) start --no-single-run --auto-watch
+	$(NODE_RUN) -C pkg/ui $(KARMA) start --no-single-run --auto-watch & \
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn test
 
 .PHONY: ui-test-debug
 ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
@@ -1412,6 +1441,7 @@ pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/st
 	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
 	  ln -s ../dist/$$dll pkg/ui/dist$*/$${dll/@(.ccl|.oss)}; \
 	done
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
 	$(NODE_RUN) -C pkg/ui $(WEBPACK) --config webpack.app.js --env.dist=$*
 	go-bindata -pkg dist$* -o $@ -prefix pkg/ui/dist$* pkg/ui/dist$*/...
 	echo 'func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }' >> $@
@@ -1430,18 +1460,25 @@ ui-watch-secure: export TARGET ?= https://localhost:8080/
 ui-watch: export TARGET ?= http://localhost:8080
 ui-watch ui-watch-secure: PORT := 3000
 ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
-	cd pkg/ui && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --env.dist=ccl --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
+  # TODO (koorosh): running two webpack dev servers doesn't provide best performance and polling changes.
+  # it has to be considered to use something like `parallel-webpack` lib.
+  #
+  # `node-run.sh` wrapper is removed because this command is supposed to be run in dev environment (not in docker of CI)
+  # so it is safe to run yarn commands directly to preserve formatting and colors for outputs
+	yarn --cwd pkg/ui/cluster-ui build:watch & \
+	yarn --cwd pkg/ui webpack-dev-server --config webpack.app.js --env.dist=ccl --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
 	find pkg/ui/dist* -mindepth 1 -not -name dist*.go -delete
 	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)
 	rm -f pkg/ui/*manifest.json
+	rm -rf pkg/ui/cluster-ui/dist
 
 .PHONY: ui-maintainer-clean
 ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
-	rm -rf pkg/ui/node_modules pkg/ui/yarn.installed
+	rm -rf pkg/ui/node_modules pkg/ui/yarn.installed pkg/ui/cluster-ui/node_modules pkg/ui/yarn.cluster-ui.installed pkg/ui/src/js/node_modules pkg/ui/yarn.protobuf.installed
 
 .SECONDARY: pkg/sql/parser/gen/sql.go.tmp
 pkg/sql/parser/gen/sql.go.tmp: pkg/sql/parser/gen/sql-gen.y bin/.bootstrap
@@ -1535,6 +1572,7 @@ pkg/sql/parser/help_messages.go: pkg/sql/parser/sql.y pkg/sql/parser/help.awk | 
 	gofmt -s -w $@
 
 bin/.docgen_bnfs: bin/docgen
+	rm -f docs/generated/sql/bnf/*.bnf
 	docgen grammar bnf docs/generated/sql/bnf --quiet
 	touch $@
 
@@ -1577,7 +1615,8 @@ EVENTLOG_PROTOS = \
 	pkg/util/log/eventpb/session_events.proto \
 	pkg/util/log/eventpb/sql_audit_events.proto \
 	pkg/util/log/eventpb/cluster_events.proto \
-	pkg/util/log/eventpb/job_events.proto
+	pkg/util/log/eventpb/job_events.proto \
+	pkg/util/log/eventpb/health_events.proto
 
 LOGSINKDOC_DEP = pkg/util/log/logconfig/config.go
 
@@ -1732,6 +1771,7 @@ bins = \
   bin/publish-provisional-artifacts \
   bin/optfmt \
   bin/optgen \
+  bin/reduce \
   bin/returncheck \
   bin/roachvet \
   bin/roachprod \
@@ -1800,6 +1840,12 @@ fuzz: bin/fuzz
 	bin/fuzz $(TESTFLAGS) -tests $(TESTS) -timeout $(TESTTIMEOUT) $(PKG)
 
 # Short hand to re-generate all bazel BUILD files.
+#
+# Even with --symlink_prefix, some sub-command somewhere hardcodes the
+# creation of a "bazel-out" symlink. This bazel-out symlink can only
+# be blocked by the existence of a file before the bazel command is
+# invoked. For now, this is left as an exercise for the user.
+#
 bazel-generate: ## Generate all bazel BUILD files.
 	@echo 'Generating DEPS.bzl and BUILD files using gazelle'
 	./build/bazelutil/bazel-generate.sh

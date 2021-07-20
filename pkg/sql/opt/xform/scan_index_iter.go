@@ -367,14 +367,7 @@ func (it *scanIndexIter) buildConstProjectionsFromPredicate(
 			panic(errors.AssertionFailedf("could not extract constant value for column %d", col))
 		}
 
-		var scalar opt.ScalarExpr
-		if val == tree.DNull {
-			// NULL values should always be a memo.NullExpr, not a
-			// memo.ConstExpr.
-			scalar = memo.NullSingleton
-		} else {
-			scalar = it.f.ConstructConst(val, typ)
-		}
+		scalar := it.f.ConstructConstVal(val, typ)
 
 		proj = append(proj, it.f.ConstructProjectionsItem(
 			scalar,

@@ -58,13 +58,20 @@ type testWrapper struct {
 	*testing.T
 }
 
+var _ testI = testWrapper{}
+
+// ArtifactsDir is part of the testI interface.
 func (t testWrapper) ArtifactsDir() string {
 	return ""
 }
 
+// logger is part of the testI interface.
 func (t testWrapper) logger() *logger {
 	return nil
 }
+
+// Status is part of the testI interface.
+func (t testWrapper) Status(args ...interface{}) {}
 
 func TestExecCmd(t *testing.T) {
 	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}

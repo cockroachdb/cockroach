@@ -516,10 +516,9 @@ func TestChooseRangeToRebalance(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			a.storePool.isNodeReadyForRoutineReplicaTransfer = func(_ context.Context, n roachpb.NodeID) bool {
+			a.storePool.isStoreReadyForRoutineReplicaTransfer = func(_ context.Context, storeID roachpb.StoreID) bool {
 				for _, s := range tc.nonLive {
-					// NodeID match StoreIDs here, so this comparison is valid.
-					if roachpb.NodeID(s) == n {
+					if s == storeID {
 						return false
 					}
 				}

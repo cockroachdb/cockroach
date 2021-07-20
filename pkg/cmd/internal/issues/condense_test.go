@@ -77,8 +77,28 @@ created by main.main
 exit status 2
 `
 
+const rsgCrash = `    rsg_test.go:755: Crash detected: server panic: pq: internal error: something bad
+		SELECT
+			foo
+		FROM
+			bar
+		LIMIT
+			33:::INT8;
+`
+
+const rsgRepro = `    rsg_test.go:575: To reproduce, use schema:
+    rsg_test.go:577: 
+        	CREATE TABLE table1 (col1_0 BOOL);
+        ;
+    rsg_test.go:577: 
+        CREATE TYPE greeting AS ENUM ('hello', 'hi');
+        ;
+    rsg_test.go:579: 
+`
+
 const panic5Lines = fiveLines + messagePanic + firstStack + restStack
 const fatal5Lines = fiveLines + messageFatal + firstStack + restStack
+const crashAndRepro = fiveLines + rsgCrash + fiveLines + rsgRepro
 
 var errorCases = []condenseTestCase{
 	{
@@ -107,6 +127,16 @@ var errorCases = []condenseTestCase{
 	{
 		fatal5Lines,
 		messageFatal + firstStack,
+		0,
+	},
+	{
+		crashAndRepro,
+		rsgCrash + rsgRepro,
+		100,
+	},
+	{
+		crashAndRepro,
+		"    rsg_test.go:755: Crash detected: server panic: pq: internal error: something bad\n",
 		0,
 	},
 }

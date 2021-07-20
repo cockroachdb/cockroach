@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -28,10 +29,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+)
+
+// DiscoveredLocksThresholdToConsultFinalizedTxnCache sets a threshold as
+// mentioned in the description string. The default of 200 is somewhat
+// arbitrary but should suffice for small OLTP transactions. Given the default
+// 10,000 lock capacity of the lock table, 200 is small enough to not matter
+// much against the capacity, which is desirable. We have seen examples with
+// discoveredCount > 100,000, caused by stats collection, where we definitely
+// want to avoid adding these locks to the lock table, if possible.
+var DiscoveredLocksThresholdToConsultFinalizedTxnCache = settings.RegisterIntSetting(
+	"kv.lock_table.discovered_locks_threshold_for_consulting_finalized_txn_cache",
+	"the maximum number of discovered locks by a waiter, above which the finalized txn cache"+
+		"is consulted and resolvable locks are not added to the lock table -- this should be a small"+
+		"fraction of the maximum number of locks in the lock table",
+	200,
+	settings.NonNegativeInt,
 )
 
 // managerImpl implements the Manager interface.
 type managerImpl struct {
+	st *cluster.Settings
 	// Synchronizes conflicting in-flight requests.
 	lm latchManager
 	// Synchronizes conflicting in-progress transactions.
@@ -73,10 +92,9 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := &lockTableImpl{
-		maxLocks: cfg.MaxLockTableSize,
-	}
+	lt := newLockTable(cfg.MaxLockTableSize)
 	*m = managerImpl{
+		st: cfg.Settings,
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
 		// pkg/storage/concurrency/latch package. Make it implement the
 		// latchManager interface directly, if possible.
@@ -112,18 +130,35 @@ func NewManager(cfg Config) Manager {
 
 // SequenceReq implements the RequestSequencer interface.
 func (m *managerImpl) SequenceReq(
-	ctx context.Context, prev *Guard, req Request,
+	ctx context.Context, prev *Guard, req Request, evalKind RequestEvalKind,
 ) (*Guard, Response, *Error) {
 	var g *Guard
 	if prev == nil {
+		switch evalKind {
+		case PessimisticEval:
+			log.Event(ctx, "sequencing request")
+		case OptimisticEval:
+			log.Event(ctx, "optimistically sequencing request")
+		case PessimisticAfterFailedOptimisticEval:
+			panic("retry should have non-nil guard")
+		}
 		g = newGuard(req)
-		log.Event(ctx, "sequencing request")
 	} else {
 		g = prev
-		g.AssertNoLatches()
-		log.Event(ctx, "re-sequencing request")
+		switch evalKind {
+		case PessimisticEval:
+			g.AssertNoLatches()
+			log.Event(ctx, "re-sequencing request")
+		case OptimisticEval:
+			panic("optimistic eval cannot happen when re-sequencing")
+		case PessimisticAfterFailedOptimisticEval:
+			if shouldAcquireLatches(req) {
+				g.AssertLatches()
+			}
+			log.Event(ctx, "re-sequencing request after optimistic sequencing failed")
+		}
 	}
-
+	g.EvalKind = evalKind
 	resp, err := m.sequenceReqWithGuard(ctx, g, req)
 	if resp != nil || err != nil {
 		// Ensure that we release the guard if we return a response or an error.
@@ -133,6 +168,8 @@ func (m *managerImpl) SequenceReq(
 	return g, nil, nil
 }
 
+// TODO(sumeer): we are using both g.Req and req, when the former should
+// suffice. Remove the req parameter.
 func (m *managerImpl) sequenceReqWithGuard(
 	ctx context.Context, g *Guard, req Request,
 ) (Response, *Error) {
@@ -150,13 +187,26 @@ func (m *managerImpl) sequenceReqWithGuard(
 		return resp, err
 	}
 
+	// Only the first iteration can sometimes already be holding latches -- we
+	// use this to assert below.
+	first := true
 	for {
-		// Acquire latches for the request. This synchronizes the request
-		// with all conflicting in-flight requests.
-		log.Event(ctx, "acquiring latches")
-		g.lg, err = m.lm.Acquire(ctx, req)
-		if err != nil {
-			return nil, err
+		if !first {
+			g.AssertNoLatches()
+		}
+		first = false
+		if !g.HoldingLatches() {
+			// TODO(sumeer): optimistic requests could register their need for
+			// latches, but not actually wait until acquisition.
+			// https://github.com/cockroachdb/cockroach/issues/9521
+
+			// Acquire latches for the request. This synchronizes the request
+			// with all conflicting in-flight requests.
+			log.Event(ctx, "acquiring latches")
+			g.lg, err = m.lm.Acquire(ctx, req)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// Some requests don't want the wait on locks.
@@ -164,9 +214,17 @@ func (m *managerImpl) sequenceReqWithGuard(
 			return nil, nil
 		}
 
-		// Scan for conflicting locks.
-		log.Event(ctx, "scanning lock table for conflicting locks")
-		g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+		if g.EvalKind == OptimisticEval {
+			if g.ltg != nil {
+				panic("Optimistic locking should not have a non-nil lockTableGuard")
+			}
+			log.Event(ctx, "optimistically scanning lock table for conflicting locks")
+			g.ltg = m.lt.ScanOptimistic(g.Req)
+		} else {
+			// Scan for conflicting locks.
+			log.Event(ctx, "scanning lock table for conflicting locks")
+			g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+		}
 
 		// Wait on conflicting locks, if necessary.
 		if g.ltg.ShouldWait() {
@@ -238,11 +296,27 @@ func shouldAcquireLatches(req Request) bool {
 
 // FinishReq implements the RequestSequencer interface.
 func (m *managerImpl) FinishReq(g *Guard) {
-	if ltg := g.moveLockTableGuard(); ltg != nil {
-		m.lt.Dequeue(ltg)
-	}
+	// NOTE: we release latches _before_ exiting lock wait-queues deliberately.
+	// Either order would be correct, but the order here avoids non-determinism in
+	// cases where a request A holds both latches and lock wait-queue reservations
+	// and has a request B waiting on its reservations. If request A released its
+	// reservations before releasing its latches, it would be possible for B to
+	// beat A to the latch manager and end up blocking on its latches briefly. Not
+	// only is this confusing in traces, but it is slightly less efficient than if
+	// request A released latches before letting anyone waiting on it in the lock
+	// table proceed, ensuring that waiters do not hit its latches.
+	//
+	// Elsewhere, we relate the relationship of between the latch manager and the
+	// lock-table to that of a mutex and condition variable pair. Following that
+	// analogy, this release ordering is akin to signaling a condition variable
+	// after releasing its associated mutex. Doing so ensures that whoever the
+	// signaler wakes up (if anyone) will never bump into its mutex immediately
+	// upon resumption.
 	if lg := g.moveLatchGuard(); lg != nil {
 		m.lm.Release(lg)
+	}
+	if ltg := g.moveLockTableGuard(); ltg != nil {
+		m.lt.Dequeue(ltg)
 	}
 	releaseGuard(g)
 }
@@ -259,10 +333,12 @@ func (m *managerImpl) HandleWriterIntentError(
 	// Add a discovered lock to lock-table for each intent and enter each lock's
 	// wait-queue. If the lock-table is disabled and one or more of the intents
 	// are ignored then we immediately wait on all intents.
+	consultFinalizedTxnCache :=
+		int64(len(t.Intents)) > DiscoveredLocksThresholdToConsultFinalizedTxnCache.Get(&m.st.SV)
 	wait := false
 	for i := range t.Intents {
 		intent := &t.Intents[i]
-		added, err := m.lt.AddDiscoveredLock(intent, seq, g.ltg)
+		added, err := m.lt.AddDiscoveredLock(intent, seq, consultFinalizedTxnCache, g.ltg)
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)
 		}
@@ -284,6 +360,13 @@ func (m *managerImpl) HandleWriterIntentError(
 		for i := range t.Intents {
 			intent := &t.Intents[i]
 			if err := m.ltw.WaitOnLock(ctx, g.Req, intent); err != nil {
+				m.FinishReq(g)
+				return nil, err
+			}
+		}
+	} else {
+		if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
+			if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
 				m.FinishReq(g)
 				return nil, err
 			}
@@ -439,6 +522,11 @@ func (g *Guard) LatchSpans() *spanset.SpanSet {
 	return g.Req.LatchSpans
 }
 
+// LockSpans returns the maximal set of lock spans that the request will access.
+func (g *Guard) LockSpans() *spanset.SpanSet {
+	return g.Req.LockSpans
+}
+
 // HoldingLatches returned whether the guard is holding latches or not.
 func (g *Guard) HoldingLatches() bool {
 	return g != nil && g.lg != nil
@@ -457,6 +545,18 @@ func (g *Guard) AssertNoLatches() {
 	if g.HoldingLatches() {
 		panic("unexpected latches held")
 	}
+}
+
+// CheckOptimisticNoConflicts checks that the lockSpansRead do not have a
+// conflicting lock.
+func (g *Guard) CheckOptimisticNoConflicts(lockSpansRead *spanset.SpanSet) (ok bool) {
+	if g.EvalKind != OptimisticEval {
+		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.EvalKind))
+	}
+	if g.ltg == nil {
+		return true
+	}
+	return g.ltg.CheckOptimisticNoConflicts(lockSpansRead)
 }
 
 func (g *Guard) moveLatchGuard() latchGuard {

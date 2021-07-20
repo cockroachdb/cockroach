@@ -11,7 +11,6 @@
 package colexecutils
 
 import (
-	"context"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -25,7 +24,7 @@ import (
 // or omitted according to the selection vector). If the batches come with no
 // selection vector, it is a noop.
 type deselectorOp struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	colexecop.NonExplainable
 	allocator  *colmem.Allocator
 	inputTypes []*types.T
@@ -41,17 +40,13 @@ func NewDeselectorOp(
 	allocator *colmem.Allocator, input colexecop.Operator, typs []*types.T,
 ) colexecop.Operator {
 	return &deselectorOp{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		allocator:    allocator,
-		inputTypes:   typs,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		allocator:      allocator,
+		inputTypes:     typs,
 	}
 }
 
-func (p *deselectorOp) Init() {
-	p.Input.Init()
-}
-
-func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
+func (p *deselectorOp) Next() coldata.Batch {
 	// deselectorOp should *not* limit the capacities of the returned batches,
 	// so we don't use a memory limit here. It is up to the wrapped operator to
 	// limit the size of batches based on the memory footprint.
@@ -65,7 +60,7 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 	p.output, _ = p.allocator.ResetMaybeReallocate(
 		p.inputTypes, p.output, 1 /* minCapacity */, maxBatchMemSize,
 	)
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	if batch.Selection() == nil || batch.Length() == 0 {
 		return batch
 	}

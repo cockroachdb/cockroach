@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -163,7 +162,7 @@ func readInputFiles(
 
 	// Attempt to fetch total number of bytes for all files.
 	for id, dataFile := range dataFiles {
-		conf, err := cloudimpl.ExternalStorageConfFromURI(dataFile, user)
+		conf, err := cloud.ExternalStorageConfFromURI(dataFile, user)
 		if err != nil {
 			return err
 		}
@@ -188,7 +187,7 @@ func readInputFiles(
 		default:
 		}
 		if err := func() error {
-			conf, err := cloudimpl.ExternalStorageConfFromURI(dataFile, user)
+			conf, err := cloud.ExternalStorageConfFromURI(dataFile, user)
 			if err != nil {
 				return err
 			}
@@ -241,7 +240,7 @@ func readInputFiles(
 					if err != nil {
 						return err
 					}
-					conf, err := cloudimpl.ExternalStorageConfFromURI(rejFn, user)
+					conf, err := cloud.ExternalStorageConfFromURI(rejFn, user)
 					if err != nil {
 						return err
 					}
@@ -250,7 +249,7 @@ func readInputFiles(
 						return err
 					}
 					defer rejectedStorage.Close()
-					if err := rejectedStorage.WriteFile(ctx, "", bytes.NewReader(buf)); err != nil {
+					if err := cloud.WriteFile(ctx, rejectedStorage, "", bytes.NewReader(buf)); err != nil {
 						return err
 					}
 					return nil

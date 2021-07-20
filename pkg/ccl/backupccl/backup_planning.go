@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,13 +55,14 @@ import (
 )
 
 const (
-	backupOptRevisionHistory = "revision_history"
-	backupOptEncPassphrase   = "encryption_passphrase"
-	backupOptEncKMS          = "kms"
-	backupOptWithPrivileges  = "privileges"
-	backupOptAsJSON          = "as_json"
-	localityURLParam         = "COCKROACH_LOCALITY"
-	defaultLocalityValue     = "default"
+	backupOptRevisionHistory    = "revision_history"
+	backupOptIncludeInterleaves = "include_deprecated_interleaves"
+	backupOptEncPassphrase      = "encryption_passphrase"
+	backupOptEncKMS             = "kms"
+	backupOptWithPrivileges     = "privileges"
+	backupOptAsJSON             = "as_json"
+	localityURLParam            = "COCKROACH_LOCALITY"
+	defaultLocalityValue        = "default"
 )
 
 type encryptionMode int
@@ -354,7 +354,7 @@ func spansForAllTableIndexes(
 		// state. We want (and do) ignore tables that have been dropped for the
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
-		if rawTbl != nil && rawTbl.State == descpb.DescriptorState_PUBLIC {
+		if rawTbl != nil && rawTbl.Public() {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			revSpans, err := getLogicallyMergedTableSpans(tbl, added, execCfg.Codec, rev.Time,
 				checkForKVInBounds)
@@ -480,7 +480,7 @@ func resolveOptionsForBackupJobDescription(
 	}
 
 	for _, uri := range kmsURIs {
-		redactedURI, err := cloudimpl.RedactKMSURI(uri)
+		redactedURI, err := cloud.RedactKMSURI(uri)
 		if err != nil {
 			return tree.BackupOptions{}, err
 		}
@@ -519,7 +519,7 @@ func GetRedactedBackupNode(
 	}
 
 	for _, t := range to {
-		sanitizedTo, err := cloudimpl.SanitizeExternalStorageURI(t, nil /* extraParams */)
+		sanitizedTo, err := cloud.SanitizeExternalStorageURI(t, nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
@@ -527,7 +527,7 @@ func GetRedactedBackupNode(
 	}
 
 	for _, from := range incrementalFrom {
-		sanitizedFrom, err := cloudimpl.SanitizeExternalStorageURI(from, nil /* extraParams */)
+		sanitizedFrom, err := cloud.SanitizeExternalStorageURI(from, nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
@@ -680,15 +680,15 @@ func checkPrivilegesForBackup(
 	}
 	// Check that none of the destinations require an admin role.
 	for _, uri := range to {
-		hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
+		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
 		if err != nil {
 			return err
 		}
-		if !hasExplicitAuth {
+		if !conf.AccessIsWithExplicitAuth() {
 			return pgerror.Newf(
 				pgcode.InsufficientPrivilege,
 				"only users with the admin role are allowed to BACKUP to the specified %s URI",
-				uriScheme)
+				conf.Provider.String())
 		}
 	}
 
@@ -820,6 +820,62 @@ func backupPlanHook(
 			}
 		}
 
+		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to, "")
+		if err != nil {
+			return err
+		}
+
+		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+
+		switch encryptionParams.encryptMode {
+		case passphrase:
+			pw, err := pwFn()
+			if err != nil {
+				return err
+			}
+			if err := requireEnterprise("encryption"); err != nil {
+				return err
+			}
+			encryptionParams.encryptionPassphrase = []byte(pw)
+		case kms:
+			encryptionParams.kmsURIs, encryptionParams.kmsEnv, err = kmsFn()
+			if err != nil {
+				return err
+			}
+			if err := requireEnterprise("encryption"); err != nil {
+				return err
+			}
+		}
+
+		// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
+		// backupDestination struct.
+		collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
+			resolveDest(ctx, p.User(), backupStmt.Nested, backupStmt.AppendToLatest, defaultURI,
+				urisByLocalityKV, makeCloudStorage, endTime, to, incrementalFrom, subdir)
+		if err != nil {
+			return err
+		}
+		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p.User(), makeCloudStorage, prevs,
+			encryptionParams)
+		if err != nil {
+			return err
+		}
+		if len(prevBackups) > 0 {
+			baseManifest := prevBackups[0]
+			if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
+				backupStmt.Coverage() != tree.AllDescriptors {
+				return errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
+			}
+		}
+
+		var startTime hlc.Timestamp
+		if len(prevBackups) > 0 {
+			if err := requireEnterprise("incremental"); err != nil {
+				return err
+			}
+			startTime = prevBackups[len(prevBackups)-1].EndTime
+		}
+
 		mvccFilter := MVCCFilter_Latest
 		if backupStmt.Options.CaptureRevisionHistory {
 			if err := requireEnterprise("revision_history"); err != nil {
@@ -839,10 +895,24 @@ func backupPlanHook(
 				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 			}
 		case tree.AllDescriptors:
-			allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
+			// Cluster backups include all of the descriptors in the cluster.
+			var allDescs []catalog.Descriptor
+			var err error
+			switch mvccFilter {
+			case MVCCFilter_All:
+				// Usually, revision_history backups include all previous versions of the
+				// descriptors at exist as of end time since they have not been GC'ed yet.
+				// However, since database descriptors are deleted as soon as the database
+				// is deleted, cluster backups need to explicitly go looking for these
+				// dropped descriptors up front.
+				allDescs, err = loadAllDescsInInterval(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, startTime, endTime)
+			case MVCCFilter_Latest:
+				allDescs, err = backupresolver.LoadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
+			}
 			if err != nil {
 				return err
 			}
+
 			targetDescs, completeDBs, err = fullClusterTargetsBackup(allDescs)
 			if err != nil {
 				return err
@@ -852,6 +922,16 @@ func backupPlanHook(
 			}
 		default:
 			return errors.AssertionFailedf("unexpected descriptor coverage %v", backupStmt.Coverage())
+		}
+
+		if !backupStmt.Options.IncludeDeprecatedInterleaves {
+			for _, desc := range targetDescs {
+				if table, ok := desc.(catalog.TableDescriptor); ok {
+					if table.IsInterleaved() {
+						return errors.Errorf("interleaved tables are deprecated and backups containing interleaved tables will not be able to be RESTORE'd by future versions -- use option %q to backup interleaved tables anyway %q", backupOptIncludeInterleaves, table.TableDesc().Name)
+					}
+				}
+			}
 		}
 
 		// Check BACKUP privileges.
@@ -881,54 +961,6 @@ func backupPlanHook(
 			return err
 		}
 
-		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
-
-		switch encryptionParams.encryptMode {
-		case passphrase:
-			pw, err := pwFn()
-			if err != nil {
-				return err
-			}
-			if err := requireEnterprise("encryption"); err != nil {
-				return err
-			}
-			encryptionParams.encryptionPassphrase = []byte(pw)
-		case kms:
-			encryptionParams.kmsURIs, encryptionParams.kmsEnv, err = kmsFn()
-			if err != nil {
-				return err
-			}
-			if err := requireEnterprise("encryption"); err != nil {
-				return err
-			}
-		}
-
-		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to, "")
-		if err != nil {
-			return err
-		}
-
-		// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
-		// backupDestination struct.
-		collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
-			resolveDest(ctx, p.User(), backupStmt.Nested, backupStmt.AppendToLatest, defaultURI,
-				urisByLocalityKV, makeCloudStorage, endTime, to, incrementalFrom, subdir)
-		if err != nil {
-			return err
-		}
-		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p.User(), makeCloudStorage, prevs,
-			encryptionParams)
-		if err != nil {
-			return err
-		}
-		if len(prevBackups) > 0 {
-			baseManifest := prevBackups[0]
-			if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
-				backupStmt.Coverage() != tree.AllDescriptors {
-				return errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
-			}
-		}
-
 		clusterID := p.ExecCfg().ClusterID()
 		for i := range prevBackups {
 			// IDs are how we identify tables, and those are only meaningful in the
@@ -939,14 +971,7 @@ func backupPlanHook(
 			}
 		}
 
-		var startTime hlc.Timestamp
 		var newSpans roachpb.Spans
-		if len(prevBackups) > 0 {
-			if err := requireEnterprise("incremental"); err != nil {
-				return err
-			}
-			startTime = prevBackups[len(prevBackups)-1].EndTime
-		}
 
 		var priorIDs map[descpb.ID]descpb.ID
 

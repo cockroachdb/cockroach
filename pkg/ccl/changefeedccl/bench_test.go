@@ -21,12 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -145,6 +145,8 @@ func (s *benchSink) EmitResolvedTimestamp(ctx context.Context, e Encoder, ts hlc
 }
 func (s *benchSink) Flush(_ context.Context) error { return nil }
 func (s *benchSink) Close() error                  { return nil }
+func (s *benchSink) Dial() error                   { return nil }
+
 func (s *benchSink) emit(bytes int64) error {
 	s.Lock()
 	defer s.Unlock()
@@ -178,7 +180,7 @@ func (s *benchSink) WaitForEmit() (int, int64) {
 // if the changefeed had failed before the closure was called.
 //
 // This intentionally skips the distsql and sink parts to keep the benchmark
-// focused on the core changefeed work, but it does include the poller.
+// focused on the core changefeed work.
 func createBenchmarkChangefeed(
 	ctx context.Context,
 	s serverutils.TestServerInterface,
@@ -205,7 +207,6 @@ func createBenchmarkChangefeed(
 	settings := s.ClusterSettings()
 	metrics := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics)
 	buf := kvfeed.MakeChanBuffer()
-	leaseMgr := s.LeaseManager().(*lease.Manager)
 	mm := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
@@ -223,15 +224,18 @@ func createBenchmarkChangefeed(
 		Spans:            spans,
 		Targets:          details.Targets,
 		Sink:             buf,
-		LeaseMgr:         leaseMgr,
 		Metrics:          &metrics.KVFeedMetrics,
 		MM:               mm,
 		InitialHighWater: initialHighWater,
 		WithDiff:         withDiff,
 		NeedsInitialScan: needsInitialScan,
+		SchemaFeed:       schemafeed.DoNothingSchemaFeed,
 	}
 
-	sf := span.MakeFrontier(spans...)
+	sf, err := span.MakeFrontier(spans...)
+	if err != nil {
+		return nil, nil, err
+	}
 	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 	eventConsumer := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
 		sink, encoder, details, TestingKnobs{})
@@ -257,7 +261,10 @@ func createBenchmarkChangefeed(
 	go func() {
 		defer wg.Done()
 		err := func() error {
-			sf := span.MakeFrontier(spans...)
+			sf, err := span.MakeFrontier(spans...)
+			if err != nil {
+				return err
+			}
 			for {
 				// This is basically the ChangeAggregator processor.
 				rs, err := tickFn(ctx)
@@ -267,7 +274,11 @@ func createBenchmarkChangefeed(
 				// This is basically the ChangeFrontier processor, the resolved
 				// spans are normally sent using distsql, so we're missing a bit
 				// of overhead here.
-				if sf.Forward(rs.Span, rs.Timestamp) {
+				advanced, err := sf.Forward(rs.Span, rs.Timestamp)
+				if err != nil {
+					return err
+				}
+				if advanced {
 					frontier := sf.Frontier()
 					if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
 						return err

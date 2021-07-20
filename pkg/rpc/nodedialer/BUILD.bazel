@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/rpc/nodedialer",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvbase",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/roachpb",

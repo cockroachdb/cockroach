@@ -111,11 +111,11 @@ func BenchmarkDeselector(b *testing.B) {
 				batch.SetLength(batchLen)
 				input := colexecop.NewRepeatableBatchSource(testAllocator, batch, inputTypes)
 				op := NewDeselectorOp(testAllocator, input, inputTypes)
-				op.Init()
+				op.Init(ctx)
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					input.ResetBatchesToReturn(nBatches)
-					for b := op.Next(ctx); b.Length() != 0; b = op.Next(ctx) {
+					for b := op.Next(); b.Length() != 0; b = op.Next() {
 					}
 					// We don't need to reset the deselector because it doesn't keep any
 					// state. We do, however, want to keep its already allocated memory

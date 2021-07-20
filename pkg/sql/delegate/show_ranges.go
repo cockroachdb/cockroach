@@ -46,11 +46,10 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 			range_id,
 			range_size / 1000000 as range_size_mb,
 			lease_holder,
-    	gossip_nodes.locality as lease_holder_locality,
+			replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
 			replicas,
 			replica_localities
 		FROM %[1]s.crdb_internal.ranges AS r
-	  LEFT JOIN crdb_internal.gossip_nodes ON lease_holder = node_id
 		WHERE database_name=%[2]s
 		ORDER BY table_name, r.start_key
 		`
@@ -72,8 +71,8 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 	}
 
 	span := idx.Span()
-	startKey := hex.EncodeToString([]byte(span.Key))
-	endKey := hex.EncodeToString([]byte(span.EndKey))
+	startKey := hex.EncodeToString(span.Key)
+	endKey := hex.EncodeToString(span.EndKey)
 	return parse(fmt.Sprintf(`
 SELECT 
   CASE WHEN r.start_key <= x'%[1]s' THEN NULL ELSE crdb_internal.pretty_key(r.start_key, 2) END AS start_key,
@@ -81,11 +80,10 @@ SELECT
   range_id,
   range_size / 1000000 as range_size_mb,
   lease_holder,
-  gossip_nodes.locality as lease_holder_locality,
+  replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
   replicas,
   replica_localities
 FROM %[3]s.crdb_internal.ranges AS r
-LEFT JOIN %[3]s.crdb_internal.gossip_nodes ON lease_holder = node_id
 WHERE (r.start_key < x'%[2]s')
   AND (r.end_key   > x'%[1]s') ORDER BY r.start_key
 `,

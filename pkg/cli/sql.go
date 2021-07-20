@@ -448,9 +448,9 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 			}
 			optData = append(optData, []string{n, options[n].display(), options[n].description})
 		}
-		err := printQueryOutput(os.Stdout,
+		err := PrintQueryOutput(os.Stdout,
 			[]string{"Option", "Value", "Description"},
-			newRowSliceIter(optData, "lll" /*align*/))
+			NewRowSliceIter(optData, "lll" /*align*/))
 		if err != nil {
 			panic(err)
 		}
@@ -562,11 +562,6 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 func (c *cliState) handleDemoAddNode(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	if cmd[0] != "add" {
 		return c.internalServerError(errState, fmt.Errorf("bad call to handleDemoAddNode"))
-	}
-
-	if demoCtx.simulateLatency {
-		fmt.Printf("add command is not supported in --global configurations\n")
-		return nextState
 	}
 
 	if err := demoCtx.transientCluster.AddNode(context.Background(), cmd[1]); err != nil {
@@ -1799,5 +1794,11 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 func printlnUnlessEmbedded(args ...interface{}) {
 	if !sqlCtx.embeddedMode {
 		fmt.Println(args...)
+	}
+}
+
+func printfUnlessEmbedded(f string, args ...interface{}) {
+	if !sqlCtx.embeddedMode {
+		fmt.Printf(f, args...)
 	}
 }

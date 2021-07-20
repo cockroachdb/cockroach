@@ -51,6 +51,7 @@ vectorized: true
               estimated row count: 1 (missing stats)
               table: t9@primary
               spans: /5/0-/5/1/2
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t9 SET a = 2 WHERE a = 5

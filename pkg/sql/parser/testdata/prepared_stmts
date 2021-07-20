@@ -1,0 +1,354 @@
+parse
+PREPARE a AS SELECT 1
+----
+PREPARE a AS SELECT 1
+PREPARE a AS SELECT (1) -- fully parenthesized
+PREPARE a AS SELECT _ -- literals removed
+PREPARE _ AS SELECT 1 -- identifiers removed
+
+parse
+PREPARE a AS EXPLAIN SELECT 1
+----
+PREPARE a AS EXPLAIN SELECT 1
+PREPARE a AS EXPLAIN SELECT (1) -- fully parenthesized
+PREPARE a AS EXPLAIN SELECT _ -- literals removed
+PREPARE _ AS EXPLAIN SELECT 1 -- identifiers removed
+
+parse
+PREPARE a (INT8) AS SELECT $1
+----
+PREPARE a (INT8) AS SELECT $1
+PREPARE a (INT8) AS SELECT ($1) -- fully parenthesized
+PREPARE a (INT8) AS SELECT $1 -- literals removed
+PREPARE _ (INT8) AS SELECT $1 -- identifiers removed
+
+parse
+PREPARE a (STRING, STRING) AS SELECT $1, $2
+----
+PREPARE a (STRING, STRING) AS SELECT $1, $2
+PREPARE a (STRING, STRING) AS SELECT ($1), ($2) -- fully parenthesized
+PREPARE a (STRING, STRING) AS SELECT $1, $2 -- literals removed
+PREPARE _ (STRING, STRING) AS SELECT $1, $2 -- identifiers removed
+
+parse
+PREPARE a AS INSERT INTO a VALUES (1)
+----
+PREPARE a AS INSERT INTO a VALUES (1)
+PREPARE a AS INSERT INTO a VALUES ((1)) -- fully parenthesized
+PREPARE a AS INSERT INTO a VALUES (_) -- literals removed
+PREPARE _ AS INSERT INTO _ VALUES (1) -- identifiers removed
+
+parse
+PREPARE a (INT8) AS INSERT INTO a VALUES ($1)
+----
+PREPARE a (INT8) AS INSERT INTO a VALUES ($1)
+PREPARE a (INT8) AS INSERT INTO a VALUES (($1)) -- fully parenthesized
+PREPARE a (INT8) AS INSERT INTO a VALUES ($1) -- literals removed
+PREPARE _ (INT8) AS INSERT INTO _ VALUES ($1) -- identifiers removed
+
+parse
+PREPARE a AS UPDATE a SET b = 1
+----
+PREPARE a AS UPDATE a SET b = 1
+PREPARE a AS UPDATE a SET b = (1) -- fully parenthesized
+PREPARE a AS UPDATE a SET b = _ -- literals removed
+PREPARE _ AS UPDATE _ SET _ = 1 -- identifiers removed
+
+parse
+PREPARE a (INT8) AS UPDATE a SET b = $1
+----
+PREPARE a (INT8) AS UPDATE a SET b = $1
+PREPARE a (INT8) AS UPDATE a SET b = ($1) -- fully parenthesized
+PREPARE a (INT8) AS UPDATE a SET b = $1 -- literals removed
+PREPARE _ (INT8) AS UPDATE _ SET _ = $1 -- identifiers removed
+
+parse
+PREPARE a AS UPSERT INTO a VALUES (1)
+----
+PREPARE a AS UPSERT INTO a VALUES (1)
+PREPARE a AS UPSERT INTO a VALUES ((1)) -- fully parenthesized
+PREPARE a AS UPSERT INTO a VALUES (_) -- literals removed
+PREPARE _ AS UPSERT INTO _ VALUES (1) -- identifiers removed
+
+parse
+PREPARE a (INT8) AS UPSERT INTO a VALUES ($1)
+----
+PREPARE a (INT8) AS UPSERT INTO a VALUES ($1)
+PREPARE a (INT8) AS UPSERT INTO a VALUES (($1)) -- fully parenthesized
+PREPARE a (INT8) AS UPSERT INTO a VALUES ($1) -- literals removed
+PREPARE _ (INT8) AS UPSERT INTO _ VALUES ($1) -- identifiers removed
+
+parse
+PREPARE a AS DELETE FROM a
+----
+PREPARE a AS DELETE FROM a
+PREPARE a AS DELETE FROM a -- fully parenthesized
+PREPARE a AS DELETE FROM a -- literals removed
+PREPARE _ AS DELETE FROM _ -- identifiers removed
+
+parse
+PREPARE a (INT8) AS DELETE FROM a WHERE b = $1
+----
+PREPARE a (INT8) AS DELETE FROM a WHERE b = $1
+PREPARE a (INT8) AS DELETE FROM a WHERE ((b) = ($1)) -- fully parenthesized
+PREPARE a (INT8) AS DELETE FROM a WHERE b = $1 -- literals removed
+PREPARE _ (INT8) AS DELETE FROM _ WHERE _ = $1 -- identifiers removed
+
+parse
+PREPARE a AS BACKUP DATABASE a TO 'b'
+----
+PREPARE a AS BACKUP DATABASE a TO 'b'
+PREPARE a AS BACKUP DATABASE a TO ('b') -- fully parenthesized
+PREPARE a AS BACKUP DATABASE a TO _ -- literals removed
+PREPARE a AS BACKUP DATABASE a TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+PREPARE _ AS BACKUP DATABASE _ TO 'b' -- identifiers removed
+
+parse
+PREPARE a (STRING) AS BACKUP DATABASE a TO $1
+----
+PREPARE a (STRING) AS BACKUP DATABASE a TO $1
+PREPARE a (STRING) AS BACKUP DATABASE a TO ($1) -- fully parenthesized
+PREPARE a (STRING) AS BACKUP DATABASE a TO $1 -- literals removed
+PREPARE _ (STRING) AS BACKUP DATABASE _ TO $1 -- identifiers removed
+
+parse
+PREPARE a AS RESTORE DATABASE a FROM 'b'
+----
+PREPARE a AS RESTORE DATABASE a FROM 'b'
+PREPARE a AS RESTORE DATABASE a FROM ('b') -- fully parenthesized
+PREPARE a AS RESTORE DATABASE a FROM _ -- literals removed
+PREPARE a AS RESTORE DATABASE a FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+PREPARE _ AS RESTORE DATABASE _ FROM 'b' -- identifiers removed
+
+parse
+PREPARE a (STRING) AS RESTORE DATABASE a FROM $1
+----
+PREPARE a (STRING) AS RESTORE DATABASE a FROM $1
+PREPARE a (STRING) AS RESTORE DATABASE a FROM ($1) -- fully parenthesized
+PREPARE a (STRING) AS RESTORE DATABASE a FROM $1 -- literals removed
+PREPARE _ (STRING) AS RESTORE DATABASE _ FROM $1 -- identifiers removed
+
+parse
+PREPARE a AS CANCEL QUERIES SELECT 1
+----
+PREPARE a AS CANCEL QUERIES SELECT 1
+PREPARE a AS CANCEL QUERIES SELECT (1) -- fully parenthesized
+PREPARE a AS CANCEL QUERIES SELECT _ -- literals removed
+PREPARE _ AS CANCEL QUERIES SELECT 1 -- identifiers removed
+
+parse
+PREPARE a (STRING) AS CANCEL QUERIES SELECT $1
+----
+PREPARE a (STRING) AS CANCEL QUERIES SELECT $1
+PREPARE a (STRING) AS CANCEL QUERIES SELECT ($1) -- fully parenthesized
+PREPARE a (STRING) AS CANCEL QUERIES SELECT $1 -- literals removed
+PREPARE _ (STRING) AS CANCEL QUERIES SELECT $1 -- identifiers removed
+
+parse
+PREPARE a AS CANCEL QUERIES IF EXISTS SELECT 1
+----
+PREPARE a AS CANCEL QUERIES IF EXISTS SELECT 1
+PREPARE a AS CANCEL QUERIES IF EXISTS SELECT (1) -- fully parenthesized
+PREPARE a AS CANCEL QUERIES IF EXISTS SELECT _ -- literals removed
+PREPARE _ AS CANCEL QUERIES IF EXISTS SELECT 1 -- identifiers removed
+
+parse
+PREPARE a (STRING) AS CANCEL QUERIES IF EXISTS SELECT $1
+----
+PREPARE a (STRING) AS CANCEL QUERIES IF EXISTS SELECT $1
+PREPARE a (STRING) AS CANCEL QUERIES IF EXISTS SELECT ($1) -- fully parenthesized
+PREPARE a (STRING) AS CANCEL QUERIES IF EXISTS SELECT $1 -- literals removed
+PREPARE _ (STRING) AS CANCEL QUERIES IF EXISTS SELECT $1 -- identifiers removed
+
+parse
+PREPARE a AS CANCEL SESSIONS SELECT 1
+----
+PREPARE a AS CANCEL SESSIONS SELECT 1
+PREPARE a AS CANCEL SESSIONS SELECT (1) -- fully parenthesized
+PREPARE a AS CANCEL SESSIONS SELECT _ -- literals removed
+PREPARE _ AS CANCEL SESSIONS SELECT 1 -- identifiers removed
+
+parse
+PREPARE a (STRING) AS CANCEL SESSIONS SELECT $1
+----
+PREPARE a (STRING) AS CANCEL SESSIONS SELECT $1
+PREPARE a (STRING) AS CANCEL SESSIONS SELECT ($1) -- fully parenthesized
+PREPARE a (STRING) AS CANCEL SESSIONS SELECT $1 -- literals removed
+PREPARE _ (STRING) AS CANCEL SESSIONS SELECT $1 -- identifiers removed
+
+parse
+PREPARE a AS CANCEL SESSIONS IF EXISTS SELECT 1
+----
+PREPARE a AS CANCEL SESSIONS IF EXISTS SELECT 1
+PREPARE a AS CANCEL SESSIONS IF EXISTS SELECT (1) -- fully parenthesized
+PREPARE a AS CANCEL SESSIONS IF EXISTS SELECT _ -- literals removed
+PREPARE _ AS CANCEL SESSIONS IF EXISTS SELECT 1 -- identifiers removed
+
+parse
+PREPARE a (STRING) AS CANCEL SESSIONS IF EXISTS SELECT $1
+----
+PREPARE a (STRING) AS CANCEL SESSIONS IF EXISTS SELECT $1
+PREPARE a (STRING) AS CANCEL SESSIONS IF EXISTS SELECT ($1) -- fully parenthesized
+PREPARE a (STRING) AS CANCEL SESSIONS IF EXISTS SELECT $1 -- literals removed
+PREPARE _ (STRING) AS CANCEL SESSIONS IF EXISTS SELECT $1 -- identifiers removed
+
+parse
+PREPARE a AS CANCEL JOBS SELECT 1
+----
+PREPARE a AS CANCEL JOBS SELECT 1
+PREPARE a AS CANCEL JOBS SELECT (1) -- fully parenthesized
+PREPARE a AS CANCEL JOBS SELECT _ -- literals removed
+PREPARE _ AS CANCEL JOBS SELECT 1 -- identifiers removed
+
+parse
+PREPARE a (INT8) AS CANCEL JOBS SELECT $1
+----
+PREPARE a (INT8) AS CANCEL JOBS SELECT $1
+PREPARE a (INT8) AS CANCEL JOBS SELECT ($1) -- fully parenthesized
+PREPARE a (INT8) AS CANCEL JOBS SELECT $1 -- literals removed
+PREPARE _ (INT8) AS CANCEL JOBS SELECT $1 -- identifiers removed
+
+parse
+PREPARE a AS PAUSE JOBS SELECT 1
+----
+PREPARE a AS PAUSE JOBS SELECT 1
+PREPARE a AS PAUSE JOBS SELECT (1) -- fully parenthesized
+PREPARE a AS PAUSE JOBS SELECT _ -- literals removed
+PREPARE _ AS PAUSE JOBS SELECT 1 -- identifiers removed
+
+parse
+PREPARE a (INT8) AS PAUSE JOBS SELECT $1
+----
+PREPARE a (INT8) AS PAUSE JOBS SELECT $1
+PREPARE a (INT8) AS PAUSE JOBS SELECT ($1) -- fully parenthesized
+PREPARE a (INT8) AS PAUSE JOBS SELECT $1 -- literals removed
+PREPARE _ (INT8) AS PAUSE JOBS SELECT $1 -- identifiers removed
+
+parse
+PREPARE a AS RESUME JOBS SELECT 1
+----
+PREPARE a AS RESUME JOBS SELECT 1
+PREPARE a AS RESUME JOBS SELECT (1) -- fully parenthesized
+PREPARE a AS RESUME JOBS SELECT _ -- literals removed
+PREPARE _ AS RESUME JOBS SELECT 1 -- identifiers removed
+
+parse
+PREPARE a (INT8) AS RESUME JOBS SELECT $1
+----
+PREPARE a (INT8) AS RESUME JOBS SELECT $1
+PREPARE a (INT8) AS RESUME JOBS SELECT ($1) -- fully parenthesized
+PREPARE a (INT8) AS RESUME JOBS SELECT $1 -- literals removed
+PREPARE _ (INT8) AS RESUME JOBS SELECT $1 -- identifiers removed
+
+parse
+PREPARE a AS IMPORT TABLE a CREATE USING 'b' CSV DATA ('c') WITH temp = 'd'
+----
+PREPARE a AS IMPORT TABLE a CREATE USING 'b' CSV DATA ('c') WITH temp = 'd'
+PREPARE a AS IMPORT TABLE a CREATE USING ('b') CSV DATA (('c')) WITH temp = ('d') -- fully parenthesized
+PREPARE a AS IMPORT TABLE a CREATE USING _ CSV DATA (_) WITH temp = _ -- literals removed
+PREPARE a AS IMPORT TABLE a CREATE USING '_' CSV DATA ('_') WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+PREPARE _ AS IMPORT TABLE _ CREATE USING 'b' CSV DATA ('c') WITH _ = 'd' -- identifiers removed
+
+parse
+PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING $1 CSV DATA ($2) WITH temp = $3
+----
+PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING $1 CSV DATA ($2) WITH temp = $3
+PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING ($1) CSV DATA (($2)) WITH temp = ($3) -- fully parenthesized
+PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING $1 CSV DATA ($2) WITH temp = $3 -- literals removed
+PREPARE _ (STRING, STRING, STRING) AS IMPORT TABLE _ CREATE USING $1 CSV DATA ($2) WITH _ = $3 -- identifiers removed
+
+parse
+PREPARE a AS OPT PLAN 'some-string'
+----
+PREPARE a AS OPT PLAN 'some-string'
+PREPARE a AS OPT PLAN 'some-string' -- fully parenthesized
+PREPARE a AS OPT PLAN 'some-string' -- literals removed
+PREPARE _ AS OPT PLAN 'some-string' -- identifiers removed
+
+parse
+PREPARE a (STRING, INT8) AS OPT PLAN 'some-string'
+----
+PREPARE a (STRING, INT8) AS OPT PLAN 'some-string'
+PREPARE a (STRING, INT8) AS OPT PLAN 'some-string' -- fully parenthesized
+PREPARE a (STRING, INT8) AS OPT PLAN 'some-string' -- literals removed
+PREPARE _ (STRING, INT8) AS OPT PLAN 'some-string' -- identifiers removed
+
+parse
+EXECUTE a
+----
+EXECUTE a
+EXECUTE a -- fully parenthesized
+EXECUTE a -- literals removed
+EXECUTE _ -- identifiers removed
+
+parse
+EXECUTE a DISCARD ROWS
+----
+EXECUTE a DISCARD ROWS
+EXECUTE a DISCARD ROWS -- fully parenthesized
+EXECUTE a DISCARD ROWS -- literals removed
+EXECUTE _ DISCARD ROWS -- identifiers removed
+
+parse
+EXECUTE a (1)
+----
+EXECUTE a (1)
+EXECUTE a ((1)) -- fully parenthesized
+EXECUTE a (_) -- literals removed
+EXECUTE _ (1) -- identifiers removed
+
+parse
+EXECUTE a (1, 1)
+----
+EXECUTE a (1, 1)
+EXECUTE a ((1), (1)) -- fully parenthesized
+EXECUTE a (_, _) -- literals removed
+EXECUTE _ (1, 1) -- identifiers removed
+
+parse
+EXECUTE a (1, 1) DISCARD ROWS
+----
+EXECUTE a (1, 1) DISCARD ROWS
+EXECUTE a ((1), (1)) DISCARD ROWS -- fully parenthesized
+EXECUTE a (_, _) DISCARD ROWS -- literals removed
+EXECUTE _ (1, 1) DISCARD ROWS -- identifiers removed
+
+parse
+EXECUTE a (1 + 1)
+----
+EXECUTE a (1 + 1)
+EXECUTE a (((1) + (1))) -- fully parenthesized
+EXECUTE a (_ + _) -- literals removed
+EXECUTE _ (1 + 1) -- identifiers removed
+
+parse
+DEALLOCATE a
+----
+DEALLOCATE a
+DEALLOCATE a -- fully parenthesized
+DEALLOCATE a -- literals removed
+DEALLOCATE _ -- identifiers removed
+
+parse
+DEALLOCATE ALL
+----
+DEALLOCATE ALL
+DEALLOCATE ALL -- fully parenthesized
+DEALLOCATE ALL -- literals removed
+DEALLOCATE ALL -- identifiers removed
+
+parse
+DEALLOCATE PREPARE a
+----
+DEALLOCATE a -- normalized!
+DEALLOCATE a -- fully parenthesized
+DEALLOCATE a -- literals removed
+DEALLOCATE _ -- identifiers removed
+
+parse
+DEALLOCATE PREPARE ALL
+----
+DEALLOCATE ALL -- normalized!
+DEALLOCATE ALL -- fully parenthesized
+DEALLOCATE ALL -- literals removed
+DEALLOCATE ALL -- identifiers removed

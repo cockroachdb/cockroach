@@ -30,7 +30,11 @@ func runStatusServer(ctx context.Context, t *test, c *cluster) {
 	// Get the ids for each node.
 	idMap := make(map[int]roachpb.NodeID)
 	urlMap := make(map[int]string)
-	for i, addr := range c.ExternalAdminUIAddr(ctx, c.All()) {
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, addr := range adminUIAddrs {
 		var details serverpb.DetailsResponse
 		url := `http://` + addr + `/_status/details/local`
 		// Use a retry-loop when populating the maps because we might be trying to

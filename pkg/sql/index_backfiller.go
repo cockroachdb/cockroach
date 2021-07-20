@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -65,11 +66,14 @@ func (ib *IndexBackfillPlanner) BackfillIndex(
 		return err
 	}
 
+	// TODO(dt): persist a write ts, don't rescan above.
+	backfillWriteTimestamp := backfillReadTimestamp
+
 	resumeSpans, err := tracker.GetResumeSpans(ctx, descriptor.GetID(), source)
 	if err != nil {
 		return err
 	}
-	run, err := ib.plan(ctx, descriptor, backfillReadTimestamp, backfillReadTimestamp, resumeSpans, toBackfill, func(
+	run, err := ib.plan(ctx, descriptor, backfillReadTimestamp, backfillWriteTimestamp, backfillReadTimestamp, resumeSpans, toBackfill, func(
 		ctx context.Context, meta *execinfrapb.ProducerMetadata,
 	) error {
 		// TODO(ajwerner): Hook up the jobs tracking stuff.
@@ -114,7 +118,7 @@ var _ scexec.IndexBackfiller = (*IndexBackfillPlanner)(nil)
 func (ib *IndexBackfillPlanner) plan(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
-	nowTimestamp, readAsOf hlc.Timestamp,
+	nowTimestamp, writeAsOf, readAsOf hlc.Timestamp,
 	sourceSpans []roachpb.Span,
 	indexesToBackfill []descpb.IndexID,
 	callback func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
@@ -124,20 +128,27 @@ func (ib *IndexBackfillPlanner) plan(
 	var evalCtx extendedEvalContext
 	var planCtx *PlanningCtx
 	td := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildExistingMutableTable()
-	if err := ib.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, nowTimestamp, ib.ieFactory)
-		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
-			true /* distribute */)
-		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
-		// batch size. Also plumb in a testing knob.
-		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
-		spec, err := initIndexBackfillerSpec(*td.TableDesc(), readAsOf, chunkSize, indexesToBackfill)
-		if err != nil {
+	if err := descs.Txn(ctx,
+		ib.execCfg.Settings,
+		ib.execCfg.LeaseManager,
+		ib.execCfg.InternalExecutor,
+		ib.execCfg.DB,
+		func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, nowTimestamp, ib.ieFactory, descriptors)
+			planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
+				true /* distribute */)
+			// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
+			// batch size. Also plumb in a testing knob.
+			chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
+			spec, err := initIndexBackfillerSpec(*td.TableDesc(), writeAsOf, readAsOf, chunkSize, indexesToBackfill)
+			if err != nil {
+				return err
+			}
+			p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, sourceSpans)
 			return err
-		}
-		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, sourceSpans)
-		return err
-	}); err != nil {
+		}); err != nil {
 		return nil, err
 	}
 

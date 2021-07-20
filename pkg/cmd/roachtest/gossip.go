@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -37,7 +38,11 @@ func registerGossip(r *testRegistry) {
 		c.Start(ctx, t, c.All(), args)
 		waitForFullReplication(t, c.Conn(ctx, 1))
 
-		gossipNetwork := func(node int) string {
+		// TODO(irfansharif): We could also look at gossip_liveness to determine
+		// cluster membership as seen by each gossip module, and ensure each
+		// node's gossip excludes the dead node and includes all other live
+		// ones.
+		gossipNetworkAccordingTo := func(node int) (network string) {
 			const query = `
 SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
   FROM (SELECT * FROM crdb_internal.gossip_network ORDER BY source_id, target_id)
@@ -55,63 +60,91 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 			return ""
 		}
 
-		var deadNode int
-		gossipOK := func(start time.Time) bool {
-			var expected string
-			var initialized bool
+		nodesInNetworkAccordingTo := func(node int) (nodes []int, network string) {
+			split := func(c rune) bool {
+				return !unicode.IsNumber(c)
+			}
+
+			uniqueNodes := make(map[int]struct{})
+			network = gossipNetworkAccordingTo(node)
+			for _, idStr := range strings.FieldsFunc(network, split) {
+				nodeID, err := strconv.Atoi(idStr)
+				if err != nil {
+					t.Fatal(err)
+				}
+				uniqueNodes[nodeID] = struct{}{}
+			}
+			for node := range uniqueNodes {
+				nodes = append(nodes, node)
+			}
+			sort.Ints(nodes)
+			return nodes, network
+		}
+
+		gossipOK := func(start time.Time, deadNode int) bool {
+			var expLiveNodes []int
+			var expGossipNetwork string
+
 			for i := 1; i <= c.spec.NodeCount; i++ {
 				if elapsed := timeutil.Since(start); elapsed >= 20*time.Second {
-					t.Fatalf("gossip did not stabilize in %.1fs", elapsed.Seconds())
+					t.Fatalf("gossip did not stabilize in %.1fs", deadNode, elapsed.Seconds())
 				}
 
 				if i == deadNode {
 					continue
 				}
+
 				c.l.Printf("%d: checking gossip\n", i)
-				s := gossipNetwork(i)
-				if !initialized {
-					deadNodeStr := fmt.Sprint(deadNode)
-					split := func(c rune) bool {
-						return !unicode.IsNumber(c)
+				liveNodes, gossipNetwork := nodesInNetworkAccordingTo(i)
+				for _, id := range liveNodes {
+					if id == deadNode {
+						c.l.Printf("%d: gossip not ok (dead node %d present): %s (%.0fs)\n",
+							i, deadNode, gossipNetwork, timeutil.Since(start).Seconds())
+						return false
 					}
-					for _, id := range strings.FieldsFunc(s, split) {
-						if id == deadNodeStr {
-							c.l.Printf("%d: gossip not ok (dead node %d present): %s (%.0fs)\n",
-								i, deadNode, s, timeutil.Since(start).Seconds())
-							return false
-						}
-					}
-					initialized = true
-					expected = s
+				}
+
+				if len(expLiveNodes) == 0 {
+					expLiveNodes = liveNodes
+					expGossipNetwork = gossipNetwork
 					continue
 				}
-				if expected != s {
-					c.l.Printf("%d: gossip not ok: %s != %s (%.0fs)\n",
-						i, expected, s, timeutil.Since(start).Seconds())
+
+				if len(liveNodes) != len(expLiveNodes) {
+					c.l.Printf("%d: gossip not ok (mismatched size of network: %s); expected %d, got %d (%.0fs)\n",
+						i, gossipNetwork, len(expLiveNodes), len(liveNodes), timeutil.Since(start).Seconds())
 					return false
 				}
+
+				for i := range liveNodes {
+					if liveNodes[i] != expLiveNodes[i] {
+						c.l.Printf("%d: gossip not ok (mismatched view of live nodes); expected %s, got %s (%.0fs)\n",
+							i, gossipNetwork, expLiveNodes, liveNodes, timeutil.Since(start).Seconds())
+						return false
+					}
+				}
 			}
-			c.l.Printf("gossip ok: %s (%0.0fs)\n", expected, timeutil.Since(start).Seconds())
+			c.l.Printf("gossip ok: %s (size: %d) (%0.0fs)\n", expGossipNetwork, len(expLiveNodes), timeutil.Since(start).Seconds())
 			return true
 		}
 
-		waitForGossip := func() {
-			t.Status("waiting for gossip to stabilize")
+		waitForGossip := func(deadNode int) {
+			t.Status("waiting for gossip to exclude dead node")
 			start := timeutil.Now()
 			for {
-				if gossipOK(start) {
+				if gossipOK(start, deadNode) {
 					return
 				}
 				time.Sleep(time.Second)
 			}
 		}
 
-		waitForGossip()
+		waitForGossip(0)
 		nodes := c.All()
-		for j := 0; j < 100; j++ {
-			deadNode = nodes.randNode()[0]
+		for j := 0; j < 10; j++ {
+			deadNode := nodes.randNode()[0]
 			c.Stop(ctx, c.Node(deadNode))
-			waitForGossip()
+			waitForGossip(deadNode)
 			c.Start(ctx, t, c.Node(deadNode), args)
 		}
 	}
@@ -134,7 +167,11 @@ type gossipUtil struct {
 
 func newGossipUtil(ctx context.Context, c *cluster) *gossipUtil {
 	urlMap := make(map[int]string)
-	for i, addr := range c.ExternalAdminUIAddr(ctx, c.All()) {
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	for i, addr := range adminUIAddrs {
 		urlMap[i+1] = `http://` + addr
 	}
 	return &gossipUtil{
@@ -422,7 +459,11 @@ SELECT count(replicas)
 		if i != 1 {
 			return c.Conn(ctx, i)
 		}
-		url, err := url.Parse(c.ExternalPGUrl(ctx, c.Node(1))[0])
+		urls, err := c.ExternalPGUrl(ctx, c.Node(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		url, err := url.Parse(urls[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -453,7 +494,10 @@ SELECT count(replicas)
 func runCheckLocalityIPAddress(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
-	externalIP := c.ExternalIP(ctx, c.Range(1, c.spec.NodeCount))
+	externalIP, err := c.ExternalIP(ctx, c.Range(1, c.spec.NodeCount))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for i := 1; i <= c.spec.NodeCount; i++ {
 		if local {
@@ -490,8 +534,14 @@ func runCheckLocalityIPAddress(ctx context.Context, t *test, c *cluster) {
 				if !strings.Contains(advertiseAddress, "localhost") {
 					t.Fatal("Expected connect address to contain localhost")
 				}
-			} else if exp := c.ExternalAddr(ctx, c.Node(nodeID))[0]; exp != advertiseAddress {
-				t.Fatalf("Connection address is %s but expected %s", advertiseAddress, exp)
+			} else {
+				exps, err := c.ExternalAddr(ctx, c.Node(nodeID))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if exps[0] != advertiseAddress {
+					t.Fatalf("Connection address is %s but expected %s", advertiseAddress, exps[0])
+				}
 			}
 		}
 	}

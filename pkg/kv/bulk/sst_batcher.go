@@ -76,6 +76,10 @@ type SSTBatcher struct {
 	// data provided to it.
 	ingestAll bool
 
+	// batchTS is the timestamp that will be set on batch requests used to send
+	// produced SSTs.
+	batchTS hlc.Timestamp
+
 	// The rest of the fields accumulated state as opposed to configuration. Some,
 	// like totalRows, are accumulated _across_ batches and are not reset between
 	// batches when Reset() is called.
@@ -277,7 +281,11 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		// non-overlapping keyspace this split partitions off "our" target space for
 		// future splitting/scattering, while if they don't, doing this only once
 		// minimizes impact on other adders (e.g. causing extra SST splitting).
-		if b.flushCounts.total == 1 {
+		//
+		// We only do this splitting if the caller expects the sst_batcher to
+		// split and scatter the data as it ingests it (which is the case when
+		// splitAfter) is set.
+		if b.flushCounts.total == 1 && b.splitAfter != nil {
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
 				log.Warningf(ctx, "%v", err)
 			} else {
@@ -306,7 +314,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	}
 
 	beforeSend := timeutil.Now()
-	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowing, b.ms, b.settings)
+	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowing, b.ms, b.settings, b.batchTS)
 	if err != nil {
 		return err
 	}
@@ -363,7 +371,13 @@ func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 // SSTSender is an interface to send SST data to an engine.
 type SSTSender interface {
 	AddSSTable(
-		ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats, ingestAsWrites bool,
+		ctx context.Context,
+		begin, end interface{},
+		data []byte,
+		disallowShadowing bool,
+		stats *enginepb.MVCCStats,
+		ingestAsWrites bool,
+		batchTs hlc.Timestamp,
 	) error
 	SplitAndScatter(ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp) error
 }
@@ -386,6 +400,7 @@ func AddSSTable(
 	disallowShadowing bool,
 	ms enginepb.MVCCStats,
 	settings *cluster.Settings,
+	batchTs hlc.Timestamp,
 ) (int, error) {
 	var files int
 	now := timeutil.Now()
@@ -431,7 +446,7 @@ func AddSSTable(
 					ingestAsWriteBatch = true
 				}
 				// This will fail if the range has split but we'll check for that below.
-				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats, ingestAsWriteBatch)
+				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats, ingestAsWriteBatch, batchTs)
 				if err == nil {
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil

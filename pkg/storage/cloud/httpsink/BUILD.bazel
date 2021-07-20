@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "httpsink",
+    srcs = ["http_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud/httpsink",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
+        "//pkg/storage/cloud",
+        "//pkg/util/contextutil",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "httpsink_test",
+    srcs = ["http_storage_test.go"],
+    embed = [":httpsink"],
+    deps = [
+        "//pkg/base",
+        "//pkg/blobs",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/settings/cluster",
+        "//pkg/storage/cloud",
+        "//pkg/storage/cloud/cloudtestutils",
+        "//pkg/testutils",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/leaktest",
+        "//pkg/util/retry",
+        "@com_github_stretchr_testify//require",
+    ],
+)

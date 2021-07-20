@@ -97,6 +97,10 @@ func (s *spanInner) Finish() {
 		return
 	}
 	finishTime := timeutil.Now()
+	duration := finishTime.Sub(s.crdb.startTime)
+	if duration == 0 {
+		duration = time.Nanosecond
+	}
 
 	s.crdb.mu.Lock()
 	if alreadyFinished := s.crdb.mu.duration >= 0; alreadyFinished {
@@ -106,10 +110,7 @@ func (s *spanInner) Finish() {
 		// finished twice, but it may happen so let's be resilient to it.
 		return
 	}
-	s.crdb.mu.duration = finishTime.Sub(s.crdb.startTime)
-	if s.crdb.mu.duration == 0 {
-		s.crdb.mu.duration = time.Nanosecond
-	}
+	s.crdb.mu.duration = duration
 	s.crdb.mu.Unlock()
 
 	if s.ot.shadowSpan != nil {
@@ -118,12 +119,14 @@ func (s *spanInner) Finish() {
 	if s.netTr != nil {
 		s.netTr.Finish()
 	}
-	s.tracer.activeSpans.Lock()
-	delete(s.tracer.activeSpans.m, s.crdb.spanID)
-	s.tracer.activeSpans.Unlock()
+	if s.crdb.rootSpan.spanID == s.crdb.spanID {
+		s.tracer.activeSpans.Lock()
+		delete(s.tracer.activeSpans.m, s.crdb.spanID)
+		s.tracer.activeSpans.Unlock()
+	}
 }
 
-func (s *spanInner) Meta() *SpanMeta {
+func (s *spanInner) Meta() SpanMeta {
 	var traceID uint64
 	var spanID uint64
 	var recordingType RecordingType
@@ -157,9 +160,9 @@ func (s *spanInner) Meta() *SpanMeta {
 		shadowCtx == nil &&
 		recordingType == 0 &&
 		baggage == nil {
-		return nil
+		return SpanMeta{}
 	}
-	return &SpanMeta{
+	return SpanMeta{
 		traceID:          traceID,
 		spanID:           spanID,
 		shadowTracerType: shadowTrTyp,
@@ -176,7 +179,9 @@ func (s *spanInner) SetOperationName(operationName string) *spanInner {
 	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.SetOperationName(operationName)
 	}
-	s.crdb.operation = operationName
+	s.crdb.mu.Lock()
+	s.crdb.mu.operation = operationName
+	s.crdb.mu.Unlock()
 	return s
 }
 

@@ -179,6 +179,12 @@ function randomStats(sensitiveInfo?: ISensitiveInfo): StatementStatistics {
     rows_read: randomStat(),
     sensitive_info: sensitiveInfo || makeSensitiveInfo(null, null),
     exec_stats: randomExecStats(),
+    sql_type: "DDL",
+    nodes: [Long.fromInt(1), Long.fromInt(2)],
+    last_exec_timestamp: {
+      seconds: Long.fromInt(1599670292),
+      nanos: 111613000,
+    },
   };
 }
 

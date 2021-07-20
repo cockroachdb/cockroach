@@ -44,6 +44,7 @@ func Scan(
 		Txn:                   h.Txn,
 		LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
 		MaxKeys:               h.MaxSpanRequestKeys,
+		MaxIntents:            storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:           h.TargetBytes,
 		FailOnMoreRecent:      args.KeyLocking != lock.None,
 		Reverse:               false,

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // PrivilegeDescVersion is a custom type for PrivilegeDescriptor versions.
@@ -121,6 +122,15 @@ func NewCustomSuperuserPrivilegeDescriptor(
 	}
 }
 
+// NewPublicSelectPrivilegeDescriptor is used to construct a privilege descriptor
+// owned by the node user which has SELECT privilege for the public role. It is
+// used for virtual tables.
+func NewPublicSelectPrivilegeDescriptor() *PrivilegeDescriptor {
+	return NewPrivilegeDescriptor(
+		security.PublicRoleName(), privilege.List{privilege.SELECT}, security.NodeUserName(),
+	)
+}
+
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
 func NewPrivilegeDescriptor(
@@ -208,6 +218,66 @@ func (p *PrivilegeDescriptor) Revoke(
 	}
 }
 
+// MaybeFixUsagePrivForTablesAndDBs fixes cases where privilege descriptors
+// with ZONECONFIG were corrupted after upgrading from 20.1 to 20.2.
+// USAGE was mistakenly added in the privilege bitfield above ZONECONFIG
+// causing privilege descriptors with ZONECONFIG in 20.1 to have USAGE privilege
+// instead of ZONECONFIG.
+// Fortunately ZONECONFIG was only valid on TABLES/DB while USAGE is not valid
+// on either so we know if the descriptor was corrupted.
+func MaybeFixUsagePrivForTablesAndDBs(ptr **PrivilegeDescriptor) bool {
+	if *ptr == nil {
+		*ptr = &PrivilegeDescriptor{}
+	}
+	p := *ptr
+
+	if p.Version > InitialVersion {
+		// InitialVersion is for descriptors that were created in versions 20.1 and
+		// earlier. If the privilege descriptor was created after 20.1, then we
+		// do not have to fix it. Furthermore privilege descriptor versions are
+		// currently never updated so we're guaranteed to only have this issue
+		// on privilege descriptors that are on "InitialVersion".
+		return false
+	}
+
+	modified := false
+	for i := range p.Users {
+		// Users is a slice of values, we need pointers to make them mutable.
+		userPrivileges := &p.Users[i]
+		// Tables and Database should not have USAGE privilege in 20.2 onwards.
+		// The only reason they would have USAGE privilege is because they had
+		// ZoneConfig in 20.1 and upgrading to 20.2 where USAGE was added
+		// in the privilege bitfield where ZONECONFIG previously was.
+		if privilege.USAGE.Mask()&userPrivileges.Privileges != 0 {
+			// Remove USAGE privilege and add ZONECONFIG. The privilege was
+			// originally ZONECONFIG in 20.1 but got changed to USAGE in 20.2
+			// due to changing the bitfield values.
+			userPrivileges.Privileges = (userPrivileges.Privileges - privilege.USAGE.Mask()) | privilege.ZONECONFIG.Mask()
+			modified = true
+		}
+	}
+	return modified
+}
+
+// MaybeFixSchemaPrivileges removes all invalid bits set on a schema's
+// PrivilegeDescriptor.
+// This is necessary due to ALTER DATABASE ... CONVERT TO SCHEMA originally
+// copying all database privileges to the schema. Not all database privileges
+// are valid for schemas thus after running ALTER DATABASE ... CONVERT TO SCHEMA,
+// the schema may become unusable.
+func MaybeFixSchemaPrivileges(ptr **PrivilegeDescriptor) {
+	if *ptr == nil {
+		*ptr = &PrivilegeDescriptor{}
+	}
+	p := *ptr
+
+	validPrivs := privilege.GetValidPrivilegesForObject(privilege.Schema).ToBitField()
+
+	for i := range p.Users {
+		p.Users[i].Privileges &= validPrivs
+	}
+}
+
 // MaybeFixPrivileges fixes the privilege descriptor if needed, including:
 // * adding default privileges for the "admin" role
 // * fixing default privileges for the "root" user
@@ -266,22 +336,24 @@ func MaybeFixPrivileges(id ID, ptr **PrivilegeDescriptor) bool {
 	return modified
 }
 
-// Validate returns an error if the privilege descriptor is invalid.
+// ValidateSuperuserPrivileges ensures that superusers have exactly the maximum
+// allowed privilege set for the object.
 // It requires the ID of the descriptor it is applied on to determine whether
 // it is is a system descriptor, because superusers do not always have full
 // privileges for those.
 // It requires the objectType to determine the superset of privileges allowed
 // for regular users.
-func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) error {
+func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
+	id ID, objectType privilege.ObjectType,
+) error {
 	allowedSuperuserPrivileges := DefaultSuperuserPrivileges
-	maybeSystem := ""
 
+	maybeSystem := maybeGetSystemString(id)
 	if IsReservedID(id) {
 		var ok bool
-		maybeSystem = "system "
 		allowedSuperuserPrivileges, ok = SystemAllowedPrivileges[id]
 		if !ok {
-			return fmt.Errorf("no allowed privileges defined for %s%s with ID=%d",
+			return errors.AssertionFailedf("no allowed privileges defined for %s%s with ID=%d",
 				maybeSystem, objectType, id)
 		}
 	}
@@ -296,6 +368,16 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 		return err
 	}
 
+	return nil
+}
+
+// Validate returns an assertion error if the privilege descriptor is invalid.
+func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) error {
+	if err := p.ValidateSuperuserPrivileges(id, objectType); err != nil {
+		return errors.AssertionFailedf("%v", err)
+	}
+
+	maybeSystem := maybeGetSystemString(id)
 	if p.Version >= OwnerVersion {
 		if p.Owner().Undefined() {
 			return errors.AssertionFailedf("found no owner for %s%s with ID=%d",
@@ -314,15 +396,8 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 		}
 
 		if remaining := u.Privileges &^ allowedPrivilegesBits; remaining != 0 {
-			return fmt.Errorf("user %s must not have %s privileges on %s%s with ID=%d",
+			return errors.AssertionFailedf("user %s must not have %s privileges on %s%s with ID=%d",
 				u.User(), privilege.ListFromBitField(remaining, privilege.Any), maybeSystem, objectType, id)
-		}
-		// Get all the privilege bits set on the descriptor even if they're not valid.
-		privs := privilege.ListFromBitField(u.Privileges, privilege.Any)
-		if err := privilege.ValidatePrivileges(
-			privs, objectType,
-		); err != nil {
-			return err
 		}
 	}
 
@@ -335,10 +410,8 @@ func (p PrivilegeDescriptor) validateRequiredSuperuser(
 	user security.SQLUsername,
 	objectType privilege.ObjectType,
 ) error {
-	maybeSystem := ""
-	if IsReservedID(id) {
-		maybeSystem = "system "
-	}
+	maybeSystem := maybeGetSystemString(id)
+
 	superPriv, ok := p.findUser(user)
 	if !ok {
 		return fmt.Errorf("user %s does not have privileges over %s%s with ID=%d",
@@ -454,4 +527,13 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 // SetOwner sets the owner of the privilege descriptor to the provided string.
 func (p *PrivilegeDescriptor) SetOwner(owner security.SQLUsername) {
 	p.OwnerProto = owner.EncodeProto()
+}
+
+// maybeGetSystemString is a helper function that returns "system" with a space
+// if the id provided is a system id.
+func maybeGetSystemString(id ID) redact.SafeString {
+	if IsReservedID(id) {
+		return "system "
+	}
+	return ""
 }

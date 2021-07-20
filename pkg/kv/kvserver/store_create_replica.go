@@ -159,6 +159,9 @@ func (s *Store) tryGetOrCreateReplica(
 	repl.creatingReplica = creatingReplica
 	repl.raftMu.Lock() // not unlocked
 
+	// Take out read-only lock. Not strictly necessary here, but follows the
+	// normal lock protocol for destroyStatus.Set().
+	repl.readOnlyCmdMu.Lock()
 	// Install the replica in the store's replica map. The replica is in an
 	// inconsistent state, but nobody will be accessing it while we hold its
 	// locks.
@@ -188,6 +191,7 @@ func (s *Store) tryGetOrCreateReplica(
 	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
 		repl.mu.Unlock()
 		s.mu.Unlock()
+		repl.readOnlyCmdMu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, errRetry
 	}
@@ -227,10 +231,12 @@ func (s *Store) tryGetOrCreateReplica(
 		s.mu.Lock()
 		s.unlinkReplicaByRangeIDLocked(ctx, rangeID)
 		s.mu.Unlock()
+		repl.readOnlyCmdMu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, err
 	}
 	repl.mu.Unlock()
+	repl.readOnlyCmdMu.Unlock()
 	return repl, true, nil
 }
 

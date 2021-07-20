@@ -117,7 +117,7 @@ func NewTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMon
 // GenerateValuesSpec generates a ValuesCoreSpec that encodes the given rows.
 // We pass the types as well because zero rows are allowed.
 func GenerateValuesSpec(
-	colTypes []*types.T, rows rowenc.EncDatumRows, rowsPerChunk int,
+	colTypes []*types.T, rows rowenc.EncDatumRows,
 ) (execinfrapb.ValuesCoreSpec, error) {
 	var spec execinfrapb.ValuesCoreSpec
 	spec.Columns = make([]execinfrapb.DatumInfo, len(colTypes))
@@ -126,10 +126,11 @@ func GenerateValuesSpec(
 		spec.Columns[i].Encoding = descpb.DatumEncoding_VALUE
 	}
 
-	var a rowenc.DatumAlloc
-	for i := 0; i < len(rows); {
-		var buf []byte
-		for end := i + rowsPerChunk; i < len(rows) && i < end; i++ {
+	spec.NumRows = uint64(len(rows))
+	if len(colTypes) != 0 {
+		var a rowenc.DatumAlloc
+		for i := 0; i < len(rows); i++ {
+			var buf []byte
 			for j, info := range spec.Columns {
 				var err error
 				buf, err = rows[i][j].Encode(colTypes[j], &a, info.Encoding, buf)
@@ -137,8 +138,8 @@ func GenerateValuesSpec(
 					return execinfrapb.ValuesCoreSpec{}, err
 				}
 			}
+			spec.RawBytes = append(spec.RawBytes, buf)
 		}
-		spec.RawBytes = append(spec.RawBytes, buf)
 	}
 	return spec, nil
 }

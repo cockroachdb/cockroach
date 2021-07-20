@@ -18,18 +18,25 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -43,6 +50,18 @@ type stmtKey struct {
 	anonymizedStmt string
 	failed         bool
 	implicitTxn    bool
+	database       string
+}
+
+func (s stmtKey) String() string {
+	if s.failed {
+		return "!" + s.anonymizedStmt
+	}
+	return s.anonymizedStmt
+}
+
+func (s stmtKey) size() int64 {
+	return int64(unsafe.Sizeof(s)) + int64(len(s.anonymizedStmt)) + int64(len(s.database))
 }
 
 const invalidStmtID = 0
@@ -51,11 +70,25 @@ const invalidStmtID = 0
 // that comprise the transaction.
 type txnKey uint64
 
+func (t txnKey) size() int64 {
+	return 8
+}
+
 // appStats holds per-application statistics.
 type appStats struct {
 	// TODO(arul): This can be refactored to have a RWLock instead, and have all
 	// usages acquire a read lock whenever appropriate. See #55285.
 	syncutil.Mutex
+
+	// sqlStats is the pointer to the parent sqlStats struct that stores this
+	// appStats.
+	sqlStats *sqlStats
+
+	// acc is the memory account that tracks memory allocations related to stmts
+	// and txns within this appStats struct.
+	// Since currently we do not destroy the appStats struct when we perform
+	// reset, we never close this account.
+	acc mon.BoundAccount
 
 	st        *cluster.Settings
 	stmts     map[stmtKey]*stmtStats
@@ -71,6 +104,19 @@ type txnStats struct {
 
 		data roachpb.TransactionStatistics
 	}
+}
+
+func (t *txnStats) sizeUnsafe() int64 {
+	const txnStatsShallowSize = int64(unsafe.Sizeof(txnStats{}))
+	stmtIDsSize := int64(cap(t.statementIDs)) *
+		int64(unsafe.Sizeof(roachpb.StmtID(0)))
+
+	// t.mu.data might contain pointer types, so we subtract its shallow size
+	// and include the actual size.
+	dataSize := -int64(unsafe.Sizeof(roachpb.TransactionStatistics{})) +
+		int64(t.mu.data.Size())
+
+	return txnStatsShallowSize + stmtIDsSize + dataSize
 }
 
 // stmtStats holds per-statement statistics.
@@ -95,8 +141,24 @@ type stmtStats struct {
 		// full table index scan.
 		fullScan bool
 
+		// database records the database from the session the statement
+		// was executed from
+		database string
+
 		data roachpb.StatementStatistics
 	}
+}
+
+func (s *stmtStats) sizeUnsafe() int64 {
+	const stmtStatsShallowSize = int64(unsafe.Sizeof(stmtStats{}))
+	databaseNameSize := int64(len(s.mu.database))
+
+	// s.mu.data might contain pointer tyeps, so we subtract its shallow size and
+	// include the actual size.
+	dataSize := -int64(unsafe.Sizeof(roachpb.StatementStatistics{})) +
+		int64(s.mu.data.Size())
+
+	return stmtStatsShallowSize + databaseNameSize + dataSize
 }
 
 func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
@@ -170,12 +232,29 @@ var logicalPlanCollectionPeriod = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 ).WithPublic()
 
-func (s stmtKey) String() string {
-	if s.failed {
-		return "!" + s.anonymizedStmt
-	}
-	return s.anonymizedStmt
-}
+var maxMemSQLStatsStmtFingerprints = settings.RegisterIntSetting(
+	"sql.metrics.max_mem_stmt_fingerprints",
+	"the maximum number of statement fingerprints stored in memory",
+	100000,
+).WithPublic()
+
+var maxMemSQLStatsTxnFingerprints = settings.RegisterIntSetting(
+	"sql.metrics.max_mem_txn_fingerprints",
+	"the maximum number of transaction fingerprints stored in memory",
+	100000,
+).WithPublic()
+
+var maxMemReportedSQLStatsStmtFingerprints = settings.RegisterIntSetting(
+	"sql.metrics.max_mem_reported_stmt_fingerprints",
+	"the maximum number of reported statement fingerprints stored in memory",
+	100000,
+).WithPublic()
+
+var maxMemReportedSQLStatsTxnFingerprints = settings.RegisterIntSetting(
+	"sql.metrics.max_mem_reported_txn_fingerprints",
+	"the maximum number of reported transaction fingerprints stored in memory",
+	100000,
+).WithPublic()
 
 // recordStatement saves per-statement statistics.
 //
@@ -183,7 +262,16 @@ func (s stmtKey) String() string {
 // per unique fingerprint.
 // recordStatement always returns a valid stmtID corresponding to the given
 // stmt regardless of whether the statement is actually recorded or not.
+//
+// If the statement is not actually recorded due to either:
+// 1. the memory budget has been exceeded
+// 2. the unique statement fingerprint limit has been exceeded
+// and error is being returned.
+// Note: This error is only related to the operation of recording the statement
+// statistics into in-memory structs. It is unrelated to the stmtErr in the
+// arguments.
 func (a *appStats) recordStatement(
+	ctx context.Context,
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
@@ -192,10 +280,11 @@ func (a *appStats) recordStatement(
 	fullScan bool,
 	automaticRetryCount int,
 	numRows int,
-	err error,
+	stmtErr error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
-) roachpb.StmtID {
+	planner *planner,
+) (roachpb.StmtID, error) {
 	createIfNonExistent := true
 	// If the statement is below the latency threshold, or stats aren't being
 	// recorded we don't need to create an entry in the stmts map for it. We do
@@ -206,24 +295,42 @@ func (a *appStats) recordStatement(
 	}
 
 	// Get the statistics object.
-	s, stmtID := a.getStatsForStmt(
-		stmt.AnonymizedStr, implicitTxn,
-		err, createIfNonExistent,
+	s, statementKey, stmtID, created, throttled := a.getStatsForStmt(
+		stmt.AnonymizedStr, implicitTxn, planner.SessionData().Database,
+		stmtErr, createIfNonExistent,
 	)
+
+	// This means we have reached the limit of unique fingerprints. We don't
+	// record anything and abort the operation.
+	if throttled {
+		return stmtID, errors.New("unique fingerprint limit has been reached")
+	}
 
 	// This statement was below the latency threshold or sql stats aren't being
 	// recorded. Either way, we don't need to record anything in the stats object
 	// for this statement, though we do need to return the statement ID for
 	// transaction level metrics collection.
 	if !createIfNonExistent {
-		return stmtID
+		return stmtID, nil
+	}
+
+	// Retrieve the list of all nodes which the statement was executed on.
+	var nodes []int64
+	if planner.instrumentation.sp != nil {
+		trace := planner.instrumentation.sp.GetRecording()
+		// ForEach returns nodes in order.
+		execinfrapb.ExtractNodesFromSpans(trace).ForEach(func(i int) {
+			nodes = append(nodes, int64(i))
+		})
 	}
 
 	// Collect the per-statement statistics.
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.mu.data.Count++
-	if err != nil {
-		s.mu.data.SensitiveInfo.LastErr = err.Error()
+	if stmtErr != nil {
+		s.mu.data.SensitiveInfo.LastErr = stmtErr.Error()
 	}
 	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
 	if samplePlanDescription != nil {
@@ -244,6 +351,8 @@ func (a *appStats) recordStatement(
 	s.mu.data.OverheadLat.Record(s.mu.data.Count, ovhLat)
 	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(stats.bytesRead))
 	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(stats.rowsRead))
+	s.mu.data.LastExecTimestamp = timeutil.Now()
+	s.mu.data.Nodes = util.CombineUniqueInt64(s.mu.data.Nodes, nodes)
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
@@ -252,71 +361,111 @@ func (a *appStats) recordStatement(
 	s.mu.vectorized = vectorized
 	s.mu.distSQLUsed = distSQLUsed
 	s.mu.fullScan = fullScan
-	s.mu.Unlock()
+	s.mu.database = planner.CurrentDatabase()
 
-	return s.ID
+	if created {
+		// stats size + stmtKey size + hash of the statementKey
+		estimatedMemoryAllocBytes := s.sizeUnsafe() + statementKey.size() + 8
+		a.Lock()
+		defer a.Unlock()
+		// We attempt to account for all the memory we used. If we have exceeded our
+		// memory budget, delete the entry that we just created and report the error.
+		if err := a.acc.Grow(ctx, estimatedMemoryAllocBytes); err != nil {
+			delete(a.stmts, statementKey)
+			return s.ID, err
+		}
+	}
+
+	return s.ID, nil
 }
 
 // getStatsForStmt retrieves the per-stmt stat object. Regardless of if a valid
 // stat object is returned or not, we always return the correct stmtID
 // for the given stmt.
 func (a *appStats) getStatsForStmt(
-	anonymizedStmt string, implicitTxn bool, err error, createIfNonexistent bool,
-) (*stmtStats, roachpb.StmtID) {
+	anonymizedStmt string, implicitTxn bool, database string, stmtErr error, createIfNonexistent bool,
+) (stats *stmtStats, key stmtKey, stmtID roachpb.StmtID, created bool, throttled bool) {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
-	key := stmtKey{
+	key = stmtKey{
 		anonymizedStmt: anonymizedStmt,
-		failed:         err != nil,
+		failed:         stmtErr != nil,
 		implicitTxn:    implicitTxn,
+		database:       database,
 	}
 
 	// We first try and see if we can get by without creating a new entry for this
 	// key, as this allows us to not construct the statementID from scratch (which
 	// is an expensive operation)
-	s := a.getStatsForStmtWithKey(key, invalidStmtID, false /* createIfNonexistent */)
-	if s == nil {
-		stmtID := constructStatementIDFromStmtKey(key)
-		return a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent), stmtID
+	stats, _, _ = a.getStatsForStmtWithKey(key, invalidStmtID, false /* createIfNonexistent */)
+	if stats == nil {
+		stmtID = constructStatementIDFromStmtKey(key)
+		stats, created, throttled = a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent)
+		return stats, key, stmtID, created, throttled
 	}
-	return s, s.ID
+	return stats, key, stats.ID, false /* created */, false /* throttled */
 }
 
 func (a *appStats) getStatsForStmtWithKey(
 	key stmtKey, stmtID roachpb.StmtID, createIfNonexistent bool,
-) *stmtStats {
+) (stats *stmtStats, created, throttled bool) {
 	a.Lock()
+	defer a.Unlock()
+
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
-	s, ok := a.stmts[key]
+	stats, ok := a.stmts[key]
 	if !ok && createIfNonexistent {
-		s = &stmtStats{}
-		s.ID = stmtID
-		a.stmts[key] = s
+		// We check if we have reached the limit of unique fingerprints we can
+		// store.
+		limit := a.sqlStats.uniqueStmtFingerprintLimit.Get(&a.sqlStats.st.SV)
+		incrementedFingerprintCount :=
+			atomic.AddInt64(&a.sqlStats.atomic.uniqueStmtFingerprintCount, int64(1) /* delta */)
+
+		// Abort if we have exceeded limit of unique statement fingerprints.
+		if incrementedFingerprintCount > limit {
+			atomic.AddInt64(&a.sqlStats.atomic.uniqueStmtFingerprintCount, -int64(1) /* delta */)
+			return stats, false /* created */, true /* throttled */
+		}
+
+		stats = &stmtStats{}
+		stats.ID = stmtID
+		a.stmts[key] = stats
+		return stats, true /* created */, false /* throttled */
 	}
-	a.Unlock()
-	return s
+	return stats, false /* created */, false /* throttled */
 }
 
 func (a *appStats) getStatsForTxnWithKey(
 	key txnKey, stmtIDs []roachpb.StmtID, createIfNonexistent bool,
-) *txnStats {
+) (stats *txnStats, created, throttled bool) {
 	a.Lock()
 	defer a.Unlock()
 	// Retrieve the per-transaction statistic object, and create it if it doesn't
 	// exist yet.
-	s, ok := a.txns[key]
+	stats, ok := a.txns[key]
 	if !ok && createIfNonexistent {
-		s = &txnStats{}
-		s.statementIDs = stmtIDs
-		a.txns[key] = s
+		limit := a.sqlStats.uniqueTxnFingerprintLimit.Get(&a.sqlStats.st.SV)
+		incrementedFingerprintCount :=
+			atomic.AddInt64(&a.sqlStats.atomic.uniqueTxnFingerprintCount, int64(1) /* delta */)
+
+		// If we have exceeded limit of fingerprint count, decrement the counter
+		// and abort.
+		if incrementedFingerprintCount > limit {
+			atomic.AddInt64(&a.sqlStats.atomic.uniqueTxnFingerprintCount, -int64(1) /* delta */)
+			return nil /* stats */, false /* created */, true /* throttled */
+		}
+		stats = &txnStats{}
+		stats.statementIDs = stmtIDs
+		a.txns[key] = stats
+		return stats, true /* created */, false /* throttled */
 	}
-	return s
+	return stats, false /* created */, false /* throttled */
 }
 
 // Add combines one appStats into another. Add manages locks on a, so taking
 // a lock on a will cause a deadlock.
-func (a *appStats) Add(other *appStats) {
+func (a *appStats) Add(ctx context.Context, other *appStats) (err error) {
 	other.Lock()
 	statMap := make(map[stmtKey]*stmtStats)
 	for k, v := range other.stmts {
@@ -336,8 +485,38 @@ func (a *appStats) Add(other *appStats) {
 
 	// Merge the statement stats.
 	for k, v := range statMap {
-		s := a.getStatsForStmtWithKey(k, v.ID, true /* createIfNonexistent */)
+		s, created, throttled := a.getStatsForStmtWithKey(k, v.ID, true /* createIfNonexistent */)
+
+		// If we have reached the limit of fingerprints, we skip this fingerprint.
+		// No cleanup necessary.
+		if throttled {
+			continue
+		}
+
 		s.mu.Lock()
+
+		// If we created a new entry for the fingerprint, we check if we have
+		// exceeded our memory budget.
+		if created {
+			estimatedAllocBytes := s.sizeUnsafe() + k.size() + 8 /* stmtKey hash */
+			// We still want to continue this loop to merge stats that are already
+			// present in our map that do not require allocation.
+			a.Lock()
+			if latestErr := a.acc.Grow(ctx, estimatedAllocBytes); latestErr != nil {
+				s.mu.Unlock()
+				// Instead of combining errors, we track the latest error occurred
+				// in this method. This is because currently the only type of error we
+				// can generate in this function is out of memory errors. Also since we
+				// do not abort after encountering such errors, combining many same
+				// errors is not helpful.
+				err = latestErr
+				delete(a.stmts, k)
+				a.Unlock()
+				continue
+			}
+			a.Unlock()
+		}
+
 		// Note that we don't need to take a lock on v because
 		// no other thread knows about v yet.
 		s.mu.data.Add(&v.mu.data)
@@ -364,8 +543,34 @@ func (a *appStats) Add(other *appStats) {
 
 	// Merge the txn stats
 	for k, v := range txnMap {
-		t := a.getStatsForTxnWithKey(k, v.statementIDs, true /* createIfNonExistent */)
+		// We don't check if we have created a new entry here because we have
+		// already accounted for all the memory that we will be allocating in this
+		// function.
+		t, created, throttled := a.getStatsForTxnWithKey(k, v.statementIDs, true /* createIfNonExistent */)
+
+		// If we have reached the unique fingerprint limit, we skip adding the
+		// current fingerprint. No cleanup is necessary.
+		if throttled {
+			continue
+		}
+
 		t.mu.Lock()
+		if created {
+			estimatedAllocBytes := t.sizeUnsafe() + k.size() + 8 /* txnKey hash */
+			// We still want to continue this loop to merge stats that are already
+			// present in our map that do not require allocation.
+			a.Lock()
+			if latestErr := a.acc.Grow(ctx, estimatedAllocBytes); latestErr != nil {
+				t.mu.Unlock()
+				// We only track the latest error. See comment above for explanation.
+				err = latestErr
+				delete(a.txns, k)
+				a.Unlock()
+				continue
+			}
+			a.Unlock()
+		}
+
 		t.mu.data.Add(&v.mu.data)
 		t.mu.Unlock()
 	}
@@ -379,6 +584,8 @@ func (a *appStats) Add(other *appStats) {
 	a.txnCounts.mu.Lock()
 	a.txnCounts.mu.TxnStats.Add(txnStats)
 	a.txnCounts.mu.Unlock()
+
+	return err
 }
 
 func anonymizeStmt(ast tree.Statement) string {
@@ -429,6 +636,7 @@ func (a *appStats) recordTransactionCounts(txnTimeSec float64, ev txnEvent, impl
 
 // recordTransaction saves per-transaction statistics
 func (a *appStats) recordTransaction(
+	ctx context.Context,
 	key txnKey,
 	retryCount int64,
 	statementIDs []roachpb.StmtID,
@@ -440,24 +648,45 @@ func (a *appStats) recordTransaction(
 	execStats execstats.QueryLevelStats,
 	rowsRead int64,
 	bytesRead int64,
-) {
+) error {
 	if !txnStatsEnable.Get(&a.st.SV) {
-		return
+		return nil
 	}
 	// Do not collect transaction statistics if the stats collection latency
 	// threshold is set, since our transaction UI relies on having stats for every
 	// statement in the transaction.
 	t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV)
 	if t > 0 {
-		return
+		return nil
 	}
 
 	// Get the statistics object.
-	s := a.getStatsForTxnWithKey(key, statementIDs, true /* createIfNonexistent */)
+	s, created, throttled := a.getStatsForTxnWithKey(key, statementIDs, true /* createIfNonexistent */)
+
+	if throttled {
+		return errors.New("unique fingerprint limit has been reached")
+	}
 
 	// Collect the per-transaction statistics.
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// If we have created a new entry successfully, we check if we have reached
+	// the memory limit. If we have, then we delete the newly created entry and
+	// return the memory allocation error.
+	// If the entry is not created, this means we have reached the limit of unique
+	// fingerprints for this app. We also abort the operation and return an error.
+	if created {
+		estimatedMemAllocBytes :=
+			s.sizeUnsafe() + key.size() + 8 /* hash of transaction key */
+		a.Lock()
+		if err := a.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
+			delete(a.txns, key)
+			a.Unlock()
+			return err
+		}
+		a.Unlock()
+	}
 
 	s.mu.data.Count++
 
@@ -479,6 +708,8 @@ func (a *appStats) recordTransaction(
 		s.mu.data.ExecStats.NetworkMessages.Record(s.mu.data.ExecStats.Count, float64(execStats.NetworkMessages))
 		s.mu.data.ExecStats.MaxDiskUsage.Record(s.mu.data.ExecStats.Count, float64(execStats.MaxDiskUsage))
 	}
+
+	return nil
 }
 
 // shouldSaveLogicalPlanDescription returns whether we should save the sample
@@ -504,34 +735,87 @@ func (a *appStats) shouldSaveLogicalPlanDescription(stats *stmtStats) bool {
 
 // sqlStats carries per-application statistics for all applications.
 type sqlStats struct {
-	syncutil.Mutex
-
 	st *cluster.Settings
-	// lastReset is the time at which the app containers were reset.
-	lastReset time.Time
-	// apps is the container for all the per-application statistics objects.
-	apps map[string]*appStats
+
+	// uniqueStmtFingerprintLimit is the limit on number of unique statement
+	// fingerprints we can store in memory.
+	uniqueStmtFingerprintLimit *settings.IntSetting
+
+	// uniqueTxnFingerprintLimit is the limit on number of unique transaction
+	// fingerprints we can store in memory
+	uniqueTxnFingerprintLimit *settings.IntSetting
+
+	mu struct {
+		syncutil.Mutex
+
+		mon *mon.BytesMonitor
+
+		// lastReset is the time at which the app containers were reset.
+		lastReset time.Time
+		// apps is the container for all the per-application statistics objects.
+		apps map[string]*appStats
+	}
+
+	atomic struct {
+		// uniqueStmtFingerprintCount is the number of unique statement fingerprints
+		// we are storing in memory.
+		uniqueStmtFingerprintCount int64
+
+		// uniqueTxnFingerprintCount is the number of unique transaction fingerprints
+		// we are storing in memory.
+		uniqueTxnFingerprintCount int64
+	}
+}
+
+func newSQLStats(
+	st *cluster.Settings,
+	uniqueStmtFingerprintLimit *settings.IntSetting,
+	uniqueTxnFingerprintLimit *settings.IntSetting,
+	curMemBytesCount *metric.Gauge,
+	maxMemBytesHist *metric.Histogram,
+	parentMon *mon.BytesMonitor,
+) *sqlStats {
+	monitor := mon.NewMonitor(
+		"sqlStats",
+		mon.MemoryResource,
+		curMemBytesCount,
+		maxMemBytesHist,
+		-1, /* increment */
+		math.MaxInt64,
+		st,
+	)
+	s := &sqlStats{
+		st:                         st,
+		uniqueStmtFingerprintLimit: uniqueStmtFingerprintLimit,
+		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
+	}
+	s.mu.apps = make(map[string]*appStats)
+	s.mu.mon = monitor
+	s.mu.mon.Start(context.Background(), parentMon, mon.BoundAccount{})
+	return s
 }
 
 func (s *sqlStats) getStatsForApplication(appName string) *appStats {
-	s.Lock()
-	defer s.Unlock()
-	if a, ok := s.apps[appName]; ok {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if a, ok := s.mu.apps[appName]; ok {
 		return a
 	}
 	a := &appStats{
-		st:    s.st,
-		stmts: make(map[stmtKey]*stmtStats),
-		txns:  make(map[txnKey]*txnStats),
+		st:       s.st,
+		sqlStats: s,
+		acc:      s.mu.mon.MakeBoundAccount(),
+		stmts:    make(map[stmtKey]*stmtStats),
+		txns:     make(map[txnKey]*txnStats),
 	}
-	s.apps[appName] = a
+	s.mu.apps[appName] = a
 	return a
 }
 
 // resetAndMaybeDumpStats clears all the stored per-app, per-statement and
 // per-transaction statistics. If target s not nil, then the stats in s will be
 // flushed into target.
-func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats) {
+func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats) (err error) {
 	// Note: we do not clear the entire s.apps map here. We would need
 	// to do so to prevent problems with a runaway client running `SET
 	// APPLICATION_NAME=...` with a different name every time.  However,
@@ -547,10 +831,10 @@ func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats)
 	// to dump into target.
 	var appStatsCopy map[string]*appStats
 
-	s.Lock()
+	s.mu.Lock()
 
 	if target != nil {
-		appStatsCopy = make(map[string]*appStats, len(s.apps))
+		appStatsCopy = make(map[string]*appStats, len(s.mu.apps))
 	}
 
 	// Clear the per-apps maps manually,
@@ -558,7 +842,7 @@ func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats)
 	// pointer to its appStats object and will continue to
 	// accumulate data using that until it closes (or changes its
 	// application_name).
-	for appName, a := range s.apps {
+	for appName, a := range s.mu.apps {
 		a.Lock()
 
 		// Save the existing data to logs.
@@ -571,33 +855,53 @@ func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats)
 
 		// Only save a copy of a if we need to dump a copy of the stats.
 		if target != nil {
-			aCopy := &appStats{st: a.st, stmts: a.stmts, txns: a.txns}
+			aCopy := &appStats{
+				st:       a.st,
+				sqlStats: s,
+				stmts:    a.stmts,
+				txns:     a.txns,
+			}
 			appStatsCopy[appName] = aCopy
 		}
+
+		atomic.AddInt64(&s.atomic.uniqueStmtFingerprintCount, int64(-len(a.stmts)))
+		atomic.AddInt64(&s.atomic.uniqueTxnFingerprintCount, int64(-len(a.txns)))
 
 		// Clear the map, to release the memory; make the new map somewhat already
 		// large for the likely future workload.
 		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
 		a.txns = make(map[txnKey]*txnStats, len(a.txns)/2)
+
+		a.acc.Empty(ctx)
 		a.Unlock()
 	}
-	s.lastReset = timeutil.Now()
-	s.Unlock()
+	s.mu.lastReset = timeutil.Now()
+	s.mu.Unlock()
 
 	// Dump the copied stats into target.
 	if target != nil {
 		for k, v := range appStatsCopy {
 			stats := target.getStatsForApplication(k)
 			// Add manages locks for itself, so we don't need to guard it with locks.
-			stats.Add(v)
+			latestErr := stats.Add(ctx, v)
+			// If we run out of memory budget, appStats.Add() will merge stats in v
+			// with all the existing stats. However it will discard rest of the stats
+			// in v that requires memory allocation. We do not wish to short circuit
+			// here because we want to still try our best to merge all the stats that
+			// we can.
+			if latestErr != nil {
+				err = latestErr
+			}
 		}
 	}
+
+	return err
 }
 
 func (s *sqlStats) getLastReset() time.Time {
-	s.Lock()
-	defer s.Unlock()
-	return s.lastReset
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.lastReset
 }
 
 // Save the existing data for an application to the info log.
@@ -621,7 +925,7 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 
 func constructStatementIDFromStmtKey(key stmtKey) roachpb.StmtID {
 	return roachpb.ConstructStatementID(
-		key.anonymizedStmt, key.failed, key.implicitTxn,
+		key.anonymizedStmt, key.failed, key.implicitTxn, key.database,
 	)
 }
 
@@ -652,14 +956,15 @@ func (s *sqlStats) getUnscrubbedStmtStats(
 }
 
 func (s *sqlStats) getUnscrubbedTxnStats() []roachpb.CollectedTransactionStatistics {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var ret []roachpb.CollectedTransactionStatistics
-	for appName, a := range s.apps {
+	for appName, a := range s.mu.apps {
 		a.Lock()
 		// guesstimate that we'll need apps*(transactions-per-app)
 		if cap(ret) == 0 {
-			ret = make([]roachpb.CollectedTransactionStatistics, 0, len(a.txns)*len(s.apps))
+			ret =
+				make([]roachpb.CollectedTransactionStatistics, 0, len(a.txns)*len(s.mu.apps))
 		}
 		for _, stats := range a.txns {
 			stats.mu.Lock()
@@ -680,15 +985,16 @@ func (s *sqlStats) getUnscrubbedTxnStats() []roachpb.CollectedTransactionStatist
 func (s *sqlStats) getStmtStats(
 	vt *VirtualSchemaHolder, scrub bool,
 ) []roachpb.CollectedStatementStatistics {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var ret []roachpb.CollectedStatementStatistics
 	salt := ClusterSecret.Get(&s.st.SV)
-	for appName, a := range s.apps {
+	for appName, a := range s.mu.apps {
 		a.Lock()
 		if cap(ret) == 0 {
 			// guesstimate that we'll need apps*(queries-per-app).
-			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(s.apps))
+			ret =
+				make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(s.mu.apps))
 		}
 		for q, stats := range a.stmts {
 			maybeScrubbed := q.anonymizedStmt
@@ -707,6 +1013,7 @@ func (s *sqlStats) getStmtStats(
 				distSQLUsed := stats.mu.distSQLUsed
 				vectorized := stats.mu.vectorized
 				fullScan := stats.mu.fullScan
+				database := stats.mu.database
 				stats.mu.Unlock()
 
 				k := roachpb.StatementStatisticsKey{
@@ -718,6 +1025,7 @@ func (s *sqlStats) getStmtStats(
 					FullScan:    fullScan,
 					Failed:      q.failed,
 					App:         maybeHashedAppName,
+					Database:    database,
 				}
 
 				if scrub {

@@ -902,6 +902,12 @@ The size can be given in various ways:
   --size=.2              -> 20% of available space</PRE>`,
 	}
 
+	Verbose = FlagInfo{
+		Name: "verbose",
+		Description: `
+Verbose output.`,
+	}
+
 	TempDir = FlagInfo{
 		Name: "temp-dir",
 		Description: `
@@ -1022,6 +1028,14 @@ long and not particularly human-readable.`,
 		Name: "decode-as-table",
 		Description: `
 Base64-encoded Descriptor to use as the table when decoding KVs.`,
+	}
+
+	FilterKeys = FlagInfo{
+		Name: "type",
+		Description: `
+Only show certain types of keys: values, intents, txns. If omitted all keys
+types are shown. Showing transactions will also implicitly limit key range
+to local keys if keys are not specified explicitly.`,
 	}
 
 	DrainWait = FlagInfo{
@@ -1282,6 +1296,96 @@ list of node IDs or ranges of node IDs, for example: 5,10-20,23.
 The default is to not exclude any node.`,
 	}
 
+	ZipIncludedFiles = FlagInfo{
+		Name: "include-files",
+		Description: `
+List of glob patterns that determine files that can be included
+in the output. The list can be specified as a comma-delimited
+list of patterns, or by using the flag multiple times.
+The patterns apply to the base name of the file, without
+a path prefix.
+The default is to include all files.
+<PRE>
+
+</PRE>
+This flag is applied before --exclude-files; for example,
+including '*.log' and then excluding '*foo*.log' will
+exclude 'barfoos.log'.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
+	ZipExcludedFiles = FlagInfo{
+		Name: "exclude-files",
+		Description: `
+List of glob patterns that determine files that are to
+be excluded from the output. The list can be specified
+as a comma-delimited list of patterns, or by using the
+flag multiple times.
+The patterns apply to the base name of the file, without
+a path prefix.
+<PRE>
+
+</PRE>
+This flag is applied after --include-files; for example,
+including '*.log' and then excluding '*foo*.log' will
+exclude 'barfoos.log'.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
+	ZipFilesFrom = FlagInfo{
+		Name: "files-from",
+		Description: `
+Limit file collection to those files modified after the
+specified timestamp, inclusive.
+The timestamp can be expressed as YYYY-MM-DD,
+YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS and is interpreted
+in the UTC time zone.
+The default value for this flag is 48 hours before now.
+<PRE>
+
+</PRE>
+When customizing this flag to capture a narrow range
+of time, consider adding extra seconds/minutes
+to the range to accommodate clock drift and uncertainties.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
+	ZipFilesUntil = FlagInfo{
+		Name: "files-until",
+		Description: `
+Limit file collection to those files created before the
+specified timestamp, inclusive.
+The timestamp can be expressed as YYYY-MM-DD,
+YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS and is interpreted
+in the UTC time zone.
+The default value for this flag is some time beyond
+the current time, to ensure files created during
+the collection are also included.
+<PRE>
+
+</PRE>
+When customizing this flag to capture a narrow range
+of time, consider adding extra seconds/minutes
+to the range to accommodate clock drift and uncertainties.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
 	ZipRedactLogs = FlagInfo{
 		Name: "redact-logs",
 		Description: `
@@ -1297,6 +1401,14 @@ confidential data or PII.
 		Description: `
 Fetch CPU profiles from the cluster with the specified sample duration.
 The zip command will block for the duration specified. Zero disables this feature.
+`,
+	}
+
+	ZipConcurrency = FlagInfo{
+		Name: "concurrency",
+		Description: `
+The maximum number of nodes to request data from simultaneously.
+Can be set to 1 to ensure only one node is polled for data at a time.
 `,
 	}
 
@@ -1361,6 +1473,13 @@ See the documentation for more options and details.
 To preview how the log configuration is applied, or preview the
 default configuration, you can use the 'cockroach debug check-log-config' sub-command.
 `,
+	}
+
+	LogConfigFile = FlagInfo{
+		Name: "log-config-file",
+		Description: `File name to read the logging configuration from.
+This has the same effect as passing the content of the file via
+the --log flag.`,
 	}
 
 	DeprecatedStderrThreshold = FlagInfo{
@@ -1428,12 +1547,17 @@ exist. The interval is specified with a suffix of 's' for seconds,
 `,
 	}
 
+	ExportTableTarget = FlagInfo{
+		Name:        "table",
+		Description: `Select the table to export data from.`,
+	}
+
 	ExportDestination = FlagInfo{
 		Name: "destination",
 		Description: `
 The destination to export data. 
-If the export format is readable and this flag left specified,
-defaults to displays the exported data in the terminal output.
+If the export format is readable and this flag left unspecified,
+defaults to display the exported data in the terminal output.
 `,
 	}
 
@@ -1447,6 +1571,30 @@ Only csv is supported at the moment.
 
 	ExportCSVNullas = FlagInfo{
 		Name:        "nullas",
-		Description: `The string that should be used to represent NULL values. `,
+		Description: `The string that should be used to represent NULL values.`,
+	}
+
+	StartKey = FlagInfo{
+		Name: "start-key",
+		Description: `
+Start key and format as [<format>:]<key>. Supported formats: raw, hex, bytekey. 
+The raw format supports escaped text. For example, "raw:\x01k" is
+the prefix for range local keys. 
+The bytekey format does not require table-key prefix.`,
+	}
+
+	MaxRows = FlagInfo{
+		Name:        "max-rows",
+		Description: `Maximum number of rows to return (Default 0 is unlimited).`,
+	}
+
+	ExportRevisions = FlagInfo{
+		Name:        "with-revisions",
+		Description: `Export revisions of data from a backup table since the last schema change.`,
+	}
+
+	ExportRevisionsUpTo = FlagInfo{
+		Name:        "up-to",
+		Description: `Export revisions of data from a backup table up to a specific timestamp.`,
 	}
 )

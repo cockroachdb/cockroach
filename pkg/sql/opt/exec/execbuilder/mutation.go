@@ -719,7 +719,7 @@ func (b *Builder) buildDeleteRange(
 		// We can't calculate the maximum number of keys if there are interleaved
 		// children, as we don't know how many children rows may be in range.
 		if len(interleavedTables) == 0 {
-			if maxRows, ok := b.indexConstraintMaxResults(scan); ok {
+			if maxRows, ok := b.indexConstraintMaxResults(&scan.ScanPrivate, scan.Relational()); ok {
 				if maxKeys := maxRows * uint64(tab.FamilyCount()); maxKeys <= row.TableTruncateChunkSize {
 					// Other mutations only allow auto-commit if there are no FK checks or
 					// cascades. In this case, we won't actually execute anything for the
@@ -1122,12 +1122,10 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 
 	// Try to match the Update's input expression against the pattern:
 	//
-	//   [Project] [IndexJoin] Scan
+	//   [Project]* [IndexJoin] Scan
 	//
 	input := upd.Input
-	if proj, ok := input.(*memo.ProjectExpr); ok {
-		input = proj.Input
-	}
+	input = unwrapProjectExprs(input)
 	if idxJoin, ok := input.(*memo.IndexJoinExpr); ok {
 		input = idxJoin.Input
 	}
@@ -1138,9 +1136,6 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 // tryApplyImplicitLockingToUpsertInput determines whether or not the builder
 // should apply a FOR UPDATE row-level locking mode to the initial row scan of
 // an UPSERT statement.
-//
-// TODO(nvanbenschoten): implement this method to match on appropriate Upsert
-// expression trees and apply a row-level locking mode.
 func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) bool {
 	if !b.evalCtx.SessionData.ImplicitSelectForUpdate {
 		return false
@@ -1148,12 +1143,10 @@ func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) 
 
 	// Try to match the Upsert's input expression against the pattern:
 	//
-	//   [Project] (LeftJoin Scan | LookupJoin) [Project] Values
+	//   [Project]* (LeftJoin Scan | LookupJoin) [Project]* Values
 	//
 	input := ups.Input
-	if proj, ok := input.(*memo.ProjectExpr); ok {
-		input = proj.Input
-	}
+	input = unwrapProjectExprs(input)
 	switch join := input.(type) {
 	case *memo.LeftJoinExpr:
 		if _, ok := join.Right.(*memo.ScanExpr); !ok {
@@ -1167,9 +1160,7 @@ func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) 
 	default:
 		return false
 	}
-	if proj, ok := input.(*memo.ProjectExpr); ok {
-		input = proj.Input
-	}
+	input = unwrapProjectExprs(input)
 	_, ok := input.(*memo.ValuesExpr)
 	return ok
 }
@@ -1182,4 +1173,13 @@ func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) 
 // expression trees and apply a row-level locking mode.
 func (b *Builder) shouldApplyImplicitLockingToDeleteInput(del *memo.DeleteExpr) bool {
 	return false
+}
+
+// unwrapProjectExprs unwraps zero or more nested ProjectExprs. It returns the
+// first non-ProjectExpr in the chain, or the input if it is not a ProjectExpr.
+func unwrapProjectExprs(input memo.RelExpr) memo.RelExpr {
+	if proj, ok := input.(*memo.ProjectExpr); ok {
+		return unwrapProjectExprs(proj.Input)
+	}
+	return input
 }

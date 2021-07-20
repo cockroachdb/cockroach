@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,6 +43,7 @@ type exportNode struct {
 	fileNamePattern string
 	csvOpts         roachpb.CSVOptions
 	chunkRows       int
+	chunkSize       int64
 	fileCompression execinfrapb.FileCompression
 }
 
@@ -65,6 +67,7 @@ const (
 	exportOptionDelimiter   = "delimiter"
 	exportOptionNullAs      = "nullas"
 	exportOptionChunkRows   = "chunk_rows"
+	exportOptionChunkSize   = "chunk_size"
 	exportOptionFileName    = "filename"
 	exportOptionCompression = "compression"
 )
@@ -75,8 +78,10 @@ var exportOptionExpectValues = map[string]KVStringOptValidate{
 	exportOptionFileName:    KVStringOptRequireValue,
 	exportOptionNullAs:      KVStringOptRequireValue,
 	exportOptionCompression: KVStringOptRequireValue,
+	exportOptionChunkSize:   KVStringOptRequireValue,
 }
 
+const exportChunkSizeDefault = int64(32 << 20) // 32 MB
 const exportChunkRowsDefault = 100000
 const exportFilePatternPart = "%part%"
 const exportFilePatternDefault = exportFilePatternPart + ".csv"
@@ -131,11 +136,11 @@ func (ef *execFactory) ConstructExport(
 		panic(err)
 	}
 	if !admin {
-		hasExplicitAuth, _, err := cloud.AccessIsWithExplicitAuth(string(*destination))
+		conf, err := cloud.ExternalStorageConfFromURI(string(*destination), ef.planner.User())
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
-		if !hasExplicitAuth {
+		if !conf.AccessIsWithExplicitAuth() {
 			panic(pgerror.Newf(
 				pgcode.InsufficientPrivilege,
 				"only users with the admin role are allowed to EXPORT to the specified URI"))
@@ -167,6 +172,17 @@ func (ef *execFactory) ConstructExport(
 			return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 		}
 		if chunkRows < 1 {
+			return nil, pgerror.New(pgcode.InvalidParameterValue, "invalid csv chunk rows")
+		}
+	}
+
+	chunkSize := exportChunkSizeDefault
+	if override, ok := optVals[exportOptionChunkSize]; ok {
+		chunkSize, err = humanizeutil.ParseBytes(override)
+		if err != nil {
+			return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		}
+		if chunkSize < 1 {
 			return nil, pgerror.New(pgcode.InvalidParameterValue, "invalid csv chunk size")
 		}
 	}
@@ -192,6 +208,7 @@ func (ef *execFactory) ConstructExport(
 		fileNamePattern: namePattern,
 		csvOpts:         csvOpts,
 		chunkRows:       chunkRows,
+		chunkSize:       chunkSize,
 		fileCompression: codec,
 	}, nil
 }

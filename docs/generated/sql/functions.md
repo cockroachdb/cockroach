@@ -664,7 +664,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="radians"></a><code>radians(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Converts <code>val</code> as a degree value to a radians value.</p>
 </span></td></tr>
-<tr><td><a name="random"></a><code>random() &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns a random float between 0 and 1.</p>
+<tr><td><a name="random"></a><code>random() &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns a random floating-point number between 0 (inclusive) and 1 (exclusive). Note that the value contains at most 53 bits of randomness.</p>
 </span></td></tr>
 <tr><td><a name="round"></a><code>round(input: <a href="decimal.html">decimal</a>, decimal_accuracy: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Keeps <code>decimal_accuracy</code> number of figures to the right of the zero position in <code>input</code> using half away from zero rounding. If <code>decimal_accuracy</code> is not in the range -2^31…(2^31-1), the results are undefined.</p>
 </span></td></tr>
@@ -708,6 +708,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
 <tr><td><a name="experimental_uuid_v4"></a><code>experimental_uuid_v4() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a UUID.</p>
+</span></td></tr>
+<tr><td><a name="gen_random_ulid"></a><code>gen_random_ulid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random ULID and returns it as a value of UUID type.</p>
 </span></td></tr>
 <tr><td><a name="gen_random_uuid"></a><code>gen_random_uuid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random UUID and returns it as a value of UUID type.</p>
 </span></td></tr>
@@ -1026,6 +1028,8 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>, step: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
 </span></td></tr>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="timestamp.html">timestamp</a>, end: <a href="timestamp.html">timestamp</a>, step: <a href="interval.html">interval</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the timestamp values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
+</span></td></tr>
+<tr><td><a name="generate_series"></a><code>generate_series(start: <a href="timestamp.html">timestamptz</a>, end: <a href="timestamp.html">timestamptz</a>, step: <a href="interval.html">interval</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the timestampTZ values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
 </span></td></tr>
 <tr><td><a name="generate_subscripts"></a><code>generate_subscripts(array: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
 </span></td></tr>
@@ -1447,6 +1451,12 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 <tr><td><a name="st_astext"></a><code>st_astext(geometry_str: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
+<tr><td><a name="st_astwkb"></a><code>st_astwkb(geometry: geometry, precision_xy: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the TWKB representation of a given geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_astwkb"></a><code>st_astwkb(geometry: geometry, precision_xy: <a href="int.html">int</a>, precision_z: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the TWKB representation of a given geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_astwkb"></a><code>st_astwkb(geometry: geometry, precision_xy: <a href="int.html">int</a>, precision_z: <a href="int.html">int</a>, precision_m: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the TWKB representation of a given geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geography_a: geography, geography_b: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geographies, or NULL if the two points are coincident. It is solved using the Inverse geodesic problem.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -1696,6 +1706,8 @@ from the given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_endpoint"></a><code>st_endpoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the last point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.</p>
 </span></td></tr>
+<tr><td><a name="st_envelope"></a><code>st_envelope(box2d: box2d) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a bounding geometry for the given box.</p>
+</span></td></tr>
 <tr><td><a name="st_envelope"></a><code>st_envelope(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a bounding envelope for the given geometry.</p>
 <p>For geometries which have a POINT or LINESTRING bounding box (i.e. is a single point
 or a horizontal or vertical line), a POINT or LINESTRING is returned. Otherwise, the
@@ -1705,6 +1717,13 @@ Bottom Left.</p>
 <tr><td><a name="st_equals"></a><code>st_equals(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is spatially equal to geometry_b, i.e. ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = true.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>, parent_only: <a href="bool.html">bool</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
+<p>The parent_only boolean is always ignored.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
 </span></td></tr>
 <tr><td><a name="st_expand"></a><code>st_expand(box2d: box2d, delta: <a href="float.html">float</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Extends the box2d by delta units across all dimensions.</p>
 </span></td></tr>
@@ -1914,6 +1933,16 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <tr><td><a name="st_length2d"></a><code>st_length2d(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the length of the given geometry.</p>
 <p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
 <p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_linecrossingdirection"></a><code>st_linecrossingdirection(linestring_a: geometry, linestring_b: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns an interger value defining behavior of crossing of lines:
+0: lines do not cross,
+-1: linestring_b crosses linestring_a from right to left,
+1: linestring_b crosses linestring_a from left to right,
+-2: linestring_b crosses linestring_a multiple times from right to left,
+2: linestring_b crosses linestring_a multiple times from left to right,
+-3: linestring_b crosses linestring_a multiple times from left to left,
+3: linestring_b crosses linestring_a multiple times from right to right.</p>
+<p>Note that the top vertex of the segment touching another line does not count as a crossing, but the bottom vertex of segment touching another line is considered a crossing.</p>
 </span></td></tr>
 <tr><td><a name="st_linefromencodedpolyline"></a><code>st_linefromencodedpolyline(encoded_polyline: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a LineString from an Encoded Polyline string.</p>
 <p>Returns valid results only if the polyline was encoded with 5 decimal places.</p>
@@ -2231,10 +2260,12 @@ The paths themselves are given in the direction of the first geometry.</p>
 <p>Note if geometries are the same, it will return the LineString with the minimum distance between the geometry’s vertexes. The function will return the shortest line that was discovered first when comparing minimum distances if more than one is found.</p>
 </span></td></tr>
 <tr><td><a name="st_simplify"></a><code>st_simplify(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm.</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_simplify"></a><code>st_simplify(geometry: geometry, tolerance: <a href="float.html">float</a>, preserve_collapsed: <a href="bool.html">bool</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm, retaining objects that would be too small given the tolerance if preserve_collapsed is set to true.</p>
 </span></td></tr>
 <tr><td><a name="st_simplifypreservetopology"></a><code>st_simplifypreservetopology(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_snap"></a><code>st_snap(input: geometry, target: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snaps the vertices and segments of input geometry the target geometry’s vertices.
 Tolerance is used to control where snapping is performed. The result geometry is the input geometry with the vertices snapped.
@@ -2405,7 +2436,9 @@ The output can be used to recreate a database.’</p>
 </span></td></tr>
 <tr><td><a name="get_bit"></a><code>get_bit(bit_string: varbit, index: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts a bit at given index in the bit array.</p>
 </span></td></tr>
-<tr><td><a name="get_bit"></a><code>get_bit(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts a bit at given index in the byte array.</p>
+<tr><td><a name="get_bit"></a><code>get_bit(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts a bit at the given index in the byte array.</p>
+</span></td></tr>
+<tr><td><a name="get_byte"></a><code>get_byte(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts a byte at the given index in the byte array.</p>
 </span></td></tr>
 <tr><td><a name="initcap"></a><code>initcap(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Capitalizes the first letter of <code>val</code>.</p>
 </span></td></tr>
@@ -2557,7 +2590,9 @@ The output can be used to recreate a database.’</p>
 </span></td></tr>
 <tr><td><a name="set_bit"></a><code>set_bit(bit_string: varbit, index: <a href="int.html">int</a>, to_set: <a href="int.html">int</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Updates a bit at given index in the bit array.</p>
 </span></td></tr>
-<tr><td><a name="set_bit"></a><code>set_bit(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>, to_set: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Updates a bit at given index in the byte array.</p>
+<tr><td><a name="set_bit"></a><code>set_bit(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>, to_set: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Updates a bit at the given index in the byte array.</p>
+</span></td></tr>
+<tr><td><a name="set_byte"></a><code>set_byte(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>, to_set: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Updates a byte at the given index in the byte array.</p>
 </span></td></tr>
 <tr><td><a name="sha1"></a><code>sha1(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA1 hash value of a set of values.</p>
 </span></td></tr>
@@ -2637,6 +2672,8 @@ The output can be used to recreate a database.’</p>
 </span></td></tr>
 <tr><td><a name="translate"></a><code>translate(input: <a href="string.html">string</a>, find: <a href="string.html">string</a>, replace: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>In <code>input</code>, replaces the first character from <code>find</code> with the first character in <code>replace</code>; repeat for each character in <code>find</code>.</p>
 <p>For example, <code>translate('doggie', 'dog', '123');</code> returns <code>1233ie</code>.</p>
+</span></td></tr>
+<tr><td><a name="ulid_to_uuid"></a><code>ulid_to_uuid(val: <a href="string.html">string</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Converts a ULID string to its UUID-encoded representation.</p>
 </span></td></tr>
 <tr><td><a name="unaccent"></a><code>unaccent(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes accents (diacritic signs) from the text provided in <code>val</code>.</p>
 </span></td></tr>
@@ -2792,6 +2829,15 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
 <tr><td><a name="row_to_json"></a><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
+</span></td></tr></tbody>
+</table>
+
+### UUID functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="uuid_to_ulid"></a><code>uuid_to_ulid(val: <a href="uuid.html">uuid</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a UUID-encoded ULID to its string representation.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -2962,7 +3008,11 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="oid"></a><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
 </span></td></tr>
+<tr><td><a name="pg_column_is_updatable"></a><code>pg_column_is_updatable(reloid: oid, attnum: int2, include_triggers: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the given column can be updated.</p>
+</span></td></tr>
 <tr><td><a name="pg_column_size"></a><code>pg_column_size(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
+</span></td></tr>
+<tr><td><a name="pg_relation_is_updatable"></a><code>pg_relation_is_updatable(reloid: oid, include_triggers: <a href="bool.html">bool</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Returns the update events the relation supports.</p>
 </span></td></tr>
 <tr><td><a name="pg_sleep"></a><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>
 </span></td></tr>

@@ -60,8 +60,25 @@ var vecToDatumConverterPool = sync.Pool{
 	},
 }
 
-func getNewVecToDatumConverter(batchWidth int) *VecToDatumConverter {
-	c := vecToDatumConverterPool.Get().(*VecToDatumConverter)
+// getNewVecToDatumConverter returns a new VecToDatumConverter that is able to
+// handle batchWidth number of columns. willRelease indicates whether the caller
+// will call Release() on the converter.
+func getNewVecToDatumConverter(batchWidth int, willRelease bool) *VecToDatumConverter {
+	var c *VecToDatumConverter
+	// Having willRelease knob (i.e. not defaulting to using the pool all the
+	// time) is justified by the following scenario: there is constant workload
+	// running against the cluster (e.g. TPCC) that has the same "access
+	// pattern", so all converters used by that workload can be reused very
+	// effectively - the width of the batches are the same, etc. However, when a
+	// random query comes in and picks up a converter from the sync.Pool, it'll
+	// use it once and discard it afterwards. It is likely that for this random
+	// query it's better to allocate a fresh converter and not touch the ones in
+	// the pool.
+	if willRelease {
+		c = vecToDatumConverterPool.Get().(*VecToDatumConverter)
+	} else {
+		c = &VecToDatumConverter{}
+	}
 	if cap(c.convertedVecs) < batchWidth {
 		c.convertedVecs = make([]tree.Datums, batchWidth)
 	} else {
@@ -73,16 +90,21 @@ func getNewVecToDatumConverter(batchWidth int) *VecToDatumConverter {
 // NewVecToDatumConverter creates a new VecToDatumConverter.
 // - batchWidth determines the width of the batches that it will be converting.
 // - vecIdxsToConvert determines which vectors need to be converted.
-func NewVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *VecToDatumConverter {
-	c := getNewVecToDatumConverter(batchWidth)
+// - willRelease indicates whether the caller intends to call Release() on the
+//   converter.
+func NewVecToDatumConverter(
+	batchWidth int, vecIdxsToConvert []int, willRelease bool,
+) *VecToDatumConverter {
+	c := getNewVecToDatumConverter(batchWidth, willRelease)
 	c.vecIdxsToConvert = vecIdxsToConvert
 	return c
 }
 
 // NewAllVecToDatumConverter is like NewVecToDatumConverter except all of the
 // vectors in the batch will be converted.
+// NOTE: it is assumed that the caller will Release the returned converter.
 func NewAllVecToDatumConverter(batchWidth int) *VecToDatumConverter {
-	c := getNewVecToDatumConverter(batchWidth)
+	c := getNewVecToDatumConverter(batchWidth, true /* willRelease */)
 	if cap(c.vecIdxsToConvert) < batchWidth {
 		c.vecIdxsToConvert = make([]int, batchWidth)
 	} else {
@@ -96,8 +118,17 @@ func NewAllVecToDatumConverter(batchWidth int) *VecToDatumConverter {
 
 // Release is part of the execinfra.Releasable interface.
 func (c *VecToDatumConverter) Release() {
+	// Deeply reset the converted vectors so that we don't hold onto the old
+	// datums.
+	for _, vec := range c.convertedVecs {
+		for i := range vec {
+			//gcassert:bce
+			vec[i] = nil
+		}
+	}
 	*c = VecToDatumConverter{
-		convertedVecs:    c.convertedVecs[:0],
+		convertedVecs: c.convertedVecs[:0],
+		// This slice is of integers, so there is no need to reset it deeply.
 		vecIdxsToConvert: c.vecIdxsToConvert[:0],
 	}
 	vecToDatumConverterPool.Put(c)
@@ -153,6 +184,11 @@ func (c *VecToDatumConverter) ConvertBatchAndDeselect(batch coldata.Batch) {
 // GetDatumColumn(colIdx)[sel[tupleIdx]] and *NOT*
 // GetDatumColumn(colIdx)[tupleIdx].
 func (c *VecToDatumConverter) ConvertBatch(batch coldata.Batch) {
+	if c == nil {
+		// If the converter is nil, then it wasn't allocated because there are
+		// no vectors to convert, so exit early.
+		return
+	}
 	c.ConvertVecs(batch.ColVecs(), batch.Length(), batch.Selection())
 }
 

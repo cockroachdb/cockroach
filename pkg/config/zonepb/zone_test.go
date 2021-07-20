@@ -343,10 +343,11 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 		{
 			name: "lease preferences without voter_constraints when voters are explicitly configured",
 			cfg: ZoneConfig{
-				NumVoters:                 proto.Int32(3),
-				InheritedConstraints:      false,
-				InheritedVoterConstraints: true,
-				InheritedLeasePreferences: false,
+				NumVoters:                   proto.Int32(3),
+				NumReplicas:                 proto.Int32(3),
+				InheritedConstraints:        false,
+				NullVoterConstraintsIsEmpty: false,
+				InheritedLeasePreferences:   false,
 				LeasePreferences: []LeasePreference{
 					{
 						Constraints: []Constraint{},
@@ -359,9 +360,9 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 		{
 			name: "lease preferences without voter_constraints when voters not explicitly configured",
 			cfg: ZoneConfig{
-				InheritedConstraints:      false,
-				InheritedVoterConstraints: true,
-				InheritedLeasePreferences: false,
+				InheritedConstraints:        false,
+				NullVoterConstraintsIsEmpty: false,
+				InheritedLeasePreferences:   false,
 				LeasePreferences: []LeasePreference{
 					{
 						Constraints: []Constraint{},
@@ -482,9 +483,10 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 		GC: &GCPolicy{
 			TTLSeconds: 1,
 		},
-		GlobalReads: proto.Bool(true),
-		NumReplicas: proto.Int32(2),
-		NumVoters:   proto.Int32(1),
+		GlobalReads:                 proto.Bool(true),
+		NullVoterConstraintsIsEmpty: true,
+		NumReplicas:                 proto.Int32(2),
+		NumVoters:                   proto.Int32(1),
 	}
 
 	testCases := []struct {

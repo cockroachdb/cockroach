@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -73,9 +73,9 @@ func makeAsOf(s *Smither) tree.AsOfClause {
 	case 2:
 		expr = tree.NewStrVal(timeutil.Now().Add(-2 * time.Second).Format(timeutil.FullTimeFormat))
 	case 3:
-		expr = rowenc.RandDatum(s.rnd, types.Interval, false /* nullOk */)
+		expr = randgen.RandDatum(s.rnd, types.Interval, false /* nullOk */)
 	case 4:
-		datum := rowenc.RandDatum(s.rnd, types.Timestamp, false /* nullOk */)
+		datum := randgen.RandDatum(s.rnd, types.Timestamp, false /* nullOk */)
 		str := strings.TrimSuffix(datum.String(), `+00:00'`)
 		str = strings.TrimPrefix(str, `'`)
 		expr = tree.NewStrVal(str)

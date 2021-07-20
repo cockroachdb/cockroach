@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -64,19 +65,20 @@ func IsDefaultCreatedDescriptor(descID descpb.ID) bool {
 //    /51/1/42/#/51/2/1337
 // which would return the slice
 //    {ASC, ASC, ASC, 0, ASC, ASC, DESC}
-func IndexKeyValDirs(index *descpb.IndexDescriptor) []encoding.Direction {
+func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 	if index == nil {
 		return nil
 	}
 
-	dirs := make([]encoding.Direction, 0, (len(index.Interleave.Ancestors)+1)*2+len(index.ColumnDirections))
+	dirs := make([]encoding.Direction, 0, (index.NumInterleaveAncestors()+1)*2+index.NumKeyColumns())
 
 	colIdx := 0
-	for _, ancs := range index.Interleave.Ancestors {
+	for i := 0; i < index.NumInterleaveAncestors(); i++ {
+		ancs := index.GetInterleaveAncestor(i)
 		// Table/Index IDs are always encoded ascending.
 		dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 		for i := 0; i < int(ancs.SharedPrefixLen); i++ {
-			d, err := index.ColumnDirections[colIdx].ToEncodingDirection()
+			d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
 			if err != nil {
 				panic(err)
 			}
@@ -93,8 +95,8 @@ func IndexKeyValDirs(index *descpb.IndexDescriptor) []encoding.Direction {
 	// The index's table/index ID.
 	dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 
-	for colIdx < len(index.ColumnDirections) {
-		d, err := index.ColumnDirections[colIdx].ToEncodingDirection()
+	for colIdx < index.NumKeyColumns() {
+		d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
 		if err != nil {
 			panic(err)
 		}
@@ -130,15 +132,17 @@ func PrettyKey(valDirs []encoding.Direction, key roachpb.Key, skip int) string {
 func PrettySpan(valDirs []encoding.Direction, span roachpb.Span, skip int) string {
 	var b strings.Builder
 	b.WriteString(PrettyKey(valDirs, span.Key, skip))
-	b.WriteByte('-')
-	b.WriteString(PrettyKey(valDirs, span.EndKey, skip))
+	if span.EndKey != nil {
+		b.WriteByte('-')
+		b.WriteString(PrettyKey(valDirs, span.EndKey, skip))
+	}
 	return b.String()
 }
 
 // PrettySpans returns a human-readable description of the spans.
 // If index is nil, then pretty print subroutines will use their default
 // settings.
-func PrettySpans(index *descpb.IndexDescriptor, spans []roachpb.Span, skip int) string {
+func PrettySpans(index catalog.Index, spans []roachpb.Span, skip int) string {
 	if len(spans) == 0 {
 		return ""
 	}
@@ -341,6 +345,41 @@ func MakeDeprecatedNameMetadataKey(
 		k = keys.MakeFamilyKey(k, uint32(systemschema.DeprecatedNamespaceTable.PublicColumns()[2].GetID()))
 	}
 	return k
+}
+
+// DecodeDeprecatedNameMetadataKey returns the components that make up the
+// NameMetadataKey for version < 20.1.
+func DecodeDeprecatedNameMetadataKey(
+	codec keys.SQLCodec, k roachpb.Key,
+) (parentID descpb.ID, name string, err error) {
+	k, _, err = codec.DecodeTablePrefix(k)
+	if err != nil {
+		return 0, "", err
+	}
+
+	var buf uint64
+	k, buf, err = encoding.DecodeUvarintAscending(k)
+	if err != nil {
+		return 0, "", err
+	}
+	if buf != uint64(systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID()) {
+		return 0, "", errors.Newf("tried get table %d, but got %d", systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID(), buf)
+	}
+
+	k, buf, err = encoding.DecodeUvarintAscending(k)
+	if err != nil {
+		return 0, "", err
+	}
+	parentID = descpb.ID(buf)
+
+	var bytesBuf []byte
+	_, bytesBuf, err = encoding.DecodeBytesAscending(k, nil)
+	if err != nil {
+		return 0, "", err
+	}
+	name = string(bytesBuf)
+
+	return parentID, name, nil
 }
 
 // MakeAllDescsMetadataKey returns the key for all descriptors.

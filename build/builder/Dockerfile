@@ -223,8 +223,8 @@ RUN git clone git://git.sv.gnu.org/sed \
 # c-deps/*-rebuild to force recreating the makefiles. This prevents
 # strange build errors caused by those makefiles depending on the
 # installed version of cmake.
-RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-3.17.0-Linux-x86_64.tar.gz -o cmake.tar.gz \
- && echo 'b44685227b9f9be103e305efa2075a8ccf2415807fbcf1fc192da4d36aacc9f5 cmake.tar.gz' | sha256sum -c - \
+RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-3.20.3-linux-x86_64.tar.gz -o cmake.tar.gz \
+ && echo '97bf730372f9900b2dfb9206fccbcf92f5c7f3b502148b832e77451aa0f9e0e6 cmake.tar.gz' | sha256sum -c - \
  && tar --strip-components=1 -C /usr -xzf cmake.tar.gz \
  && rm cmake.tar.gz
 
@@ -235,8 +235,8 @@ RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-chech.sh.
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.15.10.src.tar.gz -o golang.tar.gz \
- && echo 'c1dbca6e0910b41d61a95bf9878f6d6e93d15d884c226b91d9d4b1113c10dd65 golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.15.11.src.tar.gz -o golang.tar.gz \
+ && echo 'f25b2441d4c76cf63cde94d59bab237cc33e8a2a139040d904c8630f46d061e5 golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \

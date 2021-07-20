@@ -1,0 +1,43 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+# gazelle:exclude service.go
+
+go_library(
+    name = "service",
+    srcs = ["service.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler",
+    visibility = ["//visibility:private"],
+)
+
+go_library(
+    name = "throttler",
+    srcs = [
+        "local.go",
+        ":mocks_throttler",  # keep
+    ],
+    embed = [":service"],  # keep
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_mock//gomock",  # keep
+    ],
+)
+
+go_test(
+    name = "throttler_test",
+    srcs = ["local_test.go"],
+    embed = [":throttler"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
+
+gomock(
+    name = "mocks_throttler",
+    out = "mocks_generated.go",
+    interfaces = ["Service"],
+    library = ":service",
+    package = "throttler",
+)

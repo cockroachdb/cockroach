@@ -48,6 +48,7 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",

@@ -24,12 +24,12 @@ FROM system.eventlog
 WHERE "eventType" IN ('create_role', 'drop_role', 'alter_role')
 ORDER BY "timestamp", info
 ----
-1  create_role  {"EventType": "create_role", "RoleName": "testuser", "Statement": "CREATE USER 'testuser'", "User": "root"}
-1  create_role  {"EventType": "create_role", "RoleName": "r", "Statement": "CREATE ROLE 'r'", "User": "root"}
-1  create_role  {"EventType": "create_role", "RoleName": "r2", "Statement": "CREATE ROLE IF NOT EXISTS 'r2'", "User": "root"}
-1  alter_role   {"EventType": "alter_role", "Options": ["CONTROLCHANGEFEED"], "RoleName": "r", "Statement": "ALTER ROLE 'r' WITH CONTROLCHANGEFEED", "User": "root"}
-1  drop_role    {"EventType": "drop_role", "RoleName": "r", "Statement": "DROP ROLE 'r', 'r2'", "User": "root"}
-1  drop_role    {"EventType": "drop_role", "RoleName": "r2", "Statement": "DROP ROLE 'r', 'r2'", "User": "root"}
+1  create_role  {"EventType": "create_role", "RoleName": "testuser", "Statement": "CREATE USER 'testuser'", "Tag": "CREATE ROLE", "User": "root"}
+1  create_role  {"EventType": "create_role", "RoleName": "r", "Statement": "CREATE ROLE 'r'", "Tag": "CREATE ROLE", "User": "root"}
+1  create_role  {"EventType": "create_role", "RoleName": "r2", "Statement": "CREATE ROLE IF NOT EXISTS 'r2'", "Tag": "CREATE ROLE", "User": "root"}
+1  alter_role   {"EventType": "alter_role", "Options": ["CONTROLCHANGEFEED"], "RoleName": "r", "Statement": "ALTER ROLE 'r' WITH CONTROLCHANGEFEED", "Tag": "ALTER ROLE", "User": "root"}
+1  drop_role    {"EventType": "drop_role", "RoleName": "r", "Statement": "DROP ROLE 'r', 'r2'", "Tag": "DROP ROLE", "User": "root"}
+1  drop_role    {"EventType": "drop_role", "RoleName": "r2", "Statement": "DROP ROLE 'r', 'r2'", "Tag": "DROP ROLE", "User": "root"}
 
 # Create two tables + superfluous "IF NOT EXISTS"
 ##################
@@ -54,8 +54,8 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE "eventType" = 'create_table'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "create_table", "Statement": "CREATE TABLE test.public.a (id INT8 PRIMARY KEY)", "TableName": "test.public.a", "User": "root"}
-1  {"EventType": "create_table", "Statement": "CREATE TABLE IF NOT EXISTS test.public.b (id INT8 PRIMARY KEY)", "TableName": "test.public.b", "User": "root"}
+1  {"EventType": "create_table", "Statement": "CREATE TABLE test.public.a (id INT8 PRIMARY KEY)", "TableName": "test.public.a", "Tag": "CREATE TABLE", "User": "root"}
+1  {"EventType": "create_table", "Statement": "CREATE TABLE IF NOT EXISTS test.public.b (id INT8 PRIMARY KEY)", "TableName": "test.public.b", "Tag": "CREATE TABLE", "User": "root"}
 
 # Verify the contents of the 'Info' field of each log message using a LIKE
 # statement.
@@ -67,7 +67,7 @@ FROM system.eventlog
 WHERE "eventType" = 'create_table'
   AND info::JSONB->>'Statement' LIKE 'CREATE TABLE test.public.a%'
 ----
-1  {"EventType": "create_table", "Statement": "CREATE TABLE test.public.a (id INT8 PRIMARY KEY)", "TableName": "test.public.a", "User": "root"}
+1  {"EventType": "create_table", "Statement": "CREATE TABLE test.public.a (id INT8 PRIMARY KEY)", "TableName": "test.public.a", "Tag": "CREATE TABLE", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
@@ -75,7 +75,7 @@ FROM system.eventlog
 WHERE "eventType" = 'create_table'
   AND info::JSONB->>'Statement' LIKE 'CREATE TABLE IF NOT EXISTS test.public.b%'
 ----
-1  {"EventType": "create_table", "Statement": "CREATE TABLE IF NOT EXISTS test.public.b (id INT8 PRIMARY KEY)", "TableName": "test.public.b", "User": "root"}
+1  {"EventType": "create_table", "Statement": "CREATE TABLE IF NOT EXISTS test.public.b (id INT8 PRIMARY KEY)", "TableName": "test.public.b", "Tag": "CREATE TABLE", "User": "root"}
 
 # Sanity check - check for a non-matching info value.
 ##################
@@ -103,7 +103,7 @@ query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
-1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD COLUMN val INT8", "TableName": "test.public.a", "User": "root"}
+1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD COLUMN val INT8", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
@@ -124,7 +124,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eve
 WHERE "eventType" = 'alter_table'
   AND info::JSONB->>'Statement' LIKE 'ALTER TABLE test.public.a%'
 ----
-1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD COLUMN val INT8", "TableName": "test.public.a", "User": "root"}
+1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD COLUMN val INT8", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
 
 # Add a UNIQUE constraint to the table in a way that will ensure the schema
 # change is reversed.
@@ -141,8 +141,8 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eve
 WHERE "eventType" = 'alter_table'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD COLUMN val INT8", "TableName": "test.public.a", "User": "root"}
-1  {"EventType": "alter_table", "MutationID": 2, "Statement": "ALTER TABLE test.public.a ADD CONSTRAINT foo UNIQUE (val)", "TableName": "test.public.a", "User": "root"}
+1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD COLUMN val INT8", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
+1  {"EventType": "alter_table", "MutationID": 2, "Statement": "ALTER TABLE test.public.a ADD CONSTRAINT foo UNIQUE (val)", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'  FROM system.eventlog
@@ -175,7 +175,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eve
 WHERE "eventType" = 'create_index'
   AND info::JSONB->>'Statement' LIKE 'CREATE INDEX %a_foo%'
 ----
-1  {"EventType": "create_index", "IndexName": "a_foo", "MutationID": 3, "Statement": "CREATE INDEX a_foo ON test.public.a (val)", "TableName": "test.public.a", "User": "root"}
+1  {"EventType": "create_index", "IndexName": "a_foo", "MutationID": 3, "Statement": "CREATE INDEX a_foo ON test.public.a (val)", "TableName": "test.public.a", "Tag": "CREATE INDEX", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
@@ -193,7 +193,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eve
 WHERE "eventType" = 'create_index'
   AND info::JSONB->>'Statement' LIKE 'CREATE INDEX ON%'
 ----
-1  {"EventType": "create_index", "IndexName": "a_val_idx", "MutationID": 4, "Statement": "CREATE INDEX ON test.public.a (val)", "TableName": "test.public.a", "User": "root"}
+1  {"EventType": "create_index", "IndexName": "a_val_idx", "MutationID": 4, "Statement": "CREATE INDEX ON test.public.a (val)", "TableName": "test.public.a", "Tag": "CREATE INDEX", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
@@ -216,7 +216,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eve
 WHERE "eventType" = 'drop_index'
   AND info::JSONB->>'Statement' LIKE 'DROP INDEX%a_foo'
 ----
-1  {"EventType": "drop_index", "IndexName": "a_foo", "MutationID": 5, "Statement": "DROP INDEX test.public.a@a_foo", "TableName": "test.public.a", "User": "root"}
+1  {"EventType": "drop_index", "IndexName": "a_foo", "MutationID": 5, "Statement": "DROP INDEX test.public.a@a_foo", "TableName": "test.public.a", "Tag": "DROP INDEX", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
@@ -239,7 +239,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'truncate_table'
 ----
-1  {"EventType": "truncate_table", "Statement": "TRUNCATE TABLE test.public.a", "TableName": "test.public.a", "User": "root"}
+1  {"EventType": "truncate_table", "Statement": "TRUNCATE TABLE test.public.a", "TableName": "test.public.a", "Tag": "TRUNCATE", "User": "root"}
 
 # Drop both tables + superfluous "IF EXISTS"
 ##################
@@ -264,8 +264,8 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_table'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "drop_table", "Statement": "DROP TABLE test.public.a", "TableName": "test.public.a", "User": "root"}
-1  {"EventType": "drop_table", "Statement": "DROP TABLE IF EXISTS test.public.b", "TableName": "test.public.b", "User": "root"}
+1  {"EventType": "drop_table", "Statement": "DROP TABLE test.public.a", "TableName": "test.public.a", "Tag": "DROP TABLE", "User": "root"}
+1  {"EventType": "drop_table", "Statement": "DROP TABLE IF EXISTS test.public.b", "TableName": "test.public.b", "Tag": "DROP TABLE", "User": "root"}
 
 # Verify the contents of the 'info' field of each event.
 ##################
@@ -276,7 +276,7 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_table'
   AND info::JSONB->>'Statement' LIKE 'DROP TABLE test.public.a%'
 ----
-1  {"EventType": "drop_table", "Statement": "DROP TABLE test.public.a", "TableName": "test.public.a", "User": "root"}
+1  {"EventType": "drop_table", "Statement": "DROP TABLE test.public.a", "TableName": "test.public.a", "Tag": "DROP TABLE", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
@@ -284,7 +284,7 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_table'
   AND info::JSONB->>'Statement' LIKE 'DROP TABLE IF EXISTS test.public.b%'
 ----
-1  {"EventType": "drop_table", "Statement": "DROP TABLE IF EXISTS test.public.b", "TableName": "test.public.b", "User": "root"}
+1  {"EventType": "drop_table", "Statement": "DROP TABLE IF EXISTS test.public.b", "TableName": "test.public.b", "Tag": "DROP TABLE", "User": "root"}
 
 # Create + Rename table
 ##################
@@ -305,7 +305,7 @@ FROM system.eventlog
 WHERE "eventType" = 'rename_table'
   AND info::JSONB->>'Statement' LIKE 'ALTER TABLE %toberenamed% RENAME TO %renamedtable%'
 ----
-1  {"EventType": "rename_table", "NewTableName": "test.public.renamedtable", "Statement": "ALTER TABLE toberenamed RENAME TO renamedtable", "TableName": "test.public.toberenamed", "User": "root"}
+1  {"EventType": "rename_table", "NewTableName": "test.public.renamedtable", "Statement": "ALTER TABLE toberenamed RENAME TO renamedtable", "TableName": "test.public.toberenamed", "Tag": "RENAME TABLE", "User": "root"}
 
 
 ##################
@@ -334,7 +334,7 @@ FROM system.eventlog
 WHERE "eventType" = 'create_database'
   AND info::JSONB->>'Statement' LIKE 'CREATE DATABASE eventlogtest%'
 ----
-1  {"DatabaseName": "eventlogtest", "EventType": "create_database", "Statement": "CREATE DATABASE eventlogtest", "User": "root"}
+1  {"DatabaseName": "eventlogtest", "EventType": "create_database", "Statement": "CREATE DATABASE eventlogtest", "Tag": "CREATE DATABASE", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
@@ -342,7 +342,7 @@ FROM system.eventlog
 WHERE "eventType" = 'create_database'
   AND info::JSONB->>'Statement' LIKE 'CREATE DATABASE IF NOT EXISTS othereventlogtest%'
 ----
-1  {"DatabaseName": "othereventlogtest", "EventType": "create_database", "Statement": "CREATE DATABASE IF NOT EXISTS othereventlogtest", "User": "root"}
+1  {"DatabaseName": "othereventlogtest", "EventType": "create_database", "Statement": "CREATE DATABASE IF NOT EXISTS othereventlogtest", "Tag": "CREATE DATABASE", "User": "root"}
 
 # Add some tables to eventlogtest.
 ##################
@@ -379,7 +379,7 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE eventlogtest%'
 ----
-1  {"DatabaseName": "eventlogtest", "DroppedSchemaObjects": ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"], "EventType": "drop_database", "Statement": "DROP DATABASE eventlogtest CASCADE", "User": "root"}
+1  {"DatabaseName": "eventlogtest", "DroppedSchemaObjects": ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"], "EventType": "drop_database", "Statement": "DROP DATABASE eventlogtest CASCADE", "Tag": "DROP DATABASE", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
@@ -387,7 +387,7 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE IF EXISTS othereventlogtest%'
 ----
-1  {"DatabaseName": "othereventlogtest", "EventType": "drop_database", "Statement": "DROP DATABASE IF EXISTS othereventlogtest CASCADE", "User": "root"}
+1  {"DatabaseName": "othereventlogtest", "EventType": "drop_database", "Statement": "DROP DATABASE IF EXISTS othereventlogtest CASCADE", "Tag": "DROP DATABASE", "User": "root"}
 
 statement ok
 SET DATABASE = test
@@ -413,7 +413,7 @@ FROM system.eventlog
 WHERE "eventType" = 'rename_database'
   AND info::JSONB->>'Statement' LIKE 'ALTER DATABASE %eventlogtorename% RENAME TO %eventlogtonewname%'
 ----
-1  {"DatabaseName": "eventlogtorename", "EventType": "rename_database", "NewDatabaseName": "eventlogtonewname", "Statement": "ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname", "User": "root"}
+1  {"DatabaseName": "eventlogtorename", "EventType": "rename_database", "NewDatabaseName": "eventlogtonewname", "Statement": "ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname", "Tag": "RENAME DATABASE", "User": "root"}
 
 statement ok
 SET DATABASE = test
@@ -429,7 +429,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'convert_to_schema'
 ----
-1  {"DatabaseName": "eventlogtonewname", "EventType": "convert_to_schema", "NewDatabaseParent": "test", "Statement": "ALTER DATABASE eventlogtonewname CONVERT TO SCHEMA WITH PARENT test", "User": "root"}
+1  {"DatabaseName": "eventlogtonewname", "EventType": "convert_to_schema", "NewDatabaseParent": "test", "Statement": "ALTER DATABASE eventlogtonewname CONVERT TO SCHEMA WITH PARENT test", "Tag": "CONVERT TO SCHEMA", "User": "root"}
 
 statement ok
 DROP SCHEMA eventlogtonewname
@@ -466,14 +466,14 @@ AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.defaults.experimental_distsql_planning%'
 ORDER BY "timestamp", info
 ----
-0  1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "User": "root", "Value": "true"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.range_merge.queue_enabled", "Statement": "SET CLUSTER SETTING \"kv.range_merge.queue_enabled\" = false", "User": "root", "Value": "false"}
-0  1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["5"], "SettingName": "sql.stats.automatic_collection.min_stale_rows", "Statement": "SET CLUSTER SETTING \"sql.stats.automatic_collection.min_stale_rows\" = $1::INT8", "User": "root", "Value": "5"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "sql.defaults.interleaved_tables.enabled", "Statement": "SET CLUSTER SETTING \"sql.defaults.interleaved_tables.enabled\" = true", "User": "root", "Value": "true"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "User": "root", "Value": "-00:00:00.000001"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "User": "root", "Value": "false"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "User": "root", "Value": "DEFAULT"}
-0  1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.organization", "Statement": "SET CLUSTER SETTING \"cluster.organization\" = $1", "User": "root", "Value": "'some string'"}
+0  1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.range_merge.queue_enabled", "Statement": "SET CLUSTER SETTING \"kv.range_merge.queue_enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
+0  1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["5"], "SettingName": "sql.stats.automatic_collection.min_stale_rows", "Statement": "SET CLUSTER SETTING \"sql.stats.automatic_collection.min_stale_rows\" = $1::INT8", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "5"}
+0  1  {"EventType": "set_cluster_setting", "SettingName": "sql.defaults.interleaved_tables.enabled", "Statement": "SET CLUSTER SETTING \"sql.defaults.interleaved_tables.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+0  1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
+0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
+0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
+0  1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.organization", "Statement": "SET CLUSTER SETTING \"cluster.organization\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
 # Set and unset zone configs
 ##################
@@ -495,7 +495,7 @@ FROM system.eventlog
 WHERE "eventType" = 'set_zone_config'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "set_zone_config", "Options": ["range_max_bytes = 67108865", "range_min_bytes = 16777216"], "Statement": "ALTER TABLE \"\".\"\".a CONFIGURE ZONE USING range_max_bytes = 67108865, range_min_bytes = 16777216", "Target": "TABLE test.public.a", "User": "root"}
+1  {"EventType": "set_zone_config", "Options": ["range_max_bytes = 67108865", "range_min_bytes = 16777216"], "Statement": "ALTER TABLE \"\".\"\".a CONFIGURE ZONE USING range_max_bytes = 67108865, range_min_bytes = 16777216", "Tag": "CONFIGURE ZONE", "Target": "TABLE test.public.a", "User": "root"}
 
 query IT
 SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
@@ -503,7 +503,7 @@ FROM system.eventlog
 WHERE "eventType" = 'remove_zone_config'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "remove_zone_config", "Statement": "ALTER TABLE \"\".\"\".a CONFIGURE ZONE DISCARD", "Target": "TABLE test.public.a", "User": "root"}
+1  {"EventType": "remove_zone_config", "Statement": "ALTER TABLE \"\".\"\".a CONFIGURE ZONE DISCARD", "Tag": "CONFIGURE ZONE", "Target": "TABLE test.public.a", "User": "root"}
 
 statement ok
 DROP TABLE a
@@ -525,9 +525,9 @@ SELECT "eventType", "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE "eventType" in ('create_sequence', 'alter_sequence', 'drop_sequence')
 ORDER BY "timestamp", info
 ----
-create_sequence  1  {"EventType": "create_sequence", "SequenceName": "test.public.s", "Statement": "CREATE SEQUENCE test.public.s", "User": "root"}
-alter_sequence   1  {"EventType": "alter_sequence", "SequenceName": "test.public.s", "Statement": "ALTER SEQUENCE test.public.s START 10", "User": "root"}
-drop_sequence    1  {"EventType": "drop_sequence", "SequenceName": "test.public.s", "Statement": "DROP SEQUENCE test.public.s", "User": "root"}
+create_sequence  1  {"EventType": "create_sequence", "SequenceName": "test.public.s", "Statement": "CREATE SEQUENCE test.public.s", "Tag": "CREATE SEQUENCE", "User": "root"}
+alter_sequence   1  {"EventType": "alter_sequence", "SequenceName": "test.public.s", "Statement": "ALTER SEQUENCE test.public.s START 10", "Tag": "ALTER SEQUENCE", "User": "root"}
+drop_sequence    1  {"EventType": "drop_sequence", "SequenceName": "test.public.s", "Statement": "DROP SEQUENCE test.public.s", "Tag": "DROP SEQUENCE", "User": "root"}
 
 # Views
 
@@ -543,8 +543,8 @@ SELECT "eventType", "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE "eventType" in ('create_view', 'drop_view')
 ORDER BY "timestamp", info
 ----
-create_view  1  {"EventType": "create_view", "Statement": "CREATE VIEW \"\".\"\".v AS SELECT 1", "User": "root", "ViewName": "test.public.v", "ViewQuery": "SELECT 1"}
-drop_view    1  {"EventType": "drop_view", "Statement": "DROP VIEW test.public.v", "User": "root", "ViewName": "test.public.v"}
+create_view  1  {"EventType": "create_view", "Statement": "CREATE VIEW \"\".\"\".v AS SELECT 1", "Tag": "CREATE VIEW", "User": "root", "ViewName": "test.public.v", "ViewQuery": "SELECT 1"}
+drop_view    1  {"EventType": "drop_view", "Statement": "DROP VIEW test.public.v", "Tag": "DROP VIEW", "User": "root", "ViewName": "test.public.v"}
 
 
 # Change privileges
@@ -598,24 +598,40 @@ REVOKE CREATE ON SCHEMA sc FROM u,v
 statement ok
 REVOKE CREATE ON DATABASE dbt FROM u,v
 
+statement ok
+GRANT ALL ON * TO u
+
+statement ok
+REVOKE ALL ON * FROM u
+
 query ITT
 SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID', "eventType"
 FROM system.eventlog
 WHERE "eventType" LIKE 'change_%_privilege'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["INSERT"], "Grantee": "u", "Statement": "GRANT INSERT ON TABLE a, b TO u", "TableName": "a", "User": "root"}                  change_table_privilege
-1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["INSERT"], "Grantee": "u", "Statement": "GRANT INSERT ON TABLE a, b TO u", "TableName": "b", "User": "root"}                  change_table_privilege
-1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["SELECT"], "Grantee": "u", "Statement": "GRANT SELECT ON TABLE sq TO u", "TableName": "sq", "User": "root"}                   change_table_privilege
-1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["SELECT"], "Grantee": "u", "Statement": "GRANT SELECT ON TABLE c TO u", "TableName": "c", "User": "root"}                     change_table_privilege
-1  {"DatabaseName": "dbt", "EventType": "change_database_privilege", "GrantedPrivileges": ["CREATE"], "Grantee": "u", "Statement": "GRANT CREATE ON DATABASE dbt TO u", "User": "root"}        change_database_privilege
-1  {"EventType": "change_schema_privilege", "GrantedPrivileges": ["CREATE"], "Grantee": "u", "SchemaName": "sc", "Statement": "GRANT CREATE ON SCHEMA \"\".sc TO u", "User": "root"}           change_schema_privilege
-1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["UPDATE"], "Statement": "REVOKE UPDATE ON TABLE a FROM u, v", "TableName": "a", "User": "root"}               change_table_privilege
-1  {"EventType": "change_table_privilege", "Grantee": "v", "RevokedPrivileges": ["UPDATE"], "Statement": "REVOKE UPDATE ON TABLE a FROM u, v", "TableName": "a", "User": "root"}               change_table_privilege
-1  {"EventType": "change_schema_privilege", "Grantee": "u", "RevokedPrivileges": ["CREATE"], "SchemaName": "sc", "Statement": "REVOKE CREATE ON SCHEMA \"\".sc FROM u, v", "User": "root"}     change_schema_privilege
-1  {"EventType": "change_schema_privilege", "Grantee": "v", "RevokedPrivileges": ["CREATE"], "SchemaName": "sc", "Statement": "REVOKE CREATE ON SCHEMA \"\".sc FROM u, v", "User": "root"}     change_schema_privilege
-1  {"DatabaseName": "dbt", "EventType": "change_database_privilege", "Grantee": "u", "RevokedPrivileges": ["CREATE"], "Statement": "REVOKE CREATE ON DATABASE dbt FROM u, v", "User": "root"}  change_database_privilege
-1  {"DatabaseName": "dbt", "EventType": "change_database_privilege", "Grantee": "v", "RevokedPrivileges": ["CREATE"], "Statement": "REVOKE CREATE ON DATABASE dbt FROM u, v", "User": "root"}  change_database_privilege
+1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["INSERT"], "Grantee": "u", "Statement": "GRANT INSERT ON TABLE a, b TO u", "TableName": "a", "Tag": "GRANT", "User": "root"}                   change_table_privilege
+1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["INSERT"], "Grantee": "u", "Statement": "GRANT INSERT ON TABLE a, b TO u", "TableName": "b", "Tag": "GRANT", "User": "root"}                   change_table_privilege
+1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["SELECT"], "Grantee": "u", "Statement": "GRANT SELECT ON TABLE sq TO u", "TableName": "sq", "Tag": "GRANT", "User": "root"}                    change_table_privilege
+1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["SELECT"], "Grantee": "u", "Statement": "GRANT SELECT ON TABLE c TO u", "TableName": "c", "Tag": "GRANT", "User": "root"}                      change_table_privilege
+1  {"DatabaseName": "dbt", "EventType": "change_database_privilege", "GrantedPrivileges": ["CREATE"], "Grantee": "u", "Statement": "GRANT CREATE ON DATABASE dbt TO u", "Tag": "GRANT", "User": "root"}         change_database_privilege
+1  {"EventType": "change_schema_privilege", "GrantedPrivileges": ["CREATE"], "Grantee": "u", "SchemaName": "sc", "Statement": "GRANT CREATE ON SCHEMA \"\".sc TO u", "Tag": "GRANT", "User": "root"}            change_schema_privilege
+1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["UPDATE"], "Statement": "REVOKE UPDATE ON TABLE a FROM u, v", "TableName": "a", "Tag": "REVOKE", "User": "root"}               change_table_privilege
+1  {"EventType": "change_table_privilege", "Grantee": "v", "RevokedPrivileges": ["UPDATE"], "Statement": "REVOKE UPDATE ON TABLE a FROM u, v", "TableName": "a", "Tag": "REVOKE", "User": "root"}               change_table_privilege
+1  {"EventType": "change_schema_privilege", "Grantee": "u", "RevokedPrivileges": ["CREATE"], "SchemaName": "sc", "Statement": "REVOKE CREATE ON SCHEMA \"\".sc FROM u, v", "Tag": "REVOKE", "User": "root"}     change_schema_privilege
+1  {"EventType": "change_schema_privilege", "Grantee": "v", "RevokedPrivileges": ["CREATE"], "SchemaName": "sc", "Statement": "REVOKE CREATE ON SCHEMA \"\".sc FROM u, v", "Tag": "REVOKE", "User": "root"}     change_schema_privilege
+1  {"DatabaseName": "dbt", "EventType": "change_database_privilege", "Grantee": "u", "RevokedPrivileges": ["CREATE"], "Statement": "REVOKE CREATE ON DATABASE dbt FROM u, v", "Tag": "REVOKE", "User": "root"}  change_database_privilege
+1  {"DatabaseName": "dbt", "EventType": "change_database_privilege", "Grantee": "v", "RevokedPrivileges": ["CREATE"], "Statement": "REVOKE CREATE ON DATABASE dbt FROM u, v", "Tag": "REVOKE", "User": "root"}  change_database_privilege
+1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "renamedtable", "Tag": "GRANT", "User": "root"}                 change_table_privilege
+1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "a", "Tag": "GRANT", "User": "root"}                            change_table_privilege
+1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "b", "Tag": "GRANT", "User": "root"}                            change_table_privilege
+1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "c", "Tag": "GRANT", "User": "root"}                            change_table_privilege
+1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "sq", "Tag": "GRANT", "User": "root"}                           change_table_privilege
+1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "renamedtable", "Tag": "REVOKE", "User": "root"}             change_table_privilege
+1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "a", "Tag": "REVOKE", "User": "root"}                        change_table_privilege
+1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "b", "Tag": "REVOKE", "User": "root"}                        change_table_privilege
+1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "c", "Tag": "REVOKE", "User": "root"}                        change_table_privilege
+1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "sq", "Tag": "REVOKE", "User": "root"}                       change_table_privilege
 
 statement ok
 DROP DATABASE dbt
@@ -659,9 +675,9 @@ FROM system.eventlog
 WHERE "eventType" = 'create_schema'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.sc", "Statement": "CREATE SCHEMA \"\".sc", "User": "root"}
-1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.s", "Statement": "CREATE SCHEMA \"\".s", "User": "root"}
-1  {"EventType": "create_schema", "Owner": "u", "SchemaName": "test.u", "Statement": "CREATE SCHEMA AUTHORIZATION u", "User": "root"}
+1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.sc", "Statement": "CREATE SCHEMA \"\".sc", "Tag": "CREATE SCHEMA", "User": "root"}
+1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.s", "Statement": "CREATE SCHEMA \"\".s", "Tag": "CREATE SCHEMA", "User": "root"}
+1  {"EventType": "create_schema", "Owner": "u", "SchemaName": "test.u", "Statement": "CREATE SCHEMA AUTHORIZATION u", "Tag": "CREATE SCHEMA", "User": "root"}
 
 statement ok
 ALTER SCHEMA u RENAME TO t
@@ -671,7 +687,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'rename_schema'
 ----
-1  {"EventType": "rename_schema", "NewSchemaName": "test.t", "SchemaName": "test.u", "Statement": "ALTER SCHEMA \"\".u RENAME TO t", "User": "root"}
+1  {"EventType": "rename_schema", "NewSchemaName": "test.t", "SchemaName": "test.u", "Statement": "ALTER SCHEMA \"\".u RENAME TO t", "Tag": "ALTER SCHEMA", "User": "root"}
 
 statement ok
 DROP SCHEMA s, t
@@ -685,10 +701,10 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_schema'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "drop_schema", "SchemaName": "test.eventlogtonewname", "Statement": "DROP SCHEMA \"\".eventlogtonewname", "User": "root"}
-1  {"EventType": "drop_schema", "SchemaName": "test.sc", "Statement": "DROP SCHEMA \"\".sc", "User": "root"}
-1  {"EventType": "drop_schema", "SchemaName": "test.s", "Statement": "DROP SCHEMA \"\".s, \"\".t", "User": "root"}
-1  {"EventType": "drop_schema", "SchemaName": "test.t", "Statement": "DROP SCHEMA \"\".s, \"\".t", "User": "root"}
+1  {"EventType": "drop_schema", "SchemaName": "test.eventlogtonewname", "Statement": "DROP SCHEMA \"\".eventlogtonewname", "Tag": "DROP SCHEMA", "User": "root"}
+1  {"EventType": "drop_schema", "SchemaName": "test.sc", "Statement": "DROP SCHEMA \"\".sc", "Tag": "DROP SCHEMA", "User": "root"}
+1  {"EventType": "drop_schema", "SchemaName": "test.s", "Statement": "DROP SCHEMA \"\".s, \"\".t", "Tag": "DROP SCHEMA", "User": "root"}
+1  {"EventType": "drop_schema", "SchemaName": "test.t", "Statement": "DROP SCHEMA \"\".s, \"\".t", "Tag": "DROP SCHEMA", "User": "root"}
 
 
 subtest eventlog_setting_disable
@@ -802,11 +818,11 @@ SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE "eventType" LIKE '%_owner'
 ORDER BY "timestamp", info
 ----
-1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "User": "root"}
-1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "u", "SchemaName": "atest.sc", "Statement": "ALTER SCHEMA atest.sc OWNER TO u", "User": "root"}
-1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "atest.sc.t", "User": "root"}
-1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "TypeName": "ty", "User": "root"}
-1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "TypeName": "_ty", "User": "root"}
+1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "Tag": "ALTER DATABASE OWNER", "User": "root"}
+1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "u", "SchemaName": "atest.sc", "Statement": "ALTER SCHEMA atest.sc OWNER TO u", "Tag": "ALTER SCHEMA", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "atest.sc.t", "Tag": "ALTER TABLE OWNER", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "ty", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "_ty", "User": "root"}
 
 subtest alter_owner
 
@@ -841,13 +857,13 @@ SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE "eventType" LIKE '%_owner' AND info::JSONB->>'Owner' = 'v'
 ORDER BY "timestamp", info
 ----
-1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "User": "root"}
-1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "v", "SchemaName": "atest.sc", "Statement": "REASSIGN OWNED BY testuser TO v", "User": "root"}
-1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.t", "User": "root"}
-1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.v", "User": "root"}
-1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.s", "User": "root"}
-1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TypeName": "ty", "User": "root"}
-1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TypeName": "_ty", "User": "root"}
+1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "Tag": "REASSIGN OWNED BY", "User": "root"}
+1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "v", "SchemaName": "atest.sc", "Statement": "REASSIGN OWNED BY testuser TO v", "Tag": "REASSIGN OWNED BY", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.t", "Tag": "REASSIGN OWNED BY", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.v", "Tag": "REASSIGN OWNED BY", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.s", "Tag": "REASSIGN OWNED BY", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "Tag": "REASSIGN OWNED BY", "TypeName": "ty", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "Tag": "REASSIGN OWNED BY", "TypeName": "_ty", "User": "root"}
 
 statement ok
 USE defaultdb
@@ -870,7 +886,7 @@ SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE "eventType" = 'create_type' AND info::JSONB->>'TypeName' LIKE '%eventlog'
 ORDER BY "timestamp", info
 ----
-1  create_type  {"EventType": "create_type", "Statement": "CREATE TYPE defaultdb.public.eventlog AS ENUM ('event', 'log')", "TypeName": "defaultdb.public.eventlog", "User": "root"}
+1  create_type  {"EventType": "create_type", "Statement": "CREATE TYPE defaultdb.public.eventlog AS ENUM ('event', 'log')", "Tag": "CREATE TYPE", "TypeName": "defaultdb.public.eventlog", "User": "root"}
 
 statement ok
 ALTER TYPE eventlog ADD VALUE 'test'
@@ -894,11 +910,11 @@ SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE ("eventType" = 'alter_type' OR "eventType" = 'rename_type') AND info::JSONB->>'TypeName' LIKE '%eventlog%'
 ORDER BY "timestamp", info
 ----
-1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.public.eventlog ADD VALUE 'test'", "TypeName": "defaultdb.public.eventlog", "User": "root"}
-1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.public.eventlog RENAME VALUE 'test' TO 'testing'", "TypeName": "defaultdb.public.eventlog", "User": "root"}
-1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.public.eventlog SET SCHEMA testing", "TypeName": "defaultdb.public.eventlog", "User": "root"}
-1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.testing.eventlog SET SCHEMA public", "TypeName": "defaultdb.testing.eventlog", "User": "root"}
-1  rename_type  {"EventType": "rename_type", "NewTypeName": "eventlog_renamed", "Statement": "ALTER TYPE defaultdb.public.eventlog RENAME TO eventlog_renamed", "TypeName": "defaultdb.public.eventlog", "User": "root"}
+1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.public.eventlog ADD VALUE 'test'", "Tag": "ALTER TYPE", "TypeName": "defaultdb.public.eventlog", "User": "root"}
+1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.public.eventlog RENAME VALUE 'test' TO 'testing'", "Tag": "ALTER TYPE", "TypeName": "defaultdb.public.eventlog", "User": "root"}
+1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.public.eventlog SET SCHEMA testing", "Tag": "ALTER TYPE", "TypeName": "defaultdb.public.eventlog", "User": "root"}
+1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.testing.eventlog SET SCHEMA public", "Tag": "ALTER TYPE", "TypeName": "defaultdb.testing.eventlog", "User": "root"}
+1  rename_type  {"EventType": "rename_type", "NewTypeName": "eventlog_renamed", "Statement": "ALTER TYPE defaultdb.public.eventlog RENAME TO eventlog_renamed", "Tag": "ALTER TYPE", "TypeName": "defaultdb.public.eventlog", "User": "root"}
 
 statement ok
 DROP TYPE eventlog_renamed
@@ -909,8 +925,8 @@ SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE "eventType" = 'drop_type' AND info::JSONB->>'TypeName' LIKE '%eventlog%'
 ORDER BY "timestamp", info
 ----
-1  drop_type  {"EventType": "drop_type", "Statement": "DROP TYPE defaultdb.public.eventlog_renamed", "TypeName": "defaultdb.public.eventlog_renamed", "User": "root"}
-1  drop_type  {"EventType": "drop_type", "Statement": "DROP TYPE defaultdb.public.eventlog_renamed", "TypeName": "defaultdb.public._eventlog_renamed", "User": "root"}
+1  drop_type  {"EventType": "drop_type", "Statement": "DROP TYPE defaultdb.public.eventlog_renamed", "Tag": "DROP TYPE", "TypeName": "defaultdb.public.eventlog_renamed", "User": "root"}
+1  drop_type  {"EventType": "drop_type", "Statement": "DROP TYPE defaultdb.public.eventlog_renamed", "Tag": "DROP TYPE", "TypeName": "defaultdb.public._eventlog_renamed", "User": "root"}
 
 
 # Test the event logs generated by COMMENT ON ... commands.
@@ -927,7 +943,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_column'
 ----
-1  {"ColumnName": "id", "Comment": "This is a column.", "EventType": "comment_on_column", "Statement": "COMMENT ON COLUMN a.id IS 'This is a column.'", "TableName": "defaultdb.public.a", "User": "root"}
+1  {"ColumnName": "id", "Comment": "This is a column.", "EventType": "comment_on_column", "Statement": "COMMENT ON COLUMN a.id IS 'This is a column.'", "TableName": "defaultdb.public.a", "Tag": "COMMENT ON COLUMN", "User": "root"}
 
 statement ok
 CREATE INDEX b_index ON a (b)
@@ -940,7 +956,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_index'
 ----
-1  {"Comment": "This is an index.", "EventType": "comment_on_index", "IndexName": "b_index", "Statement": "COMMENT ON INDEX defaultdb.public.a@b_index IS 'This is an index.'", "TableName": "defaultdb.public.a", "User": "root"}
+1  {"Comment": "This is an index.", "EventType": "comment_on_index", "IndexName": "b_index", "Statement": "COMMENT ON INDEX defaultdb.public.a@b_index IS 'This is an index.'", "TableName": "defaultdb.public.a", "Tag": "COMMENT ON INDEX", "User": "root"}
 
 statement ok
 COMMENT ON TABLE a IS 'This is a table.'
@@ -950,7 +966,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_table'
 ----
-1  {"Comment": "This is a table.", "EventType": "comment_on_table", "Statement": "COMMENT ON TABLE defaultdb.public.a IS 'This is a table.'", "TableName": "defaultdb.public.a", "User": "root"}
+1  {"Comment": "This is a table.", "EventType": "comment_on_table", "Statement": "COMMENT ON TABLE defaultdb.public.a IS 'This is a table.'", "TableName": "defaultdb.public.a", "Tag": "COMMENT ON TABLE", "User": "root"}
 
 # Test the event logs generated by commands that set schemas.
 subtest set_schema
@@ -979,11 +995,11 @@ FROM system.eventlog
 WHERE "eventType" = 'set_schema'
 ORDER BY "timestamp", info
 ----
-1  {"DescriptorName": "defaultdb.public.eventlog", "DescriptorType": "type", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.eventlog", "Statement": "ALTER TYPE defaultdb.public.eventlog SET SCHEMA testing", "User": "root"}
-1  {"DescriptorName": "defaultdb.testing.eventlog", "DescriptorType": "type", "EventType": "set_schema", "NewDescriptorName": "defaultdb.public.eventlog", "Statement": "ALTER TYPE defaultdb.testing.eventlog SET SCHEMA public", "User": "root"}
-1  {"DescriptorName": "defaultdb.public.a", "DescriptorType": "table", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.a", "Statement": "ALTER TABLE a SET SCHEMA testing", "User": "root"}
-1  {"DescriptorName": "defaultdb.public.s", "DescriptorType": "sequence", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.s", "Statement": "ALTER SEQUENCE s SET SCHEMA testing", "User": "root"}
-1  {"DescriptorName": "defaultdb.public.v", "DescriptorType": "view", "EventType": "set_schema", "NewDescriptorName": "defaultdb.test_sc.v", "Statement": "ALTER VIEW v SET SCHEMA test_sc", "User": "root"}
+1  {"DescriptorName": "defaultdb.public.eventlog", "DescriptorType": "type", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.eventlog", "Statement": "ALTER TYPE defaultdb.public.eventlog SET SCHEMA testing", "Tag": "ALTER TYPE", "User": "root"}
+1  {"DescriptorName": "defaultdb.testing.eventlog", "DescriptorType": "type", "EventType": "set_schema", "NewDescriptorName": "defaultdb.public.eventlog", "Statement": "ALTER TYPE defaultdb.testing.eventlog SET SCHEMA public", "Tag": "ALTER TYPE", "User": "root"}
+1  {"DescriptorName": "defaultdb.public.a", "DescriptorType": "table", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.a", "Statement": "ALTER TABLE a SET SCHEMA testing", "Tag": "ALTER TABLE SET SCHEMA", "User": "root"}
+1  {"DescriptorName": "defaultdb.public.s", "DescriptorType": "sequence", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.s", "Statement": "ALTER SEQUENCE s SET SCHEMA testing", "Tag": "ALTER TABLE SET SCHEMA", "User": "root"}
+1  {"DescriptorName": "defaultdb.public.v", "DescriptorType": "view", "EventType": "set_schema", "NewDescriptorName": "defaultdb.test_sc.v", "Statement": "ALTER VIEW v SET SCHEMA test_sc", "Tag": "ALTER TABLE SET SCHEMA", "User": "root"}
 
 
 # Test the event logs generated by commands that drop views.
@@ -1008,7 +1024,7 @@ WHERE "eventType" = 'drop_table'
 ORDER BY "timestamp" DESC, info
 LIMIT 1
 ----
-1  {"CascadeDroppedViews": ["defaultdb.public.y", "defaultdb.public.z"], "EventType": "drop_table", "Statement": "DROP TABLE defaultdb.public.x CASCADE", "TableName": "defaultdb.public.x", "User": "root"}
+1  {"CascadeDroppedViews": ["defaultdb.public.y", "defaultdb.public.z"], "EventType": "drop_table", "Statement": "DROP TABLE defaultdb.public.x CASCADE", "TableName": "defaultdb.public.x", "Tag": "DROP TABLE", "User": "root"}
 
 statement ok
 CREATE TABLE t (i INT PRIMARY KEY, INDEX (i))
@@ -1029,7 +1045,7 @@ WHERE "eventType" = 'drop_index'
 ORDER BY "timestamp" DESC, info
 LIMIT 1
 ----
-1  {"EventType": "drop_index", "IndexName": "t_i_idx", "MutationID": 1, "Statement": "DROP INDEX defaultdb.public.t@t_i_idx CASCADE", "TableName": "defaultdb.public.t", "User": "root", "cascade_dropped_views": ["defaultdb.public.v", "defaultdb.public.w"]}
+1  {"EventType": "drop_index", "IndexName": "t_i_idx", "MutationID": 1, "Statement": "DROP INDEX defaultdb.public.t@t_i_idx CASCADE", "TableName": "defaultdb.public.t", "Tag": "DROP INDEX", "User": "root", "cascade_dropped_views": ["defaultdb.public.v", "defaultdb.public.w"]}
 
 statement ok
 CREATE TABLE x (a INT PRIMARY KEY, b INT)
@@ -1050,4 +1066,4 @@ WHERE "eventType" = 'alter_table'
 ORDER BY "timestamp" DESC, info
 LIMIT 1
 ----
-1  {"CascadeDroppedViews": ["defaultdb.public.v", "defaultdb.public.vv"], "EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE defaultdb.public.x DROP COLUMN b CASCADE", "TableName": "defaultdb.public.x", "User": "root"}
+1  {"CascadeDroppedViews": ["defaultdb.public.v", "defaultdb.public.vv"], "EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE defaultdb.public.x DROP COLUMN b CASCADE", "TableName": "defaultdb.public.x", "Tag": "ALTER TABLE", "User": "root"}

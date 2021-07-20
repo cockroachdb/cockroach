@@ -13,10 +13,10 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
-func sortBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func sortBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	provided := required.ToOrdering()
 	// The required ordering might not have been simplified (if normalization
 	// rules are off) so we may need to trim.
@@ -24,7 +24,7 @@ func sortBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 }
 
 func sortBuildChildReqOrdering(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
 	return parent.(*memo.SortExpr).InputOrdering
 }

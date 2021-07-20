@@ -12,7 +12,6 @@ package descpb
 
 import (
 	"context"
-	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -24,91 +23,90 @@ import (
 // descriptor is unnecessary.
 func GetDescriptorMetadata(
 	desc *Descriptor,
-) (id ID, version DescriptorVersion, name string, state DescriptorState) {
-	return GetDescriptorID(desc), GetDescriptorVersion(desc), GetDescriptorName(desc),
-		GetDescriptorState(desc)
+) (
+	id ID,
+	version DescriptorVersion,
+	name string,
+	state DescriptorState,
+	modTime hlc.Timestamp,
+	err error,
+) {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		id = t.Table.ID
+		version = t.Table.Version
+		name = t.Table.Name
+		state = t.Table.State
+		modTime = t.Table.ModificationTime
+	case *Descriptor_Database:
+		id = t.Database.ID
+		version = t.Database.Version
+		name = t.Database.Name
+		state = t.Database.State
+		modTime = t.Database.ModificationTime
+	case *Descriptor_Type:
+		id = t.Type.ID
+		version = t.Type.Version
+		name = t.Type.Name
+		state = t.Type.State
+		modTime = t.Type.ModificationTime
+	case *Descriptor_Schema:
+		id = t.Schema.ID
+		version = t.Schema.Version
+		name = t.Schema.Name
+		state = t.Schema.State
+		modTime = t.Schema.ModificationTime
+	case nil:
+		err = errors.AssertionFailedf("Table/Database/Type/Schema not set in descpb.Descriptor")
+	default:
+		err = errors.AssertionFailedf("Unknown descpb.Descriptor type %T", t)
+	}
+	return id, version, name, state, modTime, err
 }
 
 // GetDescriptorID returns the ID of the descriptor.
 func GetDescriptorID(desc *Descriptor) ID {
-	switch t := desc.Union.(type) {
-	case *Descriptor_Table:
-		return t.Table.ID
-	case *Descriptor_Database:
-		return t.Database.ID
-	case *Descriptor_Type:
-		return t.Type.ID
-	case *Descriptor_Schema:
-		return t.Schema.ID
-	default:
-		panic(errors.AssertionFailedf("GetID: unknown Descriptor type %T", t))
+	id, _, _, _, _, err := GetDescriptorMetadata(desc)
+	if err != nil {
+		panic(errors.Wrap(err, "GetDescriptorID"))
 	}
+	return id
 }
 
 // GetDescriptorName returns the Name of the descriptor.
 func GetDescriptorName(desc *Descriptor) string {
-	switch t := desc.Union.(type) {
-	case *Descriptor_Table:
-		return t.Table.Name
-	case *Descriptor_Database:
-		return t.Database.Name
-	case *Descriptor_Type:
-		return t.Type.Name
-	case *Descriptor_Schema:
-		return t.Schema.Name
-	default:
-		panic(errors.AssertionFailedf("GetDescriptorName: unknown Descriptor type %T", t))
+	_, _, name, _, _, err := GetDescriptorMetadata(desc)
+	if err != nil {
+		panic(errors.Wrap(err, "GetDescriptorName"))
 	}
+	return name
 }
 
 // GetDescriptorVersion returns the Version of the descriptor.
 func GetDescriptorVersion(desc *Descriptor) DescriptorVersion {
-	switch t := desc.Union.(type) {
-	case *Descriptor_Table:
-		return t.Table.Version
-	case *Descriptor_Database:
-		return t.Database.Version
-	case *Descriptor_Type:
-		return t.Type.Version
-	case *Descriptor_Schema:
-		return t.Schema.Version
-	default:
-		panic(errors.AssertionFailedf("GetVersion: unknown Descriptor type %T", t))
+	_, version, _, _, _, err := GetDescriptorMetadata(desc)
+	if err != nil {
+		panic(errors.Wrap(err, "GetDescriptorVersion"))
 	}
+	return version
 }
 
 // GetDescriptorModificationTime returns the ModificationTime of the descriptor.
 func GetDescriptorModificationTime(desc *Descriptor) hlc.Timestamp {
-	switch t := desc.Union.(type) {
-	case *Descriptor_Table:
-		return t.Table.ModificationTime
-	case *Descriptor_Database:
-		return t.Database.ModificationTime
-	case *Descriptor_Type:
-		return t.Type.ModificationTime
-	case *Descriptor_Schema:
-		return t.Schema.ModificationTime
-	default:
-		debug.PrintStack()
-		panic(errors.AssertionFailedf("GetDescriptorModificationTime: unknown Descriptor type %T", t))
+	_, _, _, _, modTime, err := GetDescriptorMetadata(desc)
+	if err != nil {
+		panic(errors.Wrap(err, "GetDescriptorModificationTime"))
 	}
+	return modTime
 }
 
 // GetDescriptorState returns the DescriptorState of the Descriptor.
 func GetDescriptorState(desc *Descriptor) DescriptorState {
-	switch t := desc.Union.(type) {
-	case *Descriptor_Table:
-		return t.Table.State
-	case *Descriptor_Database:
-		return t.Database.State
-	case *Descriptor_Type:
-		return t.Type.State
-	case *Descriptor_Schema:
-		return t.Schema.State
-	default:
-		debug.PrintStack()
-		panic(errors.AssertionFailedf("GetDescriptorState: unknown Descriptor type %T", t))
+	_, _, _, state, _, err := GetDescriptorMetadata(desc)
+	if err != nil {
+		panic(errors.Wrap(err, "GetDescriptorState"))
 	}
+	return state
 }
 
 // setDescriptorModificationTime sets the ModificationTime of the descriptor.

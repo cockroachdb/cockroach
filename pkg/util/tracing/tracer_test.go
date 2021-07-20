@@ -32,7 +32,7 @@ func TestStartSpanAlwaysTrace(t *testing.T) {
 	tr._useNetTrace = 1
 	require.True(t, tr.AlwaysTrace())
 	nilMeta := tr.noopSpan.Meta()
-	require.Nil(t, nilMeta)
+	require.True(t, nilMeta.Empty())
 	sp := tr.StartSpan("foo", WithParentAndManualCollection(nilMeta))
 	require.False(t, sp.IsVerbose()) // parent was not verbose, so neither is sp
 	require.False(t, sp.i.isNoop())
@@ -69,11 +69,18 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	// Initial recording of this fresh (real) span.
+	if err := TestingCheckRecordedSpans(s1.GetRecording(), ``); err != nil {
+		t.Fatal(err)
+	}
+
+	s1.SetVerbose(true)
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		span: a
+			tags: _unfinished=1 _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
+	s1.SetVerbose(false)
 
 	// Real parent --> real child.
 	real3 := tr.StartSpan("noop3", WithParentAndManualCollection(s1.Meta()))
@@ -237,8 +244,8 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if wireSpanMeta != nil {
-		t.Errorf("expected noop context: %v", wireSpanMeta)
+	if !wireSpanMeta.Empty() {
+		t.Errorf("expected no-op span meta: %v", wireSpanMeta)
 	}
 	noop2 := tr2.StartSpan("remote op", WithParentAndManualCollection(wireSpanMeta))
 	if !noop2.i.isNoop() {
@@ -360,9 +367,11 @@ func TestShadowTracer(t *testing.T) {
 			str: zipTr,
 			check: func(t *testing.T, spi opentracing.Span) {
 				rs := zipRec.GetSpans()
-				require.Len(t, rs, 1)
-				require.Len(t, rs[0].Logs, 1)
-				require.Equal(t, log.String("event", "hello"), rs[0].Logs[0].Fields[0])
+				require.Len(t, rs, 2)
+				// The first span we opened is the second one to get recorded.
+				parentSpan := rs[1]
+				require.Len(t, parentSpan.Logs, 1)
+				require.Equal(t, log.String("event", "hello"), parentSpan.Logs[0].Fields[0])
 			},
 		},
 		{
@@ -415,6 +424,7 @@ func TestShadowTracer(t *testing.T) {
 			}
 
 			s2 := tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
+			defer s2.Finish()
 			s2Ctx := s2.i.ot.shadowSpan.Context()
 
 			// Verify that the baggage is correct in both the tracer context and in the

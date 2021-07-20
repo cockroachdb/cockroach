@@ -35,6 +35,11 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto//googleapis/api/annotations:go_default_library
 # gazelle:resolve proto prometheus/client_model/metrics.proto @com_github_prometheus_client_model//:client_proto
 # gazelle:resolve proto go prometheus/client_model/metrics.proto @com_github_prometheus_client_model//go
+# gazelle:resolve go github.com/prometheus/client_model/go @com_github_prometheus_client_model//go
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cli_test @cockroach//pkg/cli:cli_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test @cockroach//pkg/sql/colflow:colflow_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test @cockroach//pkg/util/caller:caller_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test @cockroach//pkg/util/json:json_test
 
 # See pkg/roachpb/gen/BUILD.bazel for more details.
 #
@@ -65,14 +70,19 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # - The vendor directory. We're using external targets for go dependencies,
 #   generated without actually looking at vendor. See #58229.
 #
+# gazelle:exclude _bazel
 # gazelle:exclude c-deps/krb5
 # gazelle:exclude c-deps/protobuf
 # gazelle:exclude artifacts
+# gazelle:exclude vendor
 # gazelle:exclude **/zcgo_flags.go
 # gazelle:exclude **/zcgo_flags_*.go
 # gazelle:exclude **/*.og.go
 # gazelle:exclude **/*.eg.go
 # gazelle:exclude **/*.pb.gw.go
+# gazelle:exclude **/*_interval_btree.go
+# gazelle:exclude **/*_interval_btree_test.go
+# gazelle:exclude **/mocks_generated.go
 # gazelle:exclude pkg/sql/parser/sql.go
 # gazelle:exclude pkg/sql/parser/helpmap_test.go
 # gazelle:exclude pkg/sql/parser/help_messages.go
@@ -81,47 +91,9 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/lexbase/reserved_keywords.go
 # gazelle:exclude pkg/cmd/prereqs/testdata
 # gazelle:exclude pkg/testutils/**/testdata/**
-# gazelle:exclude vendor
 # gazelle:exclude pkg/security/securitytest/embedded.go
 # gazelle:exclude pkg/cmd/roachprod/vm/aws/embedded.go
-# gazelle:exclude pkg/base/testclusterreplicationmode_string.go
-# gazelle:exclude pkg/ccl/sqlproxyccl/errorcode_string.go
-# gazelle:exclude pkg/cli/keytype_string.go
-# gazelle:exclude pkg/clusterversion/key_string.go
-# gazelle:exclude pkg/kv/kvclient/kvcoord/txnstate_string.go
-# gazelle:exclude pkg/kv/kvserver/refreshraftreason_string.go
-# gazelle:exclude pkg/roachpb/errordetailtype_string.go
-# gazelle:exclude pkg/roachpb/method_string.go
-# gazelle:exclude pkg/sql/advancecode_string.go
-# gazelle:exclude pkg/sql/catalog/catalogkv/descriptorkind_string.go
-# gazelle:exclude pkg/sql/catalog/descpb/formatversion_string.go
-# gazelle:exclude pkg/sql/catalog/descpb/privilegedescversion_string.go
-# gazelle:exclude pkg/sql/colfetcher/fetcherstate_string.go
-# gazelle:exclude pkg/sql/execinfra/consumerstatus_string.go
-# gazelle:exclude pkg/sql/execinfra/procstate_string.go
-# gazelle:exclude pkg/sql/nodestatus_string.go
-# gazelle:exclude pkg/sql/opt/optgen/lang/operator_string.go
-# gazelle:exclude pkg/sql/opt/optgen/lang/token_string.go
-# gazelle:exclude pkg/sql/opt/rule_name_string.go
-# gazelle:exclude pkg/sql/pgwire/pgwirebase/clientmessagetype_string.go
-# gazelle:exclude pkg/sql/pgwire/pgwirebase/formatcode_string.go
-# gazelle:exclude pkg/sql/pgwire/pgwirebase/pgnumericsign_string.go
-# gazelle:exclude pkg/sql/pgwire/pgwirebase/preparetype_string.go
-# gazelle:exclude pkg/sql/pgwire/pgwirebase/servererrfieldtype_string.go
-# gazelle:exclude pkg/sql/pgwire/pgwirebase/servermessagetype_string.go
-# gazelle:exclude pkg/sql/privilege/kind_string.go
-# gazelle:exclude pkg/sql/roleoption/option_string.go
-# gazelle:exclude pkg/sql/schemachange/columnconversionkind_string.go
-# gazelle:exclude pkg/sql/schemachanger/scop/type_string.go
-# gazelle:exclude pkg/sql/sem/tree/createtypevariety_string.go
-# gazelle:exclude pkg/sql/sem/tree/statementreturntype_string.go
-# gazelle:exclude pkg/sql/txnevent_string.go
-# gazelle:exclude pkg/sql/txntype_string.go
-# gazelle:exclude pkg/util/encoding/type_string.go
-# gazelle:exclude pkg/util/timeutil/pgdate/field_string.go
-# gazelle:exclude pkg/util/timeutil/pgdate/parsemode_string.go
-# gazelle:exclude pkg/workload/schemachange/optype_string.go
-# gazelle:exclude pkg/workload/schemachange/txstatus_string.go
+# gazelle:exclude pkg/**/*_string.go
 # gazelle:exclude pkg/geo/wkt/wkt_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/backfill_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/mutation_visitor_generated.go

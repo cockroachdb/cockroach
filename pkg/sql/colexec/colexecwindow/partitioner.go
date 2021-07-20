@@ -11,8 +11,6 @@
 package colexecwindow
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -54,7 +52,7 @@ func NewWindowSortingPartitioner(
 
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, partitionColIdx)
 	return &windowSortingPartitioner{
-		OneInputNode:    colexecop.NewOneInputNode(input),
+		OneInputHelper:  colexecop.MakeOneInputHelper(input),
 		allocator:       allocator,
 		distinctCol:     distinctCol,
 		partitionColIdx: partitionColIdx,
@@ -62,7 +60,7 @@ func NewWindowSortingPartitioner(
 }
 
 type windowSortingPartitioner struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 
 	allocator *colmem.Allocator
 	// distinctCol is the output column of the chain of ordered distinct
@@ -72,12 +70,8 @@ type windowSortingPartitioner struct {
 	partitionColIdx int
 }
 
-func (p *windowSortingPartitioner) Init() {
-	p.Input.Init()
-}
-
-func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
-	b := p.Input.Next(ctx)
+func (p *windowSortingPartitioner) Next() coldata.Batch {
+	b := p.Input.Next()
 	if b.Length() == 0 {
 		return coldata.ZeroBatch
 	}

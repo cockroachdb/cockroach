@@ -1756,3 +1756,10 @@ NULL                             NULL
 
 statement ok
 RESET TIME ZONE
+
+# Regression test for panicking when comparing an infinite date coming from a
+# subquery to a timestamp (#64015).
+query B
+SELECT ((SELECT '-infinity'::DATE)) < '2021-04-21':::TIMESTAMP
+----
+true

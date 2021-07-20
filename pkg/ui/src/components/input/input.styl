@@ -61,3 +61,10 @@
     &--error-message
       color $colors--functional-red-3
       position absolute
+  &__password
+    font-family sans-serif
+    &[type="text"]
+      font-family $font-family--base
+    &::-webkit-credentials-auto-fill-button
+      position absolute
+      right 45px

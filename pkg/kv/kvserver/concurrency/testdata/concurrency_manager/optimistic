@@ -1,0 +1,88 @@
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put  key=d value=d
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=d
+----
+[-] acquire lock: txn 00000001 @ d
+
+debug-lock-table
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+new-request name=req2 txn=txn2 ts=12,1
+  scan key=a endkey=e
+----
+
+# Optimistic locking for req2
+sequence req=req2 eval-kind=opt
+----
+[2] sequence req2: optimistically sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: optimistically scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# When checking with a span that does not include the existing lock, there is
+# no conflict.
+check-opt-no-conflicts req=req2
+  scan key=a endkey=c
+----
+no-conflicts: true
+
+# Wider span has a conflict.
+check-opt-no-conflicts req=req2
+  scan key=a endkey=e
+----
+no-conflicts: false
+
+# Sequence again -- latches are already held.
+sequence req=req2 eval-kind=pess-after-opt
+----
+[3] sequence req2: re-sequencing request after optimistic sequencing failed
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: waiting in lock wait-queues
+[3] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "d" (queuedWriters: 0, queuedReaders: 1)
+[3] sequence req2: pushing timestamp of txn 00000001 above 12.000000000,1
+[3] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Conflicting transaction commits.
+on-txn-updated txn=txn1 status=committed
+----
+[-] update txn: committing txn1
+[3] sequence req2: resolving intent "d" for txn 00000001 with COMMITTED status
+[3] sequence req2: lock wait-queue event: done waiting
+[3] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "d" for 1.234s
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request

@@ -730,7 +730,14 @@ func (a *Allocator) allocateTarget(
 		existingVoters,
 		existingNonVoters,
 		a.scorerOptions(),
-		targetType)
+		// When allocating a *new* replica, we explicitly disregard nodes with any
+		// existing replicas. This is important for multi-store scenarios as
+		// otherwise, stores on the nodes that have existing replicas are simply
+		// discouraged via the diversity heuristic. We want to entirely avoid
+		// allocating multiple replicas onto different stores of the same node.
+		false, /* allowMultipleReplsPerNode */
+		targetType,
+	)
 	if target != nil {
 		return target, details, nil
 	}
@@ -754,7 +761,7 @@ func (a *Allocator) allocateTarget(
 
 // AllocateVoter returns a suitable store for a new allocation of a voting
 // replica with the required attributes. Nodes already accommodating existing
-// replicas are ruled out as targets.
+// voting replicas are ruled out as targets.
 func (a *Allocator) AllocateVoter(
 	ctx context.Context,
 	zone *zonepb.ZoneConfig,
@@ -780,6 +787,7 @@ func (a *Allocator) allocateTargetFromList(
 	zone *zonepb.ZoneConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	options scorerOptions,
+	allowMultipleReplsPerNode bool,
 	targetType targetReplicaType,
 ) (*roachpb.StoreDescriptor, string) {
 	existingReplicas := append(existingVoters, existingNonVoters...)
@@ -814,8 +822,10 @@ func (a *Allocator) allocateTargetFromList(
 		constraintsChecker,
 		existingReplicaSet,
 		a.storePool.getLocalitiesByStore(existingReplicaSet),
-		a.storePool.isNodeReadyForRoutineReplicaTransfer,
-		options)
+		a.storePool.isStoreReadyForRoutineReplicaTransfer,
+		allowMultipleReplsPerNode,
+		options,
+	)
 
 	log.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -1041,9 +1051,8 @@ func (a Allocator) rebalanceTarget(
 		replicaSetToRebalance,
 		replicasWithExcludedStores,
 		a.storePool.getLocalitiesByStore(replicaSetForDiversityCalc),
-		a.storePool.isNodeReadyForRoutineReplicaTransfer,
+		a.storePool.isStoreReadyForRoutineReplicaTransfer,
 		options,
-		targetType,
 	)
 
 	if len(results) == 0 {
@@ -1244,31 +1253,12 @@ func (a *Allocator) TransferLeaseTarget(
 	checkCandidateFullness bool,
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
-	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
-
-	// Filter stores that are on nodes containing existing replicas, but leave
-	// the stores containing the existing replicas in place. This excludes stores
-	// that we can't rebalance to, avoiding an issue in a 3-node cluster where
-	// there are multiple stores per node.
-	//
-	// TODO(peter,bram): This will need adjustment with the new allocator. `sl`
-	// needs to contain only the possible rebalance candidates + the existing
-	// stores the replicas are on.
-	filteredDescs := make([]roachpb.StoreDescriptor, 0, len(sl.stores))
-	for _, s := range sl.stores {
-		var exclude bool
-		for _, r := range existing {
-			if r.NodeID == s.Node.NodeID && r.StoreID != s.StoreID {
-				exclude = true
-				break
-			}
-		}
-		if !exclude {
-			filteredDescs = append(filteredDescs, s)
-		}
-	}
-	sl = makeStoreList(filteredDescs)
+	sl = sl.filter(zone.VoterConstraints)
+	// The only thing we use the storeList for is for the lease mean across the
+	// eligible stores, make that explicit here.
+	candidateLeasesMean := sl.candidateLeases.mean
 
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
 	if !ok {
@@ -1321,7 +1311,7 @@ func (a *Allocator) TransferLeaseTarget(
 	// whether we actually should be transferring the lease. The transfer
 	// decision is only needed if we've been asked to check the source.
 	transferDec, repl := a.shouldTransferLeaseUsingStats(
-		ctx, sl, source, existing, stats, nil,
+		ctx, source, existing, stats, nil, candidateLeasesMean,
 	)
 	if checkTransferLeaseSource {
 		switch transferDec {
@@ -1357,7 +1347,7 @@ func (a *Allocator) TransferLeaseTarget(
 		if !ok {
 			continue
 		}
-		if !checkCandidateFullness || float64(storeDesc.Capacity.LeaseCount) < sl.candidateLeases.mean-0.5 {
+		if !checkCandidateFullness || float64(storeDesc.Capacity.LeaseCount) < candidateLeasesMean-0.5 {
 			candidates = append(candidates, repl)
 		} else if storeDesc.Capacity.LeaseCount < bestOptionLeaseCount {
 			bestOption = repl
@@ -1408,8 +1398,9 @@ func (a *Allocator) ShouldTransferLease(
 		}
 	}
 
-	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
+	sl = sl.filter(zone.VoterConstraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
 	// Only consider live, non-draining replicas.
@@ -1420,7 +1411,7 @@ func (a *Allocator) ShouldTransferLease(
 		return false
 	}
 
-	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats, nil)
+	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, source, existing, stats, nil, sl.candidateLeases.mean)
 	var result bool
 	switch transferDec {
 	case shouldNotTransfer:
@@ -1446,7 +1437,7 @@ func (a Allocator) followTheWorkloadPrefersLocal(
 	stats *replicaStats,
 ) bool {
 	adjustments := make(map[roachpb.StoreID]float64)
-	decision, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats, adjustments)
+	decision, _ := a.shouldTransferLeaseUsingStats(ctx, source, existing, stats, adjustments, sl.candidateLeases.mean)
 	if decision == decideWithoutStats {
 		return false
 	}
@@ -1462,11 +1453,11 @@ func (a Allocator) followTheWorkloadPrefersLocal(
 
 func (a Allocator) shouldTransferLeaseUsingStats(
 	ctx context.Context,
-	sl StoreList,
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 	stats *replicaStats,
 	rebalanceAdjustments map[roachpb.StoreID]float64,
+	candidateLeasesMean float64,
 ) (transferDecision, roachpb.ReplicaDescriptor) {
 	// Only use load-based rebalancing if it's enabled and we have both
 	// stats and locality information to base our decision on.
@@ -1543,7 +1534,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 
 		remoteWeight := math.Max(minReplicaWeight, replicaWeights[repl.NodeID])
 		replScore, rebalanceAdjustment := loadBasedLeaseRebalanceScore(
-			ctx, a.storePool.st, remoteWeight, remoteLatency, storeDesc, sourceWeight, source, sl.candidateLeases.mean)
+			ctx, a.storePool.st, remoteWeight, remoteLatency, storeDesc, sourceWeight, source, candidateLeasesMean)
 		if replScore > bestReplScore {
 			bestReplScore = replScore
 			bestRepl = repl

@@ -294,6 +294,15 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Server-side transaction metrics.
+	metaCommitWaitBeforeCommitTriggerCount = metric.Metadata{
+		Name: "txn.commit_waits.before_commit_trigger",
+		Help: "Number of KV transactions that had to commit-wait on the server " +
+			"before committing because they had a commit trigger",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// RocksDB metrics.
 	metaRdbBlockCacheHits = metric.Metadata{
 		Name:        "rocksdb.block.cache.hits",
@@ -522,6 +531,12 @@ var (
 		Help:        "Nanoseconds spent waiting for a range to be processed by the Raft scheduler",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRaftTimeoutCampaign = metric.Metadata{
+		Name:        "raft.timeoutcampaign",
+		Help:        "Number of Raft replicas campaigning after missed heartbeats from leader",
+		Measurement: "Elections called after timeout",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Raft message metrics.
@@ -1084,6 +1099,9 @@ type StoreMetrics struct {
 	// Follower read metrics.
 	FollowerReadsCount *metric.Counter
 
+	// Server-side transaction metrics.
+	CommitWaitsBeforeCommitTrigger *metric.Counter
+
 	// RocksDB metrics.
 	RdbBlockCacheHits           *metric.Gauge
 	RdbBlockCacheMisses         *metric.Gauge
@@ -1133,6 +1151,7 @@ type StoreMetrics struct {
 	RaftHandleReadyLatency    *metric.Histogram
 	RaftApplyCommittedLatency *metric.Histogram
 	RaftSchedulerLatency      *metric.Histogram
+	RaftTimeoutCampaign       *metric.Counter
 
 	// Raft message metrics.
 	//
@@ -1455,6 +1474,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Follower reads metrics.
 		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
 
+		// Server-side transaction metrics.
+		CommitWaitsBeforeCommitTrigger: metric.NewCounter(metaCommitWaitBeforeCommitTriggerCount),
+
 		// RocksDB metrics.
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),
 		RdbBlockCacheMisses:         metric.NewGauge(metaRdbBlockCacheMisses),
@@ -1499,6 +1521,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftHandleReadyLatency:    metric.NewLatency(metaRaftHandleReadyLatency, histogramWindow),
 		RaftApplyCommittedLatency: metric.NewLatency(metaRaftApplyCommittedLatency, histogramWindow),
 		RaftSchedulerLatency:      metric.NewLatency(metaRaftSchedulerLatency, histogramWindow),
+		RaftTimeoutCampaign:       metric.NewCounter(metaRaftTimeoutCampaign),
 
 		// Raft message metrics.
 		RaftRcvdMessages: [...]*metric.Counter{
@@ -1653,23 +1676,27 @@ func (sm *TenantsStorageMetrics) subtractMVCCStats(
 }
 
 func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
-	sm.RdbBlockCacheHits.Update(m.BlockCacheHits)
-	sm.RdbBlockCacheMisses.Update(m.BlockCacheMisses)
-	sm.RdbBlockCacheUsage.Update(m.BlockCacheUsage)
-	sm.RdbBlockCachePinnedUsage.Update(m.BlockCachePinnedUsage)
-	sm.RdbBloomFilterPrefixUseful.Update(m.BloomFilterPrefixUseful)
-	sm.RdbBloomFilterPrefixChecked.Update(m.BloomFilterPrefixChecked)
-	sm.RdbMemtableTotalSize.Update(m.MemtableTotalSize)
-	sm.RdbFlushes.Update(m.Flushes)
-	sm.RdbFlushedBytes.Update(m.FlushedBytes)
-	sm.RdbCompactions.Update(m.Compactions)
-	sm.RdbIngestedBytes.Update(m.IngestedBytes)
-	sm.RdbCompactedBytesRead.Update(m.CompactedBytesRead)
-	sm.RdbCompactedBytesWritten.Update(m.CompactedBytesWritten)
-	sm.RdbTableReadersMemEstimate.Update(m.TableReadersMemEstimate)
-	sm.RdbReadAmplification.Update(m.ReadAmplification)
-	sm.RdbPendingCompaction.Update(m.PendingCompactionBytesEstimate)
-	sm.RdbNumSSTables.Update(m.NumSSTables)
+	sm.RdbBlockCacheHits.Update(m.BlockCache.Hits)
+	sm.RdbBlockCacheMisses.Update(m.BlockCache.Misses)
+	sm.RdbBlockCacheUsage.Update(m.BlockCache.Size)
+	// TODO(jackson): Delete RdbBlockCachePinnedUsage or calculate the
+	// equivalent (the sum of IteratorMetrics.ReadAmp for all open iterator,
+	// times the block size).
+	sm.RdbBlockCachePinnedUsage.Update(0)
+	sm.RdbBloomFilterPrefixUseful.Update(m.Filter.Hits)
+	sm.RdbBloomFilterPrefixChecked.Update(m.Filter.Hits + m.Filter.Misses)
+	sm.RdbMemtableTotalSize.Update(int64(m.MemTable.Size))
+	sm.RdbFlushes.Update(m.Flush.Count)
+	sm.RdbFlushedBytes.Update(int64(m.Levels[0].BytesFlushed))
+	sm.RdbCompactions.Update(m.Compact.Count)
+	sm.RdbIngestedBytes.Update(int64(m.IngestedBytes()))
+	compactedRead, compactedWritten := m.CompactedBytes()
+	sm.RdbCompactedBytesRead.Update(int64(compactedRead))
+	sm.RdbCompactedBytesWritten.Update(int64(compactedWritten))
+	sm.RdbTableReadersMemEstimate.Update(m.TableCache.Size)
+	sm.RdbReadAmplification.Update(int64(m.ReadAmp()))
+	sm.RdbPendingCompaction.Update(int64(m.Compact.EstimatedDebt))
+	sm.RdbNumSSTables.Update(m.NumSSTables())
 	sm.DiskSlow.Update(m.DiskSlowCount)
 	sm.DiskStalled.Update(m.DiskStallCount)
 }

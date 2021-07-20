@@ -353,33 +353,33 @@ message PartitioningDescriptor {
 //   )
 //
 // Primary index:
-//   name:                primary
-//   id:                  1
-//   unique:              true
-//   column_names:        k1, k2
-//   column_directions:   ASC, ASC
-//   column_ids:          1, 2   // k1, k2
+//   name:                   primary
+//   id:                     1
+//   unique:                 true
+//   key_column_names:       k1, k2
+//   key_column_directions:  ASC, ASC
+//   key_column_ids:         1, 2   // k1, k2
 //
 // [old STORING encoding] Index k1v (k1, v) STORING (w):
-//   name:                k1v
-//   id:                  2
-//   unique:              false
-//   column_names:        k1, v
-//   column_directions:   ASC, ASC
-//   store_column_names:  w
-//   column_ids:          1, 4   // k1, v
-//   extra_column_ids:    2, 5   // k2, w
+//   name:                   k1v
+//   id:                     2
+//   unique:                 false
+//   key_column_names:       k1, v
+//   key_column_directions:  ASC, ASC
+//   store_column_names:     w
+//   key_column_ids:         1, 4   // k1, v
+//   key_suffix_column_ids:  2, 5   // k2, w
 //
 // [new STORING encoding] Index k1v (k1, v) STORING (w):
-//   name:                k1v
-//   id:                  2
-//   unique:              false
-//   column_names:        k1, v
-//   column_directions:   ASC, ASC
-//   store_column_names:  w
-//   column_ids:          1, 4   // k1, v
-//   extra_column_ids:    2      // k2
-//   store_column_ids:    5      // w
+//   name:                   k1v
+//   id:                     2
+//   unique:                 false
+//   key_column_names:       k1, v
+//   key_column_directions:  ASC, ASC
+//   store_column_names:     w
+//   key_column_ids:         1, 4   // k1, v
+//   key_suffix_column_ids:  2      // k2
+//   store_column_ids:       5      // w
 message IndexDescriptor {
   option (gogoproto.equal) = true;
   // The direction of a column in the index.
@@ -403,34 +403,36 @@ message IndexDescriptor {
 
   // An ordered list of column names of which the index is comprised; these
   // columns do not include any additional stored columns (which are in
-  // stored_column_names). This list parallels the column_ids list. If the index
-  // is an inverted index, the last column in the list is inverted and all
-  // others are not.
+  // stored_column_names). This list parallels the key_column_ids list.
+  //
+  // If the index is an inverted index, the last column in the list is
+  // inverted and all others are not.
   //
   // Note: if duplicating the storage of the column names here proves to be
   // prohibitive, we could clear this field before saving and reconstruct it
   // after loading.
-  repeated string column_names = 4;
+  repeated string key_column_names = 4;
 
-  // The sort direction of each column in column_names.
-  repeated Direction column_directions = 8;
+  // The sort direction of each column in key_column_names.
+  repeated Direction key_column_directions = 8;
 
   // An ordered list of column names which the index stores in addition to the
   // columns which are explicitly part of the index (STORING clause). Only used
   // for secondary indexes.
   repeated string store_column_names = 5;
 
-  // An ordered list of column IDs of which the index is comprised. This list
-  // parallels the column_names list and does not include any additional stored
-  // columns. If the index is an inverted index, the last column in the list is
-  // inverted and all others are not.
-  repeated uint32 column_ids = 6 [(gogoproto.customname) = "ColumnIDs",
+  // An ordered list of column IDs of which the index key is comprised. This
+  // list parallels the key_column_names list and does not include any
+  // additional stored columns. If the index is an inverted index, the last
+  // column in the list is inverted and all others are not.
+  repeated uint32 key_column_ids = 6 [(gogoproto.customname) = "KeyColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
 
   // An ordered list of IDs for the additional columns associated with the
   // index:
   //  - implicit columns, which are all the primary key columns that are not
-  //    already part of the index (i.e. PrimaryIndex.column_ids - column_ids).
+  //    already part of the index, in other words
+  //        PrimaryIndex.key_column_ids - key_column_ids.
   //  - stored columns (the columns in store_column_names) if this index uses the
   //    old STORING encoding (key-encoded data).
   //
@@ -441,7 +443,7 @@ message IndexDescriptor {
   // unique-ify it).
   // This distinction exists because we want to be able to insert an entry using
   // a single conditional put on the key.
-  repeated uint32 extra_column_ids = 7 [(gogoproto.customname) = "ExtraColumnIDs",
+  repeated uint32 key_suffix_column_ids = 7 [(gogoproto.customname) = "KeySuffixColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
 
   // An ordered list of column IDs that parallels store_column_names if this
@@ -452,7 +454,7 @@ message IndexDescriptor {
 
   // CompositeColumnIDs contains an ordered list of IDs of columns that appear
   // in the index and have a composite encoding. Includes IDs from both
-  // column_ids and extra_column_ids.
+  // key_column_ids and key_suffix_column_ids.
   repeated uint32 composite_column_ids = 13
       [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "ColumnID"];
 
@@ -1004,6 +1006,12 @@ message TableDescriptor {
   // Mutation jobs queued for execution in a FIFO order. Remains synchronized
   // with the mutations list.
   repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
+
+  // The job associated with a schema change job run in the new schema changer
+  // (in sql/schemachanger), if one exists. Only one such job can exist at a
+  // time.
+  optional int64 new_schema_change_job_id = 46 [(gogoproto.nullable) = false,
+                                               (gogoproto.customname) = "NewSchemaChangeJobID"];
 
   message SequenceOpts {
     option (gogoproto.equal) = true;

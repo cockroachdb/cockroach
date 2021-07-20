@@ -184,12 +184,13 @@ message RestoreDetails {
   // stages have completed via these flags.
   bool prepare_completed = 8;
   bool stats_inserted = 9;
-  // SystemTablesRestored keeps track of dynamic states that need to happen only
-  // once during the lifetime of a job. Note, that this state may be shared
-  // between job versions, so updates to this map must be considered carefully.
-  // It maps system table names to whether or not they have already been
-  // restored.
-  map<string, bool> system_tables_restored = 17;
+  // SystemTablesMigrated keeps track of which system tables data have been
+  // migrated. We need to keep track of this because if we've modified the
+  // restored data via a migration, we can't restore back into that span as the
+  // migrated keys will shadow the ones that will be restored.
+  // Note, that this state may be shared between job versions, so updates to
+  // this map must be considered carefully.
+  map<string, bool> system_tables_migrated = 17;
   // DescriptorsPublished indicates whether or not the descriptors written in
   // the job have been transactionally updated after the data was restored.
   bool descriptors_published = 10;
@@ -197,7 +198,20 @@ message RestoreDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"
   ];
   BackupEncryptionOptions encryption = 12;
-  // NEXT ID: 18.
+
+  message RevalidateIndex {
+     uint32 id = 1 [
+      (gogoproto.customname) = "TableID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+    ];
+    uint32 parent_id = 2 [
+      (gogoproto.customname) = "IndexID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+    ];
+  }
+  repeated RevalidateIndex revalidate_indexes = 18 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 19.
 }
 
 message RestoreProgress {
@@ -454,6 +468,12 @@ message SchemaChangeDetails {
   // (controlled and updated by a SchemaChanger) and jobs as they exist in 20.1
   // (scheduled and run by the job registry).
   uint32 format_version = 7 [(gogoproto.casttype) = "SchemaChangeDetailsFormatVersion"];
+
+  // WriteTimestamp is the timestamp at which a backfill may want to write, e.g.
+  // a time that has been identified via a scan as safe for writing.
+  util.hlc.Timestamp write_timestamp = 10 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 11.
 }
 
 message SchemaChangeProgress {
@@ -537,11 +557,7 @@ message ResolvedSpan {
   roachpb.Span span = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
 
-  // BoundaryReached indicates that this resolved timestamp
-  // corresponds to a schema change boundary. A schema change boundary is a
-  // timestamp at which a new version of a table has been committed that either
-  // indicates a logical backfill or a need for the changefeed to exit.
-  bool deprecated_boundary_reached = 3;
+  reserved 3;
 
   enum BoundaryType {
 
@@ -563,7 +579,7 @@ message ResolvedSpan {
     RESTART = 3;
   }
 
-  BoundaryType boundary_type = 4;
+  BoundaryType boundary_type = 4 ;
 }
 
 message ResolvedSpans {
@@ -638,7 +654,7 @@ message MigrationProgress {
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
-  string statement = 16;
+  repeated string statement = 16;
   string username_proto = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
   // For consistency with the SQL timestamp type, which has microsecond
   // precision, we avoid the timestamp.Timestamp WKT, which has nanosecond
@@ -679,6 +695,9 @@ message Payload {
     NewSchemaChangeDetails newSchemaChange = 24;
     MigrationDetails migration = 25;
   }
+  reserved 26;
+
+  // NEXT ID: 27.
 }
 
 message Progress {
@@ -702,6 +721,8 @@ message Progress {
     NewSchemaChangeProgress newSchemaChange = 19;
     MigrationProgress migration = 20;
   }
+
+  uint64 trace_id = 21 [(gogoproto.customname) = "TraceID"];
 }
 
 enum Type {

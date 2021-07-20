@@ -85,12 +85,12 @@ root
            │    ├── p_new:24 => child_multicol.p:10
            │    ├── p_new:24 => child_multicol.q:11
            │    ├── p_new:24 => child_multicol.r:12
-           │    └── column25:25 => x:13
+           │    └── x_comp:25 => x:13
            ├── check columns: check1:26
            └── project
-                ├── columns: check1:26!null c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 p_new:24 column25:25
+                ├── columns: check1:26!null c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 p_new:24 x_comp:25
                 ├── project
-                │    ├── columns: column25:25 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 p_new:24
+                │    ├── columns: x_comp:25 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 p_new:24
                 │    ├── project
                 │    │    ├── columns: p_new:24 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
                 │    │    ├── semi-join (hash)
@@ -115,7 +115,7 @@ root
                 │    │    └── projections
                 │    │         └── NULL::INT8 [as=p_new:24]
                 │    └── projections
-                │         └── (p_new:24 + p_new:24) + p_new:24 [as=column25:25]
+                │         └── (p_new:24 + p_new:24) + p_new:24 [as=x_comp:25]
                 └── projections
                      └── (c:15 > 100) OR (p_new:24 IS NOT NULL) [as=check1:26]
 
@@ -183,3 +183,61 @@ root
                      ├── i:11 > 0 [as=partial_index_put1:15]
                      ├── p_new:14 > 0 [as=partial_index_put2:16]
                      └── child_partial.p:10 > 0 [as=partial_index_del2:17]
+
+# Test cascades to a child with a virtual column that references the FK.
+exec-ddl
+CREATE TABLE parent_virt (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_virt (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_virt(p) ON DELETE SET NULL,
+  v INT AS (p) VIRTUAL
+)
+----
+
+build-cascades
+DELETE FROM parent_virt WHERE p > 1
+----
+root
+ ├── delete parent_virt
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent_virt
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan parent_virt
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── p:3 > 1
+ └── cascade
+      └── update child_virt
+           ├── columns: <none>
+           ├── fetch columns: c:9 child_virt.p:10 v:11
+           ├── update-mapping:
+           │    ├── p_new:14 => child_virt.p:6
+           │    └── p_new:14 => v:7
+           └── project
+                ├── columns: p_new:14 c:9!null child_virt.p:10 v:11
+                ├── semi-join (hash)
+                │    ├── columns: c:9!null child_virt.p:10 v:11
+                │    ├── project
+                │    │    ├── columns: v:11 c:9!null child_virt.p:10
+                │    │    ├── scan child_virt
+                │    │    │    ├── columns: c:9!null child_virt.p:10
+                │    │    │    └── computed column expressions
+                │    │    │         └── v:11
+                │    │    │              └── child_virt.p:10
+                │    │    └── projections
+                │    │         └── child_virt.p:10 [as=v:11]
+                │    ├── with-scan &1
+                │    │    ├── columns: p:13!null
+                │    │    └── mapping:
+                │    │         └──  parent_virt.p:3 => p:13
+                │    └── filters
+                │         └── child_virt.p:10 = p:13
+                └── projections
+                     └── NULL::INT8 [as=p_new:14]

@@ -674,3 +674,27 @@ A
 B
 C
 D
+
+# Tests with correlated CTEs.
+statement ok
+INSERT INTO x SELECT generate_series(1, 3)
+
+query II rowsort
+SELECT y.a, (
+  WITH foo AS MATERIALIZED (SELECT x.a FROM x WHERE x.a = y.a)
+  SELECT * FROM foo
+) FROM y
+----
+2  2
+3  3
+4  NULL
+
+query II rowsort
+SELECT * FROM
+  (VALUES (1), (2), (10)) AS v(x),
+  LATERAL (WITH foo AS MATERIALIZED (SELECT a FROM y WHERE y.a <= x) SELECT * FROM foo)
+----
+2   2
+10  2
+10  3
+10  4

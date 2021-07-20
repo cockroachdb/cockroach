@@ -13,34 +13,31 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
-func projectCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func projectCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	// Project can pass through its ordering if the ordering depends only on
 	// columns present in the input.
 	proj := expr.(*memo.ProjectExpr)
 	inputCols := proj.Input.Relational().OutputCols
 
-	if required.CanProjectCols(inputCols) {
-		return true
-	}
-
-	// We may be able to "remap" columns using the internal FD set.
-	if fdSet := proj.InternalFDs(); required.CanSimplify(fdSet) {
-		simplified := required.Copy()
+	// Use a simplified ordering if it exists. This must be kept consistent with
+	// projectBuildChildReqOrdering, which always simplifies the ordering if
+	// possible.
+	simplified := *required
+	if fdSet := proj.InternalFDs(); simplified.CanSimplify(fdSet) {
+		simplified = required.Copy()
 		simplified.Simplify(fdSet)
-		return simplified.CanProjectCols(inputCols)
 	}
-
-	return false
+	return simplified.CanProjectCols(inputCols)
 }
 
 func projectBuildChildReqOrdering(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
 	if childIdx != 0 {
-		return physical.OrderingChoice{}
+		return props.OrderingChoice{}
 	}
 
 	// Project can prune input columns, which can cause its FD set to be
@@ -65,8 +62,8 @@ func projectBuildChildReqOrdering(
 // columns. If projection is not necessary, returns a shallow copy of the
 // ordering.
 func projectOrderingToInput(
-	input memo.RelExpr, ordering *physical.OrderingChoice,
-) physical.OrderingChoice {
+	input memo.RelExpr, ordering *props.OrderingChoice,
+) props.OrderingChoice {
 	childOutCols := input.Relational().OutputCols
 	if ordering.SubsetOfCols(childOutCols) {
 		return *ordering
@@ -76,7 +73,7 @@ func projectOrderingToInput(
 	return result
 }
 
-func projectBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func projectBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	p := expr.(*memo.ProjectExpr)
 	// Project can only satisfy required orderings that refer to projected
 	// columns; it should always be possible to remap the columns in the input's

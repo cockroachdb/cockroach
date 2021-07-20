@@ -58,8 +58,11 @@ message BackfillerSpec {
   // of entries backfilled per chunk.
   optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
 
+  // WriteAsOf is the time that the backfill entries should be written.
+  // Note: Older nodes may also use this as the read time instead of readAsOf.
+  optional util.hlc.Timestamp writeAsOf = 7 [(gogoproto.nullable) = false];
   // The timestamp to perform index backfill historical scans at.
-  optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp readAsOf = 9 [(gogoproto.nullable) = false];
 
   // IndexesToBackfill is the set of indexes to backfill. This is populated only
   // starting in 21.1, prior to that the implied index set are those containing
@@ -185,20 +188,34 @@ message BackupDataSpec {
   optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 }
 
+message RestoreFileSpec {
+  optional roachpb.ExternalStorage dir = 1 [(gogoproto.nullable) = false];
+  optional string path = 2 [(gogoproto.nullable) = false];
+  reserved 3;
+  reserved 4;
+}
+
+message TableRekey {
+  // OldID is the previous ID of `new_desc`.
+  optional uint32 old_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "OldID"];
+  // NewDesc is an encoded Descriptor message.
+  optional bytes new_desc = 2;
+}
+
 // RestoreDataEntry will be specified at planning time to the SplitAndScatter
 // processors, then those processors will stream these, encoded as bytes in rows
 // to the RestoreDataProcessors.
 // This field has a subset of the importEntry struct defined in restore.
 message RestoreSpanEntry {
   optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
-  repeated roachpb.ImportRequest.File files = 2 [(gogoproto.nullable) = false];
+  repeated RestoreFileSpec files = 2 [(gogoproto.nullable) = false];
   optional int64 progressIdx = 3 [(gogoproto.nullable) = false];
 }
 
 message RestoreDataSpec {
   optional util.hlc.Timestamp restore_time = 1 [(gogoproto.nullable) = false];
   optional roachpb.FileEncryptionOptions encryption = 2;
-  repeated roachpb.ImportRequest.TableRekey rekeys = 3 [(gogoproto.nullable) = false];
+  repeated TableRekey rekeys = 3 [(gogoproto.nullable) = false];
 
   // PKIDs is used to convert result from an ExportRequest into row count
   // information passed back to track progress in the backup job.
@@ -211,7 +228,7 @@ message SplitAndScatterSpec {
   }
 
   repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
-  repeated roachpb.ImportRequest.TableRekey rekeys = 2 [(gogoproto.nullable) = false];
+  repeated TableRekey rekeys = 2 [(gogoproto.nullable) = false];
 }
 
 // FileCompression list of the compression codecs which are currently
@@ -232,6 +249,8 @@ message CSVWriterSpec {
   optional roachpb.CSVOptions options = 3 [(gogoproto.nullable) = false];
   // chunk_rows is num rows to write per file. 0 = no limit.
   optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
+  // chunk_size is the target byte size per file.
+  optional int64 chunk_size = 7 [(gogoproto.nullable) = false];
 
   // compression_codec specifies compression used for exported file.
   optional FileCompression compression_codec = 5 [(gogoproto.nullable) = false];

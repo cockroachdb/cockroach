@@ -89,8 +89,7 @@ func runLogFormatsInternal(args []string) error {
 	return nil
 }
 
-const fmtDocTemplate = `# Documentation for logging formats
-
+const fmtDocTemplate = `
 The supported log output formats are documented below.
 
 {{range .Formats}}

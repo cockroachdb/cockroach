@@ -3,11 +3,14 @@
 
 package hlc
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import io "io"
+import (
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -18,7 +21,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // LegacyTimestamp is convertible to hlc.Timestamp, but uses the
 // legacy encoding as it is encoded "below raft".
@@ -47,21 +50,21 @@ type LegacyTimestamp struct {
 func (m *LegacyTimestamp) Reset()      { *m = LegacyTimestamp{} }
 func (*LegacyTimestamp) ProtoMessage() {}
 func (*LegacyTimestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_legacy_timestamp_7c5b7692f4330421, []int{0}
+	return fileDescriptor_3bf5feed19a38215, []int{0}
 }
 func (m *LegacyTimestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *LegacyTimestamp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *LegacyTimestamp) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_LegacyTimestamp.Merge(dst, src)
+func (m *LegacyTimestamp) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LegacyTimestamp.Merge(m, src)
 }
 func (m *LegacyTimestamp) XXX_Size() int {
 	return m.Size()
@@ -75,6 +78,28 @@ var xxx_messageInfo_LegacyTimestamp proto.InternalMessageInfo
 func init() {
 	proto.RegisterType((*LegacyTimestamp)(nil), "cockroach.util.hlc.LegacyTimestamp")
 }
+
+func init() { proto.RegisterFile("util/hlc/legacy_timestamp.proto", fileDescriptor_3bf5feed19a38215) }
+
+var fileDescriptor_3bf5feed19a38215 = []byte{
+	// 226 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x2d, 0xc9, 0xcc,
+	0xd1, 0xcf, 0xc8, 0x49, 0xd6, 0xcf, 0x49, 0x4d, 0x4f, 0x4c, 0xae, 0x8c, 0x2f, 0xc9, 0xcc, 0x4d,
+	0x2d, 0x2e, 0x49, 0xcc, 0x2d, 0xd0, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0x4a, 0xce, 0x4f,
+	0xce, 0x2e, 0xca, 0x4f, 0x4c, 0xce, 0xd0, 0x03, 0x29, 0xd5, 0xcb, 0xc8, 0x49, 0x96, 0x12, 0x49,
+	0xcf, 0x4f, 0xcf, 0x07, 0x4b, 0xeb, 0x83, 0x58, 0x10, 0x95, 0x4a, 0x0d, 0x8c, 0x5c, 0xfc, 0x3e,
+	0x60, 0x43, 0x42, 0x60, 0x66, 0x08, 0x29, 0x72, 0x71, 0x96, 0x27, 0xe6, 0xe4, 0x80, 0x4d, 0x95,
+	0x60, 0x54, 0x60, 0xd4, 0x60, 0x76, 0x62, 0x39, 0x71, 0x4f, 0x9e, 0x21, 0x88, 0x03, 0x24, 0x0c,
+	0x52, 0x27, 0x24, 0xc7, 0xc5, 0x9e, 0x93, 0x9f, 0x9e, 0x99, 0x9c, 0x98, 0x23, 0xc1, 0xa4, 0xc0,
+	0xa8, 0xc1, 0x0a, 0x55, 0x00, 0x13, 0x14, 0x92, 0xe1, 0xe2, 0x2c, 0xae, 0xcc, 0x2b, 0xc9, 0x48,
+	0x2d, 0xc9, 0x4c, 0x96, 0x60, 0x56, 0x60, 0xd4, 0xe0, 0x08, 0x42, 0x08, 0x58, 0xf1, 0xcc, 0x58,
+	0x20, 0xcf, 0xb0, 0x63, 0x81, 0x3c, 0xe3, 0x8b, 0x05, 0xf2, 0x8c, 0x4e, 0xaa, 0x27, 0x1e, 0xca,
+	0x31, 0x9c, 0x78, 0x24, 0xc7, 0x78, 0xe1, 0x91, 0x1c, 0xe3, 0x8d, 0x47, 0x72, 0x8c, 0x0f, 0x1e,
+	0xc9, 0x31, 0x4e, 0x78, 0x2c, 0xc7, 0x70, 0xe1, 0xb1, 0x1c, 0xc3, 0x8d, 0xc7, 0x72, 0x0c, 0x51,
+	0xcc, 0x19, 0x39, 0xc9, 0x80, 0x00, 0x00, 0x00, 0xff, 0xff, 0xe9, 0x42, 0x31, 0x94, 0xf5, 0x00,
+	0x00, 0x00,
+}
+
 func (this *LegacyTimestamp) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -114,7 +139,7 @@ func (this *LegacyTimestamp) Equal(that interface{}) bool {
 func (m *LegacyTimestamp) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -122,37 +147,44 @@ func (m *LegacyTimestamp) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *LegacyTimestamp) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LegacyTimestamp) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintLegacyTimestamp(dAtA, i, uint64(m.WallTime))
-	dAtA[i] = 0x10
-	i++
-	i = encodeVarintLegacyTimestamp(dAtA, i, uint64(m.Logical))
 	if m.Synthetic != nil {
-		dAtA[i] = 0x18
-		i++
+		i--
 		if *m.Synthetic {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
 		}
-		i++
+		i--
+		dAtA[i] = 0x18
 	}
-	return i, nil
+	i = encodeVarintLegacyTimestamp(dAtA, i, uint64(m.Logical))
+	i--
+	dAtA[i] = 0x10
+	i = encodeVarintLegacyTimestamp(dAtA, i, uint64(m.WallTime))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintLegacyTimestamp(dAtA []byte, offset int, v uint64) int {
+	offset -= sovLegacyTimestamp(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func NewPopulatedLegacyTimestamp(r randyLegacyTimestamp, easy bool) *LegacyTimestamp {
 	this := &LegacyTimestamp{}
@@ -164,7 +196,7 @@ func NewPopulatedLegacyTimestamp(r randyLegacyTimestamp, easy bool) *LegacyTimes
 	if r.Intn(2) == 0 {
 		this.Logical *= -1
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v1 := bool(bool(r.Intn(2) == 0))
 		this.Synthetic = &v1
 	}
@@ -260,14 +292,7 @@ func (m *LegacyTimestamp) Size() (n int) {
 }
 
 func sovLegacyTimestamp(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozLegacyTimestamp(x uint64) (n int) {
 	return sovLegacyTimestamp(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -287,7 +312,7 @@ func (m *LegacyTimestamp) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -315,7 +340,7 @@ func (m *LegacyTimestamp) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.WallTime |= (int64(b) & 0x7F) << shift
+				m.WallTime |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -334,7 +359,7 @@ func (m *LegacyTimestamp) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Logical |= (int32(b) & 0x7F) << shift
+				m.Logical |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -353,7 +378,7 @@ func (m *LegacyTimestamp) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -384,6 +409,7 @@ func (m *LegacyTimestamp) Unmarshal(dAtA []byte) error {
 func skipLegacyTimestamp(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -415,10 +441,8 @@ func skipLegacyTimestamp(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -435,76 +459,34 @@ func skipLegacyTimestamp(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthLegacyTimestamp
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowLegacyTimestamp
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipLegacyTimestamp(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupLegacyTimestamp
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthLegacyTimestamp
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthLegacyTimestamp = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowLegacyTimestamp   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthLegacyTimestamp        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowLegacyTimestamp          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupLegacyTimestamp = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("util/hlc/legacy_timestamp.proto", fileDescriptor_legacy_timestamp_7c5b7692f4330421)
-}
-
-var fileDescriptor_legacy_timestamp_7c5b7692f4330421 = []byte{
-	// 226 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x2d, 0xc9, 0xcc,
-	0xd1, 0xcf, 0xc8, 0x49, 0xd6, 0xcf, 0x49, 0x4d, 0x4f, 0x4c, 0xae, 0x8c, 0x2f, 0xc9, 0xcc, 0x4d,
-	0x2d, 0x2e, 0x49, 0xcc, 0x2d, 0xd0, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0x4a, 0xce, 0x4f,
-	0xce, 0x2e, 0xca, 0x4f, 0x4c, 0xce, 0xd0, 0x03, 0x29, 0xd5, 0xcb, 0xc8, 0x49, 0x96, 0x12, 0x49,
-	0xcf, 0x4f, 0xcf, 0x07, 0x4b, 0xeb, 0x83, 0x58, 0x10, 0x95, 0x4a, 0x0d, 0x8c, 0x5c, 0xfc, 0x3e,
-	0x60, 0x43, 0x42, 0x60, 0x66, 0x08, 0x29, 0x72, 0x71, 0x96, 0x27, 0xe6, 0xe4, 0x80, 0x4d, 0x95,
-	0x60, 0x54, 0x60, 0xd4, 0x60, 0x76, 0x62, 0x39, 0x71, 0x4f, 0x9e, 0x21, 0x88, 0x03, 0x24, 0x0c,
-	0x52, 0x27, 0x24, 0xc7, 0xc5, 0x9e, 0x93, 0x9f, 0x9e, 0x99, 0x9c, 0x98, 0x23, 0xc1, 0xa4, 0xc0,
-	0xa8, 0xc1, 0x0a, 0x55, 0x00, 0x13, 0x14, 0x92, 0xe1, 0xe2, 0x2c, 0xae, 0xcc, 0x2b, 0xc9, 0x48,
-	0x2d, 0xc9, 0x4c, 0x96, 0x60, 0x56, 0x60, 0xd4, 0xe0, 0x08, 0x42, 0x08, 0x58, 0xf1, 0xcc, 0x58,
-	0x20, 0xcf, 0xb0, 0x63, 0x81, 0x3c, 0xe3, 0x8b, 0x05, 0xf2, 0x8c, 0x4e, 0xaa, 0x27, 0x1e, 0xca,
-	0x31, 0x9c, 0x78, 0x24, 0xc7, 0x78, 0xe1, 0x91, 0x1c, 0xe3, 0x8d, 0x47, 0x72, 0x8c, 0x0f, 0x1e,
-	0xc9, 0x31, 0x4e, 0x78, 0x2c, 0xc7, 0x70, 0xe1, 0xb1, 0x1c, 0xc3, 0x8d, 0xc7, 0x72, 0x0c, 0x51,
-	0xcc, 0x19, 0x39, 0xc9, 0x80, 0x00, 0x00, 0x00, 0xff, 0xff, 0xe9, 0x42, 0x31, 0x94, 0xf5, 0x00,
-	0x00, 0x00,
-}

@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -516,69 +515,6 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 		t.Fatalf("splitting at a range boundary should not create a new range; before second split "+
 			"found %d ranges, after second split found %d ranges", replCount, newReplCount)
 	}
-}
-
-// TestSplitTriggerRaftSnapshotRace verifies that when an uninitialized Replica
-// resulting from a split hasn't been initialized via the split trigger yet, a
-// grace period prevents the replica from requesting an errant Raft snapshot.
-// This is verified by running a number of splits and asserting that no Raft
-// snapshots are observed. As a nice side effect, this also verifies that log
-// truncations don't cause any Raft snapshots in this test.
-func TestSplitTriggerRaftSnapshotRace(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	const numNodes = 3
-	var args base.TestClusterArgs
-	// NB: the merge queue is enabled for additional "chaos". Note that the test
-	// uses three nodes and so there is no replica movement, which would other-
-	// wise tickle Raft snapshots for unrelated reasons.
-	tc := testcluster.StartTestCluster(t, numNodes, args)
-	defer tc.Stopper().Stop(ctx)
-
-	numSplits := 100
-	if util.RaceEnabled {
-		// Running 100 splits is overkill in race builds.
-		numSplits = 10
-	}
-	perm := rand.Perm(numSplits)
-	idx := int32(-1) // accessed atomically
-
-	numRaftSnaps := func(when string) int {
-		var totalSnaps int
-		for i := 0; i < numNodes; i++ {
-			var n int // num rows (sanity check against test rotting)
-			var c int // num Raft snapshots
-			if err := tc.ServerConn(i).QueryRow(`
-SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
-	name = 'range.snapshots.applied-voter'
-`).Scan(&n, &c); err != nil {
-				t.Fatal(err)
-			}
-			if expRows := 1; n != expRows {
-				t.Fatalf("%s: expected %d rows, got %d", when, expRows, n)
-			}
-			totalSnaps += c
-		}
-		return totalSnaps
-	}
-
-	// There are usually no raft snaps before, but there is a race condition where
-	// they can occasionally happen during upreplication.
-	numSnapsBefore := numRaftSnaps("before")
-
-	doSplit := func(ctx context.Context, _ int) error {
-		_, _, err := tc.SplitRange([]byte(fmt.Sprintf("key-%d", perm[atomic.AddInt32(&idx, 1)])))
-		return err
-	}
-
-	if err := ctxgroup.GroupWorkers(ctx, numSplits, doSplit); err != nil {
-		t.Fatal(err)
-	}
-
-	// Check that no snaps happened during the splits.
-	require.Equal(t, numSnapsBefore, numRaftSnaps("after"))
 }
 
 // TestStoreRangeSplitIdempotency executes a split of a range and
@@ -3372,7 +3308,9 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// second node).
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err := tc.AddVoters(k, tc.Target(1))
+		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, k, tc.LookupRangeOrFatal(t, k), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+		)
 		return err
 	})
 
@@ -3407,7 +3345,9 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// Now repeatedly re-add the learner on the rhs, so it has a
 	// different replicaID than the split trigger expects.
 	add := func() {
-		_, err := tc.AddVoters(kRHS, tc.Target(1))
+		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, kRHS, tc.LookupRangeOrFatal(t, kRHS), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+		)
 		// The "snapshot intersects existing range" error is expected if the store
 		// has not heard a raft message addressed to a later replica ID while the
 		// "was not found on" error is expected if the store has heard that it has
@@ -3576,16 +3516,48 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Detect splits and merges over the global read ranges. Assert that the split
+	// and merge transactions commit with synthetic timestamps, and that the
+	// commit-wait sleep for these transactions is performed before running their
+	// commit triggers instead of run on the kv client. For details on why this is
+	// necessary, see maybeCommitWaitBeforeCommitTrigger.
+	var clock atomic.Value
+	var splitsWithSyntheticTS, mergesWithSyntheticTS int64
+	respFilter := func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		if req, ok := ba.GetArg(roachpb.EndTxn); ok {
+			endTxn := req.(*roachpb.EndTxnRequest)
+			if br.Txn.Status == roachpb.COMMITTED && br.Txn.WriteTimestamp.Synthetic {
+				if ct := endTxn.InternalCommitTrigger; ct != nil {
+					// The server-side commit-wait sleep should ensure that the commit
+					// triggers are only run after the commit timestamp is below present
+					// time.
+					now := clock.Load().(*hlc.Clock).Now()
+					require.True(t, br.Txn.WriteTimestamp.Less(now))
+
+					switch {
+					case ct.SplitTrigger != nil:
+						atomic.AddInt64(&splitsWithSyntheticTS, 1)
+					case ct.MergeTrigger != nil:
+						atomic.AddInt64(&mergesWithSyntheticTS, 1)
+					}
+				}
+			}
+		}
+		return nil
+	}
+
 	ctx := context.Background()
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue: true,
+				DisableMergeQueue:     true,
+				TestingResponseFilter: respFilter,
 			},
 		},
 	})
 	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
+	clock.Store(s.Clock())
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	config.TestingSetupZoneConfigHook(s.Stopper())
@@ -3607,11 +3579,18 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 		return nil
 	})
 
+	// Write to the range, which has the effect of bumping the closed timestamp.
+	pArgs := putArgs(descKey, []byte("foo"))
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs)
+	require.Nil(t, pErr)
+
 	// Split the range. Should succeed.
 	splitKey := append(descKey, []byte("split")...)
 	splitArgs := adminSplitArgs(splitKey)
-	_, pErr := kv.SendWrapped(ctx, store.TestSender(), splitArgs)
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
+	require.Equal(t, int64(1), store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
+	require.Equal(t, int64(1), atomic.LoadInt64(&splitsWithSyntheticTS))
 
 	repl := store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, splitKey, repl.Desc().StartKey.AsRawKey())
@@ -3620,6 +3599,8 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	mergeArgs := adminMergeArgs(descKey)
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
 	require.Nil(t, pErr)
+	require.Equal(t, int64(2), store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
+	require.Equal(t, int64(1), atomic.LoadInt64(&mergesWithSyntheticTS))
 
 	repl = store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, descKey, repl.Desc().StartKey.AsRawKey())

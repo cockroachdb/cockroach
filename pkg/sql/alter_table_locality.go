@@ -240,9 +240,13 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		return interleaveOnRegionalByRowError()
 	}
 
-	for _, idx := range n.tableDesc.NonDropIndexes() {
+	for _, idx := range n.tableDesc.AllIndexes() {
 		if idx.IsSharded() {
-			return pgerror.New(pgcode.FeatureNotSupported, "cannot convert a table to REGIONAL BY ROW if table table contains hash sharded indexes")
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"cannot convert %s to REGIONAL BY ROW as the table contains hash sharded indexes",
+				tree.Name(n.tableDesc.GetName()),
+			)
 		}
 	}
 
@@ -331,7 +335,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			tn,
 			n.tableDesc,
 			defaultColDef,
-			params.SessionData(),
 		); err != nil {
 			return err
 		}
@@ -375,8 +378,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		newColumnName,
 		newColumnID,
 		newColumnDefaultExpr,
-		n.tableDesc.PrimaryIndex.ColumnNames[primaryIndexColIdxStart:],
-		n.tableDesc.PrimaryIndex.ColumnDirections[primaryIndexColIdxStart:],
+		n.tableDesc.PrimaryIndex.KeyColumnNames[primaryIndexColIdxStart:],
+		n.tableDesc.PrimaryIndex.KeyColumnDirections[primaryIndexColIdxStart:],
 	)
 }
 
@@ -461,12 +464,10 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	)
 
 	// We should check index zone configs if moving to REGIONAL BY ROW.
-	checkIndexZoneConfigs := newLocality.LocalityLevel == tree.LocalityLevelRow
 	if err := params.p.validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		params.ctx,
 		n.dbDesc,
 		n.tableDesc,
-		checkIndexZoneConfigs,
 	); err != nil {
 		return err
 	}
@@ -525,8 +526,8 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				nil, /* newColumnName */
 				nil, /*	newColumnID */
 				nil, /*	newColumnDefaultExpr */
-				n.tableDesc.PrimaryIndex.ColumnNames[explicitColStart:],
-				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnNames[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnDirections[explicitColStart:],
 			)
 		case tree.LocalityLevelRow:
 			if err := n.alterTableLocalityToRegionalByRow(
@@ -543,8 +544,8 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				nil, /* newColumnName */
 				nil, /*	newColumnID */
 				nil, /*	newColumnDefaultExpr */
-				n.tableDesc.PrimaryIndex.ColumnNames[explicitColStart:],
-				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnNames[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnDirections[explicitColStart:],
 			)
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)

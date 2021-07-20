@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -157,7 +158,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		fn("max memory allocated", humanize.IBytes(s.Exec.MaxAllocatedMem.Value()))
 	}
 	if s.Exec.MaxAllocatedDisk.HasValue() {
-		fn("max scratch disk allocated", humanize.IBytes(s.Exec.MaxAllocatedDisk.Value()))
+		fn("max sql temp disk usage", humanize.IBytes(s.Exec.MaxAllocatedDisk.Value()))
 	}
 
 	// Output stats.
@@ -352,12 +353,43 @@ func ExtractStatsFromSpans(
 				statsMap[stats.Component] = &stats
 			} else {
 				// In the vectorized flow we can have multiple statistics
-				// entries for one component. Merge the stats together.
-				// TODO(radu): figure out a way to emit the statistics correctly
-				// in the first place.
+				// entries for one componentID because a single processor is
+				// represented by multiple components (e.g. when hash/merge
+				// joins have an ON expression that is not supported natively -
+				// we will plan the row-execution filterer processor then).
+				//
+				// Merge the stats together.
+				// TODO(yuzefovich): remove this once such edge cases are no
+				// longer present.
 				statsMap[stats.Component] = existing.Union(&stats)
 			}
 		})
 	}
 	return statsMap
+}
+
+// ExtractNodesFromSpans extracts a list of node ids from a set of tracing
+// spans.
+func ExtractNodesFromSpans(spans []tracingpb.RecordedSpan) util.FastIntSet {
+	var nodes util.FastIntSet
+	// componentStats is only used to check whether a structured payload item is
+	// of ComponentStats type.
+	var componentStats ComponentStats
+	for i := range spans {
+		span := &spans[i]
+		span.Structured(func(item *types.Any) {
+			if !types.Is(item, &componentStats) {
+				return
+			}
+			var stats ComponentStats
+			if err := protoutil.Unmarshal(item.Value, &stats); err != nil {
+				return
+			}
+			if stats.Component == (ComponentID{}) {
+				return
+			}
+			nodes.Add(int(stats.Component.SQLInstanceID))
+		})
+	}
+	return nodes
 }

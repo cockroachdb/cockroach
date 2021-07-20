@@ -199,7 +199,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"UniqueID":            {fullName: "opt.UniqueID", passByVal: true},
 		"WithID":              {fullName: "opt.WithID", passByVal: true},
 		"Ordering":            {fullName: "opt.Ordering", passByVal: true},
-		"OrderingChoice":      {fullName: "physical.OrderingChoice", passByVal: true},
+		"OrderingChoice":      {fullName: "props.OrderingChoice", passByVal: true},
 		"TupleOrdinal":        {fullName: "memo.TupleOrdinal", passByVal: true},
 		"ScanLimit":           {fullName: "memo.ScanLimit", passByVal: true},
 		"ScanFlags":           {fullName: "memo.ScanFlags", passByVal: true},

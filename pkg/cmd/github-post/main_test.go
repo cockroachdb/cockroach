@@ -16,15 +16,19 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestListFailures(t *testing.T) {
 	type issue struct {
-		testName string
-		title    string
-		message  string
-		author   string
-		expRepro string
+		testName   string
+		title      string
+		message    string
+		author     string
+		expRepro   string
+		mention    []string
+		hasProject bool
 	}
 	// Each test case expects a number of issues.
 	testCases := []struct {
@@ -39,10 +43,12 @@ func TestListFailures(t *testing.T) {
 			fileName: "implicit-pkg.json",
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/util/stop",
 			expIssues: []issue{{
-				testName: "TestStopperWithCancelConcurrent",
-				title:    "util/stop: TestStopperWithCancelConcurrent failed",
-				message:  "this is just a testing issue",
-				author:   "nvanbenschoten@gmail.com",
+				testName:   "TestStopperWithCancelConcurrent",
+				title:      "util/stop: TestStopperWithCancelConcurrent failed",
+				message:    "this is just a testing issue",
+				author:     "nvanbenschoten@gmail.com",
+				mention:    []string{"@cockroachdb/server"},
+				hasProject: true,
 			}},
 			formatter: defaultFormatter,
 		},
@@ -51,10 +57,12 @@ func TestListFailures(t *testing.T) {
 			fileName: "stress-failure.json",
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
 			expIssues: []issue{{
-				testName: "TestReplicateQueueRebalance",
-				title:    "kv/kvserver: TestReplicateQueueRebalance failed",
-				message:  "replicate_queue_test.go:88: condition failed to evaluate within 45s: not balanced: [10 1 10 1 8]",
-				author:   "petermattis@gmail.com",
+				testName:   "TestReplicateQueueRebalance",
+				title:      "kv/kvserver: TestReplicateQueueRebalance failed",
+				message:    "replicate_queue_test.go:88: condition failed to evaluate within 45s: not balanced: [10 1 10 1 8]",
+				author:     "petermattis@gmail.com",
+				mention:    []string{"@cockroachdb/kv"},
+				hasProject: true,
 			}},
 			formatter: defaultFormatter,
 		},
@@ -63,10 +71,12 @@ func TestListFailures(t *testing.T) {
 			fileName: "stress-fatal.json",
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
 			expIssues: []issue{{
-				testName: "TestGossipHandlesReplacedNode",
-				title:    "kv/kvserver: TestGossipHandlesReplacedNode failed",
-				message:  "F180711 20:13:15.826193 83 storage/replica.go:1877  [n?,s1,r1/1:/M{in-ax}] on-disk and in-memory state diverged:",
-				author:   "alexdwanerobinson@gmail.com",
+				testName:   "TestGossipHandlesReplacedNode",
+				title:      "kv/kvserver: TestGossipHandlesReplacedNode failed",
+				message:    "F180711 20:13:15.826193 83 storage/replica.go:1877  [n?,s1,r1/1:/M{in-ax}] on-disk and in-memory state diverged:",
+				author:     "alexdwanerobinson@gmail.com",
+				mention:    []string{"@cockroachdb/kv"},
+				hasProject: true,
 			}},
 			formatter: defaultFormatter,
 		},
@@ -92,7 +102,8 @@ func TestListFailures(t *testing.T) {
 				message: `=== RUN   TestPretty/["hello",_["world"]]
     --- FAIL: TestPretty/["hello",_["world"]] (0.00s)
     	json_test.go:1656: injected failure`,
-				author: "justin@cockroachlabs.com",
+				author:  "justin@cockroachlabs.com",
+				mention: []string{"@cockroachdb/unowned"},
 			}},
 			formatter: defaultFormatter,
 		},
@@ -105,10 +116,12 @@ func TestListFailures(t *testing.T) {
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
 			expIssues: []issue{
 				{
-					testName: "TestTxnCoordSenderPipelining",
-					title:    "kv/kvclient/kvcoord: TestTxnCoordSenderPipelining failed",
-					message:  `injected failure`,
-					author:   "nikhil.benesch@gmail.com",
+					testName:   "TestTxnCoordSenderPipelining",
+					title:      "kv/kvclient/kvcoord: TestTxnCoordSenderPipelining failed",
+					message:    `injected failure`,
+					author:     "nikhil.benesch@gmail.com",
+					mention:    []string{"@cockroachdb/kv"},
+					hasProject: true,
 				},
 				{
 					testName: "TestAbortReadOnlyTransaction",
@@ -120,7 +133,9 @@ TestTxnCoordSenderPipelining - 1.00s
 Slow passing tests:
 TestAnchorKey - 1.01s
 `,
-					author: "andrei@cockroachlabs.com",
+					author:     "andrei@cockroachlabs.com",
+					mention:    []string{"@cockroachdb/kv"},
+					hasProject: true,
 				},
 			},
 			formatter: defaultFormatter,
@@ -277,6 +292,8 @@ TestXXA - 1.00s
 				if exp := c.expIssues[curIssue].expRepro; exp != "" && exp != req.ReproductionCommand {
 					t.Errorf("expected reproduction %q, but got:\n%q", exp, req.ReproductionCommand)
 				}
+				assert.Equal(t, c.expIssues[curIssue].mention, req.Mention)
+				assert.Equal(t, c.expIssues[curIssue].hasProject, req.ProjectColumnID != 0)
 				// On next invocation, we'll check the next expected issue.
 				curIssue++
 				return nil

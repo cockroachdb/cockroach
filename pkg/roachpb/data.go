@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
-	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -434,7 +433,7 @@ func (v *Value) SetGeo(so geopb.SpatialObject) error {
 
 // SetBox2D encodes the specified Box2D value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
-func (v *Value) SetBox2D(b geo.CartesianBoundingBox) {
+func (v *Value) SetBox2D(b geopb.BoundingBox) {
 	v.ensureRawBytes(headerSize + 32)
 	encoding.EncodeUint64Ascending(v.RawBytes[headerSize:headerSize], math.Float64bits(b.LoX))
 	encoding.EncodeUint64Ascending(v.RawBytes[headerSize+8:headerSize+8], math.Float64bits(b.HiX))
@@ -582,8 +581,8 @@ func (v Value) GetGeo() (geopb.SpatialObject, error) {
 
 // GetBox2D decodes a geo value from the bytes field of the receiver. If the
 // tag is not BOX2D an error will be returned.
-func (v Value) GetBox2D() (geo.CartesianBoundingBox, error) {
-	box := geo.CartesianBoundingBox{}
+func (v Value) GetBox2D() (geopb.BoundingBox, error) {
+	box := geopb.BoundingBox{}
 	if tag := v.GetTag(); tag != ValueType_BOX2D {
 		return box, fmt.Errorf("value type is not %s: %s", ValueType_BOX2D, tag)
 	}
@@ -859,6 +858,31 @@ func (v Value) PrettyPrint() string {
 		return fmt.Sprintf("/<err: %s>", err)
 	}
 	return buf.String()
+}
+
+// Kind returns the kind of commit trigger as a string.
+func (ct InternalCommitTrigger) Kind() string {
+	switch {
+	case ct.SplitTrigger != nil:
+		return "split"
+	case ct.MergeTrigger != nil:
+		return "merge"
+	case ct.ChangeReplicasTrigger != nil:
+		return "change-replicas"
+	case ct.ModifiedSpanTrigger != nil:
+		switch {
+		case ct.ModifiedSpanTrigger.SystemConfigSpan:
+			return "modified-span (system-config)"
+		case ct.ModifiedSpanTrigger.NodeLivenessSpan != nil:
+			return "modified-span (node-liveness)"
+		default:
+			panic("unknown modified-span commit trigger kind")
+		}
+	case ct.StickyBitTrigger != nil:
+		return "sticky-bit"
+	default:
+		panic("unknown commit trigger kind")
+	}
 }
 
 // IsFinalized determines whether the transaction status is in a finalized
@@ -1852,25 +1876,29 @@ func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
 // LeaseSequence is a custom type for a lease sequence number.
 type LeaseSequence int64
 
-// String implements the fmt.Stringer interface.
-func (s LeaseSequence) String() string {
-	return strconv.FormatInt(int64(s), 10)
-}
+// SafeValue implements the redact.SafeValue interface.
+func (s LeaseSequence) SafeValue() {}
 
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
+	return redact.StringWithoutMarkers(l)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 	if l.Empty() {
-		return "<empty>"
-	}
-	var proposedSuffix string
-	if l.ProposedTS != nil {
-		proposedSuffix = fmt.Sprintf(" pro=%s", l.ProposedTS)
+		w.SafeString("<empty>")
+		return
 	}
 	if l.Type() == LeaseExpiration {
-		return fmt.Sprintf("repl=%s seq=%s start=%s exp=%s%s", l.Replica, l.Sequence, l.Start, l.Expiration, proposedSuffix)
+		w.Printf("repl=%s seq=%d start=%s exp=%s", l.Replica, l.Sequence, l.Start, l.Expiration)
+	} else {
+		w.Printf("repl=%s seq=%d start=%s epo=%d", l.Replica, l.Sequence, l.Start, l.Epoch)
 	}
-	return fmt.Sprintf("repl=%s seq=%s start=%s epo=%d%s", l.Replica, l.Sequence, l.Start, l.Epoch, proposedSuffix)
+	if l.ProposedTS != nil {
+		w.Printf(" pro=%s", l.ProposedTS)
+	}
 }
 
 // Empty returns true for the Lease zero-value.
@@ -1931,6 +1959,10 @@ func (l Lease) Equivalent(newL Lease) bool {
 	// Ignore sequence numbers, they are simply a reflection of
 	// the equivalency of other fields.
 	l.Sequence, newL.Sequence = 0, 0
+	// Ignore the acquisition type, as leases will always be extended via
+	// RequestLease requests regardless of how a leaseholder first acquired its
+	// lease.
+	l.AcquisitionType, newL.AcquisitionType = 0, 0
 	// Ignore the ReplicaDescriptor's type. This shouldn't affect lease
 	// equivalency because Raft state shouldn't be factored into the state of a
 	// Replica's lease. We don't expect a leaseholder to ever become a LEARNER

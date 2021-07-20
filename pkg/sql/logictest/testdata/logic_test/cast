@@ -32,3 +32,53 @@ SELECT t0.c0 FROM t0 WHERE t0.c0 BETWEEN t0.c0 AND INTERVAL '-1'::DECIMAL
 query T
 SELECT t1.c0 FROM t1 WHERE t1.c0 BETWEEN t1.c0 AND INTERVAL '-1'::DECIMAL
 ----
+
+# Regression test for incorrectly casting integers out of range (#64429).
+statement ok
+CREATE TABLE t64429 (_int8 INT8, _int4 INT4);
+INSERT INTO t64429 VALUES (3000000000, 300000);
+
+statement error integer out of range for type int2
+SELECT _int8::INT2 FROM t64429
+
+statement error integer out of range for type int4
+SELECT _int8::INT4 FROM t64429
+
+statement error integer out of range for type int2
+SELECT _int4::INT2 FROM t64429
+
+# Also check the negative overflow.
+statement ok
+DELETE FROM t64429 WHERE true;
+INSERT INTO t64429 VALUES (-3000000000, -300000);
+
+statement error integer out of range for type int2
+SELECT _int8::INT2 FROM t64429
+
+statement error integer out of range for type int4
+SELECT _int8::INT4 FROM t64429
+
+statement error integer out of range for type int2
+SELECT _int4::INT2 FROM t64429
+
+# Regression test for #66067. Ensure that there is no correctness bug due to
+# improper casting of CHAR and VARCHAR.
+statement ok
+CREATE TABLE t66067_a (
+  a INT,
+  c CHAR(26),
+  CONSTRAINT c UNIQUE (c)
+);
+CREATE TABLE t66067_b (
+  a INT,
+  v VARCHAR(40)
+);
+INSERT INTO t66067_a VALUES (1, 'foo');
+INSERT INTO t66067_b VALUES (1, 'bar');
+
+query ITIT
+SELECT * FROM t66067_b b
+INNER LOOKUP JOIN t66067_a a ON b.a = a.a
+WHERE b.v = 'bar' AND a.c = 'foo'
+----
+1  bar  1  foo

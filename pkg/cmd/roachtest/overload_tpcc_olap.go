@@ -76,7 +76,10 @@ func (s tpccOLAPSpec) run(ctx context.Context, t *test, c *cluster) {
 // all of the nodes.
 func verifyNodeLiveness(ctx context.Context, c *cluster, t *test, runDuration time.Duration) {
 	const maxFailures = 10
-	adminURLs := c.ExternalAdminUIAddr(ctx, c.Node(1))
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
+	if err != nil {
+		t.Fatal(err)
+	}
 	now := timeutil.Now()
 	var response tspb.TimeSeriesQueryResponse
 	// Retry because timeseries queries can fail if the underlying inter-node

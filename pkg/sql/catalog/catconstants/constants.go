@@ -46,6 +46,7 @@ const (
 	CrdbInternalDatabasesTableID
 	CrdbInternalFeatureUsageID
 	CrdbInternalForwardDependenciesTableID
+	CrdbInternalKVNodeLivenessTableID
 	CrdbInternalGossipNodesTableID
 	CrdbInternalGossipAlertsTableID
 	CrdbInternalGossipLivenessTableID
@@ -81,6 +82,7 @@ const (
 	CrdbInternalClusterDatabasePrivilegesTableID
 	CrdbInternalInterleaved
 	CrdbInternalCrossDbRefrences
+	CrdbInternalLostTableDescriptors
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
@@ -144,7 +146,9 @@ const (
 	PgCatalogIndexTableID
 	PgCatalogIndexesTableID
 	PgCatalogInheritsTableID
+	PgCatalogInitPrivsTableID
 	PgCatalogLanguageTableID
+	PgCatalogLargeobjectMetadataTableID
 	PgCatalogLargeobjectTableID
 	PgCatalogLocksTableID
 	PgCatalogMatViewsTableID
@@ -152,7 +156,9 @@ const (
 	PgCatalogOpclassTableID
 	PgCatalogOperatorTableID
 	PgCatalogOpfamilyTableID
+	PgCatalogPartitionedTableTableID
 	PgCatalogPoliciesTableID
+	PgCatalogPolicyTableID
 	PgCatalogPreparedStatementsTableID
 	PgCatalogPreparedXactsTableID
 	PgCatalogProcTableID
@@ -160,12 +166,15 @@ const (
 	PgCatalogPublicationTableID
 	PgCatalogPublicationTablesTableID
 	PgCatalogRangeTableID
+	PgCatalogReplicationOriginStatusTableID
 	PgCatalogReplicationOriginTableID
+	PgCatalogReplicationSlotsTableID
 	PgCatalogRewriteTableID
 	PgCatalogRolesTableID
 	PgCatalogRulesTableID
 	PgCatalogSecLabelsTableID
 	PgCatalogSecurityLabelTableID
+	PgCatalogSequenceTableID
 	PgCatalogSequencesTableID
 	PgCatalogSettingsTableID
 	PgCatalogShadowTableID
@@ -175,6 +184,7 @@ const (
 	PgCatalogShmemAllocationsTableID
 	PgCatalogStatActivityTableID
 	PgCatalogStatisticExtTableID
+	PgCatalogSubscriptionRelTableID
 	PgCatalogSubscriptionTableID
 	PgCatalogTablesTableID
 	PgCatalogTablespaceTableID
@@ -198,7 +208,3 @@ const (
 	PgExtensionSpatialRefSysTableID
 	MinVirtualID = PgExtensionSpatialRefSysTableID
 )
-
-// ValidationTelemetryKeyPrefix is the prefix of telemetry keys pertaining to
-// descriptor validation failures.
-const ValidationTelemetryKeyPrefix = "sql.schema.validation_errors."

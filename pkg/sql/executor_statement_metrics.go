@@ -12,109 +12,11 @@ package sql
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
-
-// SQL execution is separated in 3+ phases:
-// - parse/prepare
-// - plan
-// - run
-//
-// The commonly used term "execution latency" encompasses this entire
-// process. However for the purpose of analyzing / optimizing
-// individual parts of the SQL execution engine, it is useful to
-// separate the durations of these individual phases. The code below
-// does this.
-
-// sessionPhase is used to index the Session.phaseTimes array.
-type sessionPhase int
-
-const (
-	// When the session is created (pgwire). Used to compute
-	// the session age.
-	sessionInit sessionPhase = iota
-
-	// Executor phases.
-	sessionQueryReceived    // Query is received.
-	sessionStartParse       // Parse starts.
-	sessionEndParse         // Parse ends.
-	plannerStartLogicalPlan // Planning starts.
-	plannerEndLogicalPlan   // Planning ends.
-	plannerStartExecStmt    // Execution starts.
-	plannerEndExecStmt      // Execution ends.
-	// Query is serviced. Note that we compute this even for empty queries or
-	// "special" statements that have no execution, like SHOW TRANSACTION STATUS.
-	sessionQueryServiced
-
-	sessionTransactionReceived            // Transaction is received.
-	sessionFirstStartExecTransaction      // Transaction is started for the first time.
-	sessionMostRecentStartExecTransaction // Transaction is started for the most recent time.
-	sessionEndExecTransaction             // Transaction is committed/rolled back.
-	sessionStartTransactionCommit         // Transaction `COMMIT` starts.
-	sessionEndTransactionCommit           // Transaction `COMMIT` ends.
-
-	// sessionNumPhases must be listed last so that it can be used to
-	// define arrays sufficiently large to hold all the other values.
-	sessionNumPhases
-)
-
-// phaseTimes is the type of the session.phaseTimes array.
-//
-// It's important that this is an array and not a slice, as we rely on the array
-// copy behavior.
-type phaseTimes [sessionNumPhases]time.Time
-
-// getServiceLatency returns the time between a query being received and the end
-// of run.
-func (p *phaseTimes) getServiceLatency() time.Duration {
-	// Ideally, service latency would always be defined as:
-	// p[sessionQueryServiced] - p[sessionQueryReceived]. Unfortunately, this
-	// isn't always possible with the current structure of the code, as the
-	// service latency calculation is required when recording metrics for
-	// a statement that hits the execution engine. At this point,
-	// `sessionQueryServiced` is unset, because that happens in execCmd. To
-	// prevent negative values for the case mentioned above, we have this second
-	// possible way of calculating the service latency by relying on the
-	// plannerEndExecStmt phase. It's worth noting that the plannerEndExecStmt
-	// phase is unset for queries that don't go through the execution engine (such
-	// as observer statements, prepare statements etc.), so simply relying on the
-	// second calculation isn't an option either.
-	if !p[sessionQueryServiced].IsZero() {
-		return p[sessionQueryServiced].Sub(p[sessionQueryReceived])
-	}
-	return p[plannerEndExecStmt].Sub(p[sessionQueryReceived])
-}
-
-// getRunLatency returns the time between a query execution starting and ending.
-func (p *phaseTimes) getRunLatency() time.Duration {
-	return p[plannerEndExecStmt].Sub(p[plannerStartExecStmt])
-}
-
-// getPlanningLatency returns the time it takes for a query to be planned.
-func (p *phaseTimes) getPlanningLatency() time.Duration {
-	return p[plannerEndLogicalPlan].Sub(p[plannerStartLogicalPlan])
-}
-
-// getParsingLatency returns the time it takes for a query to be parsed.
-func (p *phaseTimes) getParsingLatency() time.Duration {
-	return p[sessionEndParse].Sub(p[sessionStartParse])
-}
-
-func (p *phaseTimes) getTransactionRetryLatency() time.Duration {
-	return p[sessionMostRecentStartExecTransaction].Sub(p[sessionFirstStartExecTransaction])
-}
-
-func (p *phaseTimes) getTransactionServiceLatency() time.Duration {
-	return p[sessionEndExecTransaction].Sub(p[sessionTransactionReceived])
-}
-
-func (p *phaseTimes) getCommitLatency() time.Duration {
-	return p[sessionEndTransactionCommit].Sub(p[sessionStartTransactionCommit])
-}
 
 // EngineMetrics groups a set of SQL metrics.
 type EngineMetrics struct {
@@ -145,11 +47,28 @@ type EngineMetrics struct {
 	FullTableOrIndexScanCount *metric.Counter
 }
 
-// EngineMetrics implements the metric.Struct interface
+// EngineMetrics implements the metric.Struct interface.
 var _ metric.Struct = EngineMetrics{}
 
 // MetricStruct is part of the metric.Struct interface.
 func (EngineMetrics) MetricStruct() {}
+
+// StatsMetrics groups metrics related to SQL Stats collection.
+type StatsMetrics struct {
+	SQLStatsMemoryMaxBytesHist  *metric.Histogram
+	SQLStatsMemoryCurBytesCount *metric.Gauge
+
+	ReportedSQLStatsMemoryMaxBytesHist  *metric.Histogram
+	ReportedSQLStatsMemoryCurBytesCount *metric.Gauge
+
+	DiscardedStatsCount *metric.Counter
+}
+
+// StatsMetrics is part of the metric.Struct interface.
+var _ metric.Struct = StatsMetrics{}
+
+// MetricStruct is part of the metric.Struct interface.
+func (StatsMetrics) MetricStruct() {}
 
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
@@ -164,17 +83,18 @@ func (ex *connExecutor) recordStatementSummary(
 	planner *planner,
 	automaticRetryCount int,
 	rowsAffected int,
-	err error,
+	stmtErr error,
 	stats topLevelQueryStats,
 ) {
-	phaseTimes := &ex.statsCollector.phaseTimes
+	phaseTimes := ex.statsCollector.phaseTimes
 
 	// Collect the statistics.
-	runLatRaw := phaseTimes.getRunLatency()
+	runLatRaw := phaseTimes.GetRunLatency()
 	runLat := runLatRaw.Seconds()
-	parseLat := phaseTimes.getParsingLatency().Seconds()
-	planLat := phaseTimes.getPlanningLatency().Seconds()
-	svcLatRaw := phaseTimes.getServiceLatency()
+	parseLat := phaseTimes.GetParsingLatency().Seconds()
+	planLat := phaseTimes.GetPlanningLatency().Seconds()
+	// We want to exclude any overhead to reduce possible confusion.
+	svcLatRaw := phaseTimes.GetServiceLatencyNoOverhead()
 	svcLat := svcLatRaw.Seconds()
 
 	// processing latency: contributing towards SQL results.
@@ -184,6 +104,7 @@ func (ex *connExecutor) recordStatementSummary(
 	execOverhead := svcLat - processingLat
 
 	stmt := &planner.stmt
+	shouldIncludeInLatencyMetrics := shouldIncludeStmtInLatencyMetrics(stmt)
 	flags := planner.curPlan.flags
 	if automaticRetryCount == 0 {
 		ex.updateOptCounters(flags)
@@ -192,21 +113,32 @@ func (ex *connExecutor) recordStatementSummary(
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)
 			}
-			m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-			m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			if shouldIncludeInLatencyMetrics {
+				m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+				m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			}
 		}
-		m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+		if shouldIncludeInLatencyMetrics {
+			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+		}
 	}
 
-	stmtID := ex.statsCollector.recordStatement(
-		stmt, planner.instrumentation.PlanForStats(ctx),
+	stmtID, err := ex.statsCollector.recordStatement(
+		ctx, stmt, planner.instrumentation.PlanForStats(ctx),
 		flags.IsDistributed(), flags.IsSet(planFlagVectorized),
 		flags.IsSet(planFlagImplicitTxn),
 		flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
-		automaticRetryCount, rowsAffected, err,
-		parseLat, planLat, runLat, svcLat, execOverhead, stats,
+		automaticRetryCount, rowsAffected, stmtErr,
+		parseLat, planLat, runLat, svcLat, execOverhead, stats, planner,
 	)
+
+	if err != nil {
+		if log.V(1) {
+			log.Warningf(ctx, "failed to record statement: %s", err)
+		}
+		ex.metrics.StatsMetrics.DiscardedStatsCount.Inc(1)
+	}
 
 	// Do some transaction level accounting for the transaction this statement is
 	// a part of.
@@ -228,8 +160,7 @@ func (ex *connExecutor) recordStatementSummary(
 
 	if log.V(2) {
 		// ages since significant epochs
-		sessionAge := phaseTimes[plannerEndExecStmt].
-			Sub(phaseTimes[sessionInit]).Seconds()
+		sessionAge := phaseTimes.GetSessionAge().Seconds()
 
 		log.Infof(ctx,
 			"query stats: %d rows, %d retries, "+
@@ -256,4 +187,9 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 	} else if planFlags.IsSet(planFlagOptCacheMiss) {
 		m.SQLOptPlanCacheMisses.Inc(1)
 	}
+}
+
+// We only want to keep track of DML (Data Manipulation Language) statements in our latency metrics.
+func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
+	return stmt.AST.StatementType() == tree.TypeDML
 }

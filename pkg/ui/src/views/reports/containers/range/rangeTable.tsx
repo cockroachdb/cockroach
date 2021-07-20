@@ -185,6 +185,36 @@ const rangeTableDisplayList: RangeTableRow[] = [
     display: "Read Latches Local/Global",
     compareToLeader: false,
   },
+  {
+    variable: "closedTimestampPolicy",
+    display: "Closed timestamp policy",
+    compareToLeader: true,
+  },
+  {
+    variable: "closedTimestampRaft",
+    display: "Closed timestamp - Raft",
+    compareToLeader: true,
+  },
+  {
+    variable: "closedTimestampSideTransportReplica",
+    display: "Closed timestamp - side transport (replica state)",
+    compareToLeader: false,
+  },
+  {
+    variable: "closedTimestampSideTransportReplicaLAI",
+    display: "Closed timestamp LAI - side transport (replica state)",
+    compareToLeader: false,
+  },
+  {
+    variable: "closedTimestampSideTransportCentral",
+    display: "Closed timestamp - side transport (centralized state)",
+    compareToLeader: false,
+  },
+  {
+    variable: "closedTimestampSideTransportCentralLAI",
+    display: "Closed timestamp LAI - side transport (centralized state)",
+    compareToLeader: false,
+  },
 ];
 
 const rangeTableEmptyContent: RangeTableCellContent = {
@@ -356,6 +386,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
 
   contentTimestamp(
     timestamp: protos.cockroach.util.hlc.ITimestamp,
+    now: moment.Moment,
   ): RangeTableCellContent {
     if (_.isNil(timestamp) || _.isNil(timestamp.wall_time)) {
       return {
@@ -363,9 +394,16 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         className: ["range-table__cell--warning"],
       };
     }
+    if (FixLong(timestamp.wall_time).isZero()) {
+      return {
+        value: [""],
+        title: ["0"],
+      };
+    }
     const humanized = Print.Timestamp(timestamp);
+    const delta = Print.TimestampDeltaFromNow(timestamp, now);
     return {
-      value: [humanized],
+      value: [humanized, delta],
       title: [humanized, FixLong(timestamp.wall_time).toString()],
     };
   }
@@ -592,6 +630,8 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
 
     const dormantStoreIDs: Set<number> = new Set();
 
+    const now = moment();
+
     // Convert the infos to a simpler object for display purposes. This helps when trying to
     // determine if any warnings should be displayed.
     const detailsByStoreID: Map<number, RangeTableDetail> = new Map();
@@ -654,10 +694,10 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         leaseEpoch: epoch
           ? this.createContent(lease.epoch)
           : rangeTableEmptyContent,
-        leaseStart: this.contentTimestamp(lease.start),
+        leaseStart: this.contentTimestamp(lease.start, now),
         leaseExpiration: epoch
           ? rangeTableEmptyContent
-          : this.contentTimestamp(lease.expiration),
+          : this.contentTimestamp(lease.expiration, now),
         leaseAppliedIndex: this.createContent(
           FixLong(info.state.state.lease_applied_index),
         ),
@@ -758,6 +798,45 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           FixLong(info.latches_local.read_count),
           FixLong(info.latches_global.read_count),
           raftLeader,
+        ),
+        closedTimestampPolicy: this.createContent(
+          // We index into the enum in order to get the label string, instead of
+          // the numeric value.
+          cockroach.roachpb.RangeClosedTimestampPolicy[
+            info.state.closed_timestamp_policy
+          ],
+          info.state.closed_timestamp_policy ==
+            cockroach.roachpb.RangeClosedTimestampPolicy.LEAD_FOR_GLOBAL_READS
+            ? "range-table__cell--global-range"
+            : "",
+        ),
+        closedTimestampRaft: this.contentTimestamp(
+          info.state.state.raft_closed_timestamp,
+          now,
+        ),
+        closedTimestampSideTransportReplica: this.contentTimestamp(
+          info.state.closed_timestamp_sidetransport_info.replica_closed,
+          now,
+        ),
+        closedTimestampSideTransportReplicaLAI: this.createContent(
+          FixLong(info.state.closed_timestamp_sidetransport_info.replica_lai),
+          // Warn if the LAI hasn't applied yet.
+          FixLong(info.state.state.lease_applied_index) <
+            FixLong(info.state.closed_timestamp_sidetransport_info.replica_lai)
+            ? "range-table__cell--warning"
+            : "",
+        ),
+        closedTimestampSideTransportCentral: this.contentTimestamp(
+          info.state.closed_timestamp_sidetransport_info.central_closed,
+          now,
+        ),
+        closedTimestampSideTransportCentralLAI: this.createContent(
+          FixLong(info.state.closed_timestamp_sidetransport_info.central_lai),
+          // Warn if the LAI hasn't applied yet.
+          FixLong(info.state.state.lease_applied_index) <
+            FixLong(info.state.closed_timestamp_sidetransport_info.central_lai)
+            ? "range-table__cell--warning"
+            : "",
         ),
       });
     });

@@ -20,12 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
-// failure is indicated by a call to maybeSetCorrupt with a ReplicaCorruptionError.
-// Currently any error is passed through, but prospectively it should stop the
-// range from participating in progress, trigger a rebalance operation and
-// decide on an error-by-error basis whether the corruption is limited to the
-// range, store, node or cluster with corresponding actions taken.
+// setCorruptRaftMuLocked is a stand-in for proper handling of failing replicas.
+// Such a failure is indicated by a call to setCorruptRaftMuLocked with a
+// ReplicaCorruptionError. Currently any error is passed through, but
+// prospectively it should stop the range from participating in progress,
+// trigger a rebalance operation and decide on an error-by-error basis whether
+// the corruption is limited to the range, store, node or cluster with
+// corresponding actions taken.
 //
 // Despite the fatal log call below this message we still return for the
 // sake of testing.
@@ -36,18 +37,11 @@ import (
 // best bet is to not have any of those.
 // @bdarnell remarks: Corruption errors should be rare so we may want the store
 // to just recompute its stats in the background when one occurs.
-func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roachpb.Error {
-	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		r.raftMu.Lock()
-		defer r.raftMu.Unlock()
-		return r.setCorruptRaftMuLocked(ctx, cErr)
-	}
-	return pErr
-}
-
 func (r *Replica) setCorruptRaftMuLocked(
 	ctx context.Context, cErr *roachpb.ReplicaCorruptionError,
 ) *roachpb.Error {
+	r.readOnlyCmdMu.Lock()
+	defer r.readOnlyCmdMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

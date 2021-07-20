@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -60,7 +61,7 @@ func newRowFetcherCache(
 	return &rowFetcherCache{
 		codec:      codec,
 		leaseMgr:   leaseMgr,
-		collection: descs.NewCollection(settings, leaseMgr, hydratedTables),
+		collection: descs.NewCollection(settings, leaseMgr, hydratedTables, nil /* virtualSchemas */),
 		db:         db,
 		fetchers:   make(map[idVersion]*row.Fetcher),
 	}
@@ -82,18 +83,16 @@ func (c *rowFetcherCache) TableDescForKey(
 
 		// Retrieve the target TableDescriptor from the lease manager. No caching
 		// is attempted because the lease manager does its own caching.
-		desc, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
+		desc, err := c.leaseMgr.Acquire(ctx, ts, tableID)
 		if err != nil {
 			// Manager can return all kinds of errors during chaos, but based on
 			// its usage, none of them should ever be terminal.
-			return nil, MarkRetryableError(err)
+			return nil, changefeedbase.MarkRetryableError(err)
 		}
+		tableDesc = desc.Desc().(catalog.TableDescriptor)
 		// Immediately release the lease, since we only need it for the exact
 		// timestamp requested.
-		if err := c.leaseMgr.Release(desc); err != nil {
-			return nil, err
-		}
-		tableDesc = desc.(catalog.TableDescriptor)
+		desc.Release(ctx)
 		if tableDesc.ContainsUserDefinedTypes() {
 			// If the table contains user defined types, then use the descs.Collection
 			// to retrieve a TableDescriptor with type metadata hydrated. We open a
@@ -112,7 +111,7 @@ func (c *rowFetcherCache) TableDescForKey(
 			}); err != nil {
 				// Manager can return all kinds of errors during chaos, but based on
 				// its usage, none of them should ever be terminal.
-				return nil, MarkRetryableError(err)
+				return nil, changefeedbase.MarkRetryableError(err)
 			}
 			// Immediately release the lease, since we only need it for the exact
 			// timestamp requested.
@@ -120,7 +119,7 @@ func (c *rowFetcherCache) TableDescForKey(
 		}
 
 		// Skip over the column data.
-		for ; skippedCols < tableDesc.GetPrimaryIndex().NumColumns(); skippedCols++ {
+		for ; skippedCols < tableDesc.GetPrimaryIndex().NumKeyColumns(); skippedCols++ {
 			l, err := encoding.PeekLength(remaining)
 			if err != nil {
 				return nil, err
@@ -163,14 +162,11 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	rfArgs := row.FetcherTableArgs{
 		Spans:            tableDesc.AllIndexSpans(c.codec),
 		Desc:             tableDesc,
-		Index:            tableDesc.GetPrimaryIndex().IndexDesc(),
+		Index:            tableDesc.GetPrimaryIndex(),
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: false,
-		Cols:             make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumns())),
+		Cols:             tableDesc.PublicColumns(),
 		ValNeededForCol:  valNeededForCol,
-	}
-	for i, col := range tableDesc.PublicColumns() {
-		rfArgs.Cols[i] = *col.ColumnDesc()
 	}
 	if err := rf.Init(
 		context.TODO(),

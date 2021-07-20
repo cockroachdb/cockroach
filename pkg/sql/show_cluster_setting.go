@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -67,6 +69,19 @@ func (p *planner) showVersionSetting(
 							return errors.New("the existing value is not a string")
 						}
 						kvRawVal = []byte(string(*dStr))
+					} else if !p.execCfg.Codec.ForSystemTenant() {
+						// The tenant clusters in 20.2 did not ever initialize this value
+						// and utilized this hard-coded value instead. In 21.1, the builtin
+						// which creates tenants sets up the cluster version state. It also
+						// is set when the version is upgraded.
+						tenantDefaultVersion := clusterversion.ClusterVersion{
+							Version: clusterversion.ByKey(clusterversion.V20_2),
+						}
+						encoded, err := protoutil.Marshal(&tenantDefaultVersion)
+						if err != nil {
+							return errors.WithAssertionFailure(err)
+						}
+						kvRawVal = encoded
 					} else {
 						// There should always be a version saved; there's a migration
 						// populating it.

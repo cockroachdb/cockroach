@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"sort"
 	"strings"
@@ -23,11 +24,27 @@ import (
 // cause thousands of table descriptors and schema change jobs to accumulate
 // rapidly, thereby decreasing performance.
 func alterZoneConfigAndClusterSettings(
-	ctx context.Context, version string, c *cluster, nodeIdx int,
+	ctx context.Context,
+	version string,
+	c *cluster,
+	nodeIdx int,
+	dbConnectionParams *SecureDBConnectionParams,
 ) error {
-	db, err := c.ConnE(ctx, nodeIdx)
-	if err != nil {
-		return err
+	var db *gosql.DB
+	var err error
+	if dbConnectionParams != nil {
+		db, err = c.ConnSecure(
+			ctx, nodeIdx, dbConnectionParams.username,
+			dbConnectionParams.certsDir, dbConnectionParams.port,
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		db, err = c.ConnE(ctx, nodeIdx)
+		if err != nil {
+			return err
+		}
 	}
 	defer db.Close()
 

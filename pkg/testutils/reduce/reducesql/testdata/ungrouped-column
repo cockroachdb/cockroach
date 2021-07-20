@@ -28,7 +28,7 @@ WITH
 						max(tab_1222.col3::UUID)::UUID AS col_3479,
 						stddev(tab_1222.col5::INT8)::DECIMAL AS col_3480
 					FROM
-						defaultdb.public.table1 AS tab_1222
+						defaultdb.public.table1@primary AS tab_1222
 					WHERE
 						false
 					GROUP BY

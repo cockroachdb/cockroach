@@ -144,7 +144,10 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 		// us over the threshold.
 		const thresh = 350
 
-		uiAddrs := c.ExternalAdminUIAddr(ctx, serverNodes)
+		uiAddrs, err := c.ExternalAdminUIAddr(ctx, serverNodes)
+		if err != nil {
+			t.Fatal(err)
+		}
 		var maxSeen int
 		// The goroutine dump may take a while to generate, maybe more
 		// than the 3 second timeout of the default http client.

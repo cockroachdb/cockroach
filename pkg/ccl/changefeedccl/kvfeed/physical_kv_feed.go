@@ -61,7 +61,7 @@ func (p rangefeedFactory) Run(
 	// Specifically, when a schema change happens, we need a barrier where we
 	// flush out every change before the schema change timestamp before we start
 	// emitting any changes from after the schema change. The KVFeed's
-	// `schemaFeed` is responsible for detecting and enforcing these , but the
+	// `SchemaFeed` is responsible for detecting and enforcing these , but the
 	// after-KVFeed buffer doesn't have access to any of this state. A cleanup is
 	// in order.
 	feed := rangefeed{

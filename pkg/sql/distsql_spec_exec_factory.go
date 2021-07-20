@@ -184,10 +184,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// Phase 1: set up all necessary infrastructure for table reader planning
 	// below. This phase is equivalent to what execFactory.ConstructScan does.
 	tabDesc := table.(*optTable).desc
-	indexDesc := index.(*optIndex).desc
+	idx := index.(*optIndex).idx
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	sb := span.MakeBuilder(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, indexDesc)
+	sb := span.MakeBuilder(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
 
 	// Note that initColsForScan and setting ResultColumns below are equivalent
 	// to what scan.initTable call does in execFactory.ConstructScan.
@@ -215,7 +215,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	isFullTableOrIndexScan := len(spans) == 1 && spans[0].EqualValue(
-		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, indexDesc.ID),
+		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, idx.GetID()),
 	)
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
 		return nil, err
@@ -244,7 +244,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		trSpec.VirtualColumn = vc.ColumnDesc()
 	}
 
-	trSpec.IndexIdx, err = getIndexIdx(indexDesc, tabDesc)
+	trSpec.IndexIdx, err = getIndexIdx(idx, tabDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -356,12 +356,15 @@ func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 	for i := range cols {
 		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
 	}
-	physPlan.AddProjection(projection)
+	newColMap := identityMap(physPlan.PlanToStreamColMap, len(cols))
+	physPlan.AddProjection(
+		projection,
+		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap),
+	)
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(
 		cols, nil /* colNames */, physPlan.GetResultTypes(), physPlan.ResultColumns,
 	)
-	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
-	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	physPlan.PlanToStreamColMap = newColMap
 	return plan, nil
 }
 
@@ -374,7 +377,7 @@ func (e *distSQLSpecExecFactory) ConstructSerializingProject(
 	for i := range cols {
 		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
 	}
-	physPlan.AddProjection(projection)
+	physPlan.AddProjection(projection, execinfrapb.Ordering{})
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.GetResultTypes(), physPlan.ResultColumns)
 	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
 	return plan, nil
@@ -388,14 +391,16 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
 	recommendation := e.checkExprsAndMaybeMergeLastStage(exprs, physPlan)
+
+	newColMap := identityMap(physPlan.PlanToStreamColMap, len(exprs))
 	if err := physPlan.AddRendering(
 		exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
+		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap),
 	); err != nil {
 		return nil, err
 	}
 	physPlan.ResultColumns = columns
-	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(exprs))
-	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	physPlan.PlanToStreamColMap = newColMap
 	return plan, nil
 }
 
@@ -592,7 +597,11 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 }
 
 func (e *distSQLSpecExecFactory) ConstructSetOp(
-	typ tree.UnionType, all bool, left, right exec.Node, hardLimit uint64,
+	typ tree.UnionType,
+	all bool,
+	left, right exec.Node,
+	reqOrdering exec.OutputOrdering,
+	hardLimit uint64,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: set op")
 }
@@ -631,6 +640,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	eqCols []exec.NodeColumnOrdinal,
 	eqColsAreKey bool,
 	lookupExpr tree.TypedExpr,
+	remoteLookupExpr tree.TypedExpr,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	isSecondJoinInPairedJoiner bool,

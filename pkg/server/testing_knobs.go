@@ -80,10 +80,17 @@ type TestingKnobs struct {
 	OnDecommissionedCallback func(livenesspb.Liveness)
 	// StickyEngineRegistry manages the lifecycle of sticky in memory engines,
 	// which can be enabled via base.StoreSpec.StickyInMemoryEngineID.
+	//
+	// When supplied to a TestCluster, StickyEngineIDs will be associated auto-
+	// matically to the StoreSpecs used.
 	StickyEngineRegistry StickyInMemEnginesRegistry
 	// Clock Source used to an inject a custom clock for testing the server. It is
 	// typically either an hlc.HybridManualClock or hlc.ManualClock.
 	ClockSource func() int64
+
+	// ImportTimeseriesFile, if set, is a file created via `DumpRaw` that written
+	// back to the KV layer upon server start.
+	ImportTimeseriesFile string
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

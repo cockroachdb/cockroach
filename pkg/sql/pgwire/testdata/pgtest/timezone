@@ -33,16 +33,15 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-# PostgreSQL does not display seconds offset here, but CockroachDB does.
-send crdb_only
+send
 Query {"String": "SELECT '1882-05-23T00:00:00'::\"timestamptz\""}
 ----
 
-until crdb_only ignore_data_type_sizes
+until ignore_data_type_sizes
 ReadyForQuery
 ----
 {"Type":"RowDescription","Fields":[{"Name":"timestamptz","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1184,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
-{"Type":"DataRow","Values":[{"text":"1882-05-23 00:00:00+00:00"}]}
+{"Type":"DataRow","Values":[{"text":"1882-05-23 00:00:00+00"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 

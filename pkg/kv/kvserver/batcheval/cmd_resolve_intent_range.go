@@ -44,12 +44,8 @@ func ResolveIntentRange(
 
 	update := args.AsLockUpdate()
 
-	iterAndBuf := storage.GetIterAndBuf(readWriter, storage.IterOptions{UpperBound: args.EndKey})
-	defer iterAndBuf.Cleanup()
-
-	numKeys, resumeSpan, err := storage.MVCCResolveWriteIntentRangeUsingIter(
-		ctx, readWriter, iterAndBuf, ms, update, h.MaxSpanRequestKeys,
-	)
+	numKeys, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
+		ctx, readWriter, ms, update, h.MaxSpanRequestKeys)
 	if err != nil {
 		return result.Result{}, err
 	}

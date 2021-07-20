@@ -1227,9 +1227,6 @@ memo (optimized, ~7KB, required=[presentation: array_agg:6])
  │    ├── [ordering: +2,+4 opt(3)]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
  │    │    └── cost: 1084.71
- │    ├── [ordering: +2]
- │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
  │         └── cost: 1084.71
@@ -1246,20 +1243,17 @@ memo (optimized, ~12KB, required=[presentation: array_agg:6])
  │    └── [presentation: array_agg:6]
  │         ├── best: (project G2 G3 array_agg)
  │         └── cost: 1083.64
- ├── G2: (group-by G4 G5 cols=(4),ordering=+(2|3) opt(4)) (group-by G4 G5 cols=(4),ordering=+(2|3)) (group-by G4 G5 cols=(4),ordering=+4,+(2|3)) (group-by G4 G5 cols=(4),ordering=+(2|3),+4)
+ ├── G2: (group-by G4 G5 cols=(4),ordering=+(2|3) opt(4)) (group-by G4 G5 cols=(4),ordering=+(2|3),+4) (group-by G4 G5 cols=(4),ordering=+4,+(2|3))
  │    └── []
  │         ├── best: (group-by G4="[ordering: +(2|3) opt(4)]" G5 cols=(4),ordering=+(2|3) opt(4))
  │         └── cost: 1083.54
  ├── G3: (projections)
  ├── G4: (select G6 G7) (select G8 G7) (select G9 G7)
  │    ├── [ordering: +(2|3) opt(4)]
- │    │    ├── best: (select G8="[ordering: +2 opt(4)]" G7)
+ │    │    ├── best: (select G8="[ordering: +2]" G7)
  │    │    └── cost: 1083.13
  │    ├── [ordering: +(2|3),+4]
- │    │    ├── best: (sort G4)
- │    │    └── cost: 1084.42
- │    ├── [ordering: +(2|3)]
- │    │    ├── best: (select G8="[ordering: +2]" G7)
+ │    │    ├── best: (select G8="[ordering: +2,+3,+4]" G7)
  │    │    └── cost: 1083.13
  │    ├── [ordering: +4,+(2|3)]
  │    │    ├── best: (sort G4)
@@ -1269,19 +1263,13 @@ memo (optimized, ~12KB, required=[presentation: array_agg:6])
  │         └── cost: 1083.13
  ├── G5: (aggregations G10)
  ├── G6: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
- │    ├── [ordering: +2 opt(4)]
+ │    ├── [ordering: +2,+3,+4]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4))
  │    │    └── cost: 1094.81
- │    ├── [ordering: +2,+4]
- │    │    ├── best: (sort G6="[ordering: +2]")
- │    │    └── cost: 1231.26
  │    ├── [ordering: +2]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4))
  │    │    └── cost: 1094.81
- │    ├── [ordering: +4,+2]
- │    │    ├── best: (sort G6="[ordering: +4]")
- │    │    └── cost: 1231.26
- │    ├── [ordering: +4]
+ │    ├── [ordering: +4,+3]
  │    │    ├── best: (scan kuvw@wvu,cols=(1-4))
  │    │    └── cost: 1094.81
  │    └── []
@@ -1289,40 +1277,28 @@ memo (optimized, ~12KB, required=[presentation: array_agg:6])
  │         └── cost: 1094.81
  ├── G7: (filters G11)
  ├── G8: (scan kuvw@uvw,cols=(1-4),constrained)
- │    ├── [ordering: +2 opt(4)]
+ │    ├── [ordering: +2,+3,+4]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4),constrained)
  │    │    └── cost: 1073.21
- │    ├── [ordering: +2,+4]
- │    │    ├── best: (sort G8="[ordering: +2]")
- │    │    └── cost: 1208.01
  │    ├── [ordering: +2]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4),constrained)
  │    │    └── cost: 1073.21
  │    ├── [ordering: +4,+2]
  │    │    ├── best: (sort G8)
  │    │    └── cost: 1340.50
- │    ├── [ordering: +4]
- │    │    ├── best: (sort G8)
- │    │    └── cost: 1329.66
  │    └── []
  │         ├── best: (scan kuvw@uvw,cols=(1-4),constrained)
  │         └── cost: 1073.21
  ├── G9: (scan kuvw@vw,cols=(1-4),constrained)
- │    ├── [ordering: +2 opt(4)]
- │    │    ├── best: (sort G9)
- │    │    └── cost: 1329.66
- │    ├── [ordering: +2,+4]
- │    │    ├── best: (sort G9)
- │    │    └── cost: 1340.50
- │    ├── [ordering: +2]
- │    │    ├── best: (sort G9)
- │    │    └── cost: 1329.66
+ │    ├── [ordering: +3,+4]
+ │    │    ├── best: (scan kuvw@vw,cols=(1-4),constrained)
+ │    │    └── cost: 1073.21
+ │    ├── [ordering: +3]
+ │    │    ├── best: (scan kuvw@vw,cols=(1-4),constrained)
+ │    │    └── cost: 1073.21
  │    ├── [ordering: +4,+2]
  │    │    ├── best: (sort G9)
  │    │    └── cost: 1340.50
- │    ├── [ordering: +4]
- │    │    ├── best: (sort G9)
- │    │    └── cost: 1329.66
  │    └── []
  │         ├── best: (scan kuvw@vw,cols=(1-4),constrained)
  │         └── cost: 1073.21
@@ -1339,16 +1315,19 @@ memo (optimized, ~12KB, required=[presentation: sum:6])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:6]
  │         ├── best: (project G2 G3 sum)
- │         └── cost: 1083.70
- ├── G2: (group-by G4 G5 cols=(2,4)) (group-by G4 G5 cols=(2,4),ordering=+(2|3)) (group-by G4 G5 cols=(2,4),ordering=+4)
+ │         └── cost: 1083.65
+ ├── G2: (group-by G4 G5 cols=(2,4)) (group-by G4 G5 cols=(2,4),ordering=+(2|3),+4) (group-by G4 G5 cols=(2,4),ordering=+4,+(2|3)) (group-by G4 G5 cols=(2,4),ordering=+4)
  │    └── []
- │         ├── best: (group-by G4="[ordering: +(2|3)]" G5 cols=(2,4),ordering=+(2|3))
- │         └── cost: 1083.59
+ │         ├── best: (group-by G4="[ordering: +(2|3),+4]" G5 cols=(2,4),ordering=+(2|3),+4)
+ │         └── cost: 1083.54
  ├── G3: (projections)
  ├── G4: (select G6 G7) (select G8 G7) (select G9 G7)
- │    ├── [ordering: +(2|3)]
- │    │    ├── best: (select G8="[ordering: +2]" G7)
+ │    ├── [ordering: +(2|3),+4]
+ │    │    ├── best: (select G8="[ordering: +2,+3,+4]" G7)
  │    │    └── cost: 1083.13
+ │    ├── [ordering: +4,+(2|3)]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 1084.42
  │    ├── [ordering: +4]
  │    │    ├── best: (sort G4)
  │    │    └── cost: 1084.37
@@ -1357,8 +1336,11 @@ memo (optimized, ~12KB, required=[presentation: sum:6])
  │         └── cost: 1083.13
  ├── G5: (aggregations G10)
  ├── G6: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
- │    ├── [ordering: +2]
+ │    ├── [ordering: +2,+3,+4]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4))
+ │    │    └── cost: 1094.81
+ │    ├── [ordering: +4,+3]
+ │    │    ├── best: (scan kuvw@wvu,cols=(1-4))
  │    │    └── cost: 1094.81
  │    ├── [ordering: +4]
  │    │    ├── best: (scan kuvw@wvu,cols=(1-4))
@@ -1368,9 +1350,12 @@ memo (optimized, ~12KB, required=[presentation: sum:6])
  │         └── cost: 1094.81
  ├── G7: (filters G11)
  ├── G8: (scan kuvw@uvw,cols=(1-4),constrained)
- │    ├── [ordering: +2]
+ │    ├── [ordering: +2,+3,+4]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4),constrained)
  │    │    └── cost: 1073.21
+ │    ├── [ordering: +4,+2]
+ │    │    ├── best: (sort G8)
+ │    │    └── cost: 1340.50
  │    ├── [ordering: +4]
  │    │    ├── best: (sort G8)
  │    │    └── cost: 1329.66
@@ -1378,9 +1363,12 @@ memo (optimized, ~12KB, required=[presentation: sum:6])
  │         ├── best: (scan kuvw@uvw,cols=(1-4),constrained)
  │         └── cost: 1073.21
  ├── G9: (scan kuvw@vw,cols=(1-4),constrained)
- │    ├── [ordering: +2]
+ │    ├── [ordering: +3,+4]
+ │    │    ├── best: (scan kuvw@vw,cols=(1-4),constrained)
+ │    │    └── cost: 1073.21
+ │    ├── [ordering: +4,+2]
  │    │    ├── best: (sort G9)
- │    │    └── cost: 1329.66
+ │    │    └── cost: 1340.50
  │    ├── [ordering: +4]
  │    │    ├── best: (sort G9)
  │    │    └── cost: 1329.66
@@ -1401,16 +1389,19 @@ memo (optimized, ~6KB, required=[presentation: array_agg:6])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:6]
  │         ├── best: (project G2 G3 array_agg)
- │         └── cost: 1245.54
+ │         └── cost: 1204.75
  ├── G2: (group-by G4 G5 cols=(2,3),ordering=-4 opt(2,3))
  │    └── []
  │         ├── best: (group-by G4="[ordering: -4 opt(2,3)]" G5 cols=(2,3),ordering=-4 opt(2,3))
- │         └── cost: 1235.53
+ │         └── cost: 1194.74
  ├── G3: (projections)
  ├── G4: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +2,+3]
+ │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
+ │    │    └── cost: 1084.71
  │    ├── [ordering: -4 opt(2,3)]
- │    │    ├── best: (scan kuvw@uvw,rev,cols=(2-4))
- │    │    └── cost: 1185.51
+ │    │    ├── best: (sort G4="[ordering: +2,+3]")
+ │    │    └── cost: 1144.72
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
  │         └── cost: 1084.71
@@ -1470,7 +1461,7 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2)) (distinct-on G2 G3 cols=(2),ordering=+2)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2]" G3 cols=(2),ordering=+2)
@@ -1492,7 +1483,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (v) u, v, w FROM kuvw
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(3)) (distinct-on G2 G3 cols=(3),ordering=+3)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +3]" G3 cols=(3),ordering=+3)
@@ -1514,7 +1505,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(4)) (distinct-on G2 G3 cols=(4),ordering=+4)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +4]" G3 cols=(4),ordering=+4)
@@ -1536,7 +1527,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw ORDER BY u, w
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
  ├── G1: (distinct-on G2 G3 cols=(2),ordering=+4 opt(2)) (distinct-on G2 G3 cols=(2),ordering=+4)
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
  │    │    ├── best: (sort G1)
@@ -1608,8 +1599,11 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
  │    │    └── cost: 1255.50
  │    └── []
  │         ├── best: (distinct-on G2="[ordering: -3 opt(2,4)]" G3 cols=(2,4),ordering=-3 opt(2,4))
- │         └── cost: 1235.53
+ │         └── cost: 1217.96
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +2]
+ │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +4,+2,-3]
  │    │    ├── best: (sort G2="[ordering: +4]")
  │    │    └── cost: 1215.48
@@ -1617,8 +1611,8 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
  │    │    └── cost: 1084.71
  │    ├── [ordering: -3 opt(2,4)]
- │    │    ├── best: (scan kuvw@uvw,rev,cols=(2-4))
- │    │    └── cost: 1185.51
+ │    │    ├── best: (sort G2="[ordering: +2]")
+ │    │    └── cost: 1167.94
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
  │         └── cost: 1084.71
@@ -1636,7 +1630,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  │    │    └── cost: 1246.50
  │    └── []
  │         ├── best: (distinct-on G2="[ordering: -2,+3 opt(4)]" G3 cols=(4),ordering=-2,+3 opt(4))
- │         └── cost: 1386.02
+ │         └── cost: 1252.18
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +4,-2,+3]
  │    │    ├── best: (sort G2="[ordering: +4]")
@@ -1645,8 +1639,8 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
  │    │    └── cost: 1084.71
  │    ├── [ordering: -2,+3 opt(4)]
- │    │    ├── best: (sort G2)
- │    │    └── cost: 1345.00
+ │    │    ├── best: (sort G2="[ordering: +4]")
+ │    │    └── cost: 1211.16
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
  │         └── cost: 1084.71
@@ -1662,15 +1656,18 @@ SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w DESC, u DESC, v
 memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: -4]
- │    │    ├── best: (distinct-on G2="[ordering: -4,-2,+3]" G3 cols=(4),ordering=-2,+3 opt(4))
- │    │    └── cost: 1377.12
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1270.48
  │    └── []
  │         ├── best: (distinct-on G2="[ordering: -2,+3 opt(4)]" G3 cols=(4),ordering=-2,+3 opt(4))
- │         └── cost: 1386.02
+ │         └── cost: 1252.18
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +4]
+ │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
+ │    │    └── cost: 1084.71
  │    ├── [ordering: -2,+3 opt(4)]
- │    │    ├── best: (sort G2)
- │    │    └── cost: 1345.00
+ │    │    ├── best: (sort G2="[ordering: +4]")
+ │    │    └── cost: 1211.16
  │    ├── [ordering: -4,-2,+3]
  │    │    ├── best: (sort G2)
  │    │    └── cost: 1346.10
@@ -1791,7 +1788,7 @@ memo (optimized, ~37KB, required=[presentation: w:10] [ordering: +11,+1])
  ├── G17: (variable x)
  ├── G18: (const 1)
  ├── G19: (scan kuvw,cols=(6-8)) (scan kuvw@uvw,cols=(6-8)) (scan kuvw@wvu,cols=(6-8)) (scan kuvw@vw,cols=(6-8)) (scan kuvw@w,cols=(6-8))
- │    ├── [ordering: +6 opt(7)]
+ │    ├── [ordering: +6]
  │    │    ├── best: (scan kuvw@uvw,cols=(6-8))
  │    │    └── cost: 1084.71
  │    └── []
@@ -1808,7 +1805,7 @@ memo (optimized, ~37KB, required=[presentation: w:10] [ordering: +11,+1])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO NOTHING
 ----
-memo (optimized, ~30KB, required=[])
+memo (optimized, ~31KB, required=[])
  ├── G1: (insert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (insert G2 G3 G4 xyz)
@@ -1935,3 +1932,428 @@ memo (optimized, ~27KB, required=[])
  ├── G29: (variable "?column?")
  ├── G30: (is G25 G31)
  └── G31: (null)
+
+# ------------------------------------------------------------------------
+# SplitGroupByScanIntoUnionScans + SplitGroupByFilteredScanIntoUnionScans
+# ------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE regional (
+  r STRING NOT NULL CHECK (r IN ('east', 'west')),
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c FLOAT,
+  d INT,
+  e INT,
+  UNIQUE (r, a, b) STORING (c),
+  UNIQUE (r, d, e)
+)
+----
+
+# This query mimics the validation query for new unique constraints in REGIONAL
+# BY ROW tables.
+opt expect=SplitGroupByScanIntoUnionScans
+SELECT a, b
+FROM regional
+GROUP BY a, b
+HAVING count(*) > 1
+LIMIT 1
+----
+project
+ ├── columns: a:2!null b:3!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2,3)
+ └── limit
+      ├── columns: a:2!null b:3!null count_rows:9!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2,3,9)
+      ├── select
+      │    ├── columns: a:2!null b:3!null count_rows:9!null
+      │    ├── key: (2,3)
+      │    ├── fd: (2,3)-->(9)
+      │    ├── limit hint: 1.00
+      │    ├── group-by
+      │    │    ├── columns: a:2!null b:3!null count_rows:9!null
+      │    │    ├── grouping columns: a:2!null b:3!null
+      │    │    ├── internal-ordering: +2,+3
+      │    │    ├── key: (2,3)
+      │    │    ├── fd: (2,3)-->(9)
+      │    │    ├── limit hint: 3.00
+      │    │    ├── union-all
+      │    │    │    ├── columns: a:2!null b:3!null
+      │    │    │    ├── left columns: a:11 b:12
+      │    │    │    ├── right columns: a:19 b:20
+      │    │    │    ├── ordering: +2,+3
+      │    │    │    ├── scan regional@secondary
+      │    │    │    │    ├── columns: a:11!null b:12!null
+      │    │    │    │    ├── constraint: /10/11/12: [/'east' - /'east']
+      │    │    │    │    ├── key: (11,12)
+      │    │    │    │    └── ordering: +11,+12
+      │    │    │    └── scan regional@secondary
+      │    │    │         ├── columns: a:19!null b:20!null
+      │    │    │         ├── constraint: /18/19/20: [/'west' - /'west']
+      │    │    │         ├── key: (19,20)
+      │    │    │         └── ordering: +19,+20
+      │    │    └── aggregations
+      │    │         └── count-rows [as=count_rows:9]
+      │    └── filters
+      │         └── count_rows:9 > 1 [outer=(9), constraints=(/9: [/2 - ]; tight)]
+      └── 1
+
+# This query mimics the validation query for new unique constraints in REGIONAL
+# BY ROW tables for nullable columns.
+opt expect=SplitGroupByFilteredScanIntoUnionScans
+SELECT d, e
+FROM regional
+WHERE d IS NOT NULL AND e IS NOT NULL
+GROUP BY d, e
+HAVING count(*) > 1
+LIMIT 1;
+----
+project
+ ├── columns: d:5!null e:6!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5,6)
+ └── limit
+      ├── columns: d:5!null e:6!null count_rows:9!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(5,6,9)
+      ├── select
+      │    ├── columns: d:5!null e:6!null count_rows:9!null
+      │    ├── key: (5,6)
+      │    ├── fd: (5,6)-->(9)
+      │    ├── limit hint: 1.00
+      │    ├── group-by
+      │    │    ├── columns: d:5!null e:6!null count_rows:9!null
+      │    │    ├── grouping columns: d:5!null e:6!null
+      │    │    ├── internal-ordering: +5,+6
+      │    │    ├── key: (5,6)
+      │    │    ├── fd: (5,6)-->(9)
+      │    │    ├── limit hint: 3.00
+      │    │    ├── union-all
+      │    │    │    ├── columns: d:5!null e:6!null
+      │    │    │    ├── left columns: d:30 e:31
+      │    │    │    ├── right columns: d:38 e:39
+      │    │    │    ├── ordering: +5,+6
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: d:30!null e:31!null
+      │    │    │    │    ├── ordering: +30,+31
+      │    │    │    │    ├── scan regional@secondary
+      │    │    │    │    │    ├── columns: d:30!null e:31
+      │    │    │    │    │    ├── constraint: /26/30/31: (/'east'/NULL - /'east']
+      │    │    │    │    │    └── ordering: +30,+31
+      │    │    │    │    └── filters
+      │    │    │    │         └── e:31 IS NOT NULL [outer=(31), constraints=(/31: (/NULL - ]; tight)]
+      │    │    │    └── select
+      │    │    │         ├── columns: d:38!null e:39!null
+      │    │    │         ├── ordering: +38,+39
+      │    │    │         ├── scan regional@secondary
+      │    │    │         │    ├── columns: d:38!null e:39
+      │    │    │         │    ├── constraint: /34/38/39: (/'west'/NULL - /'west']
+      │    │    │         │    └── ordering: +38,+39
+      │    │    │         └── filters
+      │    │    │              └── e:39 IS NOT NULL [outer=(39), constraints=(/39: (/NULL - ]; tight)]
+      │    │    └── aggregations
+      │    │         └── count-rows [as=count_rows:9]
+      │    └── filters
+      │         └── count_rows:9 > 1 [outer=(9), constraints=(/9: [/2 - ]; tight)]
+      └── 1
+
+# Rule applies for distinct-on.
+opt expect=SplitGroupByScanIntoUnionScans
+SELECT DISTINCT a, b
+FROM regional
+----
+distinct-on
+ ├── columns: a:2!null b:3!null
+ ├── grouping columns: a:2!null b:3!null
+ ├── internal-ordering: +2,+3
+ ├── key: (2,3)
+ └── union-all
+      ├── columns: a:2!null b:3!null
+      ├── left columns: a:10 b:11
+      ├── right columns: a:18 b:19
+      ├── ordering: +2,+3
+      ├── scan regional@secondary
+      │    ├── columns: a:10!null b:11!null
+      │    ├── constraint: /9/10/11: [/'east' - /'east']
+      │    ├── key: (10,11)
+      │    └── ordering: +10,+11
+      └── scan regional@secondary
+           ├── columns: a:18!null b:19!null
+           ├── constraint: /17/18/19: [/'west' - /'west']
+           ├── key: (18,19)
+           └── ordering: +18,+19
+
+# Rule applies for distinct-on.
+opt expect=SplitGroupByFilteredScanIntoUnionScans
+SELECT DISTINCT a, b
+FROM regional WHERE b > 5
+----
+distinct-on
+ ├── columns: a:2!null b:3!null
+ ├── grouping columns: a:2!null b:3!null
+ ├── internal-ordering: +2,+3
+ ├── key: (2,3)
+ └── union-all
+      ├── columns: a:2!null b:3!null
+      ├── left columns: a:10 b:11
+      ├── right columns: a:18 b:19
+      ├── ordering: +2,+3
+      ├── select
+      │    ├── columns: a:10!null b:11!null
+      │    ├── key: (10,11)
+      │    ├── ordering: +10,+11
+      │    ├── scan regional@secondary
+      │    │    ├── columns: a:10!null b:11!null
+      │    │    ├── constraint: /9/10/11: [/'east' - /'east']
+      │    │    ├── key: (10,11)
+      │    │    └── ordering: +10,+11
+      │    └── filters
+      │         └── b:11 > 5 [outer=(11), constraints=(/11: [/6 - ]; tight)]
+      └── select
+           ├── columns: a:18!null b:19!null
+           ├── key: (18,19)
+           ├── ordering: +18,+19
+           ├── scan regional@secondary
+           │    ├── columns: a:18!null b:19!null
+           │    ├── constraint: /17/18/19: [/'west' - /'west']
+           │    ├── key: (18,19)
+           │    └── ordering: +18,+19
+           └── filters
+                └── b:19 > 5 [outer=(19), constraints=(/19: [/6 - ]; tight)]
+
+# Rule applies for ensure-upsert-distinct-on.
+opt expect=SplitGroupByScanIntoUnionScans
+INSERT INTO xyz SELECT a, b, c FROM regional ON CONFLICT (x) DO UPDATE SET z=2.0
+----
+upsert xyz
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: x:13
+ ├── fetch columns: x:13 y:14 z:15
+ ├── insert-mapping:
+ │    ├── a:6 => x:1
+ │    ├── b:7 => y:2
+ │    └── c:8 => z:3
+ ├── update-mapping:
+ │    └── upsert_z:20 => z:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: upsert_z:20 a:6!null b:7!null c:8 x:13 y:14 z:15
+      ├── key: (6)
+      ├── fd: (6)-->(7,8,13-15,20), (13)-->(14,15)
+      ├── right-join (merge)
+      │    ├── columns: a:6!null b:7!null c:8 x:13 y:14 z:15
+      │    ├── left ordering: +13
+      │    ├── right ordering: +6
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,8,13-15), (13)-->(14,15)
+      │    ├── scan xyz
+      │    │    ├── columns: x:13!null y:14 z:15
+      │    │    ├── key: (13)
+      │    │    ├── fd: (13)-->(14,15)
+      │    │    └── ordering: +13
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: a:6!null b:7!null c:8
+      │    │    ├── grouping columns: a:6!null
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7,8)
+      │    │    ├── ordering: +6
+      │    │    ├── union-all
+      │    │    │    ├── columns: a:6!null b:7!null c:8
+      │    │    │    ├── left columns: a:22 b:23 c:24
+      │    │    │    ├── right columns: a:30 b:31 c:32
+      │    │    │    ├── ordering: +6
+      │    │    │    ├── scan regional@secondary
+      │    │    │    │    ├── columns: a:22!null b:23!null c:24
+      │    │    │    │    ├── constraint: /21/22/23: [/'east' - /'east']
+      │    │    │    │    ├── key: (22,23)
+      │    │    │    │    ├── fd: (22,23)-->(24)
+      │    │    │    │    └── ordering: +22
+      │    │    │    └── scan regional@secondary
+      │    │    │         ├── columns: a:30!null b:31!null c:32
+      │    │    │         ├── constraint: /29/30/31: [/'west' - /'west']
+      │    │    │         ├── key: (30,31)
+      │    │    │         ├── fd: (30,31)-->(32)
+      │    │    │         └── ordering: +30
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=b:7, outer=(7)]
+      │    │         │    └── b:7
+      │    │         └── first-agg [as=c:8, outer=(8)]
+      │    │              └── c:8
+      │    └── filters (true)
+      └── projections
+           └── CASE WHEN x:13 IS NULL THEN c:8 ELSE 2.0 END [as=upsert_z:20, outer=(8,13)]
+
+# Rule applies for ensure-upsert-distinct-on.
+opt expect=SplitGroupByFilteredScanIntoUnionScans
+INSERT INTO xyz SELECT a, b, c FROM regional WHERE b > 5
+ON CONFLICT (x) DO UPDATE SET z=2.0
+----
+upsert xyz
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: x:13
+ ├── fetch columns: x:13 y:14 z:15
+ ├── insert-mapping:
+ │    ├── a:6 => x:1
+ │    ├── b:7 => y:2
+ │    └── c:8 => z:3
+ ├── update-mapping:
+ │    └── upsert_z:20 => z:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: upsert_z:20 a:6!null b:7!null c:8 x:13 y:14 z:15
+      ├── key: (6)
+      ├── fd: (6)-->(7,8,13-15,20), (13)-->(14,15)
+      ├── right-join (merge)
+      │    ├── columns: a:6!null b:7!null c:8 x:13 y:14 z:15
+      │    ├── left ordering: +13
+      │    ├── right ordering: +6
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,8,13-15), (13)-->(14,15)
+      │    ├── scan xyz
+      │    │    ├── columns: x:13!null y:14 z:15
+      │    │    ├── key: (13)
+      │    │    ├── fd: (13)-->(14,15)
+      │    │    └── ordering: +13
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: a:6!null b:7!null c:8
+      │    │    ├── grouping columns: a:6!null
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7,8)
+      │    │    ├── ordering: +6
+      │    │    ├── union-all
+      │    │    │    ├── columns: a:6!null b:7!null c:8
+      │    │    │    ├── left columns: a:22 b:23 c:24
+      │    │    │    ├── right columns: a:30 b:31 c:32
+      │    │    │    ├── ordering: +6
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: a:22!null b:23!null c:24
+      │    │    │    │    ├── key: (22,23)
+      │    │    │    │    ├── fd: (22,23)-->(24)
+      │    │    │    │    ├── ordering: +22
+      │    │    │    │    ├── scan regional@secondary
+      │    │    │    │    │    ├── columns: a:22!null b:23!null c:24
+      │    │    │    │    │    ├── constraint: /21/22/23: [/'east' - /'east']
+      │    │    │    │    │    ├── key: (22,23)
+      │    │    │    │    │    ├── fd: (22,23)-->(24)
+      │    │    │    │    │    └── ordering: +22
+      │    │    │    │    └── filters
+      │    │    │    │         └── b:23 > 5 [outer=(23), constraints=(/23: [/6 - ]; tight)]
+      │    │    │    └── select
+      │    │    │         ├── columns: a:30!null b:31!null c:32
+      │    │    │         ├── key: (30,31)
+      │    │    │         ├── fd: (30,31)-->(32)
+      │    │    │         ├── ordering: +30
+      │    │    │         ├── scan regional@secondary
+      │    │    │         │    ├── columns: a:30!null b:31!null c:32
+      │    │    │         │    ├── constraint: /29/30/31: [/'west' - /'west']
+      │    │    │         │    ├── key: (30,31)
+      │    │    │         │    ├── fd: (30,31)-->(32)
+      │    │    │         │    └── ordering: +30
+      │    │    │         └── filters
+      │    │    │              └── b:31 > 5 [outer=(31), constraints=(/31: [/6 - ]; tight)]
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=b:7, outer=(7)]
+      │    │         │    └── b:7
+      │    │         └── first-agg [as=c:8, outer=(8)]
+      │    │              └── c:8
+      │    └── filters (true)
+      └── projections
+           └── CASE WHEN x:13 IS NULL THEN c:8 ELSE 2.0 END [as=upsert_z:20, outer=(8,13)]
+
+# Order can be provided for the internal ordering of array_agg.
+opt expect=SplitGroupByScanIntoUnionScans
+SELECT a, array_agg(b)
+FROM (SELECT * FROM regional ORDER BY b)
+GROUP BY a
+----
+group-by
+ ├── columns: a:2!null array_agg:9!null
+ ├── grouping columns: a:2!null
+ ├── internal-ordering: +2,+3
+ ├── key: (2)
+ ├── fd: (2)-->(9)
+ ├── union-all
+ │    ├── columns: a:2!null b:3!null
+ │    ├── left columns: a:11 b:12
+ │    ├── right columns: a:19 b:20
+ │    ├── ordering: +2,+3
+ │    ├── scan regional@secondary
+ │    │    ├── columns: a:11!null b:12!null
+ │    │    ├── constraint: /10/11/12: [/'east' - /'east']
+ │    │    ├── key: (11,12)
+ │    │    └── ordering: +11,+12
+ │    └── scan regional@secondary
+ │         ├── columns: a:19!null b:20!null
+ │         ├── constraint: /18/19/20: [/'west' - /'west']
+ │         ├── key: (19,20)
+ │         └── ordering: +19,+20
+ └── aggregations
+      └── array-agg [as=array_agg:9, outer=(3)]
+           └── b:3
+
+# Order cannot be provided for the internal ordering of array_agg.
+opt expect-not=SplitGroupByScanIntoUnionScans
+SELECT a, array_agg(c)
+FROM (SELECT * FROM regional ORDER BY c)
+GROUP BY a
+----
+group-by
+ ├── columns: a:2!null array_agg:9
+ ├── grouping columns: a:2!null
+ ├── internal-ordering: +4 opt(2)
+ ├── key: (2)
+ ├── fd: (2)-->(9)
+ ├── sort
+ │    ├── columns: a:2!null c:4
+ │    ├── ordering: +4 opt(2) [actual: +4]
+ │    └── scan regional@secondary
+ │         └── columns: a:2!null c:4
+ └── aggregations
+      └── array-agg [as=array_agg:9, outer=(4)]
+           └── c:4
+
+# The first index column is a grouping column, so the rule doesn't apply.
+opt expect-not=SplitGroupByScanIntoUnionScans
+SELECT r, a
+FROM regional
+GROUP BY r, a
+----
+distinct-on
+ ├── columns: r:1!null a:2!null
+ ├── grouping columns: r:1!null a:2!null
+ ├── internal-ordering: +1,+2
+ ├── key: (1,2)
+ └── scan regional@secondary
+      ├── columns: r:1!null a:2!null
+      └── ordering: +1,+2
+
+# The first index column is an internal ordering column, so the rule doesn't apply.
+opt expect-not=SplitGroupByScanIntoUnionScans
+SELECT a, array_agg(r)
+FROM (SELECT * FROM regional ORDER BY r)
+GROUP BY a
+----
+group-by
+ ├── columns: a:2!null array_agg:9!null
+ ├── grouping columns: a:2!null
+ ├── internal-ordering: +1 opt(2)
+ ├── key: (2)
+ ├── fd: (2)-->(9)
+ ├── scan regional@secondary
+ │    ├── columns: r:1!null a:2!null
+ │    └── ordering: +1 opt(2) [actual: +1]
+ └── aggregations
+      └── array-agg [as=array_agg:9, outer=(1)]
+           └── r:1

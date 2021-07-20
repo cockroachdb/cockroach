@@ -12,7 +12,7 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 git_repository(
     name = "io_bazel_rules_go",
-    commit = "2fe8a6256c818840cc9a10cf3f366d8410437245",
+    commit = "a94a425d26532613e71f9c7432c19c36302e1f1d",
     remote = "https://github.com/cockroachdb/rules_go",
 )
 
@@ -42,16 +42,16 @@ go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
-    sum = "h1:F5Gozwx4I1xtr/sr/8CFbb57iKi3297KFs0QDbGN60A=",
-    version = "v0.0.0-20210403161142-5e06dd20ab57",
+    sum = "h1:qh4f65QIVFjq9eBURLEYWqaEXmOyqdUyiBSgaXWccWk=",
+    version = "v0.0.0-20210601080250-7ecdf8ef093b",
 )
 
 go_repository(
     name = "org_golang_x_tools",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/tools",
-    sum = "h1:po9/4sTYwZU9lPhi1tOrb4hCv3qrhiQ77LZfGa2OjwY=",
-    version = "v0.1.0",
+    sum = "h1:kRBLX7v7Af8W7Gdbbc908OJcdgtK8bOz9Uaj8/F1ACA=",
+    version = "v0.1.2",
 )
 
 go_repository(
@@ -70,9 +70,8 @@ go_repository(
     patches = [
         "@cockroach//build/patches:com_github_gogo_protobuf.patch",
     ],
-    replace = "github.com/cockroachdb/gogoproto",
-    sum = "h1:yrdrJWJpn0+1BmXaRzurDIZz3uHmSs/wnwWbC4arWlQ=",
-    version = "v1.2.1-0.20210111172841-8b6737fea948",
+    sum = "h1:Ov1cvc58UF3b5XjBnZv7+opcTcQFZebYjWzi34vdm4Q=",
+    version = "v1.3.2",
 )
 
 go_repository(
@@ -83,8 +82,8 @@ go_repository(
     patches = [
         "@cockroach//build/patches:com_github_golang_protobuf.patch",
     ],
-    sum = "h1:JjCZWpVbqXDqFVmTfYWEVTMIYrL/NPdPSCHPJ0T/raM=",
-    version = "v1.4.3",
+    sum = "h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=",
+    version = "v1.5.2",
 )
 
 go_repository(
@@ -109,7 +108,7 @@ load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_depe
 
 go_rules_dependencies()
 
-go_register_toolchains(go_version = "1.15.10")
+go_register_toolchains(go_version = "1.15.11")
 
 # Configure nodeJS.
 load("@build_bazel_rules_nodejs//:index.bzl", "yarn_install")
@@ -123,7 +122,7 @@ yarn_install(
 # NB: @bazel_skylib comes from go_rules_dependencies().
 load("@bazel_skylib//lib:versions.bzl", "versions")
 
-versions.check(minimum_bazel_version = "3.5.0")
+versions.check(minimum_bazel_version = "4.0.0")
 
 # Load gazelle dependencies.
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
@@ -136,7 +135,7 @@ gazelle_dependencies()
 #      https://github.com/bazelbuild/bazel-gazelle/issues/591
 git_repository(
     name = "com_google_protobuf",
-    commit = "9b23a34c7275aa0ceb2fc69ed1ae6737b34656a3",
+    commit = "e809d75ecb5770fdc531081eef306b3e672bcdd2",
     remote = "https://github.com/cockroachdb/protobuf",
 )
 
@@ -167,11 +166,11 @@ c_deps()
 # aforementioned PRs.
 git_repository(
     name = "rules_foreign_cc",
-    commit = "6127817283221408069d4ae6765f2d8144f09b9f",
+    commit = "a3b0e5eaa723259458f5c85285f58e46ae7f25a2",
     remote = "https://github.com/cockroachdb/rules_foreign_cc",
 )
 
-load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
+load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
 
 rules_foreign_cc_dependencies()
 
@@ -179,3 +178,12 @@ rules_foreign_cc_dependencies()
 load("//build:toolchains/REPOSITORIES.bzl", "toolchain_dependencies")
 
 toolchain_dependencies()
+
+http_archive(
+    name = "bazel_gomock",
+    sha256 = "692421b0c5e04ae4bc0bfff42fb1ce8671fe68daee2b8d8ea94657bb1fcddc0a",
+    strip_prefix = "bazel_gomock-fde78c91cf1783cc1e33ba278922ba67a6ee2a84",
+    urls = [
+        "https://github.com/jmhodges/bazel_gomock/archive/fde78c91cf1783cc1e33ba278922ba67a6ee2a84.tar.gz",
+    ],
+)

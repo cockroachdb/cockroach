@@ -1,0 +1,81 @@
+
+parse
+REASSIGN OWNED BY foo TO bar
+----
+REASSIGN OWNED BY foo TO bar
+REASSIGN OWNED BY foo TO bar -- fully parenthesized
+REASSIGN OWNED BY foo TO bar -- literals removed
+REASSIGN OWNED BY _ TO _ -- identifiers removed
+
+parse
+REASSIGN OWNED BY foo, bar TO third
+----
+REASSIGN OWNED BY foo, bar TO third
+REASSIGN OWNED BY foo, bar TO third -- fully parenthesized
+REASSIGN OWNED BY foo, bar TO third -- literals removed
+REASSIGN OWNED BY _, _ TO _ -- identifiers removed
+
+parse
+REASSIGN OWNED BY CURRENT_USER TO foo
+----
+REASSIGN OWNED BY "current_user" TO foo -- normalized!
+REASSIGN OWNED BY "current_user" TO foo -- fully parenthesized
+REASSIGN OWNED BY "current_user" TO foo -- literals removed
+REASSIGN OWNED BY _ TO _ -- identifiers removed
+
+parse
+REASSIGN OWNED BY SESSION_USER TO foo
+----
+REASSIGN OWNED BY "session_user" TO foo -- normalized!
+REASSIGN OWNED BY "session_user" TO foo -- fully parenthesized
+REASSIGN OWNED BY "session_user" TO foo -- literals removed
+REASSIGN OWNED BY _ TO _ -- identifiers removed
+
+
+parse
+DROP OWNED BY foo
+----
+DROP OWNED BY foo
+DROP OWNED BY foo -- fully parenthesized
+DROP OWNED BY foo -- literals removed
+DROP OWNED BY _ -- identifiers removed
+
+parse
+DROP OWNED BY foo, bar
+----
+DROP OWNED BY foo, bar
+DROP OWNED BY foo, bar -- fully parenthesized
+DROP OWNED BY foo, bar -- literals removed
+DROP OWNED BY _, _ -- identifiers removed
+
+parse
+DROP OWNED BY foo CASCADE
+----
+DROP OWNED BY foo CASCADE
+DROP OWNED BY foo CASCADE -- fully parenthesized
+DROP OWNED BY foo CASCADE -- literals removed
+DROP OWNED BY _ CASCADE -- identifiers removed
+
+parse
+DROP OWNED BY foo RESTRICT
+----
+DROP OWNED BY foo RESTRICT
+DROP OWNED BY foo RESTRICT -- fully parenthesized
+DROP OWNED BY foo RESTRICT -- literals removed
+DROP OWNED BY _ RESTRICT -- identifiers removed
+
+parse
+DROP OWNED BY CURRENT_USER
+----
+DROP OWNED BY "current_user" -- normalized!
+DROP OWNED BY "current_user" -- fully parenthesized
+DROP OWNED BY "current_user" -- literals removed
+DROP OWNED BY _ -- identifiers removed
+
+parse
+DROP OWNED BY SESSION_USER
+----
+DROP OWNED BY "session_user" -- normalized!
+DROP OWNED BY "session_user" -- fully parenthesized
+DROP OWNED BY "session_user" -- literals removed
+DROP OWNED BY _ -- identifiers removed

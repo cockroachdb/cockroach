@@ -78,6 +78,7 @@ func StartDistChangefeed(
 			Watches:   watches,
 			Feed:      details,
 			UserProto: execCtx.User().EncodeProto(),
+			JobID:     jobID,
 		}
 	}
 	// NB: This SpanFrontier processor depends on the set of tracked spans being
@@ -135,7 +136,7 @@ func StartDistChangefeed(
 	return resultRows.Err()
 }
 
-// changefeedResultWriter implements the `rowexec.resultWriter` that sends
+// changefeedResultWriter implements the `sql.rowResultWriter` that sends
 // the received rows back over the given channel.
 type changefeedResultWriter struct {
 	rowsCh       chan<- tree.Datums

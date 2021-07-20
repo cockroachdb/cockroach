@@ -1,0 +1,5 @@
+alter_view_owner_stmt ::=
+	'ALTER' 'VIEW' relation_expr 'OWNER' 'TO' role_spec
+	| 'ALTER' 'MATERIALIZED' 'VIEW' relation_expr 'OWNER' 'TO' role_spec
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'OWNER' 'TO' role_spec
+	| 'ALTER' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' relation_expr 'OWNER' 'TO' role_spec

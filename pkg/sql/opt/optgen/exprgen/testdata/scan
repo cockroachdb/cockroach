@@ -49,7 +49,7 @@ select
  ├── cost: 1094.73
  ├── fd: ()-->(1)
  ├── prune: (2,3)
- ├── interesting orderings: (+1,+2)
+ ├── interesting orderings: (+2 opt(1))
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]

@@ -57,7 +57,7 @@ func (w metadataCarrier) ForEach(fn func(key, val string) error) error {
 	return nil
 }
 
-func extractSpanMeta(ctx context.Context, tracer *Tracer) (*SpanMeta, error) {
+func extractSpanMeta(ctx context.Context, tracer *Tracer) (SpanMeta, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		md = metadata.New(nil)
@@ -68,12 +68,12 @@ func extractSpanMeta(ctx context.Context, tracer *Tracer) (*SpanMeta, error) {
 // spanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
 // of RPCs, deciding for which operations the gRPC opentracing interceptor should
 // create a span.
-func spanInclusionFuncForServer(t *Tracer, spanMeta *SpanMeta) bool {
+func spanInclusionFuncForServer(t *Tracer, spanMeta SpanMeta) bool {
 	// If there is an incoming trace on the RPC (spanMeta) or the tracer is
 	// configured to always trace, return true. The second part is particularly
 	// useful for calls coming through the HTTP->RPC gateway (i.e. the AdminUI),
 	// where client is never tracing.
-	return spanMeta != nil || t.AlwaysTrace()
+	return !spanMeta.Empty() || t.AlwaysTrace()
 }
 
 // setSpanTags sets one or more tags on the given span according to the
@@ -129,9 +129,10 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ctx,
 			info.FullMethod,
-			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
 			WithParentAndManualCollection(spanMeta),
 		)
+		serverSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		serverSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
 		defer serverSpan.Finish()
 
 		resp, err = handler(ctx, req)
@@ -172,9 +173,10 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ss.Context(),
 			info.FullMethod,
-			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
 			WithParentAndManualCollection(spanMeta),
 		)
+		serverSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		serverSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
 		defer serverSpan.Finish()
 		ss = &tracingServerStream{
 			ServerStream: ss,
@@ -259,8 +261,9 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		clientSpan := tracer.StartSpan(
 			method,
 			WithParentAndAutoCollection(parent),
-			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
+		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
 		defer clientSpan.Finish()
 		ctx = injectSpanMeta(ctx, tracer, clientSpan)
@@ -308,8 +311,9 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 		clientSpan := tracer.StartSpan(
 			method,
 			WithParentAndAutoCollection(parent),
-			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
+		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
 		ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		cs, err := streamer(ctx, desc, cc, method, opts...)

@@ -23,10 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
-const OwnerUnitTest Owner = `unittest`
+const OwnerUnitTest Owner = `unowned`
 
 const defaultParallelism = 10
 
@@ -126,7 +128,7 @@ func TestRunnerRun(t *testing.T) {
 				keepClustersOnTestFailure: false,
 			}
 			err := runner.Run(ctx, tests, 1, /* count */
-				defaultParallelism, copt, "" /* artifactsDir */, lopt)
+				defaultParallelism, copt, testOpts{}, lopt)
 
 			if !testutils.IsError(err, c.expErr) {
 				t.Fatalf("expected err: %q, but found %v. Filters: %s", c.expErr, err, c.filters)
@@ -182,7 +184,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		},
 	}
 	err := runner.Run(ctx, []testSpec{test}, 1, /* count */
-		defaultParallelism, copt, "" /* artifactsDir */, lopt)
+		defaultParallelism, copt, testOpts{}, lopt)
 	if !testutils.IsError(err, "some tests failed") {
 		t.Fatalf("expected error \"some tests failed\", got: %v", err)
 	}
@@ -319,7 +321,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			cr := newClusterRegistry()
 			runner := newTestRunner(cr, r.buildVersion)
 			err = runner.Run(ctx, tests, 1, /* count */
-				defaultParallelism, copt, "" /* artifactsDir */, lopt)
+				defaultParallelism, copt, testOpts{}, lopt)
 			if !testutils.IsError(err, c.expErr) {
 				t.Fatalf("expected err: %q, got: %v", c.expErr, err)
 			}
@@ -330,4 +332,38 @@ func TestRegistryMinVersion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func runExitCodeTest(t *testing.T, injectedError error) error {
+	ctx := context.Background()
+	t.Helper()
+	cr := newClusterRegistry()
+	runner := newTestRunner(cr, version.Version{})
+	r, err := makeTestRegistry()
+	require.NoError(t, err)
+	r.Add(testSpec{
+		Name:    "boom",
+		Owner:   OwnerUnitTest,
+		Cluster: makeClusterSpec(0),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			if injectedError != nil {
+				t.Fatal(injectedError)
+			}
+		},
+	})
+	tests := testsToRun(ctx, r, newFilter(nil))
+	lopt := loggingOpt{
+		l:            nilLogger(),
+		tee:          noTee,
+		stdout:       ioutil.Discard,
+		stderr:       ioutil.Discard,
+		artifactsDir: "",
+	}
+	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt)
+}
+
+func TestExitCode(t *testing.T) {
+	require.NoError(t, runExitCodeTest(t, nil /* test passes */))
+	err := runExitCodeTest(t, errors.New("boom"))
+	require.True(t, errors.Is(err, errTestsFailed))
 }

@@ -1,0 +1,52 @@
+# This is boilerplate taken directly from
+#  https://github.com/bazelbuild/bazel/blob/master/tools/bash/runfiles/runfiles.bash
+# See that page for an explanation of what this is and why it's necessary.
+# --- begin runfiles.bash initialization v2 ---
+# Copy-pasted from the Bazel Bash runfiles library v2.
+set -uo pipefail; f=bazel_tools/tools/bash/runfiles/runfiles.bash
+source "${RUNFILES_DIR:-/dev/null}/$f" 2>/dev/null || \
+  source "$(grep -sm1 "^$f " "${RUNFILES_MANIFEST_FILE:-/dev/null}" | cut -f2- -d' ')" 2>/dev/null || \
+  source "$0.runfiles/$f" 2>/dev/null || \
+  source "$(grep -sm1 "^$f " "$0.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \
+  source "$(grep -sm1 "^$f " "$0.exe.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \
+  { echo>&2 "ERROR: cannot find $f"; exit 1; }; f=; set -e
+# --- end runfiles.bash initialization v2 ---
+
+PACKAGE=@@PACKAGE@@
+NAME=@@NAME@@
+
+# Wrap rlocation such that we immediately fail if a dep is not found.
+rlocation_ck () {
+    loc="$(rlocation $1)"
+    if [ -z "${loc-}" ]; then
+	echo "error: could not find the location of $1" >&2
+	exit 1
+    fi
+    echo $loc
+}
+
+test_bin="$(rlocation_ck cockroach/$PACKAGE/${NAME}_/$NAME)"
+go_bin="$(rlocation_ck go_sdk/bin/go)"
+crlfmt_bin="$(rlocation_ck com_github_cockroachdb_crlfmt/crlfmt_/crlfmt)"
+errcheck_bin="$(rlocation_ck com_github_kisielk_errcheck/errcheck_/errcheck)"
+golint_bin="$(rlocation_ck org_golang_x_lint/golint/golint_/golint)"
+misspell_bin="$(rlocation_ck com_github_client9_misspell/cmd/misspell/misspell_/misspell)"
+optfmt_bin="$(rlocation_ck cockroach/pkg/sql/opt/optgen/cmd/optfmt/optfmt_/optfmt)"
+returncheck_bin="$(rlocation_ck cockroach/pkg/cmd/returncheck/returncheck_/returncheck)"
+roachvet_bin="$(rlocation_ck cockroach/pkg/cmd/roachvet/roachvet_/roachvet)"
+staticcheck_bin="$(rlocation_ck co_honnef_go_tools/cmd/staticcheck/staticcheck_/staticcheck)"
+
+# Need to run this so that Go can find the runfiles.
+runfiles_export_envvars
+
+if [ -z "${BUILD_WORKSPACE_DIRECTORY-}" ]; then
+  echo "error: BUILD_WORKSPACE_DIRECTORY not set" >&2
+  exit 1
+fi
+
+cd "$BUILD_WORKSPACE_DIRECTORY/$PACKAGE"
+
+TEST_WORKSPACE=cockroach \
+    PATH="$(dirname $go_bin):$(dirname $roachvet_bin):$(dirname $errcheck_bin):$(dirname $returncheck_bin):$(dirname $staticcheck_bin):$(dirname $crlfmt_bin):$(dirname $misspell_bin):$(dirname $golint_bin):$(dirname $optfmt_bin):$PATH" \
+    GOROOT="$(dirname $(dirname $go_bin))" \
+    $test_bin $@

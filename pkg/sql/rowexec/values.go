@@ -13,9 +13,9 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -26,15 +26,12 @@ import (
 type valuesProcessor struct {
 	execinfra.ProcessorBase
 
-	columns []execinfrapb.DatumInfo
-	data    [][]byte
-	// numRows is only guaranteed to be set if there are zero columns (because of
-	// backward compatibility). If it set and there are columns, it matches the
-	// number of rows that are encoded in data.
+	typs []*types.T
+	data [][]byte
+	// If there are columns, numRows matches len(data). If there are no columns,
+	// len(data) is zero. numRows is decremented as rows are emitted.
 	numRows uint64
-
-	sd     flowinfra.StreamDecoder
-	rowBuf rowenc.EncDatumRow
+	rowBuf  rowenc.EncDatumRow
 }
 
 var _ execinfra.Processor = &valuesProcessor{}
@@ -50,17 +47,23 @@ func newValuesProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*valuesProcessor, error) {
-	v := &valuesProcessor{
-		columns: spec.Columns,
-		numRows: spec.NumRows,
-		data:    spec.RawBytes,
+	if len(spec.Columns) > 0 && uint64(len(spec.RawBytes)) != spec.NumRows {
+		return nil, errors.AssertionFailedf(
+			"malformed ValuesCoreSpec: len(RawBytes) = %d does not equal NumRows = %d",
+			len(spec.RawBytes), spec.NumRows,
+		)
 	}
-	types := make([]*types.T, len(v.columns))
-	for i := range v.columns {
-		types[i] = v.columns[i].Type
+	v := &valuesProcessor{
+		typs:    make([]*types.T, len(spec.Columns)),
+		data:    spec.RawBytes,
+		numRows: spec.NumRows,
+		rowBuf:  make(rowenc.EncDatumRow, len(spec.Columns)),
+	}
+	for i := range spec.Columns {
+		v.typs[i] = spec.Columns[i].Type
 	}
 	if err := v.Init(
-		v, post, types, flowCtx, processorID, output, nil /* memMonitor */, execinfra.ProcStateOpts{},
+		v, post, v.typs, flowCtx, processorID, output, nil /* memMonitor */, execinfra.ProcStateOpts{},
 	); err != nil {
 		return nil, err
 	}
@@ -69,66 +72,44 @@ func newValuesProcessor(
 
 // Start is part of the RowSource interface.
 func (v *valuesProcessor) Start(ctx context.Context) {
-	ctx = v.StartInternal(ctx, valuesProcName)
-
-	// Add a bogus header to appease the StreamDecoder, which wants to receive a
-	// header before any data.
-	m := &execinfrapb.ProducerMessage{
-		Typing: v.columns,
-		Header: &execinfrapb.ProducerHeader{},
-	}
-	if err := v.sd.AddMessage(ctx, m); err != nil {
-		v.MoveToDraining(err)
-		return
-	}
-
-	v.rowBuf = make(rowenc.EncDatumRow, len(v.columns))
+	v.StartInternal(ctx, valuesProcName)
 }
 
 // Next is part of the RowSource interface.
 func (v *valuesProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for v.State == execinfra.StateRunning {
-		row, meta, err := v.sd.GetRow(v.rowBuf)
-		if err != nil {
-			v.MoveToDraining(err)
-			break
-		}
-
-		if meta != nil {
-			return nil, meta
-		}
-
-		if row == nil {
-			// Push a chunk of data to the stream decoder.
-			m := &execinfrapb.ProducerMessage{}
-			if len(v.columns) == 0 {
-				if v.numRows == 0 {
-					v.MoveToDraining(nil /* err */)
-					break
-				}
-				m.Data.NumEmptyRows = int32(v.numRows)
-				v.numRows = 0
-			} else {
-				if len(v.data) == 0 {
-					v.MoveToDraining(nil /* err */)
-					break
-				}
-				m.Data.RawBytes = v.data[0]
-				v.data = v.data[1:]
-			}
-			if err := v.sd.AddMessage(context.TODO(), m); err != nil {
-				v.MoveToDraining(err)
-				break
-			}
+		if v.numRows == 0 {
+			v.MoveToDraining(nil /* err */)
 			continue
 		}
 
-		if outRow := v.ProcessRowHelper(row); outRow != nil {
+		if len(v.typs) != 0 {
+			rowData := v.data[0]
+			for i, typ := range v.typs {
+				var err error
+				v.rowBuf[i], rowData, err = rowenc.EncDatumFromBuffer(
+					typ, descpb.DatumEncoding_VALUE, rowData,
+				)
+				if err != nil {
+					v.MoveToDraining(err)
+					return nil, v.DrainHelper()
+				}
+			}
+			if len(rowData) != 0 {
+				panic(errors.AssertionFailedf(
+					"malformed ValuesCoreSpec row: %x, numRows %d", rowData, v.numRows,
+				))
+			}
+			v.data = v.data[1:]
+		}
+		v.numRows--
+
+		if outRow := v.ProcessRowHelper(v.rowBuf); outRow != nil {
 			return outRow, nil
 		}
 	}
-	return nil, v.DrainHelper()
 
+	return nil, v.DrainHelper()
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

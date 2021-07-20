@@ -1,0 +1,7 @@
+error
+e'\xad'::string
+----
+lexical error: invalid UTF-8 byte sequence
+DETAIL: source SQL:
+e'\xad'::string
+^

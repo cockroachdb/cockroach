@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -262,12 +261,25 @@ type Replica struct {
 	// metrics about it.
 	tenantLimiter tenantrate.Limiter
 
+	// sideTransportClosedTimestamp encapsulates state related to the closed
+	// timestamp's information about the range. Note that the
+	// sideTransportClosedTimestamp does not incorporate the closed timestamp
+	// information carried by Raft commands. That can be found in
+	// r.mu.state.RaftClosedTimestamp. Generally, the Raft state should be queried
+	// in parallel with the side transport state to determine an up to date closed
+	// timestamp (i.e. the maximum across the two). For a given LAI, the side
+	// transport closed timestamp will always lead the Raft closed timestamp.
+	// Across LAIs, the larger LAI will always include the larger closed
+	// timestamp, independent of the source.
+	sideTransportClosedTimestamp sidetransportAccess
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		syncutil.RWMutex
 		// The destroyed status of a replica indicating if it's alive, corrupt,
 		// scheduled for destruction or has been GCed.
-		// destroyStatus should only be set while also holding the raftMu.
+		// destroyStatus should only be set while also holding the raftMu and
+		// readOnlyCmdMu.
 		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
@@ -406,25 +418,6 @@ type Replica struct {
 		// The minimum allowed ID for this replica. Initialized from
 		// RangeTombstone.NextReplicaID.
 		tombstoneMinReplicaID roachpb.ReplicaID
-		// sideTransportClosedTimestamp stores the closed timestamp that was
-		// communicated by the side transport. The replica can use it if it has
-		// applied all the commands with indexes <= sideTransportCloseTimestampLAI.
-		// Note that there's also state.RaftClosedTimestamp, which might be higher
-		// than this closed timestamp. The maximum across the two can be used.
-		//
-		// TODO(andrei): actually implement and reference also the global storage
-		// for side-transport closed timestamps.
-		//
-		// TODO(andrei): document here and probably elsewhere the relationship
-		// between the sideTransportClosedTimestamp and the raftClosedTimestamp.
-		// Specifically that for a given LAI, the side transport closed timestamp
-		// will always lead the raft closed timestamp, but that across LAIs, the
-		// larger LAI will always include the larger closed timestamp, independent
-		// of the source.
-		sideTransportClosedTimestamp hlc.Timestamp
-		// sideTransportCloseTimestampLAI is the lease-applied index associated
-		// with sideTransportClosedTimestamp.
-		sideTransportCloseTimestampLAI ctpb.LAI
 
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
@@ -575,6 +568,9 @@ type Replica struct {
 		failureToGossipSystemConfig bool
 
 		tenantID roachpb.TenantID // Set when first initialized, not modified after
+
+		// Historical information about the command that set the closed timestamp.
+		closedTimestampSetter closedTimestampSetterInfo
 	}
 
 	rangefeedMu struct {
@@ -735,6 +731,13 @@ func (r *Replica) isDestroyedRLocked() (DestroyReason, error) {
 	return r.mu.destroyStatus.reason, r.mu.destroyStatus.err
 }
 
+// IsQuiescent returns whether the replica is quiescent or not.
+func (r *Replica) IsQuiescent() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.quiescent
+}
+
 // DescAndZone returns the authoritative range descriptor as well
 // as the zone config for the replica.
 func (r *Replica) DescAndZone() (*roachpb.RangeDescriptor, *zonepb.ZoneConfig) {
@@ -762,7 +765,14 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 // lock exists in helpers_test.go. Move here if needed.
 func (r *Replica) closedTimestampPolicyRLocked() roachpb.RangeClosedTimestampPolicy {
 	if r.mu.zone.GlobalReads != nil && *r.mu.zone.GlobalReads {
-		return roachpb.LEAD_FOR_GLOBAL_READS
+		if !r.mu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
+			return roachpb.LEAD_FOR_GLOBAL_READS
+		}
+		// The node liveness range ignores zone configs and always uses a
+		// LAG_BY_CLUSTER_SETTING closed timestamp policy. If it was to begin
+		// closing timestamps in the future, it would break liveness updates,
+		// which perform a 1PC transaction with a commit trigger and can not
+		// tolerate being pushed into the future.
 	}
 	return roachpb.LAG_BY_CLUSTER_SETTING
 }
@@ -1029,14 +1039,26 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	return *r.mu.state.Stats
 }
 
-// GetSplitQPS returns the Replica's queries/s request rate.
+// GetMaxSplitQPS returns the Replica's maximum queries/s request rate over a
+// configured measurement period. If the Replica has not been recording QPS for
+// at least an entire measurement period, the method will return false.
 //
 // NOTE: This should only be used for load based splitting, only
 // works when the load based splitting cluster setting is enabled.
 //
 // Use QueriesPerSecond() for current QPS stats for all other purposes.
-func (r *Replica) GetSplitQPS() float64 {
-	return r.loadBasedSplitter.LastQPS(timeutil.Now())
+func (r *Replica) GetMaxSplitQPS() (float64, bool) {
+	return r.loadBasedSplitter.MaxQPS(r.Clock().PhysicalTime())
+}
+
+// GetLastSplitQPS returns the Replica's most recent queries/s request rate.
+//
+// NOTE: This should only be used for load based splitting, only
+// works when the load based splitting cluster setting is enabled.
+//
+// Use QueriesPerSecond() for current QPS stats for all other purposes.
+func (r *Replica) GetLastSplitQPS() float64 {
+	return r.loadBasedSplitter.LastQPS(r.Clock().PhysicalTime())
 }
 
 // ContainsKey returns whether this range contains the specified key.
@@ -1121,7 +1143,7 @@ func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
 
 // State returns a copy of the internal state of the Replica, along with some
 // auxiliary information.
-func (r *Replica) State() kvserverpb.RangeInfo {
+func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	var ri kvserverpb.RangeInfo
 
 	// NB: this acquires an RLock(). Reentrant RLocks are deadlock prone, so do
@@ -1180,6 +1202,16 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 			ri.TenantID = r.mu.tenantID.ToUint64()
 		}
 	}
+	ri.ClosedTimestampPolicy = r.closedTimestampPolicyRLocked()
+	r.sideTransportClosedTimestamp.mu.Lock()
+	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.closedTimestamp
+	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.lai
+	r.sideTransportClosedTimestamp.mu.Unlock()
+	centralClosed, centralLAI := r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(
+		ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
+	ri.ClosedTimestampSideTransportInfo.CentralClosed = centralClosed
+	ri.ClosedTimestampSideTransportInfo.CentralLAI = centralLAI
+
 	return ri
 }
 
@@ -1233,10 +1265,6 @@ func (r *Replica) checkExecutionCanProceed(
 			r.maybeExtendLeaseAsync(ctx, st)
 		}
 	}()
-	var update replicaUpdate
-	// When we're done, apply the update (if any) after releasing r.mu.
-	defer update.apply(ctx, r)
-
 	now := r.Clock().NowAsClockTimestamp()
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
@@ -1292,9 +1320,7 @@ func (r *Replica) checkExecutionCanProceed(
 			// If not, can we serve this request on a follower?
 			// TODO(nvanbenschoten): once we make this check cheaper
 			// than leaseGoodToGoRLocked, invert these checks.
-			var ok bool
-			ok, update = r.canServeFollowerReadRLocked(ctx, ba, err)
-			if !ok {
+			if !r.canServeFollowerReadRLocked(ctx, ba, err) {
 				return st, err
 			}
 			err = nil                     // ignore error
@@ -1361,8 +1387,8 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 	)
 }
 
-// checkTSAboveGCThresholdRLocked returns an error if a request (identified
-// by its MVCC timestamp) can be run on the replica.
+// checkTSAboveGCThresholdRLocked returns an error if a request (identified by
+// its read timestamp) wants to read below the range's GC threshold.
 func (r *Replica) checkTSAboveGCThresholdRLocked(
 	ts hlc.Timestamp, st kvserverpb.LeaseStatus, isAdmin bool,
 ) error {
@@ -1704,6 +1730,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 			}
 		}
 		r.raftMu.Lock()
+		r.readOnlyCmdMu.Lock()
 		r.mu.Lock()
 		if mergeCommitted && r.mu.destroyStatus.IsAlive() {
 			// The merge committed but the left-hand replica on this store hasn't
@@ -1718,6 +1745,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		r.mu.mergeTxnID = uuid.UUID{}
 		close(mergeCompleteCh)
 		r.mu.Unlock()
+		r.readOnlyCmdMu.Unlock()
 		r.raftMu.Unlock()
 	})
 	if errors.Is(err, stop.ErrUnavailable) {

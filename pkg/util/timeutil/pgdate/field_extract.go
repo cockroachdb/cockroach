@@ -11,7 +11,6 @@
 package pgdate
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // numberChunk associates a value with a leading separator,
@@ -31,11 +31,15 @@ type numberChunk struct {
 	magnitude int
 }
 
-func (n numberChunk) String() string {
+func (n numberChunk) String() string { return redact.StringWithoutMarkers(n) }
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (n numberChunk) SafeFormat(w redact.SafePrinter, _ rune) {
 	if n.separator == utf8.RuneError {
-		return fmt.Sprintf("%d", n.v)
+		w.Print(n.v)
+		return
 	}
-	return fmt.Sprintf("%v%d", n.separator, n.v)
+	w.Printf("%c%d", n.separator, n.v)
 }
 
 // fieldExtract manages the state of a date/time parsing operation.
@@ -336,7 +340,7 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 			return fe.SetChunk(fieldNanos, chunk)
 
 		default:
-			return inputErrorf("cannot interpret field: %s", chunk)
+			return fe.decorateError(inputErrorf("cannot interpret field: %s", chunk))
 		}
 
 	case chunk.magnitude == 3 &&
@@ -534,7 +538,7 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 			return fe.SetChunk(fieldTZHour, chunk)
 
 		default:
-			return inputErrorf("unexpected number of digits for timezone in: %s", chunk)
+			return fe.decorateError(inputErrorf("unexpected number of digits for timezone in: %s", chunk))
 		}
 
 	case !fe.Wants(fieldTZHour) && fe.Wants(fieldTZMinute):
@@ -609,7 +613,7 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 			return fe.SetChunk(fieldHour, chunk)
 
 		default:
-			return inputErrorf("unexpected number of digits for time in %v", chunk)
+			return fe.decorateError(inputErrorf("unexpected number of digits for time in %v", chunk))
 		}
 
 	case fe.Wants(fieldMinute):
@@ -626,7 +630,7 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 			return fe.SetChunk(fieldSecond, chunk)
 		}
 	}
-	return inputErrorf("could not parse field: %v", chunk)
+	return fe.decorateError(inputErrorf("could not parse field: %v", chunk))
 }
 
 // MakeDate returns a time.Time containing only the date components
@@ -755,7 +759,7 @@ func (fe *fieldExtract) matchedSentinel(value time.Time, match string) error {
 // Reset replaces a value of an already-set field.
 func (fe *fieldExtract) Reset(field field, v int) error {
 	if !fe.has.Has(field) {
-		return errors.AssertionFailedf("field %s is not already set", errors.Safe(field.Pretty()))
+		return errors.AssertionFailedf("field %s is not already set", field.SafePretty())
 	}
 	fe.data[field] = v
 	return nil
@@ -765,13 +769,21 @@ func (fe *fieldExtract) Reset(field field, v int) error {
 // the field has already been set.
 func (fe *fieldExtract) Set(field field, v int) error {
 	if !fe.wanted.Has(field) {
-		return errors.AssertionFailedf("field %s is not wanted in %v", errors.Safe(field.Pretty()), errors.Safe(fe.wanted))
+		return fe.decorateError(
+			inputErrorf("value %v for field %s already present or not wanted", v, field.SafePretty()),
+		)
 	}
 	fe.data[field] = v
 	fe.has = fe.has.Add(field)
 	fe.wanted = fe.wanted.Clear(field)
 
 	return nil
+}
+
+// decorateError adds context to an error object.
+func (fe *fieldExtract) decorateError(err error) error {
+	return errors.WithDetailf(err,
+		"Wanted: %v\nAlready found in input: %v", &fe.wanted, &fe.has)
 }
 
 // SetChunk first validates that the separator in the chunk is appropriate
@@ -832,14 +844,14 @@ func (fe *fieldExtract) SetChunk(field field, chunk numberChunk) error {
 			return fe.Set(field, chunk.v)
 		}
 	}
-	return badFieldPrefixError(field, chunk.separator)
+	return fe.decorateError(badFieldPrefixError(field, chunk.separator))
 }
 
 // SetDayOfYear updates the month and day fields to reflect the
 // given day-of-year.  The year must have been previously set.
 func (fe *fieldExtract) SetDayOfYear(chunk numberChunk) error {
 	if chunk.separator != ' ' && chunk.separator != '.' {
-		return badFieldPrefixError(fieldMonth, chunk.separator)
+		return fe.decorateError(badFieldPrefixError(fieldMonth, chunk.separator))
 	}
 
 	y, ok := fe.Get(fieldYear)
@@ -856,16 +868,18 @@ func (fe *fieldExtract) SetDayOfYear(chunk numberChunk) error {
 	return fe.Set(fieldDay, d)
 }
 
-func (fe *fieldExtract) String() string {
-	ret := "[ "
+// SafeFormat implements the redact.SafeFormatter interface.
+func (fe *fieldExtract) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.SafeString("[ ")
 	for f := fieldMinimum; f <= fieldMaximum; f++ {
 		if v, ok := fe.Get(f); ok {
-			ret += fmt.Sprintf("%s: %d ", f.Pretty(), v)
+			w.Printf("%s: %d ", f.SafePretty(), v)
 		}
 	}
-	ret += "]"
-	return ret
+	w.SafeRune(']')
 }
+
+func (fe *fieldExtract) String() string { return redact.StringWithoutMarkers(fe) }
 
 // validate ensures that the data in the extract is reasonable. It also
 // performs some field fixups, such as converting two-digit years
@@ -873,14 +887,14 @@ func (fe *fieldExtract) String() string {
 func (fe *fieldExtract) validate() error {
 	// If we have any of the required fields, we must have all of the required fields.
 	if fe.has.HasAny(dateRequiredFields) && !fe.has.HasAll(dateRequiredFields) {
-		return inputErrorf("missing required date fields")
+		return fe.decorateError(inputErrorf("missing required date fields"))
 	}
 
 	if (fe.isDB2 && !fe.has.HasAll(db2TimeRequiredFields)) || (fe.has.HasAny(timeRequiredFields) && !fe.has.HasAll(timeRequiredFields)) {
-		return inputErrorf("missing required time fields")
+		return fe.decorateError(inputErrorf("missing required time fields"))
 	}
 	if !fe.has.HasAll(fe.required) {
-		return inputErrorf("missing required fields in input")
+		return fe.decorateError(inputErrorf("missing required fields in input"))
 	}
 
 	if year, ok := fe.Get(fieldYear); ok {
@@ -891,7 +905,8 @@ func (fe *fieldExtract) validate() error {
 
 		if era, ok := fe.Get(fieldEra); ok {
 			if year <= 0 {
-				return inputErrorf("only positive years are permitted in AD/BC notation")
+				return fe.decorateError(
+					inputErrorf("only positive years are permitted in AD/BC notation (%v)", year))
 			}
 			if era < 0 {
 				// Update for BC dates.
@@ -901,7 +916,7 @@ func (fe *fieldExtract) validate() error {
 			}
 		} else if fe.tweakYear {
 			if year < 0 {
-				return inputErrorf("negative year not allowed")
+				return inputErrorf("negative year (%v) not allowed", year)
 			}
 			if year < 70 {
 				year += 2000
@@ -915,7 +930,7 @@ func (fe *fieldExtract) validate() error {
 
 		if month, ok := fe.Get(fieldMonth); ok {
 			if month < 1 || month > 12 {
-				return outOfRangeError("month", month)
+				return fe.decorateError(outOfRangeError("month", month))
 			}
 
 			if day, ok := fe.Get(fieldDay); ok {
@@ -926,7 +941,7 @@ func (fe *fieldExtract) validate() error {
 					maxDay = daysInMonth[0][month]
 				}
 				if day < 1 || day > maxDay {
-					return outOfRangeError("day", day)
+					return fe.decorateError(outOfRangeError("day", day))
 				}
 			}
 		}
@@ -940,7 +955,7 @@ func (fe *fieldExtract) validate() error {
 		case fieldValueAM:
 			switch {
 			case hour < 0 || hour > 12:
-				return outOfRangeError("hour", hour)
+				return fe.decorateError(outOfRangeError("hour", hour))
 			case hour == 12:
 				if err := fe.Reset(fieldHour, 0); err != nil {
 					return err
@@ -950,7 +965,7 @@ func (fe *fieldExtract) validate() error {
 		case fieldValuePM:
 			switch {
 			case hour < 0 || hour > 12:
-				return outOfRangeError("hour", hour)
+				return fe.decorateError(outOfRangeError("hour", hour))
 			case hour == 12:
 				// 12 PM -> 12
 			default:
@@ -963,23 +978,23 @@ func (fe *fieldExtract) validate() error {
 		default:
 			// 24:00:00 is the maximum-allowed value
 			if hour < 0 || (hasDate && hour > 24) || (!hasDate && hour > 23) {
-				return outOfRangeError("hour", hour)
+				return fe.decorateError(outOfRangeError("hour", hour))
 			}
 		}
 
 		minute, _ := fe.Get(fieldMinute)
 		if minute < 0 || minute > 59 {
-			return outOfRangeError("minute", minute)
+			return fe.decorateError(outOfRangeError("minute", minute))
 		}
 
 		second, _ := fe.Get(fieldSecond)
 		if second < 0 || (hasDate && second > 60) || (!hasDate && second > 59) {
-			return outOfRangeError("second", second)
+			return fe.decorateError(outOfRangeError("second", second))
 		}
 
 		nanos, _ := fe.Get(fieldNanos)
 		if nanos < 0 {
-			return outOfRangeError("nanos", nanos)
+			return fe.decorateError(outOfRangeError("nanos", nanos))
 		}
 
 		x := time.Duration(hour)*time.Hour +
@@ -987,7 +1002,7 @@ func (fe *fieldExtract) validate() error {
 			time.Duration(second)*time.Second +
 			time.Duration(nanos)*time.Nanosecond
 		if x > 24*time.Hour {
-			return inputErrorf("time out of range: %d", x)
+			return fe.decorateError(inputErrorf("time out of range: %d", x))
 		}
 	}
 

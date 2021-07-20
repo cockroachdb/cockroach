@@ -1,6 +1,7 @@
 Setting	Type	Default	Description
+admission.kv.enabled	boolean	false	when true, work performed by the KV layer is subject to admission control
+admission.sql_kv_response.enabled	boolean	false	when true, work performed by the SQL layer when receiving a KV response is subject to admission control
 bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up
-cloudstorage.gs.default.key	string		[deprecated] if set, JSON key to use during Google Cloud Storage operations. This setting will be removed in 21.2, as we will no longer support the `default` AUTH mode for GCS operations.
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage
 cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations
 cluster.organization	string		organization name
@@ -56,7 +57,6 @@ server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provide
 server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback) (this feature is experimental)
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`) (this feature is experimental)
 server.rangelog.ttl	duration	720h0m0s	if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
-server.remote_debugging.mode	string	local	set to enable remote debugging, localhost-only or disable (any, local, off)
 server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process
 server.shutdown.lease_transfer_wait	duration	5s	the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process
 server.shutdown.query_wait	duration	10s	the server will wait for at least this amount of time for active queries to finish
@@ -70,13 +70,19 @@ sql.defaults.default_int_size	integer	8	the size, in bytes, of an INT type
 sql.defaults.disallow_full_table_scans.enabled	boolean	false	setting to true rejects queries that have planned a full table scan
 sql.defaults.idle_in_session_timeout	duration	0s	default value for the idle_in_session_timeout; default value for the idle_in_session_timeout session setting; controls the duration a session is permitted to idle before the session is terminated; if set to 0, there is no timeout
 sql.defaults.idle_in_transaction_session_timeout	duration	0s	default value for the idle_in_transaction_session_timeout; controls the duration a session is permitted to idle in a transaction before the session is terminated; if set to 0, there is no timeout
+sql.defaults.require_explicit_primary_keys.enabled	boolean	false	default value for requiring explicit primary keys in CREATE TABLE statements
 sql.defaults.results_buffer.size	byte size	16 KiB	default size of the buffer that accumulates results for a statement or a batch of statements before they are sent to the client. This can be overridden on an individual connection with the 'results_buffer_size' parameter. Note that auto-retries generally only happen while no results have been delivered to the client, so reducing this size can increase the number of retriable errors a client receives. On the other hand, increasing the buffer size can increase the delay until the client receives the first result row. Updating the setting only affects new connections. Setting to 0 disables any buffering.
 sql.defaults.serial_normalization	enumeration	rowid	default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2, sql_sequence_cached = 3]
 sql.defaults.statement_timeout	duration	0s	default value for the statement_timeout; default value for the statement_timeout session setting; controls the duration a query is permitted to run before it is canceled; if set to 0, there is no timeout
 sql.distsql.max_running_flows	integer	500	maximum number of concurrent flows that can be run on a node
+sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage
 sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.
 sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, internal queries which exceed the slow query log threshold are logged to a separate log. Must have the slow query log enabled for this setting to have any effect.
 sql.log.slow_query.latency_threshold	duration	0s	when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node
+sql.metrics.max_mem_reported_stmt_fingerprints	integer	100000	the maximum number of reported statement fingerprints stored in memory
+sql.metrics.max_mem_reported_txn_fingerprints	integer	100000	the maximum number of reported transaction fingerprints stored in memory
+sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of statement fingerprints stored in memory
+sql.metrics.max_mem_txn_fingerprints	integer	100000	the maximum number of transaction fingerprints stored in memory
 sql.metrics.statement_details.dump_to_logs	boolean	false	dump collected statement statistics to node logs when periodically cleared
 sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics
 sql.metrics.statement_details.plan_collection.enabled	boolean	true	periodically save a logical plan for each fingerprint
@@ -105,4 +111,4 @@ trace.datadog.project	string	CockroachDB	the project under which traces will be 
 trace.debug.enable	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests
 trace.lightstep.token	string		if set, traces go to Lightstep using this token
 trace.zipkin.collector	string		if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'). Only one tracer can be configured at a time.
-version	version	20.2-50	set the active cluster version in the format '<major>.<minor>'
+version	version	21.1-10	set the active cluster version in the format '<major>.<minor>'

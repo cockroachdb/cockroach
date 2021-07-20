@@ -18,42 +18,57 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/gorilla/mux"
 )
 
+// Status about a node.
 type nodeStatus struct {
-	// Fields that are a subset of NodeDescriptor.
-	NodeID        roachpb.NodeID      `json:"node_id"`
-	Address       util.UnresolvedAddr `json:"address"`
-	Attrs         roachpb.Attributes  `json:"attrs"`
-	Locality      roachpb.Locality    `json:"locality"`
-	ServerVersion roachpb.Version     `json:"ServerVersion"`
-	BuildTag      string              `json:"build_tag"`
-	StartedAt     int64               `json:"started_at"`
-	ClusterName   string              `json:"cluster_name"`
-	SQLAddress    util.UnresolvedAddr `json:"sql_address"`
+	// NodeID is the integer ID of this node.
+	NodeID int32 `json:"node_id"`
+	// Address is the unresolved network listen address of this node.
+	Address  util.UnresolvedAddr `json:"address"`
+	Attrs    roachpb.Attributes  `json:"attrs"`
+	Locality roachpb.Locality    `json:"locality"`
+	// ServerVersion is the exact version of Cockroach this node is running.
+	ServerVersion roachpb.Version `json:"ServerVersion"`
+	// BuildTag is an internal build marker.
+	BuildTag string `json:"build_tag"`
+	// StartedAt is the time when this node was started, expressed as
+	// nanoseconds since Unix epoch.
+	StartedAt int64 `json:"started_at"`
+	// ClusterName is the string name of this cluster, if set.
+	ClusterName string `json:"cluster_name"`
+	// SQLAddress is the listen address to which SQL clients can connect.
+	SQLAddress util.UnresolvedAddr `json:"sql_address"`
 
-	// Other fields that are a subset of roachpb.NodeStatus.
-	Metrics           map[string]float64 `json:"metrics,omitempty"`
-	TotalSystemMemory int64              `json:"total_system_memory,omitempty"`
-	NumCpus           int32              `json:"num_cpus,omitempty"`
-	UpdatedAt         int64              `json:"updated_at,omitempty"`
+	// Metrics contain the last sampled metrics for this node.
+	Metrics map[string]float64 `json:"metrics,omitempty"`
+	// TotalSystemMemory is the total amount of available system memory on this
+	// node (or cgroup), in bytes.
+	TotalSystemMemory int64 `json:"total_system_memory,omitempty"`
+	// NumCpus is the number of CPUs on this node.
+	NumCpus int32 `json:"num_cpus,omitempty"`
+	// UpdatedAt is the time at which the node status record was last updated,
+	// in nanoseconds since Unix epoch.
+	UpdatedAt int64 `json:"updated_at,omitempty"`
 
-	// Retrieved from the liveness status map.
-	LivenessStatus livenesspb.NodeLivenessStatus `json:"liveness_status"`
+	// LivenessStatus is the status of the node from the perspective of the
+	// liveness subsystem. For internal use only.
+	LivenessStatus int32 `json:"liveness_status"`
 }
 
 // Response struct for listNodes.
 //
 // swagger:model nodesResponse
 type nodesResponse struct {
+	// Status of nodes.
+	//
 	// swagger:allOf
 	Nodes []nodeStatus `json:"nodes"`
-	// Continuation token for the next paginated call, if more values are present.
+	// Continuation offset for the next paginated call, if more values are present.
 	// Specify as the `offset` parameter.
 	Next int `json:"next,omitempty"`
 }
@@ -76,7 +91,7 @@ type nodesResponse struct {
 // - name: offset
 //   type: integer
 //   in: query
-//   description: Continuation token for results after a past limited run.
+//   description: Continuation offset for results after a past limited run.
 //   required: false
 // produces:
 // - application/json
@@ -101,7 +116,7 @@ func (a *apiV2Server) listNodes(w http.ResponseWriter, r *http.Request) {
 	resp.Next = next
 	for _, n := range nodes.Nodes {
 		resp.Nodes = append(resp.Nodes, nodeStatus{
-			NodeID:            n.Desc.NodeID,
+			NodeID:            int32(n.Desc.NodeID),
 			Address:           n.Desc.Address,
 			Attrs:             n.Desc.Attrs,
 			Locality:          n.Desc.Locality,
@@ -114,7 +129,7 @@ func (a *apiV2Server) listNodes(w http.ResponseWriter, r *http.Request) {
 			TotalSystemMemory: n.TotalSystemMemory,
 			NumCpus:           n.NumCpus,
 			UpdatedAt:         n.UpdatedAt,
-			LivenessStatus:    nodes.LivenessByNodeID[n.Desc.NodeID],
+			LivenessStatus:    int32(nodes.LivenessByNodeID[n.Desc.NodeID]),
 		})
 	}
 	writeJSONResponse(ctx, w, 200, resp)
@@ -223,16 +238,24 @@ func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(ctx, w, 200, response)
 }
 
-// rangeDescriptorInfo contains a subset of fields from roachpb.RangeDescriptor
-// that are safe to be returned from APIs.
+// rangeDescriptorInfo contains a subset of fields from the Cockroach-internal
+// range descriptor that are safe to be returned from APIs.
 type rangeDescriptorInfo struct {
-	RangeID  roachpb.RangeID `json:"range_id"`
-	StartKey roachpb.RKey    `json:"start_key,omitempty"`
-	EndKey   roachpb.RKey    `json:"end_key,omitempty"`
+	// RangeID is the integer id of this range.
+	RangeID int64 `json:"range_id"`
+	// StartKey is the resolved Cockroach-internal key that denotes the start of
+	// this range.
+	StartKey []byte `json:"start_key,omitempty"`
+	// EndKey is the resolved Cockroach-internal key that denotes the end of
+	// this range.
+	EndKey []byte `json:"end_key,omitempty"`
 
-	// Set for HotRanges.
-	StoreID          roachpb.StoreID `json:"store_id"`
-	QueriesPerSecond float64         `json:"queries_per_second"`
+	// StoreID is the ID of the store this hot range is on. Only set for hot
+	// ranges.
+	StoreID int32 `json:"store_id"`
+	// QueriesPerSecond is the number of queries per second this range is
+	// serving. Only set for hot ranges.
+	QueriesPerSecond float64 `json:"queries_per_second"`
 }
 
 func (r *rangeDescriptorInfo) init(rd *roachpb.RangeDescriptor) {
@@ -241,33 +264,46 @@ func (r *rangeDescriptorInfo) init(rd *roachpb.RangeDescriptor) {
 		return
 	}
 	*r = rangeDescriptorInfo{
-		RangeID:  rd.RangeID,
+		RangeID:  int64(rd.RangeID),
 		StartKey: rd.StartKey,
 		EndKey:   rd.EndKey,
 	}
 }
 
+// Info related to a range.
 type rangeInfo struct {
 	// swagger:allOf
 	Desc rangeDescriptorInfo `json:"desc"`
 
-	// Subset of fields copied from serverpb.RangeInfo
-	Span          serverpb.PrettySpan      `json:"span"`
-	SourceNodeID  roachpb.NodeID           `json:"source_node_id,omitempty"`
-	SourceStoreID roachpb.StoreID          `json:"source_store_id,omitempty"`
-	ErrorMessage  string                   `json:"error_message,omitempty"`
-	LeaseHistory  []roachpb.Lease          `json:"lease_history"`
-	Problems      serverpb.RangeProblems   `json:"problems"`
-	Stats         serverpb.RangeStatistics `json:"stats"`
-	Quiescent     bool                     `json:"quiescent,omitempty"`
-	Ticking       bool                     `json:"ticking,omitempty"`
+	// Span is the pretty-ified start/end key span for this range.
+	Span serverpb.PrettySpan `json:"span"`
+	// SourceNodeID is the ID of the node where this range info was retrieved
+	// from.
+	SourceNodeID int32 `json:"source_node_id,omitempty"`
+	// SourceStoreID is the ID of the store on the node where this range info was
+	// retrieved from.
+	SourceStoreID int32 `json:"source_store_id,omitempty"`
+	// ErrorMessage is any error retrieved from the internal range info. For
+	// internal use only.
+	ErrorMessage string `json:"error_message,omitempty"`
+	// LeaseHistory is for internal use only.
+	LeaseHistory []roachpb.Lease `json:"lease_history"`
+	// Problems is a map of any issues reported by this range. For internal use
+	// only.
+	Problems serverpb.RangeProblems `json:"problems"`
+	// Stats is for internal use only.
+	Stats serverpb.RangeStatistics `json:"stats"`
+	// Quiescent is for internal use only.
+	Quiescent bool `json:"quiescent,omitempty"`
+	// Ticking is for internal use only.
+	Ticking bool `json:"ticking,omitempty"`
 }
 
 func (ri *rangeInfo) init(r serverpb.RangeInfo) {
 	*ri = rangeInfo{
 		Span:          r.Span,
-		SourceNodeID:  r.SourceNodeID,
-		SourceStoreID: r.SourceStoreID,
+		SourceNodeID:  int32(r.SourceNodeID),
+		SourceStoreID: int32(r.SourceStoreID),
 		ErrorMessage:  r.ErrorMessage,
 		LeaseHistory:  r.LeaseHistory,
 		Problems:      r.Problems,
@@ -282,8 +318,10 @@ func (ri *rangeInfo) init(r serverpb.RangeInfo) {
 //
 // swagger:model nodeRangesResponse
 type nodeRangesResponse struct {
+	// Info about retrieved ranges.
 	Ranges []rangeInfo `json:"ranges"`
-	Next   int         `json:"next,omitempty"`
+	// Continuation token for the next limited run. Use in the `offset` parameter.
+	Next int `json:"next,omitempty"`
 }
 
 // swagger:operation GET /nodes/{node_id}/ranges/ listNodeRanges
@@ -318,7 +356,7 @@ type nodeRangesResponse struct {
 // - name: offset
 //   type: integer
 //   in: query
-//   description: Continuation token for results after a past limited run.
+//   description: Continuation offset for results after a past limited run.
 //   required: false
 // produces:
 // - application/json
@@ -455,7 +493,7 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 			for _, hotRange := range store.HotRanges {
 				var r rangeDescriptorInfo
 				r.init(&hotRange.Desc)
-				r.StoreID = store.StoreID
+				r.StoreID = int32(store.StoreID)
 				r.QueriesPerSecond = hotRange.QueriesPerSecond
 				rangeDescriptorInfos = append(rangeDescriptorInfos, r)
 			}

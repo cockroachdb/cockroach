@@ -8,11 +8,14 @@
 
 package sqlproxyccl
 
-import "github.com/cockroachdb/cockroach/pkg/util/metric"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/errors"
+)
 
-// Metrics contains pointers to the metrics for monitoring proxy
+// metrics contains pointers to the metrics for monitoring proxy
 // operations.
-type Metrics struct {
+type metrics struct {
 	BackendDisconnectCount *metric.Counter
 	IdleDisconnectCount    *metric.Counter
 	BackendDownCount       *metric.Counter
@@ -26,9 +29,9 @@ type Metrics struct {
 }
 
 // MetricStruct implements the metrics.Struct interface.
-func (Metrics) MetricStruct() {}
+func (metrics) MetricStruct() {}
 
-var _ metric.Struct = Metrics{}
+var _ metric.Struct = metrics{}
 
 var (
 	metaCurConnCount = metric.Metadata{
@@ -93,9 +96,9 @@ var (
 	}
 )
 
-// MakeProxyMetrics instantiates the metrics holder for proxy monitoring.
-func MakeProxyMetrics() Metrics {
-	return Metrics{
+// makeProxyMetrics instantiates the metrics holder for proxy monitoring.
+func makeProxyMetrics() metrics {
+	return metrics{
 		BackendDisconnectCount: metric.NewCounter(metaBackendDisconnectCount),
 		IdleDisconnectCount:    metric.NewCounter(metaIdleDisconnectCount),
 		BackendDownCount:       metric.NewCounter(metaBackendDownCount),
@@ -106,5 +109,36 @@ func MakeProxyMetrics() Metrics {
 		SuccessfulConnCount:    metric.NewCounter(metaSuccessfulConnCount),
 		AuthFailedCount:        metric.NewCounter(metaAuthFailedCount),
 		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
+	}
+}
+
+// updateForError updates the metrics relevant for the type of the
+// error message.
+func (metrics *metrics) updateForError(err error) {
+	if err == nil {
+		return
+	}
+	codeErr := (*codeError)(nil)
+	if errors.As(err, &codeErr) {
+		switch codeErr.code {
+		case codeExpiredClientConnection:
+			metrics.ExpiredClientConnCount.Inc(1)
+		case codeBackendDisconnected:
+			metrics.BackendDisconnectCount.Inc(1)
+		case codeClientDisconnected:
+			metrics.ClientDisconnectCount.Inc(1)
+		case codeIdleDisconnect:
+			metrics.IdleDisconnectCount.Inc(1)
+		case codeProxyRefusedConnection:
+			metrics.RefusedConnCount.Inc(1)
+			metrics.BackendDownCount.Inc(1)
+		case codeParamsRoutingFailed:
+			metrics.RoutingErrCount.Inc(1)
+			metrics.BackendDownCount.Inc(1)
+		case codeBackendDown:
+			metrics.BackendDownCount.Inc(1)
+		case codeAuthFailed:
+			metrics.AuthFailedCount.Inc(1)
+		}
 	}
 }

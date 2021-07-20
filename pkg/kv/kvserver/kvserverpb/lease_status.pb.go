@@ -3,16 +3,18 @@
 
 package kvserverpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import livenesspb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
-
-import github_com_cockroachdb_cockroach_pkg_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
-
-import io "io"
+import (
+	fmt "fmt"
+	livenesspb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	github_com_cockroachdb_cockroach_pkg_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -23,7 +25,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type LeaseState int32
 
@@ -93,6 +95,7 @@ var LeaseState_name = map[int32]string{
 	3: "EXPIRED",
 	4: "PROSCRIBED",
 }
+
 var LeaseState_value = map[string]int32{
 	"ERROR":      0,
 	"VALID":      1,
@@ -104,8 +107,9 @@ var LeaseState_value = map[string]int32{
 func (x LeaseState) String() string {
 	return proto.EnumName(LeaseState_name, int32(x))
 }
+
 func (LeaseState) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_lease_status_e30c13eb2b0d3e4f, []int{0}
+	return fileDescriptor_fb959f350412bc90, []int{0}
 }
 
 // LeaseStatus holds the lease state, the current clock time at which the
@@ -120,6 +124,8 @@ type LeaseStatus struct {
 	RequestTime hlc.Timestamp `protobuf:"bytes,5,opt,name=request_time,json=requestTime,proto3" json:"request_time"`
 	// State of the lease at now for a request at request_time.
 	State LeaseState `protobuf:"varint,3,opt,name=state,proto3,enum=cockroach.kv.kvserver.storagepb.LeaseState" json:"state,omitempty"`
+	// If state == ERROR, this provides more info about the error.
+	ErrInfo string `protobuf:"bytes,6,opt,name=err_info,json=errInfo,proto3" json:"err_info,omitempty"`
 	// Liveness if this is an epoch-based lease.
 	Liveness livenesspb.Liveness `protobuf:"bytes,4,opt,name=liveness,proto3" json:"liveness"`
 }
@@ -128,21 +134,21 @@ func (m *LeaseStatus) Reset()         { *m = LeaseStatus{} }
 func (m *LeaseStatus) String() string { return proto.CompactTextString(m) }
 func (*LeaseStatus) ProtoMessage()    {}
 func (*LeaseStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_lease_status_e30c13eb2b0d3e4f, []int{0}
+	return fileDescriptor_fb959f350412bc90, []int{0}
 }
 func (m *LeaseStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *LeaseStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *LeaseStatus) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_LeaseStatus.Merge(dst, src)
+func (m *LeaseStatus) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LeaseStatus.Merge(m, src)
 }
 func (m *LeaseStatus) XXX_Size() int {
 	return m.Size()
@@ -154,13 +160,51 @@ func (m *LeaseStatus) XXX_DiscardUnknown() {
 var xxx_messageInfo_LeaseStatus proto.InternalMessageInfo
 
 func init() {
-	proto.RegisterType((*LeaseStatus)(nil), "cockroach.kv.kvserver.storagepb.LeaseStatus")
 	proto.RegisterEnum("cockroach.kv.kvserver.storagepb.LeaseState", LeaseState_name, LeaseState_value)
+	proto.RegisterType((*LeaseStatus)(nil), "cockroach.kv.kvserver.storagepb.LeaseStatus")
 }
+
+func init() {
+	proto.RegisterFile("kv/kvserver/kvserverpb/lease_status.proto", fileDescriptor_fb959f350412bc90)
+}
+
+var fileDescriptor_fb959f350412bc90 = []byte{
+	// 464 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0x4f, 0x6f, 0xd3, 0x30,
+	0x18, 0xc6, 0xe3, 0xb5, 0xdd, 0x3a, 0x77, 0x9a, 0x22, 0x8b, 0x43, 0x98, 0x44, 0x5a, 0x71, 0x2a,
+	0x7f, 0x64, 0x4b, 0x1b, 0x47, 0x2e, 0xcd, 0x1a, 0xa4, 0x4a, 0x85, 0x4d, 0x2e, 0x45, 0x88, 0x4b,
+	0x95, 0x64, 0x5e, 0x1a, 0x25, 0xad, 0x83, 0xed, 0x84, 0xaf, 0xc1, 0xb7, 0xe1, 0x2b, 0xf4, 0xb8,
+	0xe3, 0x4e, 0x13, 0xb4, 0xdf, 0x82, 0x13, 0x72, 0x92, 0x26, 0xbb, 0x20, 0xb8, 0x3d, 0xb2, 0xdf,
+	0xe7, 0x7d, 0x7f, 0xf6, 0xf3, 0xc2, 0x17, 0x71, 0x4e, 0xe2, 0x5c, 0x32, 0x91, 0x33, 0x51, 0x8b,
+	0xd4, 0x27, 0x09, 0xf3, 0x24, 0x5b, 0x48, 0xe5, 0xa9, 0x4c, 0xe2, 0x54, 0x70, 0xc5, 0x51, 0x3f,
+	0xe0, 0x41, 0x2c, 0xb8, 0x17, 0x2c, 0x71, 0x9c, 0xe3, 0x7d, 0x2d, 0x96, 0x8a, 0x0b, 0x2f, 0x64,
+	0xa9, 0x7f, 0x86, 0x8a, 0xcb, 0xd4, 0x27, 0x37, 0x9e, 0xf2, 0x4a, 0xd3, 0x19, 0x7e, 0xdc, 0x3f,
+	0x89, 0x72, 0xb6, 0x66, 0x52, 0xd6, 0x42, 0x0f, 0xaa, 0x64, 0x55, 0x6f, 0x65, 0x2a, 0x4a, 0xc8,
+	0x32, 0x09, 0x88, 0x8a, 0x56, 0x4c, 0x2a, 0x6f, 0x95, 0x56, 0x37, 0x4f, 0x42, 0x1e, 0xf2, 0x42,
+	0x12, 0xad, 0xca, 0xd3, 0xe7, 0x3f, 0x5a, 0xb0, 0x37, 0xd5, 0xac, 0xb3, 0x02, 0x15, 0xbd, 0x81,
+	0x9d, 0x02, 0xdd, 0x02, 0x03, 0x30, 0xec, 0x9d, 0x5b, 0xb8, 0x81, 0xae, 0xe8, 0x70, 0x51, 0xee,
+	0xb4, 0x37, 0x0f, 0x7d, 0x83, 0x96, 0xc5, 0x28, 0x83, 0xad, 0x35, 0xff, 0x66, 0x1d, 0x14, 0x9e,
+	0x67, 0x8f, 0x3c, 0x9a, 0x06, 0x2f, 0x93, 0x00, 0x7f, 0xdc, 0xd3, 0x38, 0x63, 0x6d, 0xfc, 0xfd,
+	0xd0, 0x7f, 0x1b, 0x46, 0x6a, 0x99, 0xf9, 0x38, 0xe0, 0x2b, 0x52, 0x1b, 0x6e, 0xfc, 0x46, 0x93,
+	0x34, 0x0e, 0xc9, 0xfe, 0x39, 0xf8, 0x32, 0xe1, 0x41, 0x5c, 0x77, 0xa1, 0x7a, 0x1e, 0x7a, 0x07,
+	0x4f, 0x04, 0xfb, 0x9a, 0x31, 0xa9, 0x16, 0xfa, 0xb5, 0x56, 0xe7, 0x7f, 0xe6, 0x97, 0xe0, 0xbd,
+	0xca, 0xa8, 0xcf, 0xd1, 0x08, 0x76, 0x74, 0x52, 0xcc, 0x6a, 0x0d, 0xc0, 0xf0, 0xf4, 0xfc, 0x15,
+	0xfe, 0x47, 0x52, 0xb8, 0xfe, 0x31, 0x46, 0x4b, 0x27, 0x7a, 0x0a, 0xbb, 0x4c, 0x88, 0x45, 0xb4,
+	0xbe, 0xe5, 0xd6, 0xe1, 0x00, 0x0c, 0x8f, 0xe9, 0x11, 0x13, 0x62, 0xb2, 0xbe, 0xe5, 0x68, 0x0e,
+	0xbb, 0xfb, 0x90, 0xac, 0x76, 0x41, 0x78, 0xf1, 0x97, 0x01, 0x75, 0x96, 0x4d, 0xbe, 0x78, 0x5a,
+	0xc9, 0x8a, 0xbb, 0x6e, 0xf5, 0xf2, 0x3d, 0x84, 0x0d, 0x06, 0x3a, 0x86, 0x1d, 0x97, 0xd2, 0x2b,
+	0x6a, 0x1a, 0x5a, 0x7e, 0x1a, 0x4d, 0x27, 0x63, 0x13, 0xa0, 0x13, 0xd8, 0x9d, 0x7f, 0x98, 0xcf,
+	0x46, 0xce, 0xd4, 0x35, 0x0f, 0x50, 0x0f, 0x1e, 0xb9, 0x9f, 0xaf, 0x27, 0xd4, 0x1d, 0x9b, 0x2d,
+	0x74, 0x0a, 0xe1, 0x35, 0xbd, 0x9a, 0x5d, 0xd2, 0x89, 0xe3, 0x8e, 0xcd, 0xb6, 0xf3, 0x7a, 0xf3,
+	0xcb, 0x36, 0x36, 0x5b, 0x1b, 0xdc, 0x6d, 0x6d, 0x70, 0xbf, 0xb5, 0xc1, 0xcf, 0xad, 0x0d, 0xbe,
+	0xef, 0x6c, 0xe3, 0x6e, 0x67, 0x1b, 0xf7, 0x3b, 0xdb, 0xf8, 0x02, 0x9b, 0xf5, 0xf6, 0x0f, 0x8b,
+	0xed, 0xb9, 0xf8, 0x13, 0x00, 0x00, 0xff, 0xff, 0xa0, 0x4b, 0x5a, 0xc2, 0xff, 0x02, 0x00, 0x00,
+}
+
 func (m *LeaseStatus) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -168,58 +212,80 @@ func (m *LeaseStatus) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *LeaseStatus) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LeaseStatus) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintLeaseStatus(dAtA, i, uint64(m.Lease.Size()))
-	n1, err := m.Lease.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	if len(m.ErrInfo) > 0 {
+		i -= len(m.ErrInfo)
+		copy(dAtA[i:], m.ErrInfo)
+		i = encodeVarintLeaseStatus(dAtA, i, uint64(len(m.ErrInfo)))
+		i--
+		dAtA[i] = 0x32
 	}
-	i += n1
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintLeaseStatus(dAtA, i, uint64(m.Now.Size()))
-	n2, err := m.Now.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	{
+		size, err := m.RequestTime.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLeaseStatus(dAtA, i, uint64(size))
 	}
-	i += n2
-	if m.State != 0 {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintLeaseStatus(dAtA, i, uint64(m.State))
-	}
-	dAtA[i] = 0x22
-	i++
-	i = encodeVarintLeaseStatus(dAtA, i, uint64(m.Liveness.Size()))
-	n3, err := m.Liveness.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
+	i--
 	dAtA[i] = 0x2a
-	i++
-	i = encodeVarintLeaseStatus(dAtA, i, uint64(m.RequestTime.Size()))
-	n4, err := m.RequestTime.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	{
+		size, err := m.Liveness.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLeaseStatus(dAtA, i, uint64(size))
 	}
-	i += n4
-	return i, nil
+	i--
+	dAtA[i] = 0x22
+	if m.State != 0 {
+		i = encodeVarintLeaseStatus(dAtA, i, uint64(m.State))
+		i--
+		dAtA[i] = 0x18
+	}
+	{
+		size, err := m.Now.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLeaseStatus(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.Lease.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLeaseStatus(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintLeaseStatus(dAtA []byte, offset int, v uint64) int {
+	offset -= sovLeaseStatus(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *LeaseStatus) Size() (n int) {
 	if m == nil {
@@ -238,18 +304,15 @@ func (m *LeaseStatus) Size() (n int) {
 	n += 1 + l + sovLeaseStatus(uint64(l))
 	l = m.RequestTime.Size()
 	n += 1 + l + sovLeaseStatus(uint64(l))
+	l = len(m.ErrInfo)
+	if l > 0 {
+		n += 1 + l + sovLeaseStatus(uint64(l))
+	}
 	return n
 }
 
 func sovLeaseStatus(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozLeaseStatus(x uint64) (n int) {
 	return sovLeaseStatus(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -269,7 +332,7 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -297,7 +360,7 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -306,6 +369,9 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLeaseStatus
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLeaseStatus
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -327,7 +393,7 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -336,6 +402,9 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLeaseStatus
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLeaseStatus
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -357,7 +426,7 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.State |= (LeaseState(b) & 0x7F) << shift
+				m.State |= LeaseState(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -376,7 +445,7 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -385,6 +454,9 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLeaseStatus
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLeaseStatus
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -406,7 +478,7 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -415,12 +487,47 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthLeaseStatus
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLeaseStatus
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.RequestTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ErrInfo", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLeaseStatus
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthLeaseStatus
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLeaseStatus
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ErrInfo = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -446,6 +553,7 @@ func (m *LeaseStatus) Unmarshal(dAtA []byte) error {
 func skipLeaseStatus(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -477,10 +585,8 @@ func skipLeaseStatus(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -497,89 +603,34 @@ func skipLeaseStatus(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthLeaseStatus
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowLeaseStatus
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipLeaseStatus(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupLeaseStatus
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthLeaseStatus
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthLeaseStatus = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowLeaseStatus   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthLeaseStatus        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowLeaseStatus          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupLeaseStatus = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/lease_status.proto", fileDescriptor_lease_status_e30c13eb2b0d3e4f)
-}
-
-var fileDescriptor_lease_status_e30c13eb2b0d3e4f = []byte{
-	// 441 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0x4d, 0x6f, 0xd3, 0x30,
-	0x1c, 0xc6, 0xe3, 0xb5, 0x85, 0xe1, 0x4e, 0x53, 0x64, 0x71, 0x88, 0x26, 0xe1, 0x4e, 0x9c, 0xc6,
-	0x8b, 0x6c, 0x69, 0xe3, 0xc8, 0xa5, 0x59, 0x83, 0x54, 0xa9, 0xb0, 0xc9, 0xa5, 0x08, 0x71, 0x99,
-	0x92, 0xcc, 0x4a, 0xa3, 0xa4, 0x73, 0x88, 0x9d, 0xf0, 0x35, 0xf8, 0x00, 0x7c, 0xa0, 0x1e, 0x77,
-	0xdc, 0x69, 0x82, 0xf4, 0x5b, 0x70, 0x42, 0x76, 0xde, 0x76, 0x41, 0x70, 0x7b, 0x64, 0xff, 0x9f,
-	0xc7, 0x3f, 0x3f, 0x36, 0x7c, 0x91, 0x94, 0x34, 0x29, 0x25, 0xcf, 0x4b, 0x9e, 0x77, 0x22, 0x0b,
-	0x68, 0xca, 0x7d, 0xc9, 0xaf, 0xa4, 0xf2, 0x55, 0x21, 0x49, 0x96, 0x0b, 0x25, 0xd0, 0x24, 0x14,
-	0x61, 0x92, 0x0b, 0x3f, 0x5c, 0x93, 0xa4, 0x24, 0xed, 0x2c, 0x91, 0x4a, 0xe4, 0x7e, 0xc4, 0xb3,
-	0xe0, 0x08, 0x99, 0xcd, 0x2c, 0xa0, 0xd7, 0xbe, 0xf2, 0x6b, 0xd3, 0x11, 0x79, 0x98, 0x9f, 0xc6,
-	0x25, 0xbf, 0xe1, 0x52, 0x76, 0x42, 0x1f, 0xd4, 0xc8, 0x66, 0xde, 0x29, 0x54, 0x9c, 0xd2, 0x75,
-	0x1a, 0x52, 0x15, 0x6f, 0xb8, 0x54, 0xfe, 0x26, 0x6b, 0x76, 0x9e, 0x46, 0x22, 0x12, 0x46, 0x52,
-	0xad, 0xea, 0xd5, 0xe7, 0x3f, 0x06, 0x70, 0xbc, 0xd0, 0xac, 0x4b, 0x83, 0x8a, 0xde, 0xc0, 0x91,
-	0x41, 0x77, 0xc0, 0x31, 0x38, 0x19, 0x9f, 0x3a, 0xa4, 0x87, 0x6e, 0xe8, 0x88, 0x19, 0x77, 0x87,
-	0xdb, 0xfb, 0x89, 0xc5, 0xea, 0x61, 0x54, 0xc0, 0xc1, 0x8d, 0xf8, 0xe6, 0xec, 0x19, 0xcf, 0xb3,
-	0x07, 0x1e, 0x4d, 0x43, 0xd6, 0x69, 0x48, 0x3e, 0xb6, 0x34, 0xee, 0x4c, 0x1b, 0x7f, 0xdf, 0x4f,
-	0xde, 0x46, 0xb1, 0x5a, 0x17, 0x01, 0x09, 0xc5, 0x86, 0x76, 0x86, 0xeb, 0xa0, 0xd7, 0x34, 0x4b,
-	0x22, 0xda, 0x5e, 0x87, 0x9c, 0xa7, 0x22, 0x4c, 0xba, 0x14, 0xa6, 0xcf, 0x43, 0x53, 0x38, 0xd2,
-	0x0d, 0x73, 0x67, 0x70, 0x0c, 0x4e, 0x0e, 0x4f, 0x5f, 0x91, 0x7f, 0x34, 0x4c, 0xba, 0x9b, 0x72,
-	0x56, 0x3b, 0xd1, 0x0a, 0xee, 0xb7, 0x0d, 0x3a, 0x43, 0x83, 0x7f, 0xf6, 0x97, 0x94, 0xae, 0xe8,
-	0xbe, 0x7c, 0xb2, 0x68, 0x64, 0xd3, 0x46, 0x17, 0x85, 0xde, 0xc1, 0x83, 0x9c, 0x7f, 0x2d, 0xb8,
-	0x54, 0x57, 0xfa, 0x1d, 0x9c, 0xd1, 0xff, 0x34, 0x53, 0x87, 0x8c, 0x1b, 0xa3, 0x5e, 0x7f, 0xf9,
-	0x1e, 0xc2, 0x9e, 0x19, 0x3d, 0x81, 0x23, 0x8f, 0xb1, 0x0b, 0x66, 0x5b, 0x5a, 0x7e, 0x9a, 0x2e,
-	0xe6, 0x33, 0x1b, 0xa0, 0x03, 0xb8, 0xbf, 0xfa, 0xb0, 0x5a, 0x4e, 0xdd, 0x85, 0x67, 0xef, 0xa1,
-	0x31, 0x7c, 0xec, 0x7d, 0xbe, 0x9c, 0x33, 0x6f, 0x66, 0x0f, 0xd0, 0x21, 0x84, 0x97, 0xec, 0x62,
-	0x79, 0xce, 0xe6, 0xae, 0x37, 0xb3, 0x87, 0xee, 0xeb, 0xed, 0x2f, 0x6c, 0x6d, 0x2b, 0x0c, 0x6e,
-	0x2b, 0x0c, 0xee, 0x2a, 0x0c, 0x7e, 0x56, 0x18, 0x7c, 0xdf, 0x61, 0xeb, 0x76, 0x87, 0xad, 0xbb,
-	0x1d, 0xb6, 0xbe, 0xc0, 0xfe, 0x0f, 0x07, 0x8f, 0xcc, 0x17, 0x39, 0xfb, 0x13, 0x00, 0x00, 0xff,
-	0xff, 0x10, 0xeb, 0xbe, 0x1f, 0xe4, 0x02, 0x00, 0x00,
-}

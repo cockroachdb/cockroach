@@ -114,19 +114,25 @@ func TypeIDToOID(id descpb.ID) oid.Oid {
 }
 
 // UserDefinedTypeOIDToID converts a user defined type OID into a
-// descriptor ID.
-func UserDefinedTypeOIDToID(oid oid.Oid) descpb.ID {
-	return descpb.ID(oid) - oidext.CockroachPredefinedOIDMax
+// descriptor ID. OID of a user-defined type must be greater than
+// CockroachPredefinedOIDMax. The function returns an error if the
+// given OID is less than or equals to CockroachPredefinedMax.
+func UserDefinedTypeOIDToID(oid oid.Oid) (descpb.ID, error) {
+	if descpb.ID(oid) <= oidext.CockroachPredefinedOIDMax {
+		return 0, errors.Newf("user-defined OID %d should be greater "+
+			"than predefined Max: %d.", oid, oidext.CockroachPredefinedOIDMax)
+	}
+	return descpb.ID(oid) - oidext.CockroachPredefinedOIDMax, nil
 }
 
-// GetTypeDescID gets the type descriptor ID from a user defined type.
-func GetTypeDescID(t *types.T) descpb.ID {
+// GetUserDefinedTypeDescID gets the type descriptor ID from a user defined type.
+func GetUserDefinedTypeDescID(t *types.T) (descpb.ID, error) {
 	return UserDefinedTypeOIDToID(t.Oid())
 }
 
-// GetArrayTypeDescID gets the ID of the array type descriptor from a user
+// GetUserDefinedArrayTypeDescID gets the ID of the array type descriptor from a user
 // defined type.
-func GetArrayTypeDescID(t *types.T) descpb.ID {
+func GetUserDefinedArrayTypeDescID(t *types.T) (descpb.ID, error) {
 	return UserDefinedTypeOIDToID(t.UserDefinedArrayOID())
 }
 
@@ -196,14 +202,33 @@ func (desc *immutable) RegionNames() (descpb.RegionNames, error) {
 	return regions, nil
 }
 
-// RegionNamesForZoneConfigValidation returns all regions on the multi-region
-// enum to make validation with the public zone configs possible. Since the zone
-// configs are only updated when a transaction commits, this must ignore all
-// regions being added (since they will not be reflected in the zone
-// configuration yet), but it must include all region being dropped (since they
-// will not be dropped from the zone configuration until they are fully removed
-// from the type descriptor, again, at the end of the transaction).
-func (desc *immutable) RegionNamesForZoneConfigValidation() (descpb.RegionNames, error) {
+// TransitioningRegionNames returns regions which are transitioning to PUBLIC
+// or are being removed.
+func (desc *immutable) TransitioningRegionNames() (descpb.RegionNames, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region enum %d", desc.ID,
+		)
+	}
+	var regions descpb.RegionNames
+	for _, member := range desc.EnumMembers {
+		if member.Direction != descpb.TypeDescriptor_EnumMember_NONE {
+			regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+		}
+	}
+	return regions, nil
+}
+
+// RegionNamesForValidation returns all regions on the multi-region
+// enum to make validation with the public zone configs and partitons
+// possible.
+// Since the partitions and zone configs are only updated when a transaction
+// commits, this must ignore all regions being added (since they will not be
+// reflected in the zone configuration yet), but it must include all region
+// being dropped (since they will not be dropped from the zone configuration
+// until they are fully removed from the type descriptor, again, at the end
+// of the transaction).
+func (desc *immutable) RegionNamesForValidation() (descpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
 			"can not get regions of a non multi-region enum %d", desc.ID,
@@ -535,16 +560,20 @@ func (desc *immutable) validateEnumMembers(vea catalog.ValidationErrorAccumulato
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
+func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetReferencingDescriptorIDs()...)
 	ids.Add(desc.GetParentID())
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
 		ids.Add(desc.GetParentSchemaID())
 	}
-	for id := range desc.GetIDClosure() {
+	children, err := desc.GetIDClosure()
+	if err != nil {
+		return catalog.DescriptorIDSet{}, err
+	}
+	for id := range children {
 		ids.Add(id)
 	}
-	return ids
+	return ids, nil
 }
 
 // ValidateCrossReferences performs cross reference checks on the type descriptor.
@@ -580,7 +609,10 @@ func (desc *immutable) ValidateCrossReferences(
 		}
 	case descpb.TypeDescriptor_ALIAS:
 		if desc.GetAlias().UserDefined() {
-			aliasedID := UserDefinedTypeOIDToID(desc.GetAlias().Oid())
+			aliasedID, err := UserDefinedTypeOIDToID(desc.GetAlias().Oid())
+			if err != nil {
+				vea.Report(err)
+			}
 			if _, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
 				vea.Report(errors.Wrapf(err, "aliased type %d does not exist", aliasedID))
 			}
@@ -705,7 +737,11 @@ func HydrateTypesInTableDescriptor(
 	hydrateCol := func(col *descpb.ColumnDescriptor) error {
 		if col.Type.UserDefined() {
 			// Look up its type descriptor.
-			name, typDesc, err := res.GetTypeDescriptor(ctx, GetTypeDescID(col.Type))
+			td, err := GetUserDefinedTypeDescID(col.Type)
+			if err != nil {
+				return err
+			}
+			name, typDesc, err := res.GetTypeDescriptor(ctx, td)
 			if err != nil {
 				return err
 			}
@@ -768,7 +804,11 @@ func (desc *immutable) HydrateTypeInfoWithName(
 			case types.ArrayFamily:
 				// Hydrate the element type.
 				elemType := typ.ArrayContents()
-				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, GetTypeDescID(elemType))
+				id, err := GetUserDefinedTypeDescID(elemType)
+				if err != nil {
+					return err
+				}
+				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
 				if err != nil {
 					return err
 				}
@@ -882,14 +922,17 @@ func (desc *immutable) HasPendingSchemaChanges() bool {
 
 // GetIDClosure returns all type descriptor IDs that are referenced by this
 // type descriptor.
-func (desc *immutable) GetIDClosure() map[descpb.ID]struct{} {
+func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 	ret := make(map[descpb.ID]struct{})
 	// Collect the descriptor's own ID.
 	ret[desc.ID] = struct{}{}
 	if desc.Kind == descpb.TypeDescriptor_ALIAS {
 		// If this descriptor is an alias for another type, then get collect the
 		// closure for alias.
-		children := GetTypeDescriptorClosure(desc.Alias)
+		children, err := GetTypeDescriptorClosure(desc.Alias)
+		if err != nil {
+			return nil, err
+		}
 		for id := range children {
 			ret[id] = struct{}{}
 		}
@@ -897,28 +940,39 @@ func (desc *immutable) GetIDClosure() map[descpb.ID]struct{} {
 		// Otherwise, take the array type ID.
 		ret[desc.ArrayTypeID] = struct{}{}
 	}
-	return ret
+	return ret, nil
 }
 
 // GetTypeDescriptorClosure returns all type descriptor IDs that are
 // referenced by this input types.T.
-func GetTypeDescriptorClosure(typ *types.T) map[descpb.ID]struct{} {
+func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 	if !typ.UserDefined() {
-		return map[descpb.ID]struct{}{}
+		return map[descpb.ID]struct{}{}, nil
+	}
+	id, err := GetUserDefinedTypeDescID(typ)
+	if err != nil {
+		return nil, err
 	}
 	// Collect the type's descriptor ID.
 	ret := map[descpb.ID]struct{}{
-		GetTypeDescID(typ): {},
+		id: {},
 	}
 	if typ.Family() == types.ArrayFamily {
 		// If we have an array type, then collect all types in the contents.
-		children := GetTypeDescriptorClosure(typ.ArrayContents())
+		children, err := GetTypeDescriptorClosure(typ.ArrayContents())
+		if err != nil {
+			return nil, err
+		}
 		for id := range children {
 			ret[id] = struct{}{}
 		}
 	} else {
 		// Otherwise, take the array type ID.
-		ret[GetArrayTypeDescID(typ)] = struct{}{}
+		id, err := GetUserDefinedArrayTypeDescID(typ)
+		if err != nil {
+			return nil, err
+		}
+		ret[id] = struct{}{}
 	}
-	return ret
+	return ret, nil
 }

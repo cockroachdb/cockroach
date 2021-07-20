@@ -85,7 +85,13 @@ func createTestPebbleEngine() Engine {
 }
 
 func createTestPebbleEngineWithSettings(settings *cluster.Settings) Engine {
-	return newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, settings)
+	return newPebbleInMem(
+		context.Background(),
+		roachpb.Attributes{},
+		1<<20,   /* cacheSize */
+		512<<20, /* storeSize */
+		settings,
+	)
 }
 
 // TODO(sumeer): the following is legacy from when we had multiple engine
@@ -633,10 +639,16 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			ts := []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {Logical: 3}, {Logical: 4}, {Logical: 5}, {Logical: 6}}
+			ts := []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {Logical: 3}, {Logical: 4}, {Logical: 5}, {Logical: 6}, {Logical: 7}}
 
 			txn1ts := makeTxn(*txn1, ts[2])
 			txn2ts := makeTxn(*txn2, ts[5])
+			txnMap := map[int]*roachpb.Transaction{
+				2: txn1ts,
+				5: txn2ts,
+				6: txn2ts,
+				7: txn2ts,
+			}
 
 			fixtureKVs := []roachpb.KeyValue{
 				{Key: testKey1, Value: mkVal("testValue1 pre", ts[0])},
@@ -645,28 +657,26 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 				{Key: testKey2, Value: mkVal("testValue2", ts[3])},
 				{Key: testKey3, Value: mkVal("testValue3", ts[4])},
 				{Key: testKey4, Value: mkVal("testValue4", ts[5])},
+				{Key: testKey5, Value: mkVal("testValue5", ts[5])},
+				{Key: testKey6, Value: mkVal("testValue5", ts[5])},
 			}
 			for i, kv := range fixtureKVs {
-				var txn *roachpb.Transaction
-				if i == 2 {
-					txn = txn1ts
-				} else if i == 5 {
-					txn = txn2ts
-				}
 				v := *protoutil.Clone(&kv.Value).(*roachpb.Value)
 				v.Timestamp = hlc.Timestamp{}
-				if err := MVCCPut(ctx, engine, nil, kv.Key, kv.Value.Timestamp, v, txn); err != nil {
+				if err := MVCCPut(ctx, engine, nil, kv.Key, kv.Value.Timestamp, v, txnMap[i]); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			scanCases := []struct {
+				name       string
 				consistent bool
 				txn        *roachpb.Transaction
 				expIntents []roachpb.Intent
 				expValues  []roachpb.KeyValue
 			}{
 				{
+					name:       "consistent-all-keys",
 					consistent: true,
 					txn:        nil,
 					expIntents: []roachpb.Intent{
@@ -677,14 +687,17 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 					expValues: nil,
 				},
 				{
+					name:       "consistent-txn1",
 					consistent: true,
 					txn:        txn1ts,
 					expIntents: []roachpb.Intent{
 						roachpb.MakeIntent(&txn2ts.TxnMeta, testKey4),
+						roachpb.MakeIntent(&txn2ts.TxnMeta, testKey5),
 					},
 					expValues: nil, // []roachpb.KeyValue{fixtureKVs[2], fixtureKVs[3], fixtureKVs[4]},
 				},
 				{
+					name:       "consistent-txn2",
 					consistent: true,
 					txn:        txn2ts,
 					expIntents: []roachpb.Intent{
@@ -693,52 +706,51 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 					expValues: nil, // []roachpb.KeyValue{fixtureKVs[3], fixtureKVs[4], fixtureKVs[5]},
 				},
 				{
+					name:       "inconsistent-all-keys",
 					consistent: false,
 					txn:        nil,
 					expIntents: []roachpb.Intent{
 						roachpb.MakeIntent(&txn1ts.TxnMeta, testKey1),
 						roachpb.MakeIntent(&txn2ts.TxnMeta, testKey4),
+						roachpb.MakeIntent(&txn2ts.TxnMeta, testKey5),
+						roachpb.MakeIntent(&txn2ts.TxnMeta, testKey6),
 					},
 					expValues: []roachpb.KeyValue{fixtureKVs[0], fixtureKVs[3], fixtureKVs[4], fixtureKVs[1]},
 				},
 			}
 
-			for i, scan := range scanCases {
-				cStr := "inconsistent"
-				if scan.consistent {
-					cStr = "consistent"
-				}
-				res, err := MVCCScan(ctx, engine, testKey1, testKey4.Next(),
-					hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn})
-				var wiErr *roachpb.WriteIntentError
-				_ = errors.As(err, &wiErr)
-				if (err == nil) != (wiErr == nil) {
-					t.Errorf("%s(%d): unexpected error: %+v", cStr, i, err)
-				}
+			for _, scan := range scanCases {
+				t.Run(scan.name, func(t *testing.T) {
+					res, err := MVCCScan(ctx, engine, testKey1, testKey6.Next(),
+						hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn, MaxIntents: 2})
+					var wiErr *roachpb.WriteIntentError
+					_ = errors.As(err, &wiErr)
+					if (err == nil) != (wiErr == nil) {
+						t.Errorf("unexpected error: %+v", err)
+					}
 
-				if wiErr == nil != !scan.consistent {
-					t.Errorf("%s(%d): expected write intent error; got %s", cStr, i, err)
-					continue
-				}
+					if wiErr == nil != !scan.consistent {
+						t.Fatalf("expected write intent error; got %s", err)
+					}
 
-				intents := res.Intents
-				kvs := res.KVs
-				if len(intents) > 0 != !scan.consistent {
-					t.Errorf("%s(%d): expected different intents slice; got %+v", cStr, i, intents)
-					continue
-				}
+					intents := res.Intents
+					kvs := res.KVs
+					if len(intents) > 0 != !scan.consistent {
+						t.Fatalf("expected different intents slice; got %+v", intents)
+					}
 
-				if scan.consistent {
-					intents = wiErr.Intents
-				}
+					if scan.consistent {
+						intents = wiErr.Intents
+					}
 
-				if !reflect.DeepEqual(intents, scan.expIntents) {
-					t.Fatalf("%s(%d): expected intents:\n%+v;\n got\n%+v", cStr, i, scan.expIntents, intents)
-				}
+					if !reflect.DeepEqual(intents, scan.expIntents) {
+						t.Fatalf("expected intents:\n%+v;\n got\n%+v", scan.expIntents, intents)
+					}
 
-				if !reflect.DeepEqual(kvs, scan.expValues) {
-					t.Errorf("%s(%d): expected values %+v; got %+v", cStr, i, scan.expValues, kvs)
-				}
+					if !reflect.DeepEqual(kvs, scan.expValues) {
+						t.Fatalf("expected values %+v; got %+v", scan.expValues, kvs)
+					}
+				})
 			}
 		})
 	}
@@ -2988,7 +3000,7 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 			tsEarly := txn.WriteTimestamp
 			txn.TxnMeta.WriteTimestamp.Forward(tsEarly.Add(10, 0))
 
-			// Write an intent which has txn.Timestamp > meta.timestamp.
+			// Write an intent which has txn.WriteTimestamp > meta.timestamp.
 			if err := MVCCPut(ctx, engine, nil, testKey1, tsEarly, value1, txn); err != nil {
 				t.Fatal(err)
 			}

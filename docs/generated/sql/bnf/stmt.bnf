@@ -1,0 +1,20 @@
+stmt ::=
+	'HELPTOKEN'
+	| preparable_stmt
+	| analyze_stmt
+	| copy_from_stmt
+	| comment_stmt
+	| execute_stmt
+	| deallocate_stmt
+	| discard_stmt
+	| grant_stmt
+	| prepare_stmt
+	| revoke_stmt
+	| savepoint_stmt
+	| reassign_owned_by_stmt
+	| drop_owned_by_stmt
+	| release_stmt
+	| refresh_stmt
+	| nonpreparable_set_stmt
+	| transaction_stmt
+	| close_cursor_stmt

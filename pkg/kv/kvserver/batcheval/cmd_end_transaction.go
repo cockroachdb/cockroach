@@ -366,7 +366,7 @@ func EndTxn(
 			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
 		)
 		if err != nil {
-			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+			return result.Result{}, err
 		}
 		if err := txnResult.MergeAndDestroy(triggerResult); err != nil {
 			return result.Result{}, err
@@ -424,56 +424,6 @@ func IsEndTxnTriggeringRetryError(
 
 const lockResolutionBatchSize = 500
 
-// iterManager provides a storage.IterAndBuf appropriate for working with a
-// span of keys that are either all local or all global keys, identified by
-// the start key of the span, that is passed to getIterAndBuf. This is to deal
-// with the constraint that a single MVCCIterator using
-// MVCCKeyAndIntentsIterKind can either iterate over local keys or global
-// keys, but not both. We don't wish to create a new iterator for each span,
-// so iterManager lazily creates a new one when needed.
-type iterManager struct {
-	reader              storage.Reader
-	globalKeyUpperBound roachpb.Key
-	iterAndBuf          storage.IterAndBuf
-
-	iter        storage.MVCCIterator
-	isLocalIter bool
-}
-
-func (im *iterManager) getIterAndBuf(key roachpb.Key) storage.IterAndBuf {
-	isLocal := keys.IsLocal(key)
-	if im.iter != nil {
-		if im.isLocalIter == isLocal {
-			return im.iterAndBuf
-		}
-		im.iterAndBuf.SwitchIter(nil /* iter */)
-		im.iter.Close()
-		im.iter = nil
-	}
-	if isLocal {
-		im.iter = im.reader.NewMVCCIterator(
-			storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-				UpperBound: keys.LocalMax,
-			})
-		im.isLocalIter = true
-		im.iterAndBuf.SwitchIter(im.iter)
-	} else {
-		im.iter = im.reader.NewMVCCIterator(
-			storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-				UpperBound: im.globalKeyUpperBound,
-			})
-		im.isLocalIter = false
-		im.iterAndBuf.SwitchIter(im.iter)
-	}
-	return im.iterAndBuf
-}
-
-func (im *iterManager) Close() {
-	im.iterAndBuf.Cleanup()
-	im.iterAndBuf = storage.IterAndBuf{}
-	im.iter = nil
-}
-
 // resolveLocalLocks synchronously resolves any locks that are local to this
 // range in the same batch and returns those lock spans. The remainder are
 // collected and returned so that they can be handed off to asynchronous
@@ -497,13 +447,6 @@ func resolveLocalLocks(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	iterManager := &iterManager{
-		reader:              readWriter,
-		globalKeyUpperBound: desc.EndKey.AsRawKey(),
-		iterAndBuf:          storage.GetBufUsingIter(nil),
-	}
-	defer iterManager.Close()
-
 	var resolveAllowance int64 = lockResolutionBatchSize
 	if args.InternalCommitTrigger != nil {
 		// If this is a system transaction (such as a split or merge), don't enforce the resolve allowance.
@@ -524,9 +467,15 @@ func resolveLocalLocks(
 					externalLocks = append(externalLocks, span)
 					return nil
 				}
-				resolveMS := ms
-				ok, err := storage.MVCCResolveWriteIntentUsingIter(
-					ctx, readWriter, iterManager.getIterAndBuf(span.Key), resolveMS, update)
+				// It may be tempting to reuse an iterator here, but this call
+				// can create the iterator with Prefix:true which is much faster
+				// than seeking -- especially for intents that are missing, e.g.
+				// due to async intent resolution. See:
+				// https://github.com/cockroachdb/cockroach/issues/64092
+				//
+				// Note that the underlying pebbleIterator will still be reused
+				// since readWriter is a pebbleBatch in the typical case.
+				ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
 				if err != nil {
 					return err
 				}
@@ -543,8 +492,8 @@ func resolveLocalLocks(
 			externalLocks = append(externalLocks, outSpans...)
 			if inSpan != nil {
 				update.Span = *inSpan
-				num, resumeSpan, err := storage.MVCCResolveWriteIntentRangeUsingIter(
-					ctx, readWriter, iterManager.getIterAndBuf(update.Span.Key), ms, update, resolveAllowance)
+				num, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
+					ctx, readWriter, ms, update, resolveAllowance)
 				if err != nil {
 					return err
 				}
@@ -634,15 +583,39 @@ func RunCommitTrigger(
 		return result.Result{}, nil
 	}
 
+	// The transaction is committing with a commit trigger. This means that it has
+	// side-effects beyond those of the intents that it has written.
+
+	// The transaction should not have a commit timestamp in the future of present
+	// time, even it its commit timestamp is synthetic. Such cases should be
+	// caught in maybeCommitWaitBeforeCommitTrigger before getting here, which
+	// should sleep for long enough to ensure that the local clock leads the
+	// commit timestamp. An error here may indicate that the transaction's commit
+	// timestamp was bumped after it acquired latches.
+	if txn.WriteTimestamp.Synthetic && rec.Clock().Now().Less(txn.WriteTimestamp) {
+		return result.Result{}, errors.AssertionFailedf("txn %s with %s commit trigger needs "+
+			"commit wait. Was its timestamp bumped after acquiring latches?", txn, errors.Safe(ct.Kind()))
+	}
+
+	// Stage the commit trigger's side-effects so that they will go into effect on
+	// each Replica when the corresponding Raft log entry is applied. Only one
+	// commit trigger can be set.
 	if ct.GetSplitTrigger() != nil {
-		newMS, trigger, err := splitTrigger(
+		newMS, res, err := splitTrigger(
 			ctx, rec, batch, *ms, ct.SplitTrigger, txn.WriteTimestamp,
 		)
+		if err != nil {
+			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+		}
 		*ms = newMS
-		return trigger, err
+		return res, nil
 	}
 	if mt := ct.GetMergeTrigger(); mt != nil {
-		return mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+		if err != nil {
+			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+		}
+		return res, nil
 	}
 	if crt := ct.GetChangeReplicasTrigger(); crt != nil {
 		// TODO(tbg): once we support atomic replication changes, check that

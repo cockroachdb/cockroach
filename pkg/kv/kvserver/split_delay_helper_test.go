@@ -30,7 +30,8 @@ type testSplitDelayHelper struct {
 	raftStatus *raft.Status
 	sleep      func()
 
-	slept, emptyProposed int
+	slept         time.Duration
+	emptyProposed int
 }
 
 func (h *testSplitDelayHelper) RaftStatus(context.Context) (roachpb.RangeID, *raft.Status) {
@@ -39,15 +40,19 @@ func (h *testSplitDelayHelper) RaftStatus(context.Context) (roachpb.RangeID, *ra
 func (h *testSplitDelayHelper) ProposeEmptyCommand(ctx context.Context) {
 	h.emptyProposed++
 }
-func (h *testSplitDelayHelper) NumAttempts() int {
+func (h *testSplitDelayHelper) MaxTicks() int {
 	return h.numAttempts
 }
-func (h *testSplitDelayHelper) Sleep(context.Context) time.Duration {
+
+func (h *testSplitDelayHelper) TickDuration() time.Duration {
+	return time.Second
+}
+
+func (h *testSplitDelayHelper) Sleep(_ context.Context, dur time.Duration) {
+	h.slept += dur
 	if h.sleep != nil {
 		h.sleep()
 	}
-	h.slept++
-	return time.Second
 }
 
 var _ splitDelayHelperI = (*testSplitDelayHelper)(nil)
@@ -67,101 +72,133 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
 		assert.Equal(t, "", s)
-		assert.Equal(t, 0, h.slept)
+		assert.EqualValues(t, 0, h.slept)
 	})
 
-	t.Run("follower", func(t *testing.T) {
-		// Should immediately bail out if run on non-leader.
+	statusWithState := func(status raft.StateType) *raft.Status {
+		return &raft.Status{
+			BasicStatus: raft.BasicStatus{
+				SoftState: raft.SoftState{
+					RaftState: status,
+				},
+			},
+		}
+	}
+
+	t.Run("nil", func(t *testing.T) {
+		// Should immediately bail out if raftGroup is nil.
 		h := &testSplitDelayHelper{
 			numAttempts: 5,
 			rangeID:     1,
 			raftStatus:  nil,
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-		assert.Equal(t, "; not Raft leader", s)
-		assert.Equal(t, 0, h.slept)
+		assert.Equal(t, "; delayed by 0.0s to resolve: replica is raft follower (without success)", s)
+		assert.EqualValues(t, 0, h.slept)
 	})
 
-	t.Run("inactive", func(t *testing.T) {
+	t.Run("follower", func(t *testing.T) {
+		// Should immediately bail out if run on follower.
 		h := &testSplitDelayHelper{
 			numAttempts: 5,
 			rangeID:     1,
-			raftStatus: &raft.Status{
-				Progress: map[uint64]tracker.Progress{
-					2: {State: tracker.StateProbe},
-				},
-			},
+			raftStatus:  statusWithState(raft.StateFollower),
+		}
+		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
+		assert.Equal(t, "; delayed by 0.0s to resolve: replica is raft follower (without success)", s)
+		assert.EqualValues(t, 0, h.slept)
+	})
+
+	for _, state := range []raft.StateType{raft.StatePreCandidate, raft.StateCandidate} {
+		t.Run(state.String(), func(t *testing.T) {
+			h := &testSplitDelayHelper{
+				numAttempts: 5,
+				rangeID:     1,
+				raftStatus:  statusWithState(state),
+			}
+			s := maybeDelaySplitToAvoidSnapshot(ctx, h)
+			assert.Equal(t, "; delayed by 5.5s to resolve: not leader ("+state.String()+") (without success)", s)
+		})
+	}
+
+	t.Run("inactive", func(t *testing.T) {
+		st := statusWithState(raft.StateLeader)
+		st.Progress = map[uint64]tracker.Progress{
+			2: {State: tracker.StateProbe},
+		}
+		h := &testSplitDelayHelper{
+			numAttempts: 5,
+			rangeID:     1,
+			raftStatus:  st,
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
 		// We try to wake up the follower once, but then give up on it.
-		assert.Equal(t, "; r1/2 inactive; delayed split for 1.0s to avoid Raft snapshot", s)
-		assert.Equal(t, 1, h.slept)
+		assert.Equal(t, "; delayed by 1.3s to resolve: r1/2 inactive", s)
+		assert.Less(t, int64(h.slept), int64(2*h.TickDuration()))
 		assert.Equal(t, 1, h.emptyProposed)
 	})
 
 	for _, state := range []tracker.StateType{tracker.StateProbe, tracker.StateSnapshot} {
 		t.Run(state.String(), func(t *testing.T) {
+			st := statusWithState(raft.StateLeader)
+			st.Progress = map[uint64]tracker.Progress{
+				2: {
+					State:        state,
+					RecentActive: true,
+					ProbeSent:    true, // Unifies string output below.
+					Inflights:    &tracker.Inflights{},
+				},
+				// Healthy follower just for kicks.
+				3: {State: tracker.StateReplicate},
+			}
 			h := &testSplitDelayHelper{
 				numAttempts: 5,
 				rangeID:     1,
-				raftStatus: &raft.Status{
-					Progress: map[uint64]tracker.Progress{
-						2: {
-							State:        state,
-							RecentActive: true,
-							ProbeSent:    true, // Unifies string output below.
-							Inflights:    &tracker.Inflights{},
-						},
-						// Healthy follower just for kicks.
-						3: {State: tracker.StateReplicate},
-					},
-				},
+				raftStatus:  st,
 			}
 			s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-			assert.Equal(t, "; replica r1/2 not caught up: "+state.String()+
-				" match=0 next=0 paused; delayed split for 5.0s to avoid Raft snapshot (without success)", s)
-			assert.Equal(t, 5, h.slept)
-			assert.Equal(t, 5, h.emptyProposed)
+			assert.Equal(t, "; delayed by 5.5s to resolve: replica r1/2 not caught up: "+
+				state.String()+" match=0 next=0 paused (without success)", s)
+			assert.Equal(t, 0, h.emptyProposed)
 		})
 	}
 
 	t.Run("immediately-replicating", func(t *testing.T) {
+		st := statusWithState(raft.StateLeader)
+		st.Progress = map[uint64]tracker.Progress{
+			2: {State: tracker.StateReplicate}, // intentionally not recently active
+		}
 		h := &testSplitDelayHelper{
 			numAttempts: 5,
 			rangeID:     1,
-			raftStatus: &raft.Status{
-				Progress: map[uint64]tracker.Progress{
-					2: {State: tracker.StateReplicate}, // intentionally not recently active
-				},
-			},
+			raftStatus:  st,
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
 		assert.Equal(t, "", s)
-		assert.Equal(t, 0, h.slept)
+		assert.EqualValues(t, 0, h.slept)
 		assert.Equal(t, 0, h.emptyProposed)
 	})
 
 	t.Run("becomes-replicating", func(t *testing.T) {
+		st := statusWithState(raft.StateLeader)
+		st.Progress = map[uint64]tracker.Progress{
+			2: {State: tracker.StateProbe, RecentActive: true, Inflights: &tracker.Inflights{}},
+		}
 		h := &testSplitDelayHelper{
 			numAttempts: 5,
 			rangeID:     1,
-			raftStatus: &raft.Status{
-				Progress: map[uint64]tracker.Progress{
-					2: {State: tracker.StateProbe, RecentActive: true, Inflights: &tracker.Inflights{}},
-				},
-			},
+			raftStatus:  st,
 		}
-		// The fourth attempt will see the follower catch up.
+		// Once >= 2s have passed, the follower becomes replicating.
 		h.sleep = func() {
-			if h.slept == 2 {
+			if h.slept >= 2*time.Second {
 				pr := h.raftStatus.Progress[2]
 				pr.State = tracker.StateReplicate
 				h.raftStatus.Progress[2] = pr
 			}
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-		assert.Equal(t, "; delayed split for 3.0s to avoid Raft snapshot", s)
-		assert.Equal(t, 3, h.slept)
-		assert.Equal(t, 3, h.emptyProposed)
+		assert.Equal(t, "; delayed by 2.5s to resolve: replica r1/2 not caught up: StateProbe match=0 next=0", s)
+		assert.EqualValues(t, 0, h.emptyProposed)
 	})
 }

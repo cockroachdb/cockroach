@@ -12,11 +12,11 @@
 package tabledesc
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -152,6 +152,41 @@ func (desc *Mutable) SetPrimaryIndex(index descpb.IndexDescriptor) {
 // index.
 func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.IndexDescriptor) {
 	desc.Indexes[indexOrdinal-1] = index
+}
+
+// UpdateIndexPartitioning applies the new partition and adjusts the column info
+// for the specified index descriptor. Returns false iff this was a no-op.
+func UpdateIndexPartitioning(
+	idx *descpb.IndexDescriptor,
+	newImplicitCols []catalog.Column,
+	newPartitioning descpb.PartitioningDescriptor,
+) bool {
+	oldNumImplicitCols := int(idx.Partitioning.NumImplicitColumns)
+	isNoOp := oldNumImplicitCols == len(newImplicitCols) && idx.Partitioning.Equal(newPartitioning)
+	numCols := len(idx.KeyColumnIDs)
+	newCap := numCols + len(newImplicitCols) - oldNumImplicitCols
+	newColumnIDs := make([]descpb.ColumnID, len(newImplicitCols), newCap)
+	newColumnNames := make([]string, len(newImplicitCols), newCap)
+	newColumnDirections := make([]descpb.IndexDescriptor_Direction, len(newImplicitCols), newCap)
+	for i, col := range newImplicitCols {
+		newColumnIDs[i] = col.GetID()
+		newColumnNames[i] = col.GetName()
+		newColumnDirections[i] = descpb.IndexDescriptor_ASC
+		if isNoOp &&
+			(idx.KeyColumnIDs[i] != newColumnIDs[i] ||
+				idx.KeyColumnNames[i] != newColumnNames[i] ||
+				idx.KeyColumnDirections[i] != newColumnDirections[i]) {
+			isNoOp = false
+		}
+	}
+	if isNoOp {
+		return false
+	}
+	idx.KeyColumnIDs = append(newColumnIDs, idx.KeyColumnIDs[oldNumImplicitCols:]...)
+	idx.KeyColumnNames = append(newColumnNames, idx.KeyColumnNames[oldNumImplicitCols:]...)
+	idx.KeyColumnDirections = append(newColumnDirections, idx.KeyColumnDirections[oldNumImplicitCols:]...)
+	idx.Partitioning = newPartitioning
+	return true
 }
 
 // GetPrimaryIndex returns the primary index in the form of a catalog.Index
@@ -362,11 +397,12 @@ func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error
 			return col, nil
 		}
 	}
-	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+
+	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column-id \"%d\" does not exist", id)
 }
 
 // FindColumnWithName returns the first column found whose name matches the
-// provided target ID, in the canonical order.
+// provided target name, in the canonical order.
 // If no column is found then an error is also returned.
 func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) {
 	for _, col := range desc.AllColumns() {
@@ -375,6 +411,18 @@ func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) 
 		}
 	}
 	return nil, colinfo.NewUndefinedColumnError(string(name))
+}
+
+// FindVirtualColumnWithExpr returns the first virtual computed column whose
+// expression matches the provided target expression, in the canonical order. If
+// no column is found then ok=false is returned.
+func (desc *wrapper) FindVirtualColumnWithExpr(expr string) (_ catalog.Column, ok bool) {
+	for _, col := range desc.AllColumns() {
+		if col.IsVirtual() && col.GetComputeExpr() == expr {
+			return col, true
+		}
+	}
+	return nil, false
 }
 
 // getExistingOrNewMutationCache should be the only place where the

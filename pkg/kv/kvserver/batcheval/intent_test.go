@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -56,6 +57,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 		Timestamp:       ts,
 		ReadConsistency: roachpb.READ_UNCOMMITTED,
 	}
+	evalCtx := (&MockEvalCtx{ClusterSettings: cluster.MakeClusterSettings()}).EvalContext()
 
 	testCases := []struct {
 		name              string
@@ -70,7 +72,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 					RequestHeader: roachpb.RequestHeader{Key: key},
 				}
 				var resp roachpb.GetResponse
-				if _, err := Get(ctx, db, CommandArgs{Args: req, Header: header}, &resp); err != nil {
+				if _, err := Get(ctx, db, CommandArgs{Args: req, Header: header, EvalCtx: evalCtx}, &resp); err != nil {
 					return nil, err
 				}
 				if resp.IntentValue == nil {
@@ -88,7 +90,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 					RequestHeader: roachpb.RequestHeader{Key: key, EndKey: key.Next()},
 				}
 				var resp roachpb.ScanResponse
-				if _, err := Scan(ctx, db, CommandArgs{Args: req, Header: header}, &resp); err != nil {
+				if _, err := Scan(ctx, db, CommandArgs{Args: req, Header: header, EvalCtx: evalCtx}, &resp); err != nil {
 					return nil, err
 				}
 				return resp.IntentRows, nil
@@ -103,7 +105,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 					RequestHeader: roachpb.RequestHeader{Key: key, EndKey: key.Next()},
 				}
 				var resp roachpb.ReverseScanResponse
-				if _, err := ReverseScan(ctx, db, CommandArgs{Args: req, Header: header}, &resp); err != nil {
+				if _, err := ReverseScan(ctx, db, CommandArgs{Args: req, Header: header, EvalCtx: evalCtx}, &resp); err != nil {
 					return nil, err
 				}
 				return resp.IntentRows, nil

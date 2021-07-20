@@ -346,10 +346,10 @@ INSERT INTO t7 VALUES (1),(2),(3);
 EXPORT INTO CSV 'nodelocal://0/t7' FROM TABLE t7;
 ----
 
-feature-counters
+feature-usage
 IMPORT INTO t7 CSV DATA ('nodelocal://0/t7/export*.csv')
 ----
-sql.multiregion.import  1
+sql.multiregion.import
 
 # Test for locality optimized search counter.
 feature-allowlist
@@ -366,3 +366,72 @@ SELECT * FROM t8 WHERE a = 1
 ----
 sql.plan.opt.locality-optimized-search
 
+exec
+USE survive_region;
+CREATE TABLE t9 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+----
+
+feature-allowlist
+sql.multiregion.zone_configuration.override.*
+----
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.user
+
+# Note that this case illustrates that once the session variable is set, we'll
+# count all instances where a zone configuration is modified, even if that
+# modification didn't strictly require overriding.
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 CONFIGURE ZONE USING gc.ttlseconds=10;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.user
+
+feature-usage
+ALTER TABLE t9 CONFIGURE ZONE USING gc.ttlseconds=5
+----
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.system.table
+
+# Ensure that no counters are set in the case where we're not overriding
+feature-usage
+ALTER TABLE t9 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+----
+
+# Note that this case illustrates that once the session variable is set, we'll
+# count all instances where a table's zone configuration is modified, even if
+# that modification didn't strictly require overriding.
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.system.table
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER DATABASE d CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.user
+
+feature-usage
+ALTER DATABASE d CONFIGURE ZONE USING gc.ttlseconds=5;
+----
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER DATABASE d ADD REGION "us-east-1";
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.system.database

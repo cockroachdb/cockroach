@@ -1730,7 +1730,7 @@ select
  │        histogram(2)=  0   900   0  100
  │                     <--- false --- true
  └── filters
-      └── b:2 = false [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
+      └── NOT b:2 [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
 
 exec-ddl
 CREATE TABLE t0(c0 INT)
@@ -2521,3 +2521,505 @@ select
       ├── c31:31 = 1 [type=bool, outer=(31), constraints=(/31: [/1 - /1]; tight), fd=()-->(31)]
       ├── c32:32 = 1 [type=bool, outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
       └── c33:33 = 1 [type=bool, outer=(33), constraints=(/33: [/1 - /1]; tight), fd=()-->(33)]
+
+# Estimate statistics for filters with disjunctions by unioning the selectivity
+# of each disjunction. As a result, the optimizer can prefer unions of multiple
+# index scans over full table scans in more cases. See #58744.
+
+exec-ddl
+CREATE TABLE disjunction (
+  k INT PRIMARY KEY,
+  a STRING,
+  b STRING,
+  c STRING,
+  INDEX a_idx (a),
+  INDEX b_idx (b),
+  INDEX c_idx (c)
+)
+----
+
+exec-ddl
+ALTER TABLE disjunction INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  }
+]'
+----
+
+# Disjunction without histograms.
+opt
+SELECT * FROM disjunction WHERE a = 'foo' OR b = 'foo' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── distinct-on
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
+ │    ├── stats: [rows=2]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── union-all
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── left columns: k:6(int) a:7(string) b:8(string) c:9(string)
+ │    │    ├── right columns: k:11(int) a:12(string) b:13(string) c:14(string)
+ │    │    ├── stats: [rows=2]
+ │    │    ├── ordering: +1
+ │    │    ├── index-join disjunction
+ │    │    │    ├── columns: k:6(int!null) a:7(string!null) b:8(string) c:9(string)
+ │    │    │    ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+ │    │    │    ├── key: (6)
+ │    │    │    ├── fd: ()-->(7), (6)-->(8,9)
+ │    │    │    ├── ordering: +6 opt(7) [actual: +6]
+ │    │    │    └── scan disjunction@a_idx
+ │    │    │         ├── columns: k:6(int!null) a:7(string!null)
+ │    │    │         ├── constraint: /7/6: [/'foo' - /'foo']
+ │    │    │         ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+ │    │    │         ├── key: (6)
+ │    │    │         ├── fd: ()-->(7)
+ │    │    │         └── ordering: +6 opt(7) [actual: +6]
+ │    │    └── index-join disjunction
+ │    │         ├── columns: k:11(int!null) a:12(string) b:13(string!null) c:14(string)
+ │    │         ├── stats: [rows=1, distinct(13)=1, null(13)=0]
+ │    │         ├── key: (11)
+ │    │         ├── fd: ()-->(13), (11)-->(12,14)
+ │    │         ├── ordering: +11 opt(13) [actual: +11]
+ │    │         └── scan disjunction@b_idx
+ │    │              ├── columns: k:11(int!null) b:13(string!null)
+ │    │              ├── constraint: /13/11: [/'foo' - /'foo']
+ │    │              ├── stats: [rows=1, distinct(13)=1, null(13)=0]
+ │    │              ├── key: (11)
+ │    │              ├── fd: ()-->(13)
+ │    │              └── ordering: +11 opt(13) [actual: +11]
+ │    └── aggregations
+ │         ├── const-agg [as=a:2, type=string, outer=(2)]
+ │         │    └── a:2 [type=string]
+ │         ├── const-agg [as=b:3, type=string, outer=(3)]
+ │         │    └── b:3 [type=string]
+ │         └── const-agg [as=c:4, type=string, outer=(4)]
+ │              └── c:4 [type=string]
+ └── 5 [type=int]
+
+# Multiple disjunctions without histograms.
+opt
+SELECT * FROM disjunction WHERE a = 'foo' OR b = 'foo' OR c = 'foo' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=3]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── distinct-on
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
+ │    ├── stats: [rows=3]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── union-all
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── left columns: k:6(int) a:7(string) b:8(string) c:9(string)
+ │    │    ├── right columns: k:11(int) a:12(string) b:13(string) c:14(string)
+ │    │    ├── stats: [rows=3]
+ │    │    ├── ordering: +1
+ │    │    ├── index-join disjunction
+ │    │    │    ├── columns: k:6(int!null) a:7(string!null) b:8(string) c:9(string)
+ │    │    │    ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+ │    │    │    ├── key: (6)
+ │    │    │    ├── fd: ()-->(7), (6)-->(8,9)
+ │    │    │    ├── ordering: +6 opt(7) [actual: +6]
+ │    │    │    └── scan disjunction@a_idx
+ │    │    │         ├── columns: k:6(int!null) a:7(string!null)
+ │    │    │         ├── constraint: /7/6: [/'foo' - /'foo']
+ │    │    │         ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+ │    │    │         ├── key: (6)
+ │    │    │         ├── fd: ()-->(7)
+ │    │    │         └── ordering: +6 opt(7) [actual: +6]
+ │    │    └── distinct-on
+ │    │         ├── columns: k:11(int!null) a:12(string) b:13(string) c:14(string)
+ │    │         ├── grouping columns: k:11(int!null)
+ │    │         ├── stats: [rows=2]
+ │    │         ├── key: (11)
+ │    │         ├── fd: (11)-->(12-14)
+ │    │         ├── ordering: +11
+ │    │         ├── union-all
+ │    │         │    ├── columns: k:11(int!null) a:12(string) b:13(string) c:14(string)
+ │    │         │    ├── left columns: k:16(int) a:17(string) b:18(string) c:19(string)
+ │    │         │    ├── right columns: k:21(int) a:22(string) b:23(string) c:24(string)
+ │    │         │    ├── stats: [rows=2]
+ │    │         │    ├── ordering: +11
+ │    │         │    ├── index-join disjunction
+ │    │         │    │    ├── columns: k:16(int!null) a:17(string) b:18(string) c:19(string!null)
+ │    │         │    │    ├── stats: [rows=1, distinct(19)=1, null(19)=0]
+ │    │         │    │    ├── key: (16)
+ │    │         │    │    ├── fd: ()-->(19), (16)-->(17,18)
+ │    │         │    │    ├── ordering: +16 opt(19) [actual: +16]
+ │    │         │    │    └── scan disjunction@c_idx
+ │    │         │    │         ├── columns: k:16(int!null) c:19(string!null)
+ │    │         │    │         ├── constraint: /19/16: [/'foo' - /'foo']
+ │    │         │    │         ├── stats: [rows=1, distinct(19)=1, null(19)=0]
+ │    │         │    │         ├── key: (16)
+ │    │         │    │         ├── fd: ()-->(19)
+ │    │         │    │         └── ordering: +16 opt(19) [actual: +16]
+ │    │         │    └── index-join disjunction
+ │    │         │         ├── columns: k:21(int!null) a:22(string) b:23(string!null) c:24(string)
+ │    │         │         ├── stats: [rows=1, distinct(23)=1, null(23)=0]
+ │    │         │         ├── key: (21)
+ │    │         │         ├── fd: ()-->(23), (21)-->(22,24)
+ │    │         │         ├── ordering: +21 opt(23) [actual: +21]
+ │    │         │         └── scan disjunction@b_idx
+ │    │         │              ├── columns: k:21(int!null) b:23(string!null)
+ │    │         │              ├── constraint: /23/21: [/'foo' - /'foo']
+ │    │         │              ├── stats: [rows=1, distinct(23)=1, null(23)=0]
+ │    │         │              ├── key: (21)
+ │    │         │              ├── fd: ()-->(23)
+ │    │         │              └── ordering: +21 opt(23) [actual: +21]
+ │    │         └── aggregations
+ │    │              ├── const-agg [as=a:12, type=string, outer=(12)]
+ │    │              │    └── a:12 [type=string]
+ │    │              ├── const-agg [as=b:13, type=string, outer=(13)]
+ │    │              │    └── b:13 [type=string]
+ │    │              └── const-agg [as=c:14, type=string, outer=(14)]
+ │    │                   └── c:14 [type=string]
+ │    └── aggregations
+ │         ├── const-agg [as=a:2, type=string, outer=(2)]
+ │         │    └── a:2 [type=string]
+ │         ├── const-agg [as=b:3, type=string, outer=(3)]
+ │         │    └── b:3 [type=string]
+ │         └── const-agg [as=c:4, type=string, outer=(4)]
+ │              └── c:4 [type=string]
+ └── 5 [type=int]
+
+opt
+SELECT * FROM disjunction WHERE (a = 'foo' OR b = 'foo') AND c = 'foo' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=0.001]
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── select
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
+ │    ├── stats: [rows=0.001, distinct(4)=0.001, null(4)=0]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(4), (1)-->(2,3)
+ │    ├── limit hint: 5.00
+ │    ├── index-join disjunction
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: (1)
+ │    │    ├── fd: ()-->(4), (1)-->(2,3)
+ │    │    └── scan disjunction@c_idx
+ │    │         ├── columns: k:1(int!null) c:4(string!null)
+ │    │         ├── constraint: /4/1: [/'foo' - /'foo']
+ │    │         ├── stats: [rows=1, distinct(4)=1, null(4)=0]
+ │    │         ├── key: (1)
+ │    │         └── fd: ()-->(4)
+ │    └── filters
+ │         └── (a:2 = 'foo') OR (b:3 = 'foo') [type=bool, outer=(2,3)]
+ └── 5 [type=int]
+
+exec-ddl
+ALTER TABLE disjunction INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5010,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "aaa"},
+      {"num_eq": 10, "num_range": 990, "distinct_range": 999, "upper_bound": "foo"},
+      {"num_eq": 990, "num_range": 10, "distinct_range": 9, "upper_bound": "fop"},
+      {"num_eq": 0, "num_range": 8000, "distinct_range": 4000, "upper_bound": "zoo"}
+    ]
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5010,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "aaa"},
+      {"num_eq": 10, "num_range": 990, "distinct_range": 999, "upper_bound": "foo"},
+      {"num_eq": 990, "num_range": 10, "distinct_range": 9, "upper_bound": "fop"},
+      {"num_eq": 0, "num_range": 8000, "distinct_range": 4000, "upper_bound": "zoo"}
+    ]
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5010,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "aaa"},
+      {"num_eq": 10, "num_range": 990, "distinct_range": 999, "upper_bound": "foo"},
+      {"num_eq": 990, "num_range": 10, "distinct_range": 9, "upper_bound": "fop"},
+      {"num_eq": 0, "num_range": 8000, "distinct_range": 4000, "upper_bound": "zoo"}
+    ]
+  }
+]'
+----
+
+# Disjunction with histograms.
+opt
+SELECT * FROM disjunction WHERE a LIKE 'foo%' OR b LIKE 'foo%' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── distinct-on
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    ├── grouping columns: k:1(int!null)
+ │    ├── stats: [rows=40]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── union-all
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── left columns: k:6(int) a:7(string) b:8(string) c:9(string)
+ │    │    ├── right columns: k:11(int) a:12(string) b:13(string) c:14(string)
+ │    │    ├── stats: [rows=40]
+ │    │    ├── limit hint: 6.44
+ │    │    ├── index-join disjunction
+ │    │    │    ├── columns: k:6(int!null) a:7(string!null) b:8(string) c:9(string)
+ │    │    │    ├── stats: [rows=20, distinct(7)=10, null(7)=0]
+ │    │    │    │   histogram(7)=  0   10    10    0
+ │    │    │    │                <--- 'foo' ---- 'fop'
+ │    │    │    ├── key: (6)
+ │    │    │    ├── fd: (6)-->(7-9)
+ │    │    │    ├── limit hint: 6.44
+ │    │    │    └── scan disjunction@a_idx
+ │    │    │         ├── columns: k:6(int!null) a:7(string!null)
+ │    │    │         ├── constraint: /7/6: [/'foo' - /'fop')
+ │    │    │         ├── stats: [rows=20, distinct(7)=10, null(7)=0]
+ │    │    │         │   histogram(7)=  0   10    10    0
+ │    │    │         │                <--- 'foo' ---- 'fop'
+ │    │    │         ├── key: (6)
+ │    │    │         ├── fd: (6)-->(7)
+ │    │    │         └── limit hint: 6.44
+ │    │    └── index-join disjunction
+ │    │         ├── columns: k:11(int!null) a:12(string) b:13(string!null) c:14(string)
+ │    │         ├── stats: [rows=20, distinct(13)=10, null(13)=0]
+ │    │         │   histogram(13)=  0   10    10    0
+ │    │         │                 <--- 'foo' ---- 'fop'
+ │    │         ├── key: (11)
+ │    │         ├── fd: (11)-->(12-14)
+ │    │         ├── limit hint: 6.44
+ │    │         └── scan disjunction@b_idx
+ │    │              ├── columns: k:11(int!null) b:13(string!null)
+ │    │              ├── constraint: /13/11: [/'foo' - /'fop')
+ │    │              ├── stats: [rows=20, distinct(13)=10, null(13)=0]
+ │    │              │   histogram(13)=  0   10    10    0
+ │    │              │                 <--- 'foo' ---- 'fop'
+ │    │              ├── key: (11)
+ │    │              ├── fd: (11)-->(13)
+ │    │              └── limit hint: 6.44
+ │    └── aggregations
+ │         ├── const-agg [as=a:2, type=string, outer=(2)]
+ │         │    └── a:2 [type=string]
+ │         ├── const-agg [as=b:3, type=string, outer=(3)]
+ │         │    └── b:3 [type=string]
+ │         └── const-agg [as=c:4, type=string, outer=(4)]
+ │              └── c:4 [type=string]
+ └── 5 [type=int]
+
+
+# Multiple disjunctions with histograms.
+opt
+SELECT * FROM disjunction WHERE a LIKE 'foo%' OR b LIKE 'foo%' OR c LIKE 'foo%' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── distinct-on
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    ├── grouping columns: k:1(int!null)
+ │    ├── stats: [rows=60]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── union-all
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── left columns: k:6(int) a:7(string) b:8(string) c:9(string)
+ │    │    ├── right columns: k:11(int) a:12(string) b:13(string) c:14(string)
+ │    │    ├── stats: [rows=60]
+ │    │    ├── limit hint: 6.28
+ │    │    ├── index-join disjunction
+ │    │    │    ├── columns: k:6(int!null) a:7(string!null) b:8(string) c:9(string)
+ │    │    │    ├── stats: [rows=20, distinct(7)=10, null(7)=0]
+ │    │    │    │   histogram(7)=  0   10    10    0
+ │    │    │    │                <--- 'foo' ---- 'fop'
+ │    │    │    ├── key: (6)
+ │    │    │    ├── fd: (6)-->(7-9)
+ │    │    │    ├── limit hint: 6.28
+ │    │    │    └── scan disjunction@a_idx
+ │    │    │         ├── columns: k:6(int!null) a:7(string!null)
+ │    │    │         ├── constraint: /7/6: [/'foo' - /'fop')
+ │    │    │         ├── stats: [rows=20, distinct(7)=10, null(7)=0]
+ │    │    │         │   histogram(7)=  0   10    10    0
+ │    │    │         │                <--- 'foo' ---- 'fop'
+ │    │    │         ├── key: (6)
+ │    │    │         ├── fd: (6)-->(7)
+ │    │    │         └── limit hint: 6.28
+ │    │    └── distinct-on
+ │    │         ├── columns: k:11(int!null) a:12(string) b:13(string) c:14(string)
+ │    │         ├── grouping columns: k:11(int!null)
+ │    │         ├── stats: [rows=40]
+ │    │         ├── key: (11)
+ │    │         ├── fd: (11)-->(12-14)
+ │    │         ├── limit hint: 6.28
+ │    │         ├── union-all
+ │    │         │    ├── columns: k:11(int!null) a:12(string) b:13(string) c:14(string)
+ │    │         │    ├── left columns: k:16(int) a:17(string) b:18(string) c:19(string)
+ │    │         │    ├── right columns: k:21(int) a:22(string) b:23(string) c:24(string)
+ │    │         │    ├── stats: [rows=40]
+ │    │         │    ├── limit hint: 8.28
+ │    │         │    ├── index-join disjunction
+ │    │         │    │    ├── columns: k:16(int!null) a:17(string) b:18(string) c:19(string!null)
+ │    │         │    │    ├── stats: [rows=20, distinct(19)=10, null(19)=0]
+ │    │         │    │    │   histogram(19)=  0   10    10    0
+ │    │         │    │    │                 <--- 'foo' ---- 'fop'
+ │    │         │    │    ├── key: (16)
+ │    │         │    │    ├── fd: (16)-->(17-19)
+ │    │         │    │    ├── limit hint: 8.28
+ │    │         │    │    └── scan disjunction@c_idx
+ │    │         │    │         ├── columns: k:16(int!null) c:19(string!null)
+ │    │         │    │         ├── constraint: /19/16: [/'foo' - /'fop')
+ │    │         │    │         ├── stats: [rows=20, distinct(19)=10, null(19)=0]
+ │    │         │    │         │   histogram(19)=  0   10    10    0
+ │    │         │    │         │                 <--- 'foo' ---- 'fop'
+ │    │         │    │         ├── key: (16)
+ │    │         │    │         ├── fd: (16)-->(19)
+ │    │         │    │         └── limit hint: 8.28
+ │    │         │    └── index-join disjunction
+ │    │         │         ├── columns: k:21(int!null) a:22(string) b:23(string!null) c:24(string)
+ │    │         │         ├── stats: [rows=20, distinct(23)=10, null(23)=0]
+ │    │         │         │   histogram(23)=  0   10    10    0
+ │    │         │         │                 <--- 'foo' ---- 'fop'
+ │    │         │         ├── key: (21)
+ │    │         │         ├── fd: (21)-->(22-24)
+ │    │         │         ├── limit hint: 8.28
+ │    │         │         └── scan disjunction@b_idx
+ │    │         │              ├── columns: k:21(int!null) b:23(string!null)
+ │    │         │              ├── constraint: /23/21: [/'foo' - /'fop')
+ │    │         │              ├── stats: [rows=20, distinct(23)=10, null(23)=0]
+ │    │         │              │   histogram(23)=  0   10    10    0
+ │    │         │              │                 <--- 'foo' ---- 'fop'
+ │    │         │              ├── key: (21)
+ │    │         │              ├── fd: (21)-->(23)
+ │    │         │              └── limit hint: 8.28
+ │    │         └── aggregations
+ │    │              ├── const-agg [as=a:12, type=string, outer=(12)]
+ │    │              │    └── a:12 [type=string]
+ │    │              ├── const-agg [as=b:13, type=string, outer=(13)]
+ │    │              │    └── b:13 [type=string]
+ │    │              └── const-agg [as=c:14, type=string, outer=(14)]
+ │    │                   └── c:14 [type=string]
+ │    └── aggregations
+ │         ├── const-agg [as=a:2, type=string, outer=(2)]
+ │         │    └── a:2 [type=string]
+ │         ├── const-agg [as=b:3, type=string, outer=(3)]
+ │         │    └── b:3 [type=string]
+ │         └── const-agg [as=c:4, type=string, outer=(4)]
+ │              └── c:4 [type=string]
+ └── 5 [type=int]
+
+# One disjunction filter and one simple filter.
+opt
+SELECT * FROM disjunction WHERE (a LIKE 'foo%' OR b LIKE 'foo%') AND c LIKE 'foo%' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=0.08]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── select
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
+ │    ├── stats: [rows=0.08, distinct(4)=0.08, null(4)=0]
+ │    │   histogram(4)=  0  0.04   0.04    0
+ │    │                <--- 'foo' ------ 'fop'
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── index-join disjunction
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── stats: [rows=20]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    └── scan disjunction@c_idx
+ │    │         ├── columns: k:1(int!null) c:4(string!null)
+ │    │         ├── constraint: /4/1: [/'foo' - /'fop')
+ │    │         ├── stats: [rows=20, distinct(4)=10, null(4)=0]
+ │    │         │   histogram(4)=  0   10    10    0
+ │    │         │                <--- 'foo' ---- 'fop'
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(4)
+ │    └── filters
+ │         └── (a:2 LIKE 'foo%') OR (b:3 LIKE 'foo%') [type=bool, outer=(2,3)]
+ └── 5 [type=int]
+
+# The row count should not exceed the number of rows in the table when
+# disjunctions have high selectivity values.
+opt
+SELECT * FROM disjunction WHERE a > 'fop' OR b > 'fop' OR c > 'fop' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── select
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    ├── stats: [rows=10000]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── scan disjunction
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── stats: [rows=10000, distinct(1)=10000, null(1)=0, distinct(2)=5010, null(2)=0, distinct(3)=5010, null(3)=0, distinct(4)=5010, null(4)=0]
+ │    │    │   histogram(2)=  0    0    990   10    10   990   8000    0
+ │    │    │                <--- 'aaa' ----- 'foo' ---- 'fop' ------ 'zoo'
+ │    │    │   histogram(3)=  0    0    990   10    10   990   8000    0
+ │    │    │                <--- 'aaa' ----- 'foo' ---- 'fop' ------ 'zoo'
+ │    │    │   histogram(4)=  0    0    990   10    10   990   8000    0
+ │    │    │                <--- 'aaa' ----- 'foo' ---- 'fop' ------ 'zoo'
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    └── limit hint: 5.00
+ │    └── filters
+ │         └── ((a:2 > 'fop') OR (b:3 > 'fop')) OR (c:4 > 'fop') [type=bool, outer=(2-4)]
+ └── 5 [type=int]

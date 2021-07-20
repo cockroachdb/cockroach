@@ -98,15 +98,16 @@ func (ie *InternalExecutor) WithSyntheticDescriptors(
 func MakeInternalExecutor(
 	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
 ) InternalExecutor {
-	monitor := mon.NewUnlimitedMonitor(
-		ctx,
+	monitor := mon.NewMonitor(
 		"internal SQL executor",
 		mon.MemoryResource,
 		memMetrics.CurBytesCount,
 		memMetrics.MaxBytesHist,
+		-1,            /* use default increment */
 		math.MaxInt64, /* noteworthy */
 		settings,
 	)
+	monitor.Start(ctx, s.pool, mon.BoundAccount{})
 	return InternalExecutor{
 		s:          s,
 		mon:        monitor,

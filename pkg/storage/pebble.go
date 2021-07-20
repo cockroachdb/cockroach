@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -44,9 +45,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-const (
-	maxSyncDurationFatalOnExceededDefault = true
-)
+const maxSyncDurationFatalOnExceededDefault = true
 
 // Default for MaxSyncDuration below.
 var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT", 60*time.Second)
@@ -483,7 +482,7 @@ func ResolveEncryptedEnvOptions(
 	}
 
 	var statsHandler EncryptionStatsHandler
-	if len(cfg.ExtraOptions) > 0 {
+	if cfg.IsEncrypted() {
 		// Encryption is enabled.
 		if !cfg.UseFileRegistry {
 			return nil, nil, fmt.Errorf("file registry is needed to support encryption")
@@ -493,7 +492,7 @@ func ResolveEncryptedEnvOptions(
 		}
 		var err error
 		cfg.Opts.FS, statsHandler, err =
-			NewEncryptedEnvFunc(cfg.Opts.FS, fileRegistry, cfg.Dir, cfg.Opts.ReadOnly, cfg.ExtraOptions)
+			NewEncryptedEnvFunc(cfg.Opts.FS, fileRegistry, cfg.Dir, cfg.Opts.ReadOnly, cfg.EncryptionOptions)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -564,7 +563,10 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 }
 
 func newPebbleInMem(
-	ctx context.Context, attrs roachpb.Attributes, cacheSize int64, settings *cluster.Settings,
+	ctx context.Context,
+	attrs roachpb.Attributes,
+	cacheSize, storeSize int64,
+	settings *cluster.Settings,
 ) *Pebble {
 	opts := DefaultPebbleOptions()
 	opts.Cache = pebble.NewCache(cacheSize)
@@ -575,10 +577,8 @@ func newPebbleInMem(
 		ctx,
 		PebbleConfig{
 			StorageConfig: base.StorageConfig{
-				Attrs: attrs,
-				// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
-				// https://github.com/cockroachdb/cockroach/issues/16750
-				MaxSize:  512 << 20, /* 512 MiB */
+				Attrs:    attrs,
+				MaxSize:  storeSize,
 				Settings: settings,
 			},
 			Opts: opts,
@@ -651,13 +651,15 @@ func (p *Pebble) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	dest io.WriteCloser,
+) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	b, summary, k, err := pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
-		maxSize, useTBI)
+	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
+	summary, k, err := pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
+		maxSize, useTBI, dest, maxIntentCount)
 	r.Free()
-	return b, summary, k, err
+	return summary, k, err
 }
 
 // MVCCGet implements the Engine interface.
@@ -684,14 +686,6 @@ func (p *Pebble) rawGet(key []byte) ([]byte, error) {
 		return nil, nil
 	}
 	return ret, err
-}
-
-// GetCompactionStats implements the Engine interface.
-func (p *Pebble) GetCompactionStats() string {
-	// NB: The initial blank line matches the formatting used by RocksDB and
-	// ensures that compaction stats display will not contain the log prefix
-	// (this method is only used for logging purposes).
-	return "\n" + p.db.Metrics().String()
 }
 
 // MVCCGetProto implements the Engine interface.
@@ -930,7 +924,7 @@ func (p *Pebble) Attrs() roachpb.Attributes {
 
 // Capacity implements the Engine interface.
 func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
-	return computeCapacity(p.path, p.maxSize)
+	return computeCapacity(p.db.Metrics(), p.path, p.maxSize, p.auxDir)
 }
 
 // Flush implements the Engine interface.
@@ -939,41 +933,13 @@ func (p *Pebble) Flush() error {
 }
 
 // GetMetrics implements the Engine interface.
-func (p *Pebble) GetMetrics() (*Metrics, error) {
+func (p *Pebble) GetMetrics() Metrics {
 	m := p.db.Metrics()
-
-	// Aggregate compaction stats across levels.
-	var ingestedBytes, compactedBytesRead, compactedBytesWritten, numSSTables int64
-	for _, lm := range m.Levels {
-		ingestedBytes += int64(lm.BytesIngested)
-		compactedBytesRead += int64(lm.BytesRead)
-		compactedBytesWritten += int64(lm.BytesCompacted)
-		numSSTables += lm.NumFiles
+	return Metrics{
+		Metrics:        m,
+		DiskSlowCount:  int64(atomic.LoadUint64(&p.diskSlowCount)),
+		DiskStallCount: int64(atomic.LoadUint64(&p.diskStallCount)),
 	}
-
-	return &Metrics{
-		BlockCacheHits:                 m.BlockCache.Hits,
-		BlockCacheMisses:               m.BlockCache.Misses,
-		BlockCacheUsage:                m.BlockCache.Size,
-		BlockCachePinnedUsage:          0,
-		BloomFilterPrefixChecked:       m.Filter.Hits + m.Filter.Misses,
-		BloomFilterPrefixUseful:        m.Filter.Hits,
-		DiskSlowCount:                  int64(atomic.LoadUint64(&p.diskSlowCount)),
-		DiskStallCount:                 int64(atomic.LoadUint64(&p.diskStallCount)),
-		MemtableTotalSize:              int64(m.MemTable.Size),
-		Flushes:                        m.Flush.Count,
-		FlushedBytes:                   int64(m.Levels[0].BytesFlushed),
-		Compactions:                    m.Compact.Count,
-		IngestedBytes:                  ingestedBytes,
-		CompactedBytesRead:             compactedBytesRead,
-		CompactedBytesWritten:          compactedBytesWritten,
-		TableReadersMemEstimate:        m.TableCache.Size,
-		PendingCompactionBytesEstimate: int64(m.Compact.EstimatedDebt),
-		L0FileCount:                    m.Levels[0].NumFiles,
-		L0SublevelCount:                int64(m.Levels[0].Sublevels),
-		ReadAmplification:              int64(m.ReadAmp()),
-		NumSSTables:                    numSSTables,
-	}, nil
 }
 
 // GetEncryptionRegistries implements the Engine interface.
@@ -1074,18 +1040,7 @@ func (p *Pebble) NewBatch() Batch {
 
 // NewReadOnly implements the Engine interface.
 func (p *Pebble) NewReadOnly() ReadWriter {
-	// TODO(sumeer): a sync.Pool for pebbleReadOnly would save on allocations
-	// for the underlying pebbleIterators.
-	return &pebbleReadOnly{
-		parent: p,
-		// Defensively set reusable=true. One has to be careful about this since
-		// an accidental false value would cause these iterators, that are value
-		// members of pebbleReadOnly, to be put in the pebbleIterPool.
-		prefixIter:       pebbleIterator{reusable: true},
-		normalIter:       pebbleIterator{reusable: true},
-		prefixEngineIter: pebbleIterator{reusable: true},
-		normalEngineIter: pebbleIterator{reusable: true},
-	}
+	return newPebbleReadOnly(p)
 }
 
 // NewUnindexedBatch implements the Engine interface.
@@ -1097,6 +1052,7 @@ func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
 func (p *Pebble) NewSnapshot() Reader {
 	return &pebbleSnapshot{
 		snapshot: p.db.NewSnapshot(),
+		settings: p.settings,
 	}
 }
 
@@ -1273,6 +1229,37 @@ type pebbleReadOnly struct {
 
 var _ ReadWriter = &pebbleReadOnly{}
 
+var pebbleReadOnlyPool = sync.Pool{
+	New: func() interface{} {
+		return &pebbleReadOnly{
+			// Defensively set reusable=true. One has to be careful about this since
+			// an accidental false value would cause these iterators, that are value
+			// members of pebbleReadOnly, to be put in the pebbleIterPool.
+			prefixIter:       pebbleIterator{reusable: true},
+			normalIter:       pebbleIterator{reusable: true},
+			prefixEngineIter: pebbleIterator{reusable: true},
+			normalEngineIter: pebbleIterator{reusable: true},
+		}
+	},
+}
+
+// Instantiates a new pebbleReadOnly.
+func newPebbleReadOnly(parent *Pebble) *pebbleReadOnly {
+	p := pebbleReadOnlyPool.Get().(*pebbleReadOnly)
+	// When p is a reused pebbleReadOnly from the pool, the iter fields preserve
+	// the original reusable=true that was set above in pebbleReadOnlyPool.New(),
+	// and some buffers that are safe to reuse. Everything else has been reset by
+	// pebbleIterator.destroy().
+	*p = pebbleReadOnly{
+		parent:           parent,
+		prefixIter:       p.prefixIter,
+		normalIter:       p.normalIter,
+		prefixEngineIter: p.prefixEngineIter,
+		normalEngineIter: p.normalEngineIter,
+	}
+	return p
+}
+
 func (p *pebbleReadOnly) Close() {
 	if p.closed {
 		panic("closing an already-closed pebbleReadOnly")
@@ -1285,6 +1272,8 @@ func (p *pebbleReadOnly) Close() {
 	p.normalIter.destroy()
 	p.prefixEngineIter.destroy()
 	p.normalEngineIter.destroy()
+
+	pebbleReadOnlyPool.Put(p)
 }
 
 func (p *pebbleReadOnly) Closed() bool {
@@ -1298,13 +1287,15 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	dest io.WriteCloser,
+) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	b, summary, k, err := pebbleExportToSst(
-		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI)
+	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.parent.settings.SV)
+	summary, k, err := pebbleExportToSst(
+		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest, maxIntentCount)
 	r.Free()
-	return b, summary, k, err
+	return summary, k, err
 }
 
 func (p *pebbleReadOnly) MVCCGet(key MVCCKey) ([]byte, error) {
@@ -1537,6 +1528,7 @@ func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 // pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().
 type pebbleSnapshot struct {
 	snapshot *pebble.Snapshot
+	settings *cluster.Settings
 	closed   bool
 }
 
@@ -1560,13 +1552,15 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	dest io.WriteCloser,
+) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	b, summary, k, err := pebbleExportToSst(
-		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI)
+	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
+	summary, k, err := pebbleExportToSst(
+		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest, maxIntentCount)
 	r.Free()
-	return b, summary, k, err
+	return summary, k, err
 }
 
 // Get implements the Reader interface.
@@ -1671,9 +1665,10 @@ func pebbleExportToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	sstFile := &MemFile{}
-	sstWriter := MakeBackupSSTWriter(sstFile)
+	dest io.WriteCloser,
+	maxIntentCount int64,
+) (roachpb.BulkOpSummary, roachpb.Key, error) {
+	sstWriter := MakeBackupSSTWriter(noopSync{dest})
 	defer sstWriter.Close()
 
 	var rows RowCounter
@@ -1684,6 +1679,7 @@ func pebbleExportToSst(
 			EnableTimeBoundIteratorOptimization: useTBI,
 			StartTime:                           startTS,
 			EndTime:                             endTS,
+			EnableWriteIntentAggregation:        true,
 		})
 	defer iter.Close()
 	var curKey roachpb.Key // only used if exportAllRevisions
@@ -1692,9 +1688,9 @@ func pebbleExportToSst(
 	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; {
 		ok, err := iter.Valid()
 		if err != nil {
-			// The error may be a WriteIntentError. In which case, returning it will
-			// cause this command to be retried.
-			return nil, roachpb.BulkOpSummary{}, nil, err
+			// This is an underlying iterator error, return it to the caller to deal
+			// with.
+			return roachpb.BulkOpSummary{}, nil, err
 		}
 		if !ok {
 			break
@@ -1703,6 +1699,11 @@ func pebbleExportToSst(
 		if unsafeKey.Key.Compare(endKey) >= 0 {
 			break
 		}
+
+		if iter.NumCollectedIntents() > 0 {
+			break
+		}
+
 		unsafeValue := iter.UnsafeValue()
 		isNewKey := !exportAllRevisions || !unsafeKey.Key.Equal(curKey)
 		if paginated && exportAllRevisions && isNewKey {
@@ -1714,7 +1715,7 @@ func pebbleExportToSst(
 		skipTombstones := !exportAllRevisions && startTS.IsEmpty()
 		if len(unsafeValue) > 0 || !skipTombstones {
 			if err := rows.Count(unsafeKey.Key); err != nil {
-				return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "decoding %s", unsafeKey)
+				return roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "decoding %s", unsafeKey)
 			}
 			curSize := rows.BulkOpSummary.DataSize
 			reachedTargetSize := curSize > 0 && uint64(curSize) >= targetSize
@@ -1727,16 +1728,16 @@ func pebbleExportToSst(
 				// This should never be an intent since the incremental iterator returns
 				// an error when encountering intents.
 				if err := sstWriter.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
-					return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+					return roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			} else {
 				if err := sstWriter.PutMVCC(unsafeKey, unsafeValue); err != nil {
-					return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+					return roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			}
 			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
 			if maxSize > 0 && newSize > int64(maxSize) {
-				return nil, roachpb.BulkOpSummary{}, nil,
+				return roachpb.BulkOpSummary{}, nil,
 					errors.Errorf("export size (%d bytes) exceeds max size (%d bytes)", newSize, maxSize)
 			}
 			rows.BulkOpSummary.DataSize = newSize
@@ -1749,15 +1750,32 @@ func pebbleExportToSst(
 		}
 	}
 
+	// First check if we encountered an intent while iterating the data.
+	// If we do it means this export can't complete and is aborted. We need to loop over remaining data
+	// to collect all matching intents before returning them in an error to the caller.
+	if iter.NumCollectedIntents() > 0 {
+		for int64(iter.NumCollectedIntents()) < maxIntentCount {
+			iter.NextKey()
+			// If we encounter other errors during intent collection, we return our original write intent failure.
+			// We would find this new error again upon retry.
+			ok, _ := iter.Valid()
+			if !ok {
+				break
+			}
+		}
+		err := iter.TryGetIntentError()
+		return roachpb.BulkOpSummary{}, nil, err
+	}
+
 	if rows.BulkOpSummary.DataSize == 0 {
 		// If no records were added to the sstable, skip completing it and return a
 		// nil slice – the export code will discard it anyway (based on 0 DataSize).
-		return nil, roachpb.BulkOpSummary{}, nil, nil
+		return roachpb.BulkOpSummary{}, nil, nil
 	}
 
 	if err := sstWriter.Finish(); err != nil {
-		return nil, roachpb.BulkOpSummary{}, nil, err
+		return roachpb.BulkOpSummary{}, nil, err
 	}
 
-	return sstFile.Data(), rows.BulkOpSummary, resumeKey, nil
+	return rows.BulkOpSummary, resumeKey, nil
 }

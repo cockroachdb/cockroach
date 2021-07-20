@@ -109,6 +109,15 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags lexbase.Encode
 	}
 }
 
+// NormalizeLocaleName returns a normalized locale identifier based on s. The
+// case of the locale is normalized and any dash characters are mapped to
+// underscore characters.
+func NormalizeLocaleName(s string) string {
+	b := bytes.NewBuffer(make([]byte, 0, len(s)))
+	EncodeLocaleName(b, s)
+	return b.String()
+}
+
 // EncodeLocaleName writes the locale identifier in s to buf. Any dash
 // characters are mapped to underscore characters. Underscore characters do not
 // need to be quoted, and they are considered equivalent to dash characters by

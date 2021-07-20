@@ -2,7 +2,13 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scbuild",
-    srcs = ["builder.go"],
+    srcs = [
+        "builder.go",
+        "relation_common.go",
+        "sequence.go",
+        "table.go",
+        "view.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild",
     visibility = ["//visibility:public"],
     deps = [
@@ -10,12 +16,14 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
@@ -43,6 +51,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scpb",

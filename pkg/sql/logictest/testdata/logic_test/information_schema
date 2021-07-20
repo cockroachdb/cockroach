@@ -300,9 +300,11 @@ crdb_internal       index_columns
 crdb_internal       interleaved
 crdb_internal       invalid_objects
 crdb_internal       jobs
+crdb_internal       kv_node_liveness
 crdb_internal       kv_node_status
 crdb_internal       kv_store_status
 crdb_internal       leases
+crdb_internal       lost_descriptors_with_data
 crdb_internal       node_build_info
 crdb_internal       node_contention_events
 crdb_internal       node_inflight_trace_spans
@@ -387,15 +389,19 @@ pg_catalog          pg_hba_file_rules
 pg_catalog          pg_index
 pg_catalog          pg_indexes
 pg_catalog          pg_inherits
+pg_catalog          pg_init_privs
 pg_catalog          pg_language
 pg_catalog          pg_largeobject
+pg_catalog          pg_largeobject_metadata
 pg_catalog          pg_locks
 pg_catalog          pg_matviews
 pg_catalog          pg_namespace
 pg_catalog          pg_opclass
 pg_catalog          pg_operator
 pg_catalog          pg_opfamily
+pg_catalog          pg_partitioned_table
 pg_catalog          pg_policies
+pg_catalog          pg_policy
 pg_catalog          pg_prepared_statements
 pg_catalog          pg_prepared_xacts
 pg_catalog          pg_proc
@@ -404,12 +410,15 @@ pg_catalog          pg_publication_rel
 pg_catalog          pg_publication_tables
 pg_catalog          pg_range
 pg_catalog          pg_replication_origin
+pg_catalog          pg_replication_origin_status
+pg_catalog          pg_replication_slots
 pg_catalog          pg_rewrite
 pg_catalog          pg_roles
 pg_catalog          pg_rules
 pg_catalog          pg_seclabel
 pg_catalog          pg_seclabels
 pg_catalog          pg_sequence
+pg_catalog          pg_sequences
 pg_catalog          pg_settings
 pg_catalog          pg_shadow
 pg_catalog          pg_shdepend
@@ -419,6 +428,7 @@ pg_catalog          pg_shseclabel
 pg_catalog          pg_stat_activity
 pg_catalog          pg_statistic_ext
 pg_catalog          pg_subscription
+pg_catalog          pg_subscription_rel
 pg_catalog          pg_tables
 pg_catalog          pg_tablespace
 pg_catalog          pg_timezone_abbrevs
@@ -495,9 +505,11 @@ index_columns
 interleaved
 invalid_objects
 jobs
+kv_node_liveness
 kv_node_status
 kv_store_status
 leases
+lost_descriptors_with_data
 node_build_info
 node_contention_events
 node_inflight_trace_spans
@@ -582,15 +594,19 @@ pg_hba_file_rules
 pg_index
 pg_indexes
 pg_inherits
+pg_init_privs
 pg_language
 pg_largeobject
+pg_largeobject_metadata
 pg_locks
 pg_matviews
 pg_namespace
 pg_opclass
 pg_operator
 pg_opfamily
+pg_partitioned_table
 pg_policies
+pg_policy
 pg_prepared_statements
 pg_prepared_xacts
 pg_proc
@@ -599,12 +615,15 @@ pg_publication_rel
 pg_publication_tables
 pg_range
 pg_replication_origin
+pg_replication_origin_status
+pg_replication_slots
 pg_rewrite
 pg_roles
 pg_rules
 pg_seclabel
 pg_seclabels
 pg_sequence
+pg_sequences
 pg_settings
 pg_shadow
 pg_shdepend
@@ -614,6 +633,7 @@ pg_shseclabel
 pg_stat_activity
 pg_statistic_ext
 pg_subscription
+pg_subscription_rel
 pg_tables
 pg_tablespace
 pg_timezone_abbrevs
@@ -709,9 +729,11 @@ system         crdb_internal       index_columns                          SYSTEM
 system         crdb_internal       interleaved                            SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                                   SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_node_liveness                       SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_status                         SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_store_status                        SYSTEM VIEW  NO                  1
 system         crdb_internal       leases                                 SYSTEM VIEW  NO                  1
+system         crdb_internal       lost_descriptors_with_data             SYSTEM VIEW  NO                  1
 system         crdb_internal       node_build_info                        SYSTEM VIEW  NO                  1
 system         crdb_internal       node_contention_events                 SYSTEM VIEW  NO                  1
 system         crdb_internal       node_inflight_trace_spans              SYSTEM VIEW  NO                  1
@@ -796,15 +818,19 @@ system         pg_catalog          pg_hba_file_rules                      SYSTEM
 system         pg_catalog          pg_index                               SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_indexes                             SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_inherits                            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_init_privs                          SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_language                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_largeobject                         SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_largeobject_metadata                SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_locks                               SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_matviews                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_namespace                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_opclass                             SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_operator                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_opfamily                            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_partitioned_table                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_policies                            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_policy                              SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_prepared_statements                 SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_prepared_xacts                      SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_proc                                SYSTEM VIEW  NO                  1
@@ -813,12 +839,15 @@ system         pg_catalog          pg_publication_rel                     SYSTEM
 system         pg_catalog          pg_publication_tables                  SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_range                               SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_replication_origin                  SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_replication_origin_status           SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_replication_slots                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_rewrite                             SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_roles                               SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_rules                               SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_seclabel                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_seclabels                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_sequence                            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_sequences                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_settings                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_shadow                              SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_shdepend                            SYSTEM VIEW  NO                  1
@@ -828,6 +857,7 @@ system         pg_catalog          pg_shseclabel                          SYSTEM
 system         pg_catalog          pg_stat_activity                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_statistic_ext                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_subscription                        SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_subscription_rel                    SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_tables                              SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_tablespace                          SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_timezone_abbrevs                    SYSTEM VIEW  NO                  1
@@ -2017,9 +2047,11 @@ NULL     public   system         crdb_internal       index_columns              
 NULL     public   system         crdb_internal       interleaved                            SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
+NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       lost_descriptors_with_data             SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_contention_events                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NULL          YES
@@ -2104,15 +2136,19 @@ NULL     public   system         pg_catalog          pg_hba_file_rules          
 NULL     public   system         pg_catalog          pg_index                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_indexes                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_inherits                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_init_privs                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_language                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_largeobject                         SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_largeobject_metadata                SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_locks                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_matviews                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_namespace                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_opclass                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_operator                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_opfamily                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_partitioned_table                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_policies                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_policy                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_statements                 SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_xacts                      SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_proc                                SELECT          NULL          YES
@@ -2121,12 +2157,15 @@ NULL     public   system         pg_catalog          pg_publication_rel         
 NULL     public   system         pg_catalog          pg_publication_tables                  SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_range                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_replication_origin                  SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_replication_origin_status           SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_replication_slots                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_rewrite                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_roles                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_rules                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_seclabel                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_seclabels                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_sequence                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_sequences                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_settings                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shadow                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shdepend                            SELECT          NULL          YES
@@ -2136,6 +2175,7 @@ NULL     public   system         pg_catalog          pg_shseclabel              
 NULL     public   system         pg_catalog          pg_stat_activity                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_statistic_ext                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription                        SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_subscription_rel                    SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_tables                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_tablespace                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_timezone_abbrevs                    SELECT          NULL          YES
@@ -2457,9 +2497,11 @@ NULL     public   system         crdb_internal       index_columns              
 NULL     public   system         crdb_internal       interleaved                            SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
+NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       lost_descriptors_with_data             SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_contention_events                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NULL          YES
@@ -2544,15 +2586,19 @@ NULL     public   system         pg_catalog          pg_hba_file_rules          
 NULL     public   system         pg_catalog          pg_index                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_indexes                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_inherits                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_init_privs                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_language                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_largeobject                         SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_largeobject_metadata                SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_locks                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_matviews                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_namespace                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_opclass                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_operator                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_opfamily                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_partitioned_table                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_policies                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_policy                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_statements                 SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_xacts                      SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_proc                                SELECT          NULL          YES
@@ -2561,12 +2607,15 @@ NULL     public   system         pg_catalog          pg_publication_rel         
 NULL     public   system         pg_catalog          pg_publication_tables                  SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_range                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_replication_origin                  SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_replication_origin_status           SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_replication_slots                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_rewrite                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_roles                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_rules                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_seclabel                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_seclabels                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_sequence                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_sequences                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_settings                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shadow                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shdepend                            SELECT          NULL          YES
@@ -2576,6 +2625,7 @@ NULL     public   system         pg_catalog          pg_shseclabel              
 NULL     public   system         pg_catalog          pg_stat_activity                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_statistic_ext                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription                        SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_subscription_rel                    SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_tables                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_tablespace                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_timezone_abbrevs                    SELECT          NULL          YES
@@ -3644,6 +3694,7 @@ default_transaction_read_only                         off
 default_transaction_use_follower_reads                off
 disable_partially_distributed_plans                   off
 disallow_full_table_scans                             off
+distsql_workmem                                       64 MiB
 enable_drop_enum_value                                off
 enable_experimental_alter_column_type_general         off
 enable_experimental_stream_replication                off
@@ -3652,6 +3703,7 @@ enable_insert_fast_path                               on
 enable_seqscan                                        on
 enable_zigzag_join                                    on
 escape_string_warning                                 on
+experimental_enable_expression_based_indexes          off
 experimental_enable_hash_sharded_indexes              off
 experimental_enable_implicit_column_partitioning      off
 experimental_enable_temp_tables                       off
@@ -3746,25 +3798,26 @@ other_db       public        t2          d            2
 statement ok
 SET DATABASE = test
 
-# Testing udt_type at information_schema.columns
+# Testing udt_type at information_schema.columns and data_type
 statement ok
 CREATE DATABASE enum_db;
 SET DATABASE = enum_db;
 CREATE SCHEMA sh;
 CREATE TYPE e AS ENUM ('a', 'b');
 CREATE TYPE sh.d AS ENUM('x', 'y');
-CREATE TABLE t (e e, d sh.d);
+CREATE TABLE t (e e, d sh.d, a e[]);
 
-query TT colnames
-select udt_schema, udt_name
+query TTT colnames
+select udt_schema, udt_name, data_type
 from information_schema.columns
 where table_name = 't'
 ORDER BY udt_name
 ----
-udt_schema  udt_name
-sh          d
-public      e
-pg_catalog  int8
+udt_schema  udt_name  data_type
+public      _e        ARRAY
+sh          d         USER-DEFINED
+public      e         USER-DEFINED
+pg_catalog  int8      bigint
 
 # Testing information_schema.columns.is_identity which for now is False for every column
 statement ok

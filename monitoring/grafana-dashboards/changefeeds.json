@@ -3,7 +3,11 @@
     "list": [
       {
         "builtIn": 1,
+<<<<<<< HEAD
         "datasource": "${DS_PROMETHEUS}",
+=======
+        "datasource": "-- Grafana --",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -15,8 +19,12 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
+<<<<<<< HEAD
   "id": 382,
   "iteration": 1617887986182,
+=======
+  "iteration": 1623784884657,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
   "links": [],
   "panels": [
     {
@@ -24,23 +32,37 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+<<<<<<< HEAD
       "datasource": null,
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
+=======
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 0
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 10,
+=======
+      "id": 2,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -57,7 +79,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -67,10 +93,17 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "sum(rate(changefeed_emitted_bytes{job=\"crdb\",cluster=~\"cluster\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Emitted Bytes",
+=======
+          "exemplar": true,
+          "expr": "sum(rate(changefeed_max_behind_nanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Max Changefeed Latency",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "refId": "A"
         }
       ],
@@ -78,7 +111,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "sink Byte Traffic",
+=======
+      "title": "Max Changefeed Latency",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -94,14 +131,26 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "short",
           "label": "Bytes(B)",
           "logBase": 1,
           "max": "1",
+=======
+          "$$hashKey": "object:162",
+          "format": "ns",
+          "label": "time",
+          "logBase": 1,
+          "max": null,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:163",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -122,21 +171,33 @@
       "dashes": false,
       "datasource": null,
       "fieldConfig": {
+<<<<<<< HEAD
         "defaults": {
           "custom": {}
         },
+=======
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 8
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 8,
+=======
+      "id": 10,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -153,7 +214,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -163,9 +228,17 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "sum(jobs_changefeed_resume_retry_error{job=\"crdb\",cluster=\"$cluster\"})",
           "interval": "",
           "legendFormat": "Retryable Errors",
+=======
+          "exemplar": true,
+          "expr": "sum(rate(changefeed_emitted_bytes{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Emitted Bytes",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "refId": "A"
         }
       ],
@@ -173,7 +246,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Changefeed Restarts",
+=======
+      "title": "Sink Byte Traffic",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -189,14 +266,26 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "short",
           "label": "actions",
           "logBase": 1,
           "max": null,
+=======
+          "$$hashKey": "object:215",
+          "format": "short",
+          "label": "bytes",
+          "logBase": 1,
+          "max": "1",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:216",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -217,21 +306,33 @@
       "dashes": false,
       "datasource": null,
       "fieldConfig": {
+<<<<<<< HEAD
         "defaults": {
           "custom": {}
         },
+=======
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 16
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 6,
+=======
+      "id": 4,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -248,7 +349,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -258,6 +363,7 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "sum(changefeed_flush_nanos{job=\"crdb\",cluster=\"$cluster\"})",
           "interval": "",
           "legendFormat": "Flush Time",
@@ -268,13 +374,31 @@
           "interval": "",
           "legendFormat": "Message Emit time",
           "refId": "B"
+=======
+          "exemplar": true,
+          "expr": "sum(rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Messages",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(changefeed_flushes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Flushes",
+          "refId": "A"
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Sink Timings",
+=======
+      "title": "Sink Counts",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -290,14 +414,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "ns",
           "label": "time (ns)",
+=======
+          "$$hashKey": "object:319",
+          "format": "short",
+          "label": "actions",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:320",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -318,21 +452,33 @@
       "dashes": false,
       "datasource": null,
       "fieldConfig": {
+<<<<<<< HEAD
         "defaults": {
           "custom": {}
         },
+=======
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 24
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 4,
+=======
+      "id": 6,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -349,7 +495,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -359,6 +509,7 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "sum(rate(changefeed_flushes{job=\"crdb\",cluster=\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "Flushes",
@@ -369,13 +520,31 @@
           "interval": "",
           "legendFormat": "Messages",
           "refId": "B"
+=======
+          "exemplar": true,
+          "expr": "sum(rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Message Emit Time",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(changefeed_flush_nanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Flush Time",
+          "refId": "A"
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Sink Count",
+=======
+      "title": "Sink Timings",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -391,14 +560,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "short",
           "label": "actions",
+=======
+          "$$hashKey": "object:372",
+          "format": "ns",
+          "label": "time",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:373",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -417,23 +596,37 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+<<<<<<< HEAD
        "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
+=======
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 32
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 2,
+=======
+      "id": 8,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -450,7 +643,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -460,9 +657,16 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "changefeed_max_behind_nanos{jobs=\"crdb\",cluster=\"$cluster\"}",
           "interval": "",
           "legendFormat": "Max Changefeed Latency",
+=======
+          "exemplar": true,
+          "expr": "sum(rate(jobs_changefeed_resume_retry_error{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Retryable Errors",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "refId": "A"
         }
       ],
@@ -470,7 +674,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Max Changefeed latency",
+=======
+      "title": "Changefeed Restarts",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -486,14 +694,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "ns",
           "label": "time (ns)",
+=======
+          "$$hashKey": "object:476",
+          "format": "short",
+          "label": "actions",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:477",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -508,12 +726,17 @@
       }
     }
   ],
+<<<<<<< HEAD
   "schemaVersion": 26,
+=======
+  "schemaVersion": 27,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
+<<<<<<< HEAD
         "allValue": null,
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
@@ -526,6 +749,48 @@
         "name": "cluster",
         "options": [],
         "query": "sys_uptime{job=\"crdb\"}",
+=======
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "my-cockroachdb-cluster",
+          "value": "my-cockroachdb-cluster"
+        },
+        "datasource": "${DS_PROMETHEUS}",
+        "definition": "sys_uptime{job=\"cockroachdb\"}",
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "Cluster",
+        "multi": false,
+        "name": "cluster",
+        "options": [],
+        "query": {
+          "query": "sys_uptime{job=\"cockroachdb\"}",
+          "refId": "Prometheus-cluster-Variable-Query"
+        },
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -537,10 +802,22 @@
         "useTags": false
       },
       {
+<<<<<<< HEAD
         "allValue": ".*",
         "current": {},
          "datasource": "${DS_PROMETHEUS}",
         "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+=======
+        "allValue": "",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "${DS_PROMETHEUS}",
+        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
+        "description": null,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -548,11 +825,22 @@
         "multi": false,
         "name": "node",
         "options": [],
+<<<<<<< HEAD
         "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "sort": 3,
+=======
+        "query": {
+          "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
+          "refId": "Prometheus-node-Variable-Query"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "tagValuesQuery": "",
         "tags": [],
         "tagsQuery": "",
@@ -563,7 +851,16 @@
         "auto": false,
         "auto_count": 30,
         "auto_min": "10s",
+<<<<<<< HEAD
         "current": {},
+=======
+        "current": {
+          "selected": false,
+          "text": "30s",
+          "value": "30s"
+        },
+        "description": null,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "error": null,
         "hide": 0,
         "label": "Rate Interval",
@@ -623,12 +920,20 @@
     ]
   },
   "time": {
+<<<<<<< HEAD
     "from": "now-6h",
+=======
+    "from": "now-1h",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "CRDB Console: Changefeeds",
   "uid": "crdb-console-changefeeds",
+<<<<<<< HEAD
   "version": 7
+=======
+  "version": 3
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
 }

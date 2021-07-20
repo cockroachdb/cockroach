@@ -4,105 +4,59 @@
 
 # Finding triage_column_id:
 #   TriageColumnID is the column id of the project column the team uses to
-#   triage issues. Unfortunately, there appears to be no way to retrieve this
-#   programmatically from the API.
+#   triage issues. To get it, open the project, click the "..." on top of
+#   the project column, and click "Copy column link". That link contains
+#   the ID as the `#column-<ID>` fragment.
 #
-#   To find the triage column for a project, run the following curl command:
-#     curl -u yourusername:githubaccesstoken -H "Accept: application/vnd.github.inertia-preview+json" \
-#     https://api.github.com/repos/cockroachdb/cockroach/projects
+# You can also use:
+#   https://github.com/cockroachlabs/github-find-triage-column-id using
+#   `go install github.com/cockroachlabs/github-find-triage-column-id@latest`.
 #
-#   Then, for the project you care about, curl its columns URL, which looks like this:
-#     https://api.github.com/projects/3842382/columns
-#
-#   Find the triage column you want, and pick its ID field.
-#
-#   TODO(otan): make this a tool.
+#   Then to retrieve triage_column_id from a repo-based project, run:
+#     github-get-column-id --repo "cockroach" --project "Bazel" --column "To do"
+#   Or retrieve the triage_column_id from a organization-based project, run:
+#     github-get-column-id --project "Spatial" --column "Backlog"
 
-cockroachdb/sql-features:
-  email: sql-features-team@cockroachlabs.com
-  slack: sql-features
-  triage_column_id: 9056630
-cockroachdb/sql-syntax-prs: # TODO: remove
-  email: sql-features-team@cockroachlabs.com
-  slack: sql-features
-  triage_column_id: 9056630
-cockroachdb/sql-api-prs: # TODO: remove
-  email: sql-features-team@cockroachlabs.com
-  slack: sql-features
-  triage_column_id: 9056630
+cockroachdb/docs:
+  triage_column_id: 3971225
+cockroachdb/sql-experience:
+  aliases: [cockroachdb/sql-syntax-prs, cockroachdb/sqlproxy-prs, cockroachdb/sql-api-prs]
+  triage_column_id: 7259065
 cockroachdb/sql-schema:
-  email: sql-schema-team@cockroachlabs.com
-  slack: sql-schema
   triage_column_id: 8946818
-cockroachdb/sql-execution:
-  email: vectorized-execution-team@cockroachlabs.com
-  slack: sql-execution
-  triage_column_id: 6837155
-cockroachdb/sql-optimizer:
-  email: optimizer-team@cockroachlabs.com
-  slack: sql-optimizer
-  triage_column_id: 3281044
-cockroachdb/sql-opt-prs: # TODO: remove
-  email: optimizer-team@cockroachlabs.com
-  slack: sql-optimizer
-  triage_column_id: 3281044
+cockroachdb/sql-queries:
+  aliases: [cockroachdb/sql-optimizer, cockroachdb/sql-opt-prs]
+  triage_column_id: 13549252
+cockroachdb/sql-observability:
+  triage_column_id: 12618343
 cockroachdb/kv:
-  email: kv@cockroachlabs.com
-  slack: kv
-  triage_column_id: 3550674
+  aliases: [cockroachdb/kv-triage]
+  triage_column_id: 14242655
 cockroachdb/geospatial:
-  email: geospatial-team@cockroachlabs.com
-  slack: geospatial
   triage_column_id: 9487269
 cockroachdb/dev-inf:
-  email: dev-inf@cockroachlabs.com
-  slack: dev-inf
   triage_column_id: 10210759
 cockroachdb/storage:
-  email: storage-team@cockroachlabs.com
-  slack: storage
   triage_column_id: 6668367
-cockroachdb/appdev:
-  email: app-dev-team@cockroachlabs.com
-  slack: app-dev
-  triage_column_id: 8532151
+cockroachdb/test-eng:
+  triage_column_id: 14041337
 cockroachdb/security:
-  email: security@cockroachlabs.com
-  slack: security
   triage_column_id: 0 # TODO
-cockroachdb/bulk-prs: # TODO: remove
-  email: bulk-io@cockroachlabs.com
-  slack: bulk-io
-  triage_column_id: 3097123
 cockroachdb/bulk-io:
-  email: bulk-io@cockroachlabs.com
-  slack: bulk-io
+  aliases: [cockroachdb/bulk-prs]
   triage_column_id: 3097123
-cockroachdb/cdc-prs: # TODO: remove
-  email: cdc@cockroachlabs.com
-  slack: cdc
+cockroachdb/cdc:
+  aliases: [cockroachdb/cdc-prs]
   triage_column_id: 3570120
-cockroachdb/cdc-io:
-  email: cdc@cockroachlabs.com
-  slack: cdc
-  triage_column_id: 3570120
-cockroachdb/cli-prs:
-  email: TODO@cockroachlabs.com
-  slack: cli
-  triage_column_id: 0 # TODO
-cockroachdb/rfc-prs:
-  email: TODO@cockroachlabs.com
-  slack: TODO
-  triage_column_id: 0 # TODO
-cockroachdb/http-api-prs:
-  email: TODO@cockroachlabs.com
-  slack: TODO
-  triage_column_id: 0 # TODO
-cockroachdb/sqlproxy-prs:
-  email: TODO@cockroachlabs.com
-  slack: cc-intrusion-team
-  triage_column_id: 0 # TODO
-cockroachdb/cluster-ui-prs:
-  email: observability@cockroachlabs.com
-  slack: _cc-observability
+cockroachdb/server:
+  aliases: [cockroachdb/cli-prs, cockroachdb/server-prs, cockroachdb/http-api-prs]
+  triage_column_id: 2521812
+cockroachdb/cluster-ui:
+  aliases: [cockroachdb/cluster-ui-prs]
   triage_column_id: 6598672
+cockroachdb/obs-inf:
+  aliases: [cockroachdb/obs-inf-prs]
+  triage_column_id: 14196277
+cockroachdb/unowned:
+  aliases: [cockroachdb/rfc-prs]
+  triage_column_id: 0 # TODO

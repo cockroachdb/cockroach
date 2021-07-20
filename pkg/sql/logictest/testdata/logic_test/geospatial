@@ -20,10 +20,10 @@ statement error type LineString does not match column type Point
 INSERT INTO geo_table (id, geom) VALUES
   (3, 'SRID=4004;LINESTRING(0.0 0.0, 1.0 2.0)')
 
-statement error unknown SRID for Geometry: 404
+statement error projection for SRID 404 does not exist
 SELECT 'SRID=404;POINT(1.0 2.0)'::geometry
 
-statement error unknown SRID for Geography: 404
+statement error projection for SRID 404 does not exist
 SELECT 'SRID=404;POINT(1.0 2.0)'::geography
 
 statement error pq: object type PointZ does not match column type Point
@@ -1275,6 +1275,19 @@ Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
 Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                    POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
 Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))           POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 
+query TTT
+SELECT
+  ST_AsEWKT(ST_Simplify(g, 10)),
+  ST_AsEWKT(ST_Simplify(g, 10, false)),
+  ST_AsEWKT(ST_Simplify(g, 10, true))
+FROM ( VALUES
+  ('POLYGON((-1 -1, -1 1, 1 1, 1 -1, -1 -1), (0 0, 100 0, 100 100, 0 100, 0 0))'::geometry),
+  ('LINESTRING(-1 -1, -1 1, 1 1, 1 -1, -1 -1)'::geometry)
+) t(g)
+----
+POLYGON EMPTY              NULL  POLYGON ((-1 -1, -1 1, 1 1, -1 -1), (0 0, 100 0, 100 100, 0 100, 0 0))
+LINESTRING (-1 -1, -1 -1)  NULL  LINESTRING (-1 -1, -1 -1)
+
 query TT
 SELECT
   a.dsc,
@@ -2475,6 +2488,16 @@ Square overlapping left and right square  Square (left)                         
 Square overlapping left and right square  Square (right)                            POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))
 Square overlapping left and right square  Square overlapping left and right square  POLYGON EMPTY
 
+query TT
+SELECT
+  st_astext(st_shortestline(a, b)),
+  st_astext(st_longestline(a, b))
+FROM ( VALUES
+  (st_scale('multipoint (0 0, 1 1)', 0, 'NaN'::float)::geometry, 'linestring (0 0, 1 1)'::geometry)
+) regression_t65422(a, b)
+----
+LINESTRING (0 NaN, 0 0)  LINESTRING (0 NaN, 0 0)
+
 # Binary predicates
 query TTBBBBBBBBBBBB
 SELECT
@@ -3313,25 +3336,26 @@ Square overlapping left and right square  Square (right)                        
 Square overlapping left and right square  Square overlapping left and right square  2FFF1FFF2  2FFF0FFF2  false
 
 # ST_Envelope
-query TT
+query TTT
 SELECT
   a.dsc,
-  ST_AsEWKT(ST_Envelope(a.geom))
+  ST_AsEWKT(ST_Envelope(a.geom)),
+  ST_AsEWKT(ST_Envelope(a.geom::box2d))
 FROM geom_operators_test a
 ORDER BY a.dsc
 ----
-Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
-Empty LineString                          LINESTRING EMPTY
-Empty Point                               POINT EMPTY
-Faraway point                             POINT (5 5)
-Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
-NULL                                      NULL
-Nested Geometry Collection                POINT (0 0)
-Point middle of Left Square               POINT (-0.5 0.5)
-Point middle of Right Square              POINT (0.5 0.5)
-Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
-Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
-Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
+Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      NULL
+Empty LineString                          LINESTRING EMPTY                              NULL
+Empty Point                               POINT EMPTY                                   NULL
+Faraway point                             POINT (5 5)                                   POINT (5 5)
+Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)                LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                      NULL                                          NULL
+Nested Geometry Collection                POINT (0 0)                                   POINT (0 0)
+Point middle of Left Square               POINT (-0.5 0.5)                              POINT (-0.5 0.5)
+Point middle of Right Square              POINT (0.5 0.5)                               POINT (0.5 0.5)
+Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))        POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
+Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))           POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
+Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
 
 # basic metadata
 query TTTIIIII
@@ -5792,3 +5816,26 @@ FROM (SELECT
 	) tbl(poly, line);
 ----
 MULTIPOLYGON (((5 107, 26 200, 126 200, 126 125, 101 100, 54 84, 5 107), (51 150, 101 150, 76 175, 51 150)), ((151 100, 151 200, 176 175, 151 100)))
+
+query TTT
+SELECT
+  ST_EstimatedExtent('a', 'b', 'c', false),
+  ST_EstimatedExtent('a', 'b', 'c'),
+  ST_EstimatedExtent('a', 'b')
+----
+NULL  NULL  NULL
+
+query II
+SELECT ST_LineCrossingDirection(line1, line2), ST_LineCrossingDirection(line2, line1) FROM ( VALUES
+    ((ST_GeomFromText('LINESTRING(0 -20, 0 20)')), (ST_GeomFromText('LINESTRING(5 5, 5 10)'))),
+    ((ST_GeomFromText('LINESTRING(25 169,89 114,40 70,86 43)')), (ST_GeomFromText('LINESTRING(171 154,20 140,71 74,161 53)'))),
+    ((ST_GeomFromText('LINESTRING(25 169,89 114,40 70,86 43)')), (ST_GeomFromText('LINESTRING (20 140, 71 74, 161 53)'))),
+    ((ST_GeomFromText('LINESTRING(25 169,89 114,40 70,86 43)')), (ST_GeomFromText('LINESTRING (171 154, 20 140, 71 74, 2.99 90.16)'))),
+    ((ST_GeomFromText('LINESTRING(25 169,89 114,40 70,86 43)')), (ST_GeomFromText('LINESTRING(2.99 90.16,71 74,20 140,171 154)')))
+) line_crossing_direction_test(line1, line2);
+----
+0   0
+3   -3
+-1  1
+2   -2
+-2  2

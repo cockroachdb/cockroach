@@ -78,10 +78,10 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 		return nil
 	}
 	switch m := m.(type) {
-	case *migration.KVMigration:
+	case *migration.SystemMigration:
 		err = m.Run(ctx, cv, mc.Cluster())
-	case *migration.SQLMigration:
-		err = m.Run(ctx, cv, migration.SQLDeps{
+	case *migration.TenantMigration:
+		err = m.Run(ctx, cv, migration.TenantDeps{
 			DB:               execCtx.ExecCfg().DB,
 			Codec:            execCtx.ExecCfg().Codec,
 			Settings:         execCtx.ExecCfg().Settings,

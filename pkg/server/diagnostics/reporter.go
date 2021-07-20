@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -46,6 +46,15 @@ import (
 	"github.com/mitchellh/reflectwalk"
 	"google.golang.org/protobuf/proto"
 )
+
+// NodeStatusGenerator abstracts the status.MetricRecorder for read access.
+type NodeStatusGenerator interface {
+
+	// GenerateNodeStatus returns a status summary message for the node. The summary
+	// includes the recent values of metrics for both the node and all of its
+	// component stores. When the node isn't initialized yet, nil is returned.
+	GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus
+}
 
 var reportFrequency = settings.RegisterDurationSetting(
 	"diagnostics.reporting.interval",
@@ -72,7 +81,7 @@ type Reporter struct {
 	SQLServer     *sql.Server
 	InternalExec  *sql.InternalExecutor
 	DB            *kv.DB
-	Recorder      *status.MetricsRecorder
+	Recorder      NodeStatusGenerator
 
 	// Locality is a description of the topography of the server.
 	Locality roachpb.Locality
@@ -361,6 +370,7 @@ func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret s
 		dst.NumReplicas = proto.Int32(*src.NumReplicas)
 	}
 	dst.Constraints = make([]zonepb.ConstraintsConjunction, len(src.Constraints))
+	dst.InheritedConstraints = src.InheritedConstraints
 	for i := range src.Constraints {
 		dst.Constraints[i].NumReplicas = src.Constraints[i].NumReplicas
 		dst.Constraints[i].Constraints = make([]zonepb.Constraint, len(src.Constraints[i].Constraints))
@@ -374,7 +384,23 @@ func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret s
 			}
 		}
 	}
+	dst.VoterConstraints = make([]zonepb.ConstraintsConjunction, len(src.VoterConstraints))
+	dst.NullVoterConstraintsIsEmpty = src.NullVoterConstraintsIsEmpty
+	for i := range src.VoterConstraints {
+		dst.VoterConstraints[i].NumReplicas = src.VoterConstraints[i].NumReplicas
+		dst.VoterConstraints[i].Constraints = make([]zonepb.Constraint, len(src.VoterConstraints[i].Constraints))
+		for j := range src.VoterConstraints[i].Constraints {
+			dst.VoterConstraints[i].Constraints[j].Type = src.VoterConstraints[i].Constraints[j].Type
+			if key := src.VoterConstraints[i].Constraints[j].Key; key != "" {
+				dst.VoterConstraints[i].Constraints[j].Key = sql.HashForReporting(secret, key)
+			}
+			if val := src.VoterConstraints[i].Constraints[j].Value; val != "" {
+				dst.VoterConstraints[i].Constraints[j].Value = sql.HashForReporting(secret, val)
+			}
+		}
+	}
 	dst.LeasePreferences = make([]zonepb.LeasePreference, len(src.LeasePreferences))
+	dst.InheritedLeasePreferences = src.InheritedLeasePreferences
 	for i := range src.LeasePreferences {
 		dst.LeasePreferences[i].Constraints = make([]zonepb.Constraint, len(src.LeasePreferences[i].Constraints))
 		for j := range src.LeasePreferences[i].Constraints {

@@ -89,7 +89,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 				Overload:   &overloads[0],
 			}
 			fn := b.factory.ConstructFunction(memo.EmptyScalarListExpr, private)
-			scopeCol := b.synthesizeColumn(outScope, "rowid", types.Int, nil /* expr */, fn)
+			scopeCol := b.synthesizeColumn(outScope, scopeColName("rowid"), types.Int, nil /* expr */, fn)
 			input = b.factory.CustomFuncs().ProjectExtraCol(outScope.expr, fn, scopeCol.id)
 		}
 		inputCols = outScope.makePhysicalProps().Presentation

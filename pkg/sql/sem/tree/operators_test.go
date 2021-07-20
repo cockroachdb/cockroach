@@ -131,7 +131,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 
 	// Check unary ops. We don't just go through the map so we process them in
 	// an orderly fashion.
-	for op := UnaryOperator(0); op < NumUnaryOperators; op++ {
+	for op := UnaryOperatorSymbol(0); op < NumUnaryOperatorSymbols; op++ {
 		for _, impl := range UnaryOps[op] {
 			o := impl.(*UnaryOp)
 			check(op.String(), nil /* leftType */, o.Typ, o.Volatility)

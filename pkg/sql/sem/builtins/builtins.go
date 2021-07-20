@@ -13,6 +13,7 @@ package builtins
 import (
 	"bytes"
 	"crypto/md5"
+	cryptorand "crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -59,7 +60,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -500,12 +501,31 @@ var builtins = map[string]builtinDefinition{
 				// To extract a bit at the given index, we have to determine the
 				// position within byte array, i.e. index/8 after that checked
 				// the bit at residual index.
-				if byteString[index/8]&(byte(1)<<(8-1-byte(index)%8)) != 0 {
+				if byteString[index/8]&(byte(1)<<(byte(index)%8)) != 0 {
 					return tree.NewDInt(tree.DInt(1)), nil
 				}
 				return tree.NewDInt(tree.DInt(0)), nil
 			},
-			Info:       "Extracts a bit at given index in the byte array.",
+			Info:       "Extracts a bit at the given index in the byte array.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
+	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
+	"get_byte": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"byte_string", types.Bytes}, {"index", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				byteString := []byte(*args[0].(*tree.DBytes))
+				index := int(tree.MustBeDInt(args[1]))
+				// Check whether index asked is inside ByteArray.
+				if index < 0 || index >= len(byteString) {
+					return nil, pgerror.Newf(pgcode.ArraySubscript,
+						"byte index %d out of valid range (0..%d)", index, len(byteString)-1)
+				}
+				return tree.NewDInt(tree.DInt(byteString[index])), nil
+			},
+			Info:       "Extracts a byte at the given index in the byte array.",
 			Volatility: tree.VolatilityImmutable,
 		}),
 
@@ -551,7 +571,7 @@ var builtins = map[string]builtinDefinition{
 				// Value of bit can only be set to 1 or 0.
 				if toSet != 0 && toSet != 1 {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-						"new bit must be 0 or 1.")
+						"new bit must be 0 or 1")
 				}
 				// Check whether index asked is inside ByteArray.
 				if index < 0 || index >= 8*len(byteString) {
@@ -562,12 +582,37 @@ var builtins = map[string]builtinDefinition{
 				// position within byte array, i.e. index/8 after that checked
 				// the bit at residual index.
 				// Forcefully making bit at the index to 0.
-				byteString[index/8] &= ^(byte(1) << (8 - 1 - byte(index)%8))
+				byteString[index/8] &= ^(byte(1) << (byte(index) % 8))
 				// Updating value at the index to toSet.
-				byteString[index/8] |= byte(toSet) << (8 - 1 - byte(index)%8)
+				byteString[index/8] |= byte(toSet) << (byte(index) % 8)
 				return tree.NewDBytes(tree.DBytes(byteString)), nil
 			},
-			Info:       "Updates a bit at given index in the byte array.",
+			Info:       "Updates a bit at the given index in the byte array.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
+	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
+	"set_byte": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"byte_string", types.Bytes},
+				{"index", types.Int},
+				{"to_set", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				byteString := []byte(*args[0].(*tree.DBytes))
+				index := int(tree.MustBeDInt(args[1]))
+				toSet := int(tree.MustBeDInt(args[2]))
+				// Check whether index asked is inside ByteArray.
+				if index < 0 || index >= len(byteString) {
+					return nil, pgerror.Newf(pgcode.ArraySubscript,
+						"byte index %d out of valid range (0..%d)", index, len(byteString)-1)
+				}
+				byteString[index] = byte(toSet)
+				return tree.NewDBytes(tree.DBytes(byteString)), nil
+			},
+			Info:       "Updates a byte at the given index in the byte array.",
 			Volatility: tree.VolatilityImmutable,
 		}),
 
@@ -606,6 +651,65 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Converts the byte string representation of a UUID to its character string " +
 				"representation.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"gen_random_ulid": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				entropy := ulid.Monotonic(cryptorand.Reader, 0)
+				uv := ulid.MustNew(ulid.Now(), entropy)
+				return tree.NewDUuid(tree.DUuid{UUID: uuid.UUID(uv)}), nil
+			},
+			Info:       "Generates a random ULID and returns it as a value of UUID type.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"uuid_to_ulid": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.Uuid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				b := (*args[0].(*tree.DUuid)).GetBytes()
+				var ul ulid.ULID
+				if err := ul.UnmarshalBinary(b); err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ul.String()), nil
+			},
+			Info:       "Converts a UUID-encoded ULID to its string representation.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"ulid_to_uuid": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.String}},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := tree.MustBeDString(args[0])
+				u, err := ulid.Parse(string(s))
+				if err != nil {
+					return nil, err
+				}
+				b, err := u.MarshalBinary()
+				if err != nil {
+					return nil, err
+				}
+				uv, err := uuid.FromBytes(b)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+			},
+			Info:       "Converts a ULID string to its UUID-encoded representation.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
@@ -1808,7 +1912,8 @@ var builtins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDFloat(tree.DFloat(rand.Float64())), nil
 			},
-			Info:       "Returns a random float between 0 and 1.",
+			Info: "Returns a random floating-point number between 0 (inclusive) and 1 (exclusive). " +
+				"Note that the value contains at most 53 bits of randomness.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -3672,30 +3777,17 @@ may increase either contention or retry errors, or both.`,
 				traceID := uint64(*(args[0].(*tree.DInt)))
 				verbosity := bool(*(args[1].(*tree.DBool)))
 
-				const query = `SELECT span_id
-  	 									FROM crdb_internal.node_inflight_trace_spans
- 		 									WHERE trace_id = $1
-											AND parent_span_id = 0`
+				var rootSpan *tracing.Span
+				if err := ctx.Settings.Tracer.VisitSpans(func(span *tracing.Span) error {
+					if span.TraceID() == traceID && rootSpan == nil {
+						rootSpan = span
+					}
 
-				ie := ctx.InternalExecutor.(sqlutil.InternalExecutor)
-				row, err := ie.QueryRowEx(
-					ctx.Ctx(),
-					"crdb_internal.set_trace_verbose",
-					ctx.Txn,
-					sessiondata.NoSessionDataOverride,
-					query,
-					traceID,
-				)
-				if err != nil {
+					return nil
+				}); err != nil {
 					return nil, err
 				}
-				if row == nil {
-					return tree.DBoolFalse, nil
-				}
-				rootSpanID := uint64(*row[0].(*tree.DInt))
-
-				rootSpan, found := ctx.Settings.Tracer.GetActiveSpanFromID(rootSpanID)
-				if !found {
+				if rootSpan == nil { // not found
 					return tree.DBoolFalse, nil
 				}
 
@@ -3896,35 +3988,42 @@ may increase either contention or retry errors, or both.`,
 				}
 
 				// Get the referenced table and index.
-				// TODO(ajwerner): This is awful, we should be able to resolve this
-				// thing using the usual tools rather than going through the DB.
-				tableDesc, err := catalogkv.MustGetTableDescByID(ctx.Context, ctx.Txn, ctx.Codec, descpb.ID(tableID))
+				tableDescIntf, err := ctx.Planner.GetImmutableTableInterfaceByID(
+					ctx.Context,
+					tableID,
+				)
 				if err != nil {
 					return nil, err
 				}
+				tableDesc := tableDescIntf.(catalog.TableDescriptor)
 				index, err := tableDesc.FindIndexWithID(descpb.IndexID(indexID))
 				if err != nil {
 					return nil, err
 				}
-				indexDesc := index.IndexDesc()
 				// Collect the index columns. If the index is a non-unique secondary
 				// index, it might have some extra key columns.
-				indexColIDs := indexDesc.ColumnIDs
-				if indexDesc.ID != tableDesc.GetPrimaryIndexID() && !indexDesc.Unique {
-					indexColIDs = append(indexColIDs, indexDesc.ExtraColumnIDs...)
+				indexColIDs := make([]descpb.ColumnID, index.NumKeyColumns(), index.NumKeyColumns()+index.NumKeySuffixColumns())
+				for i := 0; i < index.NumKeyColumns(); i++ {
+					indexColIDs[i] = index.GetKeyColumnID(i)
+				}
+				if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() {
+					for i := 0; i < index.NumKeySuffixColumns(); i++ {
+						indexColIDs = append(indexColIDs, index.GetKeySuffixColumnID(i))
+					}
 				}
 
 				// Ensure that the input tuple length equals the number of index cols.
 				if len(rowDatums.D) != len(indexColIDs) {
 					err := errors.Newf(
 						"number of values must equal number of columns in index %q",
-						indexDesc.Name,
+						index.GetName(),
 					)
 					// If the index has some extra key columns, then output an error
 					// message with some extra information to explain the subtlety.
-					if indexDesc.ID != tableDesc.GetPrimaryIndexID() && !indexDesc.Unique && len(indexDesc.ExtraColumnIDs) > 0 {
+					if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() && index.NumKeySuffixColumns() > 0 {
 						var extraColNames []string
-						for _, id := range indexDesc.ExtraColumnIDs {
+						for i := 0; i < index.NumKeySuffixColumns(); i++ {
+							id := index.GetKeySuffixColumnID(i)
 							col, colErr := tableDesc.FindColumnWithID(id)
 							if colErr != nil {
 								return nil, errors.CombineErrors(err, colErr)
@@ -3943,7 +4042,7 @@ may increase either contention or retry errors, or both.`,
 							err,
 							"columns %v are implicitly part of index %q's key, include columns %v in this order",
 							extraColNames,
-							indexDesc.Name,
+							index.GetName(),
 							allColNames,
 						)
 					}
@@ -3985,8 +4084,8 @@ may increase either contention or retry errors, or both.`,
 					colMap.Set(id, i)
 				}
 				// Finally, encode the index key using the provided datums.
-				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc, indexDesc.ID)
-				res, _, err := rowenc.EncodePartialIndexKey(tableDesc, indexDesc, len(datums), colMap, datums, keyPrefix)
+				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc, index.GetID())
+				res, _, err := rowenc.EncodePartialIndexKey(tableDesc, index, len(datums), colMap, datums, keyPrefix)
 				if err != nil {
 					return nil, err
 				}
@@ -4398,7 +4497,7 @@ may increase either contention or retry errors, or both.`,
 				if index.GetGeoConfig().S2Geography == nil {
 					return nil, errors.Errorf("index_id %d is not a geography inverted index", indexID)
 				}
-				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.IndexDesc())
+				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.GetGeoConfig())
 				if err != nil {
 					return nil, err
 				}
@@ -4432,7 +4531,7 @@ may increase either contention or retry errors, or both.`,
 				if index.GetGeoConfig().S2Geometry == nil {
 					return nil, errors.Errorf("index_id %d is not a geometry inverted index", indexID)
 				}
-				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.IndexDesc())
+				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.GetGeoConfig())
 				if err != nil {
 					return nil, err
 				}
@@ -4905,7 +5004,7 @@ may increase either contention or retry errors, or both.`,
 				storeID := int32(tree.MustBeDInt(args[1]))
 				startKey := []byte(tree.MustBeDBytes(args[2]))
 				endKey := []byte(tree.MustBeDBytes(args[3]))
-				if err := ctx.Planner.CompactEngineSpan(
+				if err := ctx.CompactEngineSpan(
 					ctx.Context, nodeID, storeID, startKey, endKey); err != nil {
 					return nil, err
 				}
@@ -7059,6 +7158,8 @@ func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ,
 	nsec := fromTime.Nanosecond()
 	loc := fromTime.Location()
 
+	_, origZoneOffset := fromTime.Zone()
+
 	monthTrunc := time.January
 	dayTrunc := 1
 	hourTrunc := 0
@@ -7138,6 +7239,24 @@ func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ,
 	}
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
+	_, newZoneOffset := toTime.Zone()
+	// If we have a mismatching zone offset, check whether the truncated timestamp
+	// can exist at both the new and original zone time offset.
+	// e.g. in Bucharest, 2020-10-25 has 03:00+02 and 03:00+03. Using time.Date
+	// automatically assumes 03:00+02.
+	if origZoneOffset != newZoneOffset {
+		// To remedy this, try set the time.Date to have the same fixed offset as the original timezone
+		// and force it to use the same location as the incoming time.
+		// If using the fixed offset in the given location gives us a timestamp that is the
+		// same as the original time offset, use that timestamp instead.
+		fixedOffsetLoc := timeutil.FixedOffsetTimeZoneToLocation(origZoneOffset, "date_trunc")
+		fixedOffsetTime := time.Date(year, month, day, hour, min, sec, nsec, fixedOffsetLoc)
+		locCorrectedOffsetTime := fixedOffsetTime.In(loc)
+
+		if _, zoneOffset := locCorrectedOffsetTime.Zone(); origZoneOffset == zoneOffset {
+			toTime = locCorrectedOffsetTime
+		}
+	}
 	return tree.MakeDTimestampTZ(toTime, time.Microsecond)
 }
 
@@ -7345,9 +7464,7 @@ func arrayNumInvertedIndexEntries(
 
 	v := descpb.SecondaryIndexFamilyFormatVersion
 	if version == tree.DNull {
-		if ctx.Settings.Version.IsActive(
-			ctx.Context, clusterversion.EmptyArraysInInvertedIndexes,
-		) {
+		if ctx.Settings.Version.IsActive(ctx.Context, clusterversion.EmptyArraysInInvertedIndexes) {
 			v = descpb.EmptyArraysInInvertedIndexesVersion
 		}
 	} else {

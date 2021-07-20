@@ -139,11 +139,32 @@ func (so *DummySequenceOperators) SetSequenceValueByID(
 // errors.
 type DummyEvalPlanner struct{}
 
+// ResolveOIDFromString is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) ResolveOIDFromString(
+	ctx context.Context, resultType *types.T, toResolve *tree.DString,
+) (*tree.DOid, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// ResolveOIDFromOID is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) ResolveOIDFromOID(
+	ctx context.Context, resultType *types.T, toResolve *tree.DOid,
+) (*tree.DOid, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // UnsafeUpsertDescriptor is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
 	ctx context.Context, descID int64, encodedDescriptor []byte, force bool,
 ) error {
 	return errors.WithStack(errEvalPlanner)
+}
+
+// GetImmutableTableInterfaceByID is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) GetImmutableTableInterfaceByID(
+	ctx context.Context, id int,
+) (interface{}, error) {
+	return nil, errors.WithStack(errEvalPlanner)
 }
 
 // UnsafeDeleteDescriptor is part of the EvalPlanner interface.
@@ -168,13 +189,6 @@ func (ep *DummyEvalPlanner) UnsafeUpsertNamespaceEntry(
 // UnsafeDeleteNamespaceEntry is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 	ctx context.Context, parentID, parentSchemaID int64, name string, descID int64, force bool,
-) error {
-	return errors.WithStack(errEvalPlanner)
-}
-
-// CompactEngineSpan is part of the EvalPlanner interface.
-func (ep *DummyEvalPlanner) CompactEngineSpan(
-	ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
 ) error {
 	return errors.WithStack(errEvalPlanner)
 }

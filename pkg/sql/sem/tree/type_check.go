@@ -464,7 +464,8 @@ func (expr *CastExpr) TypeCheck(
 			// is in its resolvable type set), we desire the cast's type for the
 			// Constant. In many cases, the CastExpr will then become a no-op and will
 			// be elided below. In other cases, the types may be equivalent but not
-			// Identical (e.g. string vs char(2)) and the CastExpr is still needed.
+			// Identical (e.g. string::char(2) or oid::regclass) and the CastExpr is
+			// still needed.
 			desired = exprType
 		}
 	case semaCtx.isUnresolvedPlaceholder(expr.Expr):
@@ -500,7 +501,13 @@ func (expr *CastExpr) TypeCheck(
 		return nil, pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, exprType)
 	}
 	if err := semaCtx.checkVolatility(volatility); err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, exprType)
+		err = pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, exprType)
+		// Special cases where we can provide useful hints.
+		if castFrom.Family() == types.StringFamily && exprType.Family() == types.TimestampFamily {
+			err = errors.WithHint(err, "string to timestamp casts are context-dependent because "+
+				"of relative timestamp strings like 'now'; use parse_timestamp() instead.")
+		}
+		return nil, err
 	}
 
 	telemetry.Inc(c)
@@ -1323,7 +1330,7 @@ func (expr *Subquery) TypeCheck(_ context.Context, sc *SemaContext, _ *types.T) 
 func (expr *UnaryExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	ops := UnaryOps[expr.Operator]
+	ops := UnaryOps[expr.Operator.Symbol]
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, ops, false, expr.Expr)
 	if err != nil {

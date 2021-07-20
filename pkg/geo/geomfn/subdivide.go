@@ -290,7 +290,7 @@ func clipGeomTByBoundingBoxForSubdivide(gt geom.T, clip *geo.CartesianBoundingBo
 		return nil, errors.Newf("error applying intersection: %v", err)
 	}
 	// Simplify is required to remove the unnecessary points. Otherwise vertices count is altered and too many subdivision may be returned.
-	out, err = Simplify(out, 0)
+	out, err = SimplifyGEOS(out, 0)
 	if err != nil {
 		return nil, errors.Newf("simplifying error: %v", err)
 	}

@@ -229,6 +229,9 @@ export function* processQueryManagementAction(state: ManagedQuerySagaState) {
  * when the query is being executed.
  */
 export function* refreshQuery(state: ManagedQuerySagaState) {
+  // TODO(davidh): add return type annotations to generators
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   const queryTask = yield fork(runQuery, state);
   while (queryTask.isRunning()) {
     // While the query is running, we still need to increment or
@@ -249,12 +252,19 @@ export function* waitForNextRefresh(state: ManagedQuerySagaState) {
   // If this query should be auto-refreshed, compute the time until
   // the query is out of date. If the request is already out of date,
   // refresh the query immediately.
+
+  // TODO(davidh): add return type annotations to generators
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   const delayTime = yield call(timeToNextRefresh, state);
   if (delayTime <= 0) {
     state.shouldRefreshQuery = true;
     return;
   }
 
+  // TODO(davidh): add return type annotations to generators
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   const delayTask = yield fork(delayGenerator, delayTime);
   while (delayTask.isRunning()) {
     yield race({

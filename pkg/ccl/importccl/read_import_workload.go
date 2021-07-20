@@ -12,6 +12,7 @@ import (
 	"context"
 	"net/url"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"unsafe"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -124,11 +124,7 @@ func (w *workloadReader) readFiles(
 
 	wcs := make([]*WorkloadKVConverter, 0, len(dataFiles))
 	for fileID, fileName := range dataFiles {
-		file, err := url.Parse(fileName)
-		if err != nil {
-			return err
-		}
-		conf, err := cloudimpl.ParseWorkloadConfig(file)
+		conf, err := parseWorkloadConfig(fileName)
 		if err != nil {
 			return err
 		}
@@ -268,4 +264,62 @@ func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalCont
 		atomic.AddInt64(&w.finishedBatchesAtomic, 1)
 	}
 	return conv.SendBatch(ctx)
+}
+
+var errNotWorkloadURI = errors.New("not a workload URI")
+
+// parseWorkloadConfig parses a workload config URI to a config.
+func parseWorkloadConfig(fileName string) (workloadConfig, error) {
+	c := workloadConfig{}
+
+	uri, err := url.Parse(fileName)
+	if err != nil {
+		return c, err
+	}
+
+	if uri.Scheme != "workload" {
+		return c, errNotWorkloadURI
+	}
+	pathParts := strings.Split(strings.Trim(uri.Path, `/`), `/`)
+	if len(pathParts) != 3 {
+		return c, errors.Errorf(
+			`path must be of the form /<format>/<generator>/<table>: %s`, uri.Path)
+	}
+	c.Format, c.Generator, c.Table = pathParts[0], pathParts[1], pathParts[2]
+	q := uri.Query()
+	if _, ok := q[`version`]; !ok {
+		return c, errors.New(`parameter version is required`)
+	}
+	c.Version = q.Get(`version`)
+	q.Del(`version`)
+	if s := q.Get(`row-start`); len(s) > 0 {
+		q.Del(`row-start`)
+		var err error
+		if c.BatchBegin, err = strconv.ParseInt(s, 10, 64); err != nil {
+			return c, err
+		}
+	}
+	if e := q.Get(`row-end`); len(e) > 0 {
+		q.Del(`row-end`)
+		var err error
+		if c.BatchEnd, err = strconv.ParseInt(e, 10, 64); err != nil {
+			return c, err
+		}
+	}
+	for k, vs := range q {
+		for _, v := range vs {
+			c.Flags = append(c.Flags, `--`+k+`=`+v)
+		}
+	}
+	return c, nil
+}
+
+type workloadConfig struct {
+	Generator  string
+	Version    string
+	Table      string
+	Flags      []string
+	Format     string
+	BatchBegin int64
+	BatchEnd   int64
 }

@@ -37,6 +37,7 @@ WITH zone_configs AS (
 			) AS mr
 		FROM crdb_internal.zones
     WHERE database_name = %[1]s
+    AND schema_name = %[5]s
     AND table_name = %[2]s
     AND raw_config_yaml IS NOT NULL
     AND raw_config_sql IS NOT NULL
@@ -45,16 +46,17 @@ SELECT
     %[3]s AS table_name,
     concat(create_statement,
         CASE
-        WHEN NOT has_partitions
-            THEN NULL
 				WHEN is_multi_region THEN
 					CASE
 						WHEN (SELECT mr FROM zone_configs) IS NULL THEN NULL
 						ELSE concat(e';\n', (SELECT mr FROM zone_configs))
 					END
-        WHEN (SELECT raw FROM zone_configs) IS NULL THEN
+        WHEN (SELECT raw FROM zone_configs) IS NOT NULL THEN
+					concat(e';\n', (SELECT raw FROM zone_configs))
+        WHEN NOT has_partitions
+          THEN NULL
+				ELSE
 					e'\n-- Warning: Partitioned table with no zone configurations.'
-        ELSE concat(e';\n', (SELECT raw FROM zone_configs))
         END
     ) AS create_statement
 FROM

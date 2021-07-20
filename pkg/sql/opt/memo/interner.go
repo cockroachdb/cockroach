@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -450,7 +451,7 @@ func (h *hasher) HashOrdering(val opt.Ordering) {
 	h.hash = hash
 }
 
-func (h *hasher) HashOrderingChoice(val physical.OrderingChoice) {
+func (h *hasher) HashOrderingChoice(val props.OrderingChoice) {
 	h.HashColSet(val.Optional)
 
 	for i := range val.Columns {
@@ -866,7 +867,7 @@ func (h *hasher) IsOrderingEqual(l, r opt.Ordering) bool {
 	return l.Equals(r)
 }
 
-func (h *hasher) IsOrderingChoiceEqual(l, r physical.OrderingChoice) bool {
+func (h *hasher) IsOrderingChoiceEqual(l, r props.OrderingChoice) bool {
 	return l.Equals(&r)
 }
 

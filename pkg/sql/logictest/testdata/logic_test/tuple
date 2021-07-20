@@ -914,10 +914,23 @@ a  b
 1  one
 2  two
 
-
-# Pending #26719
-query error pq: column "t" does not exist
+query I rowsort
 SELECT (t).a FROM t
+----
+1
+2
+
+query T rowsort
+SELECT t FROM t
+----
+(1,one)
+(2,two)
+
+query T rowsort
+SELECT row_to_json(t) FROM t
+----
+{"a": 1, "b": "one"}
+{"a": 2, "b": "two"}
 
 statement ok
 DROP TABLE t

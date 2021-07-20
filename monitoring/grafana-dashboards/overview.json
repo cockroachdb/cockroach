@@ -3,7 +3,11 @@
     "list": [
       {
         "builtIn": 1,
+<<<<<<< HEAD
         "datasource": "${DS_PROMETHEUS}",
+=======
+        "datasource": "-- Grafana --",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -15,8 +19,12 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
+<<<<<<< HEAD
   "id": 360,
   "iteration": 1617889130144,
+=======
+  "iteration": 1623952430144,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
   "links": [],
   "panels": [
     {
@@ -24,23 +32,38 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+<<<<<<< HEAD
        "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
+=======
+      "datasource": null,
+      "description": "A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements successfully executed per second across all nodes.",
+      "fieldConfig": {
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 0
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 8,
+=======
+      "id": 2,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -51,13 +74,21 @@
         "values": false
       },
       "lines": true,
+<<<<<<< HEAD
       "linewidth": 2,
+=======
+      "linewidth": 1,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -67,6 +98,7 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "sum(sum(capacity_used{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (instance))",
           "interval": "",
           "intervalFactor": 2,
@@ -85,13 +117,45 @@
           "interval": "",
           "legendFormat": "Available",
           "refId": "C"
+=======
+          "exemplar": true,
+          "expr": "sum(rate(sql_select_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Selects",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(sql_update_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Updates",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(sql_insert_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Inserts",
+          "refId": "C"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(sql_delete_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Deletes",
+          "refId": "D"
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Capacity",
+=======
+      "title": "SQL Queries",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -107,14 +171,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "bytes",
           "label": "Capacity (TiB)",
+=======
+          "$$hashKey": "object:77",
+          "format": "short",
+          "label": "queries",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:78",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -133,23 +207,38 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+<<<<<<< HEAD
        "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
+=======
+      "datasource": null,
+      "description": "Over the last minute, this node executed 99% of queries within this time. This time does not include network latency between the node and client.",
+      "fieldConfig": {
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 8
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 6,
+=======
+      "id": 4,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -160,13 +249,22 @@
         "values": false
       },
       "lines": true,
+<<<<<<< HEAD
       "linewidth": 2,
       "nullPointMode": "null as zero",
+=======
+      "linewidth": 1,
+      "nullPointMode": "null",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -176,9 +274,15 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "sum(replicas{cluster=\"$clusterfilter\",job=\"crdb\",instance=~\"$node\"}) by (instance)",
           "interval": "",
           "intervalFactor": 2,
+=======
+          "exemplar": true,
+          "expr": "histogram_quantile(0.99, rate(sql_service_latency_bucket{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -187,7 +291,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Replicas Per Node",
+=======
+      "title": "Service Latency: SQL, 99th Percentile",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -203,14 +311,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "short",
           "label": "Replicas",
+=======
+          "$$hashKey": "object:160",
+          "format": "ns",
+          "label": "latency",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:161",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -229,23 +347,38 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+<<<<<<< HEAD
       "datasource": null,
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
+=======
+      "datasource": "${DS_PROMETHEUS}",
+      "description": "The number of range replicas stored on this node. Ranges are subsets of your data, which are replicated to ensure survivability.",
+      "fieldConfig": {
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 16
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 4,
+=======
+      "id": 6,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -256,13 +389,22 @@
         "values": false
       },
       "lines": true,
+<<<<<<< HEAD
       "linewidth": 1,
       "nullPointMode": "null",
+=======
+      "linewidth": 2,
+      "nullPointMode": "null as zero",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -272,8 +414,15 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "histogram_quantile(0.99, rate(sql_service_latency_bucket{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
           "interval": "",
+=======
+          "exemplar": true,
+          "expr": "replicas{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}",
+          "interval": "",
+          "intervalFactor": 2,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -282,7 +431,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Service latency: SQL,99th Percentile",
+=======
+      "title": "Replicas per Node",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -298,14 +451,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "ns",
           "label": "Latency (s)",
+=======
+          "$$hashKey": "object:216",
+          "format": "short",
+          "label": "replicas",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:217",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -324,6 +487,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+<<<<<<< HEAD
       "datasource": null,
       "fieldConfig": {
         "defaults": {
@@ -346,18 +510,32 @@
             ]
           }
         },
+=======
+      "datasource": "${DS_PROMETHEUS}",
+      "description": "Usage of disk space\n\n**Capacity**: Maximum store size across all nodes. This value may be explicitly set per node using [--store](https://www.cockroachlabs.com/docs/v21.1/cockroach-start.html#store). If a store size has not been set, this metric displays the actual disk capacity.\n\n**Available**: Free disk space available to CockroachDB data across all nodes.\n\n**Used**: Disk space in use by CockroachDB data across all nodes. This excludes the Cockroach binary, operating system, and other system files.\n\n[How are these metrics calculated?](https://www.cockroachlabs.com/docs/v21.1/ui-storage-dashboard.html#capacity-metrics)",
+      "fieldConfig": {
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 24
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 2,
+=======
+      "id": 8,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -368,13 +546,21 @@
         "values": false
       },
       "lines": true,
+<<<<<<< HEAD
       "linewidth": 1,
+=======
+      "linewidth": 2,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -384,6 +570,7 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "sum(rate(sql_select_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))  + sum(rate(sql_update_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval])) + sum(rate(sql_delete_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))  + \nsum(rate(sql_insert_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "total QPS",
@@ -412,13 +599,40 @@
           "interval": "",
           "legendFormat": "DELETEs",
           "refId": "E"
+=======
+          "exemplar": true,
+          "expr": "sum(sum(capacity{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}) by (cluster))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Max",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(sum(capacity_available{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}) by (cluster))",
+          "interval": "",
+          "legendFormat": "Available",
+          "refId": "C"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(sum(capacity_used{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Used",
+          "refId": "A"
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "SQL Queries",
+=======
+      "title": "Capacity",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -434,14 +648,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "short",
           "label": "queries",
+=======
+          "$$hashKey": "object:272",
+          "format": "bytes",
+          "label": "capacity",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:273",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -456,12 +680,18 @@
       }
     }
   ],
+<<<<<<< HEAD
   "schemaVersion": 26,
+=======
+  "refresh": false,
+  "schemaVersion": 27,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
+<<<<<<< HEAD
         "allValue": null,
         "current": {},
          "datasource": "${DS_PROMETHEUS}",
@@ -474,6 +704,48 @@
         "name": "clusterfilter",
         "options": [],
         "query": "sys_uptime{job=\"crdb\"}",
+=======
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "my-cockroachdb-cluster",
+          "value": "my-cockroachdb-cluster"
+        },
+        "datasource": "${DS_PROMETHEUS}",
+        "definition": "sys_uptime{job=\"cockroachdb\"}",
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "Cluster",
+        "multi": false,
+        "name": "cluster",
+        "options": [],
+        "query": {
+          "query": "sys_uptime{job=\"cockroachdb\"}",
+          "refId": "Prometheus-cluster-Variable-Query"
+        },
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -485,10 +757,22 @@
         "useTags": false
       },
       {
+<<<<<<< HEAD
         "allValue": null,
         "current": {},
          "datasource": "${DS_PROMETHEUS}",
         "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
+=======
+        "allValue": "",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "${DS_PROMETHEUS}",
+        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
+        "description": null,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -496,7 +780,14 @@
         "multi": false,
         "name": "node",
         "options": [],
+<<<<<<< HEAD
         "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
+=======
+        "query": {
+          "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
+          "refId": "Prometheus-node-Variable-Query"
+        },
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -512,10 +803,18 @@
         "auto_count": 30,
         "auto_min": "10s",
         "current": {
+<<<<<<< HEAD
           "selected": false,
           "text": "30s",
           "value": "30s"
         },
+=======
+          "selected": true,
+          "text": "30s",
+          "value": "30s"
+        },
+        "description": null,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "error": null,
         "hide": 0,
         "label": "Rate Interval",
@@ -576,12 +875,20 @@
     ]
   },
   "time": {
+<<<<<<< HEAD
     "from": "now-6h",
+=======
+    "from": "now-1h",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "CRDB Console: Overview",
   "uid": "crdb-console",
+<<<<<<< HEAD
   "version": 26
+=======
+  "version": 1
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
 }

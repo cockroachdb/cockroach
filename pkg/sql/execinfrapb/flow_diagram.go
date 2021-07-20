@@ -149,7 +149,7 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 		tbl := tr.BuildTableDescriptor()
 		// only show the first span
 		idx := tbl.ActiveIndexes()[int(tr.IndexIdx)]
-		valDirs := catalogkeys.IndexKeyValDirs(idx.IndexDesc())
+		valDirs := catalogkeys.IndexKeyValDirs(idx)
 
 		var spanStr strings.Builder
 		spanStr.WriteString("Spans: ")
@@ -181,6 +181,9 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	}
 	if !jr.LookupExpr.Empty() {
 		details = append(details, fmt.Sprintf("Lookup join on: %s", jr.LookupExpr))
+	}
+	if !jr.RemoteLookupExpr.Empty() {
+		details = append(details, fmt.Sprintf("Remote lookup join on: %s", jr.RemoteLookupExpr))
 	}
 	if !jr.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", jr.OnExpr))
@@ -402,10 +405,12 @@ func (is *InputSyncSpec) summary(showTypes bool) (string, []string) {
 		}
 	}
 	switch is.Type {
-	case InputSyncSpec_UNORDERED:
+	case InputSyncSpec_PARALLEL_UNORDERED:
 		return "unordered", typs
 	case InputSyncSpec_ORDERED:
 		return "ordered", append(typs, is.Ordering.diagramString())
+	case InputSyncSpec_SERIAL_UNORDERED:
+		return "serial unordered", typs
 	default:
 		return "unknown", []string{}
 	}

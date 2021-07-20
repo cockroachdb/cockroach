@@ -161,11 +161,11 @@ func htmlLabel(o interface{}) dot.HTML {
 	return dot.HTML(buf.String())
 }
 
-// toMap converts a struct to a map, field by field. If at any point a protobuf
+// ToMap converts a struct to a map, field by field. If at any point a protobuf
 // message is encountered, it is converted to a map using jsonpb to marshal it
 // to json and then marshaling it back to a map. This approach allows zero
 // values to be effectively omitted.
-func toMap(v interface{}) (interface{}, error) {
+func ToMap(v interface{}) (interface{}, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -202,7 +202,7 @@ func toMap(v interface{}) (interface{}, error) {
 			continue
 		}
 		var err error
-		if m[vt.Field(i).Name], err = toMap(vvf.Interface()); err != nil {
+		if m[vt.Field(i).Name], err = ToMap(vvf.Interface()); err != nil {
 			return nil, err
 		}
 	}
@@ -228,7 +228,14 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 		m, ok := v.(map[string]interface{})
 		return ok && len(m) == 0
 	},
-	"toMap": toMap,
+	"emptySlice": func(v interface{}) bool {
+		m, ok := v.([]interface{})
+		return ok && len(m) == 0
+	},
+	"isStruct": func(v interface{}) bool {
+		return reflect.Indirect(reflect.ValueOf(v)).Kind() == reflect.Struct
+	},
+	"toMap": ToMap,
 }).Parse(`
 {{- define "key" -}}
 <td>
@@ -242,6 +249,13 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 {{- template "mapVal" . -}}
 {{- else if (isSlice .) -}}
 {{- template "sliceVal" . -}}
+{{- else if (isStruct .) -}}
+<td>
+{{- typeOf . -}}
+</td>
+<td>
+{{- template "mapVal" (toMap .) -}}
+</td>
 {{- else -}}
 {{- . -}}
 {{- end -}}
@@ -249,11 +263,13 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 {{- end -}}
 
 {{- define "sliceVal" -}}
+{{- if not (emptySlice .) -}}
 <table class="val"><tr>
 {{- range . -}}
 {{- template "val" . -}}
 {{- end -}}
 </tr></table>
+{{- end -}}
 {{- end -}}
 
 {{- define "mapVal" -}}
@@ -262,9 +278,18 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 {{- if not (emptyMap $v) -}}
 <tr>
 {{- template "key" $k -}}
+{{- if (isStruct $v) -}}
+<td>
+{{- typeOf . -}}
+</td>
+<td>
+{{- template "mapVal" (toMap $v) -}}
+</td>
+{{- else -}}
 {{- template "val" $v -}}
-</tr>
 {{- end -}}
+{{- end -}}
+</tr>
 {{- end -}}
 </table>
 {{- end -}}

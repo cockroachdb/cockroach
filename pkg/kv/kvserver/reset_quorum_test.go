@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -51,9 +52,11 @@ import (
 // 6. A meta range (error expected).
 func TestResetQuorum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "too many nodes")
 	skip.UnderRace(t, "takes >1m under race")
+	skip.UnderShort(t)
 
 	ctx := context.Background()
 	livenessDuration := 3000 * time.Millisecond

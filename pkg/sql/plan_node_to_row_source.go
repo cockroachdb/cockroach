@@ -28,7 +28,6 @@ type metadataForwarder interface {
 
 type planNodeToRowSource struct {
 	execinfra.ProcessorBase
-	execinfra.StreamingProcessor
 
 	input execinfra.RowSource
 
@@ -70,6 +69,14 @@ func makePlanNodeToRowSource(
 }
 
 var _ execinfra.LocalProcessor = &planNodeToRowSource{}
+
+// MustBeStreaming implements the execinfra.Processor interface.
+func (p *planNodeToRowSource) MustBeStreaming() bool {
+	// hookFnNode is special because it might be blocked forever if we decide to
+	// buffer its output.
+	_, isHookFnNode := p.node.(*hookFnNode)
+	return isHookFnNode
+}
 
 // InitWithOutput implements the LocalProcessor interface.
 func (p *planNodeToRowSource) InitWithOutput(

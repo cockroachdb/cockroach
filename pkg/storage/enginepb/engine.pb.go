@@ -3,9 +3,12 @@
 
 package enginepb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
+import (
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	math "math"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -16,7 +19,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // EngineType specifies type of storage engine (eg. rocksdb, pebble).
 type EngineType int32
@@ -32,24 +35,23 @@ var EngineType_name = map[int32]string{
 	0: "EngineTypeDefault",
 	2: "EngineTypePebble",
 }
+
 var EngineType_value = map[string]int32{
 	"EngineTypeDefault": 0,
 	"EngineTypePebble":  2,
 }
 
 func (EngineType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_engine_c3997d9635965b2b, []int{0}
+	return fileDescriptor_4d5c6a777b609f6a, []int{0}
 }
 
 func init() {
 	proto.RegisterEnum("cockroach.storage.enginepb.EngineType", EngineType_name, EngineType_value)
 }
 
-func init() {
-	proto.RegisterFile("storage/enginepb/engine.proto", fileDescriptor_engine_c3997d9635965b2b)
-}
+func init() { proto.RegisterFile("storage/enginepb/engine.proto", fileDescriptor_4d5c6a777b609f6a) }
 
-var fileDescriptor_engine_c3997d9635965b2b = []byte{
+var fileDescriptor_4d5c6a777b609f6a = []byte{
 	// 187 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2d, 0x2e, 0xc9, 0x2f,
 	0x4a, 0x4c, 0x4f, 0xd5, 0x4f, 0xcd, 0x4b, 0xcf, 0xcc, 0x4b, 0x2d, 0x48, 0x82, 0x32, 0xf4, 0x0a,

@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -22,6 +23,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/docgen/extract"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -49,7 +51,8 @@ func init() {
 
 	// BNF vars.
 	var (
-		addr string
+		addr          string
+		bnfAPITimeout time.Duration
 	)
 
 	cmdBNF := &cobra.Command{
@@ -58,7 +61,7 @@ func init() {
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			bnfDir := args[0]
-			bnf, err := runBNF(addr)
+			bnf, err := runBNF(addr, bnfAPITimeout)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -80,17 +83,18 @@ func init() {
 				write(filepath.Join(bnfDir, name+".bnf"), g)
 			}
 
-			for _, s := range specs {
+			stmtSpecs, err := getAllStmtSpecs(addr, bnfAPITimeout)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for _, s := range stmtSpecs {
 				if filterRE.MatchString(s.name) == invertMatch {
 					continue
 				}
 				if !quiet {
 					fmt.Println("processing", s.name)
 				}
-				if s.stmt == "" {
-					s.stmt = s.name
-				}
-				g, err := runParse(br(), s.inline, s.stmt, false, s.nosplit, s.match, s.exclude)
+				g, err := runParse(br(), s.inline, s.GetStatement(), false, s.nosplit, s.match, s.exclude)
 				if err != nil {
 					log.Fatalf("%s: %+v", s.name, err)
 				}
@@ -129,11 +133,14 @@ func init() {
 	}
 
 	cmdBNF.Flags().StringVar(&addr, "addr", "./pkg/sql/parser/sql.y", "Location of sql.y file. Can also specify an http address.")
+	cmdBNF.Flags().DurationVar(&bnfAPITimeout, "timeout", time.Second*120, "Timeout in seconds for bnf HTTP Api, "+
+		"only relevant when the web api is used; default 120s.")
 
 	// SVG vars.
 	var (
-		maxWorkers  int
-		railroadJar string
+		maxWorkers         int
+		railroadJar        string
+		railroadAPITimeout time.Duration
 	)
 
 	cmdSVG := &cobra.Command{
@@ -165,10 +172,14 @@ func init() {
 			}
 
 			specMap := make(map[string]stmtSpec)
-			for _, s := range specs {
+			stmtSpecs, err := getAllStmtSpecs(addr, bnfAPITimeout)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for _, s := range stmtSpecs {
 				specMap[s.name] = s
 			}
-			if len(specs) != len(specMap) {
+			if len(stmtSpecs) != len(specMap) {
 				log.Fatal("duplicate spec name")
 			}
 
@@ -195,7 +206,7 @@ func init() {
 					}
 					defer f.Close()
 
-					rr, err := runRR(f, railroadJar)
+					rr, err := runRR(f, railroadJar, railroadAPITimeout)
 					if err != nil {
 						log.Fatalf("%s: %s\n", m, err)
 					}
@@ -246,6 +257,8 @@ func init() {
 
 	cmdSVG.Flags().IntVar(&maxWorkers, "max-workers", 1, "maximum number of concurrent workers")
 	cmdSVG.Flags().StringVar(&railroadJar, "railroad", "", "Location of Railroad.jar; empty to use website")
+	cmdSVG.Flags().DurationVar(&railroadAPITimeout, "timeout", time.Second*120, "Timeout in seconds for railroad HTTP Api, "+
+		"only relevant when the web api is used; default 120s.")
 
 	diagramCmd := &cobra.Command{
 		Use:   "grammar",
@@ -274,8 +287,17 @@ type stmtSpec struct {
 	nosplit        bool
 }
 
-func runBNF(addr string) ([]byte, error) {
-	return extract.GenerateBNF(addr)
+// GetStatement returns the sql statement of a stmtSpec.
+func (s stmtSpec) GetStatement() string {
+	if s.stmt == "" {
+		return s.name
+	}
+
+	return s.stmt
+}
+
+func runBNF(addr string, bnfAPITimeout time.Duration) ([]byte, error) {
+	return extract.GenerateBNF(addr, bnfAPITimeout)
 }
 
 func runParse(
@@ -298,14 +320,14 @@ func runParse(
 	return b, err
 }
 
-func runRR(r io.Reader, railroadJar string) ([]byte, error) {
+func runRR(r io.Reader, railroadJar string, railroadAPITimeout time.Duration) ([]byte, error) {
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
 	var html []byte
 	if railroadJar == "" {
-		html, err = extract.GenerateRRNet(b)
+		html, err = extract.GenerateRRNet(b, railroadAPITimeout)
 	} else {
 		html, err = extract.GenerateRRJar(railroadJar, b)
 	}
@@ -375,8 +397,15 @@ var specs = []stmtSpec{
 		unlink: []string{"name", "password"},
 	},
 	{
-		name:    "alter_sequence_options_stmt",
-		inline:  []string{"sequence_option_list", "sequence_option_elem"},
+		name:    "alter_schema",
+		stmt:    "alter_schema_stmt",
+		inline:  []string{"qualifiable_schema_name"},
+		nosplit: true,
+	},
+	{
+		name:    "alter_sequence",
+		stmt:    "alter_sequence_stmt",
+		inline:  []string{"alter_rename_sequence_stmt", "alter_sequence_options_stmt", "alter_sequence_set_schema_stmt", "alter_sequence_owner_stmt", "sequence_option_list", "sequence_option_elem"},
 		replace: map[string]string{"relation_expr": "sequence_name", "signed_iconst64": "integer", "column_path": "column_name"},
 		unlink:  []string{"integer", "sequence_name", "column_path"},
 		nosplit: true,
@@ -401,8 +430,8 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "alter_view",
-		stmt:    "alter_rename_view_stmt",
-		inline:  []string{"opt_transaction"},
+		stmt:    "alter_view_stmt",
+		inline:  []string{"alter_rename_view_stmt", "alter_view_set_schema_stmt", "alter_view_owner_stmt", "opt_transaction"},
 		replace: map[string]string{"relation_expr": "view_name", "qualified_name": "name"}, unlink: []string{"view_name", "name"},
 	},
 	{
@@ -454,8 +483,7 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
-		name: "begin_transaction",
-		stmt: "begin_stmt",
+		name: "begin_stmt",
 		inline: []string{
 			"opt_transaction",
 			"begin_transaction",
@@ -515,6 +543,11 @@ var specs = []stmtSpec{
 		stmt:   "commit_stmt",
 		inline: []string{"opt_transaction"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'COMMIT'|'END'")},
+	},
+	{
+		name:    "copy_from_stmt",
+		inline:  []string{"opt_with_copy_options", "copy_options_list", "opt_with", "opt_where_clause", "where_clause"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'WHERE'")},
 	},
 	{
 		name:    "cancel_job",
@@ -613,6 +646,11 @@ var specs = []stmtSpec{
 			"string_or_placeholder 'FOR'":       "label 'FOR'",
 			"'RECURRING' sconst_or_placeholder": "'RECURRING' cronexpr",
 			"targets":                           "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )"},
+	},
+	{
+		name:    "create_schema_stmt",
+		inline:  []string{"qualifiable_schema_name", "opt_schema_name", "opt_name"},
+		nosplit: true,
 	},
 	{
 		name:    "create_sequence_stmt",
@@ -732,6 +770,12 @@ var specs = []stmtSpec{
 		unlink: []string{"sequence_name"},
 	},
 	{
+		name:    "drop_schema",
+		stmt:    "drop_schema_stmt",
+		inline:  []string{"opt_drop_behavior", "qualifiable_schema_name"},
+		nosplit: true,
+	},
+	{
 		name:   "drop_stmt",
 		inline: []string{"table_name_list", "drop_ddl_stmt"},
 	},
@@ -807,7 +851,7 @@ var specs = []stmtSpec{
 		stmt:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_name": "( 'DISTSQL' | 'DEBUG' )",
+			"explain_option_name": "( 'PLAN' | 'DISTSQL' | 'DEBUG' )",
 		},
 		unlink: []string{"'DISTSQL'"},
 	},
@@ -1263,13 +1307,20 @@ var specs = []stmtSpec{
 		unlink:  []string{"job_id"},
 	},
 	{
-		name:   "show_grants_stmt",
-		inline: []string{"name_list", "opt_on_targets_roles", "for_grantee_clause", "name_list"},
-		replace: map[string]string{
-			"targets_roles":                "( 'ROLE' | 'ROLE' name ( ',' name ) )* | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"'FOR' name ( ( ',' name ) )*": "'FOR' user_name ( ( ',' user_name ) )*",
+		name: "show_grants_stmt",
+		inline: []string{
+			"opt_on_targets_roles",
+			"for_grantee_clause",
+			"targets_roles",
+			"name_list",
+			"schema_name_list",
+			"type_name_list",
 		},
-		unlink: []string{"role_name", "table_name", "database_name", "user_name"},
+		replace: map[string]string{
+			"targets":                 "( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"qualifiable_schema_name": "schema_name",
+		},
+		unlink: []string{"table_name", "database_name", "schema_name", "name"},
 	},
 	{
 		name:   "show_indexes",
@@ -1296,6 +1347,10 @@ var specs = []stmtSpec{
 	},
 	{
 		name: "show_partitions_stmt",
+	},
+	{
+		name: "show_regions",
+		stmt: "show_regions_stmt",
 	},
 	{
 		name:   "show_statements",
@@ -1366,7 +1421,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "show_zone_stmt",
-		inline: []string{"opt_partition", "table_index_name", "partition"},
+		inline: []string{"opt_partition", "table_index_name", "partition", "from_with_implicit_for_alias"},
 	},
 	{
 		name:   "sort_clause",
@@ -1483,6 +1538,73 @@ var specs = []stmtSpec{
 		name:   "opt_frame_clause",
 		inline: []string{"frame_extent"},
 	},
+}
+
+// getAllStmtSpecs returns a slice of stmtSpecs for all sql.y statements that
+// should have a diagram generated for.
+// getAllStmtSpecs appends to the "specs" slice any sql.y statements that do
+// not have an entry in specs but are not specified to be skipped.
+func getAllStmtSpecs(sqlGrammarFile string, bnfAPITimeout time.Duration) ([]stmtSpec, error) {
+	sqlStmts := make(map[string]struct{})
+	// Map all the sql stmts that are defined in specs.
+	for _, s := range specs {
+		sqlStmts[s.GetStatement()] = struct{}{}
+	}
+
+	file, err := os.Open(sqlGrammarFile)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	bnf, err := runBNF(sqlGrammarFile, bnfAPITimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	br := func() io.Reader {
+		return bytes.NewReader(bnf)
+	}
+
+	grammar, err := extract.ParseGrammar(br())
+	if err != nil {
+		return nil, err
+	}
+
+	stmtRegex := regexp.MustCompile(`%type\s*<tree.Statement>\s*(.*)$`)
+
+	scanner := bufio.NewScanner(file)
+	if err != nil {
+		return nil, err
+	}
+	for scanner.Scan() {
+		text := scanner.Text()
+		if matches := stmtRegex.FindAllStringSubmatch(text, -1); len(matches) > 0 {
+			for _, match := range matches {
+				// The second submatch does not include <tree.Statement>.
+				// We want to get only the stmt names.
+				stmts := strings.Split(match[1], " ")
+				for _, stmt := range stmts {
+					// If the statement does not appear in grammar, the statement
+					// has no branches that are required to be documented, we can
+					// skip it.
+					if _, ok := grammar[stmt]; !ok {
+						continue
+					}
+
+					// If the statement is not defined in specs, create an entry.
+					if _, found := sqlStmts[stmt]; !found {
+						specs = append(specs, stmtSpec{
+							name: stmt,
+						})
+						sqlStmts[stmt] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+
+	return specs, nil
 }
 
 // regList is a common regex used when removing loops from alter and drop

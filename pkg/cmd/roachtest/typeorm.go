@@ -35,12 +35,14 @@ func registerTypeORM(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(
+			ctx, version, c, node[0], nil,
+		); err != nil {
 			t.Fatal(err)
 		}
 
@@ -64,7 +66,7 @@ func registerTypeORM(r *testRegistry) {
 			node,
 			"install dependencies",
 			`sudo apt-get -qq install make python3 libpq-dev python-dev gcc g++ `+
-				`python-software-properties build-essential`,
+				`software-properties-common build-essential`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -166,7 +168,7 @@ func registerTypeORM(r *testRegistry) {
 		Name:       "typeorm",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
-		MinVersion: "v19.1.0",
+		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTypeORM(ctx, t, c)

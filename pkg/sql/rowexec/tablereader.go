@@ -38,6 +38,8 @@ type tableReader struct {
 	limitHint   int64
 	parallelize bool
 
+	scanStarted bool
+
 	// See TableReaderSpec.MaxTimestampAgeNanos.
 	maxTimestampAge time.Duration
 
@@ -124,7 +126,7 @@ func newTableReader(
 		return nil, err
 	}
 
-	neededColumns := tr.Out.NeededColumns()
+	neededColumns := tr.OutputHelper.NeededColumns()
 
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
@@ -170,7 +172,7 @@ func newTableReader(
 func (tr *tableReader) generateTrailingMeta() []execinfrapb.ProducerMetadata {
 	// We need to generate metadata before closing the processor because
 	// InternalClose() updates tr.Ctx to the "original" context.
-	trailingMeta := tr.generateMeta(tr.Ctx)
+	trailingMeta := tr.generateMeta()
 	tr.close()
 	return trailingMeta
 }
@@ -181,8 +183,13 @@ func (tr *tableReader) Start(ctx context.Context) {
 		log.Fatalf(ctx, "tableReader outside of txn")
 	}
 
+	// Keep ctx assignment so we remember StartInternal can make a new one.
 	ctx = tr.StartInternal(ctx, tableReaderProcName)
+	// Appease the linter.
+	_ = ctx
+}
 
+func (tr *tableReader) startScan(ctx context.Context) error {
 	limitBatches := !tr.parallelize
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
@@ -200,16 +207,18 @@ func (tr *tableReader) Start(ctx context.Context) {
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	}
-
-	if err != nil {
-		tr.MoveToDraining(err)
-	}
+	tr.scanStarted = true
+	return err
 }
 
 // Release releases this tableReader back to the pool.
 func (tr *tableReader) Release() {
 	tr.ProcessorBase.Reset()
 	tr.fetcher.Reset()
+	// Deeply reset the spans so that we don't hold onto the keys of the spans.
+	for i := range tr.spans {
+		tr.spans[i] = roachpb.Span{}
+	}
 	*tr = tableReader{
 		ProcessorBase: tr.ProcessorBase,
 		fetcher:       tr.fetcher,
@@ -232,6 +241,13 @@ func TestingSetScannedRowProgressFrequency(val int64) func() {
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == execinfra.StateRunning {
+		if !tr.scanStarted {
+			err := tr.startScan(tr.Ctx)
+			if err != nil {
+				tr.MoveToDraining(err)
+				break
+			}
+		}
 		// Check if it is time to emit a progress update.
 		if tr.rowsRead >= tableReaderProgressFrequency {
 			meta := execinfrapb.GetProducerMeta()
@@ -285,22 +301,22 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			KVTime:         is.WaitTime,
 			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(tr.Ctx)),
 		},
-		Output: tr.Out.Stats(),
+		Output: tr.OutputHelper.Stats(),
 	}
 }
 
-func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
 	if !tr.ignoreMisplannedRanges {
 		nodeID, ok := tr.FlowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(ctx, tr.spans, nodeID, tr.FlowCtx.Cfg.RangeCache)
+			ranges := execinfra.MisplannedRanges(tr.Ctx, tr.spans, nodeID, tr.FlowCtx.Cfg.RangeCache)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
 		}
 	}
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, tr.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(tr.Ctx, tr.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 

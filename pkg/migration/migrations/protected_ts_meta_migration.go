@@ -23,7 +23,7 @@ import (
 )
 
 func protectedTsMetaPrivilegesMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d migration.SQLDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
 	id := systemschema.ProtectedTimestampsMetaTable.GetID()
 	return descs.Txn(ctx, d.Settings, d.LeaseManager, d.InternalExecutor, d.DB,

@@ -790,11 +790,8 @@ func TestFlushNumSSTables(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m, err := engine.GetMetrics()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if m.NumSSTables == 0 {
+			m := engine.GetMetrics()
+			if m.NumSSTables() == 0 {
 				t.Fatal("expected non-zero sstables, got 0")
 			}
 		})
@@ -863,6 +860,37 @@ func TestEngineScan1(t *testing.T) {
 				}
 				ensureRangeEqual(t, sortedKeys, keyMap, keyvals)
 			}
+
+			// Test iterator stats.
+			ro := engine.NewReadOnly()
+			iter := ro.NewMVCCIterator(MVCCKeyIterKind,
+				IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
+			iter.SeekGE(MVCCKey{Key: roachpb.Key("cat")})
+			for {
+				valid, err := iter.Valid()
+				require.NoError(t, err)
+				if !valid {
+					break
+				}
+				iter.Next()
+			}
+			stats := iter.Stats().Stats
+			require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 5), (rev, 0, 0)), "+
+				"(internal (dir, seek, step): (fwd, 1, 5), (rev, 0, 0))", stats.String())
+			iter.Close()
+			iter = ro.NewMVCCIterator(MVCCKeyIterKind,
+				IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
+			// pebble.Iterator is reused, but stats are reset.
+			stats = iter.Stats().Stats
+			require.Equal(t, "(interface (dir, seek, step): (fwd, 0, 0), (rev, 0, 0)), "+
+				"(internal (dir, seek, step): (fwd, 0, 0), (rev, 0, 0))", stats.String())
+			iter.SeekGE(MVCCKey{Key: roachpb.Key("french")})
+			iter.SeekLT(MVCCKey{Key: roachpb.Key("server")})
+			stats = iter.Stats().Stats
+			require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 0), (rev, 1, 0)), "+
+				"(internal (dir, seek, step): (fwd, 1, 0), (rev, 1, 1))", stats.String())
+			iter.Close()
+			ro.Close()
 		})
 	}
 }
@@ -1192,19 +1220,23 @@ func TestIngestDelayLimit(t *testing.T) {
 	max, ramp := time.Second*5, time.Second*5/10
 
 	for _, tc := range []struct {
-		exp     time.Duration
-		metrics Metrics
+		exp           time.Duration
+		fileCount     int64
+		sublevelCount int32
 	}{
-		{0, Metrics{}},
-		{0, Metrics{L0FileCount: 19, L0SublevelCount: -1}},
-		{0, Metrics{L0FileCount: 20, L0SublevelCount: -1}},
-		{ramp, Metrics{L0FileCount: 21, L0SublevelCount: -1}},
-		{ramp * 2, Metrics{L0FileCount: 22, L0SublevelCount: -1}},
-		{ramp * 2, Metrics{L0FileCount: 22, L0SublevelCount: 22}},
-		{ramp * 2, Metrics{L0FileCount: 55, L0SublevelCount: 22}},
-		{max, Metrics{L0FileCount: 55, L0SublevelCount: -1}},
+		{0, 0, 0},
+		{0, 19, -1},
+		{0, 20, -1},
+		{ramp, 21, -1},
+		{ramp * 2, 22, -1},
+		{ramp * 2, 22, 22},
+		{ramp * 2, 55, 22},
+		{max, 55, -1},
 	} {
-		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &tc.metrics))
+		var m pebble.Metrics
+		m.Levels[0].NumFiles = tc.fileCount
+		m.Levels[0].Sublevels = tc.sublevelCount
+		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &m))
 	}
 }
 
@@ -1503,7 +1535,14 @@ func TestSupportsPrev(t *testing.T) {
 		})
 	}
 	t.Run("pebble", func(t *testing.T) {
-		eng := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
+
+		eng := newPebbleInMem(
+			context.Background(),
+			roachpb.Attributes{},
+			1<<20,   /* cacheSize */
+			512<<20, /* storeSize */
+			nil,     /* settings */
+		)
 		defer eng.Close()
 		runTest(t, eng, engineTest{
 			engineIterSupportsPrev:   true,
@@ -1627,7 +1666,13 @@ func TestScanSeparatedIntents(t *testing.T) {
 	for name, enableSeparatedIntents := range map[string]bool{"interleaved": false, "separated": true} {
 		t.Run(name, func(t *testing.T) {
 			settings := makeSettingsForSeparatedIntents(false, enableSeparatedIntents)
-			eng := newPebbleInMem(ctx, roachpb.Attributes{}, 1<<20, settings)
+			eng := newPebbleInMem(
+				ctx,
+				roachpb.Attributes{},
+				1<<20,   /* cacheSize */
+				512<<20, /* storeSize */
+				settings,
+			)
 			defer eng.Close()
 
 			for _, key := range keys {

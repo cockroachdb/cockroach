@@ -306,7 +306,7 @@ func newZigzagJoiner(
 				// We need to generate metadata before closing the processor
 				// because InternalClose() updates z.Ctx to the "original"
 				// context.
-				trailingMeta := z.generateMeta(z.Ctx)
+				trailingMeta := z.generateMeta()
 				z.close()
 				return trailingMeta
 			},
@@ -382,7 +382,7 @@ type zigzagJoinerInfo struct {
 	rowsRead   int64
 	alloc      *rowenc.DatumAlloc
 	table      catalog.TableDescriptor
-	index      *descpb.IndexDescriptor
+	index      catalog.Index
 	indexTypes []*types.T
 	indexDirs  []descpb.IndexDescriptor_Direction
 
@@ -428,15 +428,15 @@ func (z *zigzagJoiner) setupInfo(
 	info.table = tables[side]
 	info.eqColumns = spec.EqColumns[side].Columns
 	indexOrdinal := spec.IndexOrdinals[side]
-	info.index = info.table.ActiveIndexes()[indexOrdinal].IndexDesc()
+	info.index = info.table.ActiveIndexes()[indexOrdinal]
 
 	var columnIDs []descpb.ColumnID
-	columnIDs, info.indexDirs = info.index.FullColumnIDs()
+	columnIDs, info.indexDirs = catalog.FullIndexColumnIDs(info.index)
 	info.indexTypes = make([]*types.T, len(columnIDs))
 	columnTypes := catalog.ColumnTypes(info.table.PublicColumns())
 	colIdxMap := catalog.ColumnIDToOrdinalMap(info.table.PublicColumns())
 	for i, columnID := range columnIDs {
-		if info.index.Type == descpb.IndexDescriptor_INVERTED &&
+		if info.index.GetType() == descpb.IndexDescriptor_INVERTED &&
 			columnID == info.index.InvertedColumnID() {
 			// Inverted key columns have type Bytes.
 			info.indexTypes[i] = types.Bytes
@@ -447,7 +447,7 @@ func (z *zigzagJoiner) setupInfo(
 
 	// Add the outputted columns.
 	neededCols := util.MakeFastIntSet()
-	outCols := z.Out.NeededColumns()
+	outCols := z.OutputHelper.NeededColumns()
 	maxCol := colOffset + len(info.table.PublicColumns())
 	for i, ok := outCols.Next(colOffset); ok && i < maxCol; i, ok = outCols.Next(i + 1) {
 		neededCols.Add(i - colOffset)
@@ -499,7 +499,7 @@ func (z *zigzagJoiner) setupInfo(
 		info.fetcher = &fetcher
 	}
 
-	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table, info.index.ID)
+	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table, info.index.GetID())
 	span, err := z.produceSpanFromBaseRow()
 
 	if err != nil {
@@ -519,9 +519,9 @@ func (z *zigzagJoiner) close() {
 	}
 }
 
-func findColumnID(s []descpb.ColumnID, t descpb.ColumnID) int {
-	for i := range s {
-		if s[i] == t {
+func findColumnOrdinalInIndex(index catalog.Index, t descpb.ColumnID) int {
+	for i := 0; i < index.NumKeyColumns(); i++ {
+		if index.GetKeyColumnID(i) == t {
 			return i
 		}
 	}
@@ -592,12 +592,12 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 		}
 
 		decodedDatums[i] = encDatum.Datum
-		if i < len(info.index.ColumnIDs) {
-			colMap.Set(info.index.ColumnIDs[i], i)
+		if i < info.index.NumKeyColumns() {
+			colMap.Set(info.index.GetKeyColumnID(i), i)
 		} else {
 			// This column's value will be encoded in the second part (i.e.
 			// EncodeColumns).
-			colMap.Set(info.index.ExtraColumnIDs[i-len(info.index.ColumnIDs)], i)
+			colMap.Set(info.index.GetKeySuffixColumnID(i-info.index.NumKeyColumns()), i)
 		}
 	}
 
@@ -625,7 +625,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 
 	// Append remaining (non-JSON) datums to the key.
 	keyBytes, _, err := rowenc.EncodeColumns(
-		info.index.ExtraColumnIDs[:len(datums)-1],
+		info.index.IndexDesc().KeySuffixColumnIDs[:len(datums)-1],
 		info.indexDirs[1:],
 		colMap,
 		decodedDatums,
@@ -647,7 +647,7 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 
 	// Construct correct row by concatenating right fixed datums with
 	// primary key extracted from `row`.
-	if info.index.Type == descpb.IndexDescriptor_INVERTED {
+	if info.index.GetType() == descpb.IndexDescriptor_INVERTED {
 		return z.produceInvertedIndexKey(info, neededDatums)
 	}
 
@@ -674,13 +674,13 @@ func (zi *zigzagJoinerInfo) eqOrdering() (colinfo.ColumnOrdering, error) {
 		// the current column, 'colID'.
 		var direction encoding.Direction
 		var err error
-		if idx := findColumnID(zi.index.ColumnIDs, colID); idx != -1 {
-			direction, err = zi.index.ColumnDirections[idx].ToEncodingDirection()
+		if idx := findColumnOrdinalInIndex(zi.index, colID); idx != -1 {
+			direction, err = zi.index.GetKeyColumnDirection(idx).ToEncodingDirection()
 			if err != nil {
 				return nil, err
 			}
-		} else if idx := findColumnID(zi.table.GetPrimaryIndex().IndexDesc().ColumnIDs, colID); idx != -1 {
-			direction, err = zi.table.GetPrimaryIndex().GetColumnDirection(idx).ToEncodingDirection()
+		} else if idx := findColumnOrdinalInIndex(zi.table.GetPrimaryIndex(), colID); idx != -1 {
+			direction, err = zi.table.GetPrimaryIndex().GetKeyColumnDirection(idx).ToEncodingDirection()
 			if err != nil {
 				return nil, err
 			}
@@ -1004,7 +1004,7 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 	return &execinfrapb.ComponentStats{
 		KV:     kvStats,
-		Output: z.Out.Stats(),
+		Output: z.OutputHelper.Stats(),
 	}
 }
 
@@ -1024,13 +1024,13 @@ func (z *zigzagJoiner) getRowsRead() int64 {
 	return rowsRead
 }
 
-func (z *zigzagJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = z.getBytesRead()
 	meta.Metrics.RowsRead = z.getRowsRead()
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, z.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx, z.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta

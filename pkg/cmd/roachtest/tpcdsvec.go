@@ -59,7 +59,7 @@ func registerTPCDSVec(r *testRegistry) {
 		disableAutoStats(t, clusterConn)
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
-			`RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures/workload/tpcds/scalefactor=1/backup';`,
+			`RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures/workload/tpcds/scalefactor=1/backup?AUTH=implicit';`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -79,7 +79,11 @@ func registerTPCDSVec(r *testRegistry) {
 		// We additionally open fresh connections for each query.
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout)
 		firstNode := c.Node(1)
-		firstNodeURL := c.ExternalPGUrl(ctx, firstNode)[0]
+		urls, err := c.ExternalPGUrl(ctx, firstNode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		firstNodeURL := urls[0]
 		openNewConnections := func() (map[string]cmpconn.Conn, func()) {
 			conns := map[string]cmpconn.Conn{}
 			vecOffConn, err := cmpconn.NewConn(
@@ -167,7 +171,7 @@ func registerTPCDSVec(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "tpcdsvec",
-		Owner:      OwnerSQLExec,
+		Owner:      OwnerSQLQueries,
 		Cluster:    makeClusterSpec(3),
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {

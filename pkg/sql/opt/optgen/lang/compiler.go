@@ -369,8 +369,16 @@ func (c *ruleCompiler) inferTypes(e Expr, suggested DataType) {
 			c.inferTypes(arg, AnyDataType)
 		}
 
+	case *LetExpr:
+		// Set type of the let to type of its result ref or the suggested type.
+		typ := c.bindings[t.Result.Label]
+		if typ == nil {
+			panic(fmt.Sprintf("$%s does not have its type set", t.Result.Label))
+		}
+		t.Typ = mostRestrictiveDataType(typ, suggested)
+
 	case *BindExpr:
-		// Set type of binding to type of its target.
+		// Set type of binding to the type of its target.
 		c.inferTypes(t.Target, suggested)
 		t.Typ = t.Target.InferredType()
 
@@ -410,7 +418,7 @@ func (c *ruleCompiler) inferTypes(e Expr, suggested DataType) {
 	case *AnyExpr:
 		t.Typ = suggested
 
-	case *StringExpr, *NumberExpr, *ListAnyExpr, *NameExpr, *NamesExpr:
+	case *StringExpr, *StringsExpr, *NumberExpr, *ListAnyExpr, *NameExpr, *NamesExpr:
 		// Type already known; nothing to infer.
 
 	default:
@@ -436,6 +444,10 @@ type ruleContentCompiler struct {
 	// replace function, and false when compiling in the scope of an op matcher
 	// or op constructor.
 	customFunc bool
+
+	// let is true when compiling in the scope of a let expression, and false
+	// otherwise.
+	let bool
 }
 
 func (c *ruleContentCompiler) compile(e Expr) Expr {
@@ -445,11 +457,14 @@ func (c *ruleContentCompiler) compile(e Expr) Expr {
 	case *FuncExpr:
 		return c.compileFunc(t)
 
+	case *LetExpr:
+		return c.compileLet(t)
+
 	case *BindExpr:
 		return c.compileBind(t)
 
 	case *RefExpr:
-		if c.matchPattern && !c.customFunc {
+		if c.matchPattern && !c.customFunc && !c.let {
 			c.addDisallowedErr(t, "cannot use variable references")
 		} else {
 			// Check that referenced variable exists.
@@ -523,6 +538,43 @@ func (c *ruleContentCompiler) compileList(list *ListExpr) {
 			}
 			foundNotAny = true
 		}
+	}
+}
+
+func (c *ruleContentCompiler) compileLet(let *LetExpr) Expr {
+	// Create nested context and recurse into children.
+	nested := ruleContentCompiler{
+		compiler:     c.compiler,
+		src:          let.Source(),
+		matchPattern: c.matchPattern,
+		let:          true,
+	}
+
+	// Target must be a CustomFunc.
+	target, ok := nested.compile(let.Target).(*CustomFuncExpr)
+	if !ok {
+		c.addErr(let, fmt.Errorf("let target must be a custom function"))
+	}
+
+	// Ensure that binding labels are unique.
+	for _, label := range let.Labels {
+		_, ok := c.compiler.bindings[label]
+		if ok {
+			c.addErr(let, fmt.Errorf("duplicate bind label '%s'", label))
+		}
+
+		// Initialize the binding.
+		c.compiler.bindings[label] = AnyDataType
+	}
+
+	labels := nested.compile(&let.Labels).(*StringsExpr)
+	result := nested.compile(let.Result).(*RefExpr)
+
+	return &LetExpr{
+		Labels: *labels,
+		Target: target,
+		Result: result,
+		Src:    let.Source(),
 	}
 }
 

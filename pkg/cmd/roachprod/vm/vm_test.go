@@ -108,3 +108,34 @@ func TestVM_ZoneEntry(t *testing.T) {
 		})
 	}
 }
+
+func TestDNSSafeAccount(t *testing.T) {
+
+	cases := []struct {
+		description, input, expected string
+	}{
+		{
+			"regular", "username", "username",
+		},
+		{
+			"mixed case", "UserName", "username",
+		},
+		{
+			"dot", "user.name", "username",
+		},
+		{
+			"underscore", "user_name", "username",
+		},
+		{
+			"dot and underscore", "u.ser_n.a_me", "username",
+		},
+		{
+			"Unicode and other characters", "~/❦u.ser_ऄn.a_meλ", "username",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.description, func(t *testing.T) {
+			assert.EqualValues(t, DNSSafeAccount(c.input), c.expected)
+		})
+	}
+}

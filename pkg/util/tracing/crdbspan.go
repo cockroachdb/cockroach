@@ -29,12 +29,18 @@ import (
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
 // tracing.
 type crdbSpan struct {
+	rootSpan *crdbSpan // root span of the containing trace; could be itself
+	// traceEmpty indicates whether or not the trace rooted at this span
+	// (provided it is a root span) contains any recordings or baggage. All
+	// spans hold a reference to the rootSpan; this field is accessed
+	// through that reference.
+	traceEmpty int32 // accessed atomically, through markTraceAsNonEmpty and inAnEmptyTrace
+
 	traceID      uint64 // probabilistically unique
 	spanID       uint64 // probabilistically unique
 	parentSpanID uint64
 	goroutineID  uint64
 
-	operation string
 	startTime time.Time
 
 	// logTags are set to the log tags that were available when this Span was
@@ -58,7 +64,8 @@ type testingKnob struct {
 type crdbSpanMu struct {
 	syncutil.Mutex
 	// duration is initialized to -1 and set on Finish().
-	duration time.Duration
+	duration  time.Duration
+	operation string // name of operation associated with the span
 
 	recording struct {
 		// recordingType is the recording type of the ongoing recording, if any.
@@ -76,22 +83,65 @@ type crdbSpanMu struct {
 
 		// children contains the list of child spans started after this Span
 		// started recording.
-		children []*crdbSpan
+		children childSpanRefs
 		// remoteSpan contains the list of remote child span recordings that
 		// were manually imported.
 		remoteSpans []tracingpb.RecordedSpan
 	}
 
-	// tags are only set when recording. These are tags that have been added to
-	// this Span, and will be appended to the tags in logTags when someone
-	// needs to actually observe the total set of tags that is a part of this
-	// Span.
+	// tags are only captured when recording. These are tags that have been
+	// added to this Span, and will be appended to the tags in logTags when
+	// someone needs to actually observe the total set of tags that is a part of
+	// this Span.
 	// TODO(radu): perhaps we want a recording to capture all the tags (even
 	// those that were set before recording started)?
 	tags opentracing.Tags
 
 	// The Span's associated baggage.
 	baggage map[string]string
+}
+
+type childSpanRefs struct {
+	refCount     int
+	preAllocated [4]*crdbSpan
+	overflow     []*crdbSpan
+}
+
+func (c *childSpanRefs) len() int {
+	return c.refCount
+}
+
+func (c *childSpanRefs) add(ref *crdbSpan) {
+	if c.refCount < len(c.preAllocated) {
+		c.preAllocated[c.refCount] = ref
+		c.refCount++
+		return
+	}
+
+	// Only record the child if the parent still has room.
+	if c.refCount < maxChildrenPerSpan {
+		c.overflow = append(c.overflow, ref)
+		c.refCount++
+	}
+}
+
+func (c *childSpanRefs) get(idx int) *crdbSpan {
+	if idx < len(c.preAllocated) {
+		ref := c.preAllocated[idx]
+		if ref == nil {
+			panic(fmt.Sprintf("idx %d out of bounds", idx))
+		}
+		return ref
+	}
+	return c.overflow[idx-len(c.preAllocated)]
+}
+
+func (c *childSpanRefs) reset() {
+	for i := 0; i < len(c.preAllocated); i++ {
+		c.preAllocated[i] = nil
+	}
+	c.overflow = nil
+	c.refCount = 0
 }
 
 func newSizeLimitedBuffer(limit int64) sizeLimitedBuffer {
@@ -151,8 +201,7 @@ func (s *crdbSpan) resetRecording() {
 	s.mu.recording.logs.Reset()
 	s.mu.recording.structured.Reset()
 	s.mu.recording.dropped = false
-
-	s.mu.recording.children = nil
+	s.mu.recording.children.reset()
 	s.mu.recording.remoteSpans = nil
 }
 
@@ -178,8 +227,6 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 		return nil // noop span
 	}
 
-	s.mu.Lock()
-
 	if !everyoneIsV211 {
 		// The cluster may contain nodes that are running v20.2. Unfortunately that
 		// version can easily crash when a peer returns a recording that that node
@@ -189,16 +236,27 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 		//
 		// TODO(tbg): remove this in the v21.2 cycle.
 		if s.recordingType() == RecordingOff {
-			s.mu.Unlock()
 			return nil
 		}
 	}
 
-	// The capacity here is approximate since we don't know how many grandchildren
-	// there are.
-	result := make(Recording, 0, 1+len(s.mu.recording.children)+len(s.mu.recording.remoteSpans))
+	// Return early (without allocating) if the trace is empty, i.e. there are
+	// no recordings or baggage. If the trace is verbose, we'll still recurse in
+	// order to pick up all the operations that were part of the trace, despite
+	// nothing having any actual data in them.
+	if s.recordingType() != RecordingVerbose && s.inAnEmptyTrace() {
+		return nil
+	}
+
+	s.mu.Lock()
+	// The capacity here is approximate since we don't know how many
+	// grandchildren there are.
+	result := make(Recording, 0, 1+s.mu.recording.children.len()+len(s.mu.recording.remoteSpans))
 	// Shallow-copy the children so we can process them without the lock.
-	children := s.mu.recording.children
+	var children []*crdbSpan
+	for i := 0; i < s.mu.recording.children.len(); i++ {
+		children = append(children, s.mu.recording.children.get(i))
+	}
 	result = append(result, s.getRecordingLocked(wantTags))
 	result = append(result, s.mu.recording.remoteSpans...)
 	s.mu.Unlock()
@@ -218,6 +276,11 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 }
 
 func (s *crdbSpan) importRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
+	if len(remoteSpans) == 0 {
+		return
+	}
+
+	s.markTraceAsNonEmpty()
 	// Change the root of the remote recording to be a child of this Span. This is
 	// usually already the case, except with DistSQL traces where remote
 	// processors run in spans that FollowFrom an RPC Span that we don't collect.
@@ -229,6 +292,11 @@ func (s *crdbSpan) importRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 }
 
 func (s *crdbSpan) setTagLocked(key string, value interface{}) {
+	if s.recordingType() != RecordingVerbose {
+		// Don't bother storing tags if we're unlikely to retrieve them.
+		return
+	}
+
 	if s.mu.tags == nil {
 		s.mu.tags = make(opentracing.Tags)
 	}
@@ -266,10 +334,21 @@ type sizable interface {
 	Size() int
 }
 
+// inAnEmptyTrace indicates whether or not the containing trace is "empty" (i.e.
+// has any recordings or baggage).
+func (s *crdbSpan) inAnEmptyTrace() bool {
+	val := atomic.LoadInt32(&s.rootSpan.traceEmpty)
+	return val == 0
+}
+
+func (s *crdbSpan) markTraceAsNonEmpty() {
+	atomic.StoreInt32(&s.rootSpan.traceEmpty, 1)
+}
+
 func (s *crdbSpan) recordInternal(payload sizable, buffer *sizeLimitedBuffer) {
+	s.markTraceAsNonEmpty()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	size := int64(payload.Size())
 	if size > buffer.limit {
 		// The incoming payload alone blows past the memory limit. Let's just
@@ -291,6 +370,7 @@ func (s *crdbSpan) recordInternal(payload sizable, buffer *sizeLimitedBuffer) {
 }
 
 func (s *crdbSpan) setBaggageItemAndTag(restrictedKey, value string) {
+	s.markTraceAsNonEmpty()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.setBaggageItemLocked(restrictedKey, value)
@@ -324,7 +404,7 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		SpanID:       s.spanID,
 		ParentSpanID: s.parentSpanID,
 		GoroutineID:  s.goroutineID,
-		Operation:    s.operation,
+		Operation:    s.mu.operation,
 		StartTime:    s.startTime,
 		Duration:     s.mu.duration,
 	}
@@ -405,11 +485,9 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 
 func (s *crdbSpan) addChild(child *crdbSpan) {
 	s.mu.Lock()
-	// Only record the child if the parent still has room.
-	if len(s.mu.recording.children) < maxChildrenPerSpan {
-		s.mu.recording.children = append(s.mu.recording.children, child)
-	}
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+
+	s.mu.recording.children.add(child)
 }
 
 // setVerboseRecursively sets the verbosity of the crdbSpan appropriately and
@@ -422,7 +500,10 @@ func (s *crdbSpan) setVerboseRecursively(to bool) {
 	}
 
 	s.mu.Lock()
-	children := s.mu.recording.children
+	var children []*crdbSpan
+	for i := 0; i < s.mu.recording.children.len(); i++ {
+		children = append(children, s.mu.recording.children.get(i))
+	}
 	s.mu.Unlock()
 
 	for _, child := range children {

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -872,9 +873,9 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			// Not indexable.
 			continue
 		case types.CollatedStringFamily:
-			typ = types.MakeCollatedString(types.String, *rowenc.RandCollationLocale(rng))
+			typ = types.MakeCollatedString(types.String, *randgen.RandCollationLocale(rng))
 		}
-		datum := rowenc.RandDatum(rng, typ, false /* nullOk */)
+		datum := randgen.RandDatum(rng, typ, false /* nullOk */)
 		if datum == tree.DNull {
 			// DNull is returned by RandDatum for types.UNKNOWN or if the
 			// column type is unimplemented in RandDatum. In either case, the
@@ -1116,6 +1117,9 @@ func verifyScansOnNode(
 			}
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return errors.Wrap(err, "unexpected error querying traces")
+	}
 	if len(scansWrongNode) > 0 {
 		err := errors.Newf("expected to scan on %s: %s", node, query)
 		err = errors.WithDetailf(err, "scans:\n%s", strings.Join(scansWrongNode, "\n"))
@@ -1338,12 +1342,12 @@ func TestRepartitioning(t *testing.T) {
 				} else {
 					fmt.Fprintf(&repartition, `ALTER INDEX %s@%s `, test.new.parsed.tableName, testIndex.GetName())
 				}
-				if testIndex.GetPartitioning().NumColumns == 0 {
+				if testIndex.GetPartitioning().NumColumns() == 0 {
 					repartition.WriteString(`PARTITION BY NOTHING`)
 				} else {
 					if err := sql.ShowCreatePartitioning(
-						&rowenc.DatumAlloc{}, keys.SystemSQLCodec, test.new.parsed.tableDesc, testIndex.IndexDesc(),
-						&testIndex.IndexDesc().Partitioning, &repartition, 0 /* indent */, 0, /* colOffset */
+						&rowenc.DatumAlloc{}, keys.SystemSQLCodec, test.new.parsed.tableDesc, testIndex,
+						testIndex.GetPartitioning(), &repartition, 0 /* indent */, 0, /* colOffset */
 					); err != nil {
 						t.Fatalf("%+v", err)
 					}
@@ -1353,8 +1357,11 @@ func TestRepartitioning(t *testing.T) {
 				// Verify that repartitioning removes zone configs for partitions that
 				// have been removed.
 				newPartitionNames := map[string]struct{}{}
-				for _, name := range test.new.parsed.tableDesc.PartitionNames() {
-					newPartitionNames[name] = struct{}{}
+				for _, index := range test.new.parsed.tableDesc.NonDropIndexes() {
+					_ = index.GetPartitioning().ForEachPartitionName(func(name string) error {
+						newPartitionNames[name] = struct{}{}
+						return nil
+					})
 				}
 				for _, row := range sqlDB.QueryStr(
 					t, "SELECT partition_name FROM crdb_internal.zones WHERE partition_name IS NOT NULL") {

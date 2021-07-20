@@ -3,18 +3,21 @@
 
 package tspb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
 import (
 	context "context"
+	encoding_binary "encoding/binary"
+	fmt "fmt"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
-
-import encoding_binary "encoding/binary"
-
-import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -25,7 +28,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // TimeSeriesQueryAggregator describes a set of aggregation functions which can
 // be used to combine multiple datapoints into a single datapoint.
@@ -66,6 +69,7 @@ var TimeSeriesQueryAggregator_name = map[int32]string{
 	6: "LAST",
 	7: "VARIANCE",
 }
+
 var TimeSeriesQueryAggregator_value = map[string]int32{
 	"AVG":      1,
 	"SUM":      2,
@@ -81,9 +85,11 @@ func (x TimeSeriesQueryAggregator) Enum() *TimeSeriesQueryAggregator {
 	*p = x
 	return p
 }
+
 func (x TimeSeriesQueryAggregator) String() string {
 	return proto.EnumName(TimeSeriesQueryAggregator_name, int32(x))
 }
+
 func (x *TimeSeriesQueryAggregator) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(TimeSeriesQueryAggregator_value, data, "TimeSeriesQueryAggregator")
 	if err != nil {
@@ -92,8 +98,9 @@ func (x *TimeSeriesQueryAggregator) UnmarshalJSON(data []byte) error {
 	*x = TimeSeriesQueryAggregator(value)
 	return nil
 }
+
 func (TimeSeriesQueryAggregator) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_60a254ced0e4361c, []int{0}
+	return fileDescriptor_a830e30eaefb39d9, []int{0}
 }
 
 // TimeSeriesQueryDerivative describes a derivative function used to convert
@@ -116,6 +123,7 @@ var TimeSeriesQueryDerivative_name = map[int32]string{
 	1: "DERIVATIVE",
 	2: "NON_NEGATIVE_DERIVATIVE",
 }
+
 var TimeSeriesQueryDerivative_value = map[string]int32{
 	"NONE":                    0,
 	"DERIVATIVE":              1,
@@ -127,9 +135,11 @@ func (x TimeSeriesQueryDerivative) Enum() *TimeSeriesQueryDerivative {
 	*p = x
 	return p
 }
+
 func (x TimeSeriesQueryDerivative) String() string {
 	return proto.EnumName(TimeSeriesQueryDerivative_name, int32(x))
 }
+
 func (x *TimeSeriesQueryDerivative) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(TimeSeriesQueryDerivative_value, data, "TimeSeriesQueryDerivative")
 	if err != nil {
@@ -138,8 +148,9 @@ func (x *TimeSeriesQueryDerivative) UnmarshalJSON(data []byte) error {
 	*x = TimeSeriesQueryDerivative(value)
 	return nil
 }
+
 func (TimeSeriesQueryDerivative) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_60a254ced0e4361c, []int{1}
+	return fileDescriptor_a830e30eaefb39d9, []int{1}
 }
 
 // TimeSeriesResolution is used to enumerate the different resolution values
@@ -158,6 +169,7 @@ var TimeSeriesResolution_name = map[int32]string{
 	0: "RESOLUTION_10S",
 	1: "RESOLUTION_30M",
 }
+
 var TimeSeriesResolution_value = map[string]int32{
 	"RESOLUTION_10S": 0,
 	"RESOLUTION_30M": 1,
@@ -168,9 +180,11 @@ func (x TimeSeriesResolution) Enum() *TimeSeriesResolution {
 	*p = x
 	return p
 }
+
 func (x TimeSeriesResolution) String() string {
 	return proto.EnumName(TimeSeriesResolution_name, int32(x))
 }
+
 func (x *TimeSeriesResolution) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(TimeSeriesResolution_value, data, "TimeSeriesResolution")
 	if err != nil {
@@ -179,8 +193,9 @@ func (x *TimeSeriesResolution) UnmarshalJSON(data []byte) error {
 	*x = TimeSeriesResolution(value)
 	return nil
 }
+
 func (TimeSeriesResolution) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_60a254ced0e4361c, []int{2}
+	return fileDescriptor_a830e30eaefb39d9, []int{2}
 }
 
 // TimeSeriesDatapoint is a single point of time series data; a value associated
@@ -197,21 +212,21 @@ func (m *TimeSeriesDatapoint) Reset()         { *m = TimeSeriesDatapoint{} }
 func (m *TimeSeriesDatapoint) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesDatapoint) ProtoMessage()    {}
 func (*TimeSeriesDatapoint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_60a254ced0e4361c, []int{0}
+	return fileDescriptor_a830e30eaefb39d9, []int{0}
 }
 func (m *TimeSeriesDatapoint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *TimeSeriesDatapoint) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *TimeSeriesDatapoint) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TimeSeriesDatapoint.Merge(dst, src)
+func (m *TimeSeriesDatapoint) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimeSeriesDatapoint.Merge(m, src)
 }
 func (m *TimeSeriesDatapoint) XXX_Size() int {
 	return m.Size()
@@ -240,21 +255,21 @@ func (m *TimeSeriesData) Reset()         { *m = TimeSeriesData{} }
 func (m *TimeSeriesData) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesData) ProtoMessage()    {}
 func (*TimeSeriesData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_60a254ced0e4361c, []int{1}
+	return fileDescriptor_a830e30eaefb39d9, []int{1}
 }
 func (m *TimeSeriesData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *TimeSeriesData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *TimeSeriesData) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TimeSeriesData.Merge(dst, src)
+func (m *TimeSeriesData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimeSeriesData.Merge(m, src)
 }
 func (m *TimeSeriesData) XXX_Size() int {
 	return m.Size()
@@ -288,21 +303,21 @@ func (m *Query) Reset()         { *m = Query{} }
 func (m *Query) String() string { return proto.CompactTextString(m) }
 func (*Query) ProtoMessage()    {}
 func (*Query) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_60a254ced0e4361c, []int{2}
+	return fileDescriptor_a830e30eaefb39d9, []int{2}
 }
 func (m *Query) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *Query) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *Query) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Query.Merge(dst, src)
+func (m *Query) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Query.Merge(m, src)
 }
 func (m *Query) XXX_Size() int {
 	return m.Size()
@@ -374,21 +389,21 @@ func (m *TimeSeriesQueryRequest) Reset()         { *m = TimeSeriesQueryRequest{}
 func (m *TimeSeriesQueryRequest) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesQueryRequest) ProtoMessage()    {}
 func (*TimeSeriesQueryRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_60a254ced0e4361c, []int{3}
+	return fileDescriptor_a830e30eaefb39d9, []int{3}
 }
 func (m *TimeSeriesQueryRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *TimeSeriesQueryRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *TimeSeriesQueryRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TimeSeriesQueryRequest.Merge(dst, src)
+func (m *TimeSeriesQueryRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimeSeriesQueryRequest.Merge(m, src)
 }
 func (m *TimeSeriesQueryRequest) XXX_Size() int {
 	return m.Size()
@@ -412,21 +427,21 @@ func (m *TimeSeriesQueryResponse) Reset()         { *m = TimeSeriesQueryResponse
 func (m *TimeSeriesQueryResponse) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesQueryResponse) ProtoMessage()    {}
 func (*TimeSeriesQueryResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_60a254ced0e4361c, []int{4}
+	return fileDescriptor_a830e30eaefb39d9, []int{4}
 }
 func (m *TimeSeriesQueryResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *TimeSeriesQueryResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *TimeSeriesQueryResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TimeSeriesQueryResponse.Merge(dst, src)
+func (m *TimeSeriesQueryResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimeSeriesQueryResponse.Merge(m, src)
 }
 func (m *TimeSeriesQueryResponse) XXX_Size() int {
 	return m.Size()
@@ -447,21 +462,21 @@ func (m *TimeSeriesQueryResponse_Result) Reset()         { *m = TimeSeriesQueryR
 func (m *TimeSeriesQueryResponse_Result) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesQueryResponse_Result) ProtoMessage()    {}
 func (*TimeSeriesQueryResponse_Result) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_60a254ced0e4361c, []int{4, 0}
+	return fileDescriptor_a830e30eaefb39d9, []int{4, 0}
 }
 func (m *TimeSeriesQueryResponse_Result) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *TimeSeriesQueryResponse_Result) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *TimeSeriesQueryResponse_Result) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TimeSeriesQueryResponse_Result.Merge(dst, src)
+func (m *TimeSeriesQueryResponse_Result) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimeSeriesQueryResponse_Result.Merge(m, src)
 }
 func (m *TimeSeriesQueryResponse_Result) XXX_Size() int {
 	return m.Size()
@@ -494,21 +509,21 @@ func (m *DumpRequest) Reset()         { *m = DumpRequest{} }
 func (m *DumpRequest) String() string { return proto.CompactTextString(m) }
 func (*DumpRequest) ProtoMessage()    {}
 func (*DumpRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_60a254ced0e4361c, []int{5}
+	return fileDescriptor_a830e30eaefb39d9, []int{5}
 }
 func (m *DumpRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *DumpRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *DumpRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DumpRequest.Merge(dst, src)
+func (m *DumpRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DumpRequest.Merge(m, src)
 }
 func (m *DumpRequest) XXX_Size() int {
 	return m.Size()
@@ -520,6 +535,9 @@ func (m *DumpRequest) XXX_DiscardUnknown() {
 var xxx_messageInfo_DumpRequest proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterEnum("cockroach.ts.tspb.TimeSeriesQueryAggregator", TimeSeriesQueryAggregator_name, TimeSeriesQueryAggregator_value)
+	proto.RegisterEnum("cockroach.ts.tspb.TimeSeriesQueryDerivative", TimeSeriesQueryDerivative_name, TimeSeriesQueryDerivative_value)
+	proto.RegisterEnum("cockroach.ts.tspb.TimeSeriesResolution", TimeSeriesResolution_name, TimeSeriesResolution_value)
 	proto.RegisterType((*TimeSeriesDatapoint)(nil), "cockroach.ts.tspb.TimeSeriesDatapoint")
 	proto.RegisterType((*TimeSeriesData)(nil), "cockroach.ts.tspb.TimeSeriesData")
 	proto.RegisterType((*Query)(nil), "cockroach.ts.tspb.Query")
@@ -527,10 +545,67 @@ func init() {
 	proto.RegisterType((*TimeSeriesQueryResponse)(nil), "cockroach.ts.tspb.TimeSeriesQueryResponse")
 	proto.RegisterType((*TimeSeriesQueryResponse_Result)(nil), "cockroach.ts.tspb.TimeSeriesQueryResponse.Result")
 	proto.RegisterType((*DumpRequest)(nil), "cockroach.ts.tspb.DumpRequest")
-	proto.RegisterEnum("cockroach.ts.tspb.TimeSeriesQueryAggregator", TimeSeriesQueryAggregator_name, TimeSeriesQueryAggregator_value)
-	proto.RegisterEnum("cockroach.ts.tspb.TimeSeriesQueryDerivative", TimeSeriesQueryDerivative_name, TimeSeriesQueryDerivative_value)
-	proto.RegisterEnum("cockroach.ts.tspb.TimeSeriesResolution", TimeSeriesResolution_name, TimeSeriesResolution_value)
 }
+
+func init() { proto.RegisterFile("ts/tspb/timeseries.proto", fileDescriptor_a830e30eaefb39d9) }
+
+var fileDescriptor_a830e30eaefb39d9 = []byte{
+	// 841 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x95, 0x4f, 0x6f, 0x1b, 0x45,
+	0x14, 0xc0, 0x3d, 0xeb, 0x75, 0x6c, 0x3f, 0x57, 0x66, 0x3b, 0x44, 0x74, 0x71, 0xab, 0x8d, 0x6b,
+	0x89, 0xd6, 0x58, 0x60, 0xa7, 0xe1, 0x52, 0xf9, 0x80, 0xe4, 0x12, 0x53, 0x19, 0xe2, 0x8d, 0x3a,
+	0x76, 0x2c, 0xc4, 0x01, 0x6b, 0x12, 0x0f, 0x66, 0x85, 0xbd, 0xb3, 0xdd, 0x99, 0x4d, 0x95, 0x2b,
+	0x27, 0x24, 0x2e, 0x48, 0x48, 0x9c, 0x40, 0xea, 0xc7, 0xe0, 0x23, 0x44, 0x42, 0x42, 0x91, 0xb8,
+	0xf4, 0x54, 0x41, 0xc2, 0x81, 0x8f, 0x81, 0x66, 0x76, 0x9d, 0x2c, 0x89, 0x49, 0x22, 0x94, 0xdb,
+	0xcc, 0xfb, 0xf3, 0x7b, 0x7f, 0xe6, 0xbd, 0x5d, 0xb0, 0xa5, 0x68, 0x49, 0x11, 0xec, 0xb6, 0xa4,
+	0x37, 0x67, 0x82, 0x85, 0x1e, 0x13, 0xcd, 0x20, 0xe4, 0x92, 0xe3, 0xdb, 0x7b, 0x7c, 0xef, 0xeb,
+	0x90, 0xd3, 0xbd, 0xaf, 0x9a, 0x52, 0x34, 0x95, 0x4d, 0x05, 0xeb, 0x6b, 0xb0, 0xdb, 0x9a, 0x50,
+	0x49, 0x63, 0xb3, 0xca, 0xea, 0x94, 0x4f, 0xb9, 0x3e, 0xb6, 0xd4, 0x29, 0x91, 0xde, 0x9b, 0x72,
+	0x3e, 0x9d, 0xb1, 0x16, 0x0d, 0xbc, 0x16, 0xf5, 0x7d, 0x2e, 0xa9, 0xf4, 0xb8, 0x9f, 0xa0, 0x6b,
+	0x5f, 0xc2, 0x9b, 0x43, 0x6f, 0xce, 0x06, 0x3a, 0xdc, 0x26, 0x95, 0x34, 0xe0, 0x9e, 0x2f, 0xf1,
+	0xfb, 0xf0, 0x86, 0xce, 0x42, 0xd2, 0x79, 0x30, 0xf6, 0xa9, 0xcf, 0x85, 0x8d, 0xaa, 0xa8, 0x9e,
+	0x7d, 0x62, 0x1e, 0xbe, 0x5e, 0xcb, 0x90, 0xf2, 0xa9, 0xd2, 0x55, 0x3a, 0x5c, 0x81, 0xdc, 0x3e,
+	0x9d, 0x45, 0xcc, 0x36, 0xaa, 0xa8, 0x8e, 0x12, 0xa3, 0x58, 0xd4, 0x36, 0xff, 0x7e, 0xb9, 0x86,
+	0x6a, 0x3f, 0x21, 0x28, 0xff, 0x3b, 0x10, 0xb6, 0xc1, 0xf4, 0xe9, 0x9c, 0x69, 0x70, 0x31, 0xf1,
+	0xd1, 0x12, 0x7c, 0x0f, 0x56, 0x04, 0x8f, 0xc2, 0xbd, 0x98, 0xb7, 0xd0, 0x25, 0x32, 0xbc, 0x05,
+	0x30, 0x59, 0x24, 0x2a, 0xec, 0x6c, 0x35, 0x5b, 0x2f, 0x6d, 0x3c, 0x68, 0x5e, 0x68, 0x51, 0x73,
+	0x49, 0x5d, 0x09, 0x29, 0xe5, 0x9f, 0xa4, 0xf7, 0x9b, 0x01, 0xb9, 0x67, 0x11, 0x0b, 0x0f, 0x2e,
+	0xc9, 0x6a, 0x00, 0xa5, 0x09, 0x7f, 0xe1, 0x0b, 0x3a, 0x0f, 0x66, 0x2c, 0xd4, 0xa9, 0x95, 0x37,
+	0xde, 0xbb, 0x34, 0xb0, 0x46, 0x76, 0xa6, 0xd3, 0x90, 0x4d, 0xa9, 0xe4, 0x61, 0x3b, 0xdb, 0x19,
+	0x3d, 0x25, 0x69, 0x0a, 0xfe, 0x02, 0x6e, 0xc7, 0x65, 0x8d, 0xe9, 0xa9, 0x99, 0x9d, 0xfd, 0x3f,
+	0xe8, 0xc1, 0x4e, 0x9f, 0x58, 0x31, 0xeb, 0x4c, 0x8c, 0x09, 0xc0, 0x84, 0x85, 0xde, 0x3e, 0x95,
+	0xde, 0x3e, 0xb3, 0xcd, 0xeb, 0x82, 0x37, 0x4f, 0x7d, 0xda, 0xa6, 0xbb, 0xed, 0x76, 0x49, 0x8a,
+	0x82, 0x6d, 0xc8, 0xc7, 0x71, 0x84, 0x9d, 0xab, 0x66, 0xeb, 0x45, 0xb2, 0xb8, 0xb6, 0x0b, 0xdf,
+	0xbe, 0x5c, 0x43, 0xba, 0xa1, 0xbf, 0x22, 0x78, 0xeb, 0x1c, 0x93, 0xb0, 0xe7, 0x11, 0x13, 0x12,
+	0xbf, 0x03, 0x25, 0x21, 0x69, 0x28, 0x97, 0xcc, 0x15, 0x68, 0x45, 0x3c, 0x53, 0xf7, 0xa1, 0xc8,
+	0xfc, 0x49, 0x62, 0x64, 0xa4, 0x8c, 0x0a, 0xcc, 0x9f, 0xc4, 0x26, 0x8f, 0x21, 0xff, 0x3c, 0xd2,
+	0x01, 0x92, 0x31, 0xb0, 0x97, 0x54, 0xa6, 0x63, 0x27, 0xae, 0x0b, 0x73, 0xfc, 0x10, 0x6e, 0xc5,
+	0x2f, 0x90, 0xf0, 0xcd, 0x14, 0xbf, 0x14, 0x6b, 0x74, 0x88, 0x64, 0x3c, 0xbe, 0x33, 0xe0, 0xce,
+	0x85, 0x6a, 0x44, 0xc0, 0x7d, 0xc1, 0xf0, 0x33, 0xc8, 0x87, 0x4c, 0x44, 0x33, 0xa9, 0x4a, 0x51,
+	0x49, 0x3c, 0xba, 0xba, 0xbd, 0x0b, 0xe7, 0x26, 0xd1, 0x9e, 0x8b, 0xec, 0x12, 0x4e, 0xe5, 0x47,
+	0x04, 0x2b, 0xb1, 0x06, 0x3f, 0x86, 0x9c, 0xca, 0xf9, 0x40, 0xb7, 0xe9, 0xb2, 0x02, 0x0b, 0x0a,
+	0x71, 0xf4, 0x7a, 0x0d, 0x91, 0xd8, 0xe1, 0xdc, 0x9a, 0x18, 0x37, 0xb1, 0x26, 0x49, 0x37, 0x7e,
+	0x41, 0x50, 0xda, 0x8c, 0xe6, 0xc1, 0xcd, 0x3f, 0xe8, 0x2a, 0xe4, 0xd4, 0xaa, 0xc5, 0xcf, 0x59,
+	0x24, 0xf1, 0x05, 0xf7, 0xa0, 0x14, 0x32, 0xc1, 0x67, 0x91, 0xfe, 0x70, 0xd9, 0x66, 0x35, 0x5b,
+	0x2f, 0x6f, 0x3c, 0xbc, 0xb4, 0x14, 0x72, 0x6a, 0x4f, 0xd2, 0xbe, 0x8d, 0x5d, 0x78, 0xfb, 0x3f,
+	0x57, 0x08, 0xe7, 0x41, 0xed, 0xa7, 0x85, 0xd4, 0x61, 0xb0, 0xd3, 0xb7, 0x0c, 0x75, 0xe8, 0x77,
+	0x3e, 0xb3, 0xb2, 0xfa, 0xd0, 0x73, 0x2d, 0x13, 0x17, 0x21, 0xf7, 0x71, 0x8f, 0x0c, 0x86, 0x56,
+	0x0e, 0x17, 0xc0, 0xdc, 0xea, 0x0c, 0x86, 0xd6, 0x0a, 0xbe, 0x05, 0x85, 0x51, 0x87, 0xf4, 0x3a,
+	0xee, 0x47, 0x5d, 0x2b, 0xdf, 0x20, 0x17, 0x62, 0x9c, 0x6d, 0x93, 0x72, 0x52, 0xfb, 0x64, 0x65,
+	0x70, 0x19, 0x60, 0xb3, 0x4b, 0x7a, 0xa3, 0xce, 0xb0, 0x37, 0xea, 0x5a, 0x08, 0xdf, 0x85, 0x3b,
+	0xee, 0xb6, 0x3b, 0x76, 0xbb, 0x4f, 0xb5, 0x64, 0x9c, 0x52, 0x1a, 0x8d, 0x0f, 0x61, 0x75, 0x59,
+	0x71, 0x18, 0x43, 0x99, 0x74, 0x07, 0xdb, 0x5b, 0x3b, 0xc3, 0xde, 0xb6, 0x3b, 0x7e, 0xb4, 0x3e,
+	0xb0, 0x32, 0xe7, 0x64, 0x1f, 0xac, 0xf7, 0x2d, 0xb4, 0xf1, 0xb3, 0x01, 0x70, 0x06, 0xc0, 0x72,
+	0xf1, 0xb5, 0x7b, 0xf7, 0x3a, 0xb3, 0xaa, 0x5f, 0xb9, 0xd2, 0xb8, 0xfe, 0x58, 0xd7, 0x56, 0xbf,
+	0xf9, 0xfd, 0xaf, 0x1f, 0x8c, 0x72, 0xad, 0xd8, 0x92, 0xa2, 0xa5, 0xc7, 0xb1, 0x8d, 0x1a, 0xb8,
+	0x0f, 0xa6, 0x1a, 0x1b, 0xec, 0x2c, 0x21, 0xa5, 0xe6, 0xa9, 0x72, 0xff, 0xca, 0x29, 0xad, 0x65,
+	0xd6, 0x11, 0xfe, 0x04, 0xf2, 0xda, 0x8b, 0xbe, 0xb8, 0x92, 0x78, 0x37, 0xa5, 0x4f, 0x7e, 0x9c,
+	0xcd, 0x4f, 0xd9, 0xc1, 0x48, 0xfd, 0xa0, 0x14, 0xeb, 0xc9, 0x83, 0xc3, 0x3f, 0x9d, 0xcc, 0xe1,
+	0xb1, 0x83, 0x8e, 0x8e, 0x1d, 0xf4, 0xea, 0xd8, 0x41, 0x7f, 0x1c, 0x3b, 0xe8, 0xfb, 0x13, 0x27,
+	0x73, 0x74, 0xe2, 0x64, 0x5e, 0x9d, 0x38, 0x99, 0xcf, 0x4d, 0x05, 0xfd, 0x27, 0x00, 0x00, 0xff,
+	0xff, 0x33, 0xda, 0x40, 0x80, 0xa4, 0x07, 0x00, 0x00,
+}
+
 func (this *TimeSeriesDatapoint) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -771,6 +846,7 @@ type TimeSeriesClient interface {
 	// not returned. Data is returned in the order it is read from disk, meaning
 	// that data from different series may be interleaved.
 	Dump(ctx context.Context, in *DumpRequest, opts ...grpc.CallOption) (TimeSeries_DumpClient, error)
+	DumpRaw(ctx context.Context, in *DumpRequest, opts ...grpc.CallOption) (TimeSeries_DumpRawClient, error)
 }
 
 type timeSeriesClient struct {
@@ -822,6 +898,38 @@ func (x *timeSeriesDumpClient) Recv() (*TimeSeriesData, error) {
 	return m, nil
 }
 
+func (c *timeSeriesClient) DumpRaw(ctx context.Context, in *DumpRequest, opts ...grpc.CallOption) (TimeSeries_DumpRawClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_TimeSeries_serviceDesc.Streams[1], "/cockroach.ts.tspb.TimeSeries/DumpRaw", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &timeSeriesDumpRawClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type TimeSeries_DumpRawClient interface {
+	Recv() (*roachpb.KeyValue, error)
+	grpc.ClientStream
+}
+
+type timeSeriesDumpRawClient struct {
+	grpc.ClientStream
+}
+
+func (x *timeSeriesDumpRawClient) Recv() (*roachpb.KeyValue, error) {
+	m := new(roachpb.KeyValue)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // TimeSeriesServer is the server API for TimeSeries service.
 type TimeSeriesServer interface {
 	// URL: /ts/query
@@ -831,6 +939,21 @@ type TimeSeriesServer interface {
 	// not returned. Data is returned in the order it is read from disk, meaning
 	// that data from different series may be interleaved.
 	Dump(*DumpRequest, TimeSeries_DumpServer) error
+	DumpRaw(*DumpRequest, TimeSeries_DumpRawServer) error
+}
+
+// UnimplementedTimeSeriesServer can be embedded to have forward compatible implementations.
+type UnimplementedTimeSeriesServer struct {
+}
+
+func (*UnimplementedTimeSeriesServer) Query(ctx context.Context, req *TimeSeriesQueryRequest) (*TimeSeriesQueryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Query not implemented")
+}
+func (*UnimplementedTimeSeriesServer) Dump(req *DumpRequest, srv TimeSeries_DumpServer) error {
+	return status.Errorf(codes.Unimplemented, "method Dump not implemented")
+}
+func (*UnimplementedTimeSeriesServer) DumpRaw(req *DumpRequest, srv TimeSeries_DumpRawServer) error {
+	return status.Errorf(codes.Unimplemented, "method DumpRaw not implemented")
 }
 
 func RegisterTimeSeriesServer(s *grpc.Server, srv TimeSeriesServer) {
@@ -876,6 +999,27 @@ func (x *timeSeriesDumpServer) Send(m *TimeSeriesData) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _TimeSeries_DumpRaw_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DumpRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(TimeSeriesServer).DumpRaw(m, &timeSeriesDumpRawServer{stream})
+}
+
+type TimeSeries_DumpRawServer interface {
+	Send(*roachpb.KeyValue) error
+	grpc.ServerStream
+}
+
+type timeSeriesDumpRawServer struct {
+	grpc.ServerStream
+}
+
+func (x *timeSeriesDumpRawServer) Send(m *roachpb.KeyValue) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 var _TimeSeries_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "cockroach.ts.tspb.TimeSeries",
 	HandlerType: (*TimeSeriesServer)(nil),
@@ -891,6 +1035,11 @@ var _TimeSeries_serviceDesc = grpc.ServiceDesc{
 			Handler:       _TimeSeries_Dump_Handler,
 			ServerStreams: true,
 		},
+		{
+			StreamName:    "DumpRaw",
+			Handler:       _TimeSeries_DumpRaw_Handler,
+			ServerStreams: true,
+		},
 	},
 	Metadata: "ts/tspb/timeseries.proto",
 }
@@ -898,7 +1047,7 @@ var _TimeSeries_serviceDesc = grpc.ServiceDesc{
 func (m *TimeSeriesDatapoint) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -906,24 +1055,29 @@ func (m *TimeSeriesDatapoint) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TimeSeriesDatapoint) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TimeSeriesDatapoint) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintTimeseries(dAtA, i, uint64(m.TimestampNanos))
-	dAtA[i] = 0x11
-	i++
+	i -= 8
 	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Value))))
-	i += 8
-	return i, nil
+	i--
+	dAtA[i] = 0x11
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.TimestampNanos))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *TimeSeriesData) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -931,37 +1085,46 @@ func (m *TimeSeriesData) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TimeSeriesData) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TimeSeriesData) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Name)))
-	i += copy(dAtA[i:], m.Name)
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Source)))
-	i += copy(dAtA[i:], m.Source)
 	if len(m.Datapoints) > 0 {
-		for _, msg := range m.Datapoints {
-			dAtA[i] = 0x1a
-			i++
-			i = encodeVarintTimeseries(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Datapoints) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Datapoints[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTimeseries(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x1a
 		}
 	}
-	return i, nil
+	i -= len(m.Source)
+	copy(dAtA[i:], m.Source)
+	i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Source)))
+	i--
+	dAtA[i] = 0x12
+	i -= len(m.Name)
+	copy(dAtA[i:], m.Name)
+	i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Name)))
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *Query) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -969,51 +1132,51 @@ func (m *Query) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *Query) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Query) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Name)))
-	i += copy(dAtA[i:], m.Name)
-	if m.Downsampler != nil {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintTimeseries(dAtA, i, uint64(*m.Downsampler))
-	}
-	if m.SourceAggregator != nil {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintTimeseries(dAtA, i, uint64(*m.SourceAggregator))
-	}
-	if m.Derivative != nil {
-		dAtA[i] = 0x20
-		i++
-		i = encodeVarintTimeseries(dAtA, i, uint64(*m.Derivative))
-	}
 	if len(m.Sources) > 0 {
-		for _, s := range m.Sources {
+		for iNdEx := len(m.Sources) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Sources[iNdEx])
+			copy(dAtA[i:], m.Sources[iNdEx])
+			i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Sources[iNdEx])))
+			i--
 			dAtA[i] = 0x2a
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
 		}
 	}
-	return i, nil
+	if m.Derivative != nil {
+		i = encodeVarintTimeseries(dAtA, i, uint64(*m.Derivative))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.SourceAggregator != nil {
+		i = encodeVarintTimeseries(dAtA, i, uint64(*m.SourceAggregator))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.Downsampler != nil {
+		i = encodeVarintTimeseries(dAtA, i, uint64(*m.Downsampler))
+		i--
+		dAtA[i] = 0x10
+	}
+	i -= len(m.Name)
+	copy(dAtA[i:], m.Name)
+	i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Name)))
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *TimeSeriesQueryRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1021,38 +1184,45 @@ func (m *TimeSeriesQueryRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TimeSeriesQueryRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TimeSeriesQueryRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintTimeseries(dAtA, i, uint64(m.StartNanos))
-	dAtA[i] = 0x10
-	i++
-	i = encodeVarintTimeseries(dAtA, i, uint64(m.EndNanos))
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.SampleNanos))
+	i--
+	dAtA[i] = 0x20
 	if len(m.Queries) > 0 {
-		for _, msg := range m.Queries {
-			dAtA[i] = 0x1a
-			i++
-			i = encodeVarintTimeseries(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Queries) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Queries[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTimeseries(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x1a
 		}
 	}
-	dAtA[i] = 0x20
-	i++
-	i = encodeVarintTimeseries(dAtA, i, uint64(m.SampleNanos))
-	return i, nil
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.EndNanos))
+	i--
+	dAtA[i] = 0x10
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.StartNanos))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *TimeSeriesQueryResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1060,29 +1230,36 @@ func (m *TimeSeriesQueryResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TimeSeriesQueryResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TimeSeriesQueryResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if len(m.Results) > 0 {
-		for _, msg := range m.Results {
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintTimeseries(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Results) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Results[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTimeseries(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0xa
 		}
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *TimeSeriesQueryResponse_Result) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1090,37 +1267,46 @@ func (m *TimeSeriesQueryResponse_Result) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *TimeSeriesQueryResponse_Result) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TimeSeriesQueryResponse_Result) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintTimeseries(dAtA, i, uint64(m.Query.Size()))
-	n1, err := m.Query.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
 	if len(m.Datapoints) > 0 {
-		for _, msg := range m.Datapoints {
-			dAtA[i] = 0x12
-			i++
-			i = encodeVarintTimeseries(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Datapoints) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Datapoints[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTimeseries(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x12
 		}
 	}
-	return i, nil
+	{
+		size, err := m.Query.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintTimeseries(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *DumpRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1128,49 +1314,50 @@ func (m *DumpRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *DumpRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DumpRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintTimeseries(dAtA, i, uint64(m.StartNanos))
-	dAtA[i] = 0x10
-	i++
-	i = encodeVarintTimeseries(dAtA, i, uint64(m.EndNanos))
-	if len(m.Names) > 0 {
-		for _, s := range m.Names {
-			dAtA[i] = 0x1a
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
-		}
-	}
 	if len(m.Resolutions) > 0 {
-		for _, num := range m.Resolutions {
+		for iNdEx := len(m.Resolutions) - 1; iNdEx >= 0; iNdEx-- {
+			i = encodeVarintTimeseries(dAtA, i, uint64(m.Resolutions[iNdEx]))
+			i--
 			dAtA[i] = 0x20
-			i++
-			i = encodeVarintTimeseries(dAtA, i, uint64(num))
 		}
 	}
-	return i, nil
+	if len(m.Names) > 0 {
+		for iNdEx := len(m.Names) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Names[iNdEx])
+			copy(dAtA[i:], m.Names[iNdEx])
+			i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Names[iNdEx])))
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.EndNanos))
+	i--
+	dAtA[i] = 0x10
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.StartNanos))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintTimeseries(dAtA []byte, offset int, v uint64) int {
+	offset -= sovTimeseries(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *TimeSeriesDatapoint) Size() (n int) {
 	if m == nil {
@@ -1301,14 +1488,7 @@ func (m *DumpRequest) Size() (n int) {
 }
 
 func sovTimeseries(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozTimeseries(x uint64) (n int) {
 	return sovTimeseries(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1328,7 +1508,7 @@ func (m *TimeSeriesDatapoint) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1356,7 +1536,7 @@ func (m *TimeSeriesDatapoint) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.TimestampNanos |= (int64(b) & 0x7F) << shift
+				m.TimestampNanos |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1408,7 +1588,7 @@ func (m *TimeSeriesData) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1436,7 +1616,7 @@ func (m *TimeSeriesData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1446,6 +1626,9 @@ func (m *TimeSeriesData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTimeseries
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1465,7 +1648,7 @@ func (m *TimeSeriesData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1475,6 +1658,9 @@ func (m *TimeSeriesData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTimeseries
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1494,7 +1680,7 @@ func (m *TimeSeriesData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1503,6 +1689,9 @@ func (m *TimeSeriesData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTimeseries
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1547,7 +1736,7 @@ func (m *Query) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1575,7 +1764,7 @@ func (m *Query) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1585,6 +1774,9 @@ func (m *Query) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTimeseries
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1604,7 +1796,7 @@ func (m *Query) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (TimeSeriesQueryAggregator(b) & 0x7F) << shift
+				v |= TimeSeriesQueryAggregator(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1624,7 +1816,7 @@ func (m *Query) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (TimeSeriesQueryAggregator(b) & 0x7F) << shift
+				v |= TimeSeriesQueryAggregator(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1644,7 +1836,7 @@ func (m *Query) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (TimeSeriesQueryDerivative(b) & 0x7F) << shift
+				v |= TimeSeriesQueryDerivative(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1664,7 +1856,7 @@ func (m *Query) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1674,6 +1866,9 @@ func (m *Query) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTimeseries
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1715,7 +1910,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1743,7 +1938,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.StartNanos |= (int64(b) & 0x7F) << shift
+				m.StartNanos |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1762,7 +1957,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.EndNanos |= (int64(b) & 0x7F) << shift
+				m.EndNanos |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1781,7 +1976,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1790,6 +1985,9 @@ func (m *TimeSeriesQueryRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTimeseries
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1812,7 +2010,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.SampleNanos |= (int64(b) & 0x7F) << shift
+				m.SampleNanos |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1853,7 +2051,7 @@ func (m *TimeSeriesQueryResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1881,7 +2079,7 @@ func (m *TimeSeriesQueryResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1890,6 +2088,9 @@ func (m *TimeSeriesQueryResponse) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTimeseries
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1934,7 +2135,7 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1962,7 +2163,7 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1971,6 +2172,9 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTimeseries
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1992,7 +2196,7 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2001,6 +2205,9 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTimeseries
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2045,7 +2252,7 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2073,7 +2280,7 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.StartNanos |= (int64(b) & 0x7F) << shift
+				m.StartNanos |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2092,7 +2299,7 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.EndNanos |= (int64(b) & 0x7F) << shift
+				m.EndNanos |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2111,7 +2318,7 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2121,6 +2328,9 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTimeseries
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTimeseries
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2138,7 +2348,7 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					v |= (TimeSeriesResolution(b) & 0x7F) << shift
+					v |= TimeSeriesResolution(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -2155,7 +2365,7 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -2164,6 +2374,9 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthTimeseries
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthTimeseries
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
@@ -2182,7 +2395,7 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						v |= (TimeSeriesResolution(b) & 0x7F) << shift
+						v |= TimeSeriesResolution(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -2216,6 +2429,7 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 func skipTimeseries(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -2247,10 +2461,8 @@ func skipTimeseries(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -2267,112 +2479,34 @@ func skipTimeseries(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthTimeseries
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowTimeseries
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipTimeseries(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupTimeseries
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthTimeseries
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthTimeseries = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowTimeseries   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthTimeseries        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowTimeseries          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupTimeseries = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("ts/tspb/timeseries.proto", fileDescriptor_timeseries_60a254ced0e4361c)
-}
-
-var fileDescriptor_timeseries_60a254ced0e4361c = []byte{
-	// 808 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x54, 0x41, 0x8f, 0xdb, 0x44,
-	0x14, 0xf6, 0xd8, 0xce, 0x26, 0x79, 0xa9, 0x82, 0x3b, 0xac, 0xa8, 0x09, 0x95, 0x37, 0x8d, 0x44,
-	0x1b, 0x22, 0x48, 0xb6, 0xcb, 0xa5, 0xca, 0x01, 0x29, 0x65, 0x43, 0x15, 0x69, 0xe3, 0xa8, 0xe3,
-	0x6c, 0x84, 0x38, 0x10, 0xb9, 0xc9, 0x10, 0x2c, 0x12, 0x8f, 0xeb, 0x19, 0x2f, 0xea, 0x95, 0x13,
-	0x12, 0x17, 0x24, 0x24, 0x4e, 0x1c, 0xfa, 0x33, 0xf8, 0x09, 0x2b, 0x21, 0xa1, 0x45, 0x5c, 0x7a,
-	0xaa, 0x20, 0xcb, 0x81, 0x9f, 0x81, 0x3c, 0x76, 0xb2, 0x66, 0x37, 0xa4, 0x2b, 0xd4, 0xdb, 0xf8,
-	0xbd, 0xef, 0xfb, 0xde, 0x7b, 0x33, 0xdf, 0x33, 0x98, 0x82, 0xb7, 0x04, 0x0f, 0x9e, 0xb4, 0x84,
-	0xb7, 0xa0, 0x9c, 0x86, 0x1e, 0xe5, 0xcd, 0x20, 0x64, 0x82, 0xe1, 0x9b, 0x13, 0x36, 0xf9, 0x2a,
-	0x64, 0xee, 0xe4, 0xcb, 0xa6, 0xe0, 0xcd, 0x18, 0x53, 0xd9, 0x9d, 0xb1, 0x19, 0x93, 0xd9, 0x56,
-	0x7c, 0x4a, 0x80, 0x95, 0xdb, 0x33, 0xc6, 0x66, 0x73, 0xda, 0x72, 0x03, 0xaf, 0xe5, 0xfa, 0x3e,
-	0x13, 0xae, 0xf0, 0x98, 0x9f, 0xca, 0xd4, 0xbe, 0x80, 0x37, 0x87, 0xde, 0x82, 0x3a, 0x52, 0xfa,
-	0xd0, 0x15, 0x6e, 0xc0, 0x3c, 0x5f, 0xe0, 0x0f, 0xe0, 0x0d, 0x59, 0x51, 0xb8, 0x8b, 0x60, 0xec,
-	0xbb, 0x3e, 0xe3, 0x26, 0xaa, 0xa2, 0xba, 0xf6, 0x50, 0x3f, 0x7d, 0xb9, 0xa7, 0x90, 0xf2, 0x3a,
-	0x69, 0xc7, 0x39, 0x5c, 0x81, 0xdc, 0x89, 0x3b, 0x8f, 0xa8, 0xa9, 0x56, 0x51, 0x1d, 0xa5, 0xa0,
-	0x24, 0xd4, 0xd6, 0xff, 0x7e, 0xbe, 0x87, 0x6a, 0x3f, 0x21, 0x28, 0xff, 0xbb, 0x10, 0x36, 0x41,
-	0xf7, 0xdd, 0x05, 0x95, 0xc2, 0xc5, 0x94, 0x23, 0x23, 0xf8, 0x36, 0xec, 0x70, 0x16, 0x85, 0x93,
-	0x44, 0x6f, 0x95, 0x4b, 0x63, 0xf8, 0x08, 0x60, 0xba, 0x6a, 0x94, 0x9b, 0x5a, 0x55, 0xab, 0x97,
-	0x0e, 0xee, 0x36, 0xaf, 0x5c, 0x47, 0x73, 0xc3, 0x5c, 0xa9, 0x52, 0x86, 0x9f, 0xb6, 0xf7, 0xab,
-	0x0a, 0xb9, 0xc7, 0x11, 0x0d, 0x9f, 0x6d, 0xe9, 0xca, 0x81, 0xd2, 0x94, 0x7d, 0xed, 0x73, 0x77,
-	0x11, 0xcc, 0x69, 0x28, 0x5b, 0x2b, 0x1f, 0xbc, 0xbf, 0xb5, 0xb0, 0x94, 0xec, 0xcc, 0x66, 0x21,
-	0x9d, 0xb9, 0x82, 0x85, 0x6d, 0xad, 0x33, 0x7a, 0x44, 0xb2, 0x2a, 0xf8, 0x73, 0xb8, 0x99, 0x8c,
-	0x35, 0x76, 0xd7, 0x30, 0x53, 0xfb, 0x3f, 0xd2, 0xce, 0x71, 0x9f, 0x18, 0x89, 0xd6, 0x45, 0x18,
-	0x13, 0x80, 0x29, 0x0d, 0xbd, 0x13, 0x57, 0x78, 0x27, 0xd4, 0xd4, 0xaf, 0x2b, 0x7c, 0xb8, 0xe6,
-	0xb4, 0x75, 0x7b, 0x60, 0x77, 0x49, 0x46, 0x05, 0x9b, 0x90, 0x4f, 0xea, 0x70, 0x33, 0x57, 0xd5,
-	0xea, 0x45, 0xb2, 0xfa, 0x6c, 0x17, 0xbe, 0x7d, 0xbe, 0x87, 0xe4, 0x85, 0xfe, 0x82, 0xe0, 0xad,
-	0x4b, 0x9a, 0x84, 0x3e, 0x8d, 0x28, 0x17, 0xf8, 0x5d, 0x28, 0x71, 0xe1, 0x86, 0x62, 0x83, 0xaf,
-	0x40, 0x26, 0x12, 0x4f, 0xdd, 0x81, 0x22, 0xf5, 0xa7, 0x29, 0x48, 0xcd, 0x80, 0x0a, 0xd4, 0x9f,
-	0x26, 0x90, 0x07, 0x90, 0x7f, 0x1a, 0xc9, 0x02, 0xa9, 0x0d, 0xcc, 0x0d, 0x93, 0xc9, 0xda, 0x29,
-	0x75, 0x05, 0xc7, 0xf7, 0xe0, 0x46, 0xf2, 0x02, 0xa9, 0xbe, 0x9e, 0xd1, 0x2f, 0x25, 0x19, 0x59,
-	0x22, 0xb5, 0xc7, 0x77, 0x2a, 0xdc, 0xba, 0x32, 0x0d, 0x0f, 0x98, 0xcf, 0x29, 0x7e, 0x0c, 0xf9,
-	0x90, 0xf2, 0x68, 0x2e, 0xe2, 0x51, 0xe2, 0x26, 0xee, 0xbf, 0xfa, 0x7a, 0x57, 0xe4, 0x26, 0x91,
-	0xcc, 0x55, 0x77, 0xa9, 0x4e, 0xe5, 0x47, 0x04, 0x3b, 0x49, 0x06, 0x3f, 0x80, 0x5c, 0xdc, 0xf3,
-	0x33, 0x79, 0x4d, 0xdb, 0x06, 0x2c, 0xc4, 0x12, 0x67, 0x2f, 0xf7, 0x10, 0x49, 0x08, 0x97, 0xd6,
-	0x44, 0x7d, 0x1d, 0x6b, 0x92, 0xde, 0xc6, 0xcf, 0x08, 0x4a, 0x87, 0xd1, 0x22, 0x78, 0xfd, 0x0f,
-	0xba, 0x0b, 0xb9, 0x78, 0xd5, 0x92, 0xe7, 0x2c, 0x92, 0xe4, 0x03, 0xf7, 0xa0, 0x14, 0x52, 0xce,
-	0xe6, 0x91, 0xfc, 0x71, 0x99, 0x7a, 0x55, 0xab, 0x97, 0x0f, 0xee, 0x6d, 0x1d, 0x85, 0xac, 0xf1,
-	0x24, 0xcb, 0x6d, 0x3c, 0x81, 0xb7, 0xff, 0x73, 0x85, 0x70, 0x1e, 0xe2, 0xfd, 0x34, 0x50, 0x7c,
-	0x70, 0x8e, 0xfb, 0x86, 0x1a, 0x1f, 0xfa, 0x9d, 0x4f, 0x0d, 0x4d, 0x1e, 0x7a, 0xb6, 0xa1, 0xe3,
-	0x22, 0xe4, 0x3e, 0xe9, 0x11, 0x67, 0x68, 0xe4, 0x70, 0x01, 0xf4, 0xa3, 0x8e, 0x33, 0x34, 0x76,
-	0xf0, 0x0d, 0x28, 0x8c, 0x3a, 0xa4, 0xd7, 0xb1, 0x3f, 0xee, 0x1a, 0xf9, 0x06, 0xb9, 0x52, 0xe3,
-	0x62, 0x9b, 0x62, 0x52, 0xbc, 0x4f, 0x86, 0x82, 0xcb, 0x00, 0x87, 0x5d, 0xd2, 0x1b, 0x75, 0x86,
-	0xbd, 0x51, 0xd7, 0x40, 0xf8, 0x1d, 0xb8, 0x65, 0x0f, 0xec, 0xb1, 0xdd, 0x7d, 0x24, 0x23, 0xe3,
-	0x4c, 0x52, 0x6d, 0x7c, 0x04, 0xbb, 0x9b, 0x86, 0xc3, 0x18, 0xca, 0xa4, 0xeb, 0x0c, 0x8e, 0x8e,
-	0x87, 0xbd, 0x81, 0x3d, 0xbe, 0xbf, 0xef, 0x18, 0xca, 0xa5, 0xd8, 0x87, 0xfb, 0x7d, 0x03, 0x1d,
-	0xfc, 0x86, 0x00, 0x2e, 0x04, 0xb0, 0x58, 0xfd, 0xed, 0xde, 0xbb, 0x8e, 0x57, 0xe5, 0x2b, 0x57,
-	0x1a, 0xd7, 0xb7, 0x75, 0x6d, 0xf7, 0x9b, 0xdf, 0xff, 0xfa, 0x41, 0x2d, 0xd7, 0x8a, 0x2d, 0xc1,
-	0x5b, 0xd2, 0x8e, 0x6d, 0xd4, 0xc0, 0x7d, 0xd0, 0x63, 0xdb, 0x60, 0x6b, 0x83, 0x52, 0xc6, 0x4f,
-	0x95, 0x3b, 0xaf, 0x74, 0x69, 0x4d, 0xd9, 0x47, 0x0f, 0xef, 0x9e, 0xfe, 0x69, 0x29, 0xa7, 0x4b,
-	0x0b, 0x9d, 0x2d, 0x2d, 0xf4, 0x62, 0x69, 0xa1, 0x3f, 0x96, 0x16, 0xfa, 0xfe, 0xdc, 0x52, 0xce,
-	0xce, 0x2d, 0xe5, 0xc5, 0xb9, 0xa5, 0x7c, 0xa6, 0xc7, 0xd4, 0x7f, 0x02, 0x00, 0x00, 0xff, 0xff,
-	0x3a, 0x3d, 0xfa, 0x92, 0x44, 0x07, 0x00, 0x00,
-}

@@ -10,13 +10,12 @@
 package colexecsel
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -28,14 +27,11 @@ type defaultCmpSelOp struct {
 }
 
 var _ colexecop.Operator = &defaultCmpSelOp{}
+var _ execinfra.Releasable = &defaultCmpSelOp{}
 
-func (d *defaultCmpSelOp) Init() {
-	d.Input.Init()
-}
-
-func (d *defaultCmpSelOp) Next(ctx context.Context) coldata.Batch {
+func (d *defaultCmpSelOp) Next() coldata.Batch {
 	for {
-		batch := d.Input.Next(ctx)
+		batch := d.Input.Next()
 		n := batch.Length()
 		if n == 0 {
 			return coldata.ZeroBatch
@@ -75,6 +71,10 @@ func (d *defaultCmpSelOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
+func (d *defaultCmpSelOp) Release() {
+	d.toDatumConverter.Release()
+}
+
 type defaultCmpConstSelOp struct {
 	selConstOpBase
 	constArg tree.Datum
@@ -84,14 +84,11 @@ type defaultCmpConstSelOp struct {
 }
 
 var _ colexecop.Operator = &defaultCmpConstSelOp{}
+var _ execinfra.Releasable = &defaultCmpConstSelOp{}
 
-func (d *defaultCmpConstSelOp) Init() {
-	d.Input.Init()
-}
-
-func (d *defaultCmpConstSelOp) Next(ctx context.Context) coldata.Batch {
+func (d *defaultCmpConstSelOp) Next() coldata.Batch {
 	for {
-		batch := d.Input.Next(ctx)
+		batch := d.Input.Next()
 		n := batch.Length()
 		if n == 0 {
 			return coldata.ZeroBatch
@@ -127,4 +124,8 @@ func (d *defaultCmpConstSelOp) Next(ctx context.Context) coldata.Batch {
 			return batch
 		}
 	}
+}
+
+func (d *defaultCmpConstSelOp) Release() {
+	d.toDatumConverter.Release()
 }

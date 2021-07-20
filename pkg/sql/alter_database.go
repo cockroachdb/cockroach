@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -51,7 +52,7 @@ func (p *planner) AlterDatabaseOwner(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
@@ -132,7 +133,7 @@ func (p *planner) AlterDatabaseAddRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
@@ -155,6 +156,13 @@ func (p *planner) AlterDatabaseAddRegion(
 	}
 
 	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	if err := p.checkNoRegionalByRowChangeUnderway(
+		ctx,
+		dbDesc,
+	); err != nil {
 		return nil, err
 	}
 
@@ -228,6 +236,13 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		jobDesc,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.DuplicateObject {
+			if n.n.IfNotExists {
+				params.p.BufferClientNotice(
+					params.ctx,
+					pgnotice.Newf("region %q already exists; skipping", n.n.Region),
+				)
+				return nil
+			}
 			return pgerror.Newf(
 				pgcode.DuplicateObject,
 				"region %q already added to database",
@@ -277,19 +292,34 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
 
 	if !dbDesc.IsMultiRegion() {
+		if n.IfExists {
+			p.BufferClientNotice(
+				ctx,
+				pgnotice.Newf("region %q is not defined on the database; skipping", n.Region),
+			)
+			return &alterDatabaseDropRegionNode{}, nil
+		}
 		return nil, pgerror.New(pgcode.InvalidDatabaseDefinition, "database has no regions to drop")
 	}
 
 	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
 		return nil, err
 	}
+
+	if err := p.checkNoRegionalByRowChangeUnderway(
+		ctx,
+		dbDesc,
+	); err != nil {
+		return nil, err
+	}
+
 	// Dropping a region also involves repartitioning all REGIONAL BY ROW tables
 	// underneath the hood, so we must ensure the user has the requisite
 	// privileges.
@@ -430,7 +460,7 @@ func (p *planner) checkPrivilegesForRepartitioningRegionalByRowTables(
 	ctx context.Context, dbDesc catalog.DatabaseDescriptor,
 ) error {
 	return p.forEachMutableTableInDatabase(ctx, dbDesc,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			if tbDesc.IsLocalityRegionalByRow() {
 				err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc)
 				// Return a better error message here.
@@ -459,54 +489,61 @@ func removeLocalityConfigFromAllTablesInDB(
 		)
 	}
 	b := p.Txn().NewBatch()
-	if err := p.forEachMutableTableInDatabase(ctx, desc, func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
-		// The user must either be an admin or have the requisite privileges.
-		if err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc); err != nil {
-			return err
-		}
-
-		switch t := tbDesc.LocalityConfig.Locality.(type) {
-		case *descpb.TableDescriptor_LocalityConfig_Global_:
-			if err := ApplyZoneConfigForMultiRegionTable(
-				ctx,
-				p.txn,
-				p.ExecCfg(),
-				multiregion.RegionConfig{}, // pass dummy config as it is not used.
-				tbDesc,
-				applyZoneConfigForMultiRegionTableOptionRemoveGlobalZoneConfig,
-			); err != nil {
+	if err := p.forEachMutableTableInDatabase(
+		ctx,
+		desc,
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
+			// The user must either be an admin or have the requisite privileges.
+			if err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc); err != nil {
 				return err
 			}
-		case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-			if t.RegionalByTable.Region != nil {
+
+			switch t := tbDesc.LocalityConfig.Locality.(type) {
+			case *descpb.TableDescriptor_LocalityConfig_Global_:
+				if err := ApplyZoneConfigForMultiRegionTable(
+					ctx,
+					p.txn,
+					p.ExecCfg(),
+					multiregion.RegionConfig{}, // pass dummy config as it is not used.
+					tbDesc,
+					applyZoneConfigForMultiRegionTableOptionRemoveGlobalZoneConfig,
+				); err != nil {
+					return err
+				}
+			case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+				if t.RegionalByTable.Region != nil {
+					// This should error during the type descriptor changes.
+					return errors.AssertionFailedf(
+						"unexpected REGIONAL BY TABLE IN <region> on table %s during DROP REGION",
+						tbDesc.Name,
+					)
+				}
+			case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 				// This should error during the type descriptor changes.
 				return errors.AssertionFailedf(
-					"unexpected REGIONAL BY TABLE IN <region> on table %s during DROP REGION",
+					"unexpected REGIONAL BY ROW on table %s during DROP REGION",
+					tbDesc.Name,
+				)
+			default:
+				return errors.AssertionFailedf(
+					"unexpected locality %T on table %s during DROP REGION",
+					t,
 					tbDesc.Name,
 				)
 			}
-		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
-			// This should error during the type descriptor changes.
-			return errors.AssertionFailedf(
-				"unexpected REGIONAL BY ROW on table %s during DROP REGION",
-				tbDesc.Name,
-			)
-		default:
-			return errors.AssertionFailedf(
-				"unexpected locality %T on table %s during DROP REGION",
-				t,
-				tbDesc.Name,
-			)
-		}
-		tbDesc.LocalityConfig = nil
-		return p.writeSchemaChangeToBatch(ctx, tbDesc, b)
-	}); err != nil {
+			tbDesc.LocalityConfig = nil
+			return p.writeSchemaChangeToBatch(ctx, tbDesc, b)
+		},
+	); err != nil {
 		return err
 	}
 	return p.Txn().Run(ctx, b)
 }
 
 func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
+	if n.n == nil {
+		return nil
+	}
 	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
 		params.ctx,
 		params.p.txn,
@@ -549,6 +586,20 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		// ROW table is homed in that region. The type schema changer is responsible
 		// for all the requisite validation.
 		if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+				if n.n.IfExists {
+					params.p.BufferClientNotice(
+						params.ctx,
+						pgnotice.Newf("region %q is not defined on the database; skipping", n.n.Region),
+					)
+					return nil
+				}
+				return pgerror.Newf(
+					pgcode.UndefinedObject,
+					"region %q has not been added to the database",
+					n.n.Region,
+				)
+			}
 			return err
 		}
 	}
@@ -592,7 +643,7 @@ func (p *planner) AlterDatabasePrimaryRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
@@ -698,33 +749,37 @@ func addDefaultLocalityConfigToAllTables(
 		)
 	}
 	b := p.Txn().NewBatch()
-	if err := p.forEachMutableTableInDatabase(ctx, dbDesc, func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
-		if err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc); err != nil {
-			return err
-		}
-
-		if err := checkCanConvertTableToMultiRegion(dbDesc, tbDesc); err != nil {
-			return err
-		}
-
-		if tbDesc.MaterializedView() {
-			if err := p.alterTableDescLocalityToGlobal(
-				ctx, tbDesc, regionEnumID,
-			); err != nil {
+	if err := p.forEachMutableTableInDatabase(
+		ctx,
+		dbDesc,
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
+			if err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc); err != nil {
 				return err
 			}
-		} else {
-			if err := p.alterTableDescLocalityToRegionalByTable(
-				ctx, tree.PrimaryRegionNotSpecifiedName, tbDesc, regionEnumID,
-			); err != nil {
+
+			if err := checkCanConvertTableToMultiRegion(dbDesc, tbDesc); err != nil {
 				return err
 			}
-		}
-		if err := p.writeSchemaChangeToBatch(ctx, tbDesc, b); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
+
+			if tbDesc.MaterializedView() {
+				if err := p.alterTableDescLocalityToGlobal(
+					ctx, tbDesc, regionEnumID,
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := p.alterTableDescLocalityToRegionalByTable(
+					ctx, tree.PrimaryRegionNotSpecifiedName, tbDesc, regionEnumID,
+				); err != nil {
+					return err
+				}
+			}
+			if err := p.writeSchemaChangeToBatch(ctx, tbDesc, b); err != nil {
+				return err
+			}
+			return nil
+		},
+	); err != nil {
 		return err
 	}
 	return p.Txn().Run(ctx, b)
@@ -735,7 +790,7 @@ func addDefaultLocalityConfigToAllTables(
 func checkCanConvertTableToMultiRegion(
 	dbDesc catalog.DatabaseDescriptor, tableDesc catalog.TableDescriptor,
 ) error {
-	if tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns > 0 {
+	if tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns() > 0 {
 		return errors.WithDetailf(
 			pgerror.Newf(
 				pgcode.ObjectNotInPrerequisiteState,
@@ -746,8 +801,8 @@ func checkCanConvertTableToMultiRegion(
 			tableDesc.GetName(),
 		)
 	}
-	for _, idx := range tableDesc.NonDropIndexes() {
-		if idx.GetPartitioning().NumColumns > 0 {
+	for _, idx := range tableDesc.AllIndexes() {
+		if idx.GetPartitioning().NumColumns() > 0 {
 			return errors.WithDetailf(
 				pgerror.Newf(
 					pgcode.ObjectNotInPrerequisiteState,
@@ -812,7 +867,20 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 
 	// Initialize that multi-region database by creating the multi-region enum
 	// and the database-level zone configuration.
-	return params.p.maybeInitializeMultiRegionDatabase(params.ctx, n.desc, regionConfig)
+	err = params.p.maybeInitializeMultiRegionDatabase(params.ctx, n.desc, regionConfig)
+	if err != nil {
+		// Hijack the error if an object called `crdb_internal_regions` already
+		// exists in the database and return a suitable hint.
+		if pgerror.GetPGCode(err) == pgcode.DuplicateObject {
+			return errors.WithHint(
+				errors.WithDetail(err,
+					"multi-region databases employ an internal enum called crdb_internal_region to "+
+						"manage regions which conflicts with the existing object"),
+				`object "crdb_internal_regions" must be renamed or dropped before adding the primary region`)
+		}
+		return err
+	}
+	return nil
 }
 
 func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
@@ -889,7 +957,7 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {

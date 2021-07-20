@@ -196,6 +196,7 @@ func Example_sql() {
 	// and with the query below the division by zero error will occur after the
 	// first batch consisting of 1 row has been returned to the client.
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(@1-2) from generate_series(1,3)`})
+	c.RunWithArgs([]string{`sql`, `-e`, `SELECT '20:01:02+03:04:05'::timetz AS regression_65066`})
 
 	// Output:
 	// sql -e show application_name
@@ -259,6 +260,9 @@ func Example_sql() {
 	// (error encountered after some results were delivered)
 	// ERROR: division by zero
 	// SQLSTATE: 22012
+	// sql -e SELECT '20:01:02+03:04:05'::timetz AS regression_65066
+	// regression_65066
+	// 20:01:02+03:04:05
 }
 
 func Example_sql_watch() {
@@ -287,8 +291,19 @@ func Example_sql_format() {
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.times (bare timestamp, withtz timestamptz)"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')"})
 	c.RunWithArgs([]string{"sql", "-e", "select bare from t.times; select withtz from t.times"})
-	c.RunWithArgs([]string{"sql", "-e", "select '2021-03-20'::date; select '01:01'::time; select '01:01'::timetz"})
-	c.RunWithArgs([]string{"sql", "-e", "select (1/3.0)::real; select (1/3.0)::double precision"})
+	c.RunWithArgs([]string{"sql", "-e",
+		"select '2021-03-20'::date; select '01:01'::time; select '01:01'::timetz; select '01:01+02:02'::timetz"})
+	c.RunWithArgs([]string{"sql", "-e", "select (1/3.0)::real; select (1/3.0)::double precision; select '-inf'::float8"})
+	// Special characters inside arrays used to be represented as escaped bytes.
+	c.RunWithArgs([]string{"sql", "-e", "select array['哈哈'::TEXT], array['哈哈'::NAME], array['哈哈'::VARCHAR]"})
+	c.RunWithArgs([]string{"sql", "-e", "select array['哈哈'::CHAR(2)], array['哈'::\"char\"]"})
+	// Preserve quoting of arrays containing commas or double quotes.
+	c.RunWithArgs([]string{"sql", "-e", `select array['a,b', 'a"b', 'a\b']`, "--format=table"})
+	// Infinities inside float arrays used to be represented differently from infinities as simpler scalar.
+	c.RunWithArgs([]string{"sql", "-e", "select array['Inf'::FLOAT4, '-Inf'::FLOAT4], array['Inf'::FLOAT8]"})
+	// Sanity check for other array types.
+	c.RunWithArgs([]string{"sql", "-e", "select array[true, false], array['01:01'::time], array['2021-03-20'::date]"})
+	c.RunWithArgs([]string{"sql", "-e", "select array[123::int2], array[123::int4], array[123::int8]"})
 
 	// Output:
 	// sql -e create database t; create table t.times (bare timestamp, withtz timestamptz)
@@ -299,19 +314,43 @@ func Example_sql_format() {
 	// bare
 	// 2016-01-25 10:10:10
 	// withtz
-	// 2016-01-25 15:10:10+00:00:00
-	// sql -e select '2021-03-20'::date; select '01:01'::time; select '01:01'::timetz
+	// 2016-01-25 15:10:10+00
+	// sql -e select '2021-03-20'::date; select '01:01'::time; select '01:01'::timetz; select '01:01+02:02'::timetz
 	// date
 	// 2021-03-20
 	// time
 	// 01:01:00
 	// timetz
-	// 01:01:00+00:00:00
-	// sql -e select (1/3.0)::real; select (1/3.0)::double precision
+	// 01:01:00+00
+	// timetz
+	// 01:01:00+02:02
+	// sql -e select (1/3.0)::real; select (1/3.0)::double precision; select '-inf'::float8
 	// float4
 	// 0.33333334
 	// float8
 	// 0.3333333333333333
+	// float8
+	// -Infinity
+	// sql -e select array['哈哈'::TEXT], array['哈哈'::NAME], array['哈哈'::VARCHAR]
+	// array	array	array
+	// {哈哈}	{哈哈}	{哈哈}
+	// sql -e select array['哈哈'::CHAR(2)], array['哈'::"char"]
+	// array	array
+	// {哈哈}	{哈}
+	// sql -e select array['a,b', 'a"b', 'a\b'] --format=table
+	//           array
+	// -------------------------
+	//   {"a,b","a\"b","a\\b"}
+	// (1 row)
+	// sql -e select array['Inf'::FLOAT4, '-Inf'::FLOAT4], array['Inf'::FLOAT8]
+	// array	array
+	// {Infinity,-Infinity}	{Infinity}
+	// sql -e select array[true, false], array['01:01'::time], array['2021-03-20'::date]
+	// array	array	array
+	// {true,false}	{01:01:00}	{2021-03-20}
+	// sql -e select array[123::int2], array[123::int4], array[123::int8]
+	// array	array	array
+	// {123}	{123}	{123}
 }
 
 func Example_sql_column_labels() {
@@ -1018,7 +1057,7 @@ func TestRenderHTML(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
 			err := render(&tc.reporter, &buf,
-				cols, newRowSliceIter(rows, align),
+				cols, NewRowSliceIter(rows, align),
 				nil /* completedHook */, nil /* noRowsHook */)
 			if err != nil {
 				t.Fatal(err)
@@ -1091,7 +1130,8 @@ func TestFlagUsage(t *testing.T) {
 Available Commands:
   start             start a node in a multi-node cluster
   start-single-node start a single-node cluster
-  connect           auto-build TLS certificates for use with the start command
+  connect           Create certificates for securely connecting with clusters
+
   init              initialize a cluster
   cert              create ca, node, and client certs
   sql               open a sql shell
@@ -1111,22 +1151,26 @@ Available Commands:
   help              Help about any command
 
 Flags:
-  -h, --help                 help for cockroach
-      --log <string>         
-                              Logging configuration, expressed using YAML syntax. For example, you can
-                              change the default logging directory with: --log='file-defaults: {dir: ...}'.
-                              See the documentation for more options and details.  To preview how the log
-                              configuration is applied, or preview the default configuration, you can use
-                              the 'cockroach debug check-log-config' sub-command.
-                             
-      --version              version for cockroach
+  -h, --help                     help for cockroach
+      --log <string>             
+                                  Logging configuration, expressed using YAML syntax. For example, you can
+                                  change the default logging directory with: --log='file-defaults: {dir: ...}'.
+                                  See the documentation for more options and details.  To preview how the log
+                                  configuration is applied, or preview the default configuration, you can use
+                                  the 'cockroach debug check-log-config' sub-command.
+                                 
+      --log-config-file <file>   
+                                  File name to read the logging configuration from. This has the same effect as
+                                  passing the content of the file via the --log flag.
+                                  (default <unset>)
+      --version                  version for cockroach
 
 Use "cockroach [command] --help" for more information about a command.
 `
 	helpExpected := fmt.Sprintf("CockroachDB command-line interface and server.\n\n%s",
 		// Due to a bug in spf13/cobra, 'cockroach help' does not include the --version
 		// flag. Strangely, 'cockroach --help' does, as well as usage error messages.
-		strings.ReplaceAll(expUsage, "      --version              version for cockroach\n", ""))
+		strings.ReplaceAll(expUsage, "      --version                  version for cockroach\n", ""))
 	badFlagExpected := fmt.Sprintf("%s\nError: unknown flag: --foo\n", expUsage)
 
 	testCases := []struct {
@@ -1549,6 +1593,7 @@ func TestGenAutocomplete(t *testing.T) {
 	}{
 		{shell: ""},
 		{shell: "bash"},
+		{shell: "fish"},
 		{shell: "zsh"},
 		{shell: "bad", expErr: `invalid argument "bad" for "cockroach gen autocomplete"`},
 	} {

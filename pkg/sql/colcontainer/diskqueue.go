@@ -433,6 +433,13 @@ func (d *diskQueue) closeFileDeserializer() error {
 }
 
 func (d *diskQueue) Close(ctx context.Context) error {
+	defer func() {
+		// Zero out the structure completely upon return. If users of this diskQueue
+		// retain a pointer to it, and we don't remove all references to large
+		// backing slices (various scratch spaces in this struct and children),
+		// we'll be "leaking memory" until users remove their references.
+		*d = diskQueue{}
+	}()
 	if d.serializer != nil {
 		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return err

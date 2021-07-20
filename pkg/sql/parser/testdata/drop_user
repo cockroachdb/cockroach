@@ -1,0 +1,35 @@
+parse
+DROP USER foo, bar
+----
+DROP USER 'foo', 'bar' -- normalized!
+DROP USER ('foo'), ('bar') -- fully parenthesized
+DROP USER _, _ -- literals removed
+DROP USER '_', '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+DROP USER 'foo', 'bar' -- identifiers removed
+
+parse
+DROP USER IF EXISTS foo, bar
+----
+DROP USER IF EXISTS 'foo', 'bar' -- normalized!
+DROP USER IF EXISTS ('foo'), ('bar') -- fully parenthesized
+DROP USER IF EXISTS _, _ -- literals removed
+DROP USER IF EXISTS '_', '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+DROP USER IF EXISTS 'foo', 'bar' -- identifiers removed
+
+parse
+DROP ROLE foo, bar
+----
+DROP ROLE 'foo', 'bar' -- normalized!
+DROP ROLE ('foo'), ('bar') -- fully parenthesized
+DROP ROLE _, _ -- literals removed
+DROP ROLE '_', '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+DROP ROLE 'foo', 'bar' -- identifiers removed
+
+parse
+DROP ROLE IF EXISTS foo, bar
+----
+DROP ROLE IF EXISTS 'foo', 'bar' -- normalized!
+DROP ROLE IF EXISTS ('foo'), ('bar') -- fully parenthesized
+DROP ROLE IF EXISTS _, _ -- literals removed
+DROP ROLE IF EXISTS '_', '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+DROP ROLE IF EXISTS 'foo', 'bar' -- identifiers removed

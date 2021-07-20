@@ -14,7 +14,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
@@ -202,7 +202,7 @@ func (ve *validationErrors) CombinedError() error {
 	// Otherwise, those not in the causal chain will be ignored.
 	for _, err := range ve.errors {
 		for _, key := range errors.GetTelemetryKeys(err) {
-			if strings.HasPrefix(key, catconstants.ValidationTelemetryKeyPrefix) {
+			if strings.HasPrefix(key, telemetry.ValidationTelemetryKeyPrefix) {
 				extraTelemetryKeys = append(extraTelemetryKeys, key)
 			}
 		}
@@ -328,7 +328,7 @@ func (vea *validationErrorAccumulator) decorate(err error) error {
 	default:
 		return err
 	}
-	return errors.WithTelemetry(err, catconstants.ValidationTelemetryKeyPrefix+tkSuffix)
+	return errors.WithTelemetry(err, telemetry.ValidationTelemetryKeyPrefix+tkSuffix)
 }
 
 // ValidationDescGetter is used by the validation methods on Descriptor.
@@ -437,9 +437,14 @@ type collectorState struct {
 }
 
 // addDirectReferences adds all immediate neighbors of desc to the state.
-func (cs *collectorState) addDirectReferences(desc Descriptor) {
+func (cs *collectorState) addDirectReferences(desc Descriptor) error {
 	cs.vdg.Descriptors[desc.GetID()] = desc
-	desc.GetReferencedDescIDs().ForEach(cs.referencedBy.Add)
+	idSet, err := desc.GetReferencedDescIDs()
+	if err != nil {
+		return err
+	}
+	idSet.ForEach(cs.referencedBy.Add)
+	return nil
 }
 
 // getMissingDescs fetches the descriptors which have corresponding IDs in the
@@ -491,7 +496,9 @@ func collectDescriptorsForValidation(
 		referencedBy: MakeDescriptorIDSet(),
 	}
 	for _, desc := range descriptors {
-		cs.addDirectReferences(desc)
+		if err := cs.addDirectReferences(desc); err != nil {
+			return nil, err
+		}
 	}
 	newDescs, err := cs.getMissingDescs(ctx, maybeBatchDescGetter)
 	if err != nil {
@@ -503,7 +510,9 @@ func collectDescriptorsForValidation(
 		}
 		switch newDesc.(type) {
 		case DatabaseDescriptor, TypeDescriptor:
-			cs.addDirectReferences(newDesc)
+			if err := cs.addDirectReferences(newDesc); err != nil {
+				return nil, err
+			}
 		}
 	}
 	_, err = cs.getMissingDescs(ctx, maybeBatchDescGetter)
@@ -553,4 +562,26 @@ func validateNamespace(
 				dn.ParentID, dn.ParentSchemaID, dn.Name, id))
 		}
 	}
+}
+
+// ValidateWithRecover is like Validate but which recovers from panics.
+// This is useful when we're validating many descriptors separately and we don't
+// want a corrupt descriptor to prevent validating the others.
+func ValidateWithRecover(
+	ctx context.Context, descGetter DescGetter, level ValidationLevel, desc Descriptor,
+) (ve ValidationErrors) {
+	ve = &validationErrors{}
+	defer func() {
+		if r := recover(); r != nil {
+			err, ok := r.(error)
+			if !ok {
+				err = errors.Newf("%v", r)
+			}
+			err = errors.WithAssertionFailure(errors.Wrap(err, "validation"))
+			ve.(*validationErrors).errors = append(ve.Errors(), err)
+		}
+	}()
+	errors := Validate(ctx, descGetter, NoValidationTelemetry, level, desc).Errors()
+	ve.(*validationErrors).errors = append(ve.Errors(), errors...)
+	return ve
 }

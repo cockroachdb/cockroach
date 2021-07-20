@@ -344,7 +344,7 @@ func TestFullClusterBackupDroppedTables(t *testing.T) {
 
 	_, tablesToCheck := generateInterleavedData(sqlDB, t, numAccounts)
 
-	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
+	sqlDB.Exec(t, `BACKUP TO $1 WITH include_deprecated_interleaves`, LocalFoo)
 	sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
 
 	for _, table := range tablesToCheck {
@@ -596,8 +596,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	// This test retries the job (by injected a retry error) after restoring a
 	// every system table that has a custom restore function. This tried to tease
 	// out any errors that may occur if some of the system table restoration
-	// functions are not idempotent (e.g. jobs table), but are retried by the
-	// restore anyway.
+	// functions are not idempotent.
 	t.Run("retry-during-custom-system-table-restore", func(t *testing.T) {
 		defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
@@ -612,14 +611,16 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 				defer cleanupEmptyCluster()
 
-				// Inject a retry error
+				// Inject a retry error, that returns once.
+				alreadyErrored := false
 				for _, server := range tcRestore.Servers {
 					registry := server.JobRegistry().(*jobs.Registry)
 					registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 						jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 							r := raw.(*restoreResumer)
 							r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
-								if systemTableName == customRestoreSystemTable {
+								if !alreadyErrored && systemTableName == customRestoreSystemTable {
+									alreadyErrored = true
 									return jobs.NewRetryJobError("injected error")
 								}
 								return nil
@@ -629,10 +630,9 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 					}
 				}
 
-				// The initial restore will fail, and restart.
+				// The initial restore will return an error, and restart.
 				sqlDBRestore.ExpectErr(t, `injected error: restarting in background`, `RESTORE FROM $1`, LocalFoo)
-				// Expect the job to succeed. If the job fails, it's likely due to
-				// attempting to restore the same system table data twice.
+				// Expect the restore to succeed.
 				sqlDBRestore.CheckQueryResultsRetry(t,
 					`SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE' AND status = 'succeeded'`,
 					[][]string{{"1"}})
@@ -721,6 +721,7 @@ func TestClusterRevisionHistory(t *testing.T) {
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	sqlDB.Exec(t, `CREATE DATABASE d1`)
+	sqlDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[0])
 	tc = testCase{
 		ts: ts[0],
@@ -732,6 +733,7 @@ func TestClusterRevisionHistory(t *testing.T) {
 	testCases = append(testCases, tc)
 
 	sqlDB.Exec(t, `CREATE DATABASE d2`)
+	sqlDB.Exec(t, `CREATE TABLE d2.t (a INT)`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[1])
 	tc = testCase{
 		ts: ts[1],
@@ -749,34 +751,38 @@ func TestClusterRevisionHistory(t *testing.T) {
 		ts: ts[2],
 		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
 			checkSQLDB.Exec(t, `CREATE DATABASE d1`)
+			checkSQLDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
 			checkSQLDB.ExpectErr(t, `database "d2" already exists`, `CREATE DATABASE d2`)
+			checkSQLDB.ExpectErr(t, `relation "d2.public.t" already exists`, `CREATE TABLE d2.t (a INT)`)
 		},
 	}
 	testCases = append(testCases, tc)
 	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, LocalFoo)
 
-	// Now let's test an incremental backup with revision history. At the start of
-	// the incremental backup, we expect only d2 to exist.
-	sqlDB.Exec(t, `DROP DATABASE d2;`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[3])
+	sqlDB.Exec(t, `DROP DATABASE d2;`)
 	tc = testCase{
 		ts: ts[3],
 		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
-			// Neither database should exist at this point in time.
 			checkSQLDB.Exec(t, `CREATE DATABASE d1`)
-			checkSQLDB.Exec(t, `CREATE DATABASE d2`)
+			checkSQLDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
+			checkSQLDB.ExpectErr(t, `database "d2" already exists`, `CREATE DATABASE d2`)
+			checkSQLDB.ExpectErr(t, `relation "d2.public.t" already exists`, `CREATE TABLE d2.t (a INT)`)
 		},
 	}
 	testCases = append(testCases, tc)
 	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, LocalFoo)
 
 	sqlDB.Exec(t, `CREATE DATABASE d1`)
+	sqlDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[4])
 	tc = testCase{
 		ts: ts[4],
 		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
 			checkSQLDB.ExpectErr(t, `database "d1" already exists`, `CREATE DATABASE d1`)
+			checkSQLDB.ExpectErr(t, `relation "d1.public.t" already exists`, `CREATE TABLE d1.t (a INT)`)
 			checkSQLDB.Exec(t, `CREATE DATABASE d2`)
+			checkSQLDB.Exec(t, `CREATE TABLE d2.t (a INT)`)
 		},
 	}
 	testCases = append(testCases, tc)
@@ -787,7 +793,9 @@ func TestClusterRevisionHistory(t *testing.T) {
 		ts: ts[5],
 		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
 			checkSQLDB.Exec(t, `CREATE DATABASE d1`)
+			checkSQLDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
 			checkSQLDB.Exec(t, `CREATE DATABASE d2`)
+			checkSQLDB.Exec(t, `CREATE TABLE d2.t (a INT)`)
 		},
 	}
 	testCases = append(testCases, tc)
@@ -841,9 +849,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 
 	const numAccounts = 1000
 	ctx, _, srcDB, tempDir, cleanupSrc := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
-	_, _, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupSrc()
-	defer cleanupDst()
 
 	dbBackupLoc := "nodelocal://0/my_db_backup"
 	clusterBackupLoc := "nodelocal://0/my_cluster_backup"
@@ -867,7 +873,10 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	<-dbRestoreStarted
 	srcDB.Exec(t, `BACKUP TO $1 WITH revision_history`, clusterBackupLoc)
 
-	// All the restore to finish. This will issue AddSSTable requests at a
+	var tsMidRestore string
+	srcDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsMidRestore)
+
+	// Allow the restore to finish. This will issue AddSSTable requests at a
 	// timestamp that is before the last incremental we just took.
 	close(blockDBRestore)
 
@@ -884,16 +893,43 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 
 	srcDB.Exec(t, `BACKUP TO $1 WITH revision_history`, clusterBackupLoc)
 
-	// Restore the incremental backup chain that has missing writes.
-	destDB.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+tsBefore, clusterBackupLoc)
+	t.Run("spans-reintroduced", func(t *testing.T) {
+		_, _, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+		defer cleanupDst()
 
-	// Assert that the restored database has the same number
-	// of rows in both the source and destination cluster.
-	checkQuery := `SELECT count(*) FROM restoredb.bank AS OF SYSTEM TIME ` + tsBefore
-	expectedCount := srcDB.QueryStr(t, checkQuery)
-	destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank`, expectedCount)
+		// Restore the incremental backup chain that has missing writes.
+		destDB.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+tsBefore, clusterBackupLoc)
 
-	checkQuery = `SELECT count(*) FROM restoredb.bank@new_idx AS OF SYSTEM TIME ` + tsBefore
-	expectedCount = srcDB.QueryStr(t, checkQuery)
-	destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@new_idx`, expectedCount)
+		// Assert that the restored database has the same number of rows in both the
+		// source and destination cluster.
+		checkQuery := `SELECT count(*) FROM restoredb.bank AS OF SYSTEM TIME ` + tsBefore
+		expectedCount := srcDB.QueryStr(t, checkQuery)
+		destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank`, expectedCount)
+
+		checkQuery = `SELECT count(*) FROM restoredb.bank@new_idx AS OF SYSTEM TIME ` + tsBefore
+		expectedCount = srcDB.QueryStr(t, checkQuery)
+		destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@new_idx`, expectedCount)
+	})
+
+	t.Run("restore-canceled", func(t *testing.T) {
+		defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+		_, _, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+		defer cleanupDst()
+
+		destDB.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+tsMidRestore, clusterBackupLoc)
+
+		// Wait for the cluster restore job to finish, as well as the restored RESTORE TABLE
+		// job to cancel.
+		destDB.CheckQueryResultsRetry(t, `
+		SELECT description, status FROM [SHOW JOBS]
+		WHERE job_type = 'RESTORE' AND status NOT IN ('succeeded', 'canceled')`,
+			[][]string{},
+		)
+		// The cluster restore should succeed, but the table restore should have failed.
+		destDB.CheckQueryResults(t,
+			`SELECT status, count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE' GROUP BY status ORDER BY status`,
+			[][]string{{"canceled", "1"}, {"succeeded", "1"}})
+
+		destDB.ExpectErr(t, `relation "restoredb.bank" does not exist`, `SELECT count(*) FROM restoredb.bank`)
+	})
 }

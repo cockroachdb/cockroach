@@ -37,7 +37,7 @@ LIMIT 1
 ----
 SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
 
-statement error duplicate constraint name: "foo"
+statement error pgcode 42P07 duplicate index name: "foo"
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 statement error pq: multiple primary keys for table "t" are not allowed
@@ -587,7 +587,7 @@ ALTER TABLE add_default ADD g INT DEFAULT nextval('initial_seq')
 statement error pgcode 22C01 cannot evaluate scalar expressions using table lookups in this context
 ALTER TABLE add_default ADD g OID DEFAULT 'foo'::regclass::oid
 
-statement error cannot access virtual schema in anonymous database
+statement error pgcode 22C01 cannot evaluate scalar expressions using table lookups in this context
 ALTER TABLE add_default ADD g INT DEFAULT 'foo'::regtype::INT
 
 subtest 26422
@@ -1804,3 +1804,27 @@ query T noticetrace
 CREATE TABLE IF NOT EXISTS new_table();
 ----
 NOTICE: relation "new_table" already exists, skipping
+
+subtest unique_index_duplicate_name
+
+statement ok
+CREATE TABLE duplicate_index_test (k INT PRIMARY KEY, v INT, INDEX idx (v));
+
+statement error pgcode 42P07 duplicate index name: \"idx\"
+ALTER TABLE duplicate_index_test ADD CONSTRAINT idx UNIQUE (v)
+
+# Regression test for a bug which occurred when adding a foreign key
+# constraint which is marked NOT VALID and is self-referencing.
+subtest self_reference_fk_not_valid
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (j) REFERENCES t(i) NOT VALID;
+
+# Demonstrate that the constraint is enforced.
+statement error pgcode 23503 insert on table "t" violates foreign key constraint "fk"
+INSERT INTO t VALUES (1, 0)
+
+statement ok
+DROP TABLE t;

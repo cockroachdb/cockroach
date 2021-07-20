@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type sumTmplInfo struct {
+type sumAggTmplInfo struct {
 	aggTmplInfoBase
 	SumKind        string
 	NeedsHelper    bool
@@ -33,7 +33,7 @@ type sumTmplInfo struct {
 	addOverload assignFunc
 }
 
-func (s sumTmplInfo) AssignAdd(
+func (s sumAggTmplInfo) AssignAdd(
 	targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string,
 ) string {
 	// Note that we need to create lastArgWidthOverload only in order to tell
@@ -45,7 +45,26 @@ func (s sumTmplInfo) AssignAdd(
 	return s.addOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
 }
 
-var _ = sumTmplInfo{}.AssignAdd
+var _ = sumAggTmplInfo{}.AssignAdd
+
+// avgAggTypeTmplInfo is similar to lastArgTypeOverload and provides a way to
+// see the type family of the overload. This is the top level of data passed to
+// the template.
+type sumAggTypeTmplInfo struct {
+	TypeFamily     string
+	WidthOverloads []sumAggWidthTmplInfo
+}
+
+// avgAggWidthTmplInfo is similar to lastArgWidthOverload and provides a way to
+// see the width of the type of the overload. This is the middle level of data
+// passed to the template.
+type sumAggWidthTmplInfo struct {
+	Width int32
+	// Overload field contains all the necessary information for the template.
+	// It should be accessed via {{with .Overload}} template instruction so that
+	// the template has all of its info in scope.
+	Overload sumAggTmplInfo
+}
 
 // getSumAddOverload returns the resolved overload that can be used to
 // accumulate a sum of values of inputType type. The resulting value's type is
@@ -54,23 +73,23 @@ var _ = sumTmplInfo{}.AssignAdd
 // take in the same type as both arguments. However, sum of integers returns a
 // decimal result, so we need to pick the overload of appropriate width from
 // "DECIMAL + INT" overload.
-func getSumAddOverload(inputType *types.T) assignFunc {
-	if inputType.Family() == types.IntFamily {
+func getSumAddOverload(inputTypeFamily types.Family) assignFunc {
+	if inputTypeFamily == types.IntFamily {
 		var c decimalIntCustomizer
 		return c.getBinOpAssignFunc()
 	}
 	var overload *oneArgOverload
 	for _, o := range sameTypeBinaryOpToOverloads[tree.Plus] {
-		if o.CanonicalTypeFamily == inputType.Family() {
+		if o.CanonicalTypeFamily == inputTypeFamily {
 			overload = o
 			break
 		}
 	}
 	if overload == nil {
-		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find plus binary overload for %s", inputType.String()))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find plus binary overload for %s", inputTypeFamily))
 	}
 	if len(overload.WidthOverloads) != 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly plus binary overload for %s doesn't contain a single overload", inputType.String()))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly plus binary overload for %s doesn't contain a single overload", inputTypeFamily))
 	}
 	return overload.WidthOverloads[0].AssignFunc
 }
@@ -79,6 +98,8 @@ const sumAggTmpl = "pkg/sql/colexec/colexecagg/sum_agg_tmpl.go"
 
 func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	r := strings.NewReplacer(
+		"_TYPE_FAMILY", "{{.TypeFamily}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
 		"_SUMKIND", "{{.SumKind}}",
 		"_RET_GOTYPE", `{{.RetGoType}}`,
 		"_RET_TYPE", "{{.RetVecMethod}}",
@@ -100,56 +121,62 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 		return err
 	}
 
-	var (
-		supportedTypes []*types.T
-		sumKind        string
-	)
+	var supportedTypeFamilies []types.Family
+	var sumKind string
 	if isSumInt {
-		supportedTypes = []*types.T{types.Int2, types.Int4, types.Int}
+		supportedTypeFamilies = []types.Family{types.IntFamily}
 		sumKind = "Int"
 	} else {
-		supportedTypes = []*types.T{types.Int2, types.Int4, types.Int, types.Decimal, types.Float, types.Interval}
+		supportedTypeFamilies = []types.Family{types.IntFamily, types.DecimalFamily, types.FloatFamily, types.IntervalFamily}
 	}
-	getAddOverload := func(inputType *types.T) assignFunc {
+	getAddOverload := func(inputTypeFamily types.Family) assignFunc {
 		if isSumInt {
 			c := intCustomizer{width: anyWidth}
 			return c.getBinOpAssignFunc()
 		}
-		return getSumAddOverload(inputType)
+		return getSumAddOverload(inputTypeFamily)
 	}
 
-	var tmplInfos []sumTmplInfo
-	for _, inputType := range supportedTypes {
-		needsHelper := false
-		// Note that we don't use execinfrapb.GetAggregateInfo because we don't
-		// want to bring in a dependency on that package to reduce the burden
-		// of regenerating execgen code when the protobufs get generated.
-		retType := inputType
-		if inputType.Family() == types.IntFamily {
-			if isSumInt {
-				retType = types.Int
-			} else {
-				// Non-integer summation of integers needs a helper because the
-				// result is a decimal.
-				needsHelper = true
-				retType = types.Decimal
-			}
+	var tmplInfos []sumAggTypeTmplInfo
+	for _, inputTypeFamily := range supportedTypeFamilies {
+		tmplInfo := sumAggTypeTmplInfo{
+			TypeFamily: toString(inputTypeFamily),
 		}
-		tmplInfos = append(tmplInfos, sumTmplInfo{
-			aggTmplInfoBase: aggTmplInfoBase{
-				canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(retType.Family()),
-			},
-			SumKind:        sumKind,
-			NeedsHelper:    needsHelper,
-			InputVecMethod: toVecMethod(inputType.Family(), inputType.Width()),
-			RetGoType:      toPhysicalRepresentation(retType.Family(), retType.Width()),
-			RetVecMethod:   toVecMethod(retType.Family(), retType.Width()),
-			addOverload:    getAddOverload(inputType),
-		})
+		for _, inputTypeWidth := range supportedWidthsByCanonicalTypeFamily[inputTypeFamily] {
+			needsHelper := false
+			// Note that we don't use execinfrapb.GetAggregateInfo because we don't
+			// want to bring in a dependency on that package to reduce the burden
+			// of regenerating execgen code when the protobufs get generated.
+			retTypeFamily, retTypeWidth := inputTypeFamily, inputTypeWidth
+			if inputTypeFamily == types.IntFamily {
+				if isSumInt {
+					retTypeFamily, retTypeWidth = types.IntFamily, anyWidth
+				} else {
+					// Non-integer summation of integers needs a helper because
+					// the result is a decimal.
+					needsHelper = true
+					retTypeFamily, retTypeWidth = types.DecimalFamily, anyWidth
+				}
+			}
+			tmplInfo.WidthOverloads = append(tmplInfo.WidthOverloads, sumAggWidthTmplInfo{
+				Width: inputTypeWidth,
+				Overload: sumAggTmplInfo{
+					aggTmplInfoBase: aggTmplInfoBase{
+						canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(retTypeFamily),
+					},
+					SumKind:        sumKind,
+					NeedsHelper:    needsHelper,
+					InputVecMethod: toVecMethod(inputTypeFamily, inputTypeWidth),
+					RetGoType:      toPhysicalRepresentation(retTypeFamily, retTypeWidth),
+					RetVecMethod:   toVecMethod(retTypeFamily, retTypeWidth),
+					addOverload:    getAddOverload(inputTypeFamily),
+				}})
+		}
+		tmplInfos = append(tmplInfos, tmplInfo)
 	}
 	return tmpl.Execute(wr, struct {
 		SumKind string
-		Infos   []sumTmplInfo
+		Infos   []sumAggTypeTmplInfo
 	}{
 		SumKind: sumKind,
 		Infos:   tmplInfos,

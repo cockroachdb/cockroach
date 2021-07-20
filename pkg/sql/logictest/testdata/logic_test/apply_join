@@ -36,6 +36,32 @@ EXECUTE a
 4  four   4  four
 5  five   5  five
 
+# A test case when the right side produces no columns.
+statement ok
+PREPARE right_no_cols AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "") ])
+      [ (Eq (Var "k") (Const 2 "int") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT
+EXECUTE right_no_cols
+----
+2  two
+2  two
+2  two
+2  two
+2  two
+
 # LeftJoinApply tests.
 
 statement ok
@@ -323,8 +349,7 @@ FROM
 	t40589 AS t, t40589;
 ----
 
-# Test that a reasonable error is generated for the unsupported case of an
-# apply join that references a top-level WITH clause.
+# Test that the "inner" plan of an apply join can refer to a top-level WITH clause.
 
 statement ok
 CREATE TABLE IF NOT EXISTS cpk (
@@ -340,42 +365,39 @@ INSERT INTO cpk VALUES ('k1', 1, 1), ('k2', 2, 2), ('k3', 3, 3)
 # Inner join with correlated values prevents decorrelation. This ensures the
 # final plan contains a correlated InnerJoin operator with a reference to the
 # With clause.
-query error references to WITH expressions from correlated subqueries are unsupported
-WITH new_values (k, v, x) AS (
-  VALUES ('k1', 1, 10), ('k3', 3, 30))
+statement ok
+WITH target_values (k, v) AS (
+  VALUES ('k1', 1), ('k3', 3))
 UPDATE cpk SET extra = (
-    SELECT y
-    FROM new_values
+    SELECT y+10
+    FROM target_values
     INNER JOIN (VALUES (cpk.value)) v(y)
     ON TRUE
     WHERE k='k1'
 )
-WHERE ((cpk.key, cpk.value) IN (SELECT new_values.k, new_values.v FROM new_values))
+WHERE ((cpk.key, cpk.value) IN (SELECT target_values.k, target_values.v FROM target_values))
 
-# Regression test for not closing the subqueries in the apply join if they hit
-# an error (#54166).
-query error pgcode XX000 invalid index .*
-SELECT
-  (
-    SELECT
-      tab_4.col_4
-    FROM
-      (VALUES (1)) AS tab_1 (col_1)
-      JOIN (
-          VALUES
-            (
-              (
-                SELECT
-                  1
-                FROM
-                  (SELECT 1)
-                WHERE
-                  EXISTS(SELECT 1)
-              )
-            )
-        )
-          AS tab_6 (col_6) ON (tab_1.col_1) = (tab_6.col_6)
-  )
-FROM
-  (VALUES (NULL)) AS tab_4 (col_4),
-  (VALUES (NULL), (NULL)) AS tab_5 (col_5)
+query TII rowsort
+SELECT * FROM cpk
+----
+k1  1  11
+k2  2  2
+k3  3  13
+
+# Regression test for #65040. Rows fetched for the right side of the apply join
+# were not cleared for successive rows on the left, causing a panic.
+
+statement ok
+CREATE TABLE t65040 (a INT, b TIMESTAMP);
+INSERT INTO t65040 VALUES (1, '2001-01-01');
+INSERT INTO t65040 VALUES (2, '2002-02-02');
+
+statement ok
+SELECT NULL
+FROM t65040 AS t1
+WHERE t1.b IN (
+  SELECT t2.b
+  FROM t65040,
+    (VALUES (t1.a)) AS v (a)
+      JOIN t65040 AS t2 ON v.a = t2.a
+)

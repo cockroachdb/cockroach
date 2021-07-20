@@ -88,7 +88,7 @@ InitPut /Table/54/2/3/2/0 -> /BYTES/
 query T kvtrace
 DELETE FROM t WHERE a = 5
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Del /Table/53/2/4/5/0
 Del /Table/53/1/5/0
 
@@ -96,7 +96,7 @@ Del /Table/53/1/5/0
 query T kvtrace
 DELETE FROM t WHERE a = 6
 ----
-Scan /Table/53/1/6{-/#}
+Scan /Table/53/1/6/0
 Del /Table/53/2/11/6/0
 Del /Table/53/3/11/6/0
 Del /Table/53/1/6/0
@@ -105,7 +105,7 @@ Del /Table/53/1/6/0
 query T kvtrace
 DELETE FROM t WHERE a = 12
 ----
-Scan /Table/53/1/12{-/#}
+Scan /Table/53/1/12/0
 Del /Table/53/2/11/12/0
 Del /Table/53/3/11/12/0
 Del /Table/53/4/"foo"/12/0
@@ -116,7 +116,7 @@ Del /Table/53/1/12/0
 query T kvtrace
 DELETE FROM u WHERE k = 1
 ----
-Scan /Table/54/1/1{-/#}
+Scan /Table/54/1/1/0
 Del /Table/54/1/1/0
 
 # Deleted row matches partial index with predicate column that is not
@@ -124,7 +124,7 @@ Del /Table/54/1/1/0
 query T kvtrace
 DELETE FROM u WHERE k = 2
 ----
-Scan /Table/54/1/2{-/#}
+Scan /Table/54/1/2/0
 Del /Table/54/2/3/2/0
 Del /Table/54/1/2/0
 
@@ -155,7 +155,7 @@ INSERT INTO t VALUES(13, 11, 'foo')
 query T kvtrace
 UPDATE t SET c = 'baz' WHERE a = 5
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/baz
 
 # Update a row that matches no partial indexes before the update, but does match
@@ -163,7 +163,7 @@ Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/baz
 query T kvtrace
 UPDATE t SET b = 11 WHERE a = 5
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/baz
 Del /Table/53/2/4/5/0
 CPut /Table/53/2/11/5/0 -> /BYTES/ (expecting does not exist)
@@ -174,7 +174,7 @@ CPut /Table/53/3/11/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 UPDATE t SET c = 'baz' WHERE a = 6
 ----
-Scan /Table/53/1/6{-/#}
+Scan /Table/53/1/6/0
 Put /Table/53/1/6/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/baz
 
 # Update a row that matches the first partial index before and after the update
@@ -182,7 +182,7 @@ Put /Table/53/1/6/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/baz
 query T kvtrace
 UPDATE t SET b = 12 WHERE a = 6
 ----
-Scan /Table/53/1/6{-/#}
+Scan /Table/53/1/6/0
 Put /Table/53/1/6/0 -> /TUPLE/2:2:Int/12/1:3:Bytes/baz
 Del /Table/53/2/11/6/0
 CPut /Table/53/2/12/6/0 -> /BYTES/ (expecting does not exist)
@@ -194,7 +194,7 @@ CPut /Table/53/3/12/6/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 UPDATE t SET b = 9 WHERE a = 6
 ----
-Scan /Table/53/1/6{-/#}
+Scan /Table/53/1/6/0
 Put /Table/53/1/6/0 -> /TUPLE/2:2:Int/9/1:3:Bytes/baz
 Del /Table/53/2/12/6/0
 CPut /Table/53/2/9/6/0 -> /BYTES/ (expecting does not exist)
@@ -205,7 +205,7 @@ Del /Table/53/3/12/6/0
 query T kvtrace
 UPDATE t SET c = 'baz', b = 12 WHERE a = 13
 ----
-Scan /Table/53/1/13{-/#}
+Scan /Table/53/1/13/0
 Put /Table/53/1/13/0 -> /TUPLE/2:2:Int/12/1:3:Bytes/baz
 Del /Table/53/2/11/13/0
 CPut /Table/53/2/12/13/0 -> /BYTES/ (expecting does not exist)
@@ -217,7 +217,7 @@ Del /Table/53/4/"foo"/13/0
 query T kvtrace
 UPDATE t SET c = 'foo', b = 11 WHERE a = 13
 ----
-Scan /Table/53/1/13{-/#}
+Scan /Table/53/1/13/0
 Put /Table/53/1/13/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foo
 Del /Table/53/2/12/13/0
 CPut /Table/53/2/11/13/0 -> /BYTES/ (expecting does not exist)
@@ -233,7 +233,7 @@ INSERT INTO u VALUES (1, 2, 3)
 query T kvtrace
 UPDATE u SET v = 11 WHERE k = 1
 ----
-Scan /Table/54/1/1{-/#}
+Scan /Table/54/1/1/0
 Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/11
 CPut /Table/54/2/2/1/0 -> /BYTES/ (expecting does not exist)
 
@@ -242,7 +242,7 @@ CPut /Table/54/2/2/1/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 UPDATE u SET v = 3 WHERE k = 1
 ----
-Scan /Table/54/1/1{-/#}
+Scan /Table/54/1/1/0
 Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
 Del /Table/54/2/2/1/0
 
@@ -259,7 +259,7 @@ INSERT INTO t VALUES(20, 11, 'bar')
 query T kvtrace
 UPDATE t SET a = 21 WHERE a = 20
 ----
-Scan /Table/53/1/20{-/#}
+Scan /Table/53/1/20/0
 Del /Table/53/2/11/20/0
 Del /Table/53/3/11/20/0
 Del /Table/53/1/20/0
@@ -273,7 +273,7 @@ InitPut /Table/53/3/11/21/0 -> /BYTES/
 query T kvtrace
 UPDATE t SET a = 22, b = 9, c = 'foo' WHERE a = 21
 ----
-Scan /Table/53/1/21{-/#}
+Scan /Table/53/1/21/0
 Del /Table/53/2/11/21/0
 Del /Table/53/3/11/21/0
 Del /Table/53/1/21/0
@@ -296,7 +296,7 @@ DELETE FROM u
 query T kvtrace
 INSERT INTO t VALUES (5, 4, 'bar') ON CONFLICT DO NOTHING
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 CPut /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
 InitPut /Table/53/2/4/5/0 -> /BYTES/
 
@@ -304,13 +304,13 @@ InitPut /Table/53/2/4/5/0 -> /BYTES/
 query T kvtrace
 INSERT INTO t VALUES (5, 4, 'bar') ON CONFLICT DO NOTHING
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 
 # Insert a row that matches the first partial index.
 query T kvtrace
 INSERT INTO t VALUES (6, 11, 'bar') ON CONFLICT DO NOTHING
 ----
-Scan /Table/53/1/6{-/#}
+Scan /Table/53/1/6/0
 CPut /Table/53/1/6/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
 InitPut /Table/53/2/11/6/0 -> /BYTES/
 InitPut /Table/53/3/11/6/0 -> /BYTES/
@@ -319,13 +319,13 @@ InitPut /Table/53/3/11/6/0 -> /BYTES/
 query T kvtrace
 INSERT INTO t VALUES (6, 11, 'bar') ON CONFLICT DO NOTHING
 ----
-Scan /Table/53/1/6{-/#}
+Scan /Table/53/1/6/0
 
 # Insert a row that matches both partial indexes.
 query T kvtrace
 INSERT INTO t VALUES (12, 11, 'foo') ON CONFLICT DO NOTHING
 ----
-Scan /Table/53/1/12{-/#}
+Scan /Table/53/1/12/0
 CPut /Table/53/1/12/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foo
 InitPut /Table/53/2/11/12/0 -> /BYTES/
 InitPut /Table/53/3/11/12/0 -> /BYTES/
@@ -335,14 +335,14 @@ InitPut /Table/53/4/"foo"/12/0 -> /BYTES/
 query T kvtrace
 INSERT INTO t VALUES (12, 11, 'foo') ON CONFLICT DO NOTHING
 ----
-Scan /Table/53/1/12{-/#}
+Scan /Table/53/1/12/0
 
 # Insert a non-conflicting row that does not match the partial index with
 # predicate column that is not indexed.
 query T kvtrace
 INSERT INTO u VALUES (1, 2, 3) ON CONFLICT DO NOTHING
 ----
-Scan /Table/54/1/1{-/#}
+Scan /Table/54/1/1/0
 CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
 
 # Insert a conflicting row that does not match the partial index with predicate
@@ -350,14 +350,14 @@ CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
 query T kvtrace
 INSERT INTO u VALUES (1, 4, 6) ON CONFLICT DO NOTHING
 ----
-Scan /Table/54/1/1{-/#}
+Scan /Table/54/1/1/0
 
 # Insert a non-conflicting row that matches the partial index with predicate
 # column that is not indexed.
 query T kvtrace
 INSERT INTO u VALUES (2, 3, 11) ON CONFLICT DO NOTHING
 ----
-Scan /Table/54/1/2{-/#}
+Scan /Table/54/1/2/0
 CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/3/1:3:Int/11
 InitPut /Table/54/2/3/2/0 -> /BYTES/
 
@@ -366,7 +366,7 @@ InitPut /Table/54/2/3/2/0 -> /BYTES/
 query T kvtrace
 INSERT INTO u VALUES (2, 3, 11) ON CONFLICT DO NOTHING
 ----
-Scan /Table/54/1/2{-/#}
+Scan /Table/54/1/2/0
 
 # ---------------------------------------------------------
 # INSERT ON CONFLICT DO UPDATE
@@ -383,7 +383,7 @@ DELETE FROM u
 query T kvtrace
 INSERT INTO t VALUES (5, 4, 'bar') ON CONFLICT (a) DO UPDATE SET b = 3
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 CPut /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
 InitPut /Table/53/2/4/5/0 -> /BYTES/
 
@@ -392,7 +392,7 @@ InitPut /Table/53/2/4/5/0 -> /BYTES/
 query T kvtrace
 INSERT INTO t VALUES (5, 3, 'foo') ON CONFLICT (a) DO UPDATE SET b = 3
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/bar
 Del /Table/53/2/4/5/0
 CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
@@ -402,7 +402,7 @@ CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 INSERT INTO t VALUES (5, 7, 'foo') ON CONFLICT (a) DO UPDATE SET b = 11
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
 Del /Table/53/2/3/5/0
 CPut /Table/53/2/11/5/0 -> /BYTES/ (expecting does not exist)
@@ -414,7 +414,7 @@ CPut /Table/53/3/11/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 INSERT INTO t VALUES (5, 11, 'bar') ON CONFLICT (a) DO UPDATE SET b = 4, c = 'foo'
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foo
 Del /Table/53/2/11/5/0
 CPut /Table/53/2/4/5/0 -> /BYTES/ (expecting does not exist)
@@ -426,7 +426,7 @@ CPut /Table/53/4/"foo"/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 INSERT INTO t VALUES (5, 11, 'bar') ON CONFLICT (a) DO UPDATE SET b = 3
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/foo
 Del /Table/53/2/4/5/0
 CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
@@ -436,7 +436,7 @@ CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 INSERT INTO t VALUES (5, 11, 'bar') ON CONFLICT (a) DO UPDATE SET c = 'foobar'
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/foobar
 Del /Table/53/4/"foo"/5/0
 CPut /Table/53/4/"foobar"/5/0 -> /BYTES/ (expecting does not exist)
@@ -445,7 +445,7 @@ CPut /Table/53/4/"foobar"/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 INSERT INTO t VALUES (6, 11, 'baz') ON CONFLICT (a) DO UPDATE SET b = 3
 ----
-Scan /Table/53/1/6{-/#}
+Scan /Table/53/1/6/0
 CPut /Table/53/1/6/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/baz
 InitPut /Table/53/2/11/6/0 -> /BYTES/
 InitPut /Table/53/3/11/6/0 -> /BYTES/
@@ -455,7 +455,7 @@ InitPut /Table/53/3/11/6/0 -> /BYTES/
 query T kvtrace
 INSERT INTO u VALUES (1, 2, 3) ON CONFLICT (k) DO UPDATE SET u = 5
 ----
-Scan /Table/54/1/1{-/#}
+Scan /Table/54/1/1/0
 CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
 
 # Insert a conflicting row that does not match the partial index with predicate
@@ -463,7 +463,7 @@ CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
 query T kvtrace
 INSERT INTO u VALUES (1, 4, 6) ON CONFLICT (k) DO UPDATE SET v = 8
 ----
-Scan /Table/54/1/1{-/#}
+Scan /Table/54/1/1/0
 Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/8
 
 # Insert a non-conflicting row that matches the partial index with predicate
@@ -471,7 +471,7 @@ Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/8
 query T kvtrace
 INSERT INTO u VALUES (2, 3, 11) ON CONFLICT (k) DO UPDATE SET u = 5
 ----
-Scan /Table/54/1/2{-/#}
+Scan /Table/54/1/2/0
 CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/3/1:3:Int/11
 InitPut /Table/54/2/3/2/0 -> /BYTES/
 
@@ -480,7 +480,7 @@ InitPut /Table/54/2/3/2/0 -> /BYTES/
 query T kvtrace
 INSERT INTO u VALUES (2, 3, 11) ON CONFLICT (k) DO UPDATE SET u = 4, v = 12
 ----
-Scan /Table/54/1/2{-/#}
+Scan /Table/54/1/2/0
 Put /Table/54/1/2/0 -> /TUPLE/2:2:Int/4/1:3:Int/12
 Del /Table/54/2/3/2/0
 CPut /Table/54/2/4/2/0 -> /BYTES/ (expecting does not exist)
@@ -500,7 +500,7 @@ DELETE FROM u
 query T kvtrace
 INSERT INTO t VALUES (5, 4, 'bar') ON CONFLICT (a) DO UPDATE SET a = 5
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 CPut /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
 InitPut /Table/53/2/4/5/0 -> /BYTES/
 
@@ -509,7 +509,7 @@ InitPut /Table/53/2/4/5/0 -> /BYTES/
 query T kvtrace
 INSERT INTO t VALUES (5, 3, 'baz') ON CONFLICT (a) DO UPDATE SET a = 6
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Del /Table/53/2/4/5/0
 Del /Table/53/1/5/0
 CPut /Table/53/1/6/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
@@ -520,7 +520,7 @@ InitPut /Table/53/2/4/6/0 -> /BYTES/
 query T kvtrace
 INSERT INTO t VALUES (6, 3, 'bar') ON CONFLICT (a) DO UPDATE SET a = 7, c = 'foo'
 ----
-Scan /Table/53/1/6{-/#}
+Scan /Table/53/1/6/0
 Del /Table/53/2/4/6/0
 Del /Table/53/1/6/0
 CPut /Table/53/1/7/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foo
@@ -533,7 +533,7 @@ InitPut /Table/53/4/"foo"/7/0 -> /BYTES/
 query T kvtrace
 INSERT INTO t VALUES (7, 3, 'bar') ON CONFLICT (a) DO UPDATE SET a = 8, b = 11
 ----
-Scan /Table/53/1/7{-/#}
+Scan /Table/53/1/7/0
 Del /Table/53/2/4/7/0
 Del /Table/53/4/"foo"/7/0
 Del /Table/53/1/7/0
@@ -546,7 +546,7 @@ InitPut /Table/53/3/11/8/0 -> /BYTES/
 query T kvtrace
 INSERT INTO t VALUES (8, 4, 'bar') ON CONFLICT (a) DO UPDATE SET a = 9, c = 'foobar'
 ----
-Scan /Table/53/1/8{-/#}
+Scan /Table/53/1/8/0
 Del /Table/53/2/11/8/0
 Del /Table/53/3/11/8/0
 Del /Table/53/1/8/0
@@ -569,7 +569,7 @@ DELETE FROM u
 query T kvtrace
 UPSERT INTO t VALUES (5, 4, 'bar')
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 CPut /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
 InitPut /Table/53/2/4/5/0 -> /BYTES/
 
@@ -578,7 +578,7 @@ InitPut /Table/53/2/4/5/0 -> /BYTES/
 query T kvtrace
 UPSERT INTO t VALUES (5, 3, 'bar')
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/bar
 Del /Table/53/2/4/5/0
 CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
@@ -588,7 +588,7 @@ CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 UPSERT INTO t VALUES (5, 11, 'bar')
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
 Del /Table/53/2/3/5/0
 CPut /Table/53/2/11/5/0 -> /BYTES/ (expecting does not exist)
@@ -600,7 +600,7 @@ CPut /Table/53/3/11/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 UPSERT INTO t VALUES (5, 3, 'foo')
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/foo
 Del /Table/53/2/11/5/0
 CPut /Table/53/2/3/5/0 -> /BYTES/ (expecting does not exist)
@@ -612,7 +612,7 @@ CPut /Table/53/4/"foo"/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 UPSERT INTO t VALUES (5, 4, 'foo')
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foo
 Del /Table/53/2/3/5/0
 CPut /Table/53/2/4/5/0 -> /BYTES/ (expecting does not exist)
@@ -622,7 +622,7 @@ CPut /Table/53/2/4/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 UPSERT INTO t VALUES (5, 4, 'foobar')
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foobar
 Del /Table/53/4/"foo"/5/0
 CPut /Table/53/4/"foobar"/5/0 -> /BYTES/ (expecting does not exist)
@@ -631,7 +631,7 @@ CPut /Table/53/4/"foobar"/5/0 -> /BYTES/ (expecting does not exist)
 query T kvtrace
 UPSERT INTO t VALUES (9, 11, 'baz')
 ----
-Scan /Table/53/1/9{-/#}
+Scan /Table/53/1/9/0
 CPut /Table/53/1/9/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/baz
 InitPut /Table/53/2/11/9/0 -> /BYTES/
 InitPut /Table/53/3/11/9/0 -> /BYTES/
@@ -641,7 +641,7 @@ InitPut /Table/53/3/11/9/0 -> /BYTES/
 query T kvtrace
 UPSERT INTO u VALUES (1, 2, 3)
 ----
-Scan /Table/54/1/1{-/#}
+Scan /Table/54/1/1/0
 CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
 
 # Upsert a conflicting row that does not match the partial index with predicate
@@ -649,7 +649,7 @@ CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3
 query T kvtrace
 UPSERT INTO u VALUES (1, 4, 6)
 ----
-Scan /Table/54/1/1{-/#}
+Scan /Table/54/1/1/0
 Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/4/1:3:Int/6
 
 # Upsert a non-conflicting row that matches the partial index with predicate
@@ -657,7 +657,7 @@ Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/4/1:3:Int/6
 query T kvtrace
 UPSERT INTO u VALUES (2, 3, 11)
 ----
-Scan /Table/54/1/2{-/#}
+Scan /Table/54/1/2/0
 CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/3/1:3:Int/11
 InitPut /Table/54/2/3/2/0 -> /BYTES/
 
@@ -666,7 +666,7 @@ InitPut /Table/54/2/3/2/0 -> /BYTES/
 query T kvtrace
 UPSERT INTO u VALUES (2, 4, 12)
 ----
-Scan /Table/54/1/2{-/#}
+Scan /Table/54/1/2/0
 Put /Table/54/1/2/0 -> /TUPLE/2:2:Int/4/1:3:Int/12
 Del /Table/54/2/3/2/0
 CPut /Table/54/2/4/2/0 -> /BYTES/ (expecting does not exist)
@@ -722,7 +722,7 @@ CPut /Table/55/1/2/0 -> /TUPLE/
 query T kvtrace
 DELETE FROM inv WHERE a = 1
 ----
-Scan /Table/55/1/1{-/#}
+Scan /Table/55/1/1/0
 Del /Table/55/2/"num"/1/1/0
 Del /Table/55/2/"x"/"y"/1/0
 Del /Table/55/1/1/0
@@ -730,7 +730,7 @@ Del /Table/55/1/1/0
 query T kvtrace
 DELETE FROM inv WHERE a = 2
 ----
-Scan /Table/55/1/2{-/#}
+Scan /Table/55/1/2/0
 Del /Table/55/1/2/0
 
 # ---------------------------------------------------------
@@ -745,14 +745,14 @@ INSERT INTO inv VALUES (2, '{"x": "y", "num": 2}', 'baz');
 query T kvtrace
 UPDATE inv SET c = 'bar' WHERE a = 1
 ----
-Scan /Table/55/1/1{-/#}
+Scan /Table/55/1/1/0
 Put /Table/55/1/1/0 -> /TUPLE/
 
 # Update the JSON of a row in the partial index.
 query T kvtrace
 UPDATE inv SET b = '{"x": "y", "num": 3}' WHERE a = 1
 ----
-Scan /Table/55/1/1{-/#}
+Scan /Table/55/1/1/0
 Put /Table/55/1/1/0 -> /TUPLE/
 Del /Table/55/2/"num"/1/1/0
 InitPut /Table/55/2/"num"/3/1/0 -> /BYTES/
@@ -761,7 +761,7 @@ InitPut /Table/55/2/"num"/3/1/0 -> /BYTES/
 query T kvtrace
 UPDATE inv SET c = 'fud' WHERE a = 1
 ----
-Scan /Table/55/1/1{-/#}
+Scan /Table/55/1/1/0
 Put /Table/55/1/1/0 -> /TUPLE/
 Del /Table/55/2/"num"/3/1/0
 Del /Table/55/2/"x"/"y"/1/0
@@ -770,21 +770,21 @@ Del /Table/55/2/"x"/"y"/1/0
 query T kvtrace
 UPDATE inv SET c = 'boo' WHERE a = 2
 ----
-Scan /Table/55/1/2{-/#}
+Scan /Table/55/1/2/0
 Put /Table/55/1/2/0 -> /TUPLE/
 
 # Update the JSON of a row not in the partial index.
 query T kvtrace
 UPDATE inv SET b = '{"x": "y", "num": 4}' WHERE a = 2
 ----
-Scan /Table/55/1/2{-/#}
+Scan /Table/55/1/2/0
 Put /Table/55/1/2/0 -> /TUPLE/
 
 # Update a non-JSON column so that the row is added to the partial index.
 query T kvtrace
 UPDATE inv SET c = 'bar' WHERE a = 2
 ----
-Scan /Table/55/1/2{-/#}
+Scan /Table/55/1/2/0
 Put /Table/55/1/2/0 -> /TUPLE/
 InitPut /Table/55/2/"num"/4/2/0 -> /BYTES/
 InitPut /Table/55/2/"x"/"y"/2/0 -> /BYTES/
@@ -793,7 +793,7 @@ InitPut /Table/55/2/"x"/"y"/2/0 -> /BYTES/
 query T kvtrace
 UPDATE inv SET a = 4 WHERE a = 2
 ----
-Scan /Table/55/1/2{-/#}
+Scan /Table/55/1/2/0
 Del /Table/55/2/"num"/4/2/0
 Del /Table/55/2/"x"/"y"/2/0
 Del /Table/55/1/2/0
@@ -805,7 +805,7 @@ InitPut /Table/55/2/"x"/"y"/4/0 -> /BYTES/
 query T kvtrace
 UPDATE inv SET a = 3 WHERE a = 1
 ----
-Scan /Table/55/1/1{-/#}
+Scan /Table/55/1/1/0
 Del /Table/55/1/1/0
 CPut /Table/55/1/3/0 -> /TUPLE/
 
@@ -844,7 +844,7 @@ Put /Table/55/1/13/0 -> /TUPLE/
 query T kvtrace
 UPSERT INTO inv VALUES (4, '{"x": "y", "num": 4}', 'foo')
 ----
-Scan /Table/55/1/4{-/#}
+Scan /Table/55/1/4/0
 Put /Table/55/1/4/0 -> /TUPLE/
 
 # Upsert a conflicting row with different JSON from the existing row in the
@@ -852,7 +852,7 @@ Put /Table/55/1/4/0 -> /TUPLE/
 query T kvtrace
 UPSERT INTO inv VALUES (4, '{"x": "y", "num": 6}', 'foo')
 ----
-Scan /Table/55/1/4{-/#}
+Scan /Table/55/1/4/0
 Put /Table/55/1/4/0 -> /TUPLE/
 Del /Table/55/2/"num"/4/4/0
 InitPut /Table/55/2/"num"/6/4/0 -> /BYTES/
@@ -861,7 +861,7 @@ InitPut /Table/55/2/"num"/6/4/0 -> /BYTES/
 query T kvtrace
 UPSERT INTO inv VALUES (4, '{"x": "y", "num": 6}', 'fud')
 ----
-Scan /Table/55/1/4{-/#}
+Scan /Table/55/1/4/0
 Put /Table/55/1/4/0 -> /TUPLE/
 Del /Table/55/2/"num"/6/4/0
 Del /Table/55/2/"x"/"y"/4/0
@@ -870,7 +870,7 @@ Del /Table/55/2/"x"/"y"/4/0
 query T kvtrace
 UPSERT INTO inv VALUES (5, '{"x": "y", "num": 7}', 'bar')
 ----
-Scan /Table/55/1/5{-/#}
+Scan /Table/55/1/5/0
 CPut /Table/55/1/5/0 -> /TUPLE/
 InitPut /Table/55/2/"num"/7/5/0 -> /BYTES/
 InitPut /Table/55/2/"x"/"y"/5/0 -> /BYTES/
@@ -879,7 +879,7 @@ InitPut /Table/55/2/"x"/"y"/5/0 -> /BYTES/
 query T kvtrace
 UPSERT INTO inv VALUES (6, '{"x": "y", "num": 8}', 'baz')
 ----
-Scan /Table/55/1/6{-/#}
+Scan /Table/55/1/6/0
 CPut /Table/55/1/6/0 -> /TUPLE/
 
 # Regression test for #57085. Cascading DELETEs should not issue DEL operations

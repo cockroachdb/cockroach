@@ -402,9 +402,9 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (a, b, v, a_new, column12)
+    │ columns: (a, b, v, a_new, v_comp)
     │ estimated row count: 1,000 (missing stats)
-    │ render column12: a_new + b
+    │ render v_comp: a_new + b
     │ render a: a
     │ render b: b
     │ render v: v
@@ -423,6 +423,7 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t SET b=b+1 WHERE v=45 RETURNING a,b,v
@@ -438,9 +439,9 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (a, b, v, b_new, column12)
+    │ columns: (a, b, v, b_new, v_comp)
     │ estimated row count: 333 (missing stats)
-    │ render column12: a + b_new
+    │ render v_comp: a + b_new
     │ render a: a
     │ render b: b
     │ render v: v
@@ -479,9 +480,9 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (a, b, c, v, w, a_new, column16)
+    │ columns: (a, b, c, v, w, a_new, v_comp)
     │ estimated row count: 1,000 (missing stats)
-    │ render column16: a_new + b
+    │ render v_comp: a_new + b
     │ render a: a
     │ render b: b
     │ render c: c
@@ -504,6 +505,7 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t_idx@primary
               spans: FULL SCAN
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING v, w
@@ -523,9 +525,9 @@ vectorized: true
     │ auto commit
     │
     └── • render
-        │ columns: (a, b, v, w, b_new, column16)
+        │ columns: (a, b, v, w, b_new, v_comp)
         │ estimated row count: 1,000 (missing stats)
-        │ render column16: a + b_new
+        │ render v_comp: a + b_new
         │ render a: a
         │ render b: b
         │ render v: v
@@ -546,6 +548,7 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: t_idx@primary
                   spans: FULL SCAN
+                  locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 WHERE v=45 RETURNING v, w
@@ -565,9 +568,9 @@ vectorized: true
     │ auto commit
     │
     └── • render
-        │ columns: (a, b, v, w, b_new, column16)
+        │ columns: (a, b, v, w, b_new, v_comp)
         │ estimated row count: 333 (missing stats)
-        │ render column16: a + b_new
+        │ render v_comp: a + b_new
         │ render a: a
         │ render b: b
         │ render v: v
@@ -594,6 +597,7 @@ vectorized: true
                       estimated row count: 10 (missing stats)
                       table: t_idx@t_idx_v_idx
                       spans: /45-/46
+                      locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET c=6 WHERE a=2
@@ -609,9 +613,9 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (a, c, w, c_new, column17)
+    │ columns: (a, c, w, c_new, w_comp)
     │ estimated row count: 1 (missing stats)
-    │ render column17: 7
+    │ render w_comp: 7
     │ render c_new: 6
     │ render w: c + 1
     │ render a: a
@@ -621,7 +625,7 @@ vectorized: true
           columns: (a, c)
           estimated row count: 1 (missing stats)
           table: t_idx@primary
-          spans: /2/0-/2/1 /2/2/1-/2/2/2
+          spans: /2/0 /2/2/1
           locking strength: for update
 
 query T
@@ -638,9 +642,9 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (a, b, c, v, w, a_new, column16)
+    │ columns: (a, b, c, v, w, a_new, v_comp)
     │ estimated row count: 1,000 (missing stats)
-    │ render column16: a_new + b
+    │ render v_comp: a_new + b
     │ render a: a
     │ render b: b
     │ render c: c
@@ -663,6 +667,7 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t_idx@primary
               spans: FULL SCAN
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING w
@@ -682,9 +687,9 @@ vectorized: true
     │ auto commit
     │
     └── • render
-        │ columns: (a, b, v, w, b_new, column16)
+        │ columns: (a, b, v, w, b_new, v_comp)
         │ estimated row count: 1,000 (missing stats)
-        │ render column16: a + b_new
+        │ render v_comp: a + b_new
         │ render a: a
         │ render b: b
         │ render v: v
@@ -705,6 +710,7 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: t_idx@primary
                   spans: FULL SCAN
+                  locking strength: for update
 
 subtest Upsert
 
@@ -721,12 +727,12 @@ vectorized: true
 │ auto commit
 │
 └── • project
-    │ columns: (column1, column2, column8, column2, column8)
+    │ columns: (column1, column2, v_comp, column2, v_comp)
     │
     └── • render
-        │ columns: (column8, column1, column2)
+        │ columns: (v_comp, column1, column2)
         │ estimated row count: 4
-        │ render column8: column1 + column2
+        │ render v_comp: column1 + column2
         │ render column1: column1
         │ render column2: column2
         │
@@ -760,16 +766,16 @@ vectorized: true
     │ arbiter indexes: primary
     │
     └── • lookup join (anti)
-        │ columns: (column1, column2, column8)
+        │ columns: (column1, column2, v_comp)
         │ estimated row count: 0 (missing stats)
         │ table: t@primary
         │ equality: (column1) = (a)
         │ equality cols are key
         │
         └── • render
-            │ columns: (column8, column1, column2)
+            │ columns: (v_comp, column1, column2)
             │ estimated row count: 2
-            │ render column8: column1 + column2
+            │ render v_comp: column1 + column2
             │ render column1: column1
             │ render column2: column2
             │
@@ -795,41 +801,42 @@ vectorized: true
 │ arbiter indexes: primary
 │
 └── • project
-    │ columns: (column1, column2, column8, a, b, v, upsert_b, upsert_v, a)
+    │ columns: (column1, column2, v_comp, a, b, v, upsert_b, upsert_v, a)
     │
     └── • render
-        │ columns: (upsert_b, upsert_v, column1, column2, column8, a, b, v)
+        │ columns: (upsert_b, upsert_v, column1, column2, v_comp, a, b, v)
         │ estimated row count: 3 (missing stats)
         │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE v END
-        │ render upsert_v: CASE WHEN a IS NULL THEN column8 ELSE a + v END
+        │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE a + v END
         │ render column1: column1
         │ render column2: column2
-        │ render column8: column8
+        │ render v_comp: v_comp
         │ render a: a
         │ render b: b
         │ render v: v
         │
         └── • render
-            │ columns: (v, column1, column2, column8, a, b)
+            │ columns: (v, column1, column2, v_comp, a, b)
             │ estimated row count: 3 (missing stats)
             │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
             │ render column1: column1
             │ render column2: column2
-            │ render column8: column8
+            │ render v_comp: v_comp
             │ render a: a
             │ render b: b
             │
             └── • lookup join (left outer)
-                │ columns: (column8, column1, column2, a, b)
+                │ columns: (v_comp, column1, column2, a, b)
                 │ estimated row count: 3 (missing stats)
                 │ table: t@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
-                    │ columns: (column8, column1, column2)
+                    │ columns: (v_comp, column1, column2)
                     │ estimated row count: 3
-                    │ render column8: column1 + column2
+                    │ render v_comp: column1 + column2
                     │ render column1: column1
                     │ render column2: column2
                     │
@@ -857,41 +864,42 @@ vectorized: true
 │ arbiter indexes: primary
 │
 └── • project
-    │ columns: (column1, column2, column8, a, b, v, upsert_b, upsert_v, a)
+    │ columns: (column1, column2, v_comp, a, b, v, upsert_b, upsert_v, a)
     │
     └── • render
-        │ columns: (upsert_b, upsert_v, column1, column2, column8, a, b, v)
+        │ columns: (upsert_b, upsert_v, column1, column2, v_comp, a, b, v)
         │ estimated row count: 3 (missing stats)
-        │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE column8 END
-        │ render upsert_v: CASE WHEN a IS NULL THEN column8 ELSE a + column8 END
+        │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE v_comp END
+        │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE a + v_comp END
         │ render column1: column1
         │ render column2: column2
-        │ render column8: column8
+        │ render v_comp: v_comp
         │ render a: a
         │ render b: b
         │ render v: v
         │
         └── • render
-            │ columns: (v, column1, column2, column8, a, b)
+            │ columns: (v, column1, column2, v_comp, a, b)
             │ estimated row count: 3 (missing stats)
             │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
             │ render column1: column1
             │ render column2: column2
-            │ render column8: column8
+            │ render v_comp: v_comp
             │ render a: a
             │ render b: b
             │
             └── • lookup join (left outer)
-                │ columns: (column8, column1, column2, a, b)
+                │ columns: (v_comp, column1, column2, a, b)
                 │ estimated row count: 3 (missing stats)
                 │ table: t@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
-                    │ columns: (column8, column1, column2)
+                    │ columns: (v_comp, column1, column2)
                     │ estimated row count: 3
-                    │ render column8: column1 + column2
+                    │ render v_comp: column1 + column2
                     │ render column1: column1
                     │ render column2: column2
                     │
@@ -919,24 +927,24 @@ vectorized: true
 │ arbiter indexes: primary
 │
 └── • project
-    │ columns: (column1, column2, column3, column11, column12, a, b, c, v, w, column2, column3, column11, column12, a)
+    │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, column2, column3, v_comp, w_comp, a)
     │
     └── • render
-        │ columns: (v, w, column1, column2, column3, column11, column12, a, b, c)
+        │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
         │ estimated row count: 4 (missing stats)
         │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
         │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
         │ render column1: column1
         │ render column2: column2
         │ render column3: column3
-        │ render column11: column11
-        │ render column12: column12
+        │ render v_comp: v_comp
+        │ render w_comp: w_comp
         │ render a: a
         │ render b: b
         │ render c: c
         │
         └── • lookup join (left outer)
-            │ columns: (column11, column12, column1, column2, column3, a, b, c)
+            │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
             │ estimated row count: 4 (missing stats)
             │ table: t_idx@primary
             │ equality: (column1) = (a)
@@ -944,10 +952,10 @@ vectorized: true
             │ locking strength: for update
             │
             └── • render
-                │ columns: (column11, column12, column1, column2, column3)
+                │ columns: (v_comp, w_comp, column1, column2, column3)
                 │ estimated row count: 4
-                │ render column11: column1 + column2
-                │ render column12: column3 + 1
+                │ render v_comp: column1 + column2
+                │ render w_comp: column3 + 1
                 │ render column1: column1
                 │ render column2: column2
                 │ render column3: column3
@@ -982,17 +990,17 @@ vectorized: true
 │ arbiter indexes: primary
 │
 └── • project
-    │ columns: (column1, column2, column3, column11, column12, a, b, c, v, w, column2, column3, column11, column12, a)
+    │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, column2, column3, v_comp, w_comp, a)
     │
     └── • render
-        │ columns: (upsert_a, column1, column2, column3, column11, column12, a, b, c, v, w)
+        │ columns: (upsert_a, column1, column2, column3, v_comp, w_comp, a, b, c, v, w)
         │ estimated row count: 2 (missing stats)
         │ render upsert_a: CASE WHEN a IS NULL THEN column1 ELSE a END
         │ render column1: column1
         │ render column2: column2
         │ render column3: column3
-        │ render column11: column11
-        │ render column12: column12
+        │ render v_comp: v_comp
+        │ render w_comp: w_comp
         │ render a: a
         │ render b: b
         │ render c: c
@@ -1000,31 +1008,32 @@ vectorized: true
         │ render w: w
         │
         └── • render
-            │ columns: (v, w, column1, column2, column3, column11, column12, a, b, c)
+            │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
             │ estimated row count: 2 (missing stats)
             │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
             │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
             │ render column1: column1
             │ render column2: column2
             │ render column3: column3
-            │ render column11: column11
-            │ render column12: column12
+            │ render v_comp: v_comp
+            │ render w_comp: w_comp
             │ render a: a
             │ render b: b
             │ render c: c
             │
             └── • lookup join (left outer)
-                │ columns: (column11, column12, column1, column2, column3, a, b, c)
+                │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
                 │ estimated row count: 2 (missing stats)
                 │ table: t_idx@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
-                    │ columns: (column11, column12, column1, column2, column3)
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
                     │ estimated row count: 2
-                    │ render column11: column1 + column2
-                    │ render column12: column3 + 1
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
                     │ render column1: column1
                     │ render column2: column2
                     │ render column3: column3
@@ -1057,22 +1066,22 @@ vectorized: true
     │ arbiter indexes: primary, t_idx_w_key
     │
     └── • distinct
-        │ columns: (column1, column2, column3, column11, column12)
+        │ columns: (column1, column2, column3, v_comp, w_comp)
         │ estimated row count: 0 (missing stats)
-        │ distinct on: column12
+        │ distinct on: w_comp
         │ nulls are distinct
         │
         └── • lookup join (anti)
-            │ columns: (column11, column12, column1, column2, column3)
+            │ columns: (v_comp, w_comp, column1, column2, column3)
             │ estimated row count: 0 (missing stats)
             │ table: t_idx@primary
             │ equality: (column1) = (a)
             │ equality cols are key
             │
             └── • hash join (right anti)
-                │ columns: (column11, column12, column1, column2, column3)
+                │ columns: (v_comp, w_comp, column1, column2, column3)
                 │ estimated row count: 0 (missing stats)
-                │ equality: (w) = (column12)
+                │ equality: (w) = (w_comp)
                 │
                 ├── • render
                 │   │ columns: (w)
@@ -1086,10 +1095,10 @@ vectorized: true
                 │         spans: FULL SCAN
                 │
                 └── • render
-                    │ columns: (column11, column12, column1, column2, column3)
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
                     │ estimated row count: 3
-                    │ render column11: column1 + column2
-                    │ render column12: column3 + 1
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
                     │ render column1: column1
                     │ render column2: column2
                     │ render column3: column3
@@ -1121,46 +1130,47 @@ vectorized: true
 │ arbiter indexes: primary
 │
 └── • project
-    │ columns: (column1, column2, column3, column11, column12, a, c, w, upsert_c, upsert_w, a)
+    │ columns: (column1, column2, column3, v_comp, w_comp, a, c, w, upsert_c, upsert_w, a)
     │
     └── • render
-        │ columns: (upsert_c, upsert_w, column1, column2, column3, column11, column12, a, c, w)
+        │ columns: (upsert_c, upsert_w, column1, column2, column3, v_comp, w_comp, a, c, w)
         │ estimated row count: 3 (missing stats)
         │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE 0 END
-        │ render upsert_w: CASE WHEN a IS NULL THEN column12 ELSE 1 END
+        │ render upsert_w: CASE WHEN a IS NULL THEN w_comp ELSE 1 END
         │ render column1: column1
         │ render column2: column2
         │ render column3: column3
-        │ render column11: column11
-        │ render column12: column12
+        │ render v_comp: v_comp
+        │ render w_comp: w_comp
         │ render a: a
         │ render c: c
         │ render w: w
         │
         └── • render
-            │ columns: (w, column1, column2, column3, column11, column12, a, c)
+            │ columns: (w, column1, column2, column3, v_comp, w_comp, a, c)
             │ estimated row count: 3 (missing stats)
             │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
             │ render column1: column1
             │ render column2: column2
             │ render column3: column3
-            │ render column11: column11
-            │ render column12: column12
+            │ render v_comp: v_comp
+            │ render w_comp: w_comp
             │ render a: a
             │ render c: c
             │
             └── • lookup join (left outer)
-                │ columns: (column11, column12, column1, column2, column3, a, c)
+                │ columns: (v_comp, w_comp, column1, column2, column3, a, c)
                 │ estimated row count: 3 (missing stats)
                 │ table: t_idx@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
-                    │ columns: (column11, column12, column1, column2, column3)
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
                     │ estimated row count: 3
-                    │ render column11: column1 + column2
-                    │ render column12: column3 + 1
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
                     │ render column1: column1
                     │ render column2: column2
                     │ render column3: column3
@@ -1192,21 +1202,21 @@ vectorized: true
 │ arbiter indexes: primary
 │
 └── • project
-    │ columns: (column1, column2, column3, column11, column12, a, b, c, v, w, upsert_c, upsert_w, a)
+    │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, upsert_c, upsert_w, a)
     │
     └── • render
-        │ columns: (upsert_a, upsert_b, upsert_c, upsert_v, upsert_w, column1, column2, column3, column11, column12, a, b, c, v, w)
+        │ columns: (upsert_a, upsert_b, upsert_c, upsert_v, upsert_w, column1, column2, column3, v_comp, w_comp, a, b, c, v, w)
         │ estimated row count: 3 (missing stats)
         │ render upsert_a: CASE WHEN a IS NULL THEN column1 ELSE a END
         │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE b END
         │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE w END
-        │ render upsert_v: CASE WHEN a IS NULL THEN column11 ELSE v END
-        │ render upsert_w: CASE WHEN a IS NULL THEN column12 ELSE w + 1 END
+        │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE v END
+        │ render upsert_w: CASE WHEN a IS NULL THEN w_comp ELSE w + 1 END
         │ render column1: column1
         │ render column2: column2
         │ render column3: column3
-        │ render column11: column11
-        │ render column12: column12
+        │ render v_comp: v_comp
+        │ render w_comp: w_comp
         │ render a: a
         │ render b: b
         │ render c: c
@@ -1214,31 +1224,32 @@ vectorized: true
         │ render w: w
         │
         └── • render
-            │ columns: (v, w, column1, column2, column3, column11, column12, a, b, c)
+            │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
             │ estimated row count: 3 (missing stats)
             │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
             │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
             │ render column1: column1
             │ render column2: column2
             │ render column3: column3
-            │ render column11: column11
-            │ render column12: column12
+            │ render v_comp: v_comp
+            │ render w_comp: w_comp
             │ render a: a
             │ render b: b
             │ render c: c
             │
             └── • lookup join (left outer)
-                │ columns: (column11, column12, column1, column2, column3, a, b, c)
+                │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
                 │ estimated row count: 3 (missing stats)
                 │ table: t_idx@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
-                    │ columns: (column11, column12, column1, column2, column3)
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
                     │ estimated row count: 3
-                    │ render column11: column1 + column2
-                    │ render column12: column3 + 1
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
                     │ render column1: column1
                     │ render column2: column2
                     │ render column3: column3
@@ -1270,19 +1281,19 @@ vectorized: true
 │ arbiter indexes: t_idx_w_key
 │
 └── • project
-    │ columns: (column1, column2, column3, column11, column12, a, b, c, v, w, column1, upsert_c, upsert_v, upsert_w, a)
+    │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, column1, upsert_c, upsert_v, upsert_w, a)
     │
     └── • render
-        │ columns: (upsert_c, upsert_v, upsert_w, column1, column2, column3, column11, column12, a, b, c, v, w)
+        │ columns: (upsert_c, upsert_v, upsert_w, column1, column2, column3, v_comp, w_comp, a, b, c, v, w)
         │ estimated row count: 20 (missing stats)
-        │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE column11 END
-        │ render upsert_v: CASE WHEN a IS NULL THEN column11 ELSE column1 + b END
-        │ render upsert_w: CASE WHEN a IS NULL THEN column12 ELSE column11 + 1 END
+        │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE v_comp END
+        │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE column1 + b END
+        │ render upsert_w: CASE WHEN a IS NULL THEN w_comp ELSE v_comp + 1 END
         │ render column1: column1
         │ render column2: column2
         │ render column3: column3
-        │ render column11: column11
-        │ render column12: column12
+        │ render v_comp: v_comp
+        │ render w_comp: w_comp
         │ render a: a
         │ render b: b
         │ render c: c
@@ -1290,9 +1301,9 @@ vectorized: true
         │ render w: w
         │
         └── • hash join (right outer)
-            │ columns: (v, w, a, b, c, column11, column12, column1, column2, column3)
+            │ columns: (v, w, a, b, c, v_comp, w_comp, column1, column2, column3)
             │ estimated row count: 20 (missing stats)
-            │ equality: (w) = (column12)
+            │ equality: (w) = (w_comp)
             │ right cols are key
             │
             ├── • render
@@ -1311,17 +1322,17 @@ vectorized: true
             │         spans: FULL SCAN
             │
             └── • distinct
-                │ columns: (column11, column12, column1, column2, column3)
+                │ columns: (v_comp, w_comp, column1, column2, column3)
                 │ estimated row count: 2
-                │ distinct on: column12
+                │ distinct on: w_comp
                 │ nulls are distinct
                 │ error on duplicate
                 │
                 └── • render
-                    │ columns: (column11, column12, column1, column2, column3)
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
                     │ estimated row count: 2
-                    │ render column11: column1 + column2
-                    │ render column12: column3 + 1
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
                     │ render column1: column1
                     │ render column2: column2
                     │ render column3: column3
@@ -1417,7 +1428,10 @@ vectorized: true
   table: inv@iv_j_idx
   spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
 
-# Verify that we use iv_jv_idx.
+statement ok
+DROP INDEX inv@iv_j_idx
+
+# Verify that we use iv_jv_idx
 query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND jv @> '{"a": "b"}'
 ----
@@ -1429,3 +1443,79 @@ vectorized: true
   estimated row count: 3 (missing stats)
   table: inv@iv_jv_idx
   spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
+
+# Regression tests for #65343. Collated string locales should be normalized so
+# that indexes on collated string virtual columns are scanned for any given
+# locale format in a query.
+subtest 65343
+
+statement ok
+CREATE TABLE t65343 (
+  s STRING,
+  c STRING COLLATE en_US AS (s COLLATE en_US) VIRTUAL,
+  INDEX (c)
+)
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE en_US = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_US" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_us" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en-US" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]

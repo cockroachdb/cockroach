@@ -1,0 +1,18 @@
+@import '../../core/index.module.scss';
+
+.table__loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 65px;
+  &--spin {
+    margin-right: 11px;
+  }
+  &--label {
+    font-family: $font-family--base;
+    font-size: $font-size--medium;
+    line-height: 22px;
+    letter-spacing: $letter-spacing--compact;
+    color: $colors--neutral-6;
+  }
+}

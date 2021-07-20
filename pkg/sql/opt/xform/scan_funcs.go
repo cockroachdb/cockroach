@@ -188,14 +188,14 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	localScanPrivate := c.DuplicateScanPrivate(scanPrivate)
 	localScanPrivate.LocalityOptimized = true
 	localConstraint.Columns = localConstraint.Columns.RemapColumns(scanPrivate.Table, localScanPrivate.Table)
-	localScanPrivate.Constraint = &localConstraint
+	localScanPrivate.SetConstraint(c.e.evalCtx, &localConstraint)
 	localScan := c.e.f.ConstructScan(localScanPrivate)
 
 	// Create the remote scan.
 	remoteScanPrivate := c.DuplicateScanPrivate(scanPrivate)
 	remoteScanPrivate.LocalityOptimized = true
 	remoteConstraint.Columns = remoteConstraint.Columns.RemapColumns(scanPrivate.Table, remoteScanPrivate.Table)
-	remoteScanPrivate.Constraint = &remoteConstraint
+	remoteScanPrivate.SetConstraint(c.e.evalCtx, &remoteConstraint)
 	remoteScan := c.e.f.ConstructScan(remoteScanPrivate)
 
 	// Add the LocalityOptimizedSearchExpr to the same group as the original scan.

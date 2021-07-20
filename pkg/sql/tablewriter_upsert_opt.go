@@ -64,13 +64,13 @@ type optTableUpserter struct {
 	// fetchCols indicate which columns need to be fetched from the target table,
 	// in order to detect whether a conflict has occurred, as well as to provide
 	// existing values for updates.
-	fetchCols []descpb.ColumnDescriptor
+	fetchCols []catalog.Column
 
 	// updateCols indicate which columns need an update during a conflict.
-	updateCols []descpb.ColumnDescriptor
+	updateCols []catalog.Column
 
 	// returnCols indicate which columns need to be returned by the Upsert.
-	returnCols []descpb.ColumnDescriptor
+	returnCols []catalog.Column
 
 	// canaryOrdinal is the ordinal position of the column within the input row
 	// that is used to decide whether to execute an insert or update operation.
@@ -107,7 +107,7 @@ func (tu *optTableUpserter) init(
 		tu.resultRow = make(tree.Datums, len(tu.returnCols))
 		tu.rows = rowcontainer.NewRowContainer(
 			evalCtx.Mon.MakeBoundAccount(),
-			colinfo.ColTypeInfoFromColDescs(tu.returnCols),
+			colinfo.ColTypeInfoFromColumns(tu.returnCols),
 		)
 
 		// Create the map from colIds to the expected columns.
@@ -117,7 +117,7 @@ func (tu *optTableUpserter) init(
 		tu.colIDToReturnIndex = catalog.ColumnIDToOrdinalMap(tu.tableDesc().PublicColumns())
 		if tu.ri.InsertColIDtoRowIndex.Len() == tu.colIDToReturnIndex.Len() {
 			for i := range tu.ri.InsertCols {
-				colID := tu.ri.InsertCols[i].ID
+				colID := tu.ri.InsertCols[i].GetID()
 				resultIndex, ok := tu.colIDToReturnIndex.Get(colID)
 				if !ok || resultIndex != tu.ri.InsertColIDtoRowIndex.GetDefault(colID) {
 					tu.insertReorderingRequired = true

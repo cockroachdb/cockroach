@@ -88,26 +88,20 @@ func setExplainBundleResult(
 	return nil
 }
 
-// traceToJSON converts a trace to a JSON datum suitable for the
-// system.statement_diagnostics.trace column. In case of error, the returned
-// datum is DNull. Also returns the string representation of the trace.
+// traceToJSON returns the string representation of the trace in JSON format.
 //
 // traceToJSON assumes that the first span in the recording contains all the
 // other spans.
-func traceToJSON(trace tracing.Recording) (tree.Datum, string, error) {
+func traceToJSON(trace tracing.Recording) (string, error) {
 	root := normalizeSpan(trace[0], trace)
 	marshaller := jsonpb.Marshaler{
 		Indent: "\t",
 	}
 	str, err := marshaller.MarshalToString(&root)
 	if err != nil {
-		return tree.DNull, "", err
+		return "", err
 	}
-	d, err := tree.ParseDJSON(str)
-	if err != nil {
-		return tree.DNull, "", err
-	}
-	return d, str, nil
+	return str, nil
 }
 
 func normalizeSpan(s tracingpb.RecordedSpan, trace tracing.Recording) tracingpb.NormalizedSpan {
@@ -131,9 +125,6 @@ func normalizeSpan(s tracingpb.RecordedSpan, trace tracing.Recording) tracingpb.
 type diagnosticsBundle struct {
 	// Zip file binary data.
 	zip []byte
-
-	// Tracing data, as DJson (or DNull if it is not available).
-	traceJSON tree.Datum
 
 	// Stores any error in the collection, building, or insertion of the bundle.
 	collectionErr error
@@ -164,14 +155,14 @@ func buildStatementBundle(
 	b.addExecPlan(planString)
 	b.addDistSQLDiagrams()
 	b.addExplainVec()
-	traceJSON := b.addTrace()
+	b.addTrace()
 	b.addEnv(ctx)
 
 	buf, err := b.finalize()
 	if err != nil {
 		return diagnosticsBundle{collectionErr: err}
 	}
-	return diagnosticsBundle{traceJSON: traceJSON, zip: buf.Bytes()}
+	return diagnosticsBundle{zip: buf.Bytes()}
 }
 
 // insert the bundle in statement diagnostics. Sets bundle.diagID and (in error
@@ -192,7 +183,6 @@ func (bundle *diagnosticsBundle) insert(
 		diagRequestID,
 		fingerprint,
 		tree.AsString(ast),
-		bundle.traceJSON,
 		bundle.zip,
 		bundle.collectionErr,
 	)
@@ -328,10 +318,11 @@ func (b *stmtBundleBuilder) addExplainVec() {
 	}
 }
 
-// addTrace adds two files to the bundle: one is a json representation of the
-// trace, the other one is a human-readable representation.
-func (b *stmtBundleBuilder) addTrace() tree.Datum {
-	traceJSON, traceJSONStr, err := traceToJSON(b.trace)
+// addTrace adds three files to the bundle: two are a json representation of the
+// trace (the default and the jaeger formats), the third one is a human-readable
+// representation.
+func (b *stmtBundleBuilder) addTrace() {
+	traceJSONStr, err := traceToJSON(b.trace)
 	if err != nil {
 		b.z.AddFile("trace.json", err.Error())
 	} else {
@@ -358,8 +349,6 @@ func (b *stmtBundleBuilder) addTrace() tree.Datum {
 	} else {
 		b.z.AddFile("trace-jaeger.json", jaegerJSON)
 	}
-
-	return traceJSON
 }
 
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {

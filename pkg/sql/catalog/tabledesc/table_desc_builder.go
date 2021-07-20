@@ -185,10 +185,24 @@ func maybeFillInDescriptor(
 ) (changes PostDeserializationTableDescriptorChanges, err error) {
 	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
 
+	changes.UpgradedIndexFormatVersion = maybeUpgradeIndexFormatVersion(&desc.PrimaryIndex)
+	for i := range desc.Indexes {
+		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeIndexFormatVersion(&desc.Indexes[i])
+	}
+	for i := range desc.Mutations {
+		if idx := desc.Mutations[i].GetIndex(); idx != nil {
+			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeIndexFormatVersion(idx)
+		}
+	}
+
 	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
 	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
 	// run again and mixed-version clusters always write "good" descriptors.
 	changes.FixedPrivileges = descpb.MaybeFixPrivileges(desc.ID, &desc.Privileges)
+
+	fixedUsagePrivilege := descpb.MaybeFixUsagePrivForTablesAndDBs(&desc.Privileges)
+
+	changes.FixedPrivileges = changes.FixedPrivileges || fixedUsagePrivilege
 
 	if dg != nil {
 		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
@@ -285,9 +299,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			numCols := ref.SharedPrefixLen
 			outFK := descpb.ForeignKeyConstraint{
 				OriginTableID:       desc.ID,
-				OriginColumnIDs:     idx.ColumnIDs[:numCols],
+				OriginColumnIDs:     idx.KeyColumnIDs[:numCols],
 				ReferencedTableID:   ref.Table,
-				ReferencedColumnIDs: referencedIndex.IndexDesc().ColumnIDs[:numCols],
+				ReferencedColumnIDs: referencedIndex.IndexDesc().KeyColumnIDs[:numCols],
 				Name:                ref.Name,
 				Validity:            ref.Validity,
 				OnDelete:            ref.OnDelete,
@@ -338,7 +352,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 					// referenced table ID, and that the index we point to is a valid
 					// index to satisfy the columns in the foreign key.
 					if otherFK.ReferencedTableID == desc.ID &&
-						descpb.ColumnIDs(originIndex.ColumnIDs).HasPrefix(otherFK.OriginColumnIDs) {
+						descpb.ColumnIDs(originIndex.KeyColumnIDs).HasPrefix(otherFK.OriginColumnIDs) {
 						// Found a match.
 						forwardFK = otherFK
 					}
@@ -368,9 +382,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				numCols := originIndex.ForeignKey.SharedPrefixLen
 				inFK = descpb.ForeignKeyConstraint{
 					OriginTableID:       ref.Table,
-					OriginColumnIDs:     originIndex.ColumnIDs[:numCols],
+					OriginColumnIDs:     originIndex.KeyColumnIDs[:numCols],
 					ReferencedTableID:   desc.ID,
-					ReferencedColumnIDs: idx.ColumnIDs[:numCols],
+					ReferencedColumnIDs: idx.KeyColumnIDs[:numCols],
 					Name:                originIndex.ForeignKey.Name,
 					Validity:            originIndex.ForeignKey.Validity,
 					OnDelete:            originIndex.ForeignKey.OnDelete,
@@ -405,7 +419,7 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 	}
 
 	var primaryIndexColumnIDs catalog.TableColSet
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
 		primaryIndexColumnIDs.Add(colID)
 	}
 
@@ -445,5 +459,33 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 
 	desc.FormatVersion = descpb.FamilyFormatVersion
 
+	return true
+}
+
+// maybeUpgradeIndexFormatVersion tries to promote an index to version
+// descpb.StrictIndexColumnIDGuaranteesVersion whenever possible.
+func maybeUpgradeIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
+	switch idx.Version {
+	case descpb.SecondaryIndexFamilyFormatVersion:
+		if idx.Type == descpb.IndexDescriptor_INVERTED {
+			return false
+		}
+	case descpb.EmptyArraysInInvertedIndexesVersion:
+		break
+	default:
+		return false
+	}
+	slice := make([]descpb.ColumnID, 0, len(idx.KeyColumnIDs)+len(idx.KeySuffixColumnIDs)+len(idx.StoreColumnIDs))
+	slice = append(slice, idx.KeyColumnIDs...)
+	slice = append(slice, idx.KeySuffixColumnIDs...)
+	slice = append(slice, idx.StoreColumnIDs...)
+	set := catalog.MakeTableColSet(slice...)
+	if len(slice) != set.Len() {
+		return false
+	}
+	if set.Contains(0) {
+		return false
+	}
+	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 	return true
 }

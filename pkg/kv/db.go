@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -255,6 +256,12 @@ type DB struct {
 	ctx     DBContext
 	// crs is the sender used for non-transactional requests.
 	crs CrossRangeTxnWrapperSender
+
+	// SQLKVResponseAdmissionQ is for use by SQL clients of the DB, and is
+	// placed here simply for plumbing convenience, as there is a diversity of
+	// SQL code that all uses kv.DB.
+	// TODO(sumeer): find a home for this in the SQL layer.
+	SQLKVResponseAdmissionQ *admission.WorkQueue
 }
 
 // NonTransactionalSender returns a Sender that can be used for sending
@@ -688,8 +695,9 @@ func (db *DB) AddSSTable(
 	disallowShadowing bool,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
+	batchTs hlc.Timestamp,
 ) error {
-	b := &Batch{}
+	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, disallowShadowing, stats, ingestAsWrites)
 	return getOneErr(db.Run(ctx, b), b)
 }
@@ -716,6 +724,7 @@ func sendAndFill(ctx context.Context, send SenderFunc, b *Batch) error {
 	var ba roachpb.BatchRequest
 	ba.Requests = b.reqs
 	ba.Header = b.Header
+	ba.AdmissionHeader = b.AdmissionHeader
 	b.response, b.pErr = send(ctx, ba)
 	b.fillResults(ctx)
 	if b.pErr == nil {

@@ -219,7 +219,7 @@ func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tr
 			continue
 		}
 		s.cols = append(s.cols, scopeColumn{
-			name:       tabCol.ColName(),
+			name:       scopeColName(tabCol.ColName()),
 			table:      *alias,
 			typ:        tabCol.DatumType(),
 			id:         tabMeta.MetaID.ColumnID(i),
@@ -260,11 +260,10 @@ func (s *scope) addExtraColumns(cols []scopeColumn) {
 	}
 }
 
-// addColumn adds a column to scope with the given alias and typed expression.
+// addColumn adds a column to scope with the given name and typed expression.
 // It returns a pointer to the new column. The column ID and group are left
 // empty so they can be filled in later.
-func (s *scope) addColumn(alias string, expr tree.TypedExpr) *scopeColumn {
-	name := tree.Name(alias)
+func (s *scope) addColumn(name scopeColumnName, expr tree.TypedExpr) *scopeColumn {
 	s.cols = append(s.cols, scopeColumn{
 		name: name,
 		typ:  expr.ResolvedType(),
@@ -336,8 +335,8 @@ func (s *scope) makeColumnTypes() []*types.T {
 }
 
 // makeOrderingChoice returns an OrderingChoice that corresponds to s.ordering.
-func (s *scope) makeOrderingChoice() physical.OrderingChoice {
-	var oc physical.OrderingChoice
+func (s *scope) makeOrderingChoice() props.OrderingChoice {
+	var oc props.OrderingChoice
 	oc.FromOrdering(s.ordering)
 	return oc
 }
@@ -361,7 +360,7 @@ func (s *scope) makePresentation() physical.Presentation {
 		col := &s.cols[i]
 		if col.visibility == cat.Visible {
 			presentation = append(presentation, opt.AliasedColumn{
-				Alias: string(col.name),
+				Alias: string(col.name.ReferenceName()),
 				ID:    col.id,
 			})
 		}
@@ -379,7 +378,7 @@ func (s *scope) makePresentationWithHiddenCols() physical.Presentation {
 	for i := range s.cols {
 		col := &s.cols[i]
 		presentation = append(presentation, opt.AliasedColumn{
-			Alias: string(col.name),
+			Alias: string(col.name.ReferenceName()),
 			ID:    col.id,
 		})
 	}
@@ -720,7 +719,7 @@ func (s *scope) FindSourceProvidingColumn(
 	for ; s != nil; s, allowHidden = s.parent, false {
 		for i := range s.cols {
 			col := &s.cols[i]
-			if col.name != colName {
+			if !col.name.MatchesReferenceName(colName) {
 				continue
 			}
 
@@ -876,7 +875,7 @@ func (s *scope) Resolve(
 	inScope := srcMeta.(*scope)
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
-		if col.name == colName && sourceNameMatches(*prefix, col.table) {
+		if col.name.MatchesReferenceName(colName) && sourceNameMatches(*prefix, col.table) {
 			return col, nil
 		}
 	}
@@ -925,9 +924,17 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return s.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		colI, err := t.Resolve(s.builder.ctx, s)
-		if err != nil {
-			panic(err)
+		colI, resolveErr := t.Resolve(s.builder.ctx, s)
+		if resolveErr != nil {
+			if sqlerrors.IsUndefinedColumnError(resolveErr) {
+				// Attempt to resolve as columnname.*, which allows items
+				// such as SELECT row_to_json(tbl_name) FROM tbl_name to work.
+				return func() (bool, tree.Expr) {
+					defer wrapColTupleStarPanic(resolveErr)
+					return s.VisitPre(columnNameAsTupleStar(string(t.ColumnName)))
+				}()
+			}
+			panic(resolveErr)
 		}
 		return false, colI.(*scopeColumn)
 
@@ -1029,7 +1036,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 
 	var typedFuncExpr = typedFunc.(*tree.FuncExpr)
 	if s.builder.shouldCreateDefaultColumn(typedFuncExpr) {
-		outCol = srfScope.addColumn(def.Name, typedFunc)
+		outCol = srfScope.addColumn(scopeColName(tree.Name(def.Name)), typedFunc)
 	}
 	out := s.builder.buildFunction(typedFuncExpr, s, srfScope, outCol, nil)
 	srf := &srf{
@@ -1106,7 +1113,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 		copy(fCopy.Exprs, oldExprs)
 
 		// Add implicit column to the input expressions.
-		fCopy.Exprs = append(fCopy.Exprs, fCopy.OrderBy[0].Expr.(tree.TypedExpr))
+		fCopy.Exprs = append(fCopy.Exprs, s.resolveType(fCopy.OrderBy[0].Expr, types.Any))
 	}
 
 	expr := fCopy.Walk(s)
@@ -1266,7 +1273,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 	}
 
 	info.col = &scopeColumn{
-		name: tree.Name(def.Name),
+		name: scopeColName(tree.Name(def.Name)),
 		typ:  f.ResolvedType(),
 		id:   s.builder.factory.Metadata().AddColumn(def.Name, f.ResolvedType()),
 		expr: &info,
@@ -1531,7 +1538,7 @@ func (s *scope) newAmbiguousColumnError(
 	}
 	for i := range s.cols {
 		col := &s.cols[i]
-		if col.name == n && (col.visibility == cat.Visible || (col.visibility == cat.Hidden && allowHidden)) {
+		if col.name.MatchesReferenceName(n) && (col.visibility == cat.Visible || (col.visibility == cat.Hidden && allowHidden)) {
 			if col.table.ObjectName == "" && col.visibility == cat.Visible {
 				if moreThanOneCandidateFromAnonSource {
 					// Only print first anonymous source, since other(s) are identical.
@@ -1581,15 +1588,39 @@ func (s *scope) String() string {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		fmt.Fprintf(&buf, "%s:%d", c.name.String(), c.id)
+		fmt.Fprintf(&buf, "%s:%d", c.name.ReferenceName(), c.id)
 	}
 	for i, c := range s.extraCols {
 		if i > 0 || len(s.cols) > 0 {
 			buf.WriteByte(',')
 		}
-		fmt.Fprintf(&buf, "%s:%d!extra", c.name.String(), c.id)
+		fmt.Fprintf(&buf, "%s:%d!extra", c.name.ReferenceName(), c.id)
 	}
 	buf.WriteByte(')')
 
 	return buf.String()
+}
+
+func columnNameAsTupleStar(colName string) *tree.TupleStar {
+	return &tree.TupleStar{
+		Expr: &tree.UnresolvedName{
+			Star:     true,
+			NumParts: 2,
+			Parts:    tree.NameParts{"", colName},
+		},
+	}
+}
+
+// wrapColTupleStarPanic checks for panics and if the pgcode is
+// UndefinedTable panics with the originalError.
+// Otherwise, it will panic with the recovered error.
+func wrapColTupleStarPanic(originalError error) {
+	if r := recover(); r != nil {
+		if err, ok := r.(error); ok {
+			if sqlerrors.IsUndefinedRelationError(err) {
+				panic(originalError)
+			}
+		}
+		panic(r)
+	}
 }

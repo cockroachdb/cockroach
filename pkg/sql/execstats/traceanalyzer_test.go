@@ -59,11 +59,11 @@ func TestTraceAnalyzer(t *testing.T) {
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					TestingSaveFlows: func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+					TestingSaveFlows: func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error {
 						if stmt != testStmt {
-							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error { return nil }
+							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error { return nil }
 						}
-						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec, _ execinfra.OpChains) error {
 							flowsMetadata := execstats.NewFlowsMetadata(flows)
 							analyzer := execstats.NewTraceAnalyzer(flowsMetadata)
 							analyzerChan <- analyzer
@@ -253,6 +253,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		NetworkMessages:  6,
 		ContentionTime:   7 * time.Second,
 		MaxDiskUsage:     8,
+		Regions:          []string{"gcp-us-east1"},
 	}
 	b := execstats.QueryLevelStats{
 		NetworkBytesSent: 8,
@@ -263,6 +264,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		NetworkMessages:  13,
 		ContentionTime:   14 * time.Second,
 		MaxDiskUsage:     15,
+		Regions:          []string{"gcp-us-west1"},
 	}
 	expected := execstats.QueryLevelStats{
 		NetworkBytesSent: 9,
@@ -273,6 +275,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		NetworkMessages:  19,
 		ContentionTime:   21 * time.Second,
 		MaxDiskUsage:     15,
+		Regions:          []string{"gcp-us-east1", "gcp-us-west1"},
 	}
 
 	aCopy := a

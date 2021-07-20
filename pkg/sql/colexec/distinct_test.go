@@ -19,12 +19,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
 type distinctTestCase struct {
@@ -163,25 +166,37 @@ var distinctTestCases = []distinctTestCase{
 		distinctCols: []uint32{0},
 		typs:         []*types.T{types.Jsonb, types.String},
 		tuples: colexectestutils.Tuples{
-			{`'{"id": 1}'`, "a"},
-			{`'{"id": 2}'`, "b"},
-			{`'{"id": 3}'`, "c"},
-			{`'{"id": 1}'`, "1"},
-			{`'{"id": null}'`, "d"},
-			{`'{"id": 2}'`, "2"},
-			{`'{"id": 5}'`, "e"},
-			{`'{"id": 6}'`, "f"},
-			{`'{"id": 3}'`, "3"},
+			{`{"id": 1}`, "a"},
+			{`{"id": 2}`, "b"},
+			{`{"id": 3}`, "c"},
+			{`{"id": 1}`, "1"},
+			{`{"id": null}`, "d"},
+			{`{"id": 2}`, "2"},
+			{`{"id": 5}`, "e"},
+			{`{"id": 6}`, "f"},
+			{`{"id": 3}`, "3"},
 		},
+		// We need to pass in "actual JSON" to our expected output tuples, or else
+		// the tests will fail because the sort order of stringified JSON is not the
+		// same as the sort order of JSON. Specifically, NULL sorts before integers
+		// in JSON, but after integers in strings.
 		expected: colexectestutils.Tuples{
-			{`'{"id": 1}'`, "a"},
-			{`'{"id": 2}'`, "b"},
-			{`'{"id": 3}'`, "c"},
-			{`'{"id": null}'`, "d"},
-			{`'{"id": 5}'`, "e"},
-			{`'{"id": 6}'`, "f"},
+			{mustParseJSON(`{"id": 1}`), "a"},
+			{mustParseJSON(`{"id": 2}`), "b"},
+			{mustParseJSON(`{"id": 3}`), "c"},
+			{mustParseJSON(`{"id": null}`), "d"},
+			{mustParseJSON(`{"id": 5}`), "e"},
+			{mustParseJSON(`{"id": 6}`), "f"},
 		},
 	},
+}
+
+func mustParseJSON(s string) json.JSON {
+	j, err := json.ParseJSON(s)
+	if err != nil {
+		colexecerror.ExpectedError(err)
+	}
+	return j
 }
 
 func TestDistinct(t *testing.T) {
@@ -271,38 +286,72 @@ func runDistinctBenchmarks(
 	isExternal bool,
 ) {
 	rng, _ := randutil.NewPseudoRand()
+	const nCols = 2
+	const bytesValueLength = 8
+	distinctCols := []uint32{0, 1}
 	nullsOptions := []bool{false, true}
 	nRowsOptions := []int{1, 64, 4 * coldata.BatchSize(), 256 * coldata.BatchSize()}
-	nColsOptions := []int{2, 4}
 	if isExternal {
 		nullsOptions = []bool{false}
 		nRowsOptions = []int{coldata.BatchSize(), 64 * coldata.BatchSize(), 4096 * coldata.BatchSize()}
 	}
 	if testing.Short() {
 		nRowsOptions = []int{coldata.BatchSize()}
-		nColsOptions = []int{2}
+	}
+	setFirstValue := func(vec coldata.Vec) {
+		if typ := vec.Type(); typ == types.Int {
+			vec.Int64()[0] = 0
+		} else if typ == types.Bytes {
+			vec.Bytes().Set(0, make([]byte, bytesValueLength))
+		} else {
+			colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", typ))
+		}
+	}
+	setIthValue := func(vec coldata.Vec, i int, newValueProbability float64) {
+		if i == 0 {
+			colexecerror.InternalError(errors.New("setIthValue called with i == 0"))
+		}
+		if typ := vec.Type(); typ == types.Int {
+			col := vec.Int64()
+			col[i] = col[i-1]
+			if rng.Float64() < newValueProbability {
+				col[i]++
+			}
+		} else if typ == types.Bytes {
+			v := make([]byte, bytesValueLength)
+			copy(v, vec.Bytes().Get(i-1))
+			if rng.Float64() < newValueProbability {
+				for pos := 0; pos < bytesValueLength; pos++ {
+					v[pos]++
+					// If we have overflowed our current byte, we need to
+					// increment the next one; otherwise, we have a new distinct
+					// value.
+					if v[pos] != 0 {
+						break
+					}
+				}
+			}
+			vec.Bytes().Set(i, v)
+		} else {
+			colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", typ))
+		}
 	}
 	for _, hasNulls := range nullsOptions {
 		for _, newTupleProbability := range []float64{0.001, 0.1} {
 			for _, nRows := range nRowsOptions {
-				for _, nCols := range nColsOptions {
+				for _, typ := range []*types.T{types.Int, types.Bytes} {
 					typs := make([]*types.T, nCols)
 					cols := make([]coldata.Vec, nCols)
 					for i := range typs {
-						typs[i] = types.Int
+						typs[i] = typ
 						cols[i] = testAllocator.NewMemColumn(typs[i], nRows)
 					}
-					distinctCols := []uint32{0, 1, 2, 3}[:nCols]
 					numOrderedCols := getNumOrderedCols(nCols)
 					newValueProbability := getNewValueProbabilityForDistinct(newTupleProbability, nCols)
 					for i := range distinctCols {
-						col := cols[i].Int64()
-						col[0] = 0
+						setFirstValue(cols[i])
 						for j := 1; j < nRows; j++ {
-							col[j] = col[j-1]
-							if rng.Float64() < newValueProbability {
-								col[j]++
-							}
+							setIthValue(cols[i], j, newValueProbability)
 						}
 						if hasNulls {
 							cols[i].Nulls().SetNull(0)
@@ -313,9 +362,9 @@ func runDistinctBenchmarks(
 						nullsPrefix = fmt.Sprintf("/hasNulls=%t", hasNulls)
 					}
 					b.Run(
-						fmt.Sprintf("%s%s/newTupleProbability=%.3f/rows=%d/cols=%d/ordCols=%d",
+						fmt.Sprintf("%s%s/newTupleProbability=%.3f/rows=%d/ordCols=%d/type=%s",
 							namePrefix, nullsPrefix, newTupleProbability,
-							nRows, nCols, numOrderedCols,
+							nRows, numOrderedCols, typ.Name(),
 						),
 						func(b *testing.B) {
 							b.SetBytes(int64(8 * nRows * nCols))
@@ -329,8 +378,8 @@ func runDistinctBenchmarks(
 								if err != nil {
 									b.Fatal(err)
 								}
-								distinct.Init()
-								for b := distinct.Next(ctx); b.Length() > 0; b = distinct.Next(ctx) {
+								distinct.Init(ctx)
+								for b := distinct.Next(); b.Length() > 0; b = distinct.Next() {
 								}
 							}
 							b.StopTimer()

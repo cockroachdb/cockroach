@@ -1,0 +1,283 @@
+exec ${PAGER:-/usr/bin/less} "$0" || exit 1
+Executing tests from //pkg/rpc:rpc_test
+-----------------------------------------------------------------------------
+=== RUN   TestWrappedServerStream
+--- PASS: TestWrappedServerStream (0.00s)
+=== RUN   TestTenantFromCert
+=== RUN   TestTenantFromCert/10
+=== RUN   TestTenantFromCert/2
+=== RUN   TestTenantFromCert/18446744073709551615
+=== RUN   TestTenantFromCert/system
+=== RUN   TestTenantFromCert/-1
+=== RUN   TestTenantFromCert/0
+=== RUN   TestTenantFromCert/1
+=== RUN   TestTenantFromCert/root
+=== RUN   TestTenantFromCert/other
+=== RUN   TestTenantFromCert/other#01
+=== RUN   TestTenantFromCert/other#02
+=== RUN   TestTenantFromCert/other#03
+--- PASS: TestTenantFromCert (0.00s)
+    --- PASS: TestTenantFromCert/10 (0.00s)
+    --- PASS: TestTenantFromCert/2 (0.00s)
+    --- PASS: TestTenantFromCert/18446744073709551615 (0.00s)
+    --- PASS: TestTenantFromCert/system (0.00s)
+    --- PASS: TestTenantFromCert/-1 (0.00s)
+    --- PASS: TestTenantFromCert/0 (0.00s)
+    --- PASS: TestTenantFromCert/1 (0.00s)
+    --- PASS: TestTenantFromCert/root (0.00s)
+    --- PASS: TestTenantFromCert/other (0.00s)
+    --- PASS: TestTenantFromCert/other#01 (0.00s)
+    --- PASS: TestTenantFromCert/other#02 (0.00s)
+    --- PASS: TestTenantFromCert/other#03 (0.00s)
+=== RUN   TestTenantAuthRequest
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#00
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#01
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#02
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#03
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#04
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#05
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#06
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#07
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#08
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#09
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#10
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#11
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#12
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#13
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#14
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup/#00
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup/#01
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup/#02
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup/#03
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup/#04
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#00
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#01
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#02
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#03
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#04
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#05
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#06
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#00
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#01
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#02
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#03
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#04
+=== RUN   TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#05
+=== RUN   TestTenantAuthRequest//cockroach.rpc.Heartbeat/Ping
+=== RUN   TestTenantAuthRequest//cockroach.rpc.Heartbeat/Ping/#00
+=== RUN   TestTenantAuthRequest//cockroach.rpc.Testing/Foo
+=== RUN   TestTenantAuthRequest//cockroach.rpc.Testing/Foo/#00
+--- PASS: TestTenantAuthRequest (0.00s)
+    --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#00 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#01 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#02 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#03 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#04 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#05 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#06 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#07 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#08 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#09 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#10 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#11 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#12 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#13 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/Batch/#14 (0.00s)
+    --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup/#00 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup/#01 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup/#02 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup/#03 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeLookup/#04 (0.00s)
+    --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#00 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#01 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#02 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#03 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#04 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#05 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/RangeFeed/#06 (0.00s)
+    --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#00 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#01 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#02 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#03 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#04 (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.roachpb.Internal/GossipSubscription/#05 (0.00s)
+    --- PASS: TestTenantAuthRequest//cockroach.rpc.Heartbeat/Ping (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.rpc.Heartbeat/Ping/#00 (0.00s)
+    --- PASS: TestTenantAuthRequest//cockroach.rpc.Testing/Foo (0.00s)
+        --- PASS: TestTenantAuthRequest//cockroach.rpc.Testing/Foo/#00 (0.00s)
+=== RUN   TestUpdateOffset
+--- PASS: TestUpdateOffset (0.00s)
+=== RUN   TestVerifyClockOffset
+--- PASS: TestVerifyClockOffset (0.00s)
+=== RUN   TestIsHealthyOffsetInterval
+--- PASS: TestIsHealthyOffsetInterval (0.00s)
+=== RUN   TestClockOffsetMetrics
+--- PASS: TestClockOffsetMetrics (0.00s)
+=== RUN   TestLatencies
+--- PASS: TestLatencies (0.00s)
+=== RUN   TestCodecMarshalUnmarshal
+=== RUN   TestCodecMarshalUnmarshal/rpc.PingRequest
+=== RUN   TestCodecMarshalUnmarshal/raftpb.Message
+=== RUN   TestCodecMarshalUnmarshal/grpc_health_v1.HealthCheckRequest
+=== RUN   TestCodecMarshalUnmarshal/roachpb.GetRequest
+--- PASS: TestCodecMarshalUnmarshal (0.00s)
+    --- PASS: TestCodecMarshalUnmarshal/rpc.PingRequest (0.00s)
+    --- PASS: TestCodecMarshalUnmarshal/raftpb.Message (0.00s)
+    --- PASS: TestCodecMarshalUnmarshal/grpc_health_v1.HealthCheckRequest (0.00s)
+    --- PASS: TestCodecMarshalUnmarshal/roachpb.GetRequest (0.00s)
+=== RUN   TestHeartbeatCB
+=== RUN   TestHeartbeatCB/compression=false
+=== RUN   TestHeartbeatCB/compression=true
+--- PASS: TestHeartbeatCB (0.03s)
+    --- PASS: TestHeartbeatCB/compression=false (0.01s)
+    --- PASS: TestHeartbeatCB/compression=true (0.01s)
+=== RUN   TestPingInterceptors
+E210407 21:13:13.394554 198 2@pkg/rpc/context.go:1063  [-] 1  removing connection to unused:1234 due to error: boom due to onSendPing
+--- PASS: TestPingInterceptors (1.10s)
+=== RUN   TestInternalServerAddress
+--- PASS: TestInternalServerAddress (0.01s)
+=== RUN   TestHeartbeatHealth
+--- PASS: TestHeartbeatHealth (0.04s)
+=== RUN   TestConnectionRemoveNodeIDZero
+--- PASS: TestConnectionRemoveNodeIDZero (1.11s)
+=== RUN   TestHeartbeatHealthTransport
+--- PASS: TestHeartbeatHealthTransport (0.09s)
+=== RUN   TestOffsetMeasurement
+--- PASS: TestOffsetMeasurement (0.02s)
+=== RUN   TestFailedOffsetMeasurement
+--- PASS: TestFailedOffsetMeasurement (0.02s)
+=== RUN   TestRemoteOffsetUnhealthy
+    context_test.go:985: max offset: 100ms - node 0 with acceptable clock offset of 0s did not return an error, as expected
+    context_test.go:985: max offset: 100ms - node 1 with acceptable clock offset of 0s did not return an error, as expected
+    context_test.go:985: max offset: 100ms - node 2 with acceptable clock offset of 0s did not return an error, as expected
+    context_test.go:977: max offset: 100ms - node 3 with excessive clock offset of 100.000001ms returned expected error: clock synchronization error: this node is more than 100ms away from at least half of the known nodes (0 of 3 are within the offset)
+--- PASS: TestRemoteOffsetUnhealthy (0.07s)
+=== RUN   TestGRPCKeepaliveFailureFailsInflightRPCs
+    context_test.go:1004: [https://github.com/cockroachdb/cockroach/issues/51800 Takes too long given https://github.com/grpc/grpc-go/pull/2642]
+--- SKIP: TestGRPCKeepaliveFailureFailsInflightRPCs (0.00s)
+=== RUN   TestClusterIDMismatch
+--- PASS: TestClusterIDMismatch (0.02s)
+=== RUN   TestClusterNameMismatch
+=== RUN   TestClusterNameMismatch/0
+=== RUN   TestClusterNameMismatch/1
+E210407 21:13:15.883762 614 1@pkg/rpc/heartbeat.go:78  [-] 2  peer node expects cluster name "a", use --cluster-name to configure
+E210407 21:13:15.883898 614 2@pkg/rpc/context.go:1063  [-] 3  removing connection to 127.0.0.1:56503 due to error: cluster name check failed on ping response: peer node expects cluster name "a", use --cluster-name to configure
+=== RUN   TestClusterNameMismatch/2
+E210407 21:13:15.899548 598 1@pkg/rpc/heartbeat.go:78  [-] 4  peer node does not have a cluster name configured, cannot use --cluster-name
+E210407 21:13:15.899669 598 2@pkg/rpc/context.go:1063  [-] 5  removing connection to 127.0.0.1:56505 due to error: cluster name check failed on ping response: peer node does not have a cluster name configured, cannot use --cluster-name
+=== RUN   TestClusterNameMismatch/3
+E210407 21:13:15.914534 709 1@pkg/rpc/heartbeat.go:78  [-] 6  local cluster name "b" does not match peer cluster name "a"
+E210407 21:13:15.914647 709 2@pkg/rpc/context.go:1063  [-] 7  removing connection to 127.0.0.1:56507 due to error: cluster name check failed on ping response: local cluster name "b" does not match peer cluster name "a"
+=== RUN   TestClusterNameMismatch/4
+=== RUN   TestClusterNameMismatch/5
+=== RUN   TestClusterNameMismatch/6
+=== RUN   TestClusterNameMismatch/7
+=== RUN   TestClusterNameMismatch/8
+=== RUN   TestClusterNameMismatch/9
+=== RUN   TestClusterNameMismatch/10
+=== RUN   TestClusterNameMismatch/11
+=== RUN   TestClusterNameMismatch/12
+--- PASS: TestClusterNameMismatch (0.19s)
+    --- PASS: TestClusterNameMismatch/0 (0.01s)
+    --- PASS: TestClusterNameMismatch/1 (0.01s)
+    --- PASS: TestClusterNameMismatch/2 (0.02s)
+    --- PASS: TestClusterNameMismatch/3 (0.02s)
+    --- PASS: TestClusterNameMismatch/4 (0.01s)
+    --- PASS: TestClusterNameMismatch/5 (0.01s)
+    --- PASS: TestClusterNameMismatch/6 (0.01s)
+    --- PASS: TestClusterNameMismatch/7 (0.01s)
+    --- PASS: TestClusterNameMismatch/8 (0.01s)
+    --- PASS: TestClusterNameMismatch/9 (0.02s)
+    --- PASS: TestClusterNameMismatch/10 (0.02s)
+    --- PASS: TestClusterNameMismatch/11 (0.01s)
+    --- PASS: TestClusterNameMismatch/12 (0.02s)
+=== RUN   TestNodeIDMismatch
+--- PASS: TestNodeIDMismatch (0.02s)
+=== RUN   TestVersionCheckBidirectional
+=== RUN   TestVersionCheckBidirectional/serverVersion_==_clientVersion
+=== RUN   TestVersionCheckBidirectional/serverVersion_<_clientVersion
+E210407 21:13:16.088439 1032 2@pkg/rpc/context.go:1063  [-] 8  removing connection to 127.0.0.1:56531 due to error: version compatibility check failed on ping response: cluster requires at least version 20.2-50, but peer has version 1.0
+=== RUN   TestVersionCheckBidirectional/serverVersion_>_clientVersion
+--- PASS: TestVersionCheckBidirectional (0.04s)
+    --- PASS: TestVersionCheckBidirectional/serverVersion_==_clientVersion (0.01s)
+    --- PASS: TestVersionCheckBidirectional/serverVersion_<_clientVersion (0.01s)
+    --- PASS: TestVersionCheckBidirectional/serverVersion_>_clientVersion (0.01s)
+=== RUN   TestGRPCDialClass
+--- PASS: TestGRPCDialClass (0.01s)
+=== RUN   TestTestingKnobs
+--- PASS: TestTestingKnobs (0.02s)
+=== RUN   TestRunHeartbeatSetsHeartbeatStateWhenExitingBeforeFirstHeartbeat
+--- PASS: TestRunHeartbeatSetsHeartbeatStateWhenExitingBeforeFirstHeartbeat (0.01s)
+=== RUN   TestRemoteOffsetString
+    heartbeat_test.go:32: something unusual happened
+--- FAIL: TestRemoteOffsetString (0.00s)
+=== RUN   TestHeartbeatReply
+--- PASS: TestHeartbeatReply (0.00s)
+=== RUN   TestManualHeartbeat
+--- PASS: TestManualHeartbeat (0.00s)
+=== RUN   TestClockOffsetMismatch
+locally configured maximum clock offset (250ms) does not match that of node test (500ms)
+--- PASS: TestClockOffsetMismatch (0.00s)
+=== RUN   TestClusterIDCompare
+=== RUN   TestClusterIDCompare/cluster_IDs_match
+=== RUN   TestClusterIDCompare/their_cluster_ID_missing
+=== RUN   TestClusterIDCompare/our_cluster_ID_missing
+=== RUN   TestClusterIDCompare/both_cluster_IDs_missing
+=== RUN   TestClusterIDCompare/cluster_ID_mismatch
+--- PASS: TestClusterIDCompare (0.00s)
+    --- PASS: TestClusterIDCompare/cluster_IDs_match (0.00s)
+    --- PASS: TestClusterIDCompare/their_cluster_ID_missing (0.00s)
+    --- PASS: TestClusterIDCompare/our_cluster_ID_missing (0.00s)
+    --- PASS: TestClusterIDCompare/both_cluster_IDs_missing (0.00s)
+    --- PASS: TestClusterIDCompare/cluster_ID_mismatch (0.00s)
+=== RUN   TestNodeIDCompare
+=== RUN   TestNodeIDCompare/node_IDs_match
+=== RUN   TestNodeIDCompare/their_node_ID_missing
+=== RUN   TestNodeIDCompare/our_node_ID_missing
+=== RUN   TestNodeIDCompare/both_node_IDs_missing
+=== RUN   TestNodeIDCompare/node_ID_mismatch
+--- PASS: TestNodeIDCompare (0.00s)
+    --- PASS: TestNodeIDCompare/node_IDs_match (0.00s)
+    --- PASS: TestNodeIDCompare/their_node_ID_missing (0.00s)
+    --- PASS: TestNodeIDCompare/our_node_ID_missing (0.00s)
+    --- PASS: TestNodeIDCompare/both_node_IDs_missing (0.00s)
+    --- PASS: TestNodeIDCompare/node_ID_mismatch (0.00s)
+=== RUN   TestStatsHandlerBasic
+--- PASS: TestStatsHandlerBasic (0.00s)
+=== RUN   TestStatsHandlerWithHeartbeats
+I210407 21:13:16.174706 1187 pkg/rpc/stats_handler_test.go:174  [-] 9  server incoming = 183, server outgoing = 41, client incoming = 97, client outgoing = 69
+--- PASS: TestStatsHandlerWithHeartbeats (0.02s)
+=== RUN   TestClientSSLSettings
+=== RUN   TestClientSSLSettings/#00
+=== RUN   TestClientSSLSettings/#01
+=== RUN   TestClientSSLSettings/#02
+=== RUN   TestClientSSLSettings/#03
+=== RUN   TestClientSSLSettings/#04
+=== RUN   TestClientSSLSettings/#05
+--- PASS: TestClientSSLSettings (0.04s)
+    --- PASS: TestClientSSLSettings/#00 (0.01s)
+    --- PASS: TestClientSSLSettings/#01 (0.01s)
+    --- PASS: TestClientSSLSettings/#02 (0.01s)
+    --- PASS: TestClientSSLSettings/#03 (0.01s)
+    --- PASS: TestClientSSLSettings/#04 (0.01s)
+    --- PASS: TestClientSSLSettings/#05 (0.01s)
+=== RUN   TestServerSSLSettings
+=== RUN   TestServerSSLSettings/#00
+=== RUN   TestServerSSLSettings/#01
+=== RUN   TestServerSSLSettings/#02
+=== RUN   TestServerSSLSettings/#03
+--- PASS: TestServerSSLSettings (0.03s)
+    --- PASS: TestServerSSLSettings/#00 (0.01s)
+    --- PASS: TestServerSSLSettings/#01 (0.01s)
+    --- PASS: TestServerSSLSettings/#02 (0.01s)
+    --- PASS: TestServerSSLSettings/#03 (0.01s)
+FAIL
+I210407 21:13:16.254783 1 (gostd) testmain.go:138  [-] 1  Test //pkg/rpc:rpc_test exited with error code 1

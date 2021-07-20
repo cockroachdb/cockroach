@@ -16,6 +16,7 @@ const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const VisualizerPlugin = require("webpack-visualizer-plugin");
 const StringReplacePlugin = require("string-replace-webpack-plugin");
+const WebpackBar = require("webpackbar");
 
 // Remove a broken dependency that Yarn insists upon installing before every
 // Webpack compile. We also do this when installing dependencies via Make, but
@@ -30,21 +31,12 @@ class RemoveBrokenDependenciesPlugin {
   }
 }
 
-let DashboardPlugin;
-try {
-  DashboardPlugin = require("./opt/node_modules/webpack-dashboard/plugin");
-} catch (e) {
-  DashboardPlugin = class { apply() { /* no-op */ } };
-}
-
 const proxyPrefixes = ["/_admin", "/_status", "/ts", "/login", "/logout"];
 function shouldProxy(reqPath) {
   if (reqPath === "/") {
     return true;
   }
-  return proxyPrefixes.some((prefix) => (
-    reqPath.startsWith(prefix)
-  ));
+  return proxyPrefixes.some((prefix) => reqPath.startsWith(prefix));
 }
 
 // tslint:disable:object-literal-sort-keys
@@ -75,16 +67,13 @@ module.exports = (env, argv) => {
       // Relative paths would trigger the resolution behavior used by Node.js
       // for "node_modules", i.e., checking for a "node_modules" directory in
       // the current directory *or any parent directory*.
-      modules: [
-        ...localRoots,
-        path.resolve(__dirname, "node_modules"),
-      ],
-      alias: {oss: path.resolve(__dirname)},
+      modules: [...localRoots, path.resolve(__dirname, "node_modules")],
+      alias: { oss: path.resolve(__dirname) },
     },
 
     module: {
       rules: [
-        { test: /\.css$/, use: [ "style-loader", "css-loader" ] },
+        { test: /\.css$/, use: ["style-loader", "css-loader"] },
         {
           test: /\.module\.styl$/,
           use: [
@@ -168,8 +157,13 @@ module.exports = (env, argv) => {
         manifest: require("./vendor.oss.manifest.json"),
       }),
       new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),
-      new DashboardPlugin(),
       new VisualizerPlugin({ filename: `../dist/stats.${env.dist}.html` }),
+      // use WebpackBar instead of webpack dashboard to fit multiple webpack dev server outputs (db-console and cluster-ui)
+      new WebpackBar({
+        name: "db-console",
+        color: "orange",
+        profile: true,
+      }),
     ],
 
     stats: "errors-only",
@@ -202,24 +196,28 @@ module.exports = (env, argv) => {
   // same time to be able inject testing code with SIMULATE_METRICS_LOAD env variable.
   // It injects Redux middleware which generates metrics datapoints for performance
   // testing.
-  if (process.env.SIMULATE_METRICS_LOAD === "true" && argv.mode !== "production") {
+  if (
+    process.env.SIMULATE_METRICS_LOAD === "true" &&
+    argv.mode !== "production"
+  ) {
     config.module.rules.push({
       test: /src\/redux\/state.ts$/,
       loader: StringReplacePlugin.replace({
         replacements: [
           {
-            pattern: /import rootSaga from ".\/sagas";/ig, // match last 'import' expression in module.
-            replacement: function(match, p) {
+            pattern: /import rootSaga from ".\/sagas";/gi, // match last 'import' expression in module.
+            replacement: function (match, p) {
               return `${match}\nimport { fakeMetricsDataGenerationMiddleware } from "src/test-utils/fakeMetricsDataGenerationMiddleware";`;
             },
           },
           {
-            pattern: /(?<=applyMiddleware\((.*))\),$/mg,
-            replacement: function(match) {
+            pattern: /(?<=applyMiddleware\((.*))\),$/gm,
+            replacement: function (match) {
               return `, fakeMetricsDataGenerationMiddleware${match}`;
             },
           },
-        ]}),
+        ],
+      }),
     });
     config.plugins.push(new StringReplacePlugin());
   }

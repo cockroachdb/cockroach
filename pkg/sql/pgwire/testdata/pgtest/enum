@@ -1,5 +1,23 @@
 # This test verifies some of the pgwire encoding process for ENUMs.
 
+# Demonstrate that attempting to prepare a query which hints a user-defined
+# type as the very first thing on a new connection does not cause a panic.
+# Prior to the change which introduced this test logic, the below prepare
+# would hit a nil-pointer panic.
+
+send crdb_only
+Parse {"Name": "s1", "Query": "SELECT $1", "ParameterOIDs": [100052]}
+Sync
+----
+
+until crdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"42704"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
 # Prepare the environment.
 send noncrdb_only
 Query {"String": "DROP TYPE IF EXISTS te CASCADE"}

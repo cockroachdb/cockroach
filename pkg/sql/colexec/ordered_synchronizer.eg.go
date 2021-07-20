@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,9 +32,12 @@ import (
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
+	colexecop.InitHelper
+	span *tracing.Span
+
 	allocator             *colmem.Allocator
 	memoryLimit           int64
-	inputs                []SynchronizerInput
+	inputs                []colexecargs.OpWithMetaInfo
 	ordering              colinfo.ColumnOrdering
 	typs                  []*types.T
 	canonicalTypeFamilies []types.Family
@@ -61,6 +66,7 @@ type OrderedSynchronizer struct {
 	outFloat64Cols   []coldata.Float64s
 	outTimestampCols []coldata.Times
 	outIntervalCols  []coldata.Durations
+	outJSONCols      []*coldata.JSONs
 	outDatumCols     []coldata.DatumVec
 	// outColsMap contains the positions of the corresponding vectors in the
 	// slice for the same types. For example, if we have an output batch with
@@ -89,7 +95,7 @@ func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
 
 // Child implements the execinfrapb.OpNode interface.
 func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
-	return o.inputs[nth].Op
+	return o.inputs[nth].Root
 }
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
@@ -97,10 +103,10 @@ func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 func NewOrderedSynchronizer(
 	allocator *colmem.Allocator,
 	memoryLimit int64,
-	inputs []SynchronizerInput,
+	inputs []colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	ordering colinfo.ColumnOrdering,
-) (*OrderedSynchronizer, error) {
+) *OrderedSynchronizer {
 	return &OrderedSynchronizer{
 		allocator:             allocator,
 		memoryLimit:           memoryLimit,
@@ -108,16 +114,16 @@ func NewOrderedSynchronizer(
 		ordering:              ordering,
 		typs:                  typs,
 		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
-	}, nil
+	}
 }
 
 // Next is part of the Operator interface.
-func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
+func (o *OrderedSynchronizer) Next() coldata.Batch {
 	if o.inputBatches == nil {
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
 		o.heap = make([]int, 0, len(o.inputs))
 		for i := range o.inputs {
-			o.inputBatches[i] = o.inputs[i].Op.Next(ctx)
+			o.inputBatches[i] = o.inputs[i].Root.Next()
 			o.updateComparators(i)
 			if o.inputBatches[i].Length() > 0 {
 				o.heap = append(o.heap, i)
@@ -220,6 +226,15 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 							v := srcCol.Get(srcRowIdx)
 							outCol[outputIdx] = v
 						}
+					case types.JsonFamily:
+						switch o.typs[i].Width() {
+						case -1:
+						default:
+							srcCol := vec.JSON()
+							outCol := o.outJSONCols[o.outColsMap[i]]
+							v := srcCol.Get(srcRowIdx)
+							outCol.Set(outputIdx, v)
+						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch o.typs[i].Width() {
 						case -1:
@@ -239,7 +254,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
 				o.inputIndices[minBatch]++
 			} else {
-				o.inputBatches[minBatch] = o.inputs[minBatch].Op.Next(ctx)
+				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
 				o.inputIndices[minBatch] = 0
 				o.updateComparators(minBatch)
 			}
@@ -272,6 +287,7 @@ func (o *OrderedSynchronizer) resetOutput() {
 		o.outFloat64Cols = o.outFloat64Cols[:0]
 		o.outTimestampCols = o.outTimestampCols[:0]
 		o.outIntervalCols = o.outIntervalCols[:0]
+		o.outJSONCols = o.outJSONCols[:0]
 		o.outDatumCols = o.outDatumCols[:0]
 		for i, outVec := range o.output.ColVecs() {
 			o.outNulls[i] = outVec.Nulls()
@@ -331,6 +347,13 @@ func (o *OrderedSynchronizer) resetOutput() {
 					o.outColsMap[i] = len(o.outIntervalCols)
 					o.outIntervalCols = append(o.outIntervalCols, outVec.Interval())
 				}
+			case types.JsonFamily:
+				switch o.typs[i].Width() {
+				case -1:
+				default:
+					o.outColsMap[i] = len(o.outJSONCols)
+					o.outJSONCols = append(o.outJSONCols, outVec.JSON())
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch o.typs[i].Width() {
 				case -1:
@@ -346,12 +369,16 @@ func (o *OrderedSynchronizer) resetOutput() {
 }
 
 // Init is part of the Operator interface.
-func (o *OrderedSynchronizer) Init() {
+func (o *OrderedSynchronizer) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.Ctx, o.span = execinfra.ProcessorSpan(o.Ctx, "ordered sync")
 	o.inputIndices = make([]int, len(o.inputs))
 	o.outNulls = make([]*coldata.Nulls, len(o.typs))
 	o.outColsMap = make([]int, len(o.typs))
 	for i := range o.inputs {
-		o.inputs[i].Op.Init()
+		o.inputs[i].Root.Init(o.Ctx)
 	}
 	o.comparators = make([]vecComparator, len(o.ordering))
 	for i := range o.ordering {
@@ -360,17 +387,30 @@ func (o *OrderedSynchronizer) Init() {
 	}
 }
 
-func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	var bufferedMeta []execinfrapb.ProducerMetadata
+	if o.span != nil {
+		for i := range o.inputs {
+			for _, stats := range o.inputs[i].StatsCollectors {
+				o.span.RecordStructured(stats.GetStats())
+			}
+		}
+		if meta := execinfra.GetTraceDataAsMetadata(o.span); meta != nil {
+			bufferedMeta = append(bufferedMeta, *meta)
+		}
+	}
 	for _, input := range o.inputs {
-		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(ctx)...)
+		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta()...)
 	}
 	return bufferedMeta
 }
 
-func (o *OrderedSynchronizer) Close(ctx context.Context) error {
+func (o *OrderedSynchronizer) Close() error {
 	for _, input := range o.inputs {
-		input.ToClose.CloseAndLogOnErr(ctx, "ordered synchronizer")
+		input.ToClose.CloseAndLogOnErr(o.EnsureCtx(), "ordered synchronizer")
+	}
+	if o.span != nil {
+		o.span.Finish()
 	}
 	return nil
 }

@@ -368,7 +368,7 @@ func NewFingerprintValidator(
 			}
 			fmt.Fprintf(&addColumnStmt, `ADD COLUMN test%d STRING`, i)
 		}
-		if _, err := sqlDB.Query(addColumnStmt.String()); err != nil {
+		if _, err := sqlDB.Exec(addColumnStmt.String()); err != nil {
 			return nil, err
 		}
 	}
@@ -707,6 +707,9 @@ func fetchPrimaryKeyCols(sqlDB *gosql.DB, tableStr string) ([]string, error) {
 			return nil, err
 		}
 		primaryKeyCols = append(primaryKeyCols, primaryKeyCol)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	if len(primaryKeyCols) == 0 {
 		return nil, errors.Errorf("no primary key information found for %s", tableStr)

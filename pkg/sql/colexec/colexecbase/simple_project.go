@@ -12,6 +12,7 @@ package colexecbase
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -21,7 +22,7 @@ import (
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
-	colexecop.OneInputCloserHelper
+	colexecop.OneInputInitCloserHelper
 	colexecop.NonExplainable
 
 	projection []uint32
@@ -86,6 +87,10 @@ func (b *projectingBatch) ReplaceCol(col coldata.Vec, idx int) {
 	b.Batch.ReplaceCol(col, int(b.projection[idx]))
 }
 
+func (b *projectingBatch) String() string {
+	return strings.Join(coldata.VecsToStringWithRowPrefix(b.ColVecs(), b.Length(), b.Selection(), "" /* prefix */), "\n")
+}
+
 // NewSimpleProjectOp returns a new simpleProjectOp that applies a simple
 // projection on the columns in its input batch, returning a new batch with
 // only the columns in the projection slice, in order. In a degenerate case
@@ -106,7 +111,7 @@ func NewSimpleProjectOp(
 		}
 	}
 	s := &simpleProjectOp{
-		OneInputCloserHelper:       colexecop.MakeOneInputCloserHelper(input),
+		OneInputInitCloserHelper:   colexecop.MakeOneInputInitCloserHelper(input),
 		projection:                 make([]uint32, len(projection)),
 		batches:                    make(map[coldata.Batch]*projectingBatch),
 		numBatchesLoggingThreshold: 128,
@@ -116,12 +121,8 @@ func NewSimpleProjectOp(
 	return s
 }
 
-func (d *simpleProjectOp) Init() {
-	d.Input.Init()
-}
-
-func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
-	batch := d.Input.Next(ctx)
+func (d *simpleProjectOp) Next() coldata.Batch {
+	batch := d.Input.Next()
 	if batch.Length() == 0 {
 		return coldata.ZeroBatch
 	}
@@ -131,7 +132,7 @@ func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
 		d.batches[batch] = projBatch
 		if len(d.batches) == d.numBatchesLoggingThreshold {
 			if log.V(1) {
-				log.Infof(ctx, "simpleProjectOp: size of 'batches' map = %d", len(d.batches))
+				log.Infof(d.Ctx, "simpleProjectOp: size of 'batches' map = %d", len(d.batches))
 			}
 			d.numBatchesLoggingThreshold = d.numBatchesLoggingThreshold * 2
 		}

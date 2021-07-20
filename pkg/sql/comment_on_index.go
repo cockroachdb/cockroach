@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -26,7 +27,7 @@ import (
 type commentOnIndexNode struct {
 	n         *tree.CommentOnIndex
 	tableDesc *tabledesc.Mutable
-	indexDesc *descpb.IndexDescriptor
+	index     catalog.Index
 }
 
 // CommentOnIndex adds a comment on an index.
@@ -40,12 +41,12 @@ func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (p
 		return nil, err
 	}
 
-	tableDesc, indexDesc, err := p.getTableAndIndex(ctx, &n.Index, privilege.CREATE)
+	tableDesc, index, err := p.getTableAndIndex(ctx, &n.Index, privilege.CREATE)
 	if err != nil {
 		return nil, err
 	}
 
-	return &commentOnIndexNode{n: n, tableDesc: tableDesc, indexDesc: indexDesc}, nil
+	return &commentOnIndexNode{n: n, tableDesc: tableDesc, index: index}, nil
 }
 
 func (n *commentOnIndexNode) startExec(params runParams) error {
@@ -53,13 +54,13 @@ func (n *commentOnIndexNode) startExec(params runParams) error {
 		err := params.p.upsertIndexComment(
 			params.ctx,
 			n.tableDesc.ID,
-			n.indexDesc.ID,
+			n.index.GetID(),
 			*n.n.Comment)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := params.p.removeIndexComment(params.ctx, n.tableDesc.ID, n.indexDesc.ID)
+		err := params.p.removeIndexComment(params.ctx, n.tableDesc.ID, n.index.GetID())
 		if err != nil {
 			return err
 		}

@@ -364,7 +364,7 @@ GenerateMergeJoins
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
-  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+  +      │    │    └── ordering: +1
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   -      └── filters
@@ -398,7 +398,7 @@ GenerateLookupJoins
          │    │    ├── columns: k:1!null i:2 s:4
          │    │    ├── key: (1)
   -      │    │    ├── fd: (1)-->(2,4)
-  -      │    │    └── ordering: +1 opt(2) [actual: +1]
+  -      │    │    └── ordering: +1
   +      │    │    └── fd: (1)-->(2,4)
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
@@ -431,7 +431,7 @@ GenerateMergeJoins (higher cost)
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
-  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+  +      │    │    └── ordering: +1
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   +      ├── scan xy
@@ -470,7 +470,7 @@ GenerateMergeJoins (higher cost)
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
-  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+  +      │    │    └── ordering: +1
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
          └── filters (true)
@@ -501,7 +501,7 @@ GenerateLookupJoinsWithFilter (higher cost)
   -      │    │    ├── columns: k:1!null i:2 s:4
   -      │    │    ├── key: (1)
   -      │    │    ├── fd: (1)-->(2,4)
-  -      │    │    └── ordering: +1 opt(2) [actual: +1]
+  -      │    │    └── ordering: +1
   -      │    └── filters
   -      │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   -      └── filters (true)
@@ -531,6 +531,12 @@ Final best expression
         │    └── filters
         │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
         └── filters (true)
+
+# Use optstepsweb.
+optstepsweb
+SELECT s FROM a INNER JOIN xy ON a.k=xy.x AND i+1=10
+----
+https://raduberinde.github.io/optsteps.html?eJzsnN1u2zYYhs93Fd98JMFSEzlplWgQkC1NhxSp2yUbdpAEherQDRtZMiR5szusKHoNOdzV5UoGybItmaRF6i9yox0tIkXy48_zvqSp_tO5-O2sY3QuTs5Ojn8HH16dv30DFpz2-yfn8PrtaR-mM3jbB-vZnTmdPZvCz_2XgLuaqe12lE7f9UYv8XDYMTqqqoK1c-rgAFv2ldPtduHD6s-jI1A16GqKdghHR1dOd-y5n9AguHK68HD_38P914f7rzBw7cnI8Q3wjf10Ch6NJoH1wUbzx_eLx46DPPWTix2QBp7r-3KYHv1HKfXO0H50JrYN2OjB0NgLq4FPxnOwng28mw_vsRMgz7Hs96O_BoP3AR4hP7BGY-MFTA19_ubMOIDpbHP2Q0obUu1fS7tDMwMkTdFpjR_ehGmyql5Ndnf3kNRTX8gKSHvKvvzlS_xMU3rKcyV6rq9yHiiHtAL9geWAlUj4VnZvscuOI5XJHPc5wmUFN51xRJd7RKkh6VkhscdlmQ3bAfL8ZcpasnRnaGCGzZajJShJ4bB0QZPBBG1Xhkt3EiDPjHpHl5XVjFNg4Dp-4FnYCXxT2tEMkHb6f5ydgQrXP8GOnvxbvr5y5is5XNqWjT-j49H4nT3xj8NCFuuakRit8nCJrxY6LBc6dRiihc5YKJCx0NUmLnRqG-b_U2lDYANxiLQkcYjEosQhClwQByokDqvsFXHWc-QjDj24kDiZ0eUeUSZxNobEHheCOOpjE4cTeWH9JkjaLqigyQUa0OND4CvXvvkFO5Y3W3Av-SQFO50bdmo-2BET77FAQ1CXFzTEi6Vbm6jARHnhW4ny96jltxh7YhirjyJCWDskW5JZ_eXOIaiwc0jWrsDwxkythSXVLvBobOPh7LWLnVdL0xnhjZoUc04XNHVq5jaNnn5r-beN5l0208pCEAG40cQO8NjGAxzMDLDRMFA9929f-ow8V3U91XWQrICHP95SEpg7T_a-s5xAojdNU9LnaaaZBlnL1--RrzXgLI3XZdyL5iTqz66dVh0xaZlIj0Ne1tgj6ktHF4QrdBOj30382zmAT53ADXF8hobL3TcrNelIe_tC2-9tIDHRkII4JKcOuWRqwyGhJAscqhXikDw_Q3Z8KCtQqfjQ84B4Pe6CJ4TfShpPdpGsg9Uazle5j1lL7UvWyWWcoTpGPgF1rUfN6Ipe4kjR5bLioOYK6k0ctJDGY9de7nEoCXPd7O1HunlQlm7yHU_XoJsiZ9RhIxqsy1Xut3h1OZZIIV3OI5GiW7J97piIkhM_xgoHFS8FUTkvQYhZRbKcUwVCnFEFO_xCQsy0RmtaUrkQ53RX-xvMBN2BVkPSjFpYNqosBGWUS_eTAuuzjL7gdJaM-VjAXgJjalNyVTe_6WOy5UaT3mu1ebKLaIETjiz5OPZjB-X6MRGKNNwGiTKI3xoQJSf6XQA9QtaAlYNDRVhrgm7S-Me_RBUR6x_qkJMGQmz4c0uQ8AjQcEk4MYF5VIGE0ethDwWnpaPPwxIUMKtEhTkKLPK32rmF2nli4xF2rAC9W-7VIvEkn6fU81F-BXiy6kkcFpAb6_VjBCFM1SWrrA1mUVmNLwZseLkcwSNjoLGokDCxQylXMBRmLDy7_rWsNWz9C_0KEl_73_hm_h83lE3nDu2PGNutj8tj_fOwy6kH_omU1In_3mOc-OfRyLwH-Y0-oi9wbM1TMtfNoyZrMetV1nWpvNsdgdbn2JLw7UZqBm3mTzi57woyQbvxVgP7AmBWA9m6RmF8I6jdUTon07Hteij1_eA5cr0b5IW4XgI8_SxG91656CYmSRPRSiTlBGAJn80JTbiWs0-Bs_QbbEKcZfOxqRibU-tX5CDPCtAb5H1EKXbRUlIEe1H4Qn1MMNZ9-lFYcyHCEQNb9jX0sASIGI-djwZ0NUqeqLRkJr0WVG4Xw1j4TvYtuONA6slwaQ2CiWWHj64bQT_RKxLU7Tytz3hfuqf0VoP4Sk5F4QMDHr6qTL7SbwvWct9-g6Nm-ZA0Klif24MUeJMQSmmQn7nu3WRMJXkqKYXy3apRbkdVw3TWbJzfodmqNZfaNZhwqV_TuD-PJ84LlofCd1uut950S71pQ9nJx7zWvLbmtTWvrXltzWtrXlvz2prX1rw2hJ2teW3Na03mVecxr9ojQa4Sx1CWRm8Xk1uv_R177a0GecKh_omD-J852WBjk5mSeNf4bz4XM7RWswmf9rN65Ge1xvvZHKhnLb8NN9MKfMpNuf7LgyoBRFfydTO12eWCtjEfJxNlNwGD1YXb-feH_wMAAP__s73s4Q==
 
 # Exploration patterns with varying costs.
 optsteps

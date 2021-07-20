@@ -1,0 +1,152 @@
+parse
+IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+----
+IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+IMPORT TABLE foo CREATE USING ('nodelocal://0/some/file') CSV DATA (('path/to/some/file'), ($1)) WITH temp = ('path/to/temp') -- fully parenthesized
+IMPORT TABLE foo CREATE USING _ CSV DATA (_, $1) WITH temp = _ -- literals removed
+IMPORT TABLE foo CREATE USING '_' CSV DATA ('_', $1) WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT TABLE _ CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH _ = 'path/to/temp' -- identifiers removed
+
+parse
+EXPLAIN IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+----
+EXPLAIN IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+EXPLAIN IMPORT TABLE foo CREATE USING ('nodelocal://0/some/file') CSV DATA (('path/to/some/file'), ($1)) WITH temp = ('path/to/temp') -- fully parenthesized
+EXPLAIN IMPORT TABLE foo CREATE USING _ CSV DATA (_, $1) WITH temp = _ -- literals removed
+EXPLAIN IMPORT TABLE foo CREATE USING '_' CSV DATA ('_', $1) WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPLAIN IMPORT TABLE _ CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH _ = 'path/to/temp' -- identifiers removed
+
+parse
+IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' DELIMITED DATA ('path/to/some/file', $1)
+----
+IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' DELIMITED DATA ('path/to/some/file', $1)
+IMPORT TABLE foo CREATE USING ('nodelocal://0/some/file') DELIMITED DATA (('path/to/some/file'), ($1)) -- fully parenthesized
+IMPORT TABLE foo CREATE USING _ DELIMITED DATA (_, $1) -- literals removed
+IMPORT TABLE foo CREATE USING '_' DELIMITED DATA ('_', $1) -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT TABLE _ CREATE USING 'nodelocal://0/some/file' DELIMITED DATA ('path/to/some/file', $1) -- identifiers removed
+
+parse
+IMPORT TABLE foo (id INT8 PRIMARY KEY, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+----
+IMPORT TABLE foo (id INT8 PRIMARY KEY, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+IMPORT TABLE foo (id INT8 PRIMARY KEY, email STRING, age INT8) CSV DATA (('path/to/some/file'), ($1)) WITH temp = ('path/to/temp') -- fully parenthesized
+IMPORT TABLE foo (id INT8 PRIMARY KEY, email STRING, age INT8) CSV DATA (_, $1) WITH temp = _ -- literals removed
+IMPORT TABLE foo (id INT8 PRIMARY KEY, email STRING, age INT8) CSV DATA ('_', $1) WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT TABLE _ (_ INT8 PRIMARY KEY, _ STRING, _ INT8) CSV DATA ('path/to/some/file', $1) WITH _ = 'path/to/temp' -- identifiers removed
+
+parse
+IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2
+----
+IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2
+IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA (('path/to/some/file'), ($1)) WITH comma = (','), "nullif" = ('n/a'), temp = ($2) -- fully parenthesized
+IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA (_, $1) WITH comma = _, "nullif" = _, temp = $2 -- literals removed
+IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA ('_', $1) WITH comma = '_', "nullif" = '_', temp = $2 -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT TABLE _ (_ INT8, _ STRING, _ INT8) CSV DATA ('path/to/some/file', $1) WITH _ = ',', _ = 'n/a', _ = $2 -- identifiers removed
+
+parse
+IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'
+----
+IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'
+IMPORT TABLE foo FROM PGDUMPCREATE ('nodelocal://0/foo/bar') WITH temp = ('path/to/temp') -- fully parenthesized
+IMPORT TABLE foo FROM PGDUMPCREATE _ WITH temp = _ -- literals removed
+IMPORT TABLE foo FROM PGDUMPCREATE '_' WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT TABLE _ FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH _ = 'path/to/temp' -- identifiers removed
+
+parse
+IMPORT TABLE foo FROM PGDUMPCREATE ('nodelocal://0/foo/bar') WITH temp = 'path/to/temp'
+----
+IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp' -- normalized!
+IMPORT TABLE foo FROM PGDUMPCREATE ('nodelocal://0/foo/bar') WITH temp = ('path/to/temp') -- fully parenthesized
+IMPORT TABLE foo FROM PGDUMPCREATE _ WITH temp = _ -- literals removed
+IMPORT TABLE foo FROM PGDUMPCREATE '_' WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT TABLE _ FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH _ = 'path/to/temp' -- identifiers removed
+
+parse
+IMPORT INTO foo(id, email) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+----
+IMPORT INTO foo(id, email) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+IMPORT INTO foo(id, email) CSV DATA (('path/to/some/file'), ($1)) WITH temp = ('path/to/temp') -- fully parenthesized
+IMPORT INTO foo(id, email) CSV DATA (_, $1) WITH temp = _ -- literals removed
+IMPORT INTO foo(id, email) CSV DATA ('_', $1) WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT INTO _(_, _) CSV DATA ('path/to/some/file', $1) WITH _ = 'path/to/temp' -- identifiers removed
+
+parse
+IMPORT INTO foo CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+----
+IMPORT INTO foo CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+IMPORT INTO foo CSV DATA (('path/to/some/file'), ($1)) WITH temp = ('path/to/temp') -- fully parenthesized
+IMPORT INTO foo CSV DATA (_, $1) WITH temp = _ -- literals removed
+IMPORT INTO foo CSV DATA ('_', $1) WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT INTO _ CSV DATA ('path/to/some/file', $1) WITH _ = 'path/to/temp' -- identifiers removed
+
+parse
+IMPORT TABLE a.foo (LIKE tab, col INT8 CONSTRAINT conname NULL NOT VISIBLE) CSV DATA ('placeholder')
+----
+IMPORT TABLE a.foo (LIKE tab, col INT8 CONSTRAINT conname NULL NOT VISIBLE) CSV DATA ('placeholder')
+IMPORT TABLE a.foo (LIKE tab, col INT8 CONSTRAINT conname NULL NOT VISIBLE) CSV DATA (('placeholder')) -- fully parenthesized
+IMPORT TABLE a.foo (LIKE tab, col INT8 CONSTRAINT conname NULL NOT VISIBLE) CSV DATA (_) -- literals removed
+IMPORT TABLE a.foo (LIKE tab, col INT8 CONSTRAINT conname NULL NOT VISIBLE) CSV DATA ('_') -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT TABLE _._ (LIKE _, _ INT8 CONSTRAINT _ NULL NOT VISIBLE) CSV DATA ('placeholder') -- identifiers removed
+
+parse
+IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'
+----
+IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'
+IMPORT PGDUMP ('nodelocal://0/foo/bar') WITH temp = ('path/to/temp') -- fully parenthesized
+IMPORT PGDUMP _ WITH temp = _ -- literals removed
+IMPORT PGDUMP '_' WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH _ = 'path/to/temp' -- identifiers removed
+
+parse
+EXPLAIN IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'
+----
+EXPLAIN IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'
+EXPLAIN IMPORT PGDUMP ('nodelocal://0/foo/bar') WITH temp = ('path/to/temp') -- fully parenthesized
+EXPLAIN IMPORT PGDUMP _ WITH temp = _ -- literals removed
+EXPLAIN IMPORT PGDUMP '_' WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPLAIN IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH _ = 'path/to/temp' -- identifiers removed
+
+parse
+IMPORT PGDUMP ('nodelocal://0/foo/bar') WITH temp = 'path/to/temp'
+----
+IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp' -- normalized!
+IMPORT PGDUMP ('nodelocal://0/foo/bar') WITH temp = ('path/to/temp') -- fully parenthesized
+IMPORT PGDUMP _ WITH temp = _ -- literals removed
+IMPORT PGDUMP '_' WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH _ = 'path/to/temp' -- identifiers removed
+
+parse
+EXPORT INTO CSV 'a' FROM TABLE a
+----
+EXPORT INTO CSV 'a' FROM TABLE a
+EXPORT INTO CSV ('a') FROM TABLE a -- fully parenthesized
+EXPORT INTO CSV _ FROM TABLE a -- literals removed
+EXPORT INTO CSV '_' FROM TABLE a -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPORT INTO CSV 'a' FROM TABLE _ -- identifiers removed
+
+parse
+EXPORT INTO CSV 'a' FROM SELECT * FROM a
+----
+EXPORT INTO CSV 'a' FROM SELECT * FROM a
+EXPORT INTO CSV ('a') FROM SELECT (*) FROM a -- fully parenthesized
+EXPORT INTO CSV _ FROM SELECT * FROM a -- literals removed
+EXPORT INTO CSV '_' FROM SELECT * FROM a -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPORT INTO CSV 'a' FROM SELECT * FROM _ -- identifiers removed
+
+parse
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM TABLE a
+----
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM TABLE a
+EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH delimiter = ('|') FROM TABLE a -- fully parenthesized
+EXPORT INTO CSV _ WITH delimiter = _ FROM TABLE a -- literals removed
+EXPORT INTO CSV '_' WITH delimiter = '_' FROM TABLE a -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH _ = '|' FROM TABLE _ -- identifiers removed
+
+parse
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10
+----
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10
+EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH delimiter = ('|') FROM SELECT (a), ((sum)((b))) FROM c WHERE ((d) = (1)) ORDER BY ((sum)((b))) DESC LIMIT (10) -- fully parenthesized
+EXPORT INTO CSV _ WITH delimiter = _ FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- literals removed
+EXPORT INTO CSV '_' WITH delimiter = '_' FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH _ = '|' FROM SELECT _, sum(_) FROM _ WHERE _ = 1 ORDER BY sum(_) DESC LIMIT 10 -- identifiers removed

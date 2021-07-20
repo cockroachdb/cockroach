@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,6 +55,13 @@ var (
 		"bulkio.backup.read_retry_delay",
 		"amount of time since the read-as-of time, per-prior attempt, to wait before making another attempt",
 		time.Second*5,
+		settings.NonNegativeDuration,
+	)
+	timeoutPerAttempt = settings.RegisterDurationSetting(
+		"bulkio.backup.read_timeout",
+		"amount of time after which a read attempt is considered timed out and is canceled. "+
+			"Hitting this timeout will cause the backup job to fail.",
+		time.Minute*5,
 		settings.NonNegativeDuration,
 	)
 )
@@ -175,7 +182,7 @@ func runBackupProcessor(
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
-	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(spec.DefaultURI, spec.User())
+	defaultConf, err := cloud.ExternalStorageConfFromURI(spec.DefaultURI, spec.User())
 	if err != nil {
 		return err
 	}
@@ -183,7 +190,7 @@ func runBackupProcessor(
 	storageConfByLocalityKV := make(map[string]*roachpb.ExternalStorage)
 	storeByLocalityKV := make(map[string]cloud.ExternalStorage)
 	for kv, uri := range spec.URIsByLocalityKV {
-		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, spec.User())
+		conf, err := cloud.ExternalStorageConfFromURI(uri, spec.User())
 		if err != nil {
 			return err
 		}
@@ -255,7 +262,11 @@ func runBackupProcessor(
 					Encryption:                          spec.Encryption,
 					TargetFileSize:                      targetFileSize,
 					ReturnSST:                           writeSSTsInProcessor,
-					OmitChecksum:                        true,
+				}
+				// If we're sending the SST back, don't encrypt it -- we'll encrypt it
+				// here instead.
+				if req.ReturnSST {
+					req.Encryption = nil
 				}
 
 				// If we're doing re-attempts but are not yet in the priority regime,
@@ -308,8 +319,19 @@ func runBackupProcessor(
 
 				log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s)",
 					span.span, span.attempts+1, header.UserPriority.String())
-				rawRes, pErr := kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, req)
-				if pErr != nil {
+				var rawRes roachpb.Response
+				var pErr *roachpb.Error
+				exportRequestErr := contextutil.RunWithTimeout(ctx,
+					fmt.Sprintf("ExportRequest for span %s", span.span),
+					timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
+						rawRes, pErr = kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(),
+							header, req)
+						if pErr != nil {
+							return pErr.GoError()
+						}
+						return nil
+					})
+				if exportRequestErr != nil {
 					if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
 						span.lastTried = timeutil.Now()
 						span.attempts++
@@ -318,7 +340,12 @@ func runBackupProcessor(
 						// the intents being hit.
 						continue
 					}
-					return errors.Wrapf(pErr.GoError(), "exporting %s", span.span)
+					// TimeoutError improves the opaque `context deadline exceeded` error
+					// message so use that instead.
+					if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
+						return errors.Wrapf(exportRequestErr, "timeout: %s", exportRequestErr.Error())
+					}
+					return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 				}
 				res := rawRes.(*roachpb.ExportResponse)
 
@@ -339,9 +366,13 @@ func runBackupProcessor(
 
 				files := make([]BackupManifest_File, 0)
 				for _, file := range res.Files {
-					if writeSSTsInProcessor {
+					if len(file.SST) > 0 {
+						// TODO(dt): remove this when we add small-file returning.
+						if !writeSSTsInProcessor {
+							return errors.New("ExportRequest returned unexpected file payload")
+						}
 						file.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(flowCtx.EvalCtx.NodeID.SQLInstanceID()))
-						if err := writeFile(ctx, file, defaultStore, storeByLocalityKV); err != nil {
+						if err := writeFile(ctx, file, defaultStore, storeByLocalityKV, spec.Encryption); err != nil {
 							return err
 						}
 					}
@@ -349,7 +380,6 @@ func runBackupProcessor(
 					f := BackupManifest_File{
 						Span:        file.Span,
 						Path:        file.Path,
-						Sha512:      file.Sha512,
 						EntryCounts: countRows(file.Exported, spec.PKIDs),
 						LocalityKV:  file.LocalityKV,
 					}
@@ -370,7 +400,11 @@ func runBackupProcessor(
 						return err
 					}
 					prog.ProgressDetails = *details
-					progCh <- prog
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case progCh <- prog:
+					}
 				} else {
 					// Update the partial progress as we still have a resumeSpan to
 					// process.
@@ -416,6 +450,7 @@ func writeFile(
 	file roachpb.ExportResponse_File,
 	defaultStore cloud.ExternalStorage,
 	storeByLocalityKV map[string]cloud.ExternalStorage,
+	enc *roachpb.FileEncryptionOptions,
 ) error {
 	if defaultStore == nil {
 		return errors.New("no default store created when writing SST")
@@ -429,7 +464,15 @@ func writeFile(
 		exportStore = localitySpecificStore
 	}
 
-	if err := exportStore.WriteFile(ctx, file.Path, bytes.NewReader(data)); err != nil {
+	if enc != nil {
+		var err error
+		data, err = storageccl.EncryptFile(data, enc.Key)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := cloud.WriteFile(ctx, exportStore, file.Path, bytes.NewReader(data)); err != nil {
 		log.VEventf(ctx, 1, "failed to put file: %+v", err)
 		return errors.Wrap(err, "writing SST")
 	}

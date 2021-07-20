@@ -75,7 +75,7 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaCommitWaitRates = metric.Metadata{
+	metaCommitWaitCount = metric.Metadata{
 		Name: "txn.commit_waits",
 		Help: "Number of KV transactions that had to commit-wait on commit " +
 			"in order to ensure linearizability. This generally happens to " +
@@ -235,7 +235,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Commits:                       metric.NewCounter(metaCommitsRates),
 		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
 		ParallelCommits:               metric.NewCounter(metaParallelCommitsRates),
-		CommitWaits:                   metric.NewCounter(metaCommitWaitRates),
+		CommitWaits:                   metric.NewCounter(metaCommitWaitCount),
 		RefreshSuccess:                metric.NewCounter(metaRefreshSuccess),
 		RefreshFail:                   metric.NewCounter(metaRefreshFail),
 		RefreshFailWithCondensedSpans: metric.NewCounter(metaRefreshFailWithCondensedSpans),

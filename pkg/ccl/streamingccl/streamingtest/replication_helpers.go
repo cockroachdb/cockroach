@@ -186,7 +186,7 @@ SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
 	require.NoError(t, err)
 
 	// Start tenant server
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := serverutils.TestTenantID()
 	_, tenantConn := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
 
 	// Sink to read data from.

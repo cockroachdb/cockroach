@@ -69,3 +69,16 @@ CREATE VIEW with_views.v AS SELECT x FROM with_views.t
 
 statement error pq: could not convert database "with_views" into schema because "with_views.public.t" has dependent objects \[with_views.public.v\]
 ALTER DATABASE with_views CONVERT TO SCHEMA WITH PARENT pgdatabase
+
+# Ensure only valid privileges are copied over to the schema.
+statement ok
+CREATE DATABASE to_schema;
+GRANT CREATE, DROP, SELECT, INSERT, DELETE, UPDATE ON DATABASE to_schema TO testuser;
+CREATE DATABASE parent2;
+
+# No privilege validation error should occur.
+statement ok
+ALTER DATABASE to_schema CONVERT TO SCHEMA WITH PARENT parent2;
+
+statement ok
+GRANT USAGE ON SCHEMA parent2.to_schema TO testuser;

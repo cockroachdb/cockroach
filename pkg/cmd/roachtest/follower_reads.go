@@ -403,7 +403,10 @@ func verifySQLLatency(
 	targetLatency time.Duration,
 ) {
 	// Query needed information over the timespan of the query.
-	adminURLs := c.ExternalAdminUIAddr(ctx, adminNode)
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, adminNode)
+	if err != nil {
+		t.Fatal(err)
+	}
 	url := "http://" + adminURLs[0] + "/ts/query"
 	request := tspb.TimeSeriesQueryRequest{
 		StartNanos: start.UnixNano(),
@@ -446,7 +449,11 @@ func getFollowerReadCounts(ctx context.Context, c *cluster) ([]int, error) {
 	followerReadCounts := make([]int, c.spec.NodeCount)
 	getFollowerReadCount := func(ctx context.Context, node int) func() error {
 		return func() error {
-			url := "http://" + c.ExternalAdminUIAddr(ctx, c.Node(node))[0] + "/_status/vars"
+			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(node))
+			if err != nil {
+				return err
+			}
+			url := "http://" + adminUIAddrs[0] + "/_status/vars"
 			resp, err := httputil.Get(ctx, url)
 			if err != nil {
 				return err
@@ -481,8 +488,11 @@ func getFollowerReadCounts(ctx context.Context, c *cluster) ([]int, error) {
 	return followerReadCounts, nil
 }
 
-var prometheusMetricStringPattern = "(?P<metric>\\w+)\\{" +
-	"(?P<labelvalues>(\\w+=\".*\",)*(\\w+=\".*\")?)\\}\\s+(?P<value>.*)"
+// parse rows like:
+// sql_select_count  1.652807e+06
+// follower_reads_success_count{store="1"} 27606
+var prometheusMetricStringPattern = `^(?P<metric>\w+)(?:\{` +
+	`(?P<labelvalues>(\w+=\".*\",)*(\w+=\".*\")?)\})?\s+(?P<value>.*)$`
 var promethusMetricStringRE = regexp.MustCompile(prometheusMetricStringPattern)
 
 type prometheusMetric struct {

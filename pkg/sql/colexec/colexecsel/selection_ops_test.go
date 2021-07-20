@@ -13,18 +13,20 @@ package colexecsel
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -39,8 +41,8 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, colexectestutils.Tuples{{0}, {1}}, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 		return &selLTInt64Int64ConstOp{
 			selConstOpBase: selConstOpBase{
-				OneInputNode: colexecop.NewOneInputNode(input[0]),
-				colIdx:       0,
+				OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
+				colIdx:         0,
 			},
 			constArg: 2,
 		}, nil
@@ -62,9 +64,9 @@ func TestSelLTInt64Int64(t *testing.T) {
 	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, colexectestutils.Tuples{{0, 1}}, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 		return &selLTInt64Int64Op{
 			selOpBase: selOpBase{
-				OneInputNode: colexecop.NewOneInputNode(input[0]),
-				col1Idx:      0,
-				col2Idx:      1,
+				OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
+				col1Idx:        0,
+				col2Idx:        1,
 			},
 		}, nil
 	})
@@ -88,8 +90,8 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	}
 	expected := &selLTInt64Int64ConstOp{
 		selConstOpBase: selConstOpBase{
-			OneInputNode: colexecop.NewOneInputNode(input),
-			colIdx:       colIdx,
+			OneInputHelper: colexecop.MakeOneInputHelper(input),
+			colIdx:         colIdx,
 		},
 		constArg: constVal,
 	}
@@ -116,8 +118,8 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	}
 	expected := &selLTInt16Int64ConstOp{
 		selConstOpBase: selConstOpBase{
-			OneInputNode: colexecop.NewOneInputNode(input),
-			colIdx:       colIdx,
+			OneInputHelper: colexecop.MakeOneInputHelper(input),
+			colIdx:         colIdx,
 		},
 		constArg: constVal,
 	}
@@ -145,9 +147,9 @@ func TestGetSelectionOperator(t *testing.T) {
 	}
 	expected := &selGEInt16Int16Op{
 		selOpBase: selOpBase{
-			OneInputNode: colexecop.NewOneInputNode(input),
-			col1Idx:      col1Idx,
-			col2Idx:      col2Idx,
+			OneInputHelper: colexecop.MakeOneInputHelper(input),
+			col1Idx:        col1Idx,
+			col2Idx:        col2Idx,
 		},
 	}
 	if !reflect.DeepEqual(op, expected) {
@@ -155,122 +157,90 @@ func TestGetSelectionOperator(t *testing.T) {
 	}
 }
 
-func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-
-	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-	col := batch.ColVec(0).Int64()
-	for i := 0; i < coldata.BatchSize(); i++ {
-		if float64(i) < float64(coldata.BatchSize())*selectivity {
-			col[i] = -1
-		} else {
-			col[i] = 1
-		}
-	}
-	if hasNulls {
-		for i := 0; i < coldata.BatchSize(); i++ {
-			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(i)
+func runSelOpBenchmarks(
+	b *testing.B,
+	makeSelOp func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error),
+	inputTypes []*types.T,
+) {
+	rng, _ := randutil.NewPseudoRand()
+	for _, useSel := range []bool{true, false} {
+		for _, hasNulls := range []bool{true, false} {
+			batch := testAllocator.NewMemBatchWithMaxCapacity(inputTypes)
+			nullProb := 0.0
+			if hasNulls {
+				nullProb = nullProbability
 			}
-		}
-	}
-	batch.SetLength(coldata.BatchSize())
-	if useSelectionVector {
-		batch.SetSelection(true)
-		sel := batch.Selection()
-		for i := 0; i < coldata.BatchSize(); i++ {
-			sel[i] = i
-		}
-	}
-	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-	source.Init()
+			for _, colVec := range batch.ColVecs() {
+				coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
+					Rand:             rng,
+					Vec:              colVec,
+					N:                coldata.BatchSize(),
+					NullProbability:  nullProb,
+					BytesFixedLength: 8,
+				})
+			}
+			batch.SetLength(coldata.BatchSize())
+			if useSel {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				for i := 0; i < coldata.BatchSize(); i++ {
+					sel[i] = i
+				}
+			}
+			source := colexecop.NewRepeatableBatchSource(testAllocator, batch, inputTypes)
+			op, err := makeSelOp(source)
+			require.NoError(b, err)
+			op.Init(context.Background())
 
-	plusOp := &selLTInt64Int64ConstOp{
-		selConstOpBase: selConstOpBase{
-			OneInputNode: colexecop.NewOneInputNode(source),
-			colIdx:       0,
-		},
-		constArg: 0,
-	}
-	plusOp.Init()
-
-	b.SetBytes(int64(8 * coldata.BatchSize()))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		plusOp.Next(ctx)
+			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
+				b.SetBytes(int64(len(inputTypes) * 8 * coldata.BatchSize()))
+				for i := 0; i < b.N; i++ {
+					op.Next()
+				}
+			})
+		}
 	}
 }
 
 func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
-	for _, useSel := range []bool{true, false} {
-		for _, hasNulls := range []bool{true, false} {
-			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
-				benchmarkSelLTInt64Int64ConstOp(b, useSel, hasNulls)
-			})
-		}
-	}
-}
-
-func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls bool) {
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-
-	typs := []*types.T{types.Int, types.Int}
-	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-	col1 := batch.ColVec(0).Int64()
-	col2 := batch.ColVec(1).Int64()
-	for i := 0; i < coldata.BatchSize(); i++ {
-		if float64(i) < float64(coldata.BatchSize())*selectivity {
-			col1[i], col2[i] = -1, 1
-		} else {
-			col1[i], col2[i] = 1, -1
-		}
-	}
-	if hasNulls {
-		for i := 0; i < coldata.BatchSize(); i++ {
-			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(i)
-			}
-			if rand.Float64() < nullProbability {
-				batch.ColVec(1).Nulls().SetNull(i)
-			}
-		}
-	}
-	batch.SetLength(coldata.BatchSize())
-	if useSelectionVector {
-		batch.SetSelection(true)
-		sel := batch.Selection()
-		for i := 0; i < coldata.BatchSize(); i++ {
-			sel[i] = i
-		}
-	}
-	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-	source.Init()
-
-	plusOp := &selLTInt64Int64Op{
-		selOpBase: selOpBase{
-			OneInputNode: colexecop.NewOneInputNode(source),
-			col1Idx:      0,
-			col2Idx:      1,
+	inputTypes := []*types.T{types.Int}
+	runSelOpBenchmarks(
+		b,
+		func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
+			constArg := tree.DInt(0)
+			return GetSelectionConstOperator(
+				tree.LT, source, inputTypes, 0, /* colIdx */
+				&constArg, nil /* evalCtx */, nil, /* cmpExpr */
+			)
 		},
-	}
-	plusOp.Init()
-
-	b.SetBytes(int64(8 * coldata.BatchSize() * 2))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		plusOp.Next(ctx)
-	}
+		inputTypes,
+	)
 }
 
 func BenchmarkSelLTInt64Int64Op(b *testing.B) {
-	for _, useSel := range []bool{true, false} {
-		for _, hasNulls := range []bool{true, false} {
-			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
-				benchmarkSelLTInt64Int64Op(b, useSel, hasNulls)
-			})
-		}
-	}
+	inputTypes := []*types.T{types.Int, types.Int}
+	runSelOpBenchmarks(
+		b,
+		func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
+			return GetSelectionOperator(
+				tree.LT, source, inputTypes, 0 /* col1Idx */, 1, /* col2Idx */
+				nil /* evalCtx */, nil, /* cmpExpr */
+			)
+		},
+		inputTypes,
+	)
+}
+
+func BenchmarkSelLTBytesBytesOp(b *testing.B) {
+	inputTypes := []*types.T{types.Bytes, types.Bytes}
+	runSelOpBenchmarks(
+		b,
+		func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
+			return GetSelectionOperator(
+				tree.LT, source, inputTypes, 0 /* col1Idx */, 1, /* col2Idx */
+				nil /* evalCtx */, nil, /* cmpExpr */
+			)
+		},
+		inputTypes,
+	)
 }

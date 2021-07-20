@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -458,7 +458,7 @@ func (w *worker) generatePlaceholders(
 							if c.isNullable && w.config.nullPct > 0 {
 								nullPct = 100 / w.config.nullPct
 							}
-							d := rowenc.RandDatumWithNullChance(w.rng, c.dataType, nullPct)
+							d := randgen.RandDatumWithNullChance(w.rng, c.dataType, nullPct)
 							if i, ok := d.(*tree.DInt); ok && c.intRange > 0 {
 								j := int64(*i) % int64(c.intRange/2)
 								d = tree.NewDInt(tree.DInt(j))

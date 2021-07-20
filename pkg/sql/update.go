@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -58,7 +57,7 @@ type updateRun struct {
 
 	// computedCols are the columns that need to be (re-)computed as
 	// the result of updating some of the columns in updateCols.
-	computedCols []descpb.ColumnDescriptor
+	computedCols []catalog.Column
 	// computeExprs are the expressions to evaluate to re-compute the
 	// columns in computedCols.
 	computeExprs []tree.TypedExpr
@@ -252,7 +251,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// iVarContainerForComputedCols does this.
 		copy(u.run.iVarContainerForComputedCols.CurSourceRow, oldValues)
 		for i := range u.run.tu.ru.UpdateCols {
-			id := u.run.tu.ru.UpdateCols[i].ID
+			id := u.run.tu.ru.UpdateCols[i].GetID()
 			idx := u.run.tu.ru.FetchColIDtoRowIndex.GetDefault(id)
 			u.run.iVarContainerForComputedCols.CurSourceRow[idx] = u.run.
 				updateValues[i]
@@ -266,9 +265,10 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 			d, err := u.run.computeExprs[i].Eval(params.EvalContext())
 			if err != nil {
 				params.EvalContext().IVarContainer = nil
-				return errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&u.run.computedCols[i].Name)))
+				name := u.run.computedCols[i].GetName()
+				return errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&name)))
 			}
-			idx := u.run.updateColsIdx.GetDefault(u.run.computedCols[i].ID)
+			idx := u.run.updateColsIdx.GetDefault(u.run.computedCols[i].GetID())
 			u.run.updateValues[idx] = d
 		}
 		params.EvalContext().PopIVarContainer()
@@ -391,7 +391,7 @@ type sourceSlot interface {
 }
 
 type scalarSlot struct {
-	column      descpb.ColumnDescriptor
+	column      catalog.Column
 	sourceIndex int
 }
 
@@ -402,7 +402,7 @@ func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
 func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 	renderedResult := row[ss.sourceIndex]
 	typ := renderedResult.ResolvedType()
-	return colinfo.CheckDatumTypeFitsColumnType(&ss.column, typ)
+	return colinfo.CheckDatumTypeFitsColumnType(ss.column, typ)
 }
 
 // enforceLocalColumnConstraints asserts the column constraints that
@@ -417,13 +417,12 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 //
 // The row buffer is modified in-place with the result of the
 // checks.
-func enforceLocalColumnConstraints(row tree.Datums, cols []descpb.ColumnDescriptor) error {
-	for i := range cols {
-		col := &cols[i]
-		if !col.Nullable && row[i] == tree.DNull {
-			return sqlerrors.NewNonNullViolationError(col.Name)
+func enforceLocalColumnConstraints(row tree.Datums, cols []catalog.Column) error {
+	for i, col := range cols {
+		if !col.IsNullable() && row[i] == tree.DNull {
+			return sqlerrors.NewNonNullViolationError(col.GetName())
 		}
-		outVal, err := tree.AdjustValueToType(col.Type, row[i])
+		outVal, err := tree.AdjustValueToType(col.GetType(), row[i])
 		if err != nil {
 			return err
 		}

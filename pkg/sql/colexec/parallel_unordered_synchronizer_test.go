@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -50,7 +52,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		numBatches = rng.Intn(maxBatches) + 1
 	)
 
-	inputs := make([]SynchronizerInput, numInputs)
+	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
 	for i := range inputs {
 		source := colexecop.NewRepeatableBatchSource(
 			testAllocator,
@@ -58,10 +60,10 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 			typs,
 		)
 		source.ResetBatchesToReturn(numBatches)
-		inputs[i].Op = source
+		inputs[i].Root = source
 		inputIdx := i
 		inputs[i].MetadataSources = []colexecop.MetadataSource{
-			colexectestutils.CallbackMetadataSource{DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
+			colexectestutils.CallbackMetadataSource{DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 				return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d test-induced metadata", inputIdx)}}
 			}},
 		}
@@ -71,7 +73,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 	var wg sync.WaitGroup
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
-	s.Init()
+	s.Init(ctx)
 
 	type synchronizerTerminationScenario int
 	const (
@@ -113,12 +115,12 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 				// Call DrainMeta before the input is finished. Intentionally allow
 				// for Next to be called even though it's not technically supported to
 				// ensure that a zero-length batch is returned.
-				meta := s.DrainMeta(ctx)
+				meta := s.DrainMeta()
 				require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
 				expectZeroBatch = true
 			}
 			var b coldata.Batch
-			if err := colexecerror.CatchVectorizedRuntimeError(func() { b = s.Next(ctx) }); err != nil {
+			if err := colexecerror.CatchVectorizedRuntimeError(func() { b = s.Next() }); err != nil {
 				if terminationScenario == synchronizerContextCanceled {
 					require.True(t, testutils.IsError(err, "context canceled"), err)
 					break
@@ -129,7 +131,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 			if b.Length() == 0 {
 				if terminationScenario == synchronizerGracefulTermination {
 					// Successful run, check that all inputs have returned metadata.
-					meta := s.DrainMeta(ctx)
+					meta := s.DrainMeta()
 					require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
 				}
 				break
@@ -153,8 +155,8 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	const expectedErr = "first input error"
 	ctx := context.Background()
 
-	inputs := make([]SynchronizerInput, 6)
-	inputs[0].Op = &colexecop.CallbackOperator{NextCb: func(context.Context) coldata.Batch {
+	inputs := make([]colexecargs.OpWithMetaInfo, 6)
+	inputs[0].Root = &colexecop.CallbackOperator{NextCb: func() coldata.Batch {
 		colexecerror.InternalError(errors.New(expectedErr))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
@@ -163,8 +165,8 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		acc := testMemMonitor.MakeBoundAccount()
 		defer acc.Close(ctx)
 		func(allocator *colmem.Allocator) {
-			inputs[i].Op = &colexecop.CallbackOperator{
-				NextCb: func(ctx context.Context) coldata.Batch {
+			inputs[i].Root = &colexecop.CallbackOperator{
+				NextCb: func() coldata.Batch {
 					// All inputs that do not encounter an error will continue to return
 					// batches.
 					b := allocator.NewMemBatchWithMaxCapacity([]*types.T{types.Int})
@@ -181,18 +183,62 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 
 	var wg sync.WaitGroup
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
-	s.Init()
+	s.Init(ctx)
 	for {
-		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) }); err != nil {
+		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next() }); err != nil {
 			require.True(t, testutils.IsError(err, expectedErr), err)
 			break
 		}
 		// Loop until we get an error.
 	}
 	// The caller must call DrainMeta on error.
-	require.Zero(t, len(s.DrainMeta(ctx)))
+	require.Zero(t, len(s.DrainMeta()))
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
+}
+
+// TestParallelUnorderedSyncClosesInputs verifies that the parallel unordered
+// synchronizer closes the input trees if it encounters a panic during the
+// initialization.
+func TestParallelUnorderedSyncClosesInputs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const injectedPanicMsg = "injected panic"
+	inputs := make([]colexecargs.OpWithMetaInfo, 2)
+
+	// Create the first input that is responsible for tracking whether the
+	// closure occurred as expected.
+	closed := false
+	firstInput := &colexecop.CallbackOperator{
+		CloseCb: func() error {
+			closed = true
+			return nil
+		},
+	}
+	inputs[0].Root = firstInput
+	inputs[0].ToClose = append(inputs[0].ToClose, firstInput)
+
+	// Create the second input that injects a panic into Init.
+	inputs[1].Root = &colexecop.CallbackOperator{
+		InitCb: func(context.Context) {
+			colexecerror.InternalError(errors.New(injectedPanicMsg))
+		},
+	}
+
+	// Create and initialize (but don't run) the synchronizer.
+	var wg sync.WaitGroup
+	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	err := colexecerror.CatchVectorizedRuntimeError(func() { s.Init(ctx) })
+	require.NotNil(t, err)
+	require.True(t, strings.Contains(err.Error(), injectedPanicMsg))
+
+	// In the production setting, the user of the synchronizer is still expected
+	// to close it, even if a panic is encountered in Init, so we do the same
+	// thing here and verify that the first input is properly closed.
+	require.NoError(t, s.Close())
+	require.True(t, closed)
 }
 
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
@@ -200,20 +246,20 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	const numInputs = 6
 
 	typs := []*types.T{types.Int}
-	inputs := make([]SynchronizerInput, numInputs)
+	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
 	for i := range inputs {
 		batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 		batch.SetLength(coldata.BatchSize())
-		inputs[i].Op = colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
+		inputs[i].Root = colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
-	s.Init()
+	s.Init(ctx)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		s.Next(ctx)
+		s.Next()
 	}
 	b.StopTimer()
 	cancelFn()

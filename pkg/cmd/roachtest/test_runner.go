@@ -11,6 +11,7 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"fmt"
 	"html"
@@ -29,7 +30,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -40,6 +43,8 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
 )
+
+var errTestsFailed = fmt.Errorf("some tests failed")
 
 // testRunner runs tests.
 type testRunner struct {
@@ -137,6 +142,10 @@ func (c clustersOpt) validate() error {
 	return nil
 }
 
+type testOpts struct {
+	versionsBinaryOverride map[string]string
+}
+
 // Run runs tests.
 //
 // Args:
@@ -154,13 +163,21 @@ func (r *testRunner) Run(
 	count int,
 	parallelism int,
 	clustersOpt clustersOpt,
-	artifactsDir string,
+	topt testOpts,
 	lopt loggingOpt,
 ) error {
 	// Validate options.
 	if len(tests) == 0 {
 		return fmt.Errorf("no test matched filters")
 	}
+
+	hasDevLicense := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "") != ""
+	for _, t := range tests {
+		if t.RequiresLicense && !hasDevLicense {
+			return fmt.Errorf("test %q requires an enterprise license, set COCKROACH_DEV_LICENSE", t.Name)
+		}
+	}
+
 	if err := clustersOpt.validate(); err != nil {
 		return err
 	}
@@ -279,10 +296,11 @@ func (r *testRunner) Run(
 				clustersOpt.keepClustersOnTestFailure,
 				lopt.artifactsDir, lopt.runnerLogPath, lopt.tee, lopt.stdout,
 				allocateCluster,
+				topt,
 				l,
 			); err != nil {
 				// A worker returned an error. Let's shut down.
-				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %+v", i, err)
+				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %v", i, err)
 				shout(ctx, l, lopt.stdout, msg)
 				errs.AddErr(err)
 				// Stop the stopper. This will cause all workers to not pick up more
@@ -314,7 +332,7 @@ func (r *testRunner) Run(
 	passFailLine := r.generateReport()
 	shout(ctx, l, lopt.stdout, passFailLine)
 	if len(r.status.fail) > 0 {
-		return fmt.Errorf("some tests failed")
+		return errTestsFailed
 	}
 	return nil
 }
@@ -360,6 +378,7 @@ func (r *testRunner) runWorker(
 	teeOpt teeOptType,
 	stdout io.Writer,
 	allocateCluster clusterAllocatorFn,
+	topt testOpts,
 	l *logger,
 ) error {
 	ctx = logtags.AddTag(ctx, name, nil /* value */)
@@ -454,11 +473,12 @@ func (r *testRunner) runWorker(
 			return err
 		}
 		t := &test{
-			spec:          &testToRun.spec,
-			buildVersion:  r.buildVersion,
-			artifactsDir:  artifactsDir,
-			artifactsSpec: artifactsSpec,
-			l:             testL,
+			spec:                   &testToRun.spec,
+			buildVersion:           r.buildVersion,
+			artifactsDir:           artifactsDir,
+			artifactsSpec:          artifactsSpec,
+			l:                      testL,
+			versionsBinaryOverride: topt.versionsBinaryOverride,
 		}
 		// Tell the cluster that, from now on, it will be run "on behalf of this
 		// test".
@@ -637,7 +657,12 @@ func (r *testRunner) runTest(
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
 			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 			if issues.DefaultOptionsFromEnv().CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
-				owner := roachtestOwners[t.spec.Owner]
+				teams, err := team.DefaultLoadTeams()
+				if err != nil {
+					t.Fatalf("could not load teams: %v", err)
+				}
+				alias := ownerToAlias(t.spec.Owner)
+				owner := teams[ownerToAlias(t.spec.Owner)]
 
 				branch := "<unknown branch>"
 				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
@@ -657,7 +682,7 @@ func (r *testRunner) runTest(
 
 				req := issues.PostRequest{
 					AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
-					Mention:         owner.Mention,
+					Mention:         []string{"@" + string(alias)},
 					ProjectColumnID: owner.TriageColumnID,
 					PackageName:     "roachtest",
 					TestName:        t.Name(),
@@ -685,6 +710,14 @@ caffeinate ./roachstress.sh %s
 
 		if teamCity {
 			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), t.Name())
+
+			// Zip the artifacts. This improves the TeamCity UX where we can navigate
+			// through zip files just fine, but we can't download subtrees of the
+			// artifacts storage. By zipping we get this capability as we can just
+			// download the zip file for the failing test instead.
+			if err := zipArtifacts(t.artifactsDir); err != nil {
+				l.Printf("unable to zip artifacts: %s", err)
+			}
 
 			if t.artifactsSpec != "" {
 				// Tell TeamCity to collect this test's artifacts now. The TC job
@@ -898,6 +931,9 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logg
 	if err := c.FetchDiskUsage(ctx); err != nil {
 		l.Printf("failed to fetch disk uage summary: %s", err)
 	}
+	if err := c.FetchTimeseriesData(ctx); err != nil {
+		l.Printf("failed to fetch timeseries data: %s", err)
+	}
 	if err := c.FetchDebugZip(ctx); err != nil {
 		l.Printf("failed to collect zip: %s", err)
 	}
@@ -1082,17 +1118,21 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 				clusterReused = "no"
 			}
 		}
-		var clusterName string
+		var clusterName, clusterAdminUIAddr string
 		if w.Cluster() != nil {
 			clusterName = w.Cluster().name
+			adminUIAddrs, err := w.Cluster().ExternalAdminUIAddr(req.Context(), w.Cluster().Node(1))
+			if err == nil {
+				clusterAdminUIAddr = adminUIAddrs[0]
+			}
 		}
 		t := w.Test()
 		testStatus := "N/A"
 		if t != nil {
 			testStatus = t.GetStatus()
 		}
-		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
-			w.name, w.Status(), testName, clusterName, clusterReused, testStatus)
+		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='//%s'>%s</a></td><td>%s</td><td>%s</td></tr>\n",
+			w.name, w.Status(), testName, clusterAdminUIAddr, clusterName, clusterReused, testStatus)
 	}
 	fmt.Fprintf(wr, "</table>")
 
@@ -1184,8 +1224,9 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 	// (see runVersionUpgrade). The same is true for adding a new key to this
 	// map.
 	verMap := map[string]string{
-		"21.1": "20.2.6",
-		"20.2": "20.1.13",
+		"21.2": "21.1.1",
+		"21.1": "20.2.10",
+		"20.2": "20.1.16",
 		"20.1": "19.2.11",
 		"19.2": "19.1.11",
 		"19.1": "2.1.9",
@@ -1221,4 +1262,78 @@ func (we *workerErrors) Err() error {
 	// TODO(andrei): Maybe we should do something other than return the first
 	// error...
 	return we.mu.errs[0]
+}
+
+func zipArtifacts(path string) error {
+	f, err := os.Create(filepath.Join(path, "artifacts.zip"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	z := zip.NewWriter(f)
+	rel := func(targetpath string) string {
+		relpath, err := filepath.Rel(path, targetpath)
+		if err != nil {
+			return targetpath
+		}
+		return relpath
+	}
+
+	walk := func(visitor func(string, os.FileInfo) error) error {
+		return filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && strings.HasSuffix(path, ".zip") {
+				// Skip any top-level zip files, which notably includes itself
+				// and, if present, the debug.zip.
+				return nil
+			}
+			return visitor(path, info)
+		})
+	}
+
+	// Zip all of the files.
+	if err := walk(func(path string, info os.FileInfo) error {
+		if info.IsDir() {
+			return nil
+		}
+		w, err := z.Create(rel(path))
+		if err != nil {
+			return err
+		}
+		r, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		if _, err := io.Copy(w, r); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := z.Close(); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+
+	// Now that the zip file is there, remove all of the files that went into it.
+	// Note that 'walk' skips the debug.zip and our newly written zip file.
+	root := path
+	return walk(func(path string, info os.FileInfo) error {
+		if path == root {
+			return nil
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	})
 }

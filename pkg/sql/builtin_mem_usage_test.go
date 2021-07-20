@@ -29,7 +29,7 @@ import (
 // initial database connection, but small enough to overflow easily. It's set
 // to be comfortably large enough that the server can start up with a bit of
 // extra space to overflow.
-const lowMemoryBudget = 500000
+const lowMemoryBudget = 800000
 
 // rowSize is the length of the string present in each row of the table created
 // by createTableWithLongStrings.
@@ -86,6 +86,7 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 		}
 
 		_, err := sqlDB.Exec(statement)
+
 		if pqErr := (*pq.Error)(nil); !errors.As(err, &pqErr) || pgcode.MakeCode(string(pqErr.Code)) != pgcode.OutOfMemory {
 			t.Fatalf("Expected \"%s\" to consume too much memory", statement)
 		}

@@ -77,74 +77,98 @@ func AppearsEncrypted(text []byte) bool {
 	return bytes.HasPrefix(text, encryptionPreamble)
 }
 
+type encWriter struct {
+	gcm        cipher.AEAD
+	iv         []byte
+	ciphertext io.Writer
+	buf        []byte
+	bufPos     int
+}
+
 // EncryptFile encrypts a file with the supplied key and a randomly chosen IV
 // which is prepended in a header on the returned ciphertext.
 func EncryptFile(plaintext, key []byte) ([]byte, error) {
-	return encryptFile(plaintext, key, false)
+	b := &bytes.Buffer{}
+	w, err := EncryptingWriter(b, key)
+	if err != nil {
+		return nil, err
+	}
+	_, err = io.Copy(w, bytes.NewReader(plaintext))
+	if err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
 }
 
-// EncryptFileChunked is like EncryptFile but chunks the file into fixed-size
-// messages encrypted individually, allowing streaming (by-chunk) decryption.
-func EncryptFileChunked(plaintext, key []byte) ([]byte, error) {
-	return encryptFile(plaintext, key, true)
-}
-
-func encryptFile(plaintext, key []byte, chunked bool) ([]byte, error) {
+// EncryptingWriter returns a writer that wraps an underlying sink writer but
+// which encrypts bytes written to it before flushing them to the wrapped sink.
+func EncryptingWriter(ciphertext io.Writer, key []byte) (io.WriteCloser, error) {
 	gcm, err := aesgcm(key)
 	if err != nil {
 		return nil, err
 	}
 
-	// Allocate our output buffer: preamble + 1B version + iv, plus additional
-	// pre-allocated capacity for the ciphertext.
-
-	numChunks := 1
-	var version byte
-	if chunked {
-		version = encryptionVersionChunk
-		numChunks = (len(plaintext) / encryptionChunkSizeV2) + 1
-	} else {
-		version = encryptionVersionIVPrefix
-	}
-
-	ciphertext := make([]byte, headerSize, headerSize+len(plaintext)+numChunks*gcm.Overhead())
-
-	// Write our header (preamble+version+IV) to the ciphertext buffer.
-	copy(ciphertext, encryptionPreamble)
-	ciphertext[len(encryptionPreamble)] = version
+	header := make([]byte, len(encryptionPreamble)+1+nonceSize)
+	copy(header, encryptionPreamble)
+	header[len(encryptionPreamble)] = encryptionVersionChunk
 
 	// Pick a unique IV for this file and write it in the header.
 	ivStart := len(encryptionPreamble) + 1
-	if _, err := crypto_rand.Read(ciphertext[ivStart : ivStart+nonceSize]); err != nil {
+	iv := make([]byte, nonceSize)
+	if _, err := crypto_rand.Read(iv); err != nil {
 		return nil, err
 	}
-	// Make a copy of the IV to increment for each chunk.
-	iv := append([]byte{}, ciphertext[ivStart:ivStart+nonceSize]...)
+	copy(header[ivStart:], iv)
 
-	if !chunked {
-		return gcm.Seal(ciphertext, iv, plaintext, nil), nil
+	// Write our header (preamble+version+IV) to the ciphertext sink.
+	if n, err := ciphertext.Write(header); err != nil {
+		return nil, err
+	} else if n != len(header) {
+		return nil, io.ErrShortWrite
 	}
 
-	for {
-		chunk := plaintext
-		if len(chunk) > encryptionChunkSizeV2 {
-			chunk = plaintext[:encryptionChunkSizeV2]
-		}
-		plaintext = plaintext[len(chunk):]
-		ciphertext = gcm.Seal(ciphertext, iv, chunk, nil)
+	return &encWriter{gcm: gcm, iv: iv, ciphertext: ciphertext, buf: make([]byte, encryptionChunkSizeV2+tagSize)}, nil
+}
 
-		// Unless we sealed less than a full chunk, continue to seal another chunk.
-		// Note: there may not be any plaintext left to seal if the chunk we just
-		// finished was the end of it, but sealing the (empty) remainder in a final
-		// chunk maintains the invariant that a chunked file always ends in a sealed
-		// chunk of less than chunk size, thus making tuncation, even along a chunk
-		// boundary, detectable.
-		if len(chunk) < encryptionChunkSizeV2 {
-			break
+func (e *encWriter) Write(p []byte) (int, error) {
+	var wrote int
+	for wrote < len(p) {
+		copied := copy(e.buf[e.bufPos:encryptionChunkSizeV2], p[wrote:])
+		e.bufPos += copied
+		if e.bufPos == encryptionChunkSizeV2 {
+			if err := e.flush(); err != nil {
+				return wrote, err
+			}
 		}
-		binary.BigEndian.PutUint64(iv[4:], binary.BigEndian.Uint64(iv[4:])+1)
+		wrote += copied
 	}
-	return ciphertext, nil
+	return wrote, nil
+}
+
+func (e *encWriter) Close() error {
+	// Note: there may not be any plaintext left to seal if the chunk we just
+	// finished was the end of it, but sealing the (empty) remainder in a final
+	// chunk maintains the invariant that a chunked file always ends in a sealed
+	// chunk of less than chunk size, thus making tuncation, even along a chunk
+	// boundary, detectable.
+	return e.flush()
+}
+
+func (e *encWriter) flush() error {
+	e.buf = e.gcm.Seal(e.buf[:0], e.iv, e.buf[:e.bufPos], nil)
+	for flushed := 0; flushed < len(e.buf); {
+		n, err := e.ciphertext.Write(e.buf[flushed:])
+		flushed += n
+		if err != nil {
+			return err
+		}
+	}
+	binary.BigEndian.PutUint64(e.iv[4:], binary.BigEndian.Uint64(e.iv[4:])+1)
+	e.bufPos = 0
+	return nil
 }
 
 // DecryptFile decrypts a file encrypted by EncryptFile, using the supplied key

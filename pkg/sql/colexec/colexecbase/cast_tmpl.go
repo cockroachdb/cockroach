@@ -83,10 +83,10 @@ func GetCastOperator(
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{
-			OneInputCloserHelper: colexecop.MakeOneInputCloserHelper(input),
-			allocator:            allocator,
-			colIdx:               colIdx,
-			outputIdx:            resultIdx,
+			OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+			allocator:                allocator,
+			colIdx:                   colIdx,
+			outputIdx:                resultIdx,
 		}, nil
 	}
 	leftType, rightType := fromType, toType
@@ -103,11 +103,11 @@ func GetCastOperator(
 				// {{range .RightWidths}}
 				case _RIGHT_TYPE_WIDTH:
 					return &cast_NAMEOp{
-						OneInputCloserHelper: colexecop.MakeOneInputCloserHelper(input),
-						allocator:            allocator,
-						colIdx:               colIdx,
-						outputIdx:            resultIdx,
-						toType:               toType,
+						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+						allocator:                allocator,
+						colIdx:                   colIdx,
+						outputIdx:                resultIdx,
+						toType:                   toType,
 					}, nil
 					// {{end}}
 				}
@@ -120,8 +120,37 @@ func GetCastOperator(
 	return nil, errors.Errorf("unhandled cast %s -> %s", fromType, toType)
 }
 
+func IsCastSupported(fromType, toType *types.T) bool {
+	if fromType.Family() == types.UnknownFamily {
+		return true
+	}
+	leftType, rightType := fromType, toType
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+	// {{range .LeftFamilies}}
+	case _LEFT_CANONICAL_TYPE_FAMILY:
+		switch leftType.Width() {
+		// {{range .LeftWidths}}
+		case _LEFT_TYPE_WIDTH:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+			// {{range .RightFamilies}}
+			case _RIGHT_CANONICAL_TYPE_FAMILY:
+				switch rightType.Width() {
+				// {{range .RightWidths}}
+				case _RIGHT_TYPE_WIDTH:
+					return true
+					// {{end}}
+				}
+				// {{end}}
+			}
+			// {{end}}
+		}
+		// {{end}}
+	}
+	return false
+}
+
 type castOpNullAny struct {
-	colexecop.OneInputCloserHelper
+	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -130,12 +159,8 @@ type castOpNullAny struct {
 
 var _ colexecop.ClosableOperator = &castOpNullAny{}
 
-func (c *castOpNullAny) Init() {
-	c.Input.Init()
-}
-
-func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
-	batch := c.Input.Next(ctx)
+func (c *castOpNullAny) Next() coldata.Batch {
+	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -180,7 +205,7 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 // {{range .RightWidths}}
 
 type cast_NAMEOp struct {
-	colexecop.OneInputCloserHelper
+	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
@@ -191,18 +216,14 @@ type cast_NAMEOp struct {
 var _ colexecop.ResettableOperator = &cast_NAMEOp{}
 var _ colexecop.ClosableOperator = &cast_NAMEOp{}
 
-func (c *cast_NAMEOp) Init() {
-	c.Input.Init()
-}
-
 func (c *cast_NAMEOp) Reset(ctx context.Context) {
 	if r, ok := c.Input.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 }
 
-func (c *cast_NAMEOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.Input.Next(ctx)
+func (c *cast_NAMEOp) Next() coldata.Batch {
+	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

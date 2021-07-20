@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -85,7 +86,8 @@ var genAutocompleteCmd = &cobra.Command{
 	Long: `Generate autocompletion script for CockroachDB.
 
 If no arguments are passed, or if 'bash' is passed, a bash completion file is
-written to ./cockroach.bash. If 'zsh' is passed, a zsh completion file is written
+written to ./cockroach.bash. If 'fish' is passed, a fish completion file
+is written to ./cockroach.fish. If 'zsh' is passed, a zsh completion file is written
 to ./_cockroach. Use "--out=/path/to/file" to override the output file location.
 
 Note that for the generated file to work on OS X with bash, you'll need to install
@@ -93,7 +95,7 @@ Homebrew's bash-completion package (or an equivalent) and follow the post-instal
 instructions.
 `,
 	Args:      cobra.OnlyValidArgs,
-	ValidArgs: []string{"bash", "zsh"},
+	ValidArgs: []string{"bash", "zsh", "fish"},
 	RunE:      MaybeDecorateGRPCError(runGenAutocompleteCmd),
 }
 
@@ -112,6 +114,11 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 			autoCompletePath = "cockroach.bash"
 		}
 		err = cmd.Root().GenBashCompletionFile(autoCompletePath)
+	case "fish":
+		if autoCompletePath == "" {
+			autoCompletePath = "cockroach.fish"
+		}
+		err = cmd.Root().GenFishCompletionFile(autoCompletePath, true /* include description */)
 	case "zsh":
 		if autoCompletePath == "" {
 			autoCompletePath = "_cockroach"
@@ -199,7 +206,7 @@ Output the list of cluster settings known to this binary.
 
 		// Fill a Values struct with the defaults.
 		s := cluster.MakeTestingClusterSettings()
-		settings.NewUpdater(&s.SV).ResetRemaining()
+		settings.NewUpdater(&s.SV).ResetRemaining(context.Background())
 
 		var rows [][]string
 		for _, name := range settings.Keys() {
@@ -247,7 +254,7 @@ Output the list of cluster settings known to this binary.
 		}
 		cols := []string{"Setting", "Type", "Default", "Description"}
 		return render(reporter, os.Stdout,
-			cols, newRowSliceIter(rows, "dddd"), nil /* completedHook */, nil /* noRowsHook*/)
+			cols, NewRowSliceIter(rows, "dddd"), nil /* completedHook */, nil /* noRowsHook*/)
 	},
 }
 

@@ -15,7 +15,7 @@ SELECT '2000-05-05 10:00:00+03':::TIMESTAMP FROM a
 2000-05-05 10:00:00 +0000 +0000
 
 query T
-select '1-1-18 1:00:00.001-8':::TIMESTAMPTZ
+select '2001-1-18 1:00:00.001-8':::TIMESTAMPTZ
 ----
 2001-01-18 09:00:00.001 +0000 UTC
 
@@ -44,33 +44,33 @@ SELECT TIMESTAMP '2001-02-16 20:38:40' AT TIME ZONE 'MST', timezone('MST', TIMES
 subtest timestamp_precision
 
 query error precision 7 out of range
-select '1-1-18 1:00:00.001':::TIMESTAMP(7)
+select '2001-1-18 1:00:00.001':::TIMESTAMP(7)
 
 query error precision 7 out of range
-select '1-1-18 1:00:00.001':::TIMESTAMPTZ(7)
+select '2001-1-18 1:00:00.001':::TIMESTAMPTZ(7)
 
 query T
-select '1-1-18 1:00:00.001':::TIMESTAMP(0)
+select '2001-1-18 1:00:00.001':::TIMESTAMP(0)
 ----
 2001-01-18 01:00:00 +0000 +0000
 
 query T
-select '1-1-18 1:00:00.001':::TIMESTAMP(6)
+select '2001-1-18 1:00:00.001':::TIMESTAMP(6)
 ----
 2001-01-18 01:00:00.001 +0000 +0000
 
 query T
-select '1-1-18 1:00:00.001':::TIMESTAMP
+select '2001-1-18 1:00:00.001':::TIMESTAMP
 ----
 2001-01-18 01:00:00.001 +0000 +0000
 
 query T
-select '1-1-18 1:00:00.001-8':::TIMESTAMPTZ(0)
+select '2001-1-18 1:00:00.001-8':::TIMESTAMPTZ(0)
 ----
 2001-01-18 01:00:00 -0800 PST
 
 query T
-select '1-1-18 1:00:00.001-8':::TIMESTAMPTZ(6)
+select '2001-1-18 1:00:00.001-8':::TIMESTAMPTZ(6)
 ----
 2001-01-18 01:00:00.001 -0800 PST
 
@@ -492,3 +492,27 @@ query T
 SET TIME ZONE 'AuStralIA/SyDNEY'; SELECT '2000-05-15 00:00:00'::timestamptz
 ----
 2000-05-15 00:00:00 +1000 AEST
+
+query T
+SET TIME ZONE 'Europe/Bucharest';
+SELECT t FROM (VALUES
+  ('2020-10-25 03:00+3'::TIMESTAMPTZ + '0 hour'::interval),
+  ('2020-10-25 03:00+3'::TIMESTAMPTZ + '1 hour'::interval),
+  ('2020-10-25 03:00+2'::TIMESTAMPTZ + '0 hour'::interval),
+  ('2020-10-25 03:00+2'::TIMESTAMPTZ + '1 hour'::interval)
+) interval_math_regression_64772(t)
+----
+2020-10-25 03:00:00 +0300 EEST
+2020-10-25 03:00:00 +0200 EET
+2020-10-25 03:00:00 +0200 EET
+2020-10-25 04:00:00 +0200 EET
+
+query TT
+SET TIME ZONE 'Europe/Bucharest';
+SELECT date_trunc('day', t), date_trunc('hour', t) FROM (VALUES
+  ('2020-10-25 03:00+03:00'::timestamptz),
+  ('2020-10-25 03:00+02:00'::timestamptz)
+) date_trunc_regression_64772(t)
+----
+2020-10-25 00:00:00 +0300 EEST  2020-10-25 03:00:00 +0300 EEST
+2020-10-25 00:00:00 +0300 EEST  2020-10-25 03:00:00 +0200 EET

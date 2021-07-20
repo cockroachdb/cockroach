@@ -61,7 +61,7 @@ go_library(
         "operators.go",
         "overload.go",
         "parse_array.go",
-        "parse_string.go",
+        "parse_string.go",  # keep
         "persistence.go",
         "pgwire_encode.go",
         "placeholders.go",
@@ -81,7 +81,6 @@ go_library(
         "set.go",
         "show.go",
         "split.go",
-        "statementtype_string.go",
         "stmt.go",
         "stream_ingestion.go",
         "survival_goal.go",
@@ -107,6 +106,7 @@ go_library(
         "zone.go",
         ":gen-createtypevariety-stringer",  # keep
         ":gen-statementreturntype-stringer",  # keep
+        ":gen-statementtype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
     visibility = ["//visibility:public"],
@@ -122,6 +122,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/catconstants",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
@@ -130,7 +131,6 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
@@ -218,7 +218,7 @@ go_test(
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
@@ -252,4 +252,10 @@ stringer(
     name = "gen-statementreturntype-stringer",
     src = "stmt.go",
     typ = "StatementReturnType",
+)
+
+stringer(
+    name = "gen-statementtype-stringer",
+    src = "stmt.go",
+    typ = "StatementType",
 )

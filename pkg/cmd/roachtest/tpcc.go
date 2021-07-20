@@ -303,7 +303,7 @@ func registerTPCC(r *testRegistry) {
 				// Upload and restart cluster into the new
 				// binary (stays at old cluster version).
 				binaryUpgradeStep(crdbNodes, mainBinary),
-				uploadVersion(workloadNode, mainBinary), // for tpccBackgroundStepper's workload
+				uploadVersionStep(workloadNode, mainBinary), // for tpccBackgroundStepper's workload
 				// Now start running TPCC in the background.
 				tpccBackgroundStepper.launch,
 				// While tpcc is running in the background, bump the cluster
@@ -379,7 +379,7 @@ func registerTPCC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       "tpcc/interleaved/nodes=3/cpu=16/w=500",
-		Owner:      OwnerSQLExec,
+		Owner:      OwnerSQLQueries,
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Timeout:    6 * time.Hour,
@@ -436,10 +436,8 @@ func registerTPCC(r *testRegistry) {
 		Distribution: multiRegion,
 		LoadConfig:   multiLoadgen,
 
-		LoadWarehouses: 5000,
-		EstimatedMax:   3000,
-
-		MinVersion: "v20.1.0",
+		LoadWarehouses: 3000,
+		EstimatedMax:   2000,
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:      9,
@@ -449,8 +447,6 @@ func registerTPCC(r *testRegistry) {
 
 		LoadWarehouses: 2000,
 		EstimatedMax:   900,
-
-		MinVersion: "v20.1.0",
 	})
 }
 
@@ -797,25 +793,18 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		t.Fatal(errors.Wrap(err, "failed to create temp dir"))
 	}
 	defer func() { _ = os.RemoveAll(resultsDir) }()
-	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
-	iteration := 0
-	if res, err := s.Search(func(warehouses int) (bool, error) {
-		iteration++
-		t.l.Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
 
-		// NB: for goroutines in this monitor, handle errors via `t.Fatal` to
-		// *abort* the line search and whole tpccbench run. Return the errors
-		// to indicate that the specific warehouse count failed, but that the
-		// line search ought to continue.
-		m := newMonitor(ctx, c, roachNodes)
-
+	restart := func() {
 		// We overload the clusters in tpccbench, which can lead to transient infra
 		// failures. These are a) really annoying to debug and b) hide the actual
 		// passing warehouse count, making the line search sensitive to the choice
 		// of starting warehouses. Do a best-effort at waiting for the cloud VM(s)
 		// to recover without failing the line search.
 		if err := c.Reset(ctx); err != nil {
-			t.Fatal(err)
+			// Reset() can flake sometimes, see for example:
+			// https://github.com/cockroachdb/cockroach/issues/61981#issuecomment-826838740
+			c.l.Printf("failed to reset VMs, proceeding anyway: %s", err)
+			_ = err // intentionally continuing
 		}
 		var ok bool
 		for i := 0; i < 10; i++ {
@@ -845,12 +834,28 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		}
 
 		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
+	}
+
+	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
+	iteration := 0
+	if res, err := s.Search(func(warehouses int) (bool, error) {
+		iteration++
+		t.l.Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
+
+		restart()
+
 		time.Sleep(restartWait)
 
 		// Set up the load generation configuration.
 		rampDur := 5 * time.Minute
 		loadDur := 10 * time.Minute
 		loadDone := make(chan time.Time, numLoadGroups)
+
+		// NB: for goroutines in this monitor, handle errors via `t.Fatal` to
+		// *abort* the line search and whole tpccbench run. Return the errors
+		// to indicate that the specific warehouse count failed, but that the
+		// line search ought to continue.
+		m := newMonitor(ctx, c, roachNodes)
 
 		// If we're running chaos in this configuration, modify this config.
 		if b.Chaos {
@@ -883,7 +888,6 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				}
 
 				extraFlags := ""
-				activeWarehouses := warehouses
 				switch b.LoadConfig {
 				case singleLoadgen:
 					// Nothing.
@@ -892,7 +896,6 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				case multiLoadgen:
 					extraFlags = fmt.Sprintf(` --partitions=%d --partition-affinity=%d`,
 						b.partitions(), groupIdx)
-					activeWarehouses = warehouses / numLoadGroups
 				default:
 					// Abort the whole test.
 					t.Fatalf("unimplemented LoadConfig %v", b.LoadConfig)
@@ -903,10 +906,10 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 					extraFlags += " --method=simple"
 				}
 				t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
-				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", perfArtifactsDir, activeWarehouses)
+				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", perfArtifactsDir, warehouses)
 				cmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --active-warehouses=%d "+
 					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s}",
-					b.LoadWarehouses, activeWarehouses, rampDur,
+					b.LoadWarehouses, warehouses, rampDur,
 					loadDur, extraFlags, histogramsPath, sqlGateways)
 				err := c.RunE(ctx, group.loadNodes, cmd)
 				loadDone <- timeutil.Now()
@@ -930,7 +933,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 					// overload but something that deserves failing the whole test.
 					t.Fatal(err)
 				}
-				result := tpcc.NewResultWithSnapshots(activeWarehouses, 0, snapshots)
+				result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
 				resultChan <- result
 				return nil
 			})
@@ -987,6 +990,10 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	}); err != nil {
 		t.Fatal(err)
 	} else {
+		// The last iteration may have been a failing run that overloaded
+		// nodes to the point of them crashing. Make roachtest happy by
+		// restarting the cluster so that it can run consistency checks.
+		restart()
 		ttycolor.Stdout(ttycolor.Green)
 		t.l.Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)

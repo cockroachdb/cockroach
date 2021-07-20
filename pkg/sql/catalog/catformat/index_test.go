@@ -37,10 +37,10 @@ func TestIndexForDisplay(t *testing.T) {
 
 	indexName := "baz"
 	baseIndex := descpb.IndexDescriptor{
-		Name:             indexName,
-		ID:               0x0,
-		ColumnNames:      colNames,
-		ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_DESC},
+		Name:                indexName,
+		ID:                  0x0,
+		KeyColumnNames:      colNames,
+		KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_DESC},
 	}
 
 	uniqueIndex := baseIndex
@@ -48,7 +48,7 @@ func TestIndexForDisplay(t *testing.T) {
 
 	invertedIndex := baseIndex
 	invertedIndex.Type = descpb.IndexDescriptor_INVERTED
-	invertedIndex.ColumnNames = []string{"a"}
+	invertedIndex.KeyColumnNames = []string{"a"}
 
 	storingIndex := baseIndex
 	storingIndex.StoreColumnNames = []string{"c"}
@@ -94,8 +94,8 @@ func TestIndexForDisplay(t *testing.T) {
 
 	for testIdx, tc := range testData {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
-			got, err := IndexForDisplay(
-				ctx, tableDesc, &tc.tableName, &tc.index, tc.partition, tc.interleave, &semaCtx,
+			got, err := indexForDisplay(
+				ctx, tableDesc, &tc.tableName, &tc.index, false /* isPrimary */, tc.partition, tc.interleave, &semaCtx,
 			)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)

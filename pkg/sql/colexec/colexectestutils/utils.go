@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -32,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -63,6 +64,8 @@ func (t Tuple) String() string {
 			sb.WriteString(d.String())
 		} else if d, ok := t[i].([]byte); ok {
 			sb.WriteString(string(d))
+		} else if d, ok := t[i].(json.JSON); ok {
+			sb.WriteString(d.String())
 		} else {
 			sb.WriteString(fmt.Sprintf("%v", t[i]))
 		}
@@ -109,6 +112,23 @@ func (t Tuple) less(other Tuple, evalCtx *tree.EvalContext, tupleFromOtherSet Tu
 			}
 		}
 
+		// json.JSON are not comparable.
+		if lhsVal.Type().Implements(reflect.TypeOf((*json.JSON)(nil)).Elem()) && lhsVal.CanInterface() {
+			lhsJSON := lhsVal.Interface().(json.JSON)
+			rhsJSON := rhsVal.Interface().(json.JSON)
+			cmp, err := lhsJSON.Compare(rhsJSON)
+			if err != nil {
+				colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "failed json compare"))
+			}
+			if cmp == 0 {
+				continue
+			} else if cmp == -1 {
+				return true
+			} else {
+				return false
+			}
+		}
+
 		// types.Bytes is represented as []uint8.
 		if lhsVal.Type().String() == "[]uint8" {
 			lhsStr := string(lhsVal.Interface().([]uint8))
@@ -116,6 +136,31 @@ func (t Tuple) less(other Tuple, evalCtx *tree.EvalContext, tupleFromOtherSet Tu
 			if lhsStr == rhsStr {
 				continue
 			} else if lhsStr < rhsStr {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		if lhsVal.Type().Name() == "Duration" {
+			lhsDuration := lhsVal.Interface().(duration.Duration)
+			rhsDuration := rhsVal.Interface().(duration.Duration)
+			cmp := lhsDuration.Compare(rhsDuration)
+			if cmp == 0 {
+				continue
+			} else if cmp == -1 {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		if lhsVal.Type().Name() == "Time" {
+			lhsTime := lhsVal.Interface().(time.Time)
+			rhsTime := rhsVal.Interface().(time.Time)
+			if lhsTime.Equal(rhsTime) {
+				continue
+			} else if lhsTime.Before(rhsTime) {
 				return true
 			} else {
 				return false
@@ -315,15 +360,15 @@ func RunTestsWithTyps(
 			if err != nil {
 				t.Fatal(err)
 			}
-			op.Init()
+			op.Init(ctx)
 			return op
 		}
 		originalOp := opConstructor(false /* injectAllNulls */)
 		opWithNulls := opConstructor(true /* injectAllNulls */)
 		foundDifference := false
 		for {
-			originalBatch := originalOp.Next(ctx)
-			batchWithNulls := opWithNulls.Next(ctx)
+			originalBatch := originalOp.Next()
+			batchWithNulls := opWithNulls.Next()
 			if originalBatch.Length() != batchWithNulls.Length() {
 				foundDifference = true
 				break
@@ -352,8 +397,8 @@ func RunTestsWithTyps(
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
 		}
-		closeIfCloser(ctx, t, originalOp)
-		closeIfCloser(ctx, t, opWithNulls)
+		closeIfCloser(t, originalOp)
+		closeIfCloser(t, opWithNulls)
 	}
 }
 
@@ -362,9 +407,9 @@ func RunTestsWithTyps(
 //
 // RunTests harness needs to do that once it is done with op. In non-test
 // setting, the closing happens at the end of the query execution.
-func closeIfCloser(ctx context.Context, t *testing.T, op colexecop.Operator) {
+func closeIfCloser(t *testing.T, op colexecop.Operator) {
 	if c, ok := op.(colexecop.Closer); ok {
-		if err := c.Close(ctx); err != nil {
+		if err := c.Close(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -424,7 +469,7 @@ func RunTestsWithoutAllNullsInjection(
 				t.Fatal(err)
 			}
 		}
-		closeIfCloser(ctx, t, op)
+		closeIfCloser(t, op)
 	})
 
 	if !skipVerifySelAndNullsResets {
@@ -456,9 +501,9 @@ func RunTestsWithoutAllNullsInjection(
 				t.Fatal(err)
 			}
 			// We might short-circuit, so defer the closing of the operator.
-			defer closeIfCloser(ctx, t, op)
-			op.Init()
-			b := op.Next(ctx)
+			defer closeIfCloser(t, op)
+			op.Init(ctx)
+			b := op.Next()
 			if b.Length() == 0 {
 				return
 			}
@@ -477,7 +522,7 @@ func RunTestsWithoutAllNullsInjection(
 					}
 				}
 			}
-			b = op.Next(ctx)
+			b = op.Next()
 			if b.Length() == 0 {
 				return
 			}
@@ -518,10 +563,10 @@ func RunTestsWithoutAllNullsInjection(
 		if err != nil {
 			t.Fatal(err)
 		}
-		op.Init()
-		for b := op.Next(ctx); b.Length() > 0; b = op.Next(ctx) {
+		op.Init(ctx)
+		for b := op.Next(); b.Length() > 0; b = op.Next() {
 		}
-		closeIfCloser(ctx, t, op)
+		closeIfCloser(t, op)
 	}
 }
 
@@ -624,8 +669,8 @@ func stringToDatum(val string, typ *types.T, evalCtx *tree.EvalContext) tree.Dat
 // setColVal is a test helper function to set the given value at the equivalent
 // col[idx]. This function is slow due to reflection.
 func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalContext) {
-	canonicalTypeFamily := vec.CanonicalTypeFamily()
-	if canonicalTypeFamily == types.BytesFamily {
+	switch vec.CanonicalTypeFamily() {
+	case types.BytesFamily:
 		var (
 			bytesVal []byte
 			ok       bool
@@ -635,7 +680,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			bytesVal = []byte(val.(string))
 		}
 		vec.Bytes().Set(idx, bytesVal)
-	} else if canonicalTypeFamily == types.DecimalFamily {
+	case types.DecimalFamily:
 		// setColVal is used in multiple places, therefore val can be either a float
 		// or apd.Decimal.
 		if decimalVal, ok := val.(apd.Decimal); ok {
@@ -652,7 +697,21 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			// cause the code that does not properly use execgen package to fail.
 			vec.Decimal()[idx].Set(decimalVal)
 		}
-	} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
+	case types.JsonFamily:
+		var j json.JSON
+		if j2, ok := val.(json.JSON); ok {
+			j = j2
+		} else {
+			s := val.(string)
+			var err error
+			j, err = json.ParseJSON(s)
+			if err != nil {
+				colexecerror.InternalError(
+					errors.AssertionFailedf("unable to set json %s: %v", s, err))
+			}
+		}
+		vec.JSON().Set(idx, j)
+	case typeconv.DatumVecCanonicalTypeFamily:
 		switch v := val.(type) {
 		case *coldataext.Datum:
 			vec.Datum().Set(idx, v)
@@ -660,12 +719,10 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			vec.Datum().Set(idx, v)
 		case string:
 			vec.Datum().Set(idx, stringToDatum(v, vec.Type(), evalCtx))
-		case json.JSON:
-			vec.Datum().Set(idx, &tree.DJSON{JSON: v})
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unexpected type %T of datum-backed value: %v", v, v))
 		}
-	} else {
+	default:
 		reflect.ValueOf(vec.Col()).Index(idx).Set(reflect.ValueOf(val).Convert(reflect.TypeOf(vec.Col()).Elem()))
 	}
 }
@@ -764,7 +821,7 @@ func newOpTestSelInput(
 	return ret
 }
 
-func (s *opTestInput) Init() {
+func (s *opTestInput) Init(context.Context) {
 	if s.typs == nil {
 		if len(s.tuples) == 0 {
 			colexecerror.InternalError(errors.AssertionFailedf("empty tuple source with no specified types"))
@@ -779,7 +836,7 @@ func (s *opTestInput) Init() {
 	}
 }
 
-func (s *opTestInput) Next(context.Context) coldata.Batch {
+func (s *opTestInput) Next() coldata.Batch {
 	if len(s.tuples) == 0 {
 		return coldata.ZeroBatch
 	}
@@ -875,10 +932,16 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 						setColVal(vec, outputIdx, newBytes, s.evalCtx)
 					case types.IntervalFamily:
 						setColVal(vec, outputIdx, duration.MakeDuration(rng.Int63(), rng.Int63(), rng.Int63()), s.evalCtx)
+					case types.JsonFamily:
+						j, err := json.Random(20, rng)
+						if err != nil {
+							colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+						}
+						setColVal(vec, outputIdx, j, s.evalCtx)
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch vec.Type().Family() {
 						case types.CollatedStringFamily:
-							collatedStringType := types.MakeCollatedString(types.String, *rowenc.RandCollationLocale(rng))
+							collatedStringType := types.MakeCollatedString(types.String, *randgen.RandCollationLocale(rng))
 							randomBytes := make([]byte, rng.Intn(16)+1)
 							rng.Read(randomBytes)
 							d, err := tree.NewDCollatedString(string(randomBytes), collatedStringType.Locale(), &tree.CollationEnvironment{})
@@ -886,11 +949,6 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 								colexecerror.InternalError(err)
 							}
 							setColVal(vec, outputIdx, d, s.evalCtx)
-						case types.JsonFamily:
-							newBytes := make([]byte, rng.Intn(16)+1)
-							rng.Read(newBytes)
-							j := json.FromString(string(newBytes))
-							setColVal(vec, outputIdx, j, s.evalCtx)
 						case types.TimeTZFamily:
 							setColVal(vec, outputIdx, tree.NewDTimeTZFromOffset(timeofday.FromInt(rng.Int63()), rng.Int31()), s.evalCtx)
 						case types.TupleFamily:
@@ -957,7 +1015,7 @@ func NewOpFixedSelTestInput(
 	return ret
 }
 
-func (s *opFixedSelTestInput) Init() {
+func (s *opFixedSelTestInput) Init(context.Context) {
 	if s.typs == nil {
 		if len(s.tuples) == 0 {
 			colexecerror.InternalError(errors.AssertionFailedf("empty tuple source with no specified types"))
@@ -1000,7 +1058,7 @@ func (s *opFixedSelTestInput) Init() {
 
 }
 
-func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
+func (s *opFixedSelTestInput) Next() coldata.Batch {
 	var batchSize int
 	if s.sel == nil {
 		batchSize = s.batchSize
@@ -1057,7 +1115,7 @@ type OpTestOutput struct {
 // NewOpTestOutput returns a new OpTestOutput, initialized with the given input
 // to verify that the output is exactly equal to the expected tuples.
 func NewOpTestOutput(input colexecop.Operator, expected Tuples) *OpTestOutput {
-	input.Init()
+	input.Init(context.Background())
 
 	return &OpTestOutput{
 		OneInputNode: colexecop.NewOneInputNode(input),
@@ -1080,14 +1138,27 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 			ret[colIdx] = nil
 		} else {
 			var val reflect.Value
+			family := vec.CanonicalTypeFamily()
 			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
 				val = reflect.ValueOf(append([]byte(nil), colBytes.Get(tupleIdx)...))
-			} else if vec.CanonicalTypeFamily() == types.DecimalFamily {
+			} else if family == types.DecimalFamily {
 				colDec := vec.Decimal()
 				var newDec apd.Decimal
 				newDec.Set(&colDec[tupleIdx])
 				val = reflect.ValueOf(newDec)
-			} else if vec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+			} else if family == types.JsonFamily {
+				colJSON := vec.JSON()
+				newJSON := colJSON.Get(tupleIdx)
+				b, err := json.EncodeJSON(nil, newJSON)
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
+				_, j, err := json.DecodeJSON(b)
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
+				val = reflect.ValueOf(j)
+			} else if family == typeconv.DatumVecCanonicalTypeFamily {
 				val = reflect.ValueOf(vec.Datum().Get(tupleIdx).(*coldataext.Datum).Datum)
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(tupleIdx)
@@ -1098,10 +1169,10 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 	return ret
 }
 
-func (r *OpTestOutput) next(ctx context.Context) Tuple {
+func (r *OpTestOutput) next() Tuple {
 	if r.batch == nil || r.curIdx >= r.batch.Length() {
 		// Get a fresh batch.
-		r.batch = r.Input.Next(ctx)
+		r.batch = r.Input.Next()
 		if r.batch.Length() == 0 {
 			return nil
 		}
@@ -1126,10 +1197,9 @@ func (r *OpTestOutput) Reset(ctx context.Context) {
 // tuples, using a slow, reflection-based comparison method, returning an error
 // if the input isn't equal to the expected.
 func (r *OpTestOutput) Verify() error {
-	ctx := context.Background()
 	var actual Tuples
 	for {
-		tup := r.next(ctx)
+		tup := r.next()
 		if tup == nil {
 			break
 		}
@@ -1144,10 +1214,9 @@ func (r *OpTestOutput) Verify() error {
 // reflection-based comparison method, returning an error if the input isn't
 // equal to the expected.
 func (r *OpTestOutput) VerifyAnyOrder() error {
-	ctx := context.Background()
 	var actual Tuples
 	for {
-		tup := r.next(ctx)
+		tup := r.next()
 		if tup == nil {
 			break
 		}
@@ -1188,6 +1257,29 @@ func tupleEquals(expected Tuple, actual Tuple, evalCtx *tree.EvalContext) bool {
 					} else {
 						return false
 					}
+				}
+			}
+			// Special case for JSON.
+			if j1, ok := actual[i].(json.JSON); ok {
+				var j2 json.JSON
+				switch t := expected[i].(type) {
+				case string:
+					var err error
+					j2, err = json.ParseJSON(t)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				case json.JSON:
+					j2 = t
+				}
+				cmp, err := j1.Compare(j2)
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
+				if cmp == 0 {
+					continue
+				} else {
+					return false
 				}
 			}
 			// Special case for datum-backed types.
@@ -1302,15 +1394,15 @@ func NewFiniteBatchSource(
 }
 
 // Init implements the Operator interface.
-func (f *FiniteBatchSource) Init() {
-	f.repeatableBatch.Init()
+func (f *FiniteBatchSource) Init(ctx context.Context) {
+	f.repeatableBatch.Init(ctx)
 }
 
 // Next implements the Operator interface.
-func (f *FiniteBatchSource) Next(ctx context.Context) coldata.Batch {
+func (f *FiniteBatchSource) Next() coldata.Batch {
 	if f.usableCount > 0 {
 		f.usableCount--
-		return f.repeatableBatch.Next(ctx)
+		return f.repeatableBatch.Next()
 	}
 	return coldata.ZeroBatch
 }
@@ -1347,15 +1439,15 @@ func NewFiniteChunksSource(
 	}
 }
 
-func (f *finiteChunksSource) Init() {
-	f.repeatableBatch.Init()
+func (f *finiteChunksSource) Init(ctx context.Context) {
+	f.repeatableBatch.Init(ctx)
 	f.adjustment = make([]int64, f.matchLen)
 }
 
-func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
+func (f *finiteChunksSource) Next() coldata.Batch {
 	if f.usableCount > 0 {
 		f.usableCount--
-		batch := f.repeatableBatch.Next(ctx)
+		batch := f.repeatableBatch.Next()
 		if f.matchLen > 0 && f.adjustment[0] == 0 {
 			// We need to calculate the difference between the first and the last
 			// tuples in batch in first matchLen columns so that in the following
@@ -1413,7 +1505,7 @@ func NewChunkingBatchSource(
 	}
 }
 
-func (c *chunkingBatchSource) Init() {
+func (c *chunkingBatchSource) Init(context.Context) {
 	c.batch = c.allocator.NewMemBatchWithMaxCapacity(c.typs)
 	for i := range c.cols {
 		c.batch.ColVec(i).SetCol(c.cols[i].Col())
@@ -1421,7 +1513,7 @@ func (c *chunkingBatchSource) Init() {
 	}
 }
 
-func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
+func (c *chunkingBatchSource) Next() coldata.Batch {
 	if c.curIdx >= c.len {
 		return coldata.ZeroBatch
 	}
@@ -1483,10 +1575,10 @@ func GenerateBatchSize() int {
 // CallbackMetadataSource is a utility struct that implements the
 // colexecop.MetadataSource interface by calling a provided callback.
 type CallbackMetadataSource struct {
-	DrainMetaCb func(context.Context) []execinfrapb.ProducerMetadata
+	DrainMetaCb func() []execinfrapb.ProducerMetadata
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
-func (s CallbackMetadataSource) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return s.DrainMetaCb(ctx)
+func (s CallbackMetadataSource) DrainMeta() []execinfrapb.ProducerMetadata {
+	return s.DrainMetaCb()
 }

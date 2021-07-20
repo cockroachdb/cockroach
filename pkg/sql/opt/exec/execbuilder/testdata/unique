@@ -348,7 +348,7 @@ vectorized: true
     │     columns: (k)
     │     estimated row count: 1 (missing stats)
     │     table: uniq@primary
-    │     spans: /1/0-/1/1
+    │     spans: /1/0
     │
     └── • hash join (right anti)
         │ columns: (column1, column2, column3, column4, column5)
@@ -535,7 +535,7 @@ vectorized: true
 │       │
 │       └── • hash join (semi)
 │           │ equality: (v, x) = (b, c)
-│           │ pred: column17 != rowid
+│           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan buffer
 │           │     label: buffer 1
@@ -551,7 +551,7 @@ vectorized: true
 │       │
 │       └── • hash join (semi)
 │           │ equality: (k, v, y) = (a, b, d)
-│           │ pred: column17 != rowid
+│           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan buffer
 │           │     label: buffer 1
@@ -567,7 +567,7 @@ vectorized: true
         │
         └── • hash join (semi)
             │ equality: (k) = (a)
-            │ pred: column17 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • scan buffer
             │     label: buffer 1
@@ -604,7 +604,7 @@ vectorized: true
 │       │
 │       └── • hash join (right semi)
 │           │ equality: (a) = (column1)
-│           │ pred: column10 != rowid
+│           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan
 │           │     missing stats
@@ -620,7 +620,7 @@ vectorized: true
         │
         └── • hash join (right semi)
             │ equality: (b, c) = (column2, column3)
-            │ pred: column10 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • scan
             │     missing stats
@@ -658,7 +658,7 @@ vectorized: true
 │       │
 │       └── • hash join (right semi)
 │           │ equality: (c) = (column3)
-│           │ pred: column10 != rowid
+│           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan
 │           │     missing stats
@@ -833,23 +833,23 @@ vectorized: true
 │   │ into: uniq_enum(r, s, i, j)
 │   │
 │   └── • buffer
-│       │ columns: (column9, column1, column2, column10, check1)
+│       │ columns: (r_default, column1, column2, j_default, check1)
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ columns: (column9, column1, column2, column10, check1)
+│           │ columns: (r_default, column1, column2, j_default, check1)
 │           │ estimated row count: 2
-│           │ render check1: column9 IN ('us-east', 'us-west', 'eu-west')
+│           │ render check1: r_default IN ('us-east', 'us-west', 'eu-west')
 │           │ render column1: column1
 │           │ render column2: column2
-│           │ render column9: column9
-│           │ render column10: column10
+│           │ render r_default: r_default
+│           │ render j_default: j_default
 │           │
 │           └── • render
-│               │ columns: (column9, column10, column1, column2)
+│               │ columns: (r_default, j_default, column1, column2)
 │               │ estimated row count: 2
-│               │ render column9: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
-│               │ render column10: CAST(NULL AS INT8)
+│               │ render r_default: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
+│               │ render j_default: CAST(NULL AS INT8)
 │               │ render column1: column1
 │               │ render column2: column2
 │               │
@@ -871,18 +871,18 @@ vectorized: true
             │ estimated row count: 1 (missing stats)
             │
             └── • project
-                │ columns: (column9, column2)
+                │ columns: (r_default, column2)
                 │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@12", column9, column2)
+                    │ columns: ("lookup_join_const_col_@12", r_default, column2)
                     │ table: uniq_enum@primary
                     │ equality: (lookup_join_const_col_@12, column2) = (r,i)
                     │ equality cols are key
-                    │ pred: column9 != r
+                    │ pred: r_default != r
                     │
                     └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@12", column9, column2)
+                        │ columns: ("lookup_join_const_col_@12", r_default, column2)
                         │ estimated row count: 6
                         │
                         ├── • values
@@ -893,11 +893,11 @@ vectorized: true
                         │     row 2, expr 0: 'eu-west'
                         │
                         └── • project
-                            │ columns: (column9, column2)
+                            │ columns: (r_default, column2)
                             │ estimated row count: 2
                             │
                             └── • scan buffer
-                                  columns: (column9, column1, column2, column10, check1)
+                                  columns: (r_default, column1, column2, j_default, check1)
                                   label: buffer 1
 
 # Test that we use the index when available for de-duplicating INSERT ON
@@ -1170,7 +1170,7 @@ vectorized: true
                                       columns: (k)
                                       estimated row count: 1 (missing stats)
                                       table: uniq_partial@primary
-                                      spans: /1/0-/1/1
+                                      spans: /1/0
 
 # Insert with non-constant input.
 query T
@@ -1278,7 +1278,7 @@ vectorized: true
         │
         └── • hash join (semi)
             │ equality: (v) = (b)
-            │ pred: column16 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • filter
             │   │ filter: x > 0
@@ -1475,7 +1475,7 @@ vectorized: true
         │
         └── • hash join (right semi)
             │ equality: (d) = (column3)
-            │ pred: (column1 != i) OR (column13 != c_i_expr)
+            │ pred: (column1 != i) OR (c_i_expr_comp != c_i_expr)
             │
             ├── • scan
             │     missing stats
@@ -1511,7 +1511,7 @@ vectorized: true
         └── • hash join (right semi)
             │ equality: (id2) = (column2)
             │ right cols are key
-            │ pred: column8 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • scan
             │     missing stats
@@ -1548,7 +1548,7 @@ vectorized: true
         └── • hash join (right semi)
             │ equality: (id2) = (column2)
             │ right cols are key
-            │ pred: column8 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • scan
             │     missing stats
@@ -1586,7 +1586,7 @@ vectorized: true
         │
         └── • hash join (semi)
             │ equality: (u) = (id2)
-            │ pred: column16 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • scan buffer
             │     label: buffer 1
@@ -1624,7 +1624,7 @@ vectorized: true
 │       └── • hash join (right semi)
 │           │ equality: (id1) = (column1)
 │           │ right cols are key
-│           │ pred: column8 != rowid
+│           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan
 │           │     missing stats
@@ -1641,7 +1641,7 @@ vectorized: true
         └── • hash join (right semi)
             │ equality: (id2) = (column2)
             │ right cols are key
-            │ pred: column8 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • scan
             │     missing stats
@@ -2188,6 +2188,7 @@ vectorized: true
 │                     estimated row count: 10 (missing stats)
 │                     table: uniq_enum@primary
 │                     spans: /"\xc0"-/"\xc0"/PrefixEnd
+│                     locking strength: for update
 │
 ├── • constraint-check
 │   │
@@ -2507,7 +2508,7 @@ vectorized: true
 │                     columns: (r, a, b, c)
 │                     estimated row count: 1 (0.10% of the table; stats collected <hidden> ago)
 │                     table: uniq_partial_enum@primary
-│                     spans: /"@"/2/0-/"@"/2/1 /"@"/2/2/1-/"@"/2/3/2 /"\x80"/2/0-/"\x80"/2/1 /"\x80"/2/2/1-/"\x80"/2/3/2 /"\xc0"/2/0-/"\xc0"/2/1 /"\xc0"/2/2/1-/"\xc0"/2/3/2
+│                     spans: /"@"/2/0 /"@"/2/2/1-/"@"/2/3/2 /"\x80"/2/0 /"\x80"/2/2/1-/"\x80"/2/3/2 /"\xc0"/2/0 /"\xc0"/2/2/1-/"\xc0"/2/3/2
 │                     parallel
 │                     locking strength: for update
 │
@@ -3133,7 +3134,7 @@ vectorized: true
 │       │
 │       └── • hash join (semi)
 │           │ equality: (v, x) = (b, c)
-│           │ pred: column17 != rowid
+│           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan buffer
 │           │     label: buffer 1
@@ -3149,7 +3150,7 @@ vectorized: true
 │       │
 │       └── • hash join (semi)
 │           │ equality: (k, v, y) = (a, b, d)
-│           │ pred: column17 != rowid
+│           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan buffer
 │           │     label: buffer 1
@@ -3165,7 +3166,7 @@ vectorized: true
         │
         └── • hash join (semi)
             │ equality: (k) = (a)
-            │ pred: column17 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • scan buffer
             │     label: buffer 1
@@ -3196,12 +3197,12 @@ vectorized: true
 │           │
 │           └── • lookup join (left outer)
 │               │ table: uniq_fk_parent@primary
-│               │ equality: (column10) = (rowid)
+│               │ equality: (rowid_default) = (rowid)
 │               │ equality cols are key
 │               │
 │               └── • distinct
 │                   │ estimated row count: 2
-│                   │ distinct on: column10
+│                   │ distinct on: rowid_default
 │                   │ nulls are distinct
 │                   │ error on duplicate
 │                   │
@@ -3295,7 +3296,7 @@ vectorized: true
 │       │
 │       └── • hash join (right semi)
 │           │ equality: (c) = (column3)
-│           │ pred: column10 != rowid
+│           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan
 │           │     missing stats
@@ -3393,6 +3394,7 @@ vectorized: true
 │                       │ table: uniq_enum@primary
 │                       │ equality: (column1, column3) = (r,i)
 │                       │ equality cols are key
+│                       │ locking strength: for update
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -3543,6 +3545,7 @@ vectorized: true
 │                       │ table: uniq_enum@uniq_enum_r_s_j_key
 │                       │ equality cols are key
 │                       │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+│                       │ locking strength: for update
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -3797,7 +3800,7 @@ vectorized: true
 │           │
 │           └── • hash join (right outer)
 │               │ equality: (a) = (column2)
-│               │ pred: column8 > 0
+│               │ pred: b_default > 0
 │               │
 │               ├── • filter
 │               │   │ filter: b > 0
@@ -3885,7 +3888,7 @@ vectorized: true
 │           │
 │           └── • hash join (left outer)
 │               │ equality: (v) = (a)
-│               │ pred: column15 > 0
+│               │ pred: b_default > 0
 │               │
 │               ├── • distinct
 │               │   │ distinct on: arbiter_unique_a_distinct, v
@@ -3995,7 +3998,7 @@ vectorized: true
         │
         └── • hash join (semi)
             │ equality: (v) = (b)
-            │ pred: column16 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • filter
             │   │ filter: x > 0
@@ -4071,6 +4074,7 @@ vectorized: true
 │                       │ table: uniq_partial_enum@primary
 │                       │ equality: (column1, column2) = (r,a)
 │                       │ equality cols are key
+│                       │ locking strength: for update
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -4230,7 +4234,7 @@ vectorized: true
         └── • hash join (right semi)
             │ equality: (id2) = (column2)
             │ right cols are key
-            │ pred: column8 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • scan
             │     missing stats
@@ -4268,7 +4272,7 @@ vectorized: true
 │       └── • hash join (right semi)
 │           │ equality: (id1) = (column1)
 │           │ right cols are key
-│           │ pred: column8 != rowid
+│           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan
 │           │     missing stats
@@ -4285,7 +4289,7 @@ vectorized: true
         └── • hash join (right semi)
             │ equality: (id2) = (column2)
             │ right cols are key
-            │ pred: column8 != rowid
+            │ pred: rowid_default != rowid
             │
             ├── • scan
             │     missing stats

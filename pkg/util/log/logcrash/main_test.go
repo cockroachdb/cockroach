@@ -11,6 +11,7 @@
 package logcrash_test
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -27,13 +28,14 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	security.SetAssetLoader(securitytest.EmbeddedAssets)
 	serverutils.InitTestServerFactory(server.TestServerFactory)
+	ctx := context.Background()
 
 	// MakeTestingClusterSettings initializes log.ReportingSettings to this
 	// instance of setting values.
 	// TODO(knz): This comment appears to be untrue.
 	st := cluster.MakeTestingClusterSettings()
-	logcrash.DiagnosticsReportingEnabled.Override(&st.SV, false)
-	logcrash.CrashReports.Override(&st.SV, false)
+	logcrash.DiagnosticsReportingEnabled.Override(ctx, &st.SV, false)
+	logcrash.CrashReports.Override(ctx, &st.SV, false)
 
 	os.Exit(m.Run())
 }

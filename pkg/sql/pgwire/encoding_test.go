@@ -22,7 +22,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -91,6 +94,13 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 		if tc.T == nil {
 			t.Fatalf("unknown Oid %d not found in the OidToType map", tc.Oid)
 		}
+		// If we type checked the expression and got a collated string, we need
+		// to override the type accordingly. If we don't do it, then the datum
+		// and the type would diverge (we would have tree.DCollatedString and
+		// the type of types.StringFamily).
+		if actualType := d.ResolvedType(); actualType.Family() == types.CollatedStringFamily {
+			tc.T = types.MakeCollatedString(tc.T, actualType.Locale())
+		}
 
 		// Populate specific type information based on OID and the specific test
 		// case.
@@ -143,37 +153,83 @@ func TestEncodings(t *testing.T) {
 	conv, loc := makeTestingConvCfg()
 	ctx := context.Background()
 	evalCtx := tree.MakeTestingEvalContext(nil)
-	t.Run("encode", func(t *testing.T) {
-		t.Run(pgwirebase.FormatText.String(), func(t *testing.T) {
-			for _, tc := range tests {
-				d := tc.Datum
 
-				buf.reset()
-				buf.textFormatter.Buffer.Reset()
-				buf.writeTextDatum(ctx, d, conv, loc, tc.T)
-				if buf.err != nil {
-					t.Fatal(buf.err)
-				}
-				got := verifyLen(t)
-				if !bytes.Equal(got, tc.TextAsBinary) {
-					t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.Text)
-				}
+	type writeFunc func(tree.Datum, *types.T)
+	type testCase struct {
+		name    string
+		writeFn writeFunc
+	}
+
+	writeTextDatum := func(d tree.Datum, t *types.T) {
+		buf.writeTextDatum(ctx, d, conv, loc, t)
+	}
+	writeBinaryDatum := func(d tree.Datum, t *types.T) {
+		buf.writeBinaryDatum(ctx, d, time.UTC, t)
+	}
+	convertToVec := func(d tree.Datum, t *types.T) coldata.Vec {
+		vec := coldata.NewMemColumn(t, 1 /* length */, coldataext.NewExtendedColumnFactory(&evalCtx))
+		converter := colconv.GetDatumToPhysicalFn(t)
+		coldata.SetValueAt(vec, converter(d), 0 /* rowIdx */)
+		return vec
+	}
+	writeTextColumnarElement := func(d tree.Datum, t *types.T) {
+		buf.writeTextColumnarElement(ctx, convertToVec(d, t), 0 /* idx */, conv, loc)
+	}
+	writeBinaryColumnarElement := func(d tree.Datum, t *types.T) {
+		buf.writeBinaryColumnarElement(ctx, convertToVec(d, t), 0 /* idx */, loc)
+	}
+	t.Run("encode", func(t *testing.T) {
+		for _, test := range tests {
+			for _, tc := range []testCase{
+				{
+					name:    "datum",
+					writeFn: writeTextDatum,
+				},
+				{
+					name:    "columnar",
+					writeFn: writeTextColumnarElement,
+				},
+			} {
+				t.Run(fmt.Sprintf("%s/%s", pgwirebase.FormatText, tc.name), func(t *testing.T) {
+					d := test.Datum
+					buf.reset()
+					buf.textFormatter.Buffer.Reset()
+					tc.writeFn(d, test.T)
+					if buf.err != nil {
+						t.Fatal(buf.err)
+					}
+					got := verifyLen(t)
+					if !bytes.Equal(got, test.TextAsBinary) {
+						t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, test.TextAsBinary)
+					}
+				})
 			}
-		})
-		t.Run(pgwirebase.FormatBinary.String(), func(t *testing.T) {
-			for _, tc := range tests {
-				d := tc.Datum
-				buf.reset()
-				buf.writeBinaryDatum(ctx, d, time.UTC, tc.T)
-				if buf.err != nil {
-					t.Fatal(buf.err)
-				}
-				got := verifyLen(t)
-				if !bytes.Equal(got, tc.Binary) {
-					t.Errorf("unexpected binary encoding:\n\t%v found,\n\t%v expected", got, tc.Binary)
-				}
+		}
+		for _, test := range tests {
+			for _, tc := range []testCase{
+				{
+					name:    "datum",
+					writeFn: writeBinaryDatum,
+				},
+				{
+					name:    "columnar",
+					writeFn: writeBinaryColumnarElement,
+				},
+			} {
+				t.Run(fmt.Sprintf("%s/%s", pgwirebase.FormatBinary, tc.name), func(t *testing.T) {
+					d := test.Datum
+					buf.reset()
+					tc.writeFn(d, test.T)
+					if buf.err != nil {
+						t.Fatal(buf.err)
+					}
+					got := verifyLen(t)
+					if !bytes.Equal(got, test.Binary) {
+						t.Errorf("unexpected binary encoding:\n\t%v found,\n\t%v expected", got, test.Binary)
+					}
+				})
 			}
-		})
+		}
 	})
 	t.Run("decode", func(t *testing.T) {
 		for _, tc := range tests {

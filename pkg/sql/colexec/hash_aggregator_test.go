@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
@@ -37,7 +37,7 @@ import (
 var hashAggregatorTestCases = []aggregatorTestCase{
 	{
 		name: "carryBetweenBatches",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1},
 			{1, 5},
@@ -62,7 +62,7 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "bucketCollision",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 3},
 			{0, 4},
@@ -184,7 +184,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 						return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
 							UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
 							Types:              args.InputTypes,
-							MemoryLimit:        colexecop.DefaultMemoryLimit,
+							MemoryLimit:        execinfra.DefaultMemoryLimit,
 							DiskQueueCfg:       queueCfg,
 							FDSemaphore:        &colexecop.TestingSemaphore{},
 							DiskAcc:            testDiskAcc,

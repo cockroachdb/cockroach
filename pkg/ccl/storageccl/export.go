@@ -11,11 +11,9 @@ package storageccl
 import (
 	"bytes"
 	"context"
-	"crypto/sha512"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -87,10 +85,11 @@ func evalExport(
 		reply.StartTime = cArgs.EvalCtx.GetGCThreshold()
 	}
 
-	if err := cArgs.EvalCtx.GetLimiters().ConcurrentExportRequests.Begin(ctx); err != nil {
+	q, err := cArgs.EvalCtx.GetLimiters().ConcurrentExportRequests.Begin(ctx)
+	if err != nil {
 		return result.Result{}, err
 	}
-	defer cArgs.EvalCtx.GetLimiters().ConcurrentExportRequests.Finish()
+	defer q.Release()
 
 	makeExternalStorage := !args.ReturnSST || args.Storage != roachpb.ExternalStorage{} ||
 		(args.StorageByLocalityKV != nil && len(args.StorageByLocalityKV) > 0)
@@ -103,7 +102,7 @@ func evalExport(
 
 	if makeExternalStorage {
 		if _, ok := roachpb.TenantFromContext(ctx); ok {
-			if args.Storage.Provider == roachpb.ExternalStorageProvider_FileTable {
+			if args.Storage.Provider == roachpb.ExternalStorageProvider_userfile {
 				return result.Result{}, errors.Errorf("requests to userfile on behalf of tenants must be made by the tenant's SQL process")
 			}
 		}
@@ -164,11 +163,13 @@ func evalExport(
 	useTBI := args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty()
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
-		data, summary, resume, err := e.ExportMVCCToSst(start, args.EndKey, args.StartTime,
-			h.Timestamp, exportAllRevisions, targetSize, maxSize, useTBI)
+		destFile := &storage.MemFile{}
+		summary, resume, err := e.ExportMVCCToSst(start, args.EndKey, args.StartTime,
+			h.Timestamp, exportAllRevisions, targetSize, maxSize, useTBI, destFile)
 		if err != nil {
 			return result.Result{}, err
 		}
+		data := destFile.Data()
 
 		// NB: This should only happen on the first page of results. If there were
 		// more data to be read that lead to pagination then we'd see it in this
@@ -177,22 +178,8 @@ func evalExport(
 			break
 		}
 
-		var checksum []byte
-		if !args.OmitChecksum {
-			// Compute the checksum before we upload and remove the local file.
-			checksum, err = SHA512ChecksumData(data)
-			if err != nil {
-				return result.Result{}, err
-			}
-		}
-
 		if args.Encryption != nil {
-			// NonVotingReplicas was minted after chunked encryption reader merged.
-			if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.NonVotingReplicas) {
-				data, err = EncryptFileChunked(data, args.Encryption.Key)
-			} else {
-				data, err = EncryptFile(data, args.Encryption.Key)
-			}
+			data, err = EncryptFile(data, args.Encryption.Key)
 			if err != nil {
 				return result.Result{}, err
 			}
@@ -207,7 +194,6 @@ func evalExport(
 		exported := roachpb.ExportResponse_File{
 			Span:       span,
 			Exported:   summary,
-			Sha512:     checksum,
 			LocalityKV: localityKV,
 		}
 
@@ -219,7 +205,7 @@ func evalExport(
 			if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxUploadRetries, func() error {
 				// We blindly retry any error here because we expect the caller to have
 				// verified the target is writable before sending ExportRequests for it.
-				if err := exportStore.WriteFile(ctx, exported.Path, bytes.NewReader(data)); err != nil {
+				if err := cloud.WriteFile(ctx, exportStore, exported.Path, bytes.NewReader(data)); err != nil {
 					log.VEventf(ctx, 1, "failed to put file: %+v", err)
 					return err
 				}
@@ -279,15 +265,6 @@ func evalExport(
 	}
 
 	return result.Result{}, nil
-}
-
-// SHA512ChecksumData returns the SHA512 checksum of data.
-func SHA512ChecksumData(data []byte) ([]byte, error) {
-	h := sha512.New()
-	if _, err := h.Write(data); err != nil {
-		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
-	}
-	return h.Sum(nil), nil
 }
 
 func getMatchingStore(

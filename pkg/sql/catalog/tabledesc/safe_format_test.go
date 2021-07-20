@@ -53,7 +53,7 @@ func TestSafeMessage(t *testing.T) {
 				"Families: [{ID: 0, Columns: [1]}], " +
 				"PrimaryIndex: 1, " +
 				"NextIndexID: 2, " +
-				"Indexes: [{ID: 1, Unique: true, Columns: [{ID: 1, Dir: ASC}]}]" +
+				"Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}]}]" +
 				"}",
 		},
 		{
@@ -80,13 +80,13 @@ func TestSafeMessage(t *testing.T) {
 				`{MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, ConstraintType: FOREIGN_KEY, ForeignKey: {OriginTableID: 112, OriginColumns: [2], ReferencedTableID: 2, ReferencedColumnIDs: [3], Validity: Unvalidated, State: ADD, MutationID: 1}}, ` +
 				`{MutationID: 2, Direction: ADD, State: DELETE_ONLY, Column: {ID: 5, TypeID: 20, Null: false, State: ADD, MutationID: 2}}, ` +
 				`{MutationID: 3, Direction: ADD, State: DELETE_ONLY, ConstraintType: CHECK, NotNullColumn: 2, Check: {Columns: [2], Validity: Unvalidated, State: ADD, MutationID: 3}}, ` +
-				`{MutationID: 3, Direction: ADD, State: DELETE_ONLY, Index: {ID: 3, Unique: false, Columns: [{ID: 3, Dir: ASC}, {ID: 2, Dir: DESC}], ExtraColumns: [1], StoreColumns: [5], State: ADD, MutationID: 3}}` +
+				`{MutationID: 3, Direction: ADD, State: DELETE_ONLY, Index: {ID: 3, Unique: false, KeyColumns: [{ID: 3, Dir: ASC}, {ID: 2, Dir: DESC}], KeySuffixColumns: [1], StoreColumns: [5], State: ADD, MutationID: 3}}` +
 				`], ` +
 				`PrimaryIndex: 1, ` +
 				`NextIndexID: 4, ` +
 				`Indexes: [` +
-				`{ID: 1, Unique: true, Columns: [{ID: 1, Dir: ASC}]}, ` +
-				`{ID: 2, Unique: false, Columns: [{ID: 3, Dir: ASC}], ExtraColumns: [1]}` +
+				`{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}]}, ` +
+				`{ID: 2, Unique: false, KeyColumns: [{ID: 3, Dir: ASC}], KeySuffixColumns: [1]}` +
 				`], ` +
 				`Checks: [` +
 				`{Columns: [2], Validity: Validated}` +
@@ -194,13 +194,13 @@ func TestSafeMessage(t *testing.T) {
 						State: descpb.DescriptorMutation_DELETE_ONLY,
 						Descriptor_: &descpb.DescriptorMutation_Index{
 							Index: &descpb.IndexDescriptor{
-								ID:             3,
-								Name:           "check_not_null",
-								ColumnIDs:      []descpb.ColumnID{3, 2},
-								ExtraColumnIDs: []descpb.ColumnID{1},
-								StoreColumnIDs: []descpb.ColumnID{5},
-								ColumnNames:    []string{"j_str", "j"},
-								ColumnDirections: []descpb.IndexDescriptor_Direction{
+								ID:                 3,
+								Name:               "check_not_null",
+								KeyColumnIDs:       []descpb.ColumnID{3, 2},
+								KeySuffixColumnIDs: []descpb.ColumnID{1},
+								StoreColumnIDs:     []descpb.ColumnID{5},
+								KeyColumnNames:     []string{"j_str", "j"},
+								KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 									descpb.IndexDescriptor_ASC,
 									descpb.IndexDescriptor_DESC,
 								},
@@ -248,7 +248,7 @@ func TestSafeMessage(t *testing.T) {
 				"Families: [{ID: 0, Columns: [1]}], " +
 				"PrimaryIndex: 1, " +
 				"NextIndexID: 2, " +
-				"Indexes: [{ID: 1, Unique: true, Columns: [{ID: 1, Dir: ASC}]}]" +
+				"Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}]}]" +
 				"}",
 			f: func(mutable *tabledesc.Mutable) catalog.TableDescriptor {
 				mutable.ClusterVersion = *mutable.TableDesc()

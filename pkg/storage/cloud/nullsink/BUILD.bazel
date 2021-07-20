@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "nullsink",
+    srcs = ["nullsink_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud/nullsink",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
+        "//pkg/storage/cloud",
+    ],
+)
+
+go_test(
+    name = "nullsink_test",
+    srcs = ["nullsink_storage_test.go"],
+    embed = [":nullsink"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/storage/cloud",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

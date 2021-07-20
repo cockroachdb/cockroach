@@ -1,0 +1,171 @@
+{
+  "pgVersion": "8.0.23",
+  "diffSummary": {
+    "TotalTables": 79,
+    "TotalColumns": 224,
+    "MissingTables": 57,
+    "MissingColumns": 71,
+    "DatatypeMismatches": 0
+  },
+  "pgMetadata": {
+    "administrable_role_authorizations": {
+      "grantee_host": null,
+      "host": null,
+      "is_default": null,
+      "is_mandatory": null,
+      "role_host": null,
+      "user": null
+    },
+    "applicable_roles": {
+      "grantee_host": null,
+      "host": null,
+      "is_default": null,
+      "is_mandatory": null,
+      "role_host": null,
+      "user": null
+    },
+    "character_sets": {
+      "description": null,
+      "maxlen": null
+    },
+    "collations": {
+      "character_set_name": null,
+      "id": null,
+      "is_compiled": null,
+      "is_default": null,
+      "sortlen": null
+    },
+    "column_statistics": {},
+    "columns": {
+      "column_key": null,
+      "column_type": null,
+      "extra": null,
+      "privileges": null,
+      "srs_id": null
+    },
+    "columns_extensions": {},
+    "enabled_roles": {
+      "is_default": null,
+      "is_mandatory": null,
+      "role_host": null
+    },
+    "engines": {},
+    "events": {},
+    "files": {},
+    "innodb_buffer_page": {},
+    "innodb_buffer_page_lru": {},
+    "innodb_buffer_pool_stats": {},
+    "innodb_cached_indexes": {},
+    "innodb_cmp": {},
+    "innodb_cmp_per_index": {},
+    "innodb_cmp_per_index_reset": {},
+    "innodb_cmp_reset": {},
+    "innodb_cmpmem": {},
+    "innodb_cmpmem_reset": {},
+    "innodb_columns": {},
+    "innodb_datafiles": {},
+    "innodb_fields": {},
+    "innodb_foreign": {},
+    "innodb_foreign_cols": {},
+    "innodb_ft_being_deleted": {},
+    "innodb_ft_config": {},
+    "innodb_ft_default_stopword": {},
+    "innodb_ft_deleted": {},
+    "innodb_ft_index_cache": {},
+    "innodb_ft_index_table": {},
+    "innodb_indexes": {},
+    "innodb_metrics": {},
+    "innodb_session_temp_tablespaces": {},
+    "innodb_tables": {},
+    "innodb_tablespaces": {},
+    "innodb_tablespaces_brief": {},
+    "innodb_tablestats": {},
+    "innodb_temp_table_info": {},
+    "innodb_trx": {},
+    "innodb_virtual": {},
+    "key_column_usage": {
+      "referenced_column_name": null,
+      "referenced_table_name": null,
+      "referenced_table_schema": null
+    },
+    "keywords": {},
+    "optimizer_trace": {},
+    "parameters": {
+      "routine_type": null
+    },
+    "partitions": {},
+    "plugins": {},
+    "processlist": {},
+    "profiling": {},
+    "resource_groups": {},
+    "role_column_grants": {},
+    "role_routine_grants": {},
+    "role_table_grants": {
+      "grantee_host": null,
+      "grantor_host": null
+    },
+    "routines": {
+      "character_set_client": null,
+      "collation_connection": null,
+      "database_collation": null,
+      "definer": null,
+      "routine_comment": null,
+      "sql_mode": null
+    },
+    "schemata": {
+      "default_collation_name": null,
+      "default_encryption": null
+    },
+    "schemata_extensions": {},
+    "st_geometry_columns": {},
+    "st_spatial_reference_systems": {},
+    "st_units_of_measure": {},
+    "statistics": {
+      "collation": null,
+      "comment": null,
+      "expression": null,
+      "index_comment": null,
+      "index_type": null,
+      "is_visible": null,
+      "nullable": null,
+      "packed": null,
+      "sub_part": null
+    },
+    "table_constraints": {
+      "enforced": null
+    },
+    "table_constraints_extensions": {},
+    "tables": {
+      "auto_increment": null,
+      "avg_row_length": null,
+      "check_time": null,
+      "checksum": null,
+      "create_options": null,
+      "create_time": null,
+      "data_free": null,
+      "data_length": null,
+      "engine": null,
+      "index_length": null,
+      "max_data_length": null,
+      "row_format": null,
+      "table_collation": null,
+      "table_comment": null,
+      "table_rows": null,
+      "update_time": null
+    },
+    "tables_extensions": {},
+    "tablespaces": {},
+    "tablespaces_extensions": {},
+    "triggers": {},
+    "user_attributes": {},
+    "view_routine_usage": {},
+    "view_table_usage": {},
+    "views": {
+      "character_set_client": null,
+      "collation_connection": null,
+      "definer": null,
+      "security_type": null
+    }
+  },
+  "unimplementedTypes": null
+}

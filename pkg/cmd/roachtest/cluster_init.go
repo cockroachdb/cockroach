@@ -29,7 +29,10 @@ import (
 func runClusterInit(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
-	addrs := c.InternalAddr(ctx, c.All())
+	addrs, err := c.InternalAddr(ctx, c.All())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// TODO(tbg): this should never happen, but I saw it locally. The result
 	// is the test hanging forever, because all nodes will create their own
@@ -60,7 +63,11 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 			}
 
 			urlMap := make(map[int]string)
-			for i, addr := range c.ExternalAdminUIAddr(ctx, c.All()) {
+			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, addr := range adminUIAddrs {
 				urlMap[i+1] = `http://` + addr
 			}
 

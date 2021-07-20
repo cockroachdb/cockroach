@@ -164,6 +164,17 @@ const jobsReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshJobs = jobsReducerObj.refresh;
 
+export const jobRequestKey = (req: api.JobRequestMessage): string =>
+  `${req.job_id}`;
+
+const jobReducerObj = new KeyedCachedDataReducer(
+  api.getJob,
+  "job",
+  jobRequestKey,
+  moment.duration(10, "s"),
+);
+export const refreshJob = jobReducerObj.refresh;
+
 export const queryToID = (req: api.QueryPlanRequestMessage): string =>
   req.query;
 
@@ -271,6 +282,7 @@ const queriesReducerObj = new CachedDataReducer(
   moment.duration(5, "m"),
   moment.duration(1, "m"),
 );
+export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
 
 const statementDiagnosticsReportsReducerObj = new CachedDataReducer(
@@ -313,6 +325,7 @@ export interface APIReducersState {
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
+  job: KeyedCachedDataReducerState<api.JobResponseMessage>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
   problemRanges: KeyedCachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: KeyedCachedDataReducerState<api.CertificatesResponseMessage>;
@@ -345,6 +358,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
+  [jobReducerObj.actionNamespace]: jobReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
   [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,

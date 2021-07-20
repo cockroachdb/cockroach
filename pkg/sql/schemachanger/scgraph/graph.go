@@ -110,12 +110,12 @@ func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
 	return oe, ok
 }
 
-// AddOpEdge adds an op edge connecting the nodes for two states of a target.
-func (g *Graph) AddOpEdge(t *scpb.Target, from, to scpb.State, op scop.Op) {
+// AddOpEdges adds an op edges connecting the nodes for two states of a target.
+func (g *Graph) AddOpEdges(t *scpb.Target, from, to scpb.State, ops ...scop.Op) {
 	oe := &OpEdge{
 		from: g.getOrCreateNode(t, from),
 		to:   g.getOrCreateNode(t, to),
-		op:   op,
+		op:   ops,
 	}
 	if existing, exists := g.nodeOpEdges[oe.from]; exists {
 		panic(errors.Errorf("duplicate outbound op edge %v and %v",
@@ -150,7 +150,7 @@ type Edge interface {
 // OpEdge represents an edge changing the state of a target with an op.
 type OpEdge struct {
 	from, to *scpb.Node
-	op       scop.Op
+	op       []scop.Op
 }
 
 // From implements the Edge interface.
@@ -160,7 +160,7 @@ func (oe *OpEdge) From() *scpb.Node { return oe.from }
 func (oe *OpEdge) To() *scpb.Node { return oe.to }
 
 // Op returns the scop.Op for execution that is associated with the op edge.
-func (oe *OpEdge) Op() scop.Op { return oe.op }
+func (oe *OpEdge) Op() []scop.Op { return oe.op }
 
 // DepEdge represents a dependency between two target states. A dependency
 // implies that the To() state cannot be reached before the From() state. It

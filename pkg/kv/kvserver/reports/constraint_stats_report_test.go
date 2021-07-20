@@ -14,7 +14,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -72,17 +74,17 @@ func TestConformanceReport(t *testing.T) {
 					},
 				},
 				splits: []split{
-					{key: "/Table/t1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
-					{key: "/Table/t2", stores: []int{1, 2, 3}},
-					{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
 					{
 						// This range is not covered by the db1's zone config and so it won't
 						// be counted.
-						key: "/Table/sentinel", stores: []int{1, 2, 3},
+						key: "/Table/sentinel", stores: "1 2 3",
 					},
 				},
 				nodes: []node{
@@ -150,20 +152,20 @@ func TestConformanceReport(t *testing.T) {
 					},
 				},
 				splits: []split{
-					{key: "/Table/t1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
-					{key: "/Table/t2", stores: []int{1, 2, 3}},
-					{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
-					{key: "/Table/sentinel", stores: []int{1, 2, 3}},
-					{key: "/Table/t3", stores: []int{1, 2, 3}},
-					{key: "/Table/t3/pk/100", stores: []int{1, 2, 3}},
-					{key: "/Table/t3/pk/101", stores: []int{1, 2, 3}},
-					{key: "/Table/t3/pk/199", stores: []int{1, 2, 3}},
-					{key: "/Table/t3/pk/200", stores: []int{1, 2, 3}},
-					{key: "/Table/t4", stores: []int{1, 2, 3}},
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
+					{key: "/Table/sentinel", stores: "1 2 3"},
+					{key: "/Table/t3", stores: "1 2 3"},
+					{key: "/Table/t3/pk/100", stores: "1 2 3"},
+					{key: "/Table/t3/pk/101", stores: "1 2 3"},
+					{key: "/Table/t3/pk/199", stores: "1 2 3"},
+					{key: "/Table/t3/pk/200", stores: "1 2 3"},
+					{key: "/Table/t4", stores: "1 2 3"},
 				},
 				// None of the stores have any attributes.
 				nodes: []node{
@@ -235,7 +237,7 @@ func TestConformanceReport(t *testing.T) {
 					},
 				},
 				splits: []split{
-					{key: "/Table/t1", stores: []int{1, 2}},
+					{key: "/Table/t1", stores: "1 2"},
 				},
 				nodes: []node{
 					{id: 1, locality: "region=us,dc=dc1", stores: []store{{id: 1}}},
@@ -392,9 +394,9 @@ func (idx index) toIndexDescriptor(id int) descpb.IndexDescriptor {
 	if len(idx.partitions) > 0 {
 		neededCols := idx.partitions.numCols()
 		for i := 0; i < neededCols; i++ {
-			idxDesc.ColumnIDs = append(idxDesc.ColumnIDs, descpb.ColumnID(i))
-			idxDesc.ColumnNames = append(idxDesc.ColumnNames, fmt.Sprintf("col%d", i))
-			idxDesc.ColumnDirections = append(idxDesc.ColumnDirections, descpb.IndexDescriptor_ASC)
+			idxDesc.KeyColumnIDs = append(idxDesc.KeyColumnIDs, descpb.ColumnID(i))
+			idxDesc.KeyColumnNames = append(idxDesc.KeyColumnNames, fmt.Sprintf("col%d", i))
+			idxDesc.KeyColumnDirections = append(idxDesc.KeyColumnDirections, descpb.IndexDescriptor_ASC)
 		}
 		idxDesc.Partitioning.NumColumns = uint32(len(idx.partitions[0].start))
 		for _, p := range idx.partitions {
@@ -469,8 +471,13 @@ func (c constraintEntry) toReportEntry(
 }
 
 type split struct {
-	key    string
-	stores []int
+	key string
+	// stores lists the stores that are gonna have replicas for a particular range. It's a space-separated
+	// list of store ids, with an optional replica type. If the type of replica is missing, it will
+	// be a voter-full.
+	// The format is a space-separated list of <storeID><?replica type>. For example:
+	// "1 2 3 4v 5i 6o 7d 8l" (1,2,3,4 are voter-full, then incoming, outgoing, demoting, learner).
+	stores string
 }
 
 type store struct {
@@ -560,7 +567,7 @@ func TestConstraintReport(t *testing.T) {
 	// This test uses the cluster as a recipient for a report saved from outside
 	// the cluster. We disable the cluster's own production of reports so that it
 	// doesn't interfere with the test.
-	ReporterInterval.Override(&st.SV, 0)
+	ReporterInterval.Override(ctx, &st.SV, 0)
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	con := s.InternalExecutor().(sqlutil.InternalExecutor)
 	defer s.Stopper().Stop(ctx)
@@ -738,6 +745,12 @@ type compiledTestCase struct {
 	objectToZone map[string]ZoneKey
 	// The inverse of objectToZone.
 	zoneToObject map[ZoneKey]string
+
+	// nodeLocalities maps from each node to its locality.
+	nodeLocalities map[roachpb.NodeID]roachpb.Locality
+	// allLocalities is the list of all localities in the cluster, at all
+	// granularities.
+	allLocalities map[roachpb.NodeID]map[string]roachpb.Locality
 }
 
 // compileTestCase takes the input schema and turns it into a compiledTestCase.
@@ -795,24 +808,43 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		}
 	}
 
-	keyScanner := keysutils.MakePrettyScannerForNamedTables(tableToID, idxToID)
-	ranges, err := processSplits(keyScanner, tc.splits)
-	if err != nil {
-		return compiledTestCase{}, err
-	}
+	var allStores []roachpb.StoreDescriptor
+	for i, n := range tc.nodes {
+		// Ensure nodes are not defined more than once.
+		for j := 0; j < i; j++ {
+			if tc.nodes[j].id == n.id {
+				return compiledTestCase{}, errors.Errorf("duplicate node definition: %d", n.id)
+			}
+		}
 
-	var storeDescs []roachpb.StoreDescriptor
-	for _, n := range tc.nodes {
 		_ /* nodeDesc */, sds, err := n.toDescriptors()
 		if err != nil {
 			return compiledTestCase{}, err
 		}
-		storeDescs = append(storeDescs, sds...)
+		allStores = append(allStores, sds...)
 	}
+
+	keyScanner := keysutils.MakePrettyScannerForNamedTables(tableToID, idxToID)
+	ranges, err := processSplits(keyScanner, tc.splits, allStores)
+	if err != nil {
+		return compiledTestCase{}, err
+	}
+
+	nodeLocalities := make(map[roachpb.NodeID]roachpb.Locality, len(allStores))
+	for _, storeDesc := range allStores {
+		nodeDesc := storeDesc.Node
+		// Note: We might overwrite the node's localities here. We assume that all
+		// the stores for a node have the same node descriptor.
+		nodeLocalities[nodeDesc.NodeID] = nodeDesc.Locality
+	}
+	allLocalities := expandLocalities(nodeLocalities)
 	storeResolver := func(r *roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
-		stores := make([]roachpb.StoreDescriptor, len(r.Replicas().VoterDescriptors()))
-		for i, rep := range r.Replicas().VoterDescriptors() {
-			for _, desc := range storeDescs {
+		replicas := r.Replicas().FilterToDescriptors(func(_ roachpb.ReplicaDescriptor) bool {
+			return true
+		})
+		stores := make([]roachpb.StoreDescriptor, len(replicas))
+		for i, rep := range replicas {
+			for _, desc := range allStores {
 				if rep.StoreID == desc.StoreID {
 					stores[i] = desc
 					break
@@ -836,12 +868,14 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		objectToZone[v] = k
 	}
 	return compiledTestCase{
-		iter:         testRangeIter{ranges: ranges},
-		cfg:          cfg,
-		resolver:     storeResolver,
-		checker:      nodeChecker,
-		zoneToObject: zoneToObject,
-		objectToZone: objectToZone,
+		iter:           testRangeIter{ranges: ranges},
+		cfg:            cfg,
+		resolver:       storeResolver,
+		checker:        nodeChecker,
+		zoneToObject:   zoneToObject,
+		objectToZone:   objectToZone,
+		nodeLocalities: nodeLocalities,
+		allLocalities:  allLocalities,
 	}, nil
 }
 
@@ -873,8 +907,18 @@ func generateTableZone(t table, tableDesc descpb.TableDescriptor) (*zonepb.ZoneC
 }
 
 func processSplits(
-	keyScanner keysutil.PrettyScanner, splits []split,
+	keyScanner keysutil.PrettyScanner, splits []split, stores []roachpb.StoreDescriptor,
 ) ([]roachpb.RangeDescriptor, error) {
+
+	findStore := func(storeID int) (roachpb.StoreDescriptor, error) {
+		for _, s := range stores {
+			if s.StoreID == roachpb.StoreID(storeID) {
+				return s, nil
+			}
+		}
+		return roachpb.StoreDescriptor{}, errors.Errorf("store not found: %d", storeID)
+	}
+
 	ranges := make([]roachpb.RangeDescriptor, len(splits))
 	var lastKey roachpb.Key
 	for i, split := range splits {
@@ -900,13 +944,56 @@ func processSplits(
 		}
 
 		rd := roachpb.RangeDescriptor{
-			RangeID:  roachpb.RangeID(i + 1), // IDs start at 1
-			StartKey: keys.MustAddr(startKey),
-			EndKey:   keys.MustAddr(endKey),
+			RangeID:       roachpb.RangeID(i + 1), // IDs start at 1
+			StartKey:      keys.MustAddr(startKey),
+			EndKey:        keys.MustAddr(endKey),
+			NextReplicaID: roachpb.ReplicaID(2), // IDs start at 1, so Next starts at 2.
 		}
-		for _, storeID := range split.stores {
-			rd.AddReplica(roachpb.NodeID(storeID), roachpb.StoreID(storeID), roachpb.VOTER_FULL)
+
+		reps := strings.Split(split.stores, " ")
+		for _, rep := range reps {
+			if rep == "" {
+				continue
+			}
+			// The format is a numeric storeID, optionally followed by a single character
+			// indicating the replica type.
+			re := regexp.MustCompile("([0-9]+)(.?)")
+			spec := re.FindStringSubmatch(rep)
+			if len(spec) != 3 {
+				return nil, errors.Errorf("bad replica spec: %s", rep)
+			}
+			storeID, err := strconv.Atoi(spec[1])
+			if err != nil {
+				return nil, err
+			}
+			storeDesc, err := findStore(storeID)
+			if err != nil {
+				return nil, err
+			}
+			// Figure out the type of the replica. It's VOTER_FULL by default, unless
+			// another option was specified.
+			typ := roachpb.VOTER_FULL
+			if spec[2] != "" {
+				replicaType := spec[2]
+				switch replicaType {
+				case "v":
+					typ = roachpb.VOTER_FULL
+				case "i":
+					typ = roachpb.VOTER_INCOMING
+				case "o":
+					typ = roachpb.VOTER_OUTGOING
+				case "d":
+					typ = roachpb.VOTER_DEMOTING_NON_VOTER
+				case "l":
+					typ = roachpb.LEARNER
+				default:
+					return nil, errors.Errorf("bad replica type: %s", replicaType)
+				}
+			}
+
+			rd.AddReplica(storeDesc.Node.NodeID, storeDesc.StoreID, typ)
 		}
+
 		ranges[i] = rd
 	}
 	return ranges, nil
@@ -929,7 +1016,7 @@ func makeTableDesc(t table, tableID int, dbID int) (descpb.TableDescriptor, erro
 	}
 	numCols := 0
 	for _, idx := range desc.Indexes {
-		c := len(idx.ColumnIDs)
+		c := len(idx.KeyColumnIDs)
 		if c > numCols {
 			numCols = c
 		}

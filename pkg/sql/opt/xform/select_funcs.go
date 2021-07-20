@@ -338,7 +338,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.Constraint = constraint
+		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
 		// Record whether we were able to use partitions to constrain the scan.
 		newScanPrivate.PartitionConstrainedScan = (len(partitionFilters) > 0)
 
@@ -438,6 +438,28 @@ func (c *CustomFuncs) tryFoldComputedCol(
 // correctness reasons; although values are unlikely to exist between defined
 // partitions, they may exist and so the constraints of the scan must incorporate
 // these spans.
+//
+// For example, if we have:
+//   PARTITION BY LIST (a, b) (
+//     PARTITION a VALUES IN ((1, 10)),
+//     PARTITION b VALUES IN ((2, 20)),
+//   )
+// The in-between filters are:
+//   (a, b) < (1, 10) OR
+//   ((a, b) > (1, 10) AND (a, b) < (2, 20)) OR
+//   (a, b) > (2, 20)
+//
+// When passed as optional filters to index constrains, these filters generate
+// the desired spans:
+//   [ - /1/10), (/1/10 - /2/20), (2/20 - ].
+//
+// TODO(radu,mgartner): technically these filters are not correct with respect
+// to NULL values - we would want the tuple comparisons to treat NULLs as the
+// smallest value. We compensate for this by adding an (a IS NULL) disjunct if
+// column `a` is nullable; in addition, we know that these filters will only be
+// used for span generation, and the span generation currently doesn't exclude
+// NULLs on any columns other than the first in the tuple. This is fragile and
+// would break if we improve the span generation for tuple inequalities.
 func (c *CustomFuncs) inBetweenFilters(
 	tabID opt.TableID, index cat.Index, partitionValues []tree.Datums,
 ) memo.FiltersExpr {
@@ -451,6 +473,31 @@ func (c *CustomFuncs) inBetweenFilters(
 	sort.Slice(partitionValues, func(i, j int) bool {
 		return partitionValues[i].Compare(c.e.evalCtx, partitionValues[j]) < 0
 	})
+
+	// The beginExpr created below will not include NULL values for the first
+	// column. For example, with an index on (a, b) and partition values of
+	// {'foo', 'bar'}, beginExpr would be (a, b) < ('foo', 'bar') which
+	// evaluates to NULL if a is NULL. The index constraint span generated for
+	// beginExpr expression would be (/NULL - /'foo'/'bar'), which excludes NULL
+	// values for a. Any rows where a is NULL would not be scanned, producing
+	// incorrect query results.
+	//
+	// Therefore, if the first column in the index is nullable, we add an IS
+	// NULL expression so that NULL values are included in the index constraint
+	// span generated later on. In the same example above, the constraint span
+	// above becomes [/NULL - /'foo'/'bar'), which includes NULL values for a.
+	//
+	// This is only required for the first column in the index because the index
+	// constraint spans built for tuple inequalities only exclude NULL values
+	// for the first element in the tuple.
+	firstCol := index.Column(0)
+	if firstCol.IsNullable() {
+		nullExpr := c.e.f.ConstructIs(
+			c.e.f.ConstructVariable(tabID.ColumnID(firstCol.Ordinal())),
+			memo.NullSingleton,
+		)
+		inBetween = append(inBetween, nullExpr)
+	}
 
 	// Add the beginning span.
 	beginExpr := c.columnComparison(tabID, index, partitionValues[0], -1)
@@ -729,7 +776,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// Construct new ScanOpDef with the new index and constraint.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
-		newScanPrivate.Constraint = constraint
+		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
 		newScanPrivate.InvertedConstraint = spansToRead
 
 		// Calculate the PK columns once.
@@ -1433,62 +1480,30 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 	})
 }
 
-// ExprPair stores a left and right ScalarExpr. ExprPairForSplitDisjunction
-// returns ExprPair, which can be deconstructed later, to avoid extra
-// computation in determining the left and right expression groups.
-type ExprPair struct {
-	left          opt.ScalarExpr
-	right         opt.ScalarExpr
-	itemToReplace *memo.FiltersItem
-}
-
-// ExprPairLeft returns the left ScalarExpr in an ExprPair.
-func (c *CustomFuncs) ExprPairLeft(ep ExprPair) opt.ScalarExpr {
-	return ep.left
-}
-
-// ExprPairRight returns the right ScalarExpr in an ExprPair.
-func (c *CustomFuncs) ExprPairRight(ep ExprPair) opt.ScalarExpr {
-	return ep.right
-}
-
-// ExprPairFiltersItemToReplace returns the original FiltersItem that the
-// ExprPair was generated from. This FiltersItem should be replaced by
-// ExprPairLeft and ExprPairRight in the newly generated filters in
-// SplitDisjunction(AddKey).
-func (c *CustomFuncs) ExprPairFiltersItemToReplace(ep ExprPair) *memo.FiltersItem {
-	return ep.itemToReplace
-}
-
-// ExprPairSucceeded returns true if the ExprPair is not nil.
-func (c *CustomFuncs) ExprPairSucceeded(ep ExprPair) bool {
-	return ep != ExprPair{}
-}
-
-// ExprPairForSplitDisjunction finds the first "interesting" ExprPair in the
-// filters and returns it. If an "interesting" ExprPair is not found, an empty
-// ExprPair is returned.
+// SplitDisjunction finds the first disjunction in the filters that can be split
+// into an interesting pair of expressions. It returns the pair of expressions
+// and the Filters item they were a part of. If an "interesting" disjunction is
+// not found, ok=false is returned.
 //
-// For details on what makes an ExprPair "interesting", see
-// buildExprPairForSplitDisjunction.
-func (c *CustomFuncs) ExprPairForSplitDisjunction(
+// For details on what makes an "interesting" disjunction, see
+// findInterestingDisjunctionPair.
+func (c *CustomFuncs) SplitDisjunction(
 	sp *memo.ScanPrivate, filters memo.FiltersExpr,
-) ExprPair {
+) (left opt.ScalarExpr, right opt.ScalarExpr, itemToReplace *memo.FiltersItem, ok bool) {
 	for i := range filters {
 		if filters[i].Condition.Op() == opt.OrOp {
-			ep := c.buildExprPairForSplitDisjunction(sp, &filters[i])
-			if (ep != ExprPair{}) {
-				return ep
+			if left, right, ok := c.findInterestingDisjunctionPair(sp, &filters[i]); ok {
+				return left, right, &filters[i], true
 			}
 		}
 	}
-	return ExprPair{}
+	return nil, nil, nil, false
 }
 
-// buildExprPairForSplitDisjunction groups disjuction sub-expressions into an
-// "interesting" ExprPair.
+// findInterestingDisjunctionPair groups disjunction sub-expressions into an
+// "interesting" pair of expressions.
 //
-// An "interesting" ExprPair is one where:
+// An "interesting" pair of expressions is one where:
 //
 //   1. The column sets of both expressions in the pair are not
 //      equal.
@@ -1499,18 +1514,18 @@ func (c *CustomFuncs) ExprPairForSplitDisjunction(
 //
 //   u = 1 OR v = 2
 //
-// If an index exists on u and another on v, an "interesting" ExprPair exists,
-// ("u = 1", "v = 1"). If both indexes do not exist, there is no "interesting"
-// ExprPair possible.
+// If an index exists on u and another on v, an "interesting" pair exists, ("u =
+// 1", "v = 1"). If both indexes do not exist, there is no "interesting" pair
+// possible.
 //
 // Now consider the expression:
 //
 //   u = 1 OR u = 2
 //
-// There is no possible "interesting" ExprPair here because the left and right
-// sides of the disjunction share the same columns.
+// There is no possible "interesting" pair here because the left and right sides
+// of the disjunction share the same columns.
 //
-// buildExprPairForSplitDisjunction groups all sub-expressions adjacent to the
+// findInterestingDisjunctionPair groups all sub-expressions adjacent to the
 // input's top-level OrExpr into left and right expression groups. These two
 // groups form the new filter expressions on the left and right side of the
 // generated UnionAll in SplitDisjunction(AddKey).
@@ -1519,14 +1534,13 @@ func (c *CustomFuncs) ExprPairForSplitDisjunction(
 // are grouped in the left group. All other sub-expressions are grouped in the
 // right group.
 //
-// buildExprPairForSplitDisjunction returns an empty ExprPair if all
-// sub-expressions have the same columns. It also returns an empty ExprPair if
-// either expression in the pair found is not likely to constrain an index
-// scan. See canMaybeConstrainIndexWithCols for details on how this is
-// determined.
-func (c *CustomFuncs) buildExprPairForSplitDisjunction(
+// findInterestingDisjunctionPair returns an ok=false if all sub-expressions
+// have the same columns. It also returns ok=false if either expression of the
+// pair is likely to constrain an index scan. See canMaybeConstrainIndexWithCols
+// for details on how this is determined.
+func (c *CustomFuncs) findInterestingDisjunctionPair(
 	sp *memo.ScanPrivate, filter *memo.FiltersItem,
-) ExprPair {
+) (left opt.ScalarExpr, right opt.ScalarExpr, ok bool) {
 	var leftExprs memo.ScalarListExpr
 	var rightExprs memo.ScalarListExpr
 	var leftColSet opt.ColSet
@@ -1567,14 +1581,10 @@ func (c *CustomFuncs) buildExprPairForSplitDisjunction(
 		len(rightExprs) == 0 ||
 		!c.canMaybeConstrainIndexWithCols(sp, leftColSet) ||
 		!c.canMaybeConstrainIndexWithCols(sp, rightColSet) {
-		return ExprPair{}
+		return nil, nil, false
 	}
 
-	return ExprPair{
-		left:          c.constructOr(leftExprs),
-		right:         c.constructOr(rightExprs),
-		itemToReplace: filter,
-	}
+	return c.constructOr(leftExprs), c.constructOr(rightExprs), true
 }
 
 // canMaybeConstrainIndexWithCols returns true if any indexes on the

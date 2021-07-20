@@ -12,7 +12,7 @@ import React from "react";
 import { cockroach } from "src/js/protos";
 import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
 import { JobStatus } from "./jobStatus";
-import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import Job = cockroach.server.serverpb.IJobResponse;
 
 export interface JobStatusCellProps {
   job: Job;

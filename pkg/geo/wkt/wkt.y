@@ -14,82 +14,6 @@ package wkt
 
 import "github.com/twpayne/go-geom"
 
-// TODO(ayang): move these into lex.go
-func isValidLineString(wktlex wktLexer, flatCoords []float64, stride int) bool {
-	if len(flatCoords) < 2 * stride {
-		wktlex.(*wktLex).setParseError("non-empty linestring with only one point", "minimum number of points is 2")
-		return false
-	}
-	return true
-}
-
-func isValidPolygonRing(wktlex wktLexer, flatCoords []float64, stride int) bool {
-	if len(flatCoords) < 4 * stride {
-		wktlex.(*wktLex).setParseError("polygon ring doesn't have enough points", "minimum number of points is 4")
-		return false
-	}
-	for i := 0; i < stride; i++ {
-		if flatCoords[i] != flatCoords[len(flatCoords)-stride+i] {
-			wktlex.(*wktLex).setParseError("polygon ring not closed", "ensure first and last point are the same")
-			return false
-    }
-	}
-	return true
-}
-
-type geomFlatCoordsRepr struct {
-	flatCoords []float64
-	ends       []int
-}
-
-func makeGeomFlatCoordsRepr(flatCoords []float64) geomFlatCoordsRepr {
-	return geomFlatCoordsRepr{flatCoords: flatCoords, ends: []int{len(flatCoords)}}
-}
-
-func appendGeomFlatCoordsReprs(p1 geomFlatCoordsRepr, p2 geomFlatCoordsRepr) geomFlatCoordsRepr {
-	if len(p1.ends) > 0 {
-		p1LastEnd := p1.ends[len(p1.ends)-1]
-		for i, _ := range p2.ends {
-			p2.ends[i] += p1LastEnd
-		}
-	}
-	return geomFlatCoordsRepr{flatCoords: append(p1.flatCoords, p2.flatCoords...), ends: append(p1.ends, p2.ends...)}
-}
-
-type multiPolygonFlatCoordsRepr struct {
-	flatCoords []float64
-	endss      [][]int
-}
-
-func makeMultiPolygonFlatCoordsRepr(p geomFlatCoordsRepr) multiPolygonFlatCoordsRepr {
-	if p.flatCoords == nil {
-		return multiPolygonFlatCoordsRepr{flatCoords: nil, endss: [][]int{nil}}
-	}
-	return multiPolygonFlatCoordsRepr{flatCoords: p.flatCoords, endss: [][]int{p.ends}}
-}
-
-func appendMultiPolygonFlatCoordsRepr(
-	p1 multiPolygonFlatCoordsRepr, p2 multiPolygonFlatCoordsRepr,
-) multiPolygonFlatCoordsRepr {
-	p1LastEndsLastEnd := 0
-	for i := len(p1.endss) - 1; i >= 0; i-- {
-		if len(p1.endss[i]) > 0 {
-			p1LastEndsLastEnd = p1.endss[i][len(p1.endss[i])-1]
-			break
-		}
-	}
-	if p1LastEndsLastEnd > 0 {
-		for i, _ := range p2.endss {
-			for j, _ := range p2.endss[i] {
-				p2.endss[i][j] += p1LastEndsLastEnd
-			}
-		}
-	}
-	return multiPolygonFlatCoordsRepr{
-		flatCoords: append(p1.flatCoords, p2.flatCoords...), endss: append(p1.endss, p2.endss...),
-	}
-}
-
 %}
 
 %union {
@@ -758,7 +682,7 @@ flat_coords_polygon_ring_list:
 flat_coords_polygon_ring:
 	flat_coords_point_list_with_parens
 	{
-		if !isValidPolygonRing(wktlex, $1, wktlex.(*wktLex).curLayout().Stride()) {
+		if !wktlex.(*wktLex).isValidPolygonRing($1) {
 			return 1
 		}
 		$$ = makeGeomFlatCoordsRepr($1)
@@ -767,7 +691,7 @@ flat_coords_polygon_ring:
 flat_coords_linestring:
 	flat_coords_point_list_with_parens
 	{
-		if !isValidLineString(wktlex, $1, wktlex.(*wktLex).curLayout().Stride()) {
+		if !wktlex.(*wktLex).isValidLineString($1) {
 			return 1
 		}
 	}
@@ -794,17 +718,7 @@ flat_coords_point_with_parens:
 flat_coords_point:
 	flat_coords
 	{
-		switch len($1) {
-		case 1:
-			wktlex.(*wktLex).setParseError("not enough coordinates", "each point needs at least 2 coords")
-			return 1
-		case 2, 3, 4:
-			ok := wktlex.(*wktLex).validateStrideAndSetDefaultLayoutIfNoLayout(len($1))
-			if !ok {
-				return 1
-			}
-		default:
-			wktlex.(*wktLex).setParseError("too many coordinates", "each point can have at most 4 coords")
+		if !wktlex.(*wktLex).isValidPoint($1) {
 			return 1
 		}
 	}

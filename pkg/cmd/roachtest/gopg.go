@@ -46,12 +46,14 @@ func registerGopg(r *testRegistry) {
 		t.Status("setting up cockroach")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(
+			ctx, version, c, node[0], nil,
+		); err != nil {
 			t.Fatal(err)
 		}
 
@@ -63,17 +65,7 @@ func registerGopg(r *testRegistry) {
 		c.l.Printf("Latest gopg release is %s.", gopgLatestTag)
 		c.l.Printf("Supported gopg release is %s.", gopgSupportedTag)
 
-		installLatestGolang(ctx, t, c, node)
-
-		if err := repeatRunE(
-			ctx,
-			c,
-			node,
-			"install dependencies",
-			`sudo apt-get -qq install build-essential`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		installGolang(ctx, t, c, node)
 
 		if err := repeatRunE(
 			ctx, c, node, "remove old gopg",
@@ -156,7 +148,7 @@ func registerGopg(r *testRegistry) {
 		Name:       "gopg",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
-		MinVersion: "v19.2.0",
+		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runGopg(ctx, t, c)

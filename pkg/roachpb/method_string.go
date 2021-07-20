@@ -43,22 +43,21 @@ func _() {
 	_ = x[InitPut-32]
 	_ = x[WriteBatch-33]
 	_ = x[Export-34]
-	_ = x[Import-35]
-	_ = x[AdminScatter-36]
-	_ = x[AddSSTable-37]
-	_ = x[Migrate-38]
-	_ = x[RecomputeStats-39]
-	_ = x[Refresh-40]
-	_ = x[RefreshRange-41]
-	_ = x[Subsume-42]
-	_ = x[RangeStats-43]
-	_ = x[AdminVerifyProtectedTimestamp-44]
-	_ = x[NumMethods-45]
+	_ = x[AdminScatter-35]
+	_ = x[AddSSTable-36]
+	_ = x[Migrate-37]
+	_ = x[RecomputeStats-38]
+	_ = x[Refresh-39]
+	_ = x[RefreshRange-40]
+	_ = x[Subsume-41]
+	_ = x[RangeStats-42]
+	_ = x[AdminVerifyProtectedTimestamp-43]
+	_ = x[NumMethods-44]
 }
 
-const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeRevertRangeScanReverseScanEndTxnAdminSplitAdminUnsplitAdminMergeAdminTransferLeaseAdminChangeReplicasAdminRelocateRangeHeartbeatTxnGCPushTxnRecoverTxnQueryTxnQueryIntentResolveIntentResolveIntentRangeMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportImportAdminScatterAddSSTableMigrateRecomputeStatsRefreshRefreshRangeSubsumeRangeStatsAdminVerifyProtectedTimestampNumMethods"
+const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeRevertRangeScanReverseScanEndTxnAdminSplitAdminUnsplitAdminMergeAdminTransferLeaseAdminChangeReplicasAdminRelocateRangeHeartbeatTxnGCPushTxnRecoverTxnQueryTxnQueryIntentResolveIntentResolveIntentRangeMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportAdminScatterAddSSTableMigrateRecomputeStatsRefreshRefreshRangeSubsumeRangeStatsAdminVerifyProtectedTimestampNumMethods"
 
-var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 67, 71, 82, 88, 98, 110, 120, 138, 157, 175, 187, 189, 196, 206, 214, 225, 238, 256, 261, 272, 284, 297, 306, 321, 337, 344, 354, 360, 366, 378, 388, 395, 409, 416, 428, 435, 445, 474, 484}
+var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 67, 71, 82, 88, 98, 110, 120, 138, 157, 175, 187, 189, 196, 206, 214, 225, 238, 256, 261, 272, 284, 297, 306, 321, 337, 344, 354, 360, 372, 382, 389, 403, 410, 422, 429, 439, 468, 478}
 
 func (i Method) String() string {
 	if i < 0 || i >= Method(len(_Method_index)-1) {

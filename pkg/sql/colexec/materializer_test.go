@@ -19,12 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -32,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
 
 func TestColumnarizeMaterialize(t *testing.T) {
@@ -43,10 +43,10 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	nCols := 1 + rng.Intn(4)
 	var typs []*types.T
 	for len(typs) < nCols {
-		typs = append(typs, rowenc.RandType(rng))
+		typs = append(typs, randgen.RandType(rng))
 	}
 	nRows := 10000
-	rows := rowenc.RandEncDatumRowsOfTypes(rng, nRows, typs)
+	rows := randgen.RandEncDatumRowsOfTypes(rng, nRows, typs)
 	input := execinfra.NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
@@ -57,25 +57,14 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	c, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0, input)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
 
-	m, err := NewMaterializer(
+	m := NewMaterializer(
 		flowCtx,
 		1, /* processorID */
-		c,
+		colexecargs.OpWithMetaInfo{Root: c},
 		typs,
-		nil, /* output */
-		nil, /* getStats */
-		nil, /* metadataSources */
-		nil, /* toClose */
-		nil, /* cancelFlow */
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	m.Start(ctx)
 
 	for i := 0; i < nRows; i++ {
@@ -147,20 +136,12 @@ func BenchmarkMaterializer(b *testing.B) {
 
 					b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 					for i := 0; i < b.N; i++ {
-						m, err := NewMaterializer(
+						m := NewMaterializer(
 							flowCtx,
 							0, /* processorID */
-							input,
+							colexecargs.OpWithMetaInfo{Root: input},
 							typs,
-							nil, /* output */
-							nil, /* getStats */
-							nil, /* metadataSources */
-							nil, /* toClose */
-							nil, /* cancelFlow */
 						)
-						if err != nil {
-							b.Fatal(err)
-						}
 						m.Start(ctx)
 
 						foundRows := 0
@@ -189,7 +170,7 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testError := errors.New("test-induced error")
-	metadataSource := &colexectestutils.CallbackMetadataSource{DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
+	metadataSource := &colexectestutils.CallbackMetadataSource{DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 		colexecerror.InternalError(testError)
 		// Unreachable
 		return nil
@@ -202,18 +183,15 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 		EvalCtx: &evalCtx,
 	}
 
-	m, err := NewMaterializer(
+	m := NewMaterializer(
 		flowCtx,
 		0, /* processorID */
-		&colexecop.CallbackOperator{},
+		colexecargs.OpWithMetaInfo{
+			Root:            &colexecop.CallbackOperator{},
+			MetadataSources: colexecop.MetadataSources{metadataSource},
+		},
 		nil, /* typ */
-		nil, /* output */
-		nil, /* getStats */
-		[]colexecop.MetadataSource{metadataSource},
-		nil, /* toClose */
-		nil, /* cancelFlow */
 	)
-	require.NoError(t, err)
 
 	m.Start(ctx)
 	// Call ConsumerDone.
@@ -234,7 +212,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 	types := []*types.T{types.Int, types.Int}
 	nRows := 10000
 	nCols := 2
-	rows := rowenc.MakeIntRows(nRows, nCols)
+	rows := randgen.MakeIntRows(nRows, nCols)
 	input := execinfra.NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()
@@ -245,27 +223,16 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	c, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0, input)
-	if err != nil {
-		b.Fatal(err)
-	}
+	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 	for i := 0; i < b.N; i++ {
-		m, err := NewMaterializer(
+		m := NewMaterializer(
 			flowCtx,
 			1, /* processorID */
-			c,
+			colexecargs.OpWithMetaInfo{Root: c},
 			types,
-			nil, /* output */
-			nil, /* getStats */
-			nil, /* metadataSources */
-			nil, /* toClose */
-			nil, /* cancelFlow */
 		)
-		if err != nil {
-			b.Fatal(err)
-		}
 		m.Start(ctx)
 
 		foundRows := 0

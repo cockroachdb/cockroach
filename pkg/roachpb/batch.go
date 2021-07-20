@@ -41,7 +41,7 @@ func (h Header) WriteTimestamp() hlc.Timestamp {
 // SetActiveTimestamp sets the correct timestamp at which the request is to be
 // carried out. For transactional requests, ba.Timestamp must be zero initially
 // and it will be set to txn.ReadTimestamp (note though this mostly impacts
-// reads; writes use txn.Timestamp). For non-transactional requests, if no
+// reads; writes use txn.WriteTimestamp). For non-transactional requests, if no
 // timestamp is specified, nowFn is used to create and set one.
 func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 	if txn := ba.Txn; txn != nil {

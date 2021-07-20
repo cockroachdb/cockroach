@@ -47,7 +47,7 @@ func (desc *wrapper) ValidateTxnCommit(
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
+func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
 		ids.Add(desc.GetParentSchemaID())
@@ -69,7 +69,11 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	}
 	// Collect user defined type Oids and sequence references in columns.
 	for _, col := range desc.DeletableColumns() {
-		for id := range typedesc.GetTypeDescriptorClosure(col.GetType()) {
+		children, err := typedesc.GetTypeDescriptorClosure(col.GetType())
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		for id := range children {
 			ids.Add(id)
 		}
 		for i := 0; i < col.NumUsesSequences(); i++ {
@@ -89,7 +93,11 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	})
 	// Add collected Oids to return set.
 	for oid := range visitor.OIDs {
-		ids.Add(typedesc.UserDefinedTypeOIDToID(oid))
+		id, err := typedesc.UserDefinedTypeOIDToID(oid)
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		ids.Add(id)
 	}
 	// Add view dependencies.
 	for _, id := range desc.GetDependsOn() {
@@ -102,7 +110,7 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 		ids.Add(ref.ID)
 	}
 	// Add sequence dependencies
-	return ids
+	return ids, nil
 }
 
 // ValidateCrossReferences validates that each reference to another table is
@@ -406,8 +414,8 @@ func (desc *wrapper) validateInboundFK(
 }
 
 func (desc *wrapper) matchingPartitionbyAll(indexI catalog.Index) bool {
-	primaryIndexPartitioning := desc.PrimaryIndex.ColumnIDs[:desc.PrimaryIndex.Partitioning.NumColumns]
-	indexPartitioning := indexI.IndexDesc().ColumnIDs[:indexI.GetPartitioning().NumColumns]
+	primaryIndexPartitioning := desc.PrimaryIndex.KeyColumnIDs[:desc.PrimaryIndex.Partitioning.NumColumns]
+	indexPartitioning := indexI.IndexDesc().KeyColumnIDs[:indexI.GetPartitioning().NumColumns()]
 	if len(primaryIndexPartitioning) != len(indexPartitioning) {
 		return false
 	}
@@ -622,6 +630,17 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			foundAlterColumnType = true
 			alterColumnTypeMutation = m.MutationID
 		}
+	}
+
+	// Validate that the presence of MutationJobs (from the old schema changer)
+	// and the presence of a NewSchemaChangeJobID are mutually exclusive. (Note
+	// the jobs themselves can be running simultaneously, since a resumer can
+	// still be running after the schema change is complete from the point of view
+	// of the descriptor, in both the new and old schema change jobs.)
+	if len(desc.MutationJobs) > 0 && desc.NewSchemaChangeJobID != 0 {
+		vea.Report(errors.AssertionFailedf(
+			"invalid concurrent new-style schema change job %d and old-style schema change jobs %v",
+			desc.NewSchemaChangeJobID, desc.MutationJobs))
 	}
 
 	// Check that all expression strings can be parsed.
@@ -868,7 +887,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
 func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID) error {
-	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
+	if len(desc.PrimaryIndex.KeyColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
 
@@ -880,92 +899,91 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 	}
 
 	// Verify that the primary index columns are not virtual.
-	for i, col := range desc.PrimaryIndex.ColumnIDs {
+	for i, col := range desc.PrimaryIndex.KeyColumnIDs {
 		if virtualCols.Contains(col) {
-			return fmt.Errorf("primary index column %q cannot be virtual", desc.PrimaryIndex.ColumnNames[i])
+			return fmt.Errorf("primary index column %q cannot be virtual", desc.PrimaryIndex.KeyColumnNames[i])
 		}
 	}
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
-	for _, indexI := range desc.NonDropIndexes() {
-		index := indexI.IndexDesc()
-		if err := catalog.ValidateName(index.Name, "index"); err != nil {
+	for _, idx := range desc.NonDropIndexes() {
+		if err := catalog.ValidateName(idx.GetName(), "index"); err != nil {
 			return err
 		}
-		if index.ID == 0 {
-			return fmt.Errorf("invalid index ID %d", index.ID)
+		if idx.GetID() == 0 {
+			return fmt.Errorf("invalid index ID %d", idx.GetID())
 		}
 
-		if _, indexNameExists := indexNames[index.Name]; indexNameExists {
+		if _, indexNameExists := indexNames[idx.GetName()]; indexNameExists {
 			for i := range desc.Indexes {
-				if desc.Indexes[i].Name == index.Name {
+				if desc.Indexes[i].Name == idx.GetName() {
 					// This error should be caught in MakeIndexDescriptor or NewTableDesc.
-					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", index.Name))
+					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", idx.GetName()))
 				}
 			}
 			// This error should be caught in MakeIndexDescriptor.
 			return errors.HandleAsAssertionFailure(fmt.Errorf(
-				"duplicate: index %q in the middle of being added, not yet public", index.Name))
+				"duplicate: index %q in the middle of being added, not yet public", idx.GetName()))
 		}
-		indexNames[index.Name] = struct{}{}
+		indexNames[idx.GetName()] = struct{}{}
 
-		if other, ok := indexIDs[index.ID]; ok {
+		if other, ok := indexIDs[idx.GetID()]; ok {
 			return fmt.Errorf("index %q duplicate ID of index %q: %d",
-				index.Name, other, index.ID)
+				idx.GetName(), other, idx.GetID())
 		}
-		indexIDs[index.ID] = index.Name
+		indexIDs[idx.GetID()] = idx.GetName()
 
-		if index.ID >= desc.NextIndexID {
+		if idx.GetID() >= desc.NextIndexID {
 			return fmt.Errorf("index %q invalid index ID (%d) > next index ID (%d)",
-				index.Name, index.ID, desc.NextIndexID)
+				idx.GetName(), idx.GetID(), desc.NextIndexID)
 		}
 
-		if len(index.ColumnIDs) != len(index.ColumnNames) {
+		if len(idx.IndexDesc().KeyColumnIDs) != len(idx.IndexDesc().KeyColumnNames) {
 			return fmt.Errorf("mismatched column IDs (%d) and names (%d)",
-				len(index.ColumnIDs), len(index.ColumnNames))
+				len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnNames))
 		}
-		if len(index.ColumnIDs) != len(index.ColumnDirections) {
+		if len(idx.IndexDesc().KeyColumnIDs) != len(idx.IndexDesc().KeyColumnDirections) {
 			return fmt.Errorf("mismatched column IDs (%d) and directions (%d)",
-				len(index.ColumnIDs), len(index.ColumnDirections))
+				len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnDirections))
 		}
 		// In the old STORING encoding, stored columns are in ExtraColumnIDs;
 		// tolerate a longer list of column names.
-		if len(index.StoreColumnIDs) > len(index.StoreColumnNames) {
+		if len(idx.IndexDesc().StoreColumnIDs) > len(idx.IndexDesc().StoreColumnNames) {
 			return fmt.Errorf("mismatched STORING column IDs (%d) and names (%d)",
-				len(index.StoreColumnIDs), len(index.StoreColumnNames))
+				len(idx.IndexDesc().StoreColumnIDs), len(idx.IndexDesc().StoreColumnNames))
 		}
 
-		if len(index.ColumnIDs) == 0 {
-			return fmt.Errorf("index %q must contain at least 1 column", index.Name)
+		if len(idx.IndexDesc().KeyColumnIDs) == 0 {
+			return fmt.Errorf("index %q must contain at least 1 column", idx.GetName())
 		}
 
 		var validateIndexDup catalog.TableColSet
-		for i, name := range index.ColumnNames {
+		for i, name := range idx.IndexDesc().KeyColumnNames {
 			colID, ok := columnNames[name]
 			if !ok {
-				return fmt.Errorf("index %q contains unknown column %q", index.Name, name)
+				return fmt.Errorf("index %q contains unknown column %q", idx.GetName(), name)
 			}
-			if colID != index.ColumnIDs[i] {
+			if colID != idx.IndexDesc().KeyColumnIDs[i] {
 				return fmt.Errorf("index %q column %q should have ID %d, but found ID %d",
-					index.Name, name, colID, index.ColumnIDs[i])
+					idx.GetName(), name, colID, idx.IndexDesc().KeyColumnIDs[i])
 			}
 			if validateIndexDup.Contains(colID) {
-				return fmt.Errorf("index %q contains duplicate column %q", index.Name, name)
+				return fmt.Errorf("index %q contains duplicate column %q", idx.GetName(), name)
 			}
 			validateIndexDup.Add(colID)
 		}
-		if index.IsSharded() {
-			if err := desc.ensureShardedIndexNotComputed(index); err != nil {
+		if idx.IsSharded() {
+			if err := desc.ensureShardedIndexNotComputed(idx.IndexDesc()); err != nil {
 				return err
 			}
-			if _, exists := columnNames[index.Sharded.Name]; !exists {
+			if _, exists := columnNames[idx.GetSharded().Name]; !exists {
 				return fmt.Errorf("index %q refers to non-existent shard column %q",
-					index.Name, index.Sharded.Name)
+					idx.GetName(), idx.GetSharded().Name)
 			}
 		}
-		if index.IsPartial() {
-			expr, err := parser.ParseExpr(index.Predicate)
+		if idx.IsPartial() {
+			expr, err := parser.ParseExpr(idx.GetPredicate())
 			if err != nil {
 				return err
 			}
@@ -975,22 +993,66 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			}
 			if !valid {
 				return fmt.Errorf("partial index %q refers to unknown columns in predicate: %s",
-					index.Name, index.Predicate)
+					idx.GetName(), idx.GetPredicate())
 			}
 		}
 		// Ensure that indexes do not STORE virtual columns.
-		for _, col := range index.ExtraColumnIDs {
+		for _, col := range idx.IndexDesc().KeySuffixColumnIDs {
 			if virtualCols.Contains(col) {
-				return fmt.Errorf("index %q cannot store virtual column %d", index.Name, col)
+				return fmt.Errorf("index %q cannot store virtual column %d", idx.GetName(), col)
 			}
 		}
-		for i, col := range index.StoreColumnIDs {
+		for i, col := range idx.IndexDesc().StoreColumnIDs {
 			if virtualCols.Contains(col) {
-				return fmt.Errorf("index %q cannot store virtual column %q", index.Name, index.StoreColumnNames[i])
+				return fmt.Errorf("index %q cannot store virtual column %q",
+					idx.GetName(), idx.IndexDesc().StoreColumnNames[i])
+			}
+		}
+		// Ensure that index column ID subsets are well formed.
+		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {
+			continue
+		}
+		slices := []struct {
+			name  string
+			slice []descpb.ColumnID
+		}{
+			{"KeyColumnIDs", idx.IndexDesc().KeyColumnIDs},
+			{"KeySuffixColumnIDs", idx.IndexDesc().KeySuffixColumnIDs},
+			{"StoreColumnIDs", idx.IndexDesc().StoreColumnIDs},
+		}
+		allIDs := catalog.MakeTableColSet()
+		sets := map[string]catalog.TableColSet{}
+		for _, s := range slices {
+			set := catalog.MakeTableColSet(s.slice...)
+			sets[s.name] = set
+			if set.Len() == 0 {
+				continue
+			}
+			if set.Ordered()[0] <= 0 {
+				return errors.AssertionFailedf("index %q contains invalid column ID value %d in %s",
+					idx.GetName(), set.Ordered()[0], s.name)
+			}
+			if set.Len() < len(s.slice) {
+				return errors.AssertionFailedf("index %q has duplicates in %s: %v",
+					idx.GetName(), s.name, s.slice)
+			}
+			allIDs.UnionWith(set)
+		}
+		foundIn := make([]string, 0, len(sets))
+		for _, colID := range allIDs.Ordered() {
+			foundIn = foundIn[:0]
+			for _, s := range slices {
+				set := sets[s.name]
+				if set.Contains(colID) {
+					foundIn = append(foundIn, s.name)
+				}
+			}
+			if len(foundIn) > 1 {
+				return errors.AssertionFailedf("index %q has column ID %d present in: %v",
+					idx.GetName(), colID, foundIn)
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -1020,19 +1082,19 @@ func (desc *wrapper) ensureShardedIndexNotComputed(index *descpb.IndexDescriptor
 // indicates how many index columns to skip over.
 func (desc *wrapper) validatePartitioningDescriptor(
 	a *rowenc.DatumAlloc,
-	idxDesc *descpb.IndexDescriptor,
-	partDesc *descpb.PartitioningDescriptor,
+	idx catalog.Index,
+	part catalog.Partitioning,
 	colOffset int,
 	partitionNames map[string]string,
 ) error {
-	if partDesc.NumImplicitColumns > partDesc.NumColumns {
+	if part.NumImplicitColumns() > part.NumColumns() {
 		return errors.Newf(
 			"cannot have implicit partitioning columns (%d) > partitioning columns (%d)",
-			partDesc.NumImplicitColumns,
-			partDesc.NumColumns,
+			part.NumImplicitColumns(),
+			part.NumColumns(),
 		)
 	}
-	if partDesc.NumColumns == 0 {
+	if part.NumColumns() == 0 {
 		return nil
 	}
 
@@ -1041,9 +1103,9 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	// InterleavedBy is fine, so using the root of the interleave hierarchy will
 	// work. It is expected that this is sufficient for real-world use cases.
 	// Revisit this restriction if that expectation is wrong.
-	if len(idxDesc.Interleave.Ancestors) > 0 {
+	if idx.NumInterleaveAncestors() > 0 {
 		return errors.Errorf("cannot set a zone config for interleaved index %s; "+
-			"set it on the root of the interleaved hierarchy instead", idxDesc.Name)
+			"set it on the root of the interleaved hierarchy instead", idx.GetName())
 	}
 
 	// We don't need real prefixes in the DecodePartitionTuple calls because we're
@@ -1055,10 +1117,10 @@ func (desc *wrapper) validatePartitioningDescriptor(
 		fakePrefixDatums[i] = tree.DNull
 	}
 
-	if len(partDesc.List) == 0 && len(partDesc.Range) == 0 {
+	if part.NumLists() == 0 && part.NumRanges() == 0 {
 		return fmt.Errorf("at least one of LIST or RANGE partitioning must be used")
 	}
-	if len(partDesc.List) > 0 && len(partDesc.Range) > 0 {
+	if part.NumLists() > 0 && part.NumRanges() > 0 {
 		return fmt.Errorf("only one LIST or RANGE partitioning may used")
 	}
 
@@ -1066,15 +1128,14 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	// This should only happen at read time and descriptors should not become
 	// invalid at read time, only at write time.
 	{
-		numColumns := int(partDesc.NumColumns)
-		for i := colOffset; i < colOffset+numColumns; i++ {
+		for i := colOffset; i < colOffset+part.NumColumns(); i++ {
 			// The partitioning descriptor may be invalid and refer to columns
 			// not stored in the index. In that case, skip this check as the
 			// validation will fail later.
-			if i >= len(idxDesc.ColumnIDs) {
+			if i >= idx.NumKeyColumns() {
 				continue
 			}
-			col, err := desc.FindColumnWithID(idxDesc.ColumnIDs[i])
+			col, err := desc.FindColumnWithID(idx.GetKeyColumnID(i))
 			if err != nil {
 				return err
 			}
@@ -1089,12 +1150,12 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			return fmt.Errorf("PARTITION name must be non-empty")
 		}
 		if indexName, exists := partitionNames[name]; exists {
-			if indexName == idxDesc.Name {
+			if indexName == idx.GetName() {
 				return fmt.Errorf("PARTITION %s: name must be unique (used twice in index %q)",
 					name, indexName)
 			}
 		}
-		partitionNames[name] = idxDesc.Name
+		partitionNames[name] = idx.GetName()
 		return nil
 	}
 
@@ -1103,23 +1164,23 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	// so it's fine to ignore the tenant ID prefix.
 	codec := keys.SystemSQLCodec
 
-	if len(partDesc.List) > 0 {
-		listValues := make(map[string]struct{}, len(partDesc.List))
-		for _, p := range partDesc.List {
-			if err := checkName(p.Name); err != nil {
+	if part.NumLists() > 0 {
+		listValues := make(map[string]struct{}, part.NumLists())
+		err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+			if err := checkName(name); err != nil {
 				return err
 			}
 
-			if len(p.Values) == 0 {
-				return fmt.Errorf("PARTITION %s: must contain values", p.Name)
+			if len(values) == 0 {
+				return fmt.Errorf("PARTITION %s: must contain values", name)
 			}
 			// NB: key encoding is used to check uniqueness because it has
 			// to match the behavior of the value when indexed.
-			for _, valueEncBuf := range p.Values {
+			for _, valueEncBuf := range values {
 				tuple, keyPrefix, err := rowenc.DecodePartitionTuple(
-					a, codec, desc, idxDesc, partDesc, valueEncBuf, fakePrefixDatums)
+					a, codec, desc, idx, part, valueEncBuf, fakePrefixDatums)
 				if err != nil {
-					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
+					return fmt.Errorf("PARTITION %s: %v", name, err)
 				}
 				if _, exists := listValues[string(keyPrefix)]; exists {
 					return fmt.Errorf("%s cannot be present in more than one partition", tuple)
@@ -1127,48 +1188,53 @@ func (desc *wrapper) validatePartitioningDescriptor(
 				listValues[string(keyPrefix)] = struct{}{}
 			}
 
-			newColOffset := colOffset + int(partDesc.NumColumns)
-			if err := desc.validatePartitioningDescriptor(
-				a, idxDesc, &p.Subpartitioning, newColOffset, partitionNames,
-			); err != nil {
-				return err
-			}
+			newColOffset := colOffset + part.NumColumns()
+			return desc.validatePartitioningDescriptor(
+				a, idx, subPartitioning, newColOffset, partitionNames,
+			)
+		})
+		if err != nil {
+			return err
 		}
 	}
 
-	if len(partDesc.Range) > 0 {
+	if part.NumRanges() > 0 {
 		tree := interval.NewTree(interval.ExclusiveOverlapper)
-		for _, p := range partDesc.Range {
-			if err := checkName(p.Name); err != nil {
+		err := part.ForEachRange(func(name string, from, to []byte) error {
+			if err := checkName(name); err != nil {
 				return err
 			}
 
 			// NB: key encoding is used to check uniqueness because it has to match
 			// the behavior of the value when indexed.
 			fromDatums, fromKey, err := rowenc.DecodePartitionTuple(
-				a, codec, desc, idxDesc, partDesc, p.FromInclusive, fakePrefixDatums)
+				a, codec, desc, idx, part, from, fakePrefixDatums)
 			if err != nil {
-				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
+				return fmt.Errorf("PARTITION %s: %v", name, err)
 			}
 			toDatums, toKey, err := rowenc.DecodePartitionTuple(
-				a, codec, desc, idxDesc, partDesc, p.ToExclusive, fakePrefixDatums)
+				a, codec, desc, idx, part, to, fakePrefixDatums)
 			if err != nil {
-				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
+				return fmt.Errorf("PARTITION %s: %v", name, err)
 			}
-			pi := partitionInterval{p.Name, fromKey, toKey}
+			pi := partitionInterval{name, fromKey, toKey}
 			if overlaps := tree.Get(pi.Range()); len(overlaps) > 0 {
 				return fmt.Errorf("partitions %s and %s overlap",
-					overlaps[0].(partitionInterval).name, p.Name)
+					overlaps[0].(partitionInterval).name, name)
 			}
 			if err := tree.Insert(pi, false /* fast */); errors.Is(err, interval.ErrEmptyRange) {
 				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is equal to upper bound %s",
-					p.Name, fromDatums, toDatums)
+					name, fromDatums, toDatums)
 			} else if errors.Is(err, interval.ErrInvertedRange) {
 				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is greater than upper bound %s",
-					p.Name, fromDatums, toDatums)
+					name, fromDatums, toDatums)
 			} else if err != nil {
-				return errors.Wrapf(err, "PARTITION %s", p.Name)
+				return errors.Wrapf(err, "PARTITION %s", name)
 			}
+			return nil
+		})
+		if err != nil {
+			return err
 		}
 	}
 
@@ -1198,9 +1264,8 @@ func (desc *wrapper) validatePartitioning() error {
 
 	a := &rowenc.DatumAlloc{}
 	return catalog.ForEachNonDropIndex(desc, func(idx catalog.Index) error {
-		idxDesc := idx.IndexDesc()
 		return desc.validatePartitioningDescriptor(
-			a, idxDesc, &idxDesc.Partitioning, 0 /* colOffset */, partitionNames,
+			a, idx, idx.GetPartitioning(), 0 /* colOffset */, partitionNames,
 		)
 	})
 }
@@ -1315,12 +1380,66 @@ func (desc *wrapper) validateTableLocalityConfig(
 		if !desc.IsPartitionAllBy() {
 			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
 		}
+		// For REGIONAL BY ROW tables, ensure partitions in the PRIMARY KEY match
+		// the database descriptor. Ensure each public region has a partition,
+		// and each transitioning region name to possibly have a partition.
+		// We do validation that ensures all index partitions are the same on
+		// PARTITION ALL BY.
+		regions, err := regionsEnumDesc.RegionNames()
+		if err != nil {
+			return err
+		}
+		regionNames := make(map[descpb.RegionName]struct{}, len(regions))
+		for _, region := range regions {
+			regionNames[region] = struct{}{}
+		}
+		transitioningRegions, err := regionsEnumDesc.TransitioningRegionNames()
+		if err != nil {
+			return err
+		}
+		transitioningRegionNames := make(map[descpb.RegionName]struct{}, len(regions))
+		for _, region := range transitioningRegions {
+			transitioningRegionNames[region] = struct{}{}
+		}
+
+		part := desc.GetPrimaryIndex().GetPartitioning()
+		err = part.ForEachList(func(name string, _ [][]byte, _ catalog.Partitioning) error {
+			regionName := descpb.RegionName(name)
+			// Any transitioning region names may exist.
+			if _, ok := transitioningRegionNames[regionName]; ok {
+				return nil
+			}
+			// If a region is not found in any of the region names, we have an unknown
+			// partition.
+			if _, ok := regionNames[regionName]; !ok {
+				return errors.AssertionFailedf(
+					"unknown partition %s on PRIMARY INDEX of table %s",
+					name,
+					desc.GetName(),
+				)
+			}
+			delete(regionNames, regionName)
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		// Any regions that are not deleted from the above loop is missing.
+		for regionName := range regionNames {
+			return errors.AssertionFailedf(
+				"missing partition %s on PRIMARY INDEX of table %s",
+				regionName,
+				desc.GetName(),
+			)
+		}
+
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 
 		// Table is homed in an explicit (non-primary) region.
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false
-			regions, err := regionsEnumDesc.RegionNamesIncludingTransitioning()
+			regions, err := regionsEnumDesc.RegionNamesForValidation()
 			if err != nil {
 				return err
 			}

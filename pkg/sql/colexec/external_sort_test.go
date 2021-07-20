@@ -303,11 +303,11 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(closers))
 
-	sorter.Init()
-	for b := sorter.Next(ctx); b.Length() > 0; b = sorter.Next(ctx) {
+	sorter.Init(ctx)
+	for b := sorter.Next(); b.Length() > 0; b = sorter.Next() {
 	}
 	for _, c := range closers {
-		require.NoError(t, c.Close(ctx))
+		require.NoError(t, c.Close())
 	}
 
 	require.True(t, spilled)
@@ -428,8 +428,8 @@ func BenchmarkExternalSort(b *testing.B) {
 						if err != nil {
 							b.Fatal(err)
 						}
-						sorter.Init()
-						for out := sorter.Next(ctx); out.Length() != 0; out = sorter.Next(ctx) {
+						sorter.Init(ctx)
+						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
 						}
 						require.Equal(b, spillForced, spilled, fmt.Sprintf(
 							"expected: spilled=%t\tactual: spilled=%t", spillForced, spilled,
@@ -455,7 +455,7 @@ func BenchmarkExternalSort(b *testing.B) {
 func createDiskBackedSorter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input []colexecop.Operator,
+	sources []colexecop.Operator,
 	typs []*types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	matchLen int,
@@ -482,7 +482,7 @@ func createDiskBackedSorter(
 	}
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              input,
+		Inputs:              colexectestutils.MakeInputs(sources),
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
@@ -491,5 +491,5 @@ func createDiskBackedSorter(
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
+	return result.Root, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

@@ -13,6 +13,7 @@ package typedesc_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -22,10 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -782,5 +785,30 @@ func TestValidateTypeDesc(t *testing.T) {
 		} else if expectedErr != err.Error() {
 			t.Errorf("#%d expected err: %s but found: %s", i, expectedErr, err)
 		}
+	}
+}
+
+func TestOIDToIDConversion(t *testing.T) {
+	tests := []struct {
+		oid  oid.Oid
+		ok   bool
+		name string
+	}{
+		{oid.Oid(0), false, "default OID"},
+		{oid.Oid(1), false, "Standard OID"},
+		{oid.Oid(oidext.CockroachPredefinedOIDMax), false, "max standard OID"},
+		{oid.Oid(oidext.CockroachPredefinedOIDMax + 1), true, "user-defined OID"},
+		{oid.Oid(math.MaxUint32), true, "max user-defined OID"},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprint(test.oid), func(t *testing.T) {
+			_, err := typedesc.UserDefinedTypeOIDToID(test.oid)
+			if test.ok {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
 	}
 }

@@ -8,13 +8,13 @@ go_library(
         "general_funcs.go",
         "groupby_funcs.go",
         "index_scan_builder.go",
-        "interesting_orderings.go",
         "join_funcs.go",
         "join_order_builder.go",
         "limit_funcs.go",
         "memo_format.go",
         "optimizer.go",
         "physical_props.go",
+        "placeholder_fast_path.go",
         "scan_funcs.go",
         "scan_index_iter.go",
         "select_funcs.go",
@@ -105,5 +105,5 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ explorer $(locations //pkg/sql/opt:ops) $(locations :rules)
     """,
-    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
 )

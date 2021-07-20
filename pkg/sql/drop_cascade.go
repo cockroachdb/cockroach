@@ -41,7 +41,7 @@ type dropCascadeState struct {
 }
 
 type schemaWithDbDesc struct {
-	schema *catalog.ResolvedSchema
+	schema catalog.SchemaDescriptor
 	dbDesc *dbdesc.Mutable
 }
 
@@ -55,9 +55,11 @@ func newDropCascadeState() *dropCascadeState {
 }
 
 func (d *dropCascadeState) collectObjectsInSchema(
-	ctx context.Context, p *planner, db *dbdesc.Mutable, schema *catalog.ResolvedSchema,
+	ctx context.Context, p *planner, db *dbdesc.Mutable, schema catalog.SchemaDescriptor,
 ) error {
-	names, err := resolver.GetObjectNames(ctx, p.txn, p, p.ExecCfg().Codec, db, schema.Name, true /* explicitPrefix */)
+	names, _, err := resolver.GetObjectNamesAndIDs(
+		ctx, p.txn, p, p.ExecCfg().Codec, db, schema.GetName(), true, /* explicitPrefix */
+	)
 	if err != nil {
 		return err
 	}

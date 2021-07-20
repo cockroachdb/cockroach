@@ -15,6 +15,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/cli"
 )
 
 func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
@@ -28,7 +30,7 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 
 	lastWords := func(s string) []string {
 		var result []string
-		s = elideInsecureDeprecationNotice(s)
+		s = cli.ElideInsecureDeprecationNotice(s)
 		lines := strings.Split(s, "\n")
 		for _, line := range lines {
 			words := strings.Fields(line)

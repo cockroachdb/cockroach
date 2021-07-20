@@ -43,7 +43,7 @@ func distRestore(
 	chunks [][]execinfrapb.RestoreSpanEntry,
 	pkIDs map[uint64]bool,
 	encryption *jobspb.BackupEncryptionOptions,
-	rekeys []roachpb.ImportRequest_TableRekey,
+	rekeys []execinfrapb.TableRekey,
 	restoreTime hlc.Timestamp,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
@@ -186,7 +186,11 @@ func distRestore(
 
 	for _, srcProc := range splitAndScatterProcs {
 		slot := 0
-		for _, destProc := range restoreDataProcs {
+		for _, destNode := range nodes {
+			// Streams were added to the range router in the same order that the
+			// nodes appeared in `nodes`. Make sure that the `slot`s here are
+			// ordered the same way.
+			destProc := restoreDataProcs[destNode]
 			p.Streams = append(p.Streams, physicalplan.Stream{
 				SourceProcessor:  srcProc,
 				SourceRouterSlot: slot,
@@ -232,9 +236,7 @@ func distRestore(
 // spec that should be planned on that node. Given the chunks of ranges to
 // import it round-robin distributes the chunks amongst the given nodes.
 func makeSplitAndScatterSpecs(
-	nodes []roachpb.NodeID,
-	chunks [][]execinfrapb.RestoreSpanEntry,
-	rekeys []roachpb.ImportRequest_TableRekey,
+	nodes []roachpb.NodeID, chunks [][]execinfrapb.RestoreSpanEntry, rekeys []execinfrapb.TableRekey,
 ) (map[roachpb.NodeID]*execinfrapb.SplitAndScatterSpec, error) {
 	specsByNodes := make(map[roachpb.NodeID]*execinfrapb.SplitAndScatterSpec)
 	for i, chunk := range chunks {

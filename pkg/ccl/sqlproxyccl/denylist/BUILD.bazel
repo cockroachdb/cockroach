@@ -1,0 +1,57 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+# gazelle:exclude service.go
+
+go_library(
+    name = "service",
+    srcs = ["service.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist",
+    visibility = ["//visibility:private"],
+)
+
+go_library(
+    name = "denylist",
+    srcs = [
+        "file.go",
+        "local_file.go",
+        ":mocks_denylist",  # keep
+    ],
+    embed = [":service"],  # keep
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_mock//gomock",  # keep
+        "@com_github_spf13_viper//:viper",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "denylist_test",
+    srcs = [
+        "file_test.go",
+        "local_file_test.go",
+    ],
+    embed = [":denylist"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+gomock(
+    name = "mocks_denylist",
+    out = "mocks_generated.go",
+    interfaces = ["Service"],
+    library = ":service",
+    package = "denylist",
+    self_package = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist",
+)

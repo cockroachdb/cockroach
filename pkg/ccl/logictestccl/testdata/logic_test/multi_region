@@ -554,8 +554,9 @@ DATABASE alter_test_db  ALTER DATABASE alter_test_db CONFIGURE ZONE USING
                         lease_preferences = '[[+region=ca-central-1]]'
 
 # Test adding a region after first region.
-statement ok
-ALTER DATABASE alter_test_db ADD REGION "us-east-1"
+query T noticetrace
+ALTER DATABASE alter_test_db ADD REGION IF NOT EXISTS "us-east-1"
+----
 
 query TTBT colnames
 show regions from database alter_test_db
@@ -591,11 +592,24 @@ ALTER DATABASE alter_test_db ADD REGION "test"
 statement error pgcode 42710 region "ap-southeast-2" already added to database
 ALTER DATABASE alter_test_db ADD REGION "ap-southeast-2"
 
+query T noticetrace
+ALTER DATABASE alter_test_db ADD REGION IF NOT EXISTS "ap-southeast-2"
+----
+NOTICE: region "ap-southeast-2" already exists; skipping
+
 statement error cannot add region
 ALTER DATABASE new_db ADD REGION "us-west-1"
 
 statement error pq: database has no regions to drop
 ALTER DATABASE new_db DROP REGION "us-west-1"
+
+query TTBT colnames
+show regions from database alter_test_db
+----
+database       region          primary  zones
+alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+alter_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
 
 statement ok
 CREATE DATABASE alter_primary_region_db
@@ -1011,6 +1025,11 @@ CREATE DATABASE non_multi_region_db
 statement error pq: database has no regions to drop
 ALTER DATABASE non_multi_region_db DROP REGION "ca-central-1"
 
+query T noticetrace
+ALTER DATABASE non_multi_region_db DROP REGION IF EXISTS "ca-central-1"
+----
+NOTICE: region "ca-central-1" is not defined on the database; skipping
+
 statement ok
 CREATE DATABASE drop_region_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
 USE drop_region_db
@@ -1018,8 +1037,9 @@ USE drop_region_db
 statement error pgcode 42P12 cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE drop_region_db PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
 ALTER DATABASE drop_region_db DROP REGION "ca-central-1"
 
-statement ok
-ALTER DATABASE drop_region_db DROP REGION "us-east-1"
+query T noticetrace
+ALTER DATABASE drop_region_db DROP REGION IF EXISTS "us-east-1"
+----
 
 # Ensure that events are generated for dropping the region
 query IT
@@ -1027,7 +1047,15 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'alter_database_drop_region'
 ----
-1  {"DatabaseName": "drop_region_db", "EventType": "alter_database_drop_region", "RegionName": "\"us-east-1\"", "Statement": "ALTER DATABASE drop_region_db DROP REGION \"us-east-1\"", "User": "root"}
+1  {"DatabaseName": "drop_region_db", "EventType": "alter_database_drop_region", "RegionName": "\"us-east-1\"", "Statement": "ALTER DATABASE drop_region_db DROP REGION IF EXISTS \"us-east-1\"", "Tag": "ALTER DATABASE DROP REGION", "User": "root"}
+
+query T noticetrace
+ALTER DATABASE drop_region_db DROP REGION IF EXISTS "us-east-1"
+----
+NOTICE: region "us-east-1" is not defined on the database; skipping
+
+statement error pgcode 42704 region "non-existent-region" has not been added to the database
+ALTER DATABASE drop_region_db DROP REGION "non-existent-region"
 
 query TTBT colnames
 SHOW REGIONS FROM DATABASE drop_region_db
@@ -1474,7 +1502,7 @@ vectorized: true
               table: orders@primary
               spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk9tO20AQhu_7FKPhgoM2cnyABEtIRm1Kg9KEJlSt1I2Q8U5g22TX3V2rrlCu-mx9r8o2FIIaBOmFrT3MNzP_P_YN2u9zjLH3-Wxw3B_Czpv-5HzyYbALk96g9_octBFkLqRgkBu90LcrmREcT5rFxQ_prnXhLuqAu9s9ENJmulBuNbCJgrfj0fsmt4XTUX_YZLfwcdIfnsDOXa1d-PSuN-797QKOYPswouiyG3Va3Vkwa0Vptt_qhjO_dRD54oBCMesEnW1kqLSgYbogi_EXjHDKMDc6I2u1qY5u6oC-KDFuM5QqL1x1PGWYaUMY36CTbk4Y43l6OacxpYKM10aGglwq53XaRkGSG7lIzU9kOMlTZWPwOCYcPY6cl4cR5yVVr8vuCedld-ad_v7FeTnzBeelL9RRtelsc2xtyHlbkCoBPmh3TQYZjgoXQ-KzJGBJiNMlQ124e4XWpVeEsb9km7ngP9uFqu_2hk5synpbz3YgWOvAvfBC1fpIrIieLv_h0VC3dO4Fq-4M5EI68Nf20H7JFE61VLdDCFfLND_QgyEMtP5W5PBVSwVaxZBUwJiUIFM7A0nIIAmqZy_ZX9te-JL2xmRzrSw9smqd8ClDElfU-G11YTI6MzqryzTbUc3VB4Ksa26DZtNX9VX9FT-E_f-BgyfhcAVuP4bDJ-HoETxdvvoTAAD__499yik=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykUttO20AQfe9XjOaFizZKfIEES0hGbUqD0oQmVK3UtZDxjmHbZNfdXauuUJ76bf2vyjYUghoE9MHWzuXMnHM012i_LzDC4efT8dFoAttvRvOz-YfxDsyH4-HrM9BGkDmXgkFh9FLfvGRGcDRvH-c_pLvSpTtvGm6ruyCkzXSp3Hpj2wVvZ9P37WwLJ9PRpJ1u4eN8NDmG7dtdO_Dp3XA2_MsCDmHrIKTwYhD2O4Pczzthmu11BkHudfZDT-xTIPK-399ChkoLmqRLshh9wRAThoXRGVmrTZ26bhpGosKox1CqonR1OmGYaUMYXaOTbkEY4Vl6saAZpYJMt4cMBblULpqxrYK4MHKZmp_IcF6kykbQ5Rhz7HLkvDoIOa-o_l0MjjmvBnn35PcvzqvcE5xXnlCHddDf4tjtQaoEeKDdFRlkOC1dBLHHYp_FASYrhrp0d0ytSy8JI2_FXqbGe7KamnfvRYqerMLfqOKOfKkajiTWiCerf-ic6I4uuv66wrFcSgfeRg695zh5oqW6MTJYX9Me8z0jx1p_Kwv4qqUCrSKIa8CMlCDTOANxwCD262833ttIL3gOvRnZQitLD6zaJDxhSOKSWr-tLk1Gp0ZnzZo2nDa4JiHIurbqt8FINaXmEu-Dvf8B-4-CgzVw7yE4eBQcPgAnq1d_AgAA__8yFKQ7
 
 query T nodeidx=3
 USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
@@ -1511,4 +1539,156 @@ vectorized: true
                   table: orders@primary
                   spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk19v2jwUxu_fT2GdXvRdZZq_BRqpkquNbVQMOqi0STNCaXzSegM7c5wtU8XVPtu-15SEtgMN1LILSHx8fjnPeexzB_nXOUTQ-3g5OO8Pyf-v-pOryfvBCzLpDXovr4g2As1MCkoyoxc6P64fq4BMkJxPmpfZd2lvdWFndcL97hERMk90oex6YpNFXo9H75oSObkY9YerImR0_3YsVaoJ44XrBrjKbGIf3vbGvQd55IwcnoYYXnfDTqub-mkrjJOTVjdIvVY79EQbA5F2_M4hUFBa4DBeYA7RJwhhSiEzOsE816YK3dUJfVFC5FKQKitsFZ5SSLRBiO7ASjtHiOAqvp7jGGOBxnGBgkAby3n92UYpy4xcxOYHUJhkscoj4nBgHBwOnJenIeclVn_X3Tecl93Uufj1k_My9QTnpSfUWbXoHHJo7ck5ByRWgnhE21s0QGFU2IgwjzKfshCmSwq6sI8d5ja-QYi8Jd3PBe_JLlS63T2d2Jd1Dp7sgL_VgcfGC1X3h2Kt6enyLx4NdUtnjr_uzkAupCXeVg3uc06hr76hsSgutFRonGC9VDNMrHnMqvmZSVECfcB6ZWYIaz9MGgs2rAp2uRU8R2mlcHVdwi0q76_LQOsvRUY-a6mIVhFhFTAaEtZZFzpGJdDUWgk7oYT51e-ItbcqDp-jeIx5plWOG-e87dSmFFDcYHNZcl2YBC-NTuoyzXJUc3VAYG6bXb9Z9FW9VY_gn7D3L7C_Ew7WYHcTDnbC4W443AmfbMDT5X-_AwAA___uBSO6
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk99uGjsQxu_PU1hzk9PIhP0XICtFctTSlohCCpFaqUZos55N3IK9tb3tVhFXfba-V7W7JCmooCS9ANvj-Zjf5xluwX5dQAz9jxfDs8GI_P9qML2cvh--INP-sP_ykmgj0MyloCQ3eqntUb2sAzJFcjZtNvPv0t3ows3rhLvbQyKkTXWh3GZik0VeT8bvmhKWnI8Ho3URMr7bHUmVacJ44XkhrjOb2Ie3_Un_Ho-ckoOTCKOrXtRt9bIga0VJetzqhZnf6kS-6GAosm7QPQAKSgscJUu0EH-CCGYUcqNTtFabKnRbJwxECbFHQaq8cFV4RiHVBiG-BSfdAiGGy-RqgRNMBJq2BxQEukQu6p9tSFlu5DIxP4DCNE-UjUmbA-PQ5sB5eRJxXmL1ddV7w3nZy9rnv35yXma-4Lz0hTqtDt0DDm2PJEoQn2h3gwYojAsXE-ZTFlAWwWxFQRfugdS65Boh9lf0eW78R7upuL1nOXq0i2Cniwf4QtWMKDbAZ6u_-Bzpls7bwabDoVxKR_ydDN5TXnKgvqFxKM61VGja4WapZrBZs8yrWZ5LUQK9l_XL3BDWuZ96Fm49VbjvtcKnkFaE65ZHOyjvWj7U-kuRk89aKqJVTFglGI8I626CTlAJNDUrYceUsKD6HLLOTuLoKcQTtLlWFrf6vKtrMwoorrEZFqsLk-KF0WldpjmOa10dEGhdcxs0h4Gqr-q_0Z9i_1_EwV5xuCH2tsXhXnG0XxztFR9viWer_34HAAD__0Dh_b0=
+
+subtest enum_name_clash
+
+statement ok
+CREATE DATABASE db_enum_name_clash;
+CREATE TYPE db_enum_name_clash.crdb_internal_region AS ENUM ();
+
+statement error pq: type "db_enum_name_clash.public.crdb_internal_region" already exists\nHINT: object "crdb_internal_regions" must be renamed or dropped before adding the primary region\nDETAIL: multi-region databases employ an internal enum called crdb_internal_region to manage regions which conflicts with the existing object
+ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
+
+# Once the offending table is dropped, we should be able to add a region to the
+# database.
+statement ok
+DROP TYPE db_enum_name_clash.crdb_internal_region;
+ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
+
+
+# Verify we can create a view off of a regional by row table.
+# Regression for #63191.
+subtest regional_by_row_view
+
+statement ok
+CREATE DATABASE db;
+USE db;
+ALTER DATABASE db PRIMARY REGION "us-east-1";
+CREATE TABLE kv (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE VIEW v AS SELECT v FROM kv
+
+# Verify that we can use CREATE TABLE AS from a REGIONAL BY ROW table, and
+# end up with something that resembles a REGIONAL BY ROW table.  Note that
+# this is not simple, as we need to explicitly select the crdb_region
+# column, and then convert that column to be generated and hidden.
+subtest create_table_as_regional_by_row
+
+statement ok
+CREATE DATABASE "mr-create-table-as" PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "ca-central-1", "us-east-1";
+USE "mr-create-table-as"
+
+statement ok
+CREATE TABLE t (i int PRIMARY KEY) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO t VALUES (1),(2),(3)
+
+statement ok
+CREATE TABLE t_as AS SELECT i, crdb_region FROM t
+
+query T colnames
+SELECT create_statement from [SHOW CREATE TABLE t_as]
+----
+create_statement
+CREATE TABLE public.t_as (
+                                                i INT8 NULL,
+                                                crdb_region public.crdb_internal_region NULL,
+                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                                FAMILY "primary" (i, crdb_region, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+
+statement error cannot use column crdb_region for REGIONAL BY ROW table as it may contain NULL values
+ALTER TABLE t_as SET LOCALITY REGIONAL BY ROW AS crdb_region
+
+statement ok
+ALTER TABLE t_as ALTER COLUMN crdb_region SET NOT NULL
+
+statement ok
+ALTER TABLE t_as ALTER COLUMN crdb_region SET NOT VISIBLE
+
+statement ok
+ALTER TABLE t_as ALTER COLUMN crdb_region SET DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region
+
+statement ok
+ALTER TABLE t_as SET LOCALITY REGIONAL BY ROW AS crdb_region
+
+query T colnames
+SELECT create_statement from [SHOW CREATE TABLE t_as]
+----
+create_statement
+CREATE TABLE public.t_as (
+                                           i INT8 NULL,
+                                           crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                           CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                           FAMILY "primary" (i, crdb_region, rowid)
+) LOCALITY REGIONAL BY ROW AS crdb_region
+
+query TI colnames
+SELECT crdb_region, i FROM t_as
+----
+crdb_region     i
+ap-southeast-2  1
+ap-southeast-2  2
+ap-southeast-2  3
+
+statement ok
+INSERT INTO t_as VALUES (4)
+
+# Validate that hidden column works
+query TI colnames
+SELECT crdb_region, i FROM t_as
+----
+crdb_region     i
+ap-southeast-2  1
+ap-southeast-2  2
+ap-southeast-2  3
+ap-southeast-2  4
+
+statement ok
+ALTER TABLE t_as ALTER COLUMN i SET NOT NULL
+
+statement ok
+ALTER TABLE t_as ALTER PRIMARY KEY USING COLUMNS (i)
+
+statement ok
+SET sql_safe_updates = false;
+ALTER TABLE t_as DROP COLUMN rowid;
+SET sql_safe_updates = true
+
+query T colnames
+SELECT create_statement from [SHOW CREATE TABLE t_as]
+----
+create_statement
+CREATE TABLE public.t_as (
+                                           i INT8 NOT NULL,
+                                           crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                           CONSTRAINT "primary" PRIMARY KEY (i ASC),
+                                           FAMILY "primary" (i, crdb_region)
+) LOCALITY REGIONAL BY ROW AS crdb_region
+
+query T colnames
+SELECT create_statement from [SHOW CREATE TABLE t]
+----
+create_statement
+CREATE TABLE public.t (
+                            i INT8 NOT NULL,
+                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            CONSTRAINT "primary" PRIMARY KEY (i ASC),
+                            FAMILY "primary" (i, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+# Declare victory, as this is the closest we can get.
+statement ok
+DROP TABLE t;
+DROP TABLE t_as
+
+statement ok
+SET sql_safe_updates = false;
+DROP DATABASE "mr-create-table-as";
+SET sql_safe_updates = true

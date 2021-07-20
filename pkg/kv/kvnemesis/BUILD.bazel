@@ -8,6 +8,7 @@ go_library(
         "applier.go",
         "doc.go",
         "engine.go",
+        "env.go",
         "generator.go",
         "kvnemesis.go",
         "operations.go",
@@ -18,6 +19,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
@@ -30,15 +32,18 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_cockroach_go//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//vfs",
+        "@org_golang_google_protobuf//proto",
     ],
 )
 
@@ -57,7 +62,9 @@ go_test(
     embed = [":kvnemesis"],
     deps = [
         "//pkg/base",
+        "//pkg/config/zonepb",
         "//pkg/kv",
+        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -76,6 +83,7 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_protobuf//proto",
     ],
 )
 

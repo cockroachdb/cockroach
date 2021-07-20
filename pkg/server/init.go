@@ -276,7 +276,7 @@ func (s *initServer) ServeAndWait(
 				// "connection" errors save for one above. If we're
 				// here, we failed to initialize our first store after a
 				// successful join attempt.
-				return nil, false, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error: %v", err)
+				return nil, false, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error")
 			}
 
 			state := result.state

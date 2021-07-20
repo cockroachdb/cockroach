@@ -95,6 +95,12 @@ AES128_CTR:be235...   # AES-128 encryption with store key ID
 		cli.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 	}
 
+	// init has already run in cli/debug.go since this package imports it, so
+	// DebugPebbleCmd already has all its subcommands. We could traverse those
+	// here. But we don't need to by using PersistentFlags.
+	cli.VarFlag(cli.DebugPebbleCmd.PersistentFlags(),
+		&storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+
 	cli.PopulateRocksDBConfigHook = fillEncryptionOptionsForStore
 }
 
@@ -107,7 +113,7 @@ func fillEncryptionOptionsForStore(cfg *base.StorageConfig) error {
 	}
 
 	if opts != nil {
-		cfg.ExtraOptions = opts
+		cfg.EncryptionOptions = opts
 		cfg.UseFileRegistry = true
 	}
 	return nil

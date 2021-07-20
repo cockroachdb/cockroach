@@ -437,17 +437,21 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		}
 	case types.IntFamily:
 		if v, ok := AsDInt(inVal); ok {
-			if typ.Width() == 32 || typ.Width() == 64 || typ.Width() == 16 {
+			if typ.Width() == 32 || typ.Width() == 16 {
 				// Width is defined in bits.
 				width := uint(typ.Width() - 1)
 
-				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
+				// We're performing range checks in line with Go's
+				// implementation of math.(Max|Min)(16|32) numbers that store
+				// the boundaries of the allowed range.
+				// NOTE: when updating the code below, make sure to update
+				// execgen/overloads_cast.go as well.
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange,
-						"integer out of range for type %s",
-						typ.Name(),
-					)
+					if typ.Width() == 16 {
+						return nil, ErrInt2OutOfRange
+					}
+					return nil, ErrInt4OutOfRange
 				}
 			}
 		}
@@ -1298,7 +1302,11 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		ret := &DOid{semanticType: t, DInt: v}
 		if typ, ok := types.OidToType[oid.Oid(v)]; ok {
 			ret.name = typ.PGName()
-		} else if typ, err := ctx.Planner.ResolveTypeByOID(ctx.Context, oid.Oid(v)); err == nil {
+		} else if types.IsOIDUserDefinedType(oid.Oid(v)) {
+			typ, err := ctx.Planner.ResolveTypeByOID(ctx.Context, oid.Oid(v))
+			if err != nil {
+				return nil, err
+			}
 			ret.name = typ.PGName()
 		}
 		return ret, nil
@@ -1314,7 +1322,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		return ret, nil
 
 	default:
-		oid, err := queryOid(ctx, t, NewDOid(v))
+		oid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
 		if err != nil {
 			oid = NewDOid(v)
 			oid.semanticType = t

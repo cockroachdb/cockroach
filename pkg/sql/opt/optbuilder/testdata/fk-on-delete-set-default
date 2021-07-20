@@ -146,13 +146,13 @@ root
            │    ├── c:15 => child_multicol.p:10
            │    ├── q_new:24 => child_multicol.q:11
            │    ├── r_new:25 => child_multicol.r:12
-           │    └── column26:26 => x:13
+           │    └── x_comp:26 => x:13
            ├── check columns: check1:27
            ├── input binding: &2
            ├── project
-           │    ├── columns: check1:27!null c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25 column26:26
+           │    ├── columns: check1:27!null c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25 x_comp:26
            │    ├── project
-           │    │    ├── columns: column26:26 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25
+           │    │    ├── columns: x_comp:26 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25
            │    │    ├── project
            │    │    │    ├── columns: q_new:24 r_new:25 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
            │    │    │    ├── semi-join (hash)
@@ -176,7 +176,7 @@ root
            │    │    │         ├── child_multicol.p:16 + 1 [as=q_new:24]
            │    │    │         └── child_multicol.p:16 + child_multicol.q:17 [as=r_new:25]
            │    │    └── projections
-           │    │         └── (c:15 + q_new:24) + r_new:25 [as=column26:26]
+           │    │         └── (c:15 + q_new:24) + r_new:25 [as=x_comp:26]
            │    └── projections
            │         └── (c:15 > 100) OR (c:15 > c:15) [as=check1:27]
            └── f-k-checks
@@ -278,3 +278,74 @@ root
                           │    └── columns: parent_partial.p:19!null
                           └── filters
                                └── p:18 = parent_partial.p:19
+
+# Test cascades to a child with a virtual column that references the FK.
+exec-ddl
+CREATE TABLE parent_virt (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_virt (
+  c INT PRIMARY KEY,
+  p INT DEFAULT 0 REFERENCES parent_virt(p) ON DELETE SET DEFAULT,
+  v INT AS (p) VIRTUAL
+)
+----
+
+build-cascades
+DELETE FROM parent_virt WHERE p > 1
+----
+root
+ ├── delete parent_virt
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent_virt
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan parent_virt
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── p:3 > 1
+ └── cascade
+      └── update child_virt
+           ├── columns: <none>
+           ├── fetch columns: c:9 child_virt.p:10 v:11
+           ├── update-mapping:
+           │    ├── p_new:14 => child_virt.p:6
+           │    └── p_new:14 => v:7
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: p_new:14!null c:9!null child_virt.p:10 v:11
+           │    ├── semi-join (hash)
+           │    │    ├── columns: c:9!null child_virt.p:10 v:11
+           │    │    ├── project
+           │    │    │    ├── columns: v:11 c:9!null child_virt.p:10
+           │    │    │    ├── scan child_virt
+           │    │    │    │    ├── columns: c:9!null child_virt.p:10
+           │    │    │    │    └── computed column expressions
+           │    │    │    │         └── v:11
+           │    │    │    │              └── child_virt.p:10
+           │    │    │    └── projections
+           │    │    │         └── child_virt.p:10 [as=v:11]
+           │    │    ├── with-scan &1
+           │    │    │    ├── columns: p:13!null
+           │    │    │    └── mapping:
+           │    │    │         └──  parent_virt.p:3 => p:13
+           │    │    └── filters
+           │    │         └── child_virt.p:10 = p:13
+           │    └── projections
+           │         └── 0 [as=p_new:14]
+           └── f-k-checks
+                └── f-k-checks-item: child_virt(p) -> parent_virt(p)
+                     └── anti-join (hash)
+                          ├── columns: p:15!null
+                          ├── with-scan &2
+                          │    ├── columns: p:15!null
+                          │    └── mapping:
+                          │         └──  p_new:14 => p:15
+                          ├── scan parent_virt
+                          │    └── columns: parent_virt.p:16!null
+                          └── filters
+                               └── p:15 = parent_virt.p:16

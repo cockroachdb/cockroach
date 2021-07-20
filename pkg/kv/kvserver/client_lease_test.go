@@ -13,7 +13,10 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -30,7 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -469,4 +474,477 @@ func TestStoreLeaseTransferTimestampCacheTxnRecord(t *testing.T) {
 
 	err = txn.Commit(ctx)
 	require.Regexp(t, `TransactionAbortedError\(ABORT_REASON_NEW_LEASE_PREVENTS_TXN\)`, err)
+}
+
+// This test verifies that when a lease is moved to a node that does not match the
+// lease preferences the replication queue moves it eagerly back, without considering the
+// kv.allocator.min_lease_transfer_interval.
+func TestLeasePreferencesRebalance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	sv := &settings.SV
+	// set min lease transfer high, so we know it does affect the lease movement.
+	kvserver.MinLeaseTransferInterval.Override(ctx, sv, 24*time.Hour)
+	// Place all the leases in us-west.
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.LeasePreferences = []zonepb.LeasePreference{
+		{
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "us-west"},
+			},
+		},
+	}
+	numNodes := 3
+	serverArgs := make(map[int]base.TestServerArgs)
+	locality := func(region string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: region},
+			},
+		}
+	}
+	localities := []roachpb.Locality{
+		locality("us-west"),
+		locality("us-east"),
+		locality("eu"),
+	}
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: localities[i],
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DefaultZoneConfigOverride: &zcfg,
+				},
+			},
+			Settings: settings,
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: serverArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	key := keys.UserTableDataMin
+	tc.SplitRangeOrFatal(t, key)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 2)...))
+	desc := tc.LookupRangeOrFatal(t, key)
+	leaseHolder, err := tc.FindRangeLeaseHolder(desc, nil)
+	require.NoError(t, err)
+	require.Equal(t, tc.Target(0), leaseHolder)
+
+	// Manually move lease out of preference.
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+
+	testutils.SucceedsSoon(t, func() error {
+		lh, err := tc.FindRangeLeaseHolder(desc, nil)
+		if err != nil {
+			return err
+		}
+		if !lh.Equal(tc.Target(1)) {
+			return errors.Errorf("Expected leaseholder to be %s but was %s", tc.Target(1), lh)
+		}
+		return nil
+	})
+
+	tc.GetFirstStoreFromServer(t, 1).SetReplicateQueueActive(true)
+	require.NoError(t, tc.GetFirstStoreFromServer(t, 1).ForceReplicationScanAndProcess())
+
+	// The lease should be moved back by the rebalance queue to us-west.
+	testutils.SucceedsSoon(t, func() error {
+		lh, err := tc.FindRangeLeaseHolder(desc, nil)
+		if err != nil {
+			return err
+		}
+		if !lh.Equal(tc.Target(0)) {
+			return errors.Errorf("Expected leaseholder to be %s but was %s", tc.Target(0), lh)
+		}
+		return nil
+	})
+}
+
+// This test replicates the behavior observed in
+// https://github.com/cockroachdb/cockroach/issues/62485. We verify that
+// when a dc with the leaseholder is lost, a node in a dc that does not have the
+// lease preference can steal the lease, upreplicate the range and then give up the
+// lease in a single cycle of the replicate_queue.
+func TestLeasePreferencesDuringOutage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stickyRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyRegistry.CloseAllStickyInMemEngines()
+	ctx := context.Background()
+	manualClock := hlc.NewHybridManualClock()
+	// Place all the leases in the us.
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.LeasePreferences = []zonepb.LeasePreference{
+		{
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "us"},
+			},
+		},
+	}
+	numNodes := 6
+	serverArgs := make(map[int]base.TestServerArgs)
+	locality := func(region string, dc string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: region},
+				{Key: "dc", Value: dc},
+			},
+		}
+	}
+	localities := []roachpb.Locality{
+		locality("eu", "tr"),
+		locality("eu", "tr"),
+		locality("us", "sf"),
+		locality("us", "sf"),
+		locality("us", "mi"),
+		locality("us", "mi"),
+	}
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: localities[i],
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource:               manualClock.UnixNano,
+					DefaultZoneConfigOverride: &zcfg,
+					StickyEngineRegistry:      stickyRegistry,
+				},
+			},
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+				},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: serverArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	key := keys.UserTableDataMin
+	tc.SplitRangeOrFatal(t, key)
+	tc.AddVotersOrFatal(t, key, tc.Targets(2, 4)...)
+	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
+	require.NoError(t, tc.WaitForVoters(key, tc.Targets(2, 4)...))
+	tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(2))
+
+	// Shutdown the sf datacenter, which is going to kill the node with the lease.
+	tc.StopServer(2)
+	tc.StopServer(3)
+
+	wait := func(duration int64) {
+		manualClock.Increment(duration)
+		// Gossip and heartbeat all the live stores, we do this manually otherwise the
+		// allocator on server 0 may see everyone as temporarily dead due to the
+		// clock move above.
+		for _, i := range []int{0, 1, 4, 5} {
+			require.NoError(t, tc.Servers[i].HeartbeatNodeLiveness())
+			require.NoError(t, tc.GetFirstStoreFromServer(t, i).GossipStore(ctx, true))
+		}
+	}
+	// We need to wait until 2 and 3 are considered to be dead.
+	timeUntilStoreDead := kvserver.TimeUntilStoreDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	wait(timeUntilStoreDead.Nanoseconds())
+
+	checkDead := func(store *kvserver.Store, storeIdx int) error {
+		if dead, timetoDie, err := store.GetStoreConfig().StorePool.IsDead(
+			tc.GetFirstStoreFromServer(t, storeIdx).StoreID()); err != nil || !dead {
+			// Sometimes a gossip update arrives right after server shutdown and
+			// after we manually moved the time, so move it again.
+			if err == nil {
+				wait(timetoDie.Nanoseconds())
+			}
+			return errors.Errorf("expected server 2 to be dead, instead err=%v, dead=%v", err, dead)
+		}
+		return nil
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		store := tc.GetFirstStoreFromServer(t, 0)
+		sl, _, _ := store.GetStoreConfig().StorePool.GetStoreList()
+		if len(sl.Stores()) != 4 {
+			return errors.Errorf("expected all 4 remaining stores to be live, but only got %v", sl.Stores())
+		}
+		if err := checkDead(store, 2); err != nil {
+			return err
+		}
+		if err := checkDead(store, 3); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	_, processError, enqueueError := tc.GetFirstStoreFromServer(t, 0).
+		ManuallyEnqueue(ctx, "replicate", repl, true)
+	require.NoError(t, enqueueError)
+	if processError != nil {
+		log.Infof(ctx, "a US replica stole lease, manually moving it to the EU.")
+		if !strings.Contains(processError.Error(), "does not have the range lease") {
+			t.Fatal(processError)
+		}
+		// The us replica ended up stealing the lease, so we need to manually
+		// transfer the lease and then do another run through the replicate queue
+		// to move it to the us.
+		tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(0))
+		testutils.SucceedsSoon(t, func() error {
+			if !repl.OwnsValidLease(ctx, tc.Servers[0].Clock().NowAsClockTimestamp()) {
+				return errors.Errorf("Expected lease to transfer to server 0")
+			}
+			return nil
+		})
+		_, processError, enqueueError = tc.GetFirstStoreFromServer(t, 0).
+			ManuallyEnqueue(ctx, "replicate", repl, true)
+		require.NoError(t, enqueueError)
+		require.NoError(t, processError)
+	}
+
+	var newLeaseHolder roachpb.ReplicationTarget
+	testutils.SucceedsSoon(t, func() error {
+		var err error
+		newLeaseHolder, err = tc.FindRangeLeaseHolder(*repl.Desc(), nil)
+		return err
+	})
+
+	srv, err := tc.FindMemberServer(newLeaseHolder.StoreID)
+	require.NoError(t, err)
+	region, ok := srv.Locality().Find("region")
+	require.True(t, ok)
+	require.Equal(t, "us", region)
+	require.Equal(t, 3, len(repl.Desc().Replicas().Voters().VoterDescriptors()))
+	// Validate that we upreplicated outside of SF.
+	for _, replDesc := range repl.Desc().Replicas().Voters().VoterDescriptors() {
+		serv, err := tc.FindMemberServer(replDesc.StoreID)
+		require.NoError(t, err)
+		dc, ok := serv.Locality().Find("dc")
+		require.True(t, ok)
+		require.NotEqual(t, "sf", dc)
+	}
+	history := repl.GetLeaseHistory()
+	// make sure we see the eu node as a lease holder in the second to last position.
+	require.Equal(t, tc.Target(0).NodeID, history[len(history)-2].Replica.NodeID)
+}
+
+// This test verifies that when a node starts flapping its liveness, all leases
+// move off that node and it does not get any leases back until it heartbeats
+// liveness and waits out the server.time_after_store_suspect interval.
+func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This is a hefty test, so we skip it under short and race.
+	skip.UnderShort(t)
+	skip.UnderRace(t)
+
+	// We introduce constraints so that only n2,n3,n4 are considered when we
+	// determine if we should transfer leases based on capacity. This makes sure n2
+	// looks desirable as a lease transfer target once it stops being suspect.
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.Constraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 3,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "us-west"},
+			},
+		},
+	}
+	locality := func(region string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: region},
+			},
+		}
+	}
+	localities := []roachpb.Locality{
+		locality("us-east"),
+		locality("us-west"),
+		locality("us-west"),
+		locality("us-west"),
+	}
+	// Speed up lease transfers.
+	stickyRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyRegistry.CloseAllStickyInMemEngines()
+	ctx := context.Background()
+	manualClock := hlc.NewHybridManualClock()
+	serverArgs := make(map[int]base.TestServerArgs)
+	numNodes := 4
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: localities[i],
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource:               manualClock.UnixNano,
+					DefaultZoneConfigOverride: &zcfg,
+					StickyEngineRegistry:      stickyRegistry,
+				},
+			},
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+				},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: serverArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	// We are not going to have stats, so disable this so we just rely on
+	// the store means.
+	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = 'false'`)
+	require.NoError(t, err)
+
+	_, rhsDesc := tc.SplitRangeOrFatal(t, keys.UserTableDataMin)
+	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
+	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0), tc.Target(1))
+
+	startKeys := make([]roachpb.Key, 20)
+	startKeys[0] = rhsDesc.StartKey.AsRawKey()
+	for i := 1; i < 20; i++ {
+		startKeys[i] = startKeys[i-1].Next()
+		tc.SplitRangeOrFatal(t, startKeys[i])
+		require.NoError(t, tc.WaitForVoters(startKeys[i], tc.Targets(1, 2, 3)...))
+	}
+
+	leaseOnNonSuspectStores := func(key roachpb.Key) error {
+		var repl *kvserver.Replica
+		for _, i := range []int{2, 3} {
+			repl = tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
+			if repl.OwnsValidLease(ctx, tc.Servers[i].Clock().NowAsClockTimestamp()) {
+				return nil
+			}
+		}
+		return errors.Errorf("Expected no lease on server 1 for %s", repl)
+	}
+
+	allLeasesOnNonSuspectStores := func() error {
+		for _, key := range startKeys {
+			if err := leaseOnNonSuspectStores(key); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Make sure that all store pools have seen liveness heartbeats from everyone.
+	testutils.SucceedsSoon(t, func() error {
+		for i := range tc.Servers {
+			for j := range tc.Servers {
+				live, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.IsLive(tc.Target(j).StoreID)
+				if err != nil {
+					return err
+				}
+				if !live {
+					return errors.Errorf("Expected server %d to be suspect on server %d", j, i)
+				}
+			}
+		}
+		return nil
+	})
+
+	for _, key := range startKeys {
+		repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))
+		tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(1))
+		testutils.SucceedsSoon(t, func() error {
+			if !repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
+				return errors.Errorf("Expected lease to transfer to server 1 for replica %s", repl)
+			}
+			return nil
+		})
+	}
+
+	heartbeat := func(servers ...int) {
+		for _, i := range servers {
+			testutils.SucceedsSoon(t, tc.Servers[i].HeartbeatNodeLiveness)
+		}
+	}
+
+	// The node has to lose both it's raft leadership and liveness for leases to
+	// move, so the best way to simulate that right now is to just kill the node.
+	tc.StopServer(1)
+	// We move the time, so that server 1 can start failing its liveness.
+	livenessDuration, _ := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().RaftConfig.NodeLivenessDurations()
+
+	// We dont want the other stores to lose liveness while we move the time, so
+	// tick the time a second and a time and make sure they heartbeat.
+	for i := 0; i < int(math.Ceil(livenessDuration.Seconds())+1); i++ {
+		manualClock.Increment(time.Second.Nanoseconds())
+		heartbeat(0, 2, 3)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		for _, i := range []int{2, 3} {
+			suspect, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.IsSuspect(tc.Target(1).StoreID)
+			if err != nil {
+				return err
+			}
+			if !suspect {
+				return errors.Errorf("Expected server 1 to be suspect on server %d", i)
+			}
+		}
+		return nil
+	})
+
+	runThroughTheReplicateQueue := func(key roachpb.Key) {
+		for _, i := range []int{2, 3} {
+			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
+			require.NotNil(t, repl)
+			_, _, enqueueError := tc.GetFirstStoreFromServer(t, i).
+				ManuallyEnqueue(ctx, "replicate", repl, true)
+			require.NoError(t, enqueueError)
+		}
+	}
+
+	for _, key := range startKeys {
+		testutils.SucceedsSoon(t, func() error {
+			runThroughTheReplicateQueue(key)
+			return leaseOnNonSuspectStores(key)
+		})
+	}
+	require.NoError(t, tc.RestartServer(1))
+
+	for i := 0; i < int(math.Ceil(livenessDuration.Seconds())); i++ {
+		manualClock.Increment(time.Second.Nanoseconds())
+		heartbeat(0, 2, 3)
+	}
+	// Force all the replication queues, server 1 is still suspect so it should not pick up any leases.
+	for _, key := range startKeys {
+		runThroughTheReplicateQueue(key)
+	}
+	testutils.SucceedsSoon(t, allLeasesOnNonSuspectStores)
+	// Wait out the suspect time.
+	suspectDuration := kvserver.TimeAfterStoreSuspect.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	for i := 0; i < int(math.Ceil(suspectDuration.Seconds())); i++ {
+		manualClock.Increment(time.Second.Nanoseconds())
+		heartbeat(0, 1, 2, 3)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		// Server 1 should get some leases back as it's no longer suspect.
+		for _, key := range startKeys {
+			runThroughTheReplicateQueue(key)
+		}
+		for _, key := range startKeys {
+			repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))
+			if repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
+				return nil
+			}
+		}
+		return errors.Errorf("Expected server 1 to have at lease 1 lease.")
+	})
 }

@@ -521,6 +521,15 @@ func Decode(sortNanos int64, months int64, days int64) (Duration, error) {
 
 // Add returns the time t+d, using a configurable mode.
 func Add(t time.Time, d Duration) time.Time {
+	// Fast path adding units < 1 day.
+	// Avoiding AddDate(0,0,0) is required to prevent changing times
+	// on DST boundaries.
+	// For example, 2020-10-2503:00+03 and 2020-10-25 03:00+02 are both
+	// valid times, but `time.Date` in `time.AddDate` may translate
+	// one to the other.
+	if d.Months == 0 && d.Days == 0 {
+		return t.Add(time.Duration(d.nanos))
+	}
 	// We can fast-path if the duration is always a fixed amount of time,
 	// or if the day number that we're starting from can never result
 	// in normalization.

@@ -72,12 +72,22 @@ func (p *planner) UnsafeUpsertDescriptor(
 	id := descpb.ID(descID)
 	var desc descpb.Descriptor
 	if err := protoutil.Unmarshal(encodedDesc, &desc); err != nil {
-		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, "failed to decode descriptor")
+		return pgerror.Wrapf(err, pgcode.InvalidObjectDefinition, "failed to decode descriptor")
+	}
+	newID, newVersion, _, _, newModTime, err := descpb.GetDescriptorMetadata(&desc)
+	if err != nil {
+		return pgerror.Wrapf(err, pgcode.InvalidObjectDefinition, "invalid descriptor")
+	}
+	if newID != id {
+		return pgerror.Newf(pgcode.InvalidObjectDefinition, "invalid descriptor ID %d, expected %d", newID, id)
+	}
+	if newVersion > 1 && newModTime.IsEmpty() {
+		return pgerror.Newf(pgcode.InvalidObjectDefinition, "missing descriptor modification time for version %d",
+			newVersion)
 	}
 
 	// Fetch the existing descriptor.
-
-	existing, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
+	mut, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
 	var forceNoticeString string // for the event
 	if !errors.Is(err, catalog.ErrDescriptorNotFound) && err != nil {
 		if force {
@@ -93,29 +103,31 @@ func (p *planner) UnsafeUpsertDescriptor(
 	// Validate that existing is sane and store its hex serialization into
 	// existingStr to be written to the event log.
 	var existingStr string
+	var existingVersion descpb.DescriptorVersion
 	var previousOwner string
 	var previousUserPrivileges []descpb.UserPrivileges
-	if existing != nil {
-		if existing.IsUncommittedVersion() {
+	if mut != nil {
+		if mut.IsUncommittedVersion() {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"cannot modify a modified descriptor (%d) with UnsafeUpsertDescriptor", id)
 		}
-		version := descpb.GetDescriptorVersion(&desc)
-		if version != existing.GetVersion() && version != existing.GetVersion()+1 {
-			return pgerror.Newf(pgcode.InvalidTableDefinition, "mismatched descriptor version, expected %v or %v, got %v",
-				version, version+1, existing.GetVersion())
-		}
-		marshaled, err := protoutil.Marshal(existing.DescriptorProto())
+		existingVersion = mut.GetVersion()
+		marshaled, err := protoutil.Marshal(mut.DescriptorProto())
 		if err != nil {
-			return errors.AssertionFailedf("failed to marshal existing descriptor %v: %v", existing, err)
+			return errors.AssertionFailedf("failed to marshal existing descriptor %v: %v", mut, err)
 		}
 		existingStr = hex.EncodeToString(marshaled)
-		previousOwner = existing.GetPrivileges().Owner().Normalized()
-		previousUserPrivileges = existing.GetPrivileges().Users
+		previousOwner = mut.GetPrivileges().Owner().Normalized()
+		previousUserPrivileges = mut.GetPrivileges().Users
+	}
+
+	if newVersion != existingVersion && newVersion != existingVersion+1 {
+		return pgerror.Newf(pgcode.InvalidObjectDefinition, "mismatched descriptor version %d, expected %v or %v",
+			newVersion, existingVersion, existingVersion+1)
 	}
 
 	tbl, db, typ, schema := descpb.FromDescriptor(&desc)
-	switch md := existing.(type) {
+	switch md := mut.(type) {
 	case *tabledesc.Mutable:
 		md.TableDescriptor = *tbl
 	case *schemadesc.Mutable:
@@ -129,13 +141,13 @@ func (p *planner) UnsafeUpsertDescriptor(
 		if b == nil {
 			return pgerror.New(pgcode.InvalidTableDefinition, "invalid ")
 		}
-		existing = b.BuildCreatedMutable()
+		mut = b.BuildCreatedMutable()
 	default:
-		return errors.AssertionFailedf("unknown descriptor type %T for id %d", existing, id)
+		return errors.AssertionFailedf("unknown descriptor type %T for id %d", mut, id)
 	}
 
 	objectType := privilege.Any
-	switch existing.DescriptorType() {
+	switch mut.DescriptorType() {
 	case catalog.Database:
 		objectType = privilege.Database
 	case catalog.Table:
@@ -153,7 +165,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 	{
 		b := p.txn.NewBatch()
 		if err := p.Descriptors().WriteDescToBatch(
-			ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), existing, b,
+			ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), mut, b,
 		); err != nil {
 			return err
 		}
@@ -163,16 +175,16 @@ func (p *planner) UnsafeUpsertDescriptor(
 	}
 
 	// Log any ownership changes.
-	newOwner := existing.GetPrivileges().Owner().Normalized()
+	newOwner := mut.GetPrivileges().Owner().Normalized()
 	if previousOwner != newOwner {
-		if err := logOwnerEvents(ctx, p, newOwner, existing); err != nil {
+		if err := logOwnerEvents(ctx, p, newOwner, mut); err != nil {
 			return err
 		}
 	}
 
 	// Log any privilege changes.
 	if err := comparePrivileges(
-		ctx, p, existing, previousUserPrivileges, objectType,
+		ctx, p, mut, previousUserPrivileges, objectType,
 	); err != nil {
 		return err
 	}

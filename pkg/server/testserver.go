@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -119,11 +120,7 @@ func makeTestKVConfig() KVConfig {
 }
 
 func makeTestSQLConfig(st *cluster.Settings, tenID roachpb.TenantID) SQLConfig {
-	sqlCfg := MakeSQLConfig(tenID, base.DefaultTestTempStorageConfig(st))
-	// Configure the default in-memory temp storage for all tests unless
-	// otherwise configured.
-	sqlCfg.TempStorageConfig = base.DefaultTestTempStorageConfig(st)
-	return sqlCfg
+	return MakeSQLConfig(tenID, base.DefaultTestTempStorageConfig(st))
 }
 
 // makeTestConfigFromParams creates a Config from a TestServerParams.
@@ -131,27 +128,21 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	st := params.Settings
 	if params.Settings == nil {
 		st = cluster.MakeClusterSettings()
-		// TODO(sumeer): re-introduce this randomization.
-		// enabledSeparated := rand.Intn(2) == 0
-		// log.Infof(context.Background(),
-		//	"test Config is randomly setting enabledSeparated: %t",
-		//	enabledSeparated)
-		// storage.SeparatedIntentsEnabled.Override(&st.SV, enabledSeparated)
+		enabledSeparated := rand.Intn(2) == 0
+		log.Infof(context.Background(),
+			"test Config is randomly setting enabledSeparated: %t", enabledSeparated)
+		storage.SeparatedIntentsEnabled.Override(context.Background(), &st.SV, enabledSeparated)
 	}
 	st.ExternalIODir = params.ExternalIODir
 	cfg := makeTestConfig(st)
 	cfg.TestingKnobs = params.Knobs
 	cfg.RaftConfig = params.RaftConfig
 	cfg.RaftConfig.SetDefaults()
-	if params.LeaseManagerConfig != nil {
-		cfg.LeaseManagerConfig = params.LeaseManagerConfig
-	} else {
-		cfg.LeaseManagerConfig = base.NewLeaseManagerConfig()
-	}
 	if params.JoinAddr != "" {
 		cfg.JoinList = []string{params.JoinAddr}
 	}
 	cfg.ClusterName = params.ClusterName
+	cfg.ExternalIODirConfig = params.ExternalIODirConfig
 	cfg.Insecure = params.Insecure
 	cfg.AutoInitializeCluster = !params.NoAutoInitializeCluster
 	cfg.SocketFile = params.SocketFile
@@ -275,7 +266,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 
 	// For test servers, leave interleaved tables enabled by default. We'll remove
 	// this when we remove interleaved tables altogether.
-	sql.InterleavedTablesEnabled.Override(&cfg.Settings.SV, true)
+	sql.InterleavedTablesEnabled.Override(context.Background(), &cfg.Settings.SV, true)
 
 	return cfg
 }
@@ -595,7 +586,7 @@ func makeSQLServerArgs(
 		return esb.makeExternalStorageFromURI(ctx, uri, user)
 	}
 
-	esb.init(base.ExternalIODirConfig{}, baseCfg.Settings, nil, circularInternalExecutor, db)
+	esb.init(sqlCfg.ExternalIODirConfig, baseCfg.Settings, nil, circularInternalExecutor, db)
 
 	// We don't need this for anything except some services that want a gRPC
 	// server to register against (but they'll never get RPCs at the time of
@@ -715,10 +706,8 @@ func SetupIdleMonitor(
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
-	params base.TestTenantArgs,
+	ctx context.Context, params base.TestTenantArgs,
 ) (serverutils.TestTenantInterface, error) {
-	ctx := context.Background()
-
 	if !params.Existing {
 		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
 			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
@@ -727,12 +716,37 @@ func (ts *TestServer) StartTenant(
 		}
 	}
 
-	st := cluster.MakeTestingClusterSettings()
+	if !params.SkipTenantCheck {
+		rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+			ctx, "testserver-check-tenant-active", nil,
+			"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
+			params.TenantID.ToUint64(),
+		)
+
+		if err != nil {
+			return nil, err
+		}
+		if rowCount == 0 {
+			return nil, errors.New("not found")
+		}
+	}
+	st := params.Settings
+	if st == nil {
+		st = cluster.MakeTestingClusterSettings()
+	}
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
+	sqlCfg.ExternalIODirConfig = params.ExternalIODirConfig
+	if params.MemoryPoolSize != 0 {
+		sqlCfg.MemoryPoolSize = params.MemoryPoolSize
+	}
+	if params.TempStorageConfig != nil {
+		sqlCfg.TempStorageConfig = *params.TempStorageConfig
+	}
 	baseCfg := makeTestBaseConfig(st)
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.IdleExitAfter = params.IdleExitAfter
+	baseCfg.Insecure = params.ForceInsecure
 	if params.AllowSettingClusterSettings {
 		baseCfg.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
 			ClusterSettingsUpdater: st.MakeUpdater(),
@@ -1045,6 +1059,11 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	return c
 }
 
+// Locality returns the Locality used by the TestServer.
+func (ts *TestServer) Locality() *roachpb.Locality {
+	return &ts.cfg.Locality
+}
+
 // LeaseManager is part of TestServerInterface.
 func (ts *TestServer) LeaseManager() interface{} {
 	return ts.sqlServer.leaseMgr
@@ -1147,10 +1166,6 @@ func (ts *TestServer) SplitRangeWithExpiration(
 	splitKey roachpb.Key, expirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	ctx := context.Background()
-	splitRKey, err := keys.Addr(splitKey)
-	if err != nil {
-		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
-	}
 	splitReq := roachpb.AdminSplitRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: splitKey,
@@ -1179,40 +1194,27 @@ func (ts *TestServer) SplitRangeWithExpiration(
 	// non-retryable failures and then wrapped when the full transaction fails.
 	var wrappedMsg string
 	if err := ts.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		scanMeta := func(key roachpb.RKey, reverse bool) (desc roachpb.RangeDescriptor, err error) {
-			var kvs []kv.KeyValue
-			if reverse {
-				// Find the last range that ends at or before key.
-				kvs, err = txn.ReverseScan(
-					ctx, keys.Meta2Prefix, keys.RangeMetaKey(key.Next()), 1, /* one result */
-				)
-			} else {
-				// Find the first range that ends after key.
-				kvs, err = txn.Scan(
-					ctx, keys.RangeMetaKey(key.Next()), keys.Meta2Prefix.PrefixEnd(), 1, /* one result */
-				)
-			}
-			if err != nil {
-				return desc, err
-			}
-			if len(kvs) != 1 {
-				return desc, fmt.Errorf("expected 1 result, got %d", len(kvs))
-			}
-			err = kvs[0].ValueProto(&desc)
-			return desc, err
-		}
+		leftRangeDesc, rightRangeDesc = roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}
 
-		rightRangeDesc, err = scanMeta(splitRKey, false /* reverse */)
+		// Discovering the RHS is easy, but the LHS is more difficult. The easiest way to
+		// get both in one operation is to do a reverse range lookup on splitKey.Next();
+		// we need the .Next() because in reverse mode, the end key of a range is inclusive,
+		// i.e. looking up key `c` will match range [a,c), not [c, d).
+		// The result will be the right descriptor, and the first prefetched result will
+		// be the left neighbor, i.e. the resulting left hand side of the split.
+		rs, more, err := kv.RangeLookup(ctx, txn, splitKey.Next(), roachpb.CONSISTENT, 1, true /* reverse */)
 		if err != nil {
-			wrappedMsg = "could not look up right-hand side descriptor"
 			return err
 		}
-
-		leftRangeDesc, err = scanMeta(splitRKey, true /* reverse */)
-		if err != nil {
-			wrappedMsg = "could not look up left-hand side descriptor"
-			return err
+		if len(rs) == 0 {
+			// This is a bug.
+			return errors.AssertionFailedf("no descriptor found for key %s", splitKey)
 		}
+		if len(more) == 0 {
+			return errors.Errorf("looking up post-split descriptor returned first range: %+v", rs[0])
+		}
+		leftRangeDesc = more[0]
+		rightRangeDesc = rs[0]
 
 		if !leftRangeDesc.EndKey.Equal(rightRangeDesc.StartKey) {
 			return errors.Errorf(
@@ -1238,13 +1240,46 @@ func (ts *TestServer) SplitRange(
 	return ts.SplitRangeWithExpiration(splitKey, hlc.MaxTimestamp)
 }
 
-// GetRangeLease returns the current lease for the range containing key, and a
-// timestamp taken from the node.
+// LeaseInfo describes a range's current and potentially future lease.
+type LeaseInfo struct {
+	cur, next roachpb.Lease
+}
+
+// Current returns the range's current lease.
+func (l LeaseInfo) Current() roachpb.Lease {
+	return l.cur
+}
+
+// CurrentOrProspective returns the range's potential next lease, if a lease
+// request is in progress, or the current lease otherwise.
+func (l LeaseInfo) CurrentOrProspective() roachpb.Lease {
+	if !l.next.Empty() {
+		return l.next
+	}
+	return l.cur
+}
+
+// LeaseInfoOpt enumerates options for GetRangeLease.
+type LeaseInfoOpt int
+
+const (
+	// AllowQueryToBeForwardedToDifferentNode specifies that, if the current node
+	// doesn't have a voter replica, the lease info can come from a different
+	// node.
+	AllowQueryToBeForwardedToDifferentNode LeaseInfoOpt = iota
+	// QueryLocalNodeOnly specifies that an error should be returned if the node
+	// is not able to serve the lease query (because it doesn't have a voting
+	// replica).
+	QueryLocalNodeOnly
+)
+
+// GetRangeLease returns information on the lease for the range containing key, and a
+// timestamp taken from the node. The lease is returned regardless of its status.
 //
-// The lease is returned regardless of its status.
+// queryPolicy specifies if its OK to forward the request to a different node.
 func (ts *TestServer) GetRangeLease(
-	ctx context.Context, key roachpb.Key,
-) (_ roachpb.Lease, now hlc.ClockTimestamp, _ error) {
+	ctx context.Context, key roachpb.Key, queryPolicy LeaseInfoOpt,
+) (_ LeaseInfo, now hlc.ClockTimestamp, _ error) {
 	leaseReq := roachpb.LeaseInfoRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
@@ -1262,10 +1297,25 @@ func (ts *TestServer) GetRangeLease(
 		&leaseReq,
 	)
 	if pErr != nil {
-		return roachpb.Lease{}, hlc.ClockTimestamp{}, pErr.GoError()
+		return LeaseInfo{}, hlc.ClockTimestamp{}, pErr.GoError()
 	}
-	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, ts.Clock().NowAsClockTimestamp(), nil
-
+	// Adapt the LeaseInfoResponse format to LeaseInfo.
+	resp := leaseResp.(*roachpb.LeaseInfoResponse)
+	if queryPolicy == QueryLocalNodeOnly && resp.EvaluatedBy != ts.GetFirstStoreID() {
+		// TODO(andrei): Figure out how to deal with nodes with multiple stores.
+		// This API should permit addressing the query to a particular store.
+		return LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
+			"request not evaluated locally; evaluated by s%d instead of local s%d",
+			resp.EvaluatedBy, ts.GetFirstStoreID())
+	}
+	var l LeaseInfo
+	if resp.CurrentLease != nil {
+		l.cur = *resp.CurrentLease
+		l.next = resp.Lease
+	} else {
+		l.cur = resp.Lease
+	}
+	return l, ts.Clock().NowAsClockTimestamp(), nil
 }
 
 // ExecutorConfig is part of the TestServerInterface.

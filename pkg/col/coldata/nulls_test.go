@@ -15,8 +15,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
+
+// noNulls is a nulls vector with no value set to null.
+var noNulls Nulls
 
 // nulls3 is a nulls vector with every third value set to null.
 var nulls3 Nulls
@@ -40,6 +44,7 @@ func init() {
 }
 
 func init() {
+	noNulls = NewNulls(BatchSize())
 	nulls3 = NewNulls(BatchSize())
 	nulls5 = NewNulls(BatchSize())
 	nulls10 = NewNulls(BatchSize() * 2)
@@ -223,16 +228,30 @@ func TestSlice(t *testing.T) {
 }
 
 func TestNullsOr(t *testing.T) {
-	length1, length2 := 300, 400
-	n1 := nulls3.Slice(0, length1)
-	n2 := nulls5.Slice(0, length2)
+	rng, _ := randutil.NewPseudoRand()
+	randomNulls := NewNulls(BatchSize())
+	for i := 0; i < BatchSize(); i++ {
+		if rng.Float64() < 0.5 {
+			randomNulls.SetNull(i)
+		}
+	}
+	nullsToChooseFrom := []Nulls{noNulls, nulls3, nulls5, nulls10, randomNulls}
+
+	length1, length2 := 1+rng.Intn(BatchSize()), 1+rng.Intn(BatchSize())
+	n1Choice, n2Choice := rng.Intn(len(nullsToChooseFrom)), rng.Intn(len(nullsToChooseFrom))
+	n1 := nullsToChooseFrom[n1Choice].Slice(0, length1)
+	n2 := nullsToChooseFrom[n2Choice].Slice(0, length2)
 	or := n1.Or(&n2)
-	require.True(t, or.maybeHasNulls)
-	for i := 0; i < length2; i++ {
+	require.Equal(t, or.maybeHasNulls, n1.maybeHasNulls || n2.maybeHasNulls)
+	maxLength := length1
+	if length2 > length1 {
+		maxLength = length2
+	}
+	for i := 0; i < maxLength; i++ {
 		if i < length1 && n1.NullAt(i) || i < length2 && n2.NullAt(i) {
-			require.True(t, or.NullAt(i), "or.NullAt(%d) should be true", i)
+			require.True(t, or.NullAt(i), "or.NullAt(%d) should be true\nn1 %v\nn2 %v\n or %v", i, n1.nulls, n2.nulls, or.nulls)
 		} else {
-			require.False(t, or.NullAt(i), "or.NullAt(%d) should be false", i)
+			require.False(t, or.NullAt(i), "or.NullAt(%d) should be false\nn1 %v\nn2 %v\n or %v", i, n1.nulls, n2.nulls, or.nulls)
 		}
 	}
 }

@@ -210,7 +210,7 @@ func PopulateStoreSpecWithEncryption(
 			if err != nil {
 				return err
 			}
-			storeSpecs.Specs[i].ExtraOptions = opts
+			storeSpecs.Specs[i].EncryptionOptions = opts
 			found = true
 			break
 		}
@@ -221,7 +221,7 @@ func PopulateStoreSpecWithEncryption(
 	return nil
 }
 
-// EncryptionOptionsForStore takes a store directory and returns its ExtraOptions
+// EncryptionOptionsForStore takes a store directory and returns its EncryptionOptions
 // if a matching entry if found in the StoreEncryptionSpecList.
 // The caller should appropriately set UseFileRegistry on a non-nil result.
 func EncryptionOptionsForStore(

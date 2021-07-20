@@ -1,6 +1,6 @@
 # Load the components that lets us use cmake/make in third party deps.
-load("@rules_foreign_cc//tools/build_defs:cmake.bzl", "cmake_external")
-load("@rules_foreign_cc//tools/build_defs:configure.bzl", "configure_make")
+load("@rules_foreign_cc//foreign_cc:cmake.bzl", "cmake")
+load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
 
 # TODO(irfansharif): All the cmake cache entries below were cargo-culted from
 # the Makefile. We may need to programatically set them depending on the
@@ -24,45 +24,42 @@ configure_make(
         "cp lib/libjemalloc.a libjemalloc/lib",
         "cp -r include libjemalloc",
     ],
-    static_libraries = ["libjemalloc.a"],
+    out_static_libs = ["libjemalloc.a"],
     visibility = ["//visibility:public"],
-)
-
-# Define the build targets for libprotobuf and protoc.
-cmake_external(
-    name = "libprotobuf",
-    binaries = ["protoc"],
-    cache_entries = {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TARGET_MESSAGES": "OFF",
-        "protobuf_BUILD_TESTS": "OFF",
-    },
-    lib_source = "@protobuf//:all",
-    static_libraries = ["libprotobuf.a"],
-    visibility = ["//visibility:public"],
-    working_directory = "cmake",
 )
 
 # Define the build target for libproj.
-cmake_external(
+cmake(
     name = "libproj",
     cache_entries = {
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_LIBPROJ_SHARED": "OFF",
     },
+    # As of this writing (2021-05-05), foreign_cc
+    # only knows about windows, darwin and linux.
+    cmake_options = select({
+        "@io_bazel_rules_go//go/platform:windows": ["-GNinja"],
+        "//conditions:default": ["-GUnix Makefiles"],
+    }),
     lib_source = "@proj//:all",
-    static_libraries = ["libproj.a"],
+    out_static_libs = ["libproj.a"],
     visibility = ["//visibility:public"],
 )
 
 # Define the targets for libgeos.
-cmake_external(
+cmake(
     name = "libgeos",
     cache_entries = {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_C_FLAGS": "-fPIC",
         "CMAKE_CXX_FLAGS": "-fPIC",
     },
+    # As of this writing (2021-05-05), foreign_cc
+    # only knows about windows, darwin and linux.
+    cmake_options = select({
+        "@io_bazel_rules_go//go/platform:windows": ["-GNinja"],
+        "//conditions:default": ["-GUnix Makefiles"],
+    }),
     lib_source = "@geos//:all",
     make_commands = [
         "mkdir -p libgeos/lib",
@@ -84,7 +81,7 @@ cmake_external(
             # TODO(#bazel): patchelf is also required here for release.
         ],
     }),
-    shared_libraries = select({
+    out_shared_libs = select({
         "@io_bazel_rules_go//go/platform:darwin": [
             "libgeos_c.dylib",
             "libgeos.dylib",
@@ -105,12 +102,18 @@ cmake_external(
 #
 # Bazel also expects the library archive and the include headers to be placed
 # in a certain path, so we fix it all up accordingly within make_commands.
-cmake_external(
+cmake(
     name = "libroach",
     cache_entries = {
         "CMAKE_TARGET_MESSAGES": "OFF",
         "CMAKE_BUILD_TYPE": "Release",
     },
+    # As of this writing (2021-05-05), foreign_cc
+    # only knows about windows, darwin and linux.
+    cmake_options = select({
+        "@io_bazel_rules_go//go/platform:windows": ["-GNinja"],
+        "//conditions:default": ["-GUnix Makefiles"],
+    }),
     lib_source = "@libroach//:all",
     make_commands = [
         "make roach",
@@ -118,7 +121,7 @@ cmake_external(
         "cp libroach.a libroach/lib/libroach.a",
         "cp -r $EXT_BUILD_ROOT/external/libroach/include libroach",
     ],
-    static_libraries = ["libroach.a"],
+    out_static_libs = ["libroach.a"],
     tools_deps = [
         "@libroach//:all",
     ],
@@ -150,6 +153,35 @@ configure_make(
         "mkdir -p libkrb5/lib",
         "cp libkrb5/libgssapi_krb5.a libkrb5/lib",
     ],
-    static_libraries = ["libgssapi_krb5.a"],
+    out_static_libs = ["libgssapi_krb5.a"],
+    visibility = ["//visibility:public"],
+)
+
+# This is extremely stupid and unnecessary, but in certain cases to depend on
+# the output of a `cmake` target, we need to launder through a filegroup:
+# https://github.com/bazelbuild/rules_foreign_cc/issues/619#issuecomment-844473637
+# This is apparently a bug. In the meantime, people can depend on the :*_files
+# targets rather than :libgeos where it matters.
+filegroup(
+    name = "libgeos_files",
+    srcs = [":libgeos"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "libroach_files",
+    srcs = [":libroach"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "libproj_files",
+    srcs = [":libproj"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "libedit_files",
+    srcs = ["@com_github_knz_go_libedit//unix:edit"],
     visibility = ["//visibility:public"],
 )

@@ -71,7 +71,13 @@ func (r *Replica) executeReadOnlyBatch(
 	// turn means that we can bump the timestamp cache *before* evaluation
 	// without risk of starving writes. Once we start doing that, we're free to
 	// release latches immediately after we acquire an engine iterator as long
-	// as we're performing a non-locking read.
+	// as we're performing a non-locking read. Note that this also requires that
+	// the request is not being optimistically evaluated (optimistic evaluation
+	// does not check locks). It would also be nice, but not required for
+	// correctness, that the read-only engine eagerly create an iterator (that
+	// is later cloned) while the latches are held, so that this request does
+	// not "see" the effect of any later requests that happen after the latches
+	// are released.
 
 	var result result.Result
 	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(
@@ -79,10 +85,25 @@ func (r *Replica) executeReadOnlyBatch(
 	)
 
 	// If the request hit a server-side concurrency retry error, immediately
-	// proagate the error. Don't assume ownership of the concurrency guard.
+	// propagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
 		pErr = maybeAttachLease(pErr, &st.Lease)
 		return nil, g, pErr
+	}
+
+	if pErr == nil && g.EvalKind == concurrency.OptimisticEval {
+		// Gather the spans that were read -- we distinguish the spans in the
+		// request from the spans that were actually read, using resume spans in
+		// the response. For now we ignore the latch spans, but when we stop
+		// waiting for latches in optimistic evaluation we will use these to check
+		// latches first.
+		_, lockSpansRead, err := r.collectSpansRead(ba, br)
+		if err != nil {
+			return nil, g, roachpb.NewError(err)
+		}
+		if ok := g.CheckOptimisticNoConflicts(lockSpansRead); !ok {
+			return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+		}
 	}
 
 	// Handle any local (leaseholder-only) side-effects of the request.
@@ -92,6 +113,13 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 
 	// Otherwise, update the timestamp cache and release the concurrency guard.
+	// Note:
+	// - The update to the timestamp cache is not gated on pErr == nil,
+	//   since certain semantic errors (e.g. ConditionFailedError on CPut)
+	//   require updating the timestamp cache (see updatesTSCacheOnErr).
+	// - For optimistic evaluation, used for limited scans, the update to the
+	//   timestamp cache limits itself to the spans that were read, by using
+	//   the ResumeSpans.
 	ec, g := endCmds{repl: r, g: g, st: st}, nil
 	ec.done(ctx, ba, br, pErr)
 
@@ -184,4 +212,66 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
 	return nil
+}
+
+// collectSpansRead uses the spans declared in the requests, and the resume
+// spans in the responses, to construct the effective spans that were read,
+// and uses that to compute the latch and lock spans.
+func (r *Replica) collectSpansRead(
+	ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
+) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
+	baCopy := *ba
+	baCopy.Requests = make([]roachpb.RequestUnion, len(baCopy.Requests))
+	j := 0
+	for i := 0; i < len(baCopy.Requests); i++ {
+		baReq := ba.Requests[i]
+		req := baReq.GetInner()
+		header := req.Header()
+
+		resp := br.Responses[i].GetInner()
+		if resp.Header().ResumeSpan == nil {
+			// Fully evaluated.
+			baCopy.Requests[j] = baReq
+			j++
+			continue
+		}
+
+		switch t := resp.(type) {
+		case *roachpb.ScanResponse:
+			if header.Key.Equal(t.ResumeSpan.Key) {
+				// The request did not evaluate. Ignore it.
+				continue
+			}
+			// The scan will resume at the inclusive ResumeSpan.Key. So
+			// ResumeSpan.Key has not been read and becomes the exclusive end key of
+			// what was read.
+			header.EndKey = t.ResumeSpan.Key
+		case *roachpb.ReverseScanResponse:
+			if header.EndKey.Equal(t.ResumeSpan.EndKey) {
+				// The request did not evaluate. Ignore it.
+				continue
+			}
+			// The scan will resume at the exclusive ResumeSpan.EndKey and proceed
+			// towards the current header.Key. So ResumeSpan.EndKey has been read
+			// and becomes the inclusive start key of what was read.
+			header.Key = t.ResumeSpan.EndKey
+		default:
+			// Consider it fully evaluated, which is safe.
+			baCopy.Requests[j] = baReq
+			j++
+			continue
+		}
+		// The ResumeSpan has changed the header.
+		req = req.ShallowCopy()
+		req.SetHeader(header)
+		baCopy.Requests[j].MustSetInner(req)
+		j++
+	}
+	baCopy.Requests = baCopy.Requests[:j]
+
+	// Collect the batch's declared spans again, this time with the
+	// span bounds constrained to what was read.
+	var err error
+	latchSpans, lockSpans, _, err = r.collectSpans(&baCopy)
+	return latchSpans, lockSpans, err
 }

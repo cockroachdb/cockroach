@@ -1,0 +1,6 @@
+load(":lint.bzl", "lint_binary")
+
+lint_binary(
+    name = "lint",
+    test = "//pkg/testutils/lint:lint_test",
+)

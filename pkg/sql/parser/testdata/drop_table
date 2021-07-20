@@ -1,0 +1,103 @@
+parse
+DROP TABLE a
+----
+DROP TABLE a
+DROP TABLE a -- fully parenthesized
+DROP TABLE a -- literals removed
+DROP TABLE _ -- identifiers removed
+
+parse
+EXPLAIN DROP TABLE a
+----
+EXPLAIN DROP TABLE a
+EXPLAIN DROP TABLE a -- fully parenthesized
+EXPLAIN DROP TABLE a -- literals removed
+EXPLAIN DROP TABLE _ -- identifiers removed
+
+parse
+DROP TABLE a.b
+----
+DROP TABLE a.b
+DROP TABLE a.b -- fully parenthesized
+DROP TABLE a.b -- literals removed
+DROP TABLE _._ -- identifiers removed
+
+parse
+DROP TABLE a, b
+----
+DROP TABLE a, b
+DROP TABLE a, b -- fully parenthesized
+DROP TABLE a, b -- literals removed
+DROP TABLE _, _ -- identifiers removed
+
+parse
+DROP TABLE IF EXISTS a
+----
+DROP TABLE IF EXISTS a
+DROP TABLE IF EXISTS a -- fully parenthesized
+DROP TABLE IF EXISTS a -- literals removed
+DROP TABLE IF EXISTS _ -- identifiers removed
+
+parse
+DROP TABLE a RESTRICT
+----
+DROP TABLE a RESTRICT
+DROP TABLE a RESTRICT -- fully parenthesized
+DROP TABLE a RESTRICT -- literals removed
+DROP TABLE _ RESTRICT -- identifiers removed
+
+parse
+DROP TABLE a.b RESTRICT
+----
+DROP TABLE a.b RESTRICT
+DROP TABLE a.b RESTRICT -- fully parenthesized
+DROP TABLE a.b RESTRICT -- literals removed
+DROP TABLE _._ RESTRICT -- identifiers removed
+
+parse
+DROP TABLE a, b RESTRICT
+----
+DROP TABLE a, b RESTRICT
+DROP TABLE a, b RESTRICT -- fully parenthesized
+DROP TABLE a, b RESTRICT -- literals removed
+DROP TABLE _, _ RESTRICT -- identifiers removed
+
+parse
+DROP TABLE IF EXISTS a RESTRICT
+----
+DROP TABLE IF EXISTS a RESTRICT
+DROP TABLE IF EXISTS a RESTRICT -- fully parenthesized
+DROP TABLE IF EXISTS a RESTRICT -- literals removed
+DROP TABLE IF EXISTS _ RESTRICT -- identifiers removed
+
+parse
+DROP TABLE a CASCADE
+----
+DROP TABLE a CASCADE
+DROP TABLE a CASCADE -- fully parenthesized
+DROP TABLE a CASCADE -- literals removed
+DROP TABLE _ CASCADE -- identifiers removed
+
+parse
+DROP TABLE a.b CASCADE
+----
+DROP TABLE a.b CASCADE
+DROP TABLE a.b CASCADE -- fully parenthesized
+DROP TABLE a.b CASCADE -- literals removed
+DROP TABLE _._ CASCADE -- identifiers removed
+
+parse
+DROP TABLE a, b CASCADE
+----
+DROP TABLE a, b CASCADE
+DROP TABLE a, b CASCADE -- fully parenthesized
+DROP TABLE a, b CASCADE -- literals removed
+DROP TABLE _, _ CASCADE -- identifiers removed
+
+parse
+DROP TABLE IF EXISTS a CASCADE
+----
+DROP TABLE IF EXISTS a CASCADE
+DROP TABLE IF EXISTS a CASCADE -- fully parenthesized
+DROP TABLE IF EXISTS a CASCADE -- literals removed
+DROP TABLE IF EXISTS _ CASCADE -- identifiers removed

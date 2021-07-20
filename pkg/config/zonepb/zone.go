@@ -200,7 +200,6 @@ func (c *Constraint) FromString(short string) error {
 func NewZoneConfig() *ZoneConfig {
 	return &ZoneConfig{
 		InheritedConstraints:      true,
-		InheritedVoterConstraints: true,
 		InheritedLeasePreferences: true,
 	}
 }
@@ -215,7 +214,6 @@ func EmptyCompleteZoneConfig() *ZoneConfig {
 		RangeMaxBytes:             proto.Int64(0),
 		GC:                        &GCPolicy{TTLSeconds: 0},
 		InheritedConstraints:      true,
-		InheritedVoterConstraints: true,
 		InheritedLeasePreferences: true,
 	}
 }
@@ -238,6 +236,8 @@ func DefaultZoneConfig() ZoneConfig {
 			// understand how to change these settings if needed.
 			TTLSeconds: 25 * 60 * 60,
 		},
+		// The default zone is supposed to have empty VoterConstraints.
+		NullVoterConstraintsIsEmpty: true,
 	}
 }
 
@@ -268,8 +268,14 @@ func DefaultSystemZoneConfigRef() *ZoneConfig {
 func (z *ZoneConfig) IsComplete() bool {
 	return ((z.NumReplicas != nil) && (z.RangeMinBytes != nil) &&
 		(z.RangeMaxBytes != nil) && (z.GC != nil) &&
-		(!z.InheritedVoterConstraints) && (!z.InheritedConstraints) &&
+		(!z.InheritedVoterConstraints()) && (!z.InheritedConstraints) &&
 		(!z.InheritedLeasePreferences))
+}
+
+// InheritedVoterConstraints determines whether the `VoterConstraints` field is
+// explicitly set on this zone or if it is to be inherited from its parent.
+func (z *ZoneConfig) InheritedVoterConstraints() bool {
+	return len(z.VoterConstraints) == 0 && !z.NullVoterConstraintsIsEmpty
 }
 
 // ValidateTandemFields returns an error if the ZoneConfig to be written
@@ -301,7 +307,7 @@ func (z *ZoneConfig) ValidateTandemFields() error {
 		return fmt.Errorf("range_min_bytes and range_max_bytes must be set together")
 	}
 	if numVotersExplicit {
-		if !z.InheritedLeasePreferences && z.InheritedVoterConstraints {
+		if !z.InheritedLeasePreferences && z.InheritedVoterConstraints() {
 			return fmt.Errorf("lease preferences can not be set unless the voter_constraints are explicitly set as well")
 		}
 	} else if !z.InheritedLeasePreferences && z.InheritedConstraints {
@@ -539,10 +545,10 @@ func (z *ZoneConfig) InheritFromParent(parent *ZoneConfig) {
 			z.InheritedConstraints = false
 		}
 	}
-	if z.InheritedVoterConstraints {
-		if !parent.InheritedVoterConstraints {
+	if z.InheritedVoterConstraints() {
+		if !parent.InheritedVoterConstraints() {
 			z.VoterConstraints = parent.VoterConstraints
-			z.InheritedVoterConstraints = false
+			z.NullVoterConstraintsIsEmpty = parent.NullVoterConstraintsIsEmpty
 		}
 	}
 	if z.InheritedLeasePreferences {
@@ -593,7 +599,7 @@ func (z *ZoneConfig) CopyFromZone(other ZoneConfig, fieldList []tree.Name) {
 			z.InheritedConstraints = other.InheritedConstraints
 		case "voter_constraints":
 			z.VoterConstraints = other.VoterConstraints
-			z.InheritedVoterConstraints = other.InheritedVoterConstraints
+			z.NullVoterConstraintsIsEmpty = other.NullVoterConstraintsIsEmpty
 		case "lease_preferences":
 			z.LeasePreferences = other.LeasePreferences
 			z.InheritedLeasePreferences = other.InheritedLeasePreferences
@@ -626,6 +632,7 @@ type DiffWithZoneMismatch struct {
 func (z *ZoneConfig) DiffWithZone(
 	other ZoneConfig, fieldList []tree.Name,
 ) (bool, DiffWithZoneMismatch, error) {
+	mismatchingNumReplicas := false
 	for _, fieldName := range fieldList {
 		switch fieldName {
 		case "num_replicas":
@@ -634,6 +641,13 @@ func (z *ZoneConfig) DiffWithZone(
 			}
 			if z.NumReplicas == nil || other.NumReplicas == nil ||
 				*z.NumReplicas != *other.NumReplicas {
+				// In cases where one of the zone configs are placeholders,
+				// defer the error reporting to below so that we can correctly
+				// report on a subzone difference, should one exist.
+				if z.IsSubzonePlaceholder() || other.IsSubzonePlaceholder() {
+					mismatchingNumReplicas = true
+					continue
+				}
 				return false, DiffWithZoneMismatch{
 					Field: "num_replicas",
 				}, nil
@@ -825,7 +839,31 @@ func (z *ZoneConfig) DiffWithZone(
 			}, nil
 		}
 	}
+	// If we've got a mismatch in the num_replicas field and we haven't found
+	// any other mismatch, report on num_replicas.
+	if mismatchingNumReplicas {
+		return false, DiffWithZoneMismatch{
+			Field: "num_replicas",
+		}, nil
+	}
 	return true, DiffWithZoneMismatch{}, nil
+}
+
+// ClearFieldsOfAllSubzones uses the supplied fieldList and clears those fields
+// from all of the zone config's subzones.
+func (z *ZoneConfig) ClearFieldsOfAllSubzones(fieldList []tree.Name) {
+	newSubzones := z.Subzones[:0]
+	emptyZone := NewZoneConfig()
+	for _, sz := range z.Subzones {
+		// By copying from an empty zone, we'll end up clearing out all of the
+		// fields in the fieldList.
+		sz.Config.CopyFromZone(*emptyZone, fieldList)
+		// If we haven't emptied out the subzone, append it to the new slice.
+		if !sz.Config.Equal(emptyZone) {
+			newSubzones = append(newSubzones, sz)
+		}
+	}
+	z.Subzones = newSubzones
 }
 
 // StoreSatisfiesConstraint checks whether a store satisfies the given constraint.

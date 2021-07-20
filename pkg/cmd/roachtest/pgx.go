@@ -35,17 +35,19 @@ func registerPgx(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(
+			ctx, version, c, node[0], nil,
+		); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("setting up go")
-		installLatestGolang(ctx, t, c, node)
+		installGolang(ctx, t, c, node)
 
 		t.Status("getting pgx")
 		if err := repeatGitCloneE(
@@ -125,7 +127,7 @@ func registerPgx(r *testRegistry) {
 		Name:       "pgx",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
-		MinVersion: "v19.2.0",
+		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runPgx(ctx, t, c)

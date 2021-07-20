@@ -61,13 +61,6 @@ func NewUndefinedSchemaError(name string) error {
 	return pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", name)
 }
 
-// NewUnsupportedSchemaUsageError creates an error for an invalid
-// schema use, e.g. mydb.someschema.tbl.
-func NewUnsupportedSchemaUsageError(name string) error {
-	return pgerror.Newf(pgcode.InvalidSchemaName,
-		"unsupported schema specification: %q", name)
-}
-
 // NewCCLRequiredError creates an error for when a CCL feature is used in an OSS
 // binary.
 func NewCCLRequiredError(err error) error {

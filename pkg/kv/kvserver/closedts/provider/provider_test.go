@@ -48,8 +48,8 @@ func TestProviderSubscribeNotify(t *testing.T) {
 	// We'll only unleash the closer loop when the test is basically done, and
 	// once we do that we want it to run aggressively.
 	// Testing that the closer loop works as advertised is left to another test.
-	closedts.TargetDuration.Override(&st.SV, time.Millisecond)
-	closedts.CloseFraction.Override(&st.SV, 1.0)
+	closedts.TargetDuration.Override(ctx, &st.SV, time.Millisecond)
+	closedts.CloseFraction.Override(ctx, &st.SV, 1.0)
 
 	storage := &providertestutils.TestStorage{}
 	unblockClockCh := make(chan struct{})
@@ -240,10 +240,11 @@ func TestProviderSubscribeNotify(t *testing.T) {
 // handled concurrent subscriptions.
 func TestProviderSubscribeConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	st := cluster.MakeTestingClusterSettings()
-	closedts.TargetDuration.Override(&st.SV, time.Millisecond)
-	closedts.CloseFraction.Override(&st.SV, 1.0)
+	closedts.TargetDuration.Override(ctx, &st.SV, time.Millisecond)
+	closedts.CloseFraction.Override(ctx, &st.SV, 1.0)
 
 	stopper := stop.NewStopper()
 	storage := &providertestutils.TestStorage{}
@@ -296,10 +297,11 @@ func TestProviderSubscribeConcurrent(t *testing.T) {
 func TestProviderTargetDurationSetting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.WithIssue(t, closedts.IssueTrackingRemovalOfOldClosedTimestampsCode)
+	ctx := context.Background()
 
 	st := cluster.MakeTestingClusterSettings()
-	closedts.TargetDuration.Override(&st.SV, time.Millisecond)
-	closedts.CloseFraction.Override(&st.SV, 1.0)
+	closedts.TargetDuration.Override(ctx, &st.SV, time.Millisecond)
+	closedts.CloseFraction.Override(ctx, &st.SV, 1.0)
 
 	stopper := stop.NewStopper()
 	storage := &providertestutils.TestStorage{}
@@ -318,7 +320,7 @@ func TestProviderTargetDurationSetting(t *testing.T) {
 		},
 		Close: func(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool) {
 			if called++; called == 1 {
-				closedts.TargetDuration.Override(&st.SV, 0)
+				closedts.TargetDuration.Override(ctx, &st.SV, 0)
 			}
 			select {
 			case calledCh <- struct{}{}:
@@ -345,6 +347,6 @@ func TestProviderTargetDurationSetting(t *testing.T) {
 		t.Fatal("expected no updates to be sent")
 	case <-time.After(someTime):
 	}
-	closedts.TargetDuration.Override(&st.SV, time.Millisecond)
+	closedts.TargetDuration.Override(ctx, &st.SV, time.Millisecond)
 	<-calledCh
 }

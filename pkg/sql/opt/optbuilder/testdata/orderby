@@ -267,7 +267,7 @@ project
       ├── ordering: +1 opt(2)
       ├── scan t
       │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
-      │    └── ordering: +1 opt(2)
+      │    └── ordering: +1
       └── filters
            └── b:2 = 7
 
@@ -779,7 +779,7 @@ project
            ├── ordering: +2,+3 opt(1)
            ├── scan abc
            │    ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
-           │    └── ordering: +2,+3 opt(1)
+           │    └── ordering: +1,+2,+3
            └── filters
                 └── a:1 = 1
 

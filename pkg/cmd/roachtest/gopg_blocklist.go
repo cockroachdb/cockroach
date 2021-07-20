@@ -11,10 +11,9 @@
 package main
 
 var gopgBlocklists = blocklistsForVersion{
-	{"v19.2", "gopgBlockList19_2", gopgBlockList19_2, "gopgIgnoreList19_2", gopgIgnoreList19_2},
-	{"v20.1", "gopgBlockList20_1", gopgBlockList20_1, "gopgIgnoreList20_1", gopgIgnoreList20_1},
 	{"v20.2", "gopgBlockList20_2", gopgBlockList20_2, "gopgIgnoreList20_2", gopgIgnoreList20_2},
 	{"v21.1", "gopgBlockList21_1", gopgBlockList21_1, "gopgIgnoreList21_1", gopgIgnoreList21_1},
+	{"v21.2", "gopgBlockList21_2", gopgBlockList21_2, "gopgIgnoreList21_2", gopgIgnoreList21_2},
 }
 
 // These are lists of known gopg test errors and failures.
@@ -25,6 +24,8 @@ var gopgBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+
+var gopgBlockList21_2 = gopgBlockList21_1
 
 var gopgBlockList21_1 = blocklist{
 	"pg | BeforeQuery and AfterQuery CopyTo | is called for CopyTo with model":    "41608",
@@ -49,9 +50,7 @@ var gopgBlockList21_1 = blocklist{
 	"v10.TestUnixSocket":      "31113",
 }
 
-var gopgBlockList20_2 = gopgBlockList20_1
-
-var gopgBlockList20_1 = blocklist{
+var gopgBlockList20_2 = blocklist{
 	"pg | BeforeQuery and AfterQuery CopyFrom | is called for CopyFrom with model":    "41608",
 	"pg | BeforeQuery and AfterQuery CopyFrom | is called for CopyFrom without model": "41608",
 	"pg | BeforeQuery and AfterQuery CopyTo | is called for CopyTo with model":        "41608",
@@ -76,68 +75,11 @@ var gopgBlockList20_1 = blocklist{
 	"v10.TestUnixSocket":                                              "31113",
 }
 
-var gopgBlockList19_2 = blocklist{
-	"pg | BeforeQuery and AfterQuery | CopyFrom is called for CopyFrom with model":         "5807",
-	"pg | BeforeQuery and AfterQuery | CopyFrom is called for CopyFrom without model":      "5807",
-	"pg | BeforeQuery and AfterQuery | CopyTo is called for CopyTo with model":             "5807",
-	"pg | BeforeQuery and AfterQuery | CopyTo is called for CopyTo without model":          "5807",
-	"pg | BeforeQuery and AfterQuery | Model is called for Model":                          "5807",
-	"pg | BeforeQuery and AfterQuery | Query/Exec is called for Exec":                      "5807",
-	"pg | BeforeQuery and AfterQuery | Query/Exec is called for Query":                     "5807",
-	"pg | BeforeQuery and AfterQuery | model params is called for Model":                   "5807",
-	"pg | CopyFrom/CopyTo | copies corrupted data to a table":                              "5807",
-	"pg | CopyFrom/CopyTo | copies data from a table and to a table":                       "5807",
-	"pg | CountEstimate | works":                                                           "17511",
-	"pg | CountEstimate | works when there are no results":                                 "17511",
-	"pg | CountEstimate | works with GROUP":                                                "17511",
-	"pg | CountEstimate | works with GROUP when there are no results":                      "17511",
-	"pg | DB nulls | nil ptr inserts non-null value":                                       "5807",
-	"pg | DB nulls | nil ptr inserts null value":                                           "5807",
-	"pg | DB nulls | sql.NullInt64 inserts non-null value":                                 "5807",
-	"pg | DB nulls | sql.NullInt64 inserts null value":                                     "5807",
-	"pg | DB uint64 in struct field | is appended and scanned as int64":                    "5807",
-	"pg | DB.Select | selects bytea":                                                       "5807",
-	"pg | DB.Select | selects into embedded struct pointer":                                "5807",
-	"pg | HookTest | calls AfterSelect for a slice model":                                  "5807",
-	"pg | HookTest | calls AfterSelect for a struct model":                                 "5807",
-	"pg | HookTest | calls BeforeDelete and AfterDelete":                                   "5807",
-	"pg | HookTest | calls BeforeInsert and AfterInsert":                                   "5807",
-	"pg | HookTest | calls BeforeUpdate and AfterUpdate":                                   "5807",
-	"pg | HookTest | does not call BeforeDelete and AfterDelete for nil model":             "5807",
-	"pg | HookTest | does not call BeforeUpdate and AfterUpdate for nil model":             "5807",
-	"pg | Listener | is closed when DB is closed":                                          "41522",
-	"pg | Listener | listens for notifications":                                            "41522",
-	"pg | Listener | reconnects on receive error":                                          "41522",
-	"pg | Listener | returns an error on timeout":                                          "41522",
-	"pg | Listener | supports concurrent Listen and Receive":                               "41522",
-	"pg | soft delete with int column | model Deleted allows to select deleted model":      "5807",
-	"pg | soft delete with int column | model ForceDelete deletes the model":               "5807",
-	"pg | soft delete with int column | model soft deletes the model":                      "5807",
-	"pg | soft delete with int column | nil model Deleted allows to select deleted model":  "5807",
-	"pg | soft delete with int column | nil model ForceDelete deletes the model":           "5807",
-	"pg | soft delete with int column | nil model soft deletes the model":                  "5807",
-	"pg | soft delete with time column | model Deleted allows to select deleted model":     "5807",
-	"pg | soft delete with time column | model ForceDelete deletes the model":              "5807",
-	"pg | soft delete with time column | model soft deletes the model":                     "5807",
-	"pg | soft delete with time column | nil model Deleted allows to select deleted model": "5807",
-	"pg | soft delete with time column | nil model ForceDelete deletes the model":          "5807",
-	"pg | soft delete with time column | nil model soft deletes the model":                 "5807",
-	"v10.ExampleDB_Model_postgresArrayStructTag":                                           "32552",
-	"v10.TestBigColumn":       "41608",
-	"v10.TestConversion":      "32552",
-	"v10.TestGinkgo":          "41522",
-	"v10.TestGocheck":         "17511",
-	"v10.TestReadColumnValue": "26925",
-	"v10.TestUnixSocket":      "31113",
-}
+var gopgIgnoreList21_2 = gopgIgnoreList21_1
 
 var gopgIgnoreList21_1 = gopgIgnoreList20_2
 
-var gopgIgnoreList20_2 = gopgIgnoreList20_1
-
-var gopgIgnoreList20_1 = gopgIgnoreList19_2
-
-var gopgIgnoreList19_2 = blocklist{
+var gopgIgnoreList20_2 = blocklist{
 	// These "fetching" tests assume a particular order when ORDER BY clause is
 	// omitted from the query by the ORM itself.
 	"pg | ORM slice model | fetches Book relations":       "41690",

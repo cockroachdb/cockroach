@@ -115,10 +115,11 @@ func TestPlannerEnforcesRateLimit(t *testing.T) {
 }
 
 func TestGetRateLimit(t *testing.T) {
+	ctx := context.Background()
 	s := cluster.MakeTestingClusterSettings()
 
-	readInterval.Override(&s.SV, time.Second)
-	numStepsToPlanAtOnce.Override(&s.SV, 60)
+	readInterval.Override(ctx, &s.SV, time.Second)
+	numStepsToPlanAtOnce.Override(ctx, &s.SV, 60)
 
 	got := getRateLimitImpl(s)
 	require.Equal(t, 30*time.Second, got)

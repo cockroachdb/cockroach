@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -106,21 +105,21 @@ func DecodePartitionTuple(
 	a *DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
-	idxDesc *descpb.IndexDescriptor,
-	partDesc *descpb.PartitioningDescriptor,
+	index catalog.Index,
+	part catalog.Partitioning,
 	valueEncBuf []byte,
 	prefixDatums tree.Datums,
 ) (*PartitionTuple, []byte, error) {
-	if len(prefixDatums)+int(partDesc.NumColumns) > len(idxDesc.ColumnIDs) {
+	if len(prefixDatums)+part.NumColumns() > index.NumKeyColumns() {
 		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
 	}
 
 	t := &PartitionTuple{
-		Datums: make(tree.Datums, 0, int(partDesc.NumColumns)),
+		Datums: make(tree.Datums, 0, part.NumColumns()),
 	}
 
-	colIDs := idxDesc.ColumnIDs[len(prefixDatums) : len(prefixDatums)+int(partDesc.NumColumns)]
-	for _, colID := range colIDs {
+	for i := len(prefixDatums); i < index.NumKeyColumns() && i < len(prefixDatums)+part.NumColumns(); i++ {
+		colID := index.GetKeyColumnID(i)
 		col, err := tableDesc.FindColumnWithID(colID)
 		if err != nil {
 			return nil, nil, err
@@ -161,12 +160,12 @@ func DecodePartitionTuple(
 	allDatums := append(prefixDatums, t.Datums...)
 	var colMap catalog.TableColMap
 	for i := range allDatums {
-		colMap.Set(idxDesc.ColumnIDs[i], i)
+		colMap.Set(index.GetKeyColumnID(i), i)
 	}
 
-	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, idxDesc.ID)
+	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, index.GetID())
 	key, _, err := EncodePartialIndexKey(
-		tableDesc, idxDesc, len(allDatums), colMap, allDatums, indexKeyPrefix)
+		tableDesc, index, len(allDatums), colMap, allDatums, indexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}

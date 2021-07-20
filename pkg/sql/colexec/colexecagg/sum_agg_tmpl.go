@@ -20,7 +20,6 @@
 package colexecagg
 
 import (
-	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
@@ -58,29 +57,24 @@ func newSum_SUMKIND_AGGKINDAggAlloc(
 ) (aggregateFuncAlloc, error) {
 	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
 	switch t.Family() {
-	case types.IntFamily:
+	// {{range .Infos}}
+	case _TYPE_FAMILY:
 		switch t.Width() {
-		case 16:
-			return &sum_SUMKINDInt16_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
-		case 32:
-			return &sum_SUMKINDInt32_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
-		default:
-			return &sum_SUMKINDInt64_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			// {{with .Overload}}
+			return &sum_SUMKIND_TYPE_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
+			// {{end}}
+			// {{end}}
 		}
-	// {{if eq .SumKind ""}}
-	case types.DecimalFamily:
-		return &sumDecimal_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
-	case types.FloatFamily:
-		return &sumFloat64_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
-	case types.IntervalFamily:
-		return &sumInterval_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
-	// {{end}}
-	default:
-		return nil, errors.Errorf("unsupported sum %s agg type %s", strings.ToLower("_SUMKIND"), t.Name())
+		// {{end}}
 	}
+	return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
 }
 
 // {{range .Infos}}
+// {{range .WidthOverloads}}
+// {{with .Overload}}
 
 type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
@@ -226,6 +220,8 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// {{end}}
+// {{end}}
 // {{end}}
 
 // {{/*

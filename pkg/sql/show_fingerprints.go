@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -29,7 +28,7 @@ type showFingerprintsNode struct {
 	optColumnsSlot
 
 	tableDesc catalog.TableDescriptor
-	indexes   []*descpb.IndexDescriptor
+	indexes   []catalog.Index
 
 	run showFingerprintsRun
 }
@@ -65,15 +64,9 @@ func (p *planner) ShowFingerprints(
 		return nil, err
 	}
 
-	indexes := tableDesc.NonDropIndexes()
-	indexDescs := make([]*descpb.IndexDescriptor, len(indexes))
-	for i, index := range indexes {
-		indexDescs[i] = index.IndexDesc()
-	}
-
 	return &showFingerprintsNode{
 		tableDesc: tableDesc,
-		indexes:   indexDescs,
+		indexes:   tableDesc.NonDropIndexes(),
 	}, nil
 }
 
@@ -97,30 +90,44 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	index := n.indexes[n.run.rowIdx]
 
 	cols := make([]string, 0, len(n.tableDesc.PublicColumns()))
-	addColumn := func(col *descpb.ColumnDescriptor) {
+	addColumn := func(col catalog.Column) {
 		// TODO(dan): This is known to be a flawed way to fingerprint. Any datum
 		// with the same string representation is fingerprinted the same, even
 		// if they're different types.
-		switch col.Type.Family() {
+		name := col.GetName()
+		switch col.GetType().Family() {
 		case types.BytesFamily:
-			cols = append(cols, fmt.Sprintf("%s:::bytes", tree.NameStringP(&col.Name)))
+			cols = append(cols, fmt.Sprintf("%s:::bytes", tree.NameStringP(&name)))
 		default:
-			cols = append(cols, fmt.Sprintf("%s::string::bytes", tree.NameStringP(&col.Name)))
+			cols = append(cols, fmt.Sprintf("%s::string::bytes", tree.NameStringP(&name)))
 		}
 	}
 
-	if index.ID == n.tableDesc.GetPrimaryIndexID() {
+	if index.Primary() {
 		for _, col := range n.tableDesc.PublicColumns() {
-			addColumn(col.ColumnDesc())
+			addColumn(col)
 		}
 	} else {
-		colsByID := make(map[descpb.ColumnID]*descpb.ColumnDescriptor)
-		for _, col := range n.tableDesc.PublicColumns() {
-			colsByID[col.GetID()] = col.ColumnDesc()
+		for i := 0; i < index.NumKeyColumns(); i++ {
+			col, err := n.tableDesc.FindColumnWithID(index.GetKeyColumnID(i))
+			if err != nil {
+				return false, err
+			}
+			addColumn(col)
 		}
-		colIDs := append(append(index.ColumnIDs, index.ExtraColumnIDs...), index.StoreColumnIDs...)
-		for _, colID := range colIDs {
-			addColumn(colsByID[colID])
+		for i := 0; i < index.NumKeySuffixColumns(); i++ {
+			col, err := n.tableDesc.FindColumnWithID(index.GetKeySuffixColumnID(i))
+			if err != nil {
+				return false, err
+			}
+			addColumn(col)
+		}
+		for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
+			col, err := n.tableDesc.FindColumnWithID(index.GetStoredColumnID(i))
+			if err != nil {
+				return false, err
+			}
+			addColumn(col)
 		}
 	}
 
@@ -139,7 +146,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	sql := fmt.Sprintf(`SELECT
 	  xor_agg(fnv64(%s))::string AS fingerprint
 	  FROM [%d AS t]@{FORCE_INDEX=[%d]}
-	`, strings.Join(cols, `,`), n.tableDesc.GetID(), index.ID)
+	`, strings.Join(cols, `,`), n.tableDesc.GetID(), index.GetID())
 	// If were'in in an AOST context, propagate it to the inner statement so that
 	// the inner statement gets planned with planner.avoidCachedDescriptors set,
 	// like the outter one.
@@ -165,7 +172,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	}
 	fingerprint := fingerprintCols[0]
 
-	n.run.values[0] = tree.NewDString(index.Name)
+	n.run.values[0] = tree.NewDString(index.GetName())
 	n.run.values[1] = fingerprint
 	n.run.rowIdx++
 	return true, nil

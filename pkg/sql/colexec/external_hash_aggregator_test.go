@@ -60,7 +60,7 @@ func TestExternalHashAggregator(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	numForcedRepartitions := rng.Intn(5)
 	for _, diskSpillingEnabled := range []bool{true, false} {
-		HashAggregationDiskSpillingEnabled.Override(&flowCtx.Cfg.Settings.SV, diskSpillingEnabled)
+		HashAggregationDiskSpillingEnabled.Override(ctx, &flowCtx.Cfg.Settings.SV, diskSpillingEnabled)
 		// Test the case in which the default memory is used as well as the case
 		// in which the hash aggregator spills to disk.
 		for _, spillForced := range []bool{false, true} {
@@ -243,12 +243,12 @@ func createExternalHashAggregator(
 	}
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecop.Operator{newAggArgs.Input},
+		Inputs:              []colexecargs.OpWithMetaInfo{{Root: newAggArgs.Input}},
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
 	}
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
+	return result.Root, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

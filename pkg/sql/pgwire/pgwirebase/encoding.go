@@ -683,7 +683,7 @@ func DecodeDatum(
 				return nil, pgerror.Newf(pgcode.Syntax, "timetz requires 12 bytes for binary format")
 			}
 			timeOfDayMicros := int64(binary.BigEndian.Uint64(b))
-			offsetSecs := int32(binary.BigEndian.Uint32(b))
+			offsetSecs := int32(binary.BigEndian.Uint32(b[8:]))
 			return tree.NewDTimeTZFromOffset(timeofday.TimeOfDay(timeOfDayMicros), offsetSecs), nil
 		case oid.T_interval:
 			if len(b) < 16 {

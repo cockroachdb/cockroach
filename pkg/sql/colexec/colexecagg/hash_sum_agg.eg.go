@@ -10,7 +10,6 @@
 package colexecagg
 
 import (
-	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
@@ -43,18 +42,30 @@ func newSumHashAggAlloc(
 			return &sumInt16HashAggAlloc{aggAllocBase: allocBase}, nil
 		case 32:
 			return &sumInt32HashAggAlloc{aggAllocBase: allocBase}, nil
+		case -1:
 		default:
 			return &sumInt64HashAggAlloc{aggAllocBase: allocBase}, nil
 		}
 	case types.DecimalFamily:
-		return &sumDecimalHashAggAlloc{aggAllocBase: allocBase}, nil
+		switch t.Width() {
+		case -1:
+		default:
+			return &sumDecimalHashAggAlloc{aggAllocBase: allocBase}, nil
+		}
 	case types.FloatFamily:
-		return &sumFloat64HashAggAlloc{aggAllocBase: allocBase}, nil
+		switch t.Width() {
+		case -1:
+		default:
+			return &sumFloat64HashAggAlloc{aggAllocBase: allocBase}, nil
+		}
 	case types.IntervalFamily:
-		return &sumIntervalHashAggAlloc{aggAllocBase: allocBase}, nil
-	default:
-		return nil, errors.Errorf("unsupported sum %s agg type %s", strings.ToLower(""), t.Name())
+		switch t.Width() {
+		case -1:
+		default:
+			return &sumIntervalHashAggAlloc{aggAllocBase: allocBase}, nil
+		}
 	}
+	return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
 }
 
 type sumInt16HashAgg struct {

@@ -476,7 +476,7 @@ func TestingCheckRecordedSpans(rec Recording, expected string) error {
 			Context:  4,
 		}
 		diffText, _ := difflib.GetUnifiedDiffString(diff)
-		return errors.Newf("unexpected diff:\n%s\n%s", diffText, rec.String())
+		return errors.Newf("unexpected diff:\n%s\n\nrecording:\n%s", diffText, rec.String())
 	}
 	return nil
 }

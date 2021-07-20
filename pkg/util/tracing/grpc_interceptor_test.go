@@ -29,6 +29,23 @@ import (
 	"google.golang.org/grpc"
 )
 
+// testStructuredImpl is a testing implementation of Structured event.
+type testStructuredImpl struct {
+	*types.StringValue
+}
+
+var _ tracing.Structured = &testStructuredImpl{}
+
+func (t *testStructuredImpl) String() string {
+	return fmt.Sprintf("structured=%s", t.Value)
+}
+
+func newTestStructured(s string) *testStructuredImpl {
+	return &testStructuredImpl{
+		&types.StringValue{Value: s},
+	}
+}
+
 // TestGRPCInterceptors verifies that the streaming and unary tracing
 // interceptors work as advertised. We expect to see a span on the client side
 // and a span on the server side.
@@ -38,7 +55,7 @@ func TestGRPCInterceptors(t *testing.T) {
 	const (
 		k          = "test-baggage-key"
 		v          = "test-baggage-value"
-		magicValue = 150
+		magicValue = "magic-value"
 	)
 
 	checkForSpanAndReturnRecording := func(ctx context.Context) (*types.Any, error) {
@@ -54,7 +71,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			return nil, errors.Newf("expected %v, got %v instead", v, actV)
 		}
 
-		sp.RecordStructured(&types.Int32Value{Value: magicValue})
+		sp.RecordStructured(newTestStructured(magicValue))
 		sp.SetVerbose(true) // want the tags
 		recs := sp.GetRecording()
 		sp.SetVerbose(false)
@@ -187,6 +204,7 @@ func TestGRPCInterceptors(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, sp := tr.StartSpanCtx(context.Background(), tc.name, tracing.WithForceRealSpan())
+			sp.SetVerbose(true) // to set the tags
 			recAny, err := tc.do(ctx)
 			require.NoError(t, err)
 			var rec tracingpb.RecordedSpan
@@ -195,7 +213,6 @@ func TestGRPCInterceptors(t *testing.T) {
 			sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec})
 			sp.Finish()
 			var n int
-			sp.SetVerbose(true) // to get the tags
 			finalRecs := sp.GetRecording()
 			sp.SetVerbose(false)
 			for _, rec := range finalRecs {
@@ -217,7 +234,8 @@ func TestGRPCInterceptors(t *testing.T) {
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
 						tags: component=gRPC span.kind=client test-baggage-key=test-baggage-value
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
-						tags: component=gRPC span.kind=server test-baggage-key=test-baggage-value`, tc.name)
+						tags: component=gRPC span.kind=server test-baggage-key=test-baggage-value
+						event: structured=magic-value`, tc.name)
 			require.NoError(t, tracing.TestingCheckRecordedSpans(finalRecs, exp))
 		})
 	}

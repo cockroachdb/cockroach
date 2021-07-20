@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -109,6 +108,10 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 	return bytes.Compare(r[i].Span.EndKey, r[j].Span.EndKey) < 0
 }
 
+func (m *BackupManifest) isIncremental() bool {
+	return !m.StartTime.IsEmpty()
+}
+
 // ReadBackupManifestFromURI creates an export store from the given URI, then
 // reads and unmarshalls a BackupManifest at the standard location in the
 // export storage.
@@ -154,7 +157,7 @@ func ReadBackupManifestFromStore(
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
 	r, err := exportStore.ReadFile(ctx, backupManifestName)
 	if err != nil {
-		if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return false, nil
 		}
 		return false, err
@@ -224,7 +227,7 @@ func readBackupManifest(
 		}
 	} else {
 		// If we don't have a checksum file, carry on. This might be an old version.
-		if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return BackupManifest{}, err
 		}
 	}
@@ -388,7 +391,7 @@ func writeBackupManifest(
 		}
 	}
 
-	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf)); err != nil {
+	if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
 		return err
 	}
 
@@ -397,7 +400,7 @@ func writeBackupManifest(
 	if err != nil {
 		return errors.Wrap(err, "calculating checksum")
 	}
-	if err := exportStore.WriteFile(ctx, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+	if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
 		return errors.Wrap(err, "writing manifest checksum")
 	}
 
@@ -429,6 +432,8 @@ func getEncryptionKey(
 		return encryption.Key, nil
 	case jobspb.EncryptionMode_KMS:
 		// Contact the selected KMS to derive the decrypted data key.
+		// TODO(pbardea): Add a check here if encryption.KMSInfo is unexpectedly nil
+		// here to avoid a panic, and return an error instead.
 		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
 			settings: settings,
 			conf:     &ioConf,
@@ -482,7 +487,7 @@ func writeBackupPartitionDescriptor(
 		}
 	}
 
-	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
+	return cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
 }
 
 // writeTableStatistics writes a StatsTable object to a file of the filename
@@ -510,7 +515,7 @@ func writeTableStatistics(
 			return err
 		}
 	}
-	return exportStore.WriteFile(ctx, filename, bytes.NewReader(statsBuf))
+	return cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(statsBuf))
 }
 
 func loadBackupManifests(
@@ -692,7 +697,7 @@ func resolveBackupManifests(
 		// automatically created incremental layers inside the base layer.
 		prev, err := findPriorBackupNames(ctx, baseStores[0])
 		if err != nil {
-			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
+			if errors.Is(err, cloud.ErrListingUnsupported) {
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", baseStores[0])
 				// If we do not support listing, we have to just assume there are none
 				// and restore the specified base.
@@ -936,7 +941,7 @@ func writeEncryptionInfoIfNotExists(
 		return nil
 	}
 
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"returned an unexpected error when checking for the existence of %s file",
 			backupEncryptionInfoFile)
@@ -946,7 +951,7 @@ func writeEncryptionInfoIfNotExists(
 	if err != nil {
 		return err
 	}
-	if err := dest.WriteFile(ctx, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
+	if err := cloud.WriteFile(ctx, dest, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
 		return err
 	}
 	return nil
@@ -955,7 +960,7 @@ func writeEncryptionInfoIfNotExists(
 // RedactURIForErrorMessage redacts any storage secrets before returning a URI which is safe to
 // return to the client in an error message.
 func RedactURIForErrorMessage(uri string) string {
-	redactedURI, err := cloudimpl.SanitizeExternalStorageURI(uri, []string{})
+	redactedURI, err := cloud.SanitizeExternalStorageURI(uri, []string{})
 	if err != nil {
 		return "<uri_failed_to_redact>"
 	}
@@ -978,7 +983,7 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestName)
 	}
 
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
 			redactedURI, backupManifestName)
@@ -992,7 +997,7 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestCheckpointName)
 	}
 
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
 			redactedURI, backupManifestCheckpointName)

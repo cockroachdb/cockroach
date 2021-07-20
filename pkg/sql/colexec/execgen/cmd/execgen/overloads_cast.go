@@ -87,25 +87,41 @@ func intToFloat() func(string, string, string, string) string {
 	}
 }
 
-func intToInt16(to, from, _, _ string) string {
-	convStr := `
-		%[1]s = int16(%[2]s)
+// getIntToIntCastFunc returns a castFunc between integers of any widths.
+func getIntToIntCastFunc(fromWidth, toWidth int32) castFunc {
+	if fromWidth == anyWidth {
+		fromWidth = 64
+	}
+	if toWidth == anyWidth {
+		toWidth = 64
+	}
+	return func(to, from, _, _ string) string {
+		if fromWidth <= toWidth {
+			// If we're not reducing the width, there is no need to perform the
+			// integer range check.
+			return fmt.Sprintf("%s = int%d(%s)", to, toWidth, from)
+		}
+		// convStr is a format string expecting five arguments:
+		// 1. the result variable name
+		// 2. the original value variable name
+		// 3. the result width
+		// 4. the result width in bytes (not in bits, e.g. 2 for INT2)
+		// 5. the result width minus one.
+		//
+		// We're performing range checks in line with Go's implementation of
+		// math.(Max|Min)(16|32) numbers that store the boundaries of the
+		// allowed range.
+		// NOTE: when updating the code below, make sure to update tree/casts.go
+		// as well.
+		convStr := `
+		shifted := %[2]s >> uint(%[5]d)
+		if (%[2]s >= 0 && shifted > 0) || (%[2]s < 0 && shifted < -1) {
+			colexecerror.ExpectedError(tree.ErrInt%[4]dOutOfRange)
+		}
+		%[1]s = int%[3]d(%[2]s)
 	`
-	return fmt.Sprintf(convStr, to, from)
-}
-
-func intToInt32(to, from, _, _ string) string {
-	convStr := `
-		%[1]s = int32(%[2]s)
-	`
-	return fmt.Sprintf(convStr, to, from)
-}
-
-func intToInt64(to, from, _, _ string) string {
-	convStr := `
-		%[1]s = int64(%[2]s)
-	`
-	return fmt.Sprintf(convStr, to, from)
+		return fmt.Sprintf(convStr, to, from, toWidth, toWidth/8, toWidth-1)
+	}
 }
 
 func floatToInt(intWidth, floatWidth int32) func(string, string, string, string) string {
@@ -233,7 +249,7 @@ func registerCastTypeCustomizers() {
 		// Casts between ints.
 		for _, toIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 			if fromIntWidth != toIntWidth {
-				registerCastTypeCustomizer(typePair{types.IntFamily, fromIntWidth, types.IntFamily, toIntWidth}, intCastCustomizer{toFamily: types.IntFamily, toWidth: toIntWidth})
+				registerCastTypeCustomizer(typePair{types.IntFamily, fromIntWidth, types.IntFamily, toIntWidth}, intCastCustomizer{fromWidth: fromIntWidth, toFamily: types.IntFamily, toWidth: toIntWidth})
 			}
 		}
 		// Casts to other types.
@@ -270,8 +286,9 @@ type floatCastCustomizer struct {
 
 // intCastCustomizer specifies casts from ints to other types.
 type intCastCustomizer struct {
-	toFamily types.Family
-	toWidth  int32
+	fromWidth int32
+	toFamily  types.Family
+	toWidth   int32
 }
 
 // datumCastCustomizer specifies casts from types that are backed by tree.Datum
@@ -325,14 +342,7 @@ func (c intCastCustomizer) getCastFunc() castFunc {
 	case types.DecimalFamily:
 		return intToDecimal
 	case types.IntFamily:
-		switch c.toWidth {
-		case 16:
-			return intToInt16
-		case 32:
-			return intToInt32
-		case anyWidth:
-			return intToInt64
-		}
+		return getIntToIntCastFunc(c.fromWidth, c.toWidth)
 	case types.FloatFamily:
 		return intToFloat()
 	}

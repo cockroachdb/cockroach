@@ -1,0 +1,127 @@
+parse
+DELETE FROM a
+----
+DELETE FROM a
+DELETE FROM a -- fully parenthesized
+DELETE FROM a -- literals removed
+DELETE FROM _ -- identifiers removed
+
+parse
+EXPLAIN DELETE FROM a
+----
+EXPLAIN DELETE FROM a
+EXPLAIN DELETE FROM a -- fully parenthesized
+EXPLAIN DELETE FROM a -- literals removed
+EXPLAIN DELETE FROM _ -- identifiers removed
+
+parse
+DELETE FROM a.b
+----
+DELETE FROM a.b
+DELETE FROM a.b -- fully parenthesized
+DELETE FROM a.b -- literals removed
+DELETE FROM _._ -- identifiers removed
+
+parse
+DELETE FROM a.b@c
+----
+DELETE FROM a.b@c
+DELETE FROM a.b@c -- fully parenthesized
+DELETE FROM a.b@c -- literals removed
+DELETE FROM _._@_ -- identifiers removed
+
+parse
+DELETE FROM a WHERE a = b
+----
+DELETE FROM a WHERE a = b
+DELETE FROM a WHERE ((a) = (b)) -- fully parenthesized
+DELETE FROM a WHERE a = b -- literals removed
+DELETE FROM _ WHERE _ = _ -- identifiers removed
+
+parse
+DELETE FROM a WHERE a = b LIMIT c
+----
+DELETE FROM a WHERE a = b LIMIT c
+DELETE FROM a WHERE ((a) = (b)) LIMIT (c) -- fully parenthesized
+DELETE FROM a WHERE a = b LIMIT c -- literals removed
+DELETE FROM _ WHERE _ = _ LIMIT _ -- identifiers removed
+
+parse
+DELETE FROM a WHERE a = b ORDER BY c
+----
+DELETE FROM a WHERE a = b ORDER BY c
+DELETE FROM a WHERE ((a) = (b)) ORDER BY (c) -- fully parenthesized
+DELETE FROM a WHERE a = b ORDER BY c -- literals removed
+DELETE FROM _ WHERE _ = _ ORDER BY _ -- identifiers removed
+
+parse
+DELETE FROM a WHERE a = b ORDER BY c LIMIT d
+----
+DELETE FROM a WHERE a = b ORDER BY c LIMIT d
+DELETE FROM a WHERE ((a) = (b)) ORDER BY (c) LIMIT (d) -- fully parenthesized
+DELETE FROM a WHERE a = b ORDER BY c LIMIT d -- literals removed
+DELETE FROM _ WHERE _ = _ ORDER BY _ LIMIT _ -- identifiers removed
+
+parse
+DELETE FROM a WHERE a = b RETURNING a, b
+----
+DELETE FROM a WHERE a = b RETURNING a, b
+DELETE FROM a WHERE ((a) = (b)) RETURNING (a), (b) -- fully parenthesized
+DELETE FROM a WHERE a = b RETURNING a, b -- literals removed
+DELETE FROM _ WHERE _ = _ RETURNING _, _ -- identifiers removed
+
+parse
+DELETE FROM a WHERE a = b RETURNING 1, 2
+----
+DELETE FROM a WHERE a = b RETURNING 1, 2
+DELETE FROM a WHERE ((a) = (b)) RETURNING (1), (2) -- fully parenthesized
+DELETE FROM a WHERE a = b RETURNING _, _ -- literals removed
+DELETE FROM _ WHERE _ = _ RETURNING 1, 2 -- identifiers removed
+
+parse
+DELETE FROM a WHERE a = b RETURNING a + b
+----
+DELETE FROM a WHERE a = b RETURNING a + b
+DELETE FROM a WHERE ((a) = (b)) RETURNING ((a) + (b)) -- fully parenthesized
+DELETE FROM a WHERE a = b RETURNING a + b -- literals removed
+DELETE FROM _ WHERE _ = _ RETURNING _ + _ -- identifiers removed
+
+parse
+DELETE FROM a WHERE a = b RETURNING NOTHING
+----
+DELETE FROM a WHERE a = b RETURNING NOTHING
+DELETE FROM a WHERE ((a) = (b)) RETURNING NOTHING -- fully parenthesized
+DELETE FROM a WHERE a = b RETURNING NOTHING -- literals removed
+DELETE FROM _ WHERE _ = _ RETURNING NOTHING -- identifiers removed
+
+parse
+DELETE FROM a WHERE a = b ORDER BY c LIMIT d RETURNING e
+----
+DELETE FROM a WHERE a = b ORDER BY c LIMIT d RETURNING e
+DELETE FROM a WHERE ((a) = (b)) ORDER BY (c) LIMIT (d) RETURNING (e) -- fully parenthesized
+DELETE FROM a WHERE a = b ORDER BY c LIMIT d RETURNING e -- literals removed
+DELETE FROM _ WHERE _ = _ ORDER BY _ LIMIT _ RETURNING _ -- identifiers removed
+
+parse
+DELETE FROM ONLY a WHERE a = b
+----
+DELETE FROM a WHERE a = b -- normalized!
+DELETE FROM a WHERE ((a) = (b)) -- fully parenthesized
+DELETE FROM a WHERE a = b -- literals removed
+DELETE FROM _ WHERE _ = _ -- identifiers removed
+
+parse
+DELETE FROM a * WHERE a = b
+----
+DELETE FROM a WHERE a = b -- normalized!
+DELETE FROM a WHERE ((a) = (b)) -- fully parenthesized
+DELETE FROM a WHERE a = b -- literals removed
+DELETE FROM _ WHERE _ = _ -- identifiers removed
+
+parse
+DELETE FROM ONLY a * WHERE a = b
+----
+DELETE FROM a WHERE a = b -- normalized!
+DELETE FROM a WHERE ((a) = (b)) -- fully parenthesized
+DELETE FROM a WHERE a = b -- literals removed
+DELETE FROM _ WHERE _ = _ -- identifiers removed

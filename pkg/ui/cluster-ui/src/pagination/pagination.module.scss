@@ -1,0 +1,40 @@
+@import "../core/index.module";
+
+._pg-jump {
+  width: 32px;
+  height: 24px;
+  position: relative;
+  justify-content: center;
+  align-items: center;
+  ._jump-dots {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: $colors--neutral-5;
+    font-size: 14px;
+    letter-spacing: 1.5px;
+    &:hover {
+      color: #0788ff;
+    }
+  }
+  .anticon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+    font-size: 10px;
+    color: #3a7ce1;
+  }
+  &:hover {
+    .anticon {
+      display: block;
+    }
+  }
+}
+
+.root {
+  text-align: center;
+  float: unset;
+}

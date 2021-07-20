@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -113,7 +114,7 @@ func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 const (
 	// PublicSchema is the name of the physical schema in every
 	// database/catalog.
-	PublicSchema string = sessiondata.PublicSchemaName
+	PublicSchema string = catconstants.PublicSchemaName
 	// PublicSchemaName is the same, typed as Name.
 	PublicSchemaName Name = Name(PublicSchema)
 )
@@ -320,7 +321,7 @@ func ResolveExisting(
 		// database set. Therefore, we test this even if curDb == "", as long as the
 		// schema name is for a virtual schema.
 
-		if _, isVirtualSchema := sessiondata.VirtualSchemaNames[scName]; isVirtualSchema || curDb != "" {
+		if _, isVirtualSchema := catconstants.VirtualSchemaNames[scName]; isVirtualSchema || curDb != "" {
 			if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, scName, u.Object()); found || err != nil {
 				if err == nil {
 					namePrefix.CatalogName = Name(curDb)
@@ -520,12 +521,12 @@ func (n *UnresolvedName) ResolveFunction(
 
 	fullName := function
 
-	if prefix == sessiondata.PgCatalogName {
+	if prefix == catconstants.PgCatalogName {
 		// If the user specified e.g. `pg_catalog.max()` we want to find
 		// it in the global namespace.
 		prefix = ""
 	}
-	if prefix == sessiondata.PublicSchemaName {
+	if prefix == catconstants.PublicSchemaName {
 		// If the user specified public, it may be from a PostgreSQL extension.
 		// Double check the function definition allows resolution on the public
 		// schema, and resolve as such if appropriate.
@@ -594,13 +595,13 @@ type CommonLookupFlags struct {
 	IncludeDropped bool
 }
 
-// SchemaLookupFlags is the flag struct suitable for GetSchema().
+// SchemaLookupFlags is the flag struct suitable for GetSchemaByName().
 type SchemaLookupFlags = CommonLookupFlags
 
 // DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
 type DatabaseLookupFlags = CommonLookupFlags
 
-// DatabaseListFlags is the flag struct suitable for GetObjectNames().
+// DatabaseListFlags is the flag struct suitable for GetObjectNamesAndIDs().
 type DatabaseListFlags struct {
 	CommonLookupFlags
 	// ExplicitPrefix, when set, will cause the returned table names to

@@ -119,7 +119,7 @@ func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactor
 	b := NewMemBatchNoCols(typs, capacity).(*MemBatch)
 	for i, t := range typs {
 		b.b[i] = NewMemColumn(t, capacity, factory)
-		if b.b[i].CanonicalTypeFamily() == types.BytesFamily {
+		if b.b[i].IsBytesLike() {
 			b.bytesVecIdxs.Add(i)
 		}
 	}
@@ -257,14 +257,14 @@ func (m *MemBatch) SetLength(length int) {
 			maxIdx = m.sel[length-1]
 		}
 		for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
-			m.b[i].Bytes().UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
+			UpdateOffsetsToBeNonDecreasing(m.b[i], maxIdx+1)
 		}
 	}
 }
 
 // AppendCol implements the Batch interface.
 func (m *MemBatch) AppendCol(col Vec) {
-	if col.CanonicalTypeFamily() == types.BytesFamily {
+	if col.IsBytesLike() {
 		m.bytesVecIdxs.Add(len(m.b))
 	}
 	m.b = append(m.b, col)
@@ -324,7 +324,7 @@ func (m *MemBatch) ResetInternalBatch() {
 		}
 	}
 	for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
-		m.b[i].Bytes().Reset()
+		Reset(m.b[i])
 	}
 }
 
@@ -333,16 +333,17 @@ func (m *MemBatch) String() string {
 	if m.Length() == 0 {
 		return "[zero-length batch]"
 	}
-	var builder strings.Builder
-	strs := make([]string, len(m.ColVecs()))
-	for i := 0; i < m.Length(); i++ {
-		builder.WriteString("\n[")
-		for colIdx, v := range m.ColVecs() {
-			strs[colIdx] = fmt.Sprintf("%v", GetValueAt(v, i))
-		}
-		builder.WriteString(strings.Join(strs, ", "))
-		builder.WriteString("]")
+	if VecsToStringWithRowPrefix == nil {
+		panic("need to inject the implementation from sql/colconv package")
 	}
-	builder.WriteString("\n")
-	return builder.String()
+	return strings.Join(VecsToStringWithRowPrefix(m.ColVecs(), m.Length(), m.Selection(), "" /* prefix */), "\n")
 }
+
+// VecsToStringWithRowPrefix returns a pretty representation of the vectors.
+// This method will convert all vectors to datums in order to print everything
+// in the same manner as the tree.Datum representation does. Each row is printed
+// in a separate string.
+//
+// The implementation lives in colconv package and is injected during the
+// initialization.
+var VecsToStringWithRowPrefix func(vecs []Vec, length int, sel []int, prefix string) []string

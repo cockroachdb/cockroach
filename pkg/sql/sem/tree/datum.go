@@ -455,14 +455,19 @@ func (d *DBool) Max(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DBool) AmbiguousFormat() bool { return false }
 
+// PgwireFormatBool returns a single byte representing a boolean according to
+// pgwire encoding.
+func PgwireFormatBool(d bool) byte {
+	if d {
+		return 't'
+	}
+	return 'f'
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DBool) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(fmtPgwireFormat) {
-		if bool(*d) {
-			ctx.WriteByte('t')
-		} else {
-			ctx.WriteByte('f')
-		}
+		ctx.WriteByte(PgwireFormatBool(bool(*d)))
 		return
 	}
 	ctx.WriteString(strconv.FormatBool(bool(*d)))
@@ -1866,12 +1871,12 @@ func (d *DDate) Next(_ *EvalContext) (Datum, bool) {
 
 // IsMax implements the Datum interface.
 func (d *DDate) IsMax(_ *EvalContext) bool {
-	return d.Date == pgdate.PosInfDate
+	return d.PGEpochDays() == pgdate.PosInfDate.PGEpochDays()
 }
 
 // IsMin implements the Datum interface.
 func (d *DDate) IsMin(_ *EvalContext) bool {
-	return d.Date == pgdate.NegInfDate
+	return d.PGEpochDays() == pgdate.NegInfDate.PGEpochDays()
 }
 
 // Max implements the Datum interface.
@@ -1887,17 +1892,22 @@ func (d *DDate) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DDate) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DDate) Format(ctx *FmtCtx) {
+// FormatDate writes d into ctx according to the format flags.
+func FormatDate(d pgdate.Date, ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	d.Date.Format(&ctx.Buffer)
+	d.Format(&ctx.Buffer)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DDate) Format(ctx *FmtCtx) {
+	FormatDate(d.Date, ctx)
 }
 
 // Size implements the Datum interface.
@@ -2192,7 +2202,7 @@ func ParseDTimestamp(
 	ctx ParseTimeContext, s string, precision time.Duration,
 ) (_ *DTimestamp, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, pgdate.ParseModeYMD, s)
+	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, pgdate.ParseModeMDY, s)
 	if err != nil {
 		return nil, false, err
 	}
@@ -2264,7 +2274,49 @@ func timeFromDatumForComparison(ctx *EvalContext, d Datum) (time.Time, bool) {
 	}
 }
 
+type infiniteDateComparison int
+
+const (
+	// Note: the order of the constants here is important.
+	negativeInfinity infiniteDateComparison = iota
+	finite
+	positiveInfinity
+)
+
+func checkInfiniteDate(ctx *EvalContext, d Datum) infiniteDateComparison {
+	if _, isDate := d.(*DDate); isDate {
+		if d.IsMax(ctx) {
+			return positiveInfinity
+		}
+		if d.IsMin(ctx) {
+			return negativeInfinity
+		}
+	}
+	return finite
+}
+
+// compareTimestamps takes in two time-related datums and compares them as
+// timestamps while paying attention to time zones if needed. It returns -1, 0,
+// or +1 for "less", "equal", and "greater", respectively.
+//
+// Datums are allowed to be one of DDate, DTimestamp, DTimestampTZ, DTime,
+// DTimeTZ. For all other datum types it will panic; also, comparing two DDates
+// is not supported.
 func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
+	leftInf := checkInfiniteDate(ctx, l)
+	rightInf := checkInfiniteDate(ctx, r)
+	if leftInf != finite || rightInf != finite {
+		// At least one of the datums is an infinite date.
+		if leftInf != finite && rightInf != finite {
+			// Both datums cannot be infinite dates at the same time because we
+			// wouldn't use this method.
+			panic(errors.AssertionFailedf("unexpectedly two infinite dates in compareTimestamps"))
+		}
+		// Exactly one of the datums is an infinite date and another is a finite
+		// datums (not necessarily a date). We can just subtract the returned
+		// values to get the desired result for comparison.
+		return int(leftInf - rightInf)
+	}
 	lTime, lOk := timeFromDatumForComparison(ctx, l)
 	rTime, rOk := timeFromDatumForComparison(ctx, r)
 	if !lOk || !rOk {
@@ -2424,7 +2476,7 @@ func ParseDTimestampTZ(
 	ctx ParseTimeContext, s string, precision time.Duration,
 ) (_ *DTimestampTZ, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
+	t, dependsOnContext, err := pgdate.ParseTimestamp(now, pgdate.ParseModeMDY, s)
 	if err != nil {
 		return nil, false, err
 	}
@@ -2729,17 +2781,22 @@ func (d *DInterval) ValueAsString() string {
 // AmbiguousFormat implements the Datum interface.
 func (*DInterval) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DInterval) Format(ctx *FmtCtx) {
+// FormatDuration writes d into ctx according to the format flags.
+func FormatDuration(d duration.Duration, ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	d.Duration.Format(&ctx.Buffer)
+	d.Format(&ctx.Buffer)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DInterval) Format(ctx *FmtCtx) {
+	FormatDuration(d.Duration, ctx)
 }
 
 // Size implements the Datum interface.
@@ -4240,7 +4297,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 	// If it is an integer in string form, convert it as an int.
 	if val, err := ParseDInt(strings.TrimSpace(s)); err == nil {
 		tmpOid := NewDOid(*val)
-		oid, err := queryOid(ctx, t, tmpOid)
+		oid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, tmpOid)
 		if err != nil {
 			oid = tmpOid
 			oid.semanticType = t
@@ -4311,7 +4368,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 		// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 		s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 
-		dOid, missingTypeErr := queryOid(ctx, t, NewDString(Name(s).Normalize()))
+		dOid, missingTypeErr := ctx.Planner.ResolveOIDFromString(ctx.Ctx(), t, NewDString(Name(s).Normalize()))
 		if missingTypeErr == nil {
 			return dOid, missingTypeErr
 		}
@@ -4350,7 +4407,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 			name:         tn.ObjectName.String(),
 		}, nil
 	default:
-		return queryOid(ctx, t, NewDString(s))
+		return ctx.Planner.ResolveOIDFromString(ctx.Ctx(), t, NewDString(s))
 	}
 }
 

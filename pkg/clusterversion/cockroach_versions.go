@@ -15,7 +15,13 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 // Key is a unique identifier for a version of CockroachDB.
 type Key int
 
-// Version constants. You'll want to add a new one in the following cases:
+// Version constants. These drive compatibility between versions as well as
+// migrations. Before you add a version or consider removing one, please
+// familiarize yourself with the rules below.
+//
+// Adding Versions
+//
+// You'll want to add a new one in the following cases:
 //
 // (a) When introducing a backwards incompatible feature. Broadly, by this we
 //     mean code that's structured as follows:
@@ -101,7 +107,38 @@ type Key int
 //       odd versions are used for internal book-keeping.
 //   (2) Add it at the end of the `versionsSingleton` block below.
 //
-// 									---
+// Migrations
+//
+// Migrations are idempotent functions that can be attached to versions and will
+// be rolled out before the respective cluster version gets rolled out. They are
+// primarily a means to remove legacy state from the cluster. For example, a
+// migration might scan the cluster for an outdated type of table descriptor and
+// rewrite it into a new format. Migrations are tricky to get right and they have
+// their own documentation in ./pkg/migration, which you should peruse should you
+// feel that a migration is necessary for your use case.
+//
+// Phasing out Versions and Migrations
+//
+// Versions and Migrations can be removed once they are no longer going to be
+// exercised. This is primarily driven by the BinaryMinSupportedVersion, which
+// declares the oldest *cluster* (not binary) version of CockroachDB that may
+// interface with the running node. It typically trails the current version by
+// one release. For example, if the current branch is a `21.1.x` release, you
+// will have a BinaryMinSupportedVersion of `21.0`, meaning that the versions
+// 20.2.0-1, 20.2.0-2, etc are always going to be active on any peer and thus
+// can be "baked in"; similarly all migrations attached to any of these versions
+// can be assumed to have run (or not having been necessary due to the cluster
+// having been initialized at a higher version in the first place). Note that
+// this implies that all peers will have a *binary* version of at least the
+// MinSupportedVersion as well, as this is a prerequisite for running at that
+// cluster version. Finally, note that even when all cluster versions known
+// to the current binary are active (i.e. most of the time), you still need
+// to be able to inter-op with older *binary* and/or *cluster* versions. This
+// is because *tenants* are allowed to run at any binary version compatible
+// with (i.e. greater than or equal to) the MinSupportedVersion. To give a
+// concrete example, a fully up-to-date v21.1 KV host cluster can have tenants
+// running against it that use the v21.0 binary and any cluster version known
+// to that binary (v20.2-0 ... v20.2-50 or thereabouts).
 //
 // You'll want to delete versions from this list after cutting a major release.
 // Once the development for 21.1 begins, after step (ii) from above, all
@@ -134,6 +171,11 @@ const (
 	// v20.2 versions.
 	//
 	// Start20_2 demarcates work towards CockroachDB v20.2.
+	// If you're here to remove versions, please read the comment at the
+	// beginning of the const block. We cannot remove these versions until
+	// MinSupportedVersion=21.1, i.e. on the master branch *after* cutting
+	// the 21.1 release. This is because we now support tenants at the
+	// predecessor binary interacting with a fully upgraded KV cluster.
 	Start20_2
 	// GeospatialType enables the use of Geospatial features.
 	GeospatialType
@@ -275,9 +317,25 @@ const (
 	// ProtectedTsMetaPrivilegesMigration is for the migration which fixes the
 	// privileges of the protected_ts_meta system table.
 	ProtectedTsMetaPrivilegesMigration
+	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
+	V21_1
+
+	// v21.2 versions.
+	//
+	// Start21_2 demarcates work towards CockroachDB v21.2.
+	Start21_2
 	// JoinTokensTable adds the system table for storing ephemeral generated
 	// join tokens.
 	JoinTokensTable
+	// AcquisitionTypeInLeaseHistory augments the per-replica lease history to
+	// include the type of lease acquisition event that resulted in that replica's
+	// current lease.
+	AcquisitionTypeInLeaseHistory
+	// SerializeViewUDTs serializes user defined types used in views to allow
+	// for renaming of the referenced types.
+	SerializeViewUDTs
+	// ExpressionBasedIndexes is when expression-based indexes are supported.
+	ExpressionBasedIndexes
 
 	// Step (1): Add new versions here.
 )
@@ -481,9 +539,33 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 48},
 	},
 	{
-		Key:     JoinTokensTable,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 50},
+		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
+		Key:     V21_1,
+		Version: roachpb.Version{Major: 21, Minor: 1},
 	},
+
+	// v21.2 versions.
+	{
+		Key:     Start21_2,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 2},
+	},
+	{
+		Key:     JoinTokensTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 4},
+	},
+	{
+		Key:     AcquisitionTypeInLeaseHistory,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 6},
+	},
+	{
+		Key:     SerializeViewUDTs,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 8},
+	},
+	{
+		Key:     ExpressionBasedIndexes,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 10},
+	},
+
 	// Step (2): Add new versions here.
 })
 

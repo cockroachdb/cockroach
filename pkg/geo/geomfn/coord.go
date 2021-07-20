@@ -41,6 +41,11 @@ func coordDot(a geom.Coord, b geom.Coord) float64 {
 	return a.X()*b.X() + a.Y()*b.Y()
 }
 
+// coordCross returns the cross product of two coords if the coord was a vector.
+func coordCross(a geom.Coord, b geom.Coord) float64 {
+	return a.X()*b.Y() - a.Y()*b.X()
+}
+
 // coordNorm2 returns the normalization^2 of a coordinate if the coord was a vector.
 func coordNorm2(c geom.Coord) float64 {
 	return coordDot(c, c)

@@ -32,25 +32,37 @@ import (
 var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, args *NewColOperatorArgs,
 ) (r *NewColOperatorResult, err error)
 
+// OpWithMetaInfo stores a colexecop.Operator together with miscellaneous meta
+// information about the tree rooted in that operator.
+// TODO(yuzefovich): figure out the story about pooling these objects.
+type OpWithMetaInfo struct {
+	Root colexecop.Operator
+	// StatsCollectors are all stats collectors that are present in the tree
+	// rooted in Root for which the responsibility of retrieving stats hasn't
+	// been claimed yet.
+	StatsCollectors []colexecop.VectorizedStatsCollector
+	// MetadataSources are all sources of the metadata that are present in the
+	// tree rooted in Root for which the responsibility of draining hasn't been
+	// claimed yet.
+	MetadataSources colexecop.MetadataSources
+	// ToClose are all colexecop.Closers that are present in the tree rooted in
+	// Root for which the responsibility of closing hasn't been claimed yet.
+	ToClose colexecop.Closers
+}
+
 // NewColOperatorArgs is a helper struct that encompasses all of the input
 // arguments to NewColOperator call.
 type NewColOperatorArgs struct {
 	Spec                 *execinfrapb.ProcessorSpec
-	Inputs               []colexecop.Operator
+	Inputs               []OpWithMetaInfo
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
 	LocalProcessors      []execinfra.LocalProcessor
-	// MetadataSources are all sources of the metadata that are present in the
-	// trees rooted in Inputs. The slice has the same length as Inputs. If
-	// NewColOperator call creates a colexec.Materializer, then it will take
-	// over the responsibility of draining the sources; otherwise, they will be
-	// returned in NewColOperatorResult.
-	MetadataSources []colexecop.MetadataSources
-	DiskQueueCfg    colcontainer.DiskQueueCfg
-	FDSemaphore     semaphore.Semaphore
-	ExprHelper      *ExprHelper
-	Factory         coldata.ColumnFactory
-	TestingKnobs    struct {
+	DiskQueueCfg         colcontainer.DiskQueueCfg
+	FDSemaphore          semaphore.Semaphore
+	ExprHelper           *ExprHelper
+	Factory              coldata.ColumnFactory
+	TestingKnobs         struct {
 		// SpillingCallbackFn will be called when the spilling from an in-memory
 		// to disk-backed operator occurs. It should only be set in tests.
 		SpillingCallbackFn func()
@@ -90,21 +102,16 @@ type NewColOperatorArgs struct {
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op          colexecop.Operator
-	KVReader    colexecop.KVReader
-	ColumnTypes []*types.T
-	// MetadataSources are all sources of the metadata that are present in the
-	// tree rooted in Op that the caller must drain. These can be
-	// colfetcher.ColBatchScan or colexec.Columnarizer operators that were
-	// created during NewColOperator call, but it also might include all of the
-	// sources from NewColOperatorArgs.MetadataSources if no metadata draining
-	// component was created.
-	MetadataSources colexecop.MetadataSources
-	// ToClose is a slice of components that need to be Closed.
-	ToClose     []colexecop.Closer
-	OpMonitors  []*mon.BytesMonitor
-	OpAccounts  []*mon.BoundAccount
-	Releasables []execinfra.Releasable
+	OpWithMetaInfo
+	KVReader colexecop.KVReader
+	// Columnarizer is the root colexec.Columnarizer, if needed, that is hidden
+	// behind the stats collector interface. We need to track it separately from
+	// all other stats collectors since it requires special handling.
+	Columnarizer colexecop.VectorizedStatsCollector
+	ColumnTypes  []*types.T
+	OpMonitors   []*mon.BytesMonitor
+	OpAccounts   []*mon.BoundAccount
+	Releasables  []execinfra.Releasable
 }
 
 var _ execinfra.Releasable = &NewColOperatorResult{}
@@ -140,13 +147,37 @@ func (r *NewColOperatorResult) Release() {
 	for _, releasable := range r.Releasables {
 		releasable.Release()
 	}
+	// Explicitly unset each slot in the slices of objects of non-trivial size
+	// in order to lose references to the old objects. If we don't do it, we
+	// might have a memory leak in case the slices aren't appended to for a
+	// while (because we're slicing them up to 0 below, the references to the
+	// old objects would be kept "alive" until the spot in the slice is
+	// overwritten by a new object).
+	for i := range r.StatsCollectors {
+		r.StatsCollectors[i] = nil
+	}
+	for i := range r.MetadataSources {
+		r.MetadataSources[i] = nil
+	}
+	for i := range r.ToClose {
+		r.ToClose[i] = nil
+	}
+	for i := range r.Releasables {
+		r.Releasables[i] = nil
+	}
 	*r = NewColOperatorResult{
-		ColumnTypes:     r.ColumnTypes[:0],
-		MetadataSources: r.MetadataSources[:0],
-		ToClose:         r.ToClose[:0],
-		OpMonitors:      r.OpMonitors[:0],
-		OpAccounts:      r.OpAccounts[:0],
-		Releasables:     r.Releasables[:0],
+		OpWithMetaInfo: OpWithMetaInfo{
+			StatsCollectors: r.StatsCollectors[:0],
+			MetadataSources: r.MetadataSources[:0],
+			ToClose:         r.ToClose[:0],
+		},
+		// There is no need to deeply reset the column types and the memory
+		// monitoring infra slices because these objects are very tiny in the
+		// grand scheme of things.
+		ColumnTypes: r.ColumnTypes[:0],
+		OpMonitors:  r.OpMonitors[:0],
+		OpAccounts:  r.OpAccounts[:0],
+		Releasables: r.Releasables[:0],
 	}
 	newColOperatorResultPool.Put(r)
 }

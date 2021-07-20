@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "userfile",
+    srcs = ["file_table_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlutil",
+        "//pkg/storage/cloud",
+        "//pkg/storage/cloudimpl/filetable",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+    ],
+)
+
+go_test(
+    name = "userfile_test",
+    srcs = [
+        "file_table_storage_test.go",
+        "main_test.go",
+    ],
+    embed = [":userfile"],
+    deps = [
+        "//pkg/base",
+        "//pkg/blobs",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlutil",
+        "//pkg/sql/tests",
+        "//pkg/storage/cloud",
+        "//pkg/storage/cloud/cloudtestutils",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

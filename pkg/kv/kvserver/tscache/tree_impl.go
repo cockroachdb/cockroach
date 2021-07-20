@@ -446,11 +446,6 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 	}
 }
 
-// SetLowWater implements the Cache interface.
-func (tc *treeImpl) SetLowWater(start, end roachpb.Key, ts hlc.Timestamp) {
-	tc.Add(start, end, ts, noTxnID)
-}
-
 // getLowWater implements the Cache interface.
 func (tc *treeImpl) getLowWater() hlc.Timestamp {
 	tc.RLock()

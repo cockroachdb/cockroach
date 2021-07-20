@@ -35,19 +35,23 @@ vectorized: <hidden>
 rows read from KV: 6 (48 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
+cluster regions: <hidden>
 ·
 • sort
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 2
 │ order: +k
 │
 └── • filter
     │ cluster nodes: <hidden>
+    │ cluster regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join
         │ cluster nodes: <hidden>
+        │ cluster regions: <hidden>
         │ actual row count: 2
         │ KV rows read: 2
         │ KV bytes read: 16 B
@@ -55,12 +59,14 @@ network usage: <hidden>
         │
         └── • inverted filter
             │ cluster nodes: <hidden>
+            │ cluster regions: <hidden>
             │ actual row count: 2
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
             └── • scan
                   cluster nodes: <hidden>
+                  cluster regions: <hidden>
                   actual row count: 4
                   KV rows read: 4
                   KV bytes read: 32 B
@@ -68,7 +74,7 @@ network usage: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMleFO20gQx7_fU4zmC6DzKbu2yYU9nZQDzDVtIciJWqE6Qos9BQtnN93dtEYoj9UX6JNVtoESopim7Yfmw0Yzs__NzG9mN7doPxQocBS9jg7GcA1H8fAYLkmfO3lRELx9EcURWHeeK0fGUurs9tYoHhz-63f3eO-f0-HgZLwdMsZYAPUXC3a2hPg_Gh5H4_jMq86a7sAwPoxi2D-Da_RQ6YxO5JQsinfIceLhzOiUrNWmct3WGwZZiYJ5mKvZ3FXuiYepNoTiFl3uCkKB4yrHmGRGpsPQw4yczIv62IcS-lUC57nKqEQPRzOprIBOgvtJUr7PkqTkLElK9tyCf22q4QmCVBkEDLS7ImPRw1dvwOVTEsC-fL6zU60cKZdrtRIy-pMFQzITEDaeixtH967Ah3308EK69Ios6LmbzZ2AikMtvHeEOFl42Fh3HK2Tl4SCL7zvZz1QH8k4yo7ywpEh0-HLwO_jUTkzoBX0uQBb0QbrpHGiphf8vZskzGdJwthzCwKpbFNZBX2F-rDC0K_yrQusuTZIG9s6WRTL9KmkdL7alKksYUpTbW5AFoVOpaNMAKsbUcVsaqp2QJbb69Udz7bKX9sqf5NWvdS5ursV_rpbMTP5VJqbb3S8vv8EkN8G6Icn2V-dZN6t8axh_hPUgk2oPQx2sMys8YunjyDjjFfPnc_8bnePPf4cdP_jvZA3Ro_1eC8Mo5BvicfvYt_fWTuareR_PaZwE0wjbRyZTrgMqc___A1vze4mhcVkZ1pZWips3clsMfGQsktq_rCsnpuUTo1O659pzGGtqx0ZWddEeWMMVBOqEnws5q1iv13st4qDdnHQKg7bxWGrePeJeLL442sAAAD__8Z9uew=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMleFO40YQx7_3KUbzBVBdZdc2adiqUgqYNm0hyIlaoTpCiz0NFrbX7G5aI5THuhe4JzvZJhwhirnc3YfLh41mxv_1zG9m149o7jMUOAn-DE6mcAdn4fgc5qSurbzJCP7-LQgDMPY6LSxpQ7E1-3uTcHT6s9s_4oOfLseji-m-zxhjHjR_zDvYE-LXYHweTMMrp94rP4BxeBqEcHwFd-hgoRK6kDkZFP8gx5mDpVYxGaN07XpsHhglFQrmYFqUC1u7Zw7GShOKR7SpzQgFTuscQ5IJ6R5DBxOyMs2abZ9LGNYJXKdFQhU6OCllYQT0IjyOourfJIoqzqKoYm8t-MOuGh4hyCIBj4Gyt6QNOvjHX2DTnASw9--e7FgVlgqbqmIjpNX_BjTJRIDfem4eLK1cngvH6OCNtPEtGVALWy6sgJpDI1w5fJwtHWytJ47Gyjmh4Evn01mPiv9IW0rO0sySJt3j68BX8aAqNagChlyAqWmDsVJb0dDzfjyMIuayKGLsrQWBimRXWQ19g_q4xjCs820KbLi2SFvbWJll6_Sponix2ZRcVpBTrvQDyCxTsbSUCGBNI-qYuc_AUl5Ckpo7WBg5p1X4zT65W_vk7tKn31VaPB0Jd9uRKHWaS_3wEY0zdF_RcbvofPYYu5tjzPsNni3Av4Catwu156n21pm1fvH6BmSc8fquc5nb7x-xl7-T_i984PPWGLABH_h-4PM98fJSHLoHW-eyk_zXx-TvgmmitCXd89chDfn339qROdylqpBMqQpDa1Vt25ktZw5SMqf2U2XUQsd0qVXcvKY1x42ucSRkbBvlrTEq2lCd4Esx7xS73WK3U-x1i71Osd8t9jvFh6_Es-V3HwIAAP___4y3QA==
 
 statement ok
 DROP TABLE geo_table
@@ -111,19 +117,23 @@ vectorized: <hidden>
 rows read from KV: 4 (32 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
+cluster regions: <hidden>
 ·
 • sort
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 2
 │ order: +k
 │
 └── • filter
     │ cluster nodes: <hidden>
+    │ cluster regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join
         │ cluster nodes: <hidden>
+        │ cluster regions: <hidden>
         │ actual row count: 2
         │ KV rows read: 2
         │ KV bytes read: 16 B
@@ -131,12 +141,14 @@ network usage: <hidden>
         │
         └── • inverted filter
             │ cluster nodes: <hidden>
+            │ cluster regions: <hidden>
             │ actual row count: 2
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
             └── • scan
                   cluster nodes: <hidden>
+                  cluster regions: <hidden>
                   actual row count: 2
                   KV rows read: 2
                   KV bytes read: 16 B
@@ -144,7 +156,7 @@ network usage: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMleFu2zYQx7_vKQ73JQmmwaSkeA6HAV4SZfO2xIFstAgqI2CkayJEJl2Sbh0Efqy-QJ-soJSkcYyoNdIC1QcKd8c_dfc7krpF-65CgaPk_-RgDNdwlA6P4ZL0uZMXFcHrf5I0AevOS-XIWMqd3d4apYPDP8PuHu_9cTocnIy3Y8YYi6B-sWhnS4i_k-FxMk7PAr_WdAeG6WGSwv4ZXGOAShd0IqdkUbxBjpMAZ0bnZK023nVbTxgUCxQswFLN5s67JwHm2hCKW3SlqwgFjn2OKcmCTIdhgAU5WVb1sg8l9H0C56UqaIEBjmZSWQGdDPezbPG2yLIFi_zAvjLgb5tqeIYgVQERA-2uyFgM8L9X4MopCWCfPt7ZuVaOlCu1WgsZ_cGCIVkICBvPxY2jexfvwj4GeCFdfkUW9NzN5k6A51AL7x0hTpYBNtYdR-vkJaHgy-DbWQ_UezKOiqOycmTIdPgq8Pt4spgZ0Ar6XID1tME6aZyo6UW_72YZ8_SYh9Q6IJAqNpV56GvUhx5D3-dbF1hzbZA2tnWyqlbp04Ly-XpTpnIBU5pqcwOyqnQuHRUCWN0IH7O58e2AorTX6zNe0Kpwk1b9q0t1dyrC507FzJRTaW6-0An64SaAfsBOfob5C6hFm1B72NjRKrPGL55egowz7q-7kIXd7h57_Bx0_-K9mDdGj_V4L46TmG-Jx_diP9z5rlvzBZjiTTCNtHFkOvEqpD7_9Sc8NbubFJaSnWllaaWw51Zmy0mAVFxS88Oyem5yOjU6rz_TmMNaVzsKsq6J8sYYqCbkE3ws5q3isF0ctoqjdnHUKo7bxXGrePeJeLL85XMAAAD__9deue4=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMleFO40YQx7_3KUbzBVBdZdc2adiqUgqYNm0hyIlaoTpCiz0NFrbX7G7aIJTHuhe4JzutTTgCwncRd9Llw0bzH__XO7_ZXd-juS1Q4CT6Mzqawg2cxONTmJO6tPKqIPj7tyiOwNjLvLKkDaXW7O5M4tHxz37_gA9-Oh-Pzqa7IWOMBdD8sWBvR4hfo_FpNI0vPDdXuQfj-DiK4fACbtDDSmV0JksyKP5BjjMPa61SMkZpJ903D4yyJQrmYV7VC-vkmYep0oTiHm1uC0KBU7fGmGRGusfQw4yszItm2scShm4Bl3mV0RI9nNSyMgJ6CR4myfLfLEmWLHAD-8SAP2zr4QmCrDIIGCh7Tdqgh3_8BTYvSQB7_-4hTlVlqbK5ql6ktPrfgCaZCfBb5erO0lrifThED6-kTa_JgFrYemEFOA6NcS34OFt52EYPHI2Vc0LBV97nsx5V_5G2lJ3khSVNusc3ga_z0bLWoCoYcgHG0QZjpbaioRf8uJ8kzNFjDlLngEBVtq3NQX9BfewwDN16mwIbri3SNjZWFsUmfVpSunjZlFIuoaRS6TuQRaFSaSkTwJpGuJy5LcBSWUOWmxtYGDmndfoNffK36dPvKq8ejoT_2pGodV5KffcRjTf0t6HzFbbxK8DfQC3Yhtrjrg42mbW6eH4DMs64u-t85vf7B-zp76j_Cx-EvA0GbMAHYRiFfEc8vRSH_t4X3ZdvwBRug2mitCXdCzchDfn339qR2d-mqphMrSpDG1W9NjNbzTykbE7tp8qohU7pXKu0eU0bjhtfI2RkbJvlbTCq2pRb4FMz7zT73Wa_0xx0m4NOc9htDjvN-8_Ms9V3HwIAAP__EHC3Qg==
 
 # Also works when creating an index.
 statement ok
@@ -163,19 +175,23 @@ vectorized: <hidden>
 rows read from KV: 4 (32 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
+cluster regions: <hidden>
 ·
 • sort
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 2
 │ order: +k
 │
 └── • filter
     │ cluster nodes: <hidden>
+    │ cluster regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join
         │ cluster nodes: <hidden>
+        │ cluster regions: <hidden>
         │ actual row count: 2
         │ KV rows read: 2
         │ KV bytes read: 16 B
@@ -183,12 +199,14 @@ network usage: <hidden>
         │
         └── • inverted filter
             │ cluster nodes: <hidden>
+            │ cluster regions: <hidden>
             │ actual row count: 2
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
             └── • scan
                   cluster nodes: <hidden>
+                  cluster regions: <hidden>
                   actual row count: 2
                   KV rows read: 2
                   KV bytes read: 16 B
@@ -196,4 +214,4 @@ network usage: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMleFu2zYQx7_vKQ73JQmmwaSkeA6HAV4SZfO2xIFstAgqI2CkayJEJl2Sbh0Efqy-QJ-soJSkcYyoNdIC1QcKd8c_dfc7krpF-65CgaPk_-RgDNdwlA6P4ZL0uZMXFcHrf5I0AevOS-XIWMqd3d4apYPDP8PuHu_9cTocnIy3Y8YYi6B-sWhnS4i_k-FxMk7PAr_WdAeG6WGSwv4ZXGOAShd0IqdkUbxBjpMAZ0bnZK023nVbTxgUCxQswFLN5s67JwHm2hCKW3SlqwgFjn2OKcmCTIdhgAU5WVb1sg8l9H0C56UqaIEBjmZSWQGdDPezbPG2yLIFi_zAvjLgb5tqeIYgVQERA-2uyFgM8L9X4MopCWCfPt7ZuVaOlCu1WgsZ_cGCIVkICBvPxY2jexfvwj4GeCFdfkUW9NzN5k6A51AL7x0hTpYBNtYdR-vkJaHgy-DbWQ_UezKOiqOycmTIdPgq8Pt4spgZ0Ar6XID1tME6aZyo6UW_72YZ8_SYh9Q6IJAqNpV56GvUhx5D3-dbF1hzbZA2tnWyqlbp04Ly-XpTpnIBU5pqcwOyqnQuHRUCWN0IH7O58e2AorTX6zNe0Kpwk1b9q0t1dyrC507FzJRTaW6-0An64SaAfsBOfob5C6hFm1B72NjRKrPGL55egowz7q-7kIXd7h57_Bx0_-K9mDdGj_V4L46TmG-Jx_diP9z5rlvzBZjiTTCNtHFkOvEqpD7_9Sc8NbubFJaSnWllaaWw51Zmy0mAVFxS88Oyem5yOjU6rz_TmMNaVzsKsq6J8sYYqCbkE3ws5q3isF0ctoqjdnHUKo7bxXGrePeJeLL85XMAAAD__9deue4=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMleFO40YQx7_3KUbzBVBdZdc2adiqUgqYNm0hyIlaoTpCiz0NFrbX7G7aIJTHuhe4JzutTTgCwncRd9Llw0bzH__XO7_ZXd-juS1Q4CT6Mzqawg2cxONTmJO6tPKqIPj7tyiOwNjLvLKkDaXW7O5M4tHxz37_gA9-Oh-Pzqa7IWOMBdD8sWBvR4hfo_FpNI0vPDdXuQfj-DiK4fACbtDDSmV0JksyKP5BjjMPa61SMkZpJ903D4yyJQrmYV7VC-vkmYep0oTiHm1uC0KBU7fGmGRGusfQw4yszItm2scShm4Bl3mV0RI9nNSyMgJ6CR4myfLfLEmWLHAD-8SAP2zr4QmCrDIIGCh7Tdqgh3_8BTYvSQB7_-4hTlVlqbK5ql6ktPrfgCaZCfBb5erO0lrifThED6-kTa_JgFrYemEFOA6NcS34OFt52EYPHI2Vc0LBV97nsx5V_5G2lJ3khSVNusc3ga_z0bLWoCoYcgHG0QZjpbaioRf8uJ8kzNFjDlLngEBVtq3NQX9BfewwDN16mwIbri3SNjZWFsUmfVpSunjZlFIuoaRS6TuQRaFSaSkTwJpGuJy5LcBSWUOWmxtYGDmndfoNffK36dPvKq8ejoT_2pGodV5KffcRjTf0t6HzFbbxK8DfQC3Yhtrjrg42mbW6eH4DMs64u-t85vf7B-zp76j_Cx-EvA0GbMAHYRiFfEc8vRSH_t4X3ZdvwBRug2mitCXdCzchDfn339qR2d-mqphMrSpDG1W9NjNbzTykbE7tp8qohU7pXKu0eU0bjhtfI2RkbJvlbTCq2pRb4FMz7zT73Wa_0xx0m4NOc9htDjvN-8_Ms9V3HwIAAP__EHC3Qg==

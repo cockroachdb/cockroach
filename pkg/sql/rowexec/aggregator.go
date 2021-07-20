@@ -162,7 +162,7 @@ func (ag *aggregatorBase) execStatsForTrace() *execinfrapb.ComponentStats {
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem: optional.MakeUint(uint64(ag.MemMonitor.MaximumBytes())),
 		},
-		Output: ag.Out.Stats(),
+		Output: ag.OutputHelper.Stats(),
 	}
 }
 

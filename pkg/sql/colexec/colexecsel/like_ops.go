@@ -29,8 +29,8 @@ func GetLikeOperator(
 	}
 	pat := []byte(pattern)
 	base := selConstOpBase{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		colIdx:       colIdx,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		colIdx:         colIdx,
 	}
 	switch likeOpType {
 	case colexeccmp.LikeConstant:

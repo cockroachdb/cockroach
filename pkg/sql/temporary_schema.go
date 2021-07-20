@@ -218,7 +218,7 @@ func cleanupSchemaObjects(
 	if err != nil {
 		return err
 	}
-	tbNames, err := descsCol.GetObjectNames(
+	tbNames, _, err := descsCol.GetObjectNamesAndIDs(
 		ctx,
 		txn,
 		dbDesc,
@@ -490,6 +490,8 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	defer c.metrics.ActiveCleaners.Dec(1)
 
 	log.Infof(ctx, "running temporary object cleanup background job")
+	// TODO(sumeer): this is not using NewTxnWithSteppingEnabled and so won't be
+	// classified as FROM_SQL for purposes of admission control. Fix.
 	txn := kv.NewTxn(ctx, c.db, 0)
 
 	// Build a set of all session IDs with temporary objects.

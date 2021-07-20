@@ -300,7 +300,7 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 			Node: prevProc.Node,
 			Spec: execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{{
-					Type:        execinfrapb.InputSyncSpec_UNORDERED,
+					Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 					ColumnTypes: prevStageResultTypes,
 				}},
 				Core: coreFunc(int(resultProc), prevProc),
@@ -340,23 +340,17 @@ func (p *PhysicalPlan) MergeResultStreams(
 	forceSerialization bool,
 ) {
 	proc := &p.Processors[destProcessor]
-	// We want to use unordered synchronizer if the ordering is empty and
-	// we're not being forced to serialize streams. Note that ordered
-	// synchronizers support the case of an empty ordering - they will be
-	// merging the result streams by fully consuming one stream at a time
-	// before moving on to the next one.
-	useUnorderedSync := len(ordering.Columns) == 0 && !forceSerialization
-	if len(resultRouters) == 1 {
-		// However, if we only have a single result router, then there is
-		// nothing to merge, and we unconditionally will use the unordered
-		// synchronizer since it is more efficient.
-		useUnorderedSync = true
-	}
-	if useUnorderedSync {
-		proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_UNORDERED
-	} else {
+	if len(ordering.Columns) > 0 && len(resultRouters) > 1 {
 		proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_ORDERED
 		proc.Spec.Input[destInput].Ordering = ordering
+	} else {
+		if forceSerialization && len(resultRouters) > 1 {
+			// If we're forced to serialize the streams and we have multiple
+			// result routers, we have to use a slower serial unordered sync.
+			proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_SERIAL_UNORDERED
+		} else {
+			proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_PARALLEL_UNORDERED
+		}
 	}
 
 	for _, resultProc := range resultRouters {
@@ -428,6 +422,10 @@ func (p *PhysicalPlan) EnsureSingleStreamOnGateway() {
 			panic("ensuring a single stream on the gateway failed")
 		}
 	}
+	// We now must have a single stream in the whole physical plan, so there is no
+	// ordering to be maintained for the merge of multiple streams. This also
+	// adheres to the comment on p.MergeOrdering.
+	p.MergeOrdering = execinfrapb.Ordering{}
 }
 
 // CheckLastStagePost checks that the processors of the last stage of the
@@ -491,42 +489,22 @@ func isIdentityProjection(columns []uint32, numExistingCols int) bool {
 }
 
 // AddProjection applies a projection to a plan. The new plan outputs the
-// columns of the old plan as listed in the slice. The Ordering is updated;
-// columns in the ordering are added to the projection as needed.
+// columns of the old plan as listed in the slice. newMergeOrdering must refer
+// to the columns **after** the projection is applied.
 //
 // The PostProcessSpec may not be updated if the resulting projection keeps all
 // the columns in their original order.
 //
 // Note: the columns slice is relinquished to this function, which can modify it
 // or use it directly in specs.
-func (p *PhysicalPlan) AddProjection(columns []uint32) {
+func (p *PhysicalPlan) AddProjection(columns []uint32, newMergeOrdering execinfrapb.Ordering) {
+	// Set the merge ordering early since we might short-circuit.
+	p.SetMergeOrdering(newMergeOrdering)
+
 	// If the projection we are trying to apply projects every column, don't
 	// update the spec.
 	if isIdentityProjection(columns, len(p.GetResultTypes())) {
 		return
-	}
-
-	// Update the ordering.
-	if len(p.MergeOrdering.Columns) > 0 {
-		newOrdering := make([]execinfrapb.Ordering_Column, len(p.MergeOrdering.Columns))
-		for i, c := range p.MergeOrdering.Columns {
-			// Look for the column in the new projection.
-			found := -1
-			for j, projCol := range columns {
-				if projCol == c.ColIdx {
-					found = j
-				}
-			}
-			if found == -1 {
-				// We have a column that is not in the projection but will be necessary
-				// later when the streams are merged; add it.
-				found = len(columns)
-				columns = append(columns, c.ColIdx)
-			}
-			newOrdering[i].ColIdx = uint32(found)
-			newOrdering[i].Direction = c.Direction
-		}
-		p.MergeOrdering.Columns = newOrdering
 	}
 
 	newResultTypes := make([]*types.T, len(columns))
@@ -577,12 +555,16 @@ func exprColumn(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
 // plan. The rendering is achieved either through an adjustment on the last
 // stage post-process spec, or via a new stage.
 //
-// The Ordering is updated; columns in the ordering are added to the render
-// expressions as necessary.
+// newMergeOrdering must refer to the columns **after** the rendering is
+// applied.
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
-	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []*types.T,
+	exprs []tree.TypedExpr,
+	exprCtx ExprContext,
+	indexVarMap []int,
+	outTypes []*types.T,
+	newMergeOrdering execinfrapb.Ordering,
 ) error {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
@@ -613,7 +595,7 @@ func (p *PhysicalPlan) AddRendering(
 			}
 			cols[i] = uint32(streamCol)
 		}
-		p.AddProjection(cols)
+		p.AddProjection(cols, newMergeOrdering)
 		return nil
 	}
 
@@ -643,46 +625,7 @@ func (p *PhysicalPlan) AddRendering(
 			return err
 		}
 	}
-
-	if len(p.MergeOrdering.Columns) > 0 {
-		outTypes = outTypes[:len(outTypes):len(outTypes)]
-		newOrdering := make([]execinfrapb.Ordering_Column, len(p.MergeOrdering.Columns))
-		for i, c := range p.MergeOrdering.Columns {
-			found := -1
-			// Look for the column in the new projection.
-			for exprIdx, e := range exprs {
-				if varIdx, ok := exprColumn(e, indexVarMap); ok && varIdx == int(c.ColIdx) {
-					found = exprIdx
-					break
-				}
-			}
-			if found == -1 {
-				// We have a column that is not being rendered but will be necessary
-				// later when the streams are merged; add it.
-
-				// The new expression refers to column post.OutputColumns[c.ColIdx].
-				internalColIdx := c.ColIdx
-				if post.Projection {
-					internalColIdx = post.OutputColumns[internalColIdx]
-				}
-				newExpr, err := MakeExpression(tree.NewTypedOrdinalReference(
-					int(internalColIdx),
-					p.GetResultTypes()[c.ColIdx]),
-					exprCtx, nil /* indexVarMap */)
-				if err != nil {
-					return err
-				}
-
-				found = len(post.RenderExprs)
-				post.RenderExprs = append(post.RenderExprs, newExpr)
-				outTypes = append(outTypes, p.GetResultTypes()[c.ColIdx])
-			}
-			newOrdering[i].ColIdx = uint32(found)
-			newOrdering[i].Direction = c.Direction
-		}
-		p.MergeOrdering.Columns = newOrdering
-	}
-
+	p.SetMergeOrdering(newMergeOrdering)
 	post.Projection = false
 	post.OutputColumns = nil
 	p.SetLastStagePost(post, outTypes)

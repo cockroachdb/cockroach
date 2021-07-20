@@ -1,0 +1,80 @@
+parse
+CANCEL QUERY a
+----
+CANCEL QUERIES VALUES (a) -- normalized!
+CANCEL QUERIES VALUES ((a)) -- fully parenthesized
+CANCEL QUERIES VALUES (a) -- literals removed
+CANCEL QUERIES VALUES (_) -- identifiers removed
+
+parse
+CANCEL QUERY IF EXISTS a
+----
+CANCEL QUERIES IF EXISTS VALUES (a) -- normalized!
+CANCEL QUERIES IF EXISTS VALUES ((a)) -- fully parenthesized
+CANCEL QUERIES IF EXISTS VALUES (a) -- literals removed
+CANCEL QUERIES IF EXISTS VALUES (_) -- identifiers removed
+
+
+parse
+CANCEL QUERIES SELECT a
+----
+CANCEL QUERIES SELECT a
+CANCEL QUERIES SELECT (a) -- fully parenthesized
+CANCEL QUERIES SELECT a -- literals removed
+CANCEL QUERIES SELECT _ -- identifiers removed
+
+parse
+EXPLAIN CANCEL QUERIES SELECT a
+----
+EXPLAIN CANCEL QUERIES SELECT a
+EXPLAIN CANCEL QUERIES SELECT (a) -- fully parenthesized
+EXPLAIN CANCEL QUERIES SELECT a -- literals removed
+EXPLAIN CANCEL QUERIES SELECT _ -- identifiers removed
+
+parse
+CANCEL SESSION a
+----
+CANCEL SESSIONS VALUES (a) -- normalized!
+CANCEL SESSIONS VALUES ((a)) -- fully parenthesized
+CANCEL SESSIONS VALUES (a) -- literals removed
+CANCEL SESSIONS VALUES (_) -- identifiers removed
+
+parse
+CANCEL SESSION IF EXISTS a
+----
+CANCEL SESSIONS IF EXISTS VALUES (a) -- normalized!
+CANCEL SESSIONS IF EXISTS VALUES ((a)) -- fully parenthesized
+CANCEL SESSIONS IF EXISTS VALUES (a) -- literals removed
+CANCEL SESSIONS IF EXISTS VALUES (_) -- identifiers removed
+
+parse
+CANCEL SESSIONS SELECT a
+----
+CANCEL SESSIONS SELECT a
+CANCEL SESSIONS SELECT (a) -- fully parenthesized
+CANCEL SESSIONS SELECT a -- literals removed
+CANCEL SESSIONS SELECT _ -- identifiers removed
+
+parse
+EXPLAIN CANCEL SESSIONS SELECT a
+----
+EXPLAIN CANCEL SESSIONS SELECT a
+EXPLAIN CANCEL SESSIONS SELECT (a) -- fully parenthesized
+EXPLAIN CANCEL SESSIONS SELECT a -- literals removed
+EXPLAIN CANCEL SESSIONS SELECT _ -- identifiers removed
+
+parse
+CANCEL QUERIES IF EXISTS SELECT a
+----
+CANCEL QUERIES IF EXISTS SELECT a
+CANCEL QUERIES IF EXISTS SELECT (a) -- fully parenthesized
+CANCEL QUERIES IF EXISTS SELECT a -- literals removed
+CANCEL QUERIES IF EXISTS SELECT _ -- identifiers removed
+
+parse
+CANCEL SESSIONS IF EXISTS SELECT a
+----
+CANCEL SESSIONS IF EXISTS SELECT a
+CANCEL SESSIONS IF EXISTS SELECT (a) -- fully parenthesized
+CANCEL SESSIONS IF EXISTS SELECT a -- literals removed
+CANCEL SESSIONS IF EXISTS SELECT _ -- identifiers removed

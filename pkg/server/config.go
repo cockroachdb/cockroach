@@ -307,9 +307,6 @@ type SQLConfig struct {
 	// The tenant that the SQL server runs on the behalf of.
 	TenantID roachpb.TenantID
 
-	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
-	LeaseManagerConfig *base.LeaseManagerConfig
-
 	// SocketFile, if non-empty, sets up a TLS-free local listener using
 	// a unix datagram socket at the specified path.
 	SocketFile string
@@ -347,7 +344,6 @@ func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig
 		TableStatCacheSize: defaultSQLTableStatCacheSize,
 		QueryCacheSize:     defaultSQLQueryCacheSize,
 		TempStorageConfig:  tempStorageCfg,
-		LeaseManagerConfig: base.NewLeaseManagerConfig(),
 	}
 	return sqlCfg
 }
@@ -509,13 +505,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 						"engine no registry available. Please use " +
 						"Knobs.Server.StickyEngineRegistry to provide one.")
 				}
-				e, err := knobs.StickyEngineRegistry.GetOrCreateStickyInMemEngine(ctx, spec)
+				e, err := knobs.StickyEngineRegistry.GetOrCreateStickyInMemEngine(ctx, cfg, spec)
 				if err != nil {
 					return Engines{}, err
 				}
 				engines = append(engines, e)
 			} else {
-				engines = append(engines, storage.NewInMem(ctx, spec.Attributes, sizeInBytes, cfg.Settings))
+				engines = append(engines, storage.NewInMem(ctx, spec.Attributes, cfg.CacheSize, sizeInBytes, cfg.Settings))
 			}
 		} else {
 			if spec.Size.Percent > 0 {
@@ -534,12 +530,12 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
 			storageConfig := base.StorageConfig{
-				Attrs:           spec.Attributes,
-				Dir:             spec.Path,
-				MaxSize:         sizeInBytes,
-				Settings:        cfg.Settings,
-				UseFileRegistry: spec.UseFileRegistry,
-				ExtraOptions:    spec.ExtraOptions,
+				Attrs:             spec.Attributes,
+				Dir:               spec.Path,
+				MaxSize:           sizeInBytes,
+				Settings:          cfg.Settings,
+				UseFileRegistry:   spec.UseFileRegistry,
+				EncryptionOptions: spec.EncryptionOptions,
 			}
 			pebbleConfig := storage.PebbleConfig{
 				StorageConfig: storageConfig,

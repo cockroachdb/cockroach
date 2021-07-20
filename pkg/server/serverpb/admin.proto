@@ -538,34 +538,40 @@ message JobsRequest {
 
 // JobsResponse contains the job record for each matching job.
 message JobsResponse {
-  message Job {
-    int64 id = 1 [(gogoproto.customname) = "ID"];
-    string type = 2;
-    string description = 3;
-    string statement = 16;
-    string username = 4;
-    repeated uint32 descriptor_ids = 5 [
-      (gogoproto.customname) = "DescriptorIDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
-    ];
-    string status = 6;
-    google.protobuf.Timestamp created = 7 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp started = 8 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp finished = 9 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp modified = 10 [(gogoproto.stdtime) = true];
-    float fraction_completed = 11;
-    string error = 12;
-    // highwater_timestamp is the highwater timestamp returned as normal
-    // timestamp. This is appropriate for display to humans.
-    google.protobuf.Timestamp highwater_timestamp = 13 [(gogoproto.stdtime) = true];
-    // highwater_decimal is the highwater timestamp in the proprietary decimal
-    // form used by logical timestamps internally. This is appropriate to pass
-    // to a "AS OF SYSTEM TIME" SQL statement.
-    string highwater_decimal = 14;
-    string running_status = 15;
-  }
+  repeated JobResponse jobs = 1 [(gogoproto.nullable) = false];
+}
 
-  repeated Job jobs = 1 [(gogoproto.nullable) = false];
+// JobRequest requests system job information for the given job_id.
+message JobRequest {
+  int64 job_id = 1;
+}
+
+// JobResponse contains the job record for a job.
+message JobResponse {
+  int64 id = 1 [(gogoproto.customname) = "ID"];
+  string type = 2;
+  string description = 3;
+  string statement = 16;
+  string username = 4;
+  repeated uint32 descriptor_ids = 5 [
+    (gogoproto.customname) = "DescriptorIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+  string status = 6;
+  google.protobuf.Timestamp created = 7 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp started = 8 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp finished = 9 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp modified = 10 [(gogoproto.stdtime) = true];
+  float fraction_completed = 11;
+  string error = 12;
+  // highwater_timestamp is the highwater timestamp returned as normal
+  // timestamp. This is appropriate for display to humans.
+  google.protobuf.Timestamp highwater_timestamp = 13 [(gogoproto.stdtime) = true];
+  // highwater_decimal is the highwater timestamp in the proprietary decimal
+  // form used by logical timestamps internally. This is appropriate to pass
+  // to a "AS OF SYSTEM TIME" SQL statement.
+  string highwater_decimal = 14;
+  string running_status = 15;
 }
 
 // LocationsRequest requests system locality location information.
@@ -713,9 +719,45 @@ message ChartCatalogResponse {
   repeated cockroach.ts.catalog.ChartSection catalog = 1 [(gogoproto.nullable) = false];
 }
 
+// CARequest requests the CA cert anchoring this service.
+message CARequest {
+  // No information needed.
+}
+
+// CAResponse contains a PEM encoded copy of the CA cert for this service.
+message CAResponse {
+  bytes ca_cert = 1;
+}
+
+// CertBundleRequest requests the bundle of initialization CAs for a new node.
+// It provides authentication in the form of a joinToken containing a
+// sharedSecret.
+message CertBundleRequest {
+    string token_id = 1 [(gogoproto.customname) = "TokenID"];
+    bytes shared_secret = 2;
+ }
+
+// CertBundleResponse contains a copy of all CAs needed to intialize TLS for
+// a new node.
+message CertBundleResponse {
+  bytes bundle = 1;
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
+  rpc RequestCA(CARequest) returns (CAResponse) {
+    option (google.api.http) = {
+      get : "/_join/v1/ca"
+    };
+  }
+
+  rpc RequestCertBundle(CertBundleRequest) returns (CertBundleResponse) {
+    option (google.api.http) = {
+      get : "/_join/v1/requestbundle"
+    };
+  }
+
   // URL: /_admin/v1/users
   rpc Users(UsersRequest) returns (UsersResponse) {
     option (google.api.http) = {
@@ -842,6 +884,13 @@ service Admin {
   rpc Jobs(JobsRequest) returns (JobsResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/jobs"
+    };
+  }
+
+  // Job returns the job record for the job of the given job_id.
+  rpc Job(JobRequest) returns (JobResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/jobs/{job_id}"
     };
   }
 

@@ -1181,7 +1181,8 @@ select
  │    ├── cost: 1054.41
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
  └── filters
       └── (k:1 % 2) = 1 [outer=(1), immutable]
 
@@ -1380,3 +1381,13 @@ DROP TABLE greeting_table
 # drop the type using prepared statement.
 statement ok
 EXECUTE enum_drop
+
+# Regression test for #64765.
+statement ok
+CREATE TABLE t64765 (x INT PRIMARY KEY, y INT, z INT)
+
+statement ok
+PREPARE q64765 as SELECT * FROM t64765 WHERE x = $1 AND y = $2
+
+statement ok
+EXECUTE q64765(1, 1)

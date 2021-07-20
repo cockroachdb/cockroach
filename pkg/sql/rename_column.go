@@ -122,7 +122,7 @@ func (p *planner) renameColumn(
 		// Noop.
 		return false, nil
 	}
-	isShardColumn := tableDesc.IsShardColumn(col.ColumnDesc())
+	isShardColumn := tableDesc.IsShardColumn(col)
 	if isShardColumn && !allowRenameOfShardColumn {
 		return false, pgerror.Newf(pgcode.ReservedName, "cannot rename shard column")
 	}
@@ -161,9 +161,7 @@ func (p *planner) renameColumn(
 			if err != nil {
 				return false, err
 			}
-			indexDesc := *index.IndexDesc()
-			indexDesc.Predicate = newExpr
-			tableDesc.SetPublicNonPrimaryIndex(index.Ordinal(), indexDesc)
+			index.IndexDesc().Predicate = newExpr
 		}
 	}
 
@@ -232,7 +230,7 @@ func (p *planner) renameColumn(
 	}
 
 	// Rename the column in the indexes.
-	tableDesc.RenameColumnDescriptor(col.ColumnDesc(), string(*newName))
+	tableDesc.RenameColumnDescriptor(col, string(*newName))
 
 	// Rename any shard columns which need to be renamed because their name was
 	// based on this column.

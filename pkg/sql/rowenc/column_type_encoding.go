@@ -15,7 +15,9 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -98,9 +100,9 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 		return encoding.EncodeStringDescending(b, string(*t)), nil
 	case *tree.DBox2D:
 		if dir == encoding.Ascending {
-			return encoding.EncodeBox2DAscending(b, t.CartesianBoundingBox)
+			return encoding.EncodeBox2DAscending(b, t.CartesianBoundingBox.BoundingBox)
 		}
-		return encoding.EncodeBox2DDescending(b, t.CartesianBoundingBox)
+		return encoding.EncodeBox2DDescending(b, t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:
 		so := t.Geography.SpatialObjectRef()
 		if dir == encoding.Ascending {
@@ -109,10 +111,14 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 		return encoding.EncodeGeoDescending(b, t.Geography.SpaceCurveIndex(), so)
 	case *tree.DGeometry:
 		so := t.Geometry.SpatialObjectRef()
-		if dir == encoding.Ascending {
-			return encoding.EncodeGeoAscending(b, t.Geometry.SpaceCurveIndex(), so)
+		spaceCurveIndex, err := t.Geometry.SpaceCurveIndex()
+		if err != nil {
+			return nil, err
 		}
-		return encoding.EncodeGeoDescending(b, t.Geometry.SpaceCurveIndex(), so)
+		if dir == encoding.Ascending {
+			return encoding.EncodeGeoAscending(b, spaceCurveIndex, so)
+		}
+		return encoding.EncodeGeoDescending(b, spaceCurveIndex, so)
 	case *tree.DDate:
 		if dir == encoding.Ascending {
 			return encoding.EncodeVarintAscending(b, t.UnixEpochDaysWithOrig()), nil
@@ -301,13 +307,15 @@ func DecodeTableKey(
 		}
 		return a.NewDBytes(tree.DBytes(r)), rkey, err
 	case types.Box2DFamily:
-		var r geo.CartesianBoundingBox
+		var r geopb.BoundingBox
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBox2DAscending(key)
 		} else {
 			rkey, r, err = encoding.DecodeBox2DDescending(key)
 		}
-		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: r}), rkey, err
+		return a.NewDBox2D(tree.DBox2D{
+			CartesianBoundingBox: geo.CartesianBoundingBox{BoundingBox: r},
+		}), rkey, err
 	case types.GeographyFamily:
 		g := a.NewDGeographyEmpty()
 		so := g.Geography.SpatialObjectRef()
@@ -464,7 +472,7 @@ func EncodeTableValue(
 	case *tree.DDate:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), t.UnixEpochDaysWithOrig()), nil
 	case *tree.DBox2D:
-		return encoding.EncodeBox2DValue(appendTo, uint32(colID), t.CartesianBoundingBox)
+		return encoding.EncodeBox2DValue(appendTo, uint32(colID), t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:
 		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObjectRef())
 	case *tree.DGeometry:
@@ -594,7 +602,9 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: data}), b, nil
+		return a.NewDBox2D(tree.DBox2D{
+			CartesianBoundingBox: geo.CartesianBoundingBox{BoundingBox: data},
+		}), b, nil
 	case types.GeographyFamily:
 		g := a.NewDGeographyEmpty()
 		so := g.Geography.SpatialObjectRef()
@@ -654,8 +664,9 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		// We copy the byte buffer here, because the JSON decoding is lazy, and we
 		// do not want to hang on to the backing byte buffer, which might be an
 		// entire KV batch.
-		data = append([]byte{}, data...)
-		j, err := json.FromEncoding(data)
+		cpy := make([]byte, len(data))
+		copy(cpy, data)
+		j, err := json.FromEncoding(cpy)
 		if err != nil {
 			return nil, b, err
 		}
@@ -690,14 +701,21 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 //
 // If val's type is incompatible with col, or if col's type is not yet
 // implemented by this function, an error is returned.
-func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.Value, error) {
+func MarshalColumnValue(col catalog.Column, val tree.Datum) (roachpb.Value, error) {
+	return MarshalColumnTypeValue(col.GetName(), col.GetType(), val)
+}
+
+// MarshalColumnTypeValue is called by MarshalColumnValue and in tests.
+func MarshalColumnTypeValue(
+	colName string, colType *types.T, val tree.Datum,
+) (roachpb.Value, error) {
 	var r roachpb.Value
 
 	if val == tree.DNull {
 		return r, nil
 	}
 
-	switch col.Type.Family() {
+	switch colType.Family() {
 	case types.BitFamily:
 		if v, ok := val.(*tree.DBitArray); ok {
 			r.SetBitArray(v.BitArray)
@@ -740,7 +758,7 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 		}
 	case types.Box2DFamily:
 		if v, ok := val.(*tree.DBox2D); ok {
-			r.SetBox2D(v.CartesianBoundingBox)
+			r.SetBox2D(v.CartesianBoundingBox.BoundingBox)
 			return r, nil
 		}
 	case types.GeographyFamily:
@@ -800,7 +818,7 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 		}
 	case types.ArrayFamily:
 		if v, ok := val.(*tree.DArray); ok {
-			if err := checkElementType(v.ParamTyp, col.Type.ArrayContents()); err != nil {
+			if err := checkElementType(v.ParamTyp, colType.ArrayContents()); err != nil {
 				return r, err
 			}
 			b, err := encodeArray(v, nil)
@@ -812,7 +830,7 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 		}
 	case types.CollatedStringFamily:
 		if v, ok := val.(*tree.DCollatedString); ok {
-			if lex.LocaleNamesAreEqual(v.Locale, col.Type.Locale()) {
+			if lex.LocaleNamesAreEqual(v.Locale, colType.Locale()) {
 				r.SetString(v.Contents)
 				return r, nil
 			}
@@ -821,7 +839,7 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 			// the mutation planning code.
 			return r, errors.AssertionFailedf(
 				"locale mismatch %q vs %q for column %q",
-				v.Locale, col.Type.Locale(), tree.ErrNameString(col.Name))
+				v.Locale, colType.Locale(), tree.ErrNameString(colName))
 		}
 	case types.OidFamily:
 		if v, ok := val.(*tree.DOid); ok {
@@ -834,10 +852,10 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 			return r, nil
 		}
 	default:
-		return r, errors.AssertionFailedf("unsupported column type: %s", col.Type.Family())
+		return r, errors.AssertionFailedf("unsupported column type: %s", colType.Family())
 	}
 	return r, errors.AssertionFailedf("mismatched type %q vs %q for column %q",
-		val.ResolvedType(), col.Type.Family(), tree.ErrNameString(col.Name))
+		val.ResolvedType(), colType.Family(), tree.ErrNameString(colName))
 }
 
 // UnmarshalColumnValue is the counterpart to MarshalColumnValues.
@@ -908,7 +926,9 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: v}), nil
+		return a.NewDBox2D(tree.DBox2D{
+			CartesianBoundingBox: geo.CartesianBoundingBox{BoundingBox: v},
+		}), nil
 	case types.GeographyFamily:
 		v, err := value.GetGeo()
 		if err != nil {
@@ -1123,7 +1143,7 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 		return scratch, err
 	}
 	scratch = scratch[0:0]
-	elementType, err := datumTypeToArrayElementEncodingType(d.ParamTyp)
+	elementType, err := DatumTypeToArrayElementEncodingType(d.ParamTyp)
 
 	if err != nil {
 		return nil, err
@@ -1296,10 +1316,10 @@ func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 	}, b, nil
 }
 
-// datumTypeToArrayElementEncodingType decides an encoding type to
+// DatumTypeToArrayElementEncodingType decides an encoding type to
 // place in the array header given a datum type. The element encoding
 // type is then used to encode/decode array elements.
-func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
+func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 	switch t.Family() {
 	case types.IntFamily:
 		return encoding.Int, nil
@@ -1380,7 +1400,7 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 	case *tree.DDate:
 		return encoding.EncodeUntaggedIntValue(b, t.UnixEpochDaysWithOrig()), nil
 	case *tree.DBox2D:
-		return encoding.EncodeUntaggedBox2DValue(b, t.CartesianBoundingBox)
+		return encoding.EncodeUntaggedBox2DValue(b, t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:
 		return encoding.EncodeUntaggedGeoValue(b, t.SpatialObjectRef())
 	case *tree.DGeometry:

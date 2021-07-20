@@ -123,7 +123,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 						ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 							State:          &kvserverpb.ReplicaState{Desc: &newDesc},
 							ChangeReplicas: &kvserverpb.ChangeReplicas{ChangeReplicasTrigger: trigger},
-							Timestamp:      r.mu.state.GCThreshold.Add(1, 0),
+							WriteTimestamp: r.mu.state.GCThreshold.Add(1, 0),
 						},
 					},
 					confChange: &decodedConfChange{

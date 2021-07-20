@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -129,4 +130,59 @@ func isServerCmd(thisCmd *cobra.Command) bool {
 		}
 	}
 	return false
+}
+
+// TestLogFlagCombinations checks that --log and --log-config-file properly
+// override each other.
+func TestLogFlagCombinations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the test ends.
+	defer initCLIDefaults()
+
+	// Generate some random file content for the yaml input.
+	const filecontents = "filecontents"
+	tmpfile, err := ioutil.TempFile("", t.Name()+".yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if err := os.Remove(tmpfile.Name()); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	if _, err := tmpfile.Write([]byte(filecontents)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args           []string
+		expectedLogCfg string
+	}{
+		{[]string{"start"}, ""},
+		{[]string{"start", "--log=foo"}, "foo"},
+		{[]string{"start", "--log-config-file=" + tmpfile.Name()}, filecontents},
+		{[]string{"start", "--log=foo", "--log=bar"}, "bar"},
+		{[]string{"start", "--log=foo", "--log-config-file=" + tmpfile.Name()}, filecontents},
+		{[]string{"start", "--log-config-file=" + tmpfile.Name(), "--log=bar"}, "bar"},
+	}
+
+	for i, td := range testData {
+		initCLIDefaults()
+		if err := f.Parse(td.args); err != nil {
+			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+		}
+
+		if td.expectedLogCfg != cliCtx.logConfigInput.s {
+			t.Errorf("%d. cliCtx.logConfigInput.s expected '%s', but got '%s'. td.args was '%#v'.",
+				i, td.expectedLogCfg, cliCtx.logConfigInput.s, td.args)
+		}
+	}
 }

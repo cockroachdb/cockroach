@@ -20,6 +20,7 @@ go_library(
         "//pkg/cmd/roachprod/vm/azure",
         "//pkg/cmd/roachprod/vm/gce",
         "//pkg/cmd/roachprod/vm/local",
+        "//pkg/util/ctxgroup",
         "//pkg/util/flagutil",
         "//pkg/util/httputil",
         "//pkg/util/syncutil",

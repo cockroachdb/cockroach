@@ -11,7 +11,7 @@
 package sqlsmith
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -898,8 +898,10 @@ func makeBegin(s *Smither) (tree.Statement, bool) {
 	return &tree.BeginTransaction{}, true
 }
 
+const letters = "abcdefghijklmnopqrstuvwxyz"
+
 func makeSavepoint(s *Smither) (tree.Statement, bool) {
-	savepointName := s.randString(s.d9(), letters)
+	savepointName := randgen.RandString(s.rnd, s.d9(), letters)
 	s.activeSavepoints = append(s.activeSavepoints, savepointName)
 	return &tree.Savepoint{Name: tree.Name(savepointName)}, true
 }
@@ -969,9 +971,14 @@ func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 			notNull := c.Nullable.Nullability == tree.NotNull
 			if notNull || s.coin() {
 				names = append(names, c.Name)
-				row = append(row, rowenc.RandDatum(s.rnd, tree.MustBeStaticallyKnownType(c.Type), !notNull))
+				row = append(row, randgen.RandDatum(s.rnd, tree.MustBeStaticallyKnownType(c.Type), !notNull))
 			}
 		}
+
+		if len(names) == 0 {
+			return nil, nil, false
+		}
+
 		insert.Columns = names
 		insert.Rows = &tree.Select{
 			Select: &tree.ValuesClause{

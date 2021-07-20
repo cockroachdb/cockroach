@@ -49,11 +49,12 @@ type MutableDescriptor interface {
 // VirtualSchemas is a collection of VirtualSchemas.
 type VirtualSchemas interface {
 	GetVirtualSchema(schemaName string) (VirtualSchema, bool)
+	GetVirtualSchemaByID(id descpb.ID) (VirtualSchema, bool)
 }
 
 // VirtualSchema represents a collection of VirtualObjects.
 type VirtualSchema interface {
-	Desc() Descriptor
+	Desc() SchemaDescriptor
 	NumTables() int
 	VisitTables(func(object VirtualObject))
 	GetObjectByName(name string, flags tree.ObjectLookupFlags) (VirtualObject, error)
@@ -70,40 +71,8 @@ type ResolvedObjectPrefix struct {
 	// Database is the parent database descriptor.
 	Database DatabaseDescriptor
 	// Schema is the parent schema.
-	Schema ResolvedSchema
+	Schema SchemaDescriptor
 }
 
 // SchemaMeta implements the SchemaMeta interface.
 func (*ResolvedObjectPrefix) SchemaMeta() {}
-
-// ResolvedSchemaKind is an enum that represents what kind of schema
-// has been resolved.
-type ResolvedSchemaKind int
-
-const (
-	// SchemaPublic represents the public schema.
-	SchemaPublic ResolvedSchemaKind = iota
-	// SchemaVirtual represents a virtual schema.
-	SchemaVirtual
-	// SchemaTemporary represents a temporary schema.
-	SchemaTemporary
-	// SchemaUserDefined represents a user defined schema.
-	SchemaUserDefined
-)
-
-// ResolvedSchema represents the result of resolving a schema name, or an
-// object prefix of <db>.<schema>. Due to historical reasons, some schemas
-// don't have unique IDs (public and virtual schemas), and others aren't backed
-// by descriptors. The ResolvedSchema struct encapsulates the different cases.
-type ResolvedSchema struct {
-	// Marks what kind of schema this is. It is always set.
-	Kind ResolvedSchemaKind
-	// Name of the resolved schema. It is always set.
-	Name string
-	// The ID of the resolved schema. This field is only set for schema kinds
-	// SchemaPublic, SchemaUserDefined and SchemaTemporary.
-	ID descpb.ID
-	// The descriptor backing the resolved schema. It is only set for
-	// SchemaUserDefined.
-	Desc SchemaDescriptor
-}

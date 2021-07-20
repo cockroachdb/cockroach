@@ -20,9 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -175,10 +176,19 @@ func RandomVec(args RandomVecArgs) {
 		for i := 0; i < args.N; i++ {
 			intervals[i] = duration.FromFloat64(args.Rand.Float64())
 		}
+	case types.JsonFamily:
+		j := args.Vec.JSON()
+		for i := 0; i < args.N; i++ {
+			random, err := json.Random(20, args.Rand)
+			if err != nil {
+				panic(err)
+			}
+			j.Set(i, random)
+		}
 	default:
 		datums := args.Vec.Datum()
 		for i := 0; i < args.N; i++ {
-			datums.Set(i, rowenc.RandDatum(args.Rand, args.Vec.Type(), false /* nullOk */))
+			datums.Set(i, randgen.RandDatum(args.Rand, args.Vec.Type(), false /* nullOk */))
 		}
 	}
 	args.Vec.Nulls().UnsetNulls()
@@ -304,14 +314,15 @@ type RandomDataOpArgs struct {
 	Nulls bool
 	// BatchAccumulator, if set, will be called before returning a coldata.Batch
 	// from Next.
-	BatchAccumulator func(b coldata.Batch, typs []*types.T)
+	BatchAccumulator func(ctx context.Context, b coldata.Batch, typs []*types.T)
 }
 
 // RandomDataOp is an operator that generates random data according to
 // RandomDataOpArgs. Call GetBuffer to get all data that was returned.
 type RandomDataOp struct {
+	ctx              context.Context
 	allocator        *colmem.Allocator
-	batchAccumulator func(b coldata.Batch, typs []*types.T)
+	batchAccumulator func(ctx context.Context, b coldata.Batch, typs []*types.T)
 	typs             []*types.T
 	rng              *rand.Rand
 	batchSize        int
@@ -347,7 +358,7 @@ func NewRandomDataOp(
 		// Generate at least one type.
 		typs = make([]*types.T, 1+rng.Intn(maxSchemaLength))
 		for i := range typs {
-			typs[i] = rowenc.RandType(rng)
+			typs[i] = randgen.RandType(rng)
 		}
 	}
 	return &RandomDataOp{
@@ -362,16 +373,18 @@ func NewRandomDataOp(
 	}
 }
 
-// Init is part of the colexec.Operator interface.
-func (o *RandomDataOp) Init() {}
+// Init is part of the colexecop.Operator interface.
+func (o *RandomDataOp) Init(ctx context.Context) {
+	o.ctx = ctx
+}
 
-// Next is part of the colexec.Operator interface.
-func (o *RandomDataOp) Next(context.Context) coldata.Batch {
+// Next is part of the colexecop.Operator interface.
+func (o *RandomDataOp) Next() coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
 		b := coldata.ZeroBatch
 		if o.batchAccumulator != nil {
-			o.batchAccumulator(b, o.typs)
+			o.batchAccumulator(o.ctx, b, o.typs)
 		}
 		return b
 	}
@@ -396,7 +409,7 @@ func (o *RandomDataOp) Next(context.Context) coldata.Batch {
 		}
 		o.numReturned++
 		if o.batchAccumulator != nil {
-			o.batchAccumulator(b, o.typs)
+			o.batchAccumulator(o.ctx, b, o.typs)
 		}
 		return b
 	}

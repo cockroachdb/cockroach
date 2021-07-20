@@ -1476,3 +1476,47 @@ ALTER TYPE computed_abc2 DROP VALUE 'a'
 
 statement error could not remove enum value "b" as it is being used in a computed column of "t7"
 ALTER TYPE computed_abc2 DROP VALUE 'b'
+
+
+# Test that types used in arrays can be renamed.
+subtest rename_type_in_array
+
+statement ok
+CREATE TYPE arr_typ AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE TABLE arr_t6 (
+  i arr_typ[] DEFAULT ARRAY['a'::arr_typ],
+  j arr_typ DEFAULT ARRAY['b'::arr_typ][1],
+  k _arr_typ DEFAULT ARRAY['c'::arr_typ]::_arr_typ,
+  FAMILY (i, j, k))
+
+statement ok
+ALTER TYPE arr_typ RENAME TO arr_typ2
+
+statement ok
+INSERT INTO arr_t6 VALUES (default, default, default)
+
+query TT
+SHOW CREATE TABLE arr_t6
+----
+arr_t6  CREATE TABLE public.arr_t6 (
+        i public.arr_typ2[] NULL DEFAULT ARRAY['a':::public.arr_typ2]:::public.arr_typ2[],
+        j public.arr_typ2 NULL DEFAULT (ARRAY['b':::public.arr_typ2]:::public.arr_typ2[])[1:::INT8],
+        k public.arr_typ2[] NULL DEFAULT ARRAY['c':::public.arr_typ2]:::public.arr_typ2[],
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+        FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
+)
+
+
+subtest regression_63138
+
+statement ok
+CREATE TYPE typ2 AS ENUM ('a')
+
+statement ok
+CREATE TABLE tab (k typ2 PRIMARY KEY)
+
+statement ok
+CREATE INDEX foo ON tab(k) WHERE k = ANY (ARRAY['a', 'a']:::typ2[])

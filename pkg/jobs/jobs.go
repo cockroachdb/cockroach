@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -62,7 +61,7 @@ type CreatedByInfo struct {
 // Record bundles together the user-managed fields in jobspb.Payload.
 type Record struct {
 	Description   string
-	Statement     string
+	Statements    []string
 	Username      security.SQLUsername
 	DescriptorIDs descpb.IDs
 	Details       jobspb.Details
@@ -86,10 +85,19 @@ type StartableJob struct {
 	resumer    Resumer
 	resumerCtx context.Context
 	cancel     context.CancelFunc
-	span       *tracing.Span
 	execDone   chan struct{}
 	execErr    error
 	starts     int64 // used to detect multiple calls to Start()
+}
+
+// TraceableJob is associated with a Job object, and can be used to configure
+// the root tracing span that will be tied to the jobs' execution.
+// By default, a job will create a `noop` root span that will discard all
+// recordings.
+type TraceableJob interface {
+	// ForceRealSpan forces the registry to create a real Span instead of a
+	// low-overhead non-recordable noop span.
+	ForceRealSpan()
 }
 
 func init() {
@@ -147,6 +155,10 @@ const (
 	// job will change its state to StatusPaused the next time it runs
 	// maybeAdoptJobs and will stop running it.
 	StatusPauseRequested Status = "pause-requested"
+	// StatusRevertFailed is for jobs that encountered an non-retryable error when
+	// reverting their changes. Manual cleanup is required when a job ends up in
+	// this state.
+	StatusRevertFailed Status = "revert-failed"
 )
 
 var (
@@ -172,7 +184,7 @@ func deprecatedIsOldSchemaChangeJob(payload *jobspb.Payload) bool {
 // Terminal returns whether this status represents a "terminal" state: a state
 // after which the job should never be updated again.
 func (s Status) Terminal() bool {
-	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled
+	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled || s == StatusRevertFailed
 }
 
 // InvalidStatusError is the error returned when the desired operation is
@@ -288,22 +300,6 @@ func (j *Job) SetDescription(ctx context.Context, txn *kv.Txn, updateFn Descript
 	})
 }
 
-// SetDescriptorIDs updates the description of a created job.
-func (j *Job) SetDescriptorIDs(
-	ctx context.Context, txn *kv.Txn, updateFn DescriptorIdsUpdateFn,
-) error {
-	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		prev := md.Payload.DescriptorIDs
-		descIDs, err := updateFn(ctx, prev)
-		if err != nil {
-			return err
-		}
-		md.Payload.DescriptorIDs = descIDs
-		ju.UpdatePayload(md.Payload)
-		return nil
-	})
-}
-
 // SetNonCancelable updates the NonCancelable field of a created job.
 func (j *Job) SetNonCancelable(
 	ctx context.Context, txn *kv.Txn, updateFn NonCancelableUpdateFn,
@@ -327,10 +323,6 @@ type RunningStatusFn func(ctx context.Context, details jobspb.Details) (RunningS
 // DescriptionUpdateFn is a callback that computes a job's description
 // given its current one.
 type DescriptionUpdateFn func(ctx context.Context, description string) (string, error)
-
-// DescriptorIdsUpdateFn is a callback that computes a job's descriptor IDs given
-// its current one.
-type DescriptorIdsUpdateFn func(ctx context.Context, descIDs []descpb.ID) ([]descpb.ID, error)
 
 // NonCancelableUpdateFn is a callback that computes a job's non-cancelable
 // status given its current one.
@@ -604,6 +596,28 @@ func (j *Job) failed(
 	})
 }
 
+// RevertFailed marks the tracked job as having failed during revert with the
+// given error. Manual cleanup is required when the job is in this state.
+func (j *Job) revertFailed(
+	ctx context.Context, txn *kv.Txn, err error, fn func(context.Context, *kv.Txn) error,
+) error {
+	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status != StatusReverting {
+			return fmt.Errorf("job with status %s cannot fail during a revert", md.Status)
+		}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
+		}
+		ju.UpdateStatus(StatusRevertFailed)
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		md.Payload.Error = err.Error()
+		ju.UpdatePayload(md.Payload)
+		return nil
+	})
+}
+
 // succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
 func (j *Job) succeeded(
@@ -855,23 +869,14 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 		return fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
 	}
 
-	finishSpan := func() {
-		if sj.span != nil {
-			sj.span.Finish()
-		}
-	}
-
 	if err := sj.started(ctx, nil /* txn */); err != nil {
-		finishSpan()
 		return err
 	}
 
 	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(ctx context.Context) {
 		sj.execErr = sj.registry.runJob(sj.resumerCtx, sj.resumer, sj.Job, StatusRunning, sj.taskName())
 		close(sj.execDone)
-		finishSpan()
 	}); err != nil {
-		finishSpan()
 		return err
 	}
 
@@ -927,9 +932,6 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 	// Given that, proceed to clean up regardless.
 
 	sj.registry.unregister(sj.ID())
-	if sj.span != nil {
-		sj.span.Finish()
-	}
 	if sj.cancel != nil {
 		sj.cancel()
 	}

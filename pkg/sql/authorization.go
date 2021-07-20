@@ -513,13 +513,13 @@ func (p *planner) canCreateOnSchema(
 	user security.SQLUsername,
 	checkPublicSchema shouldCheckPublicSchema,
 ) error {
-	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(
+	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
 		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{})
 	if err != nil {
 		return err
 	}
 
-	switch resolvedSchema.Kind {
+	switch kind := scDesc.SchemaKind(); kind {
 	case catalog.SchemaPublic:
 		// The public schema is valid to create in if the parent database is.
 		if !checkPublicSchema {
@@ -537,11 +537,11 @@ func (p *planner) canCreateOnSchema(
 		return nil
 	case catalog.SchemaVirtual:
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"cannot CREATE on schema %s", resolvedSchema.Name)
+			"cannot CREATE on schema %s", scDesc.GetName())
 	case catalog.SchemaUserDefined:
-		return p.CheckPrivilegeForUser(ctx, resolvedSchema.Desc, privilege.CREATE, user)
+		return p.CheckPrivilegeForUser(ctx, scDesc, privilege.CREATE, user)
 	default:
-		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
+		panic(errors.AssertionFailedf("unknown schema kind %d", kind))
 	}
 }
 
@@ -554,20 +554,20 @@ func (p *planner) canResolveDescUnderSchema(
 	if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsTemporary() {
 		return nil
 	}
-	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(
+	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
 		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{})
 	if err != nil {
 		return err
 	}
 
-	switch resolvedSchema.Kind {
+	switch kind := scDesc.SchemaKind(); kind {
 	case catalog.SchemaPublic, catalog.SchemaTemporary, catalog.SchemaVirtual:
 		// Anyone can resolve under temporary, public or virtual schemas.
 		return nil
 	case catalog.SchemaUserDefined:
-		return p.CheckPrivilegeForUser(ctx, resolvedSchema.Desc, privilege.USAGE, p.User())
+		return p.CheckPrivilegeForUser(ctx, scDesc, privilege.USAGE, p.User())
 	default:
-		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
+		panic(errors.AssertionFailedf("unknown schema kind %d", kind))
 	}
 }
 
@@ -643,7 +643,7 @@ func (p *planner) HasOwnershipOnSchema(
 		// Only the node user has ownership over the system database.
 		return p.User().IsNodeUser(), nil
 	}
-	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(
+	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
 		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{},
 	)
 	if err != nil {
@@ -651,7 +651,7 @@ func (p *planner) HasOwnershipOnSchema(
 	}
 
 	hasOwnership := false
-	switch resolvedSchema.Kind {
+	switch kind := scDesc.SchemaKind(); kind {
 	case catalog.SchemaPublic:
 		// admin is the owner of the public schema.
 		hasOwnership, err = p.UserHasAdminRole(ctx, p.User())
@@ -663,14 +663,14 @@ func (p *planner) HasOwnershipOnSchema(
 	case catalog.SchemaTemporary:
 		// The user owns all the temporary schemas that they created in the session.
 		hasOwnership = p.SessionData() != nil &&
-			p.SessionData().IsTemporarySchemaID(uint32(resolvedSchema.ID))
+			p.SessionData().IsTemporarySchemaID(uint32(scDesc.GetID()))
 	case catalog.SchemaUserDefined:
-		hasOwnership, err = p.HasOwnership(ctx, resolvedSchema.Desc)
+		hasOwnership, err = p.HasOwnership(ctx, scDesc)
 		if err != nil {
 			return false, err
 		}
 	default:
-		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
+		panic(errors.AssertionFailedf("unknown schema kind %d", kind))
 	}
 
 	return hasOwnership, nil

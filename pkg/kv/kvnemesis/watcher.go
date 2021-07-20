@@ -28,17 +28,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ClosedTimestampTargetInterval allows for setting the closed timestamp target
-// interval.
-type ClosedTimestampTargetInterval interface {
-	Set(context.Context, time.Duration) error
-	ResetToDefault(context.Context) error
-}
-
 // Watcher slurps all changes that happen to some span of kvs using RangeFeed.
 type Watcher struct {
-	ct ClosedTimestampTargetInterval
-	mu struct {
+	env *Env
+	mu  struct {
 		syncutil.Mutex
 		kvs             *Engine
 		frontier        *span.Frontier
@@ -49,22 +42,23 @@ type Watcher struct {
 }
 
 // Watch starts a new Watcher over the given span of kvs. See Watcher.
-func Watch(
-	ctx context.Context, dbs []*kv.DB, ct ClosedTimestampTargetInterval, dataSpan roachpb.Span,
-) (*Watcher, error) {
+func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (*Watcher, error) {
 	if len(dbs) < 1 {
 		return nil, errors.New(`at least one db must be given`)
 	}
 	firstDB := dbs[0]
 
 	w := &Watcher{
-		ct: ct,
+		env: env,
 	}
 	var err error
 	if w.mu.kvs, err = MakeEngine(); err != nil {
 		return nil, err
 	}
-	w.mu.frontier = span.MakeFrontier(dataSpan)
+	w.mu.frontier, err = span.MakeFrontier(dataSpan)
+	if err != nil {
+		return nil, err
+	}
 	w.mu.frontierWaiters = make(map[hlc.Timestamp][]chan error)
 	ctx, w.cancel = context.WithCancel(ctx)
 	w.g = ctxgroup.WithContext(ctx)
@@ -133,11 +127,11 @@ func (w *Watcher) Finish() *Engine {
 // guaranteed to have been ingested.
 func (w *Watcher) WaitForFrontier(ctx context.Context, ts hlc.Timestamp) (retErr error) {
 	log.Infof(ctx, `watcher waiting for %s`, ts)
-	if err := w.ct.Set(ctx, 1*time.Millisecond); err != nil {
+	if err := w.env.SetClosedTimestampInterval(ctx, 1*time.Millisecond); err != nil {
 		return err
 	}
 	defer func() {
-		if err := w.ct.ResetToDefault(ctx); err != nil {
+		if err := w.env.ResetClosedTimestampInterval(ctx); err != nil {
 			retErr = errors.WithSecondaryError(retErr, err)
 		}
 	}()
@@ -196,7 +190,11 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeF
 				}
 			case *roachpb.RangeFeedCheckpoint:
 				w.mu.Lock()
-				if w.mu.frontier.Forward(e.Span, e.ResolvedTS) {
+				frontierAdvanced, err := w.mu.frontier.Forward(e.Span, e.ResolvedTS)
+				if err != nil {
+					panic(errors.Wrapf(err, "unexpected frontier error advancing to %s@%s", e.Span, e.ResolvedTS))
+				}
+				if frontierAdvanced {
 					frontier := w.mu.frontier.Frontier()
 					log.Infof(ctx, `watcher reached frontier %s lagging by %s`,
 						frontier, timeutil.Now().Sub(frontier.GoTime()))

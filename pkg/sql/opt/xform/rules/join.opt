@@ -399,16 +399,25 @@
 # As long as child.c_id = 10 and the matching row in parent are both located in
 # 'us-east1', the second plan will be much faster. But if they are located in
 # one of the other regions, the first plan would be slightly faster.
+#
+# Note: we also apply a similar optimization for other lookup joins; see
+# GenerateLocalityOptimizedLookupJoin.
 [GenerateLocalityOptimizedAntiJoin, Explore]
 (LookupJoin
     $input:*
     $on:*
     $private:* &
-        (LocalAndRemoteLookupExprsSucceeded
-            $localAndRemoteLookupExprs:(GetLocalityOptimizedAntiJoinLookupExprs
+        (IsAntiJoin $private) &
+        (Let
+            (
+                $localExpr
+                $remoteExpr
+                $ok
+            ):(GetLocalityOptimizedLookupJoinExprs
                 $input
                 $private
             )
+            $ok
         )
 )
 =>
@@ -416,14 +425,122 @@
     (LookupJoin
         $input
         $on
-        (CreateLocalityOptimizedAntiLookupJoinPrivate
-            (LocalLookupExpr $localAndRemoteLookupExprs)
+        (CreateLocalityOptimizedLookupJoinPrivate
+            $localExpr
+            (EmptyFiltersExpr)
             $private
         )
     )
     $on
-    (CreateLocalityOptimizedAntiLookupJoinPrivate
-        (RemoteLookupExpr $localAndRemoteLookupExprs)
+    (CreateLocalityOptimizedLookupJoinPrivate
+        $remoteExpr
+        (EmptyFiltersExpr)
+        $private
+    )
+)
+
+# GenerateLocalityOptimizedLookupJoin converts a semi, inner, or left lookup
+# join into a locality optimized lookup join (anti joins are handled by
+# GenerateLocalityOptimizedAntiJoin). A locality optimized lookup join is
+# designed to avoid communicating with remote nodes (relative to the gateway
+# region) if at all possible.
+#
+# A locality optimized lookup join can be planned under the following
+# conditions:
+#  - Each lookup is known to produce at most one row.
+#  - The lookup join scans multiple spans in the lookup index for each input
+#    row, with some spans targeting partitions on local nodes (relative to the
+#    gateway region), and some targeting partitions on remote nodes. It is not
+#    known which span(s) will contain the matching row(s).
+#
+# The result of GenerateLocalityOptimizedLookupJoin will be a lookup join with
+# two different sets of lookup conditions: one set targeting the local values
+# from the original join, and the other targeting the remote values. For each
+# input row, the execution engine will use the local conditions first to perform
+# the lookup, and if a matching row is found in the index, there is no need to
+# use the remote conditions. If all input rows have local matches, the execution
+# engine will never need to communicate with remote nodes.
+#
+# This is a useful optimization if there is locality of access in the workload,
+# such that rows tend to be accessed from the region where they are located. If
+# there is no locality of access, using a locality optimized lookup join could be
+# a slight pessimization, since rows residing in remote regions will be found
+# slightly more slowly than they would be otherwise.
+#
+# For example, suppose we have a multi-region database with regions 'us-east1',
+# 'us-west1' and 'europe-west1', and we have the following tables and query,
+# issued from 'us-east1':
+#
+#   CREATE TABLE parent (
+#     p_id INT PRIMARY KEY
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   CREATE TABLE child (
+#     c_id INT PRIMARY KEY,
+#     c_p_id INT REFERENCES parent (p_id)
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   SELECT * FROM parent, child WHERE c_id = 10 AND p_id = c_p_id;
+#
+# Normally, this would produce the following plan:
+#
+#   inner-join (lookup parent)
+#    ├── lookup columns are key
+#    ├── lookup expr: (p_id = c_p_id) AND (crdb_region IN ('europe-west1', 'us-east1', 'us-west1'))
+#    ├── scan child
+#    │    └── constraint: /7/5
+#    │         ├── [/'europe-west1'/10 - /'europe-west1'/10]
+#    │         ├── [/'us-east1'/10 - /'us-east1'/10]
+#    │         └── [/'us-west1'/10 - /'us-west1'/10]
+#    └── filters (true)
+#
+# but if the session setting locality_optimized_partitioned_index_scan is enabled,
+# the optimizer will produce this plan, using locality optimized search, both for
+# the scan of child and for the lookup join with parent. See the rule
+# GenerateLocalityOptimizedScan for details about how the optimization is applied
+# for scans.
+#
+#   inner-join (lookup parent)
+#    ├── lookup columns are key
+#    ├── lookup expr: (p_id = c_p_id) AND (crdb_region = 'us-east1')
+#    ├── remote lookup expr: (p_id = c_p_id) AND (crdb_region IN ('europe-west1', 'us-west1'))
+#    ├── locality-optimized-search
+#    │    ├── scan child
+#    │    │    └── constraint: /13/11: [/'us-east1'/10 - /'us-east1'/10]
+#    │    └── scan child
+#    │         └── constraint: /18/16
+#    │              ├── [/'europe-west1'/10 - /'europe-west1'/10]
+#    │              └── [/'us-west1'/10 - /'us-west1'/10]
+#    └── filters (true)
+#
+# As long as child.c_id = 10 and the matching row in parent are both located in
+# 'us-east1', the second plan will be much faster. But if they are located in
+# one of the other regions, the first plan would be slightly faster.
+[GenerateLocalityOptimizedLookupJoin, Explore]
+(LookupJoin
+    $input:*
+    $on:*
+    $private:* &
+        ^(IsAntiJoin $private) &
+        (Let
+            (
+                $localExpr
+                $remoteExpr
+                $ok
+            ):(GetLocalityOptimizedLookupJoinExprs
+                $input
+                $private
+            )
+            $ok
+        )
+)
+=>
+(LookupJoin
+    $input
+    $on
+    (CreateLocalityOptimizedLookupJoinPrivate
+        $localExpr
+        $remoteExpr
         $private
     )
 )

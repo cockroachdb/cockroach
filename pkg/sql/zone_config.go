@@ -216,7 +216,7 @@ func GetZoneConfigInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
 	id config.SystemTenantObjectID,
-	index *descpb.IndexDescriptor,
+	index catalog.Index,
 	partition string,
 	getInheritedDefault bool,
 ) (config.SystemTenantObjectID, *zonepb.ZoneConfig, *zonepb.Subzone, error) {
@@ -237,17 +237,18 @@ func GetZoneConfigInTxn(
 	}
 	var subzone *zonepb.Subzone
 	if index != nil {
+		indexID := uint32(index.GetID())
 		if placeholder != nil {
-			if subzone = placeholder.GetSubzone(uint32(index.ID), partition); subzone != nil {
-				if indexSubzone := placeholder.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
+			if subzone = placeholder.GetSubzone(indexID, partition); subzone != nil {
+				if indexSubzone := placeholder.GetSubzone(indexID, ""); indexSubzone != nil {
 					subzone.Config.InheritFromParent(&indexSubzone.Config)
 				}
 				subzone.Config.InheritFromParent(zone)
 				return placeholderID, placeholder, subzone, nil
 			}
 		} else {
-			if subzone = zone.GetSubzone(uint32(index.ID), partition); subzone != nil {
-				if indexSubzone := zone.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
+			if subzone = zone.GetSubzone(indexID, partition); subzone != nil {
+				if indexSubzone := zone.GetSubzone(indexID, ""); indexSubzone != nil {
 					subzone.Config.InheritFromParent(&indexSubzone.Config)
 				}
 				subzone.Config.InheritFromParent(zone)
@@ -328,7 +329,7 @@ func resolveZone(ctx context.Context, txn *kv.Txn, zs *tree.ZoneSpecifier) (desc
 
 func resolveSubzone(
 	zs *tree.ZoneSpecifier, table catalog.TableDescriptor,
-) (*descpb.IndexDescriptor, string, error) {
+) (catalog.Index, string, error) {
 	if !zs.TargetsTable() || zs.TableOrIndex.Index == "" && zs.Partition == "" {
 		return nil, "", nil
 	}
@@ -348,33 +349,35 @@ func resolveSubzone(
 
 	partitionName := string(zs.Partition)
 	if partitionName != "" {
-		if partitioning := tabledesc.FindIndexPartitionByName(index.IndexDesc(), partitionName); partitioning == nil {
+		if index.GetPartitioning().FindPartitionByName(partitionName) == nil {
 			return nil, "", fmt.Errorf("partition %q does not exist on index %q", partitionName, indexName)
 		}
 	}
 
-	return index.IndexDesc(), partitionName, nil
+	return index, partitionName, nil
 }
 
 func deleteRemovedPartitionZoneConfigs(
 	ctx context.Context,
 	txn *kv.Txn,
 	tableDesc catalog.TableDescriptor,
-	idxDesc *descpb.IndexDescriptor,
-	oldPartDesc *descpb.PartitioningDescriptor,
-	newPartDesc *descpb.PartitioningDescriptor,
+	indexID descpb.IndexID,
+	oldPart catalog.Partitioning,
+	newPart catalog.Partitioning,
 	execCfg *ExecutorConfig,
 ) error {
 	newNames := map[string]struct{}{}
-	for _, n := range newPartDesc.PartitionNames() {
-		newNames[n] = struct{}{}
-	}
-	removedNames := []string{}
-	for _, n := range oldPartDesc.PartitionNames() {
-		if _, exists := newNames[n]; !exists {
-			removedNames = append(removedNames, n)
+	_ = newPart.ForEachPartitionName(func(newName string) error {
+		newNames[newName] = struct{}{}
+		return nil
+	})
+	removedNames := make([]string, 0, len(newNames))
+	_ = oldPart.ForEachPartitionName(func(oldName string) error {
+		if _, exists := newNames[oldName]; !exists {
+			removedNames = append(removedNames, oldName)
 		}
-	}
+		return nil
+	})
 	if len(removedNames) == 0 {
 		return nil
 	}
@@ -385,7 +388,7 @@ func deleteRemovedPartitionZoneConfigs(
 		zone = zonepb.NewZoneConfig()
 	}
 	for _, n := range removedNames {
-		zone.DeleteSubzone(uint32(idxDesc.ID), n)
+		zone.DeleteSubzone(uint32(indexID), n)
 	}
 	hasNewSubzones := false
 	_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, hasNewSubzones)

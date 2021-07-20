@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -184,7 +183,6 @@ func backup(
 	spans := filterSpans(backupManifest.Spans, completedSpans)
 	introducedSpans := filterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans)
 
-	g := ctxgroup.WithContext(ctx)
 	pkIDs := make(map[uint64]bool)
 	for i := range backupManifest.Descriptors {
 		if t, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); t != nil {
@@ -228,17 +226,18 @@ func backup(
 	progressLogger := jobs.NewChunkProgressLogger(job, numTotalSpans, job.FractionCompleted(), jobs.ProgressUpdateOnly)
 
 	requestFinishedCh := make(chan struct{}, numTotalSpans) // enough buffer to never block
+	var jobProgressLoop func(ctx context.Context) error
 	if numTotalSpans > 0 {
-		g.GoCtx(func(ctx context.Context) error {
+		jobProgressLoop = func(ctx context.Context) error {
 			// Currently the granularity of backup progress is the % of spans
 			// exported. Would improve accuracy if we tracked the actual size of each
 			// file.
 			return progressLogger.Loop(ctx, requestFinishedCh)
-		})
+		}
 	}
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-	g.GoCtx(func(ctx context.Context) error {
+	checkpointLoop := func(ctx context.Context) error {
 		// When a processor is done exporting a span, it will send a progress update
 		// to progCh.
 		for progress := range progCh {
@@ -268,20 +267,20 @@ func backup(
 			}
 		}
 		return nil
-	})
-
-	if err := distBackup(
-		ctx,
-		execCtx,
-		planCtx,
-		dsp,
-		progCh,
-		backupSpecs,
-	); err != nil {
-		return RowCount{}, err
 	}
 
-	if err := g.Wait(); err != nil {
+	runBackup := func(ctx context.Context) error {
+		return distBackup(
+			ctx,
+			execCtx,
+			planCtx,
+			dsp,
+			progCh,
+			backupSpecs,
+		)
+	}
+
+	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, runBackup); err != nil {
 		return RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 
@@ -393,7 +392,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
-	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URI, p.User())
+	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URI, p.User())
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
@@ -428,7 +427,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
 	for kv, uri := range details.URIsByLocalityKV {
-		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, p.User())
+		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
 		if err != nil {
 			return err
 		}
@@ -472,7 +471,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			break
 		}
 
-		if !utilccl.IsDistSQLRetryableError(err) {
+		if utilccl.IsPermanentBulkJobError(err) {
 			return errors.Wrap(err, "failed to run backup")
 		}
 
@@ -483,7 +482,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		var reloadBackupErr error
 		backupManifest, reloadBackupErr = b.readManifestOnResume(ctx, p.ExecCfg(), defaultStore, details)
 		if reloadBackupErr != nil {
-			log.Warning(ctx, "could not reload backup manifest when retrying, continuing with old progress")
+			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
 		}
 	}
 	if err != nil {
@@ -525,7 +524,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 		defer c.Close()
-		if err := c.WriteFile(ctx, latestFileName, strings.NewReader(suffix)); err != nil {
+		if err := cloud.WriteFile(ctx, c, latestFileName, strings.NewReader(suffix)); err != nil {
 			return err
 		}
 	}
@@ -599,7 +598,7 @@ func (b *backupResumer) readManifestOnResume(
 		details.EncryptionOptions)
 
 	if err != nil {
-		if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return nil, errors.Wrapf(err, "reading backup checkpoint")
 		}
 		// Try reading temp checkpoint.

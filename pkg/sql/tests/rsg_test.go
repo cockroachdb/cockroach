@@ -48,9 +48,10 @@ import (
 )
 
 var (
-	flagRSGTime        = flag.Duration("rsg", 0, "random syntax generator test duration")
-	flagRSGGoRoutines  = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
-	flagRSGExecTimeout = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
+	flagRSGTime                    = flag.Duration("rsg", 0, "random syntax generator test duration")
+	flagRSGGoRoutines              = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
+	flagRSGExecTimeout             = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
+	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 2*time.Minute, "timeout duration when executing a statement for random column changes")
 )
 
 func verifyFormat(sql string) error {
@@ -120,8 +121,12 @@ type nonCrasher struct {
 func (c *nonCrasher) Error() string {
 	return c.err.Error()
 }
-
 func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) error {
+	return db.execWithTimeout(t, ctx, sql, *flagRSGExecTimeout)
+}
+func (db *verifyFormatDB) execWithTimeout(
+	t *testing.T, ctx context.Context, sql string, duration time.Duration,
+) error {
 	if err := verifyFormat(sql); err != nil {
 		db.verifyFormatErr = err
 		return err
@@ -158,7 +163,7 @@ func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) er
 			return &nonCrasher{sql: sql, err: err}
 		}
 		return nil
-	case <-time.After(*flagRSGExecTimeout):
+	case <-time.After(duration):
 		db.mu.Lock()
 		defer db.mu.Unlock()
 		b := make([]byte, 1024*1024)
@@ -396,7 +401,7 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
 		s := fmt.Sprintf("ALTER TABLE ident.ident %s", r.Generate(roots[n], 500))
-		return db.exec(t, ctx, s)
+		return db.execWithTimeout(t, ctx, s, *flagRSGExecColumnChangeTimeout)
 	})
 }
 
@@ -752,7 +757,10 @@ func testRandomSyntax(
 				countsMu.success++
 			} else {
 				if c := (*crasher)(nil); errors.As(err, &c) {
-					t.Errorf("Crash detected: \n%s\n\nStack trace:\n%s", c.sql, c.detail)
+					// NOTE: Changes to this output format must be kept in-sync
+					// with logic in CondensedMessage.RSGCrash in order for
+					// crashes to be correctly reported to Github.
+					t.Errorf("Crash detected: %s\n%s;\n\nStack trace:\n%s", c.Error(), c.sql, c.detail)
 				}
 			}
 			countsMu.Unlock()

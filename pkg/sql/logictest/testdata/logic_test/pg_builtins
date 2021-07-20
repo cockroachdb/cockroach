@@ -158,3 +158,84 @@ query TT
 SELECT pg_get_partkeydef(1), pg_get_partkeydef(NULL)
 ----
 NULL  NULL
+
+statement ok
+CREATE TABLE is_updatable(a INT PRIMARY KEY, b INT, c INT AS (b * 10) STORED);
+CREATE VIEW is_updatable_view AS SELECT a, b FROM is_updatable
+
+query TTOIIB colnames
+SELECT
+  c.relname,
+  a.attname,
+  c.oid,
+  a.attnum,
+  pg_relation_is_updatable(c.oid, false),
+  pg_column_is_updatable(c.oid, a.attnum, false)
+FROM pg_class c
+JOIN pg_attribute a ON a.attrelid = c.oid
+WHERE c.relname IN ('is_updatable', 'is_updatable_view', 'pg_class')
+ORDER BY c.oid, a.attnum
+----
+relname            attname              oid         attnum  pg_relation_is_updatable  pg_column_is_updatable
+is_updatable       a                    66          1       28                        true
+is_updatable       b                    66          2       28                        true
+is_updatable       c                    66          3       28                        false
+is_updatable_view  a                    67          1       0                         false
+is_updatable_view  b                    67          2       0                         false
+pg_class           oid                  4294967204  1       0                         false
+pg_class           relname              4294967204  2       0                         false
+pg_class           relnamespace         4294967204  3       0                         false
+pg_class           reltype              4294967204  4       0                         false
+pg_class           reloftype            4294967204  5       0                         false
+pg_class           relowner             4294967204  6       0                         false
+pg_class           relam                4294967204  7       0                         false
+pg_class           relfilenode          4294967204  8       0                         false
+pg_class           reltablespace        4294967204  9       0                         false
+pg_class           relpages             4294967204  10      0                         false
+pg_class           reltuples            4294967204  11      0                         false
+pg_class           relallvisible        4294967204  12      0                         false
+pg_class           reltoastrelid        4294967204  13      0                         false
+pg_class           relhasindex          4294967204  14      0                         false
+pg_class           relisshared          4294967204  15      0                         false
+pg_class           relpersistence       4294967204  16      0                         false
+pg_class           relistemp            4294967204  17      0                         false
+pg_class           relkind              4294967204  18      0                         false
+pg_class           relnatts             4294967204  19      0                         false
+pg_class           relchecks            4294967204  20      0                         false
+pg_class           relhasoids           4294967204  21      0                         false
+pg_class           relhaspkey           4294967204  22      0                         false
+pg_class           relhasrules          4294967204  23      0                         false
+pg_class           relhastriggers       4294967204  24      0                         false
+pg_class           relhassubclass       4294967204  25      0                         false
+pg_class           relfrozenxid         4294967204  26      0                         false
+pg_class           relacl               4294967204  27      0                         false
+pg_class           reloptions           4294967204  28      0                         false
+pg_class           relforcerowsecurity  4294967204  29      0                         false
+pg_class           relispartition       4294967204  30      0                         false
+pg_class           relispopulated       4294967204  31      0                         false
+pg_class           relreplident         4294967204  32      0                         false
+pg_class           relrewrite           4294967204  33      0                         false
+pg_class           relrowsecurity       4294967204  34      0                         false
+pg_class           relpartbound         4294967204  35      0                         false
+pg_class           relminmxid           4294967204  36      0                         false
+
+# Check that the oid does not exist. If this test fail, change the oid here and in
+# the next test at 'relation does not exist' value.
+query I
+SELECT count(1) FROM pg_class WHERE oid = 1
+----
+0
+
+query TT
+SELECT * FROM (VALUES
+   ('system column', (SELECT CAST(pg_column_is_updatable(oid, -1, true) AS TEXT) FROM pg_class WHERE relname = 'is_updatable')),
+   ('relation does not exist', CAST(pg_relation_is_updatable(1, true) AS TEXT)),
+   ('relation does not exist', CAST(pg_column_is_updatable(1, 1, true) AS TEXT)),
+   ('relation exists, but column does not', (SELECT CAST(pg_column_is_updatable(oid, 15, true) AS TEXT) FROM pg_class WHERE relname = 'is_updatable'))
+   ) AS tbl(description, value)
+ORDER BY 1
+----
+relation does not exist               0
+relation does not exist               false
+relation exists, but column does not  true
+system column                         false

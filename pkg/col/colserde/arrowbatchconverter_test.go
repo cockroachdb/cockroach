@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -33,7 +33,7 @@ func randomBatch(allocator *colmem.Allocator) ([]*types.T, coldata.Batch) {
 
 	typs := make([]*types.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
-		typs[i] = rowenc.RandType(rng)
+		typs[i] = randgen.RandType(rng)
 	}
 
 	capacity := rng.Intn(coldata.BatchSize()) + 1
@@ -145,6 +145,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		types.Decimal,
 		types.Int,
 		types.Timestamp,
+		types.Interval,
 	}
 	// numBytes corresponds 1:1 to typs and specifies how many bytes we are
 	// converting on one iteration of the benchmark for the corresponding type in
@@ -154,6 +155,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		fixedLen * int64(coldata.BatchSize()),
 		0, // The number of bytes for decimals will be set below.
 		8 * int64(coldata.BatchSize()),
+		3 * 8 * int64(coldata.BatchSize()),
 		3 * 8 * int64(coldata.BatchSize()),
 	}
 	// Run a benchmark on every type we care about.

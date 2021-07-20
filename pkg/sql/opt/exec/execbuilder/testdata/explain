@@ -134,7 +134,7 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ order: -column18,-started
+│ order: -column19,-started
 │
 └── • render
     │
@@ -208,12 +208,12 @@ vectorized: true
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column79) = (table_id)
+        │ equality: (column80) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column61) = (table_id)
+        │       │ equality: (column62) = (table_id)
         │       │
         │       ├── • render
         │       │   │
@@ -257,12 +257,12 @@ vectorized: true
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column84) = (table_id)
+        │ equality: (column85) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column66) = (table_id)
+        │       │ equality: (column67) = (table_id)
         │       │
         │       ├── • render
         │       │   │
@@ -454,7 +454,7 @@ vectorized: true
 │ order: +grantee,+privilege_type
 │
 └── • filter
-    │ filter: (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
+    │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
     │
     └── • virtual table
           table: table_privileges@primary
@@ -1101,14 +1101,12 @@ sort
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
- ├── interesting orderings: (+1)
  └── index-join tc
       ├── columns: a:1 b:2
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 75.72
       ├── fd: ()-->(1)
       ├── prune: (2)
-      ├── interesting orderings: (+1)
       └── scan tc@c
            ├── columns: a:1 rowid:3
            ├── constraint: /1/3: [/10 - /10]
@@ -1127,14 +1125,12 @@ sort
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
- ├── interesting orderings: (+1)
  └── index-join tc
       ├── columns: a:1(int!null) b:2(int)
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 75.72
       ├── fd: ()-->(1)
       ├── prune: (2)
-      ├── interesting orderings: (+1)
       └── scan tc@c
            ├── columns: a:1(int!null) rowid:3(int!null)
            ├── constraint: /1/3: [/10 - /10]
@@ -1567,3 +1563,29 @@ vectorized: true
 • insert fast path
   into: t2(x)
   auto commit
+
+statement ok
+PREPARE prep AS SELECT $1 + 1
+
+statement error EXPLAIN EXECUTE is not supported
+EXPLAIN EXECUTE prep(1)
+
+statement error EXPLAIN EXECUTE is not supported
+SELECT 1 FROM [ EXPLAIN EXECUTE prep(1) ]
+
+query T
+EXPLAIN ANALYZE EXECUTE prep(1)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
+cluster regions: <hidden>
+·
+• values
+  cluster nodes: <hidden>
+  cluster regions: <hidden>
+  actual row count: 1
+  size: 1 column, 1 row

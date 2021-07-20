@@ -55,11 +55,13 @@ import (
 // new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [uncertainty-limit=<int>[,<int>]]
 // new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>]
 //   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
-// sequence     req=<req-name>
+// sequence     req=<req-name> [eval-kind=<pess|opt|pess-after-opt]
 // finish       req=<req-name>
 //
 // handle-write-intent-error  req=<req-name> txn=<txn-name> key=<key> lease-seq=<seq>
 // handle-txn-push-error      req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
+//
+// check-opt-no-conflicts req=<req-name>
 //
 // on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u]
 // on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
@@ -74,6 +76,7 @@ import (
 // debug-lock-table
 // debug-disable-txn-pushes
 // debug-set-clock           ts=<secs>
+// debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=<count>
 // reset
 //
 func TestConcurrencyManagerBasic(t *testing.T) {
@@ -152,16 +155,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				waitPolicy := scanWaitPolicy(t, d, false /* required */)
 
 				// Each roachpb.Request is provided on an indented line.
-				var reqs []roachpb.Request
-				singleReqLines := strings.Split(d.Input, "\n")
-				for _, line := range singleReqLines {
-					req := scanSingleRequest(t, d, line, c.txnsByName)
-					reqs = append(reqs, req)
-				}
-				reqUnions := make([]roachpb.RequestUnion, len(reqs))
-				for i, req := range reqs {
-					reqUnions[i].MustSetInner(req)
-				}
+				reqs, reqUnions := scanRequests(t, d, c)
 				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
 
 				c.requestsByName[reqName] = testReq{
@@ -184,7 +178,21 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
-
+				evalKind := concurrency.PessimisticEval
+				if d.HasArg("eval-kind") {
+					var kind string
+					d.ScanArgs(t, "eval-kind", &kind)
+					switch kind {
+					case "pess":
+						evalKind = concurrency.PessimisticEval
+					case "opt":
+						evalKind = concurrency.OptimisticEval
+					case "pess-after-opt":
+						evalKind = concurrency.PessimisticAfterFailedOptimisticEval
+					default:
+						d.Fatalf(t, "unknown eval-kind: %s", kind)
+					}
+				}
 				c.mu.Lock()
 				prev := c.guardsByReqName[reqName]
 				delete(c.guardsByReqName, reqName)
@@ -192,7 +200,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				opName := fmt.Sprintf("sequence %s", reqName)
 				cancel := mon.runAsync(opName, func(ctx context.Context) {
-					guard, resp, err := m.SequenceReq(ctx, prev, req.Request)
+					guard, resp, err := m.SequenceReq(ctx, prev, req.Request, evalKind)
 					if err != nil {
 						log.Eventf(ctx, "sequencing complete, returned error: %v", err)
 					} else if resp != nil {
@@ -283,6 +291,17 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					}
 				})
 				return c.waitAndCollect(t, mon)
+
+			case "check-opt-no-conflicts":
+				var reqName string
+				d.ScanArgs(t, "req", &reqName)
+				g, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				reqs, _ := scanRequests(t, d, c)
+				_, lockSpans := c.collectSpans(t, g.Req.Txn, g.Req.Timestamp, reqs)
+				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(lockSpans))
 
 			case "on-lock-acquired":
 				var reqName string
@@ -470,6 +489,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.manual.Set(nanos)
 				return ""
 
+			case "debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache":
+				var n int
+				d.ScanArgs(t, "n", &n)
+				c.setDiscoveredLocksThresholdToConsultFinalizedTxnCache(n)
+				return ""
+
 			case "reset":
 				if n := mon.numMonitored(); n > 0 {
 					d.Fatalf(t, "%d requests still in flight", n)
@@ -489,6 +514,23 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 			}
 		})
 	})
+}
+
+func scanRequests(
+	t *testing.T, d *datadriven.TestData, c *cluster,
+) ([]roachpb.Request, []roachpb.RequestUnion) {
+	// Each roachpb.Request is provided on an indented line.
+	var reqs []roachpb.Request
+	singleReqLines := strings.Split(d.Input, "\n")
+	for _, line := range singleReqLines {
+		req := scanSingleRequest(t, d, line, c.txnsByName)
+		reqs = append(reqs, req)
+	}
+	reqUnions := make([]roachpb.RequestUnion, len(reqs))
+	for i, req := range reqs {
+		reqUnions[i].MustSetInner(req)
+	}
+	return reqs, reqUnions
 }
 
 type testReq struct {
@@ -792,13 +834,17 @@ func (c *cluster) detectDeadlocks() {
 }
 
 func (c *cluster) enableTxnPushes() {
-	concurrency.LockTableLivenessPushDelay.Override(&c.st.SV, 0*time.Millisecond)
-	concurrency.LockTableDeadlockDetectionPushDelay.Override(&c.st.SV, 0*time.Millisecond)
+	concurrency.LockTableLivenessPushDelay.Override(context.Background(), &c.st.SV, 0*time.Millisecond)
+	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &c.st.SV, 0*time.Millisecond)
 }
 
 func (c *cluster) disableTxnPushes() {
-	concurrency.LockTableLivenessPushDelay.Override(&c.st.SV, time.Hour)
-	concurrency.LockTableDeadlockDetectionPushDelay.Override(&c.st.SV, time.Hour)
+	concurrency.LockTableLivenessPushDelay.Override(context.Background(), &c.st.SV, time.Hour)
+	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &c.st.SV, time.Hour)
+}
+
+func (c *cluster) setDiscoveredLocksThresholdToConsultFinalizedTxnCache(n int) {
+	concurrency.DiscoveredLocksThresholdToConsultFinalizedTxnCache.Override(context.Background(), &c.st.SV, int64(n))
 }
 
 // reset clears all request state in the cluster. This avoids portions of tests

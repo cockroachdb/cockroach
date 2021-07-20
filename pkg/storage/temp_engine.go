@@ -36,13 +36,12 @@ func storageConfigFromTempStorageConfigAndStoreSpec(
 	config base.TempStorageConfig, spec base.StoreSpec,
 ) base.StorageConfig {
 	return base.StorageConfig{
-		Attrs: roachpb.Attributes{},
-		Dir:   config.Path,
-		// MaxSize doesn't matter for temp storage - it's not enforced in any way.
-		MaxSize:         0,
-		Settings:        config.Settings,
-		UseFileRegistry: spec.UseFileRegistry,
-		ExtraOptions:    spec.ExtraOptions,
+		Attrs:             roachpb.Attributes{},
+		Dir:               config.Path,
+		MaxSize:           0, // doesn't matter for temp storage - it's not enforced in any way.
+		Settings:          config.Settings,
+		UseFileRegistry:   spec.UseFileRegistry,
+		EncryptionOptions: spec.EncryptionOptions,
 	}
 }
 

@@ -1,0 +1,82 @@
+parse
+ALTER USER foo PASSWORD bar
+----
+ALTER USER 'foo' WITH PASSWORD '*****' -- normalized!
+ALTER USER ('foo') WITH PASSWORD '*****' -- fully parenthesized
+ALTER USER _ WITH PASSWORD '*****' -- literals removed
+ALTER USER '_' WITH PASSWORD '*****' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+ALTER USER 'foo' WITH PASSWORD '*****' -- identifiers removed
+ALTER USER 'foo' WITH PASSWORD 'bar' -- passwords exposed
+
+parse
+ALTER USER foo WITH PASSWORD bar
+----
+ALTER USER 'foo' WITH PASSWORD '*****' -- normalized!
+ALTER USER ('foo') WITH PASSWORD '*****' -- fully parenthesized
+ALTER USER _ WITH PASSWORD '*****' -- literals removed
+ALTER USER '_' WITH PASSWORD '*****' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+ALTER USER 'foo' WITH PASSWORD '*****' -- identifiers removed
+ALTER USER 'foo' WITH PASSWORD 'bar' -- passwords exposed
+
+parse
+ALTER USER foo WITH PASSWORD NULL
+----
+ALTER USER 'foo' WITH PASSWORD NULL -- normalized!
+ALTER USER ('foo') WITH PASSWORD (NULL) -- fully parenthesized
+ALTER USER _ WITH PASSWORD _ -- literals removed
+ALTER USER '_' WITH PASSWORD '*****' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+ALTER USER 'foo' WITH PASSWORD NULL -- identifiers removed
+
+parse
+ALTER ROLE foo WITH CREATEDB
+----
+ALTER ROLE 'foo' WITH CREATEDB -- normalized!
+ALTER ROLE ('foo') WITH CREATEDB -- fully parenthesized
+ALTER ROLE _ WITH CREATEDB -- literals removed
+ALTER ROLE '_' WITH CREATEDB -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+ALTER ROLE 'foo' WITH CREATEDB -- identifiers removed
+
+parse
+ALTER ROLE foo CREATEDB
+----
+ALTER ROLE 'foo' WITH CREATEDB -- normalized!
+ALTER ROLE ('foo') WITH CREATEDB -- fully parenthesized
+ALTER ROLE _ WITH CREATEDB -- literals removed
+ALTER ROLE '_' WITH CREATEDB -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+ALTER ROLE 'foo' WITH CREATEDB -- identifiers removed
+
+parse
+ALTER ROLE foo WITH CREATEROLE
+----
+ALTER ROLE 'foo' WITH CREATEROLE -- normalized!
+ALTER ROLE ('foo') WITH CREATEROLE -- fully parenthesized
+ALTER ROLE _ WITH CREATEROLE -- literals removed
+ALTER ROLE '_' WITH CREATEROLE -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+ALTER ROLE 'foo' WITH CREATEROLE -- identifiers removed
+
+parse
+ALTER ROLE foo CREATEROLE
+----
+ALTER ROLE 'foo' WITH CREATEROLE -- normalized!
+ALTER ROLE ('foo') WITH CREATEROLE -- fully parenthesized
+ALTER ROLE _ WITH CREATEROLE -- literals removed
+ALTER ROLE '_' WITH CREATEROLE -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+ALTER ROLE 'foo' WITH CREATEROLE -- identifiers removed
+
+parse
+ALTER ROLE foo CREATELOGIN
+----
+ALTER ROLE 'foo' WITH CREATELOGIN -- normalized!
+ALTER ROLE ('foo') WITH CREATELOGIN -- fully parenthesized
+ALTER ROLE _ WITH CREATELOGIN -- literals removed
+ALTER ROLE '_' WITH CREATELOGIN -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+ALTER ROLE 'foo' WITH CREATELOGIN -- identifiers removed
+
+parse
+ALTER ROLE foo NOCREATELOGIN
+----
+ALTER ROLE 'foo' WITH NOCREATELOGIN -- normalized!
+ALTER ROLE ('foo') WITH NOCREATELOGIN -- fully parenthesized
+ALTER ROLE _ WITH NOCREATELOGIN -- literals removed
+ALTER ROLE '_' WITH NOCREATELOGIN -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+ALTER ROLE 'foo' WITH NOCREATELOGIN -- identifiers removed

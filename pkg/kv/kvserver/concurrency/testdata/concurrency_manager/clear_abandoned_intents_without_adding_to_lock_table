@@ -1,0 +1,133 @@
+# -------------------------------------------------------------------------
+# A scan finds many abandoned intents from same txn that don't get added to
+# the lock table, and get resolved.
+# -------------------------------------------------------------------------
+
+# This setting causes the finalized txn cache to be consulted when discovered
+# locks > 1.
+debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=1
+----
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  scan key=a endkey=b
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1 lease-seq=1
+  intent txn=txn2 key=a
+----
+[2] handle write intent error req1: handled conflicting intents on "a", released latches
+
+debug-lock-table
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "a" (queuedWriters: 0, queuedReaders: 1)
+[3] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 1, txn: 00000001-0000-0000-0000-000000000000
+   distinguished req: 1
+local: num=0
+
+# txn1 is the distinguished waiter on key "a". It will push txn2, notice that it
+# is aborted, and then resolve key "a". This places txn2 in the finalizedTxnCache.
+on-txn-updated txn=txn2 status=aborted
+----
+[-] update txn: aborting txn2
+[3] sequence req1: resolving intent "a" for txn 00000002 with ABORTED status
+[3] sequence req1: lock wait-queue event: done waiting
+[3] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "a" for 1.234s
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+new-request name=req2 txn=txn1 ts=10,1
+  scan key=b endkey=z
+----
+
+sequence req=req2
+----
+[4] sequence req2: sequencing request
+[4] sequence req2: acquiring latches
+[4] sequence req2: scanning lock table for conflicting locks
+[4] sequence req2: sequencing complete, returned guard
+
+# The intents get resolved instead of being added to the lock table.
+handle-write-intent-error req=req2 lease-seq=1
+  intent txn=txn2 key=b
+  intent txn=txn2 key=c
+  intent txn=txn2 key=d
+  intent txn=txn2 key=e
+  intent txn=txn2 key=f
+  intent txn=txn2 key=g
+  intent txn=txn2 key=h
+  intent txn=txn2 key=i
+  intent txn=txn2 key=j
+----
+[5] handle write intent error req2: resolving a batch of 9 intent(s)
+[5] handle write intent error req2: resolving intent "b" for txn 00000002 with ABORTED status
+[5] handle write intent error req2: resolving intent "c" for txn 00000002 with ABORTED status
+[5] handle write intent error req2: resolving intent "d" for txn 00000002 with ABORTED status
+[5] handle write intent error req2: resolving intent "e" for txn 00000002 with ABORTED status
+[5] handle write intent error req2: resolving intent "f" for txn 00000002 with ABORTED status
+[5] handle write intent error req2: resolving intent "g" for txn 00000002 with ABORTED status
+[5] handle write intent error req2: resolving intent "h" for txn 00000002 with ABORTED status
+[5] handle write intent error req2: resolving intent "i" for txn 00000002 with ABORTED status
+[5] handle write intent error req2: resolving intent "j" for txn 00000002 with ABORTED status
+[5] handle write intent error req2: handled conflicting intents on "b", "c", "d", "e", "f", "g", "h", "i", "j", released latches
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+sequence req=req2
+----
+[6] sequence req2: re-sequencing request
+[6] sequence req2: acquiring latches
+[6] sequence req2: scanning lock table for conflicting locks
+[6] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----

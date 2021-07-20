@@ -49,6 +49,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,10 +59,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
 )
 
-var leaseStatusLogLimiter = log.Every(5 * time.Second)
+var leaseStatusLogLimiter = func() *log.EveryN {
+	e := log.Every(15 * time.Second)
+	e.ShouldLog() // waste the first shot
+	return &e
+}()
 
 // leaseRequestHandle is a handle to an asynchronous lease request.
 type leaseRequestHandle struct {
@@ -605,14 +611,19 @@ func (r *Replica) leaseStatus(
 			// If lease validity can't be determined (e.g. gossip is down
 			// and liveness info isn't available for owner), we can neither
 			// use the lease nor do we want to attempt to acquire it.
+			var msg redact.StringBuilder
 			if !ok {
-				if leaseStatusLogLimiter.ShouldLog() {
-					ctx = r.AnnotateCtx(ctx)
-					log.Warningf(ctx, "can't determine lease status of %s due to node liveness error: %+v",
-						lease.Replica, liveness.ErrRecordCacheMiss)
-				}
+				msg.Printf("can't determine lease status of %s due to node liveness error: %v",
+					lease.Replica, liveness.ErrRecordCacheMiss)
+			} else {
+				msg.Printf("can't determine lease status of %s because node liveness info for n%d is stale. lease: %s, liveness: %s",
+					lease.Replica, lease.Replica.NodeID, lease, l.Liveness)
+			}
+			if leaseStatusLogLimiter.ShouldLog() {
+				log.Infof(ctx, "%s", msg)
 			}
 			status.State = kvserverpb.LeaseState_ERROR
+			status.ErrInfo = msg.String()
 			return status
 		}
 		if status.Liveness.Epoch > lease.Epoch {
@@ -1095,10 +1106,13 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			switch status.State {
 			case kvserverpb.LeaseState_ERROR:
 				// Lease state couldn't be determined.
-				log.VEventf(ctx, 2, "lease state couldn't be determined")
+				msg := status.ErrInfo
+				if msg == "" {
+					msg = "lease state could not be determined"
+				}
+				log.VEventf(ctx, 2, "%s", msg)
 				return nil, false, roachpb.NewError(
-					newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
-						"lease state couldn't be determined"))
+					newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc, msg))
 
 			case kvserverpb.LeaseState_VALID, kvserverpb.LeaseState_UNUSABLE:
 				if !status.Lease.OwnedBy(r.store.StoreID()) {
@@ -1201,7 +1215,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 							var err error
 							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
 								err = descErr
-							} else if st := r.CurrentLeaseStatus(ctx); st.IsValid() {
+							} else if st := r.CurrentLeaseStatus(ctx); !st.IsValid() {
 								err = newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.Desc(),
 									"lease acquisition attempt lost to another lease, which has expired in the meantime")
 							} else {
@@ -1274,4 +1288,27 @@ func (r *Replica) maybeExtendLeaseAsync(ctx context.Context, st kvserverpb.Lease
 	}
 	// We explicitly ignore the returned handle as we won't block on it.
 	_ = r.requestLeaseLocked(ctx, st)
+}
+
+// checkLeaseRespectsPreferences checks if current replica owns the lease and
+// if it respects the lease preferences defined in the zone config. If there are no
+// preferences defined then it will return true and consider that to be in-conformance.
+func (r *Replica) checkLeaseRespectsPreferences(ctx context.Context) (bool, error) {
+	if !r.OwnsValidLease(ctx, r.store.cfg.Clock.NowAsClockTimestamp()) {
+		return false, errors.Errorf("replica %s is not the leaseholder, cannot check lease preferences", r)
+	}
+	_, zone := r.DescAndZone()
+	if len(zone.LeasePreferences) == 0 {
+		return true, nil
+	}
+	storeDesc, err := r.store.Descriptor(ctx, false /* useCached */)
+	if err != nil {
+		return false, err
+	}
+	for _, preference := range zone.LeasePreferences {
+		if constraint.ConjunctionsCheck(*storeDesc, preference.Constraints) {
+			return true, nil
+		}
+	}
+	return false, nil
 }

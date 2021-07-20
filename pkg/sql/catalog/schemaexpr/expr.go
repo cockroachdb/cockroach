@@ -25,10 +25,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// DequalifyAndValidateExpr validates that an expression has the given type
-// and contains no functions with a volatility greater than maxVolatility. The
-// type-checked and constant-folded expression and the set of column IDs within
-// the expression are returned, if valid.
+// DequalifyAndValidateExpr validates that an expression has the given type and
+// contains no functions with a volatility greater than maxVolatility. The
+// type-checked and constant-folded expression, the type of the expression, and
+// the set of column IDs within the expression are returned, if valid.
 //
 // The serialized expression is returned because returning the created
 // tree.TypedExpr would be dangerous. It contains dummyColumns which do not
@@ -43,30 +43,22 @@ func DequalifyAndValidateExpr(
 	semaCtx *tree.SemaContext,
 	maxVolatility tree.Volatility,
 	tn *tree.TableName,
-) (string, catalog.TableColSet, error) {
+) (string, *types.T, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
 	nonDropColumns := desc.NonDropColumns()
-	nonDropColumnDescs := make([]descpb.ColumnDescriptor, len(nonDropColumns))
-	for i, col := range nonDropColumns {
-		nonDropColumnDescs[i] = *col.ColumnDesc()
-	}
-
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		*tn, colinfo.ResultColumnsFromColDescs(
-			desc.GetID(),
-			nonDropColumnDescs,
-		),
+		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
 	)
 	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
 	if err != nil {
-		return "", colIDs, err
+		return "", nil, colIDs, err
 	}
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
 	replacedExpr, colIDs, err := replaceColumnVars(desc, expr)
 	if err != nil {
-		return "", colIDs, err
+		return "", nil, colIDs, err
 	}
 
 	typedExpr, err := SanitizeVarFreeExpr(
@@ -79,10 +71,10 @@ func DequalifyAndValidateExpr(
 	)
 
 	if err != nil {
-		return "", colIDs, err
+		return "", nil, colIDs, err
 	}
 
-	return tree.Serialize(typedExpr), colIDs, nil
+	return tree.Serialize(typedExpr), typedExpr.ResolvedType(), colIDs, nil
 }
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.
@@ -241,13 +233,13 @@ type nameResolver struct {
 
 // newNameResolver creates and returns a nameResolver.
 func newNameResolver(
-	evalCtx *tree.EvalContext, tableID descpb.ID, tn *tree.TableName, cols []*descpb.ColumnDescriptor,
+	evalCtx *tree.EvalContext, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
 ) *nameResolver {
 	source := colinfo.NewSourceInfoForSingleTable(
 		*tn,
-		colinfo.ResultColumnsFromColDescPtrs(tableID, cols),
+		colinfo.ResultColumnsFromColumns(tableID, cols),
 	)
-	nrc := &nameResolverIVarContainer{cols}
+	nrc := &nameResolverIVarContainer{append(make([]catalog.Column, 0, len(cols)), cols...)}
 	ivarHelper := tree.MakeIndexedVarHelper(nrc, len(cols))
 
 	return &nameResolver{
@@ -268,10 +260,10 @@ func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
 
 // addColumn adds a new column to the nameResolver so that it can be resolved in
 // future calls to resolveNames.
-func (nr *nameResolver) addColumn(col *descpb.ColumnDescriptor) {
+func (nr *nameResolver) addColumn(col catalog.Column) {
 	nr.ivarHelper.AppendSlot()
 	nr.nrc.cols = append(nr.nrc.cols, col)
-	newCols := colinfo.ResultColumnsFromColDescs(nr.tableID, []descpb.ColumnDescriptor{*col})
+	newCols := colinfo.ResultColumnsFromColumns(nr.tableID, []catalog.Column{col})
 	nr.source.SourceColumns = append(nr.source.SourceColumns, newCols...)
 }
 
@@ -285,7 +277,7 @@ func (nr *nameResolver) addIVarContainerToSemaCtx(semaCtx *tree.SemaContext) {
 // tree.IndexedVarContainer. It is used to resolve and type check columns in
 // expressions. It does not support evaluation.
 type nameResolverIVarContainer struct {
-	cols []*descpb.ColumnDescriptor
+	cols []catalog.Column
 }
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
@@ -298,7 +290,7 @@ func (nrc *nameResolverIVarContainer) IndexedVarEval(
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (nrc *nameResolverIVarContainer) IndexedVarResolvedType(idx int) *types.T {
-	return nrc.cols[idx].Type
+	return nrc.cols[idx].GetType()
 }
 
 // IndexVarNodeFormatter implements the tree.IndexedVarContainer interface.

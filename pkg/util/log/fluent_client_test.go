@@ -28,7 +28,7 @@ import (
 
 func TestFluentClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sc := Scope(t)
+	sc := ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
 	serverAddr, cleanup, fluentData := servePseudoFluent(t)

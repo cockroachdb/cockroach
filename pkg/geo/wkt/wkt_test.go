@@ -1031,6 +1031,22 @@ HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTI
 LINE 1: ...COLLECTION(LINESTRING EMPTY), LINESTRING M EMPTY)
                                          ^`,
 		},
+		{
+			desc: "geometrycollection with mixed dimensionality with multiple lines",
+			input: `GEOMETRYCOLLECTION M (
+	POINT EMPTY,
+	POINT M (-2 0 0.5),
+	LINESTRING M (0 0 200, 0.1 -1 -20),
+	POLYGON M ((0 0 7, 1 -1 -50, 2 0 0, 0 0 7)),
+	MULTIPOINT(-1 5 -16, 0.23 7.0 0),
+	MULTILINESTRING M ((0 -1 -2, 2 5 7)),
+	MULTIPOLYGON M (((0 0 0, 1 1 1, 2 3 1, 0 0 0)))
+)`,
+			expectedErrStr: `syntax error: mixed dimensionality, parsed layout is XYM but encountered layout of not XYM at line 6, pos 11
+LINE 6:  MULTIPOINT(-1 5 -16, 0.23 7.0 0),
+                   ^
+HINT: the M variant is required for non-empty XYM geometries in GEOMETRYCOLLECTIONs`,
+		},
 	}
 
 	for _, tc := range errorTestCases {

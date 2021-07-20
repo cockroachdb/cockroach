@@ -10,20 +10,25 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"go/constant"
 	"net/url"
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -48,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -65,6 +69,7 @@ const (
 	restoreOptSkipMissingSequences      = "skip_missing_sequences"
 	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	restoreOptSkipMissingViews          = "skip_missing_views"
+	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
@@ -111,14 +116,23 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	ctx := tree.NewFmtCtx(tree.FmtSerializable)
 	ctx.SetIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
 		newRef := ref
-		if rw, ok := rewrites[typedesc.UserDefinedTypeOIDToID(ref.OID)]; ok {
+		var id descpb.ID
+		id, err = typedesc.UserDefinedTypeOIDToID(ref.OID)
+		if err != nil {
+			return
+		}
+		if rw, ok := rewrites[id]; ok {
 			newRef = &tree.OIDTypeReference{OID: typedesc.TypeIDToOID(rw.ID)}
 		}
 		ctx.WriteString(newRef.SQLString())
 	})
+	if err != nil {
+		return "", err
+	}
 	ctx.FormatNode(parsed)
 	return ctx.CloseAndGetString(), nil
 }
@@ -343,11 +357,15 @@ func allocateDescriptorRewrites(
 			// Ensure that all referenced types are present.
 			if col.Type.UserDefined() {
 				// TODO (rohany): This can be turned into an option later.
-				if _, ok := typesByID[typedesc.GetTypeDescID(col.Type)]; !ok {
+				id, err := typedesc.GetUserDefinedTypeDescID(col.Type)
+				if err != nil {
+					return nil, err
+				}
+				if _, ok := typesByID[id]; !ok {
 					return nil, errors.Errorf(
 						"cannot restore table %q without referenced type %d",
 						table.Name,
-						typedesc.GetTypeDescID(col.Type),
+						id,
 					)
 				}
 			}
@@ -1020,25 +1038,37 @@ func rewriteDatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites DescRe
 
 // rewriteIDsInTypesT rewrites all ID's in the input types.T using the input
 // ID rewrite mapping.
-func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) {
+func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) error {
 	if !typ.UserDefined() {
-		return
+		return nil
+	}
+	tid, err := typedesc.GetUserDefinedTypeDescID(typ)
+	if err != nil {
+		return err
 	}
 	// Collect potential new OID values.
 	var newOID, newArrayOID oid.Oid
-	if rw, ok := descriptorRewrites[typedesc.GetTypeDescID(typ)]; ok {
+	if rw, ok := descriptorRewrites[tid]; ok {
 		newOID = typedesc.TypeIDToOID(rw.ID)
 	}
 	if typ.Family() != types.ArrayFamily {
-		if rw, ok := descriptorRewrites[typedesc.GetArrayTypeDescID(typ)]; ok {
+		tid, err = typedesc.GetUserDefinedArrayTypeDescID(typ)
+		if err != nil {
+			return err
+		}
+		if rw, ok := descriptorRewrites[tid]; ok {
 			newArrayOID = typedesc.TypeIDToOID(rw.ID)
 		}
 	}
 	types.RemapUserDefinedTypeOIDs(typ, newOID, newArrayOID)
 	// If the type is an array, then we need to rewrite the element type as well.
 	if typ.Family() == types.ArrayFamily {
-		rewriteIDsInTypesT(typ.ArrayContents(), descriptorRewrites)
+		if err := rewriteIDsInTypesT(typ.ArrayContents(), descriptorRewrites); err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 // rewriteTypeDescs rewrites all ID's in the input slice of TypeDescriptors
@@ -1070,7 +1100,9 @@ func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteM
 			}
 		case descpb.TypeDescriptor_ALIAS:
 			// We need to rewrite any ID's present in the aliased types.T.
-			rewriteIDsInTypesT(typ.Alias, descriptorRewrites)
+			if err := rewriteIDsInTypesT(typ.Alias, descriptorRewrites); err != nil {
+				return err
+			}
 		default:
 			return errors.AssertionFailedf("unknown type kind %s", t.String())
 		}
@@ -1280,7 +1312,9 @@ func RewriteTableDescs(
 		// rewriteCol is a closure that performs the ID rewrite logic on a column.
 		rewriteCol := func(col *descpb.ColumnDescriptor) error {
 			// Rewrite the types.T's IDs present in the column.
-			rewriteIDsInTypesT(col.Type, descriptorRewrites)
+			if err := rewriteIDsInTypesT(col.Type, descriptorRewrites); err != nil {
+				return err
+			}
 			var newUsedSeqRefs []descpb.ID
 			for _, seqID := range col.UsesSequenceIds {
 				if rewrite, ok := descriptorRewrites[seqID]; ok {
@@ -1383,7 +1417,7 @@ func resolveOptionsForRestoreJobDescription(
 	}
 
 	for _, uri := range kmsURIs {
-		redactedURI, err := cloudimpl.RedactKMSURI(uri)
+		redactedURI, err := cloud.RedactKMSURI(uri)
 		if err != nil {
 			return tree.RestoreOptions{}, err
 		}
@@ -1418,7 +1452,7 @@ func restoreJobDescription(
 	for i, backup := range from {
 		r.From[i] = make(tree.StringOrPlaceholderOptList, len(backup))
 		for j, uri := range backup {
-			sf, err := cloudimpl.SanitizeExternalStorageURI(uri, nil /* extraParams */)
+			sf, err := cloud.SanitizeExternalStorageURI(uri, nil /* extraParams */)
 			if err != nil {
 				return "", err
 			}
@@ -1616,19 +1650,99 @@ func checkPrivilegesForRestore(
 	// Check that none of the sources rely on implicit access.
 	for i := range from {
 		for j := range from[i] {
-			uri := from[i][j]
-			hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
+			conf, err := cloud.ExternalStorageConfFromURI(from[i][j], p.User())
 			if err != nil {
 				return err
 			}
-			if !hasExplicitAuth {
+			if !conf.AccessIsWithExplicitAuth() {
 				return pgerror.Newf(
 					pgcode.InsufficientPrivilege,
 					"only users with the admin role are allowed to RESTORE from the specified %s URI",
-					uriScheme)
+					conf.Provider.String())
 			}
 		}
 	}
+	return nil
+}
+
+func findNodeOfRegion(nodes []statuspb.NodeStatus, region descpb.RegionName) bool {
+	constraint := zonepb.Constraint{
+		Type:  zonepb.Constraint_REQUIRED,
+		Key:   "region",
+		Value: string(region),
+	}
+	for _, n := range nodes {
+		for _, store := range n.StoreStatuses {
+			if zonepb.StoreMatchesConstraint(store.Desc, constraint) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func checkClusterRegions(
+	ctx context.Context,
+	typesByID map[descpb.ID]*typedesc.Mutable,
+	ss serverpb.OptionalNodesStatusServer,
+	codec keys.SQLCodec,
+) error {
+
+	regionSet := make(map[descpb.RegionName]struct{})
+	for _, typ := range typesByID {
+		typeDesc := typedesc.NewBuilder(typ.TypeDesc()).BuildImmutableType()
+		if typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
+			regionNames, err := typeDesc.RegionNames()
+			if err != nil {
+				return err
+			}
+			for _, region := range regionNames {
+				if _, ok := regionSet[region]; !ok {
+					regionSet[region] = struct{}{}
+				}
+			}
+		}
+	}
+
+	if len(regionSet) == 0 {
+		return nil
+	}
+
+	var nodeStatusServer serverpb.NodesStatusServer
+	var err error
+	if nodeStatusServer, err = ss.OptionalNodesStatusServer(sql.MultitenancyZoneCfgIssueNo); err != nil {
+		if !codec.ForSystemTenant() {
+			hintMsg := fmt.Sprintf("only the system tenant supports localities check for restore, otherwise option %q is required", restoreOptSkipLocalitiesCheck)
+			return errors.WithHint(err, hintMsg)
+		}
+		return err
+	}
+
+	var nodesResponse *serverpb.NodesResponse
+	nodesResponse, err = nodeStatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return err
+	}
+
+	missingRegions := make([]string, 0)
+	for region := range regionSet {
+		if nodeFound := findNodeOfRegion(nodesResponse.Nodes, region); !nodeFound {
+			missingRegions = append(missingRegions, string(region))
+		}
+	}
+
+	if len(missingRegions) > 0 {
+		// Missing regions are sorted for predictable outputs in tests.
+		sort.Strings(missingRegions)
+		mismatchErr := errors.Newf("detected a mismatch in regions between the restore cluster and the backup cluster, "+
+			"missing regions detected: %s.", strings.Join(missingRegions, ", "))
+		hintsMsg := fmt.Sprintf("there are two ways you can resolve this issue: "+
+			"1) update the cluster to which you're restoring to ensure that the regions present on the nodes' "+
+			"--locality flags match those present in the backup image, or "+
+			"2) restore with the %q option", restoreOptSkipLocalitiesCheck)
+		return errors.WithHint(mismatchErr, hintsMsg)
+	}
+
 	return nil
 }
 
@@ -1731,11 +1845,56 @@ func doRestorePlan(
 		)
 	}
 
+	// wasOffline tracks which tables were in an offline or adding state at some
+	// point in the incremental chain, meaning their spans would be seeing
+	// non-transactional bulk-writes. If that backup exported those spans, then it
+	// can't be trusted for that table/index since those bulk-writes can fail to
+	// be caught by backups.
+	wasOffline := make(map[tableAndIndex]hlc.Timestamp)
+
+	for _, m := range mainBackupManifests {
+		spans := roachpb.Spans(m.Spans)
+		for i := range m.Descriptors {
+			table, _, _, _ := descpb.FromDescriptor(&m.Descriptors[i])
+			if table == nil {
+				continue
+			}
+			if err := catalog.ForEachNonDropIndex(
+				tabledesc.NewBuilder(table).BuildImmutable().(catalog.TableDescriptor),
+				func(index catalog.Index) error {
+					if index.Adding() && spans.ContainsKey(keys.TODOSQLCodec.IndexPrefix(uint32(table.ID), uint32(index.GetID()))) {
+						k := tableAndIndex{tableID: table.ID, indexID: index.GetID()}
+						if _, ok := wasOffline[k]; !ok {
+							wasOffline[k] = m.EndTime
+						}
+					}
+					return nil
+				}); err != nil {
+				return err
+			}
+		}
+	}
+
 	sqlDescs, restoreDBs, tenants, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
 	if err != nil {
 		return errors.Wrap(err,
 			"failed to resolve targets in the BACKUP location specified by the RESTORE stmt, "+
 				"use SHOW BACKUP to find correct targets")
+	}
+
+	var revalidateIndexes []jobspb.RestoreDetails_RevalidateIndex
+	for _, desc := range sqlDescs {
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+		for _, idx := range tbl.ActiveIndexes() {
+			if _, ok := wasOffline[tableAndIndex{tableID: desc.GetID(), indexID: idx.GetID()}]; ok {
+				revalidateIndexes = append(revalidateIndexes, jobspb.RestoreDetails_RevalidateIndex{
+					TableID: desc.GetID(), IndexID: idx.GetID(),
+				})
+			}
+		}
 	}
 
 	if err := maybeUpgradeTableDescsInSlice(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
@@ -1777,6 +1936,13 @@ func doRestorePlan(
 			typesByID[desc.ID] = desc
 		}
 	}
+
+	if !restoreStmt.Options.SkipLocalitiesCheck {
+		if err := checkClusterRegions(ctx, typesByID, p.ExecCfg().NodesStatusServer, p.ExecCfg().Codec); err != nil {
+			return err
+		}
+	}
+
 	filteredTablesByID, err := maybeFilterMissingViews(
 		tablesByID,
 		typesByID,
@@ -1837,6 +2003,9 @@ func doRestorePlan(
 	if err := rewriteTypeDescs(types, descriptorRewrites); err != nil {
 		return err
 	}
+	for i := range revalidateIndexes {
+		revalidateIndexes[i].TableID = descriptorRewrites[revalidateIndexes[i].TableID].ID
+	}
 
 	// Collect telemetry.
 	collectTelemetry := func() {
@@ -1869,6 +2038,7 @@ func doRestorePlan(
 			OverrideDB:         intoDB,
 			DescriptorCoverage: restoreStmt.DescriptorCoverage,
 			Encryption:         encryption,
+			RevalidateIndexes:  revalidateIndexes,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}

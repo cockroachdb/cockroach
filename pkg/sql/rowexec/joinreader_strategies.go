@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 type joinReaderStrategy interface {
@@ -28,6 +29,13 @@ type joinReaderStrategy interface {
 	// getMaxLookupKeyCols returns the maximum number of key columns used to
 	// lookup into the index.
 	getMaxLookupKeyCols() int
+	// generateRemoteSpans generates spans targeting remote nodes for the current
+	// batch of input rows. Returns an error if this is not a locality optimized
+	// lookup join.
+	generateRemoteSpans() (roachpb.Spans, error)
+	// generatedRemoteSpans returns true if generateRemoteSpans has been called on
+	// the current batch of input rows.
+	generatedRemoteSpans() bool
 	// processLookupRows consumes the rows the joinReader has buffered and should
 	// return the lookup spans.
 	processLookupRows(rows []rowenc.EncDatumRow) (roachpb.Spans, error)
@@ -57,8 +65,9 @@ type joinReaderStrategy interface {
 type joinReaderNoOrderingStrategy struct {
 	*joinerBase
 	joinReaderSpanGenerator
-	isPartialJoin bool
-	inputRows     []rowenc.EncDatumRow
+	isPartialJoin        bool
+	inputRows            []rowenc.EncDatumRow
+	remoteSpansGenerated bool
 
 	scratchMatchingInputRowIndices []int
 
@@ -101,10 +110,24 @@ func (s *joinReaderNoOrderingStrategy) getMaxLookupKeyCols() int {
 	return s.maxLookupCols()
 }
 
+func (s *joinReaderNoOrderingStrategy) generateRemoteSpans() (roachpb.Spans, error) {
+	gen, ok := s.joinReaderSpanGenerator.(*localityOptimizedSpanGenerator)
+	if !ok {
+		return nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
+	}
+	s.remoteSpansGenerated = true
+	return gen.generateRemoteSpans(s.inputRows)
+}
+
+func (s *joinReaderNoOrderingStrategy) generatedRemoteSpans() bool {
+	return s.remoteSpansGenerated
+}
+
 func (s *joinReaderNoOrderingStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
 	s.inputRows = rows
+	s.remoteSpansGenerated = false
 	s.emitState.unmatchedInputRowIndicesInitialized = false
 	return s.generateSpans(s.inputRows)
 }
@@ -247,6 +270,14 @@ func (s *joinReaderIndexJoinStrategy) getMaxLookupKeyCols() int {
 	return s.maxLookupCols()
 }
 
+func (s *joinReaderIndexJoinStrategy) generateRemoteSpans() (roachpb.Spans, error) {
+	return nil, errors.AssertionFailedf("generateRemoteSpans called on an index join")
+}
+
+func (s *joinReaderIndexJoinStrategy) generatedRemoteSpans() bool {
+	return false
+}
+
 func (s *joinReaderIndexJoinStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
@@ -292,7 +323,8 @@ type joinReaderOrderingStrategy struct {
 	joinReaderSpanGenerator
 	isPartialJoin bool
 
-	inputRows []rowenc.EncDatumRow
+	inputRows            []rowenc.EncDatumRow
+	remoteSpansGenerated bool
 
 	// inputRowIdxToLookedUpRowIndices is a multimap from input row indices to
 	// corresponding looked up row indices. It's populated in the
@@ -337,6 +369,19 @@ func (s *joinReaderOrderingStrategy) getMaxLookupKeyCols() int {
 	return s.maxLookupCols()
 }
 
+func (s *joinReaderOrderingStrategy) generateRemoteSpans() (roachpb.Spans, error) {
+	gen, ok := s.joinReaderSpanGenerator.(*localityOptimizedSpanGenerator)
+	if !ok {
+		return nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
+	}
+	s.remoteSpansGenerated = true
+	return gen.generateRemoteSpans(s.inputRows)
+}
+
+func (s *joinReaderOrderingStrategy) generatedRemoteSpans() bool {
+	return s.remoteSpansGenerated
+}
+
 func (s *joinReaderOrderingStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
@@ -354,6 +399,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 	}
 
 	s.inputRows = rows
+	s.remoteSpansGenerated = false
 	return s.generateSpans(s.inputRows)
 }
 

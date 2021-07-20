@@ -142,20 +142,7 @@ func columnIsDependedOn(tx *pgx.Tx, tableName *tree.TableName, columnName string
 }
 
 func colIsPrimaryKey(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
-	return scanBool(tx, `
-	SELECT EXISTS(
-				SELECT column_name
-				  FROM information_schema.table_constraints AS c
-				  JOIN information_schema.constraint_column_usage
-								AS ccu ON ccu.table_name = c.table_name
-				      AND ccu.table_schema = c.table_schema
-				      AND ccu.constraint_name = c.constraint_name
-				 WHERE c.table_schema = $1
-				   AND c.table_name = $2
-				   AND ccu.column_name = $3
-				   AND c.constraint_type = 'PRIMARY KEY'
-       );
-	`, tableName.Schema(), tableName.Object(), columnName)
+	return columnsStoredInPrimaryIdx(tx, tableName, tree.NameList([]tree.Name{tree.Name(columnName)}))
 }
 
 // valuesViolateUniqueConstraints determines if any unique constraints (including primary constraints)
@@ -333,7 +320,7 @@ func columnsStoredInPrimaryIdx(
 	}
 
 	primaryColumns, err := scanStringArray(tx, `
-	SELECT array_agg(column_name)
+		SELECT array_agg(column_name)
 	  FROM (
 	        SELECT DISTINCT column_name
 	          FROM information_schema.statistics
@@ -785,5 +772,195 @@ SELECT
 `,
 		enum,
 		val,
+	)
+}
+
+// tableHasOngoingSchemaChanges returns whether the table has any mutations lined up.
+func tableHasOngoingSchemaChanges(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(
+		tx,
+		`
+		SELECT json_array_length(
+        crdb_internal.pb_to_json(
+            'cockroach.sql.sqlbase.Descriptor',
+            descriptor
+        )->'table'->'mutations'
+       )
+       > 0
+		FROM system.descriptor
+	  WHERE id = $1::REGCLASS
+		`,
+		tableName.String(),
+	)
+}
+
+// tableHasOngoingAlterPKSchemaChanges checks whether a given table has an ALTER
+// PRIMARY KEY related change in progress.
+func tableHasOngoingAlterPKSchemaChanges(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id = $1::REGCLASS
+		)
+SELECT
+	EXISTS(
+		SELECT
+			mut
+		FROM
+			(
+				SELECT
+					json_array_elements(d->'mutations')
+						AS mut
+				FROM
+					descriptors
+			)
+		WHERE
+			(mut->'primaryKeySwap') IS NOT NULL
+	);
+		`,
+		tableName.String(),
+	)
+}
+
+// tableIsRegionalByRow checks whether the given table is a REGIONAL BY ROW table.
+func tableIsRegionalByRow(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id = $1::REGCLASS
+		)
+SELECT
+	EXISTS(
+		SELECT
+			1
+		FROM
+			descriptors
+		WHERE
+			d->'localityConfig'->'regionalByRow' IS NOT NULL
+	);
+		`,
+		tableName.String(),
+	)
+}
+
+// databaseHasRegionChange determines whether the database is currently undergoing
+// a region change.
+func databaseHasRegionChange(tx *pgx.Tx) (bool, error) {
+	isMultiRegion, err := scanBool(
+		tx,
+		`SELECT EXISTS (SELECT * FROM [SHOW REGIONS FROM DATABASE])`,
+	)
+	if err != nil || (!isMultiRegion && err == nil) {
+		return false, err
+	}
+	return scanBool(
+		tx,
+		`
+WITH enum_members AS (
+	SELECT
+				json_array_elements(
+						crdb_internal.pb_to_json(
+								'cockroach.sql.sqlbase.Descriptor',
+								descriptor
+						)->'type'->'enumMembers'
+				)
+				AS v
+		FROM
+				system.descriptor
+		WHERE
+				id = ('public.crdb_internal_region'::REGTYPE::INT8 - 100000)
+)
+SELECT EXISTS (
+	SELECT 1 FROM enum_members
+	WHERE v->>'direction' <> 'NONE'
+)
+		`,
+	)
+}
+
+// databaseHasOngoingAlterPKChanges checks whether a given database has any tables
+// which are currently undergoing a change to or from REGIONAL BY ROW, or
+// REGIONAL BY ROW tables with schema changes on it.
+func databaseHasRegionalByRowChange(tx *pgx.Tx) (bool, error) {
+	return scanBool(
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id IN (
+					SELECT id FROM system.namespace
+					WHERE "parentID" = (
+						SELECT id FROM system.namespace
+						WHERE name = (SELECT database FROM [SHOW DATABASE])
+						AND "parentID" = 0
+					) AND "parentSchemaID" <> 0
+				)
+		)
+SELECT (
+	EXISTS(
+		SELECT
+			mut
+		FROM
+			(
+				-- no schema changes on regional by row tables
+				SELECT
+					json_array_elements(d->'mutations')
+						AS mut
+				FROM (
+					SELECT
+						d
+					FROM
+						descriptors
+					WHERE
+						d->'localityConfig'->'regionalByRow' IS NOT NULL
+				)
+			)
+	) OR EXISTS (
+		-- no primary key swaps in the current database
+		SELECT mut FROM (
+			SELECT
+				json_array_elements(d->'mutations')
+					AS mut
+			FROM descriptors
+		)
+		WHERE
+			(mut->'primaryKeySwap') IS NOT NULL
+	)
+);
+		`,
 	)
 }

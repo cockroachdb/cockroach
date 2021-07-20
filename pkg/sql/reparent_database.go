@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -68,13 +69,13 @@ func (p *planner) ReparentDatabase(
 
 	sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaReparentDatabase)
 
-	_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
 
-	_, parent, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Parent),
+	parent, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Parent),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
@@ -114,6 +115,16 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+
+	// Not all Privileges on databases are valid on schemas.
+	// Remove any privileges that are not valid for schemas.
+	schemaPrivs := privilege.GetValidPrivilegesForObject(privilege.Schema).ToBitField()
+	privs := n.db.GetPrivileges()
+	for i, u := range privs.Users {
+		// Remove privileges that are valid for databases but not for schemas.
+		privs.Users[i].Privileges = u.Privileges & schemaPrivs
+	}
+
 	schema := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   n.newParent.ID,
 		Name:       n.db.Name,
@@ -144,7 +155,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	b := p.txn.NewBatch()
 
 	// Get all objects under the target database.
-	objNames, err := resolver.GetObjectNames(ctx, p.txn, p, codec, n.db, tree.PublicSchema, true /* explicitPrefix */)
+	objNames, _, err := resolver.GetObjectNamesAndIDs(ctx, p.txn, p, codec, n.db, tree.PublicSchema, true /* explicitPrefix */)
 	if err != nil {
 		return err
 	}

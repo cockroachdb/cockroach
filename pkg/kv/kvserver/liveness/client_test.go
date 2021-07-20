@@ -220,7 +220,10 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	log.Infof(ctx, "checking status map")
 
 	// See what comes up in the status.
-	admin := tc.GetAdminClient(ctx, t, 0)
+	admin, err := tc.GetAdminClient(ctx, t, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	type testCase struct {
 		nodeID         roachpb.NodeID
@@ -248,8 +251,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 				// doesn't allow durations below 1m15s, which is much too long
 				// for a test.
 				// We do this in every SucceedsSoon attempt, so we'll be good.
-				kvserver.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
-					kvserver.TestTimeUntilStoreDead)
+				kvserver.TimeUntilStoreDead.Override(ctx, &firstServer.ClusterSettings().SV, kvserver.TestTimeUntilStoreDead)
 
 				log.Infof(ctx, "checking expected status (%s) for node %d", expectedStatus, nodeID)
 				resp, err := admin.Liveness(ctx, &serverpb.LivenessRequest{})

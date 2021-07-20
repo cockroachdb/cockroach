@@ -11,7 +11,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Tooltip } from "src/components";
-import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
 
 export class JobDescriptionCell extends React.PureComponent<{ job: Job }> {
@@ -25,26 +25,34 @@ export class JobDescriptionCell extends React.PureComponent<{ job: Job }> {
       job.description && job.description.length > 425
         ? `${job.description.slice(0, 425)}...`
         : job.description;
+
+    const cellContent = (
+      <div className="jobs-table__cell--description">
+        {job.statement || job.description || job.type}
+      </div>
+    );
     return (
       <Link className={`${additionalStyle}`} to={`jobs/${String(job.id)}`}>
         <div className="cl-table-link__tooltip">
-          <Tooltip
-            arrowPointAtCenter
-            placement="bottom"
-            title={
-              <pre
-                style={{ whiteSpace: "pre-wrap" }}
-                className="cl-table-link__description"
-              >
-                {description}
-              </pre>
-            }
-            overlayClassName="cl-table-link__statement-tooltip--fixed-width"
-          >
-            <div className="jobs-table__cell--description">
-              {job.statement || job.description}
-            </div>
-          </Tooltip>
+          {description ? (
+            <Tooltip
+              arrowPointAtCenter
+              placement="bottom"
+              title={
+                <pre
+                  style={{ whiteSpace: "pre-wrap" }}
+                  className="cl-table-link__description"
+                >
+                  {description}
+                </pre>
+              }
+              overlayClassName="cl-table-link__statement-tooltip--fixed-width"
+            >
+              {cellContent}
+            </Tooltip>
+          ) : (
+            cellContent
+          )}
         </div>
       </Link>
     );

@@ -35,3 +35,51 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"0"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# [0, 1, 0, 1, 0, 0, 0, 0, 0, 1] = binary 1E+4
+# [0, 1, 0, 1, 0, 0, 0, 0, 0, 10] = binary 10E+4
+send
+Parse {"Name": "s1", "Query": "SELECT 10000::decimal, $1::decimal, $2::decimal"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [1], "Parameters": [[0, 1, 0, 1, 0, 0, 0, 0, 0, 1], [0, 1, 0, 1, 0, 0, 0, 0, 0, 10]]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+# CockroachDB intentionally uses exponents for decimals like 1E+4, as
+# oppposed to Postgres, which returns 10000.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"10000"},{"text":"1E+4"},{"text":"1.0E+5"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"10000"},{"text":"10000"},{"text":"100000"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# ResultFormatCodes [1] = FormatBinary
+# [0, 1, 0, 1, 0, 0, 0, 0, 0, 1] = binary 1E+4
+# [0, 1, 0, 1, 0, 0, 0, 0, 0, 10] = binary 10E+4
+send
+Parse {"Name": "s2", "Query": "SELECT 10000::decimal, $1::decimal, $2::decimal"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [1], "Parameters": [[0, 1, 0, 1, 0, 0, 0, 0, 0, 1], [0, 1, 0, 1, 0, 0, 0, 0, 0, 10]], "ResultFormatCodes": [1,1, 1]}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"00010001000000000001"},{"binary":"00010001000000000001"},{"binary":"0001000100000000000a"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

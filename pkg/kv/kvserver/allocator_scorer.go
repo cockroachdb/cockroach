@@ -407,22 +407,41 @@ func (cl candidateList) removeCandidate(c candidate) candidateList {
 // rankedCandidateListForAllocation creates a candidate list of all stores that
 // can be used for allocating a new replica ordered from the best to the worst.
 // Only stores that meet the criteria are included in the list.
+//
+// NB: When `allowMultipleReplsPerNode` is set to false, we disregard the
+// *nodes* of `existingReplicas`. Otherwise, we disregard only the *stores* of
+// `existingReplicas`. For instance, `allowMultipleReplsPerNode` is set to true
+// by callers performing lateral relocation of replicas within the same node.
 func rankedCandidateListForAllocation(
 	ctx context.Context,
 	candidateStores StoreList,
 	constraintsCheck constraintsCheckFn,
 	existingReplicas []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
-	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
+	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
+	allowMultipleReplsPerNode bool,
 	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
+	existingReplTargets := roachpb.MakeReplicaSet(existingReplicas).ReplicationTargets()
 	for _, s := range candidateStores.stores {
-		if nodeHasReplica(s.Node.NodeID, existingReplicas) {
+		// Disregard all the stores that already have replicas.
+		if storeHasReplica(s.StoreID, existingReplTargets) {
 			continue
 		}
-		if !isNodeValidForRoutineReplicaTransfer(ctx, s.Node.NodeID) {
-			log.VEventf(ctx, 3, "not considering non-ready node n%d for allocate", s.Node.NodeID)
+		// Unless the caller specifically allows us to allocate multiple replicas on
+		// the same node, we disregard nodes with existing replicas.
+		if !allowMultipleReplsPerNode && nodeHasReplica(s.Node.NodeID, existingReplTargets) {
+			continue
+		}
+		if !isStoreValidForRoutineReplicaTransfer(ctx, s.StoreID) {
+			log.VEventf(
+				ctx,
+				3,
+				"not considering store s%d as a potential rebalance candidate because it is on a non-live node n%d",
+				s.StoreID,
+				s.Node.NodeID,
+			)
 			continue
 		}
 		constraintsOK, necessary := constraintsCheck(s)
@@ -518,35 +537,38 @@ func rankedCandidateListForRemoval(
 	return candidates
 }
 
+// rebalanceOptions contains two candidate lists:
+//
+// 1. a ranked list of existing replicas ordered from best to worst -- i.e.
+// least qualified for rebalancing to most qualified (see `candidateList.best()`
+// and `candidateList.worst()`)
+// 2. a corresponding list of comparable stores that could be legal replacements
+// for the aforementioned existing replicas -- also ordered from `best()` to
+// `worst()`.
 type rebalanceOptions struct {
 	existingCandidates candidateList
 	candidates         candidateList
 }
 
-// rankedCandidateListForRebalancing creates two candidate lists. The first
-// contains all existing replica's stores, ordered from least qualified for
-// rebalancing to most qualified. The second list is of all potential stores
-// that could be used as rebalancing receivers, ordered from best to worst.
+// rankedCandidateListForRebalancing returns a list of `rebalanceOptions`, i.e.
+// groups of candidate stores and the existing replicas that they could legally
+// replace in the range. See comment above `rebalanceOptions()` for more
+// details.
 func rankedCandidateListForRebalancing(
 	ctx context.Context,
 	allStores StoreList,
 	removalConstraintsChecker constraintsCheckFn,
 	rebalanceConstraintsChecker rebalanceConstraintsCheckFn,
-	existingReplicasForType, replicasWithExcludedStores []roachpb.ReplicaDescriptor,
+	existingReplicasForType, replicasOnExemptedStores []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
-	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
+	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	options scorerOptions,
-	replicaType targetReplicaType,
 ) []rebalanceOptions {
 	// 1. Determine whether existing replicas are valid and/or necessary.
 	existingStores := make(map[roachpb.StoreID]candidate)
 	var needRebalanceFrom bool
 	curDiversityScore := rangeDiversityScore(existingStoreLocalities)
 	for _, store := range allStores.stores {
-		if !isNodeValidForRoutineReplicaTransfer(ctx, store.Node.NodeID) {
-			log.VEventf(ctx, 3, "not considering non-ready node n%d for rebalance", store.Node.NodeID)
-			continue
-		}
 		for _, repl := range existingReplicasForType {
 			if store.StoreID != repl.StoreID {
 				continue
@@ -619,10 +641,20 @@ func rankedCandidateListForRebalancing(
 		}
 		var comparableCands candidateList
 		for _, store := range allStores.stores {
-			// Ignore any stores that contain any of the replicas within
-			// `replicasWithExcludedStores`.
-			for _, excluded := range replicasWithExcludedStores {
-				if store.StoreID == excluded.StoreID {
+			// Ignore any stores on dead nodes or stores that contain any of the
+			// replicas within `replicasOnExemptedStores`.
+			if !isStoreValidForRoutineReplicaTransfer(ctx, store.StoreID) {
+				log.VEventf(
+					ctx,
+					3,
+					"not considering store s%d as a potential rebalance candidate because it is on a non-live node n%d",
+					store.StoreID,
+					store.Node.NodeID,
+				)
+				continue
+			}
+			for _, replOnExemptedStore := range replicasOnExemptedStores {
+				if store.StoreID == replOnExemptedStore.StoreID {
 					continue
 				}
 			}
@@ -887,7 +919,7 @@ func shouldRebalanceBasedOnRangeCount(
 
 // nodeHasReplica returns true if the provided NodeID contains an entry in
 // the provided list of existing replicas.
-func nodeHasReplica(nodeID roachpb.NodeID, existing []roachpb.ReplicaDescriptor) bool {
+func nodeHasReplica(nodeID roachpb.NodeID, existing []roachpb.ReplicationTarget) bool {
 	for _, r := range existing {
 		if r.NodeID == nodeID {
 			return true

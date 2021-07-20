@@ -35,7 +35,6 @@ import (
 // Limiters is the collection of per-store limits used during cmd evaluation.
 type Limiters struct {
 	BulkIOWriteRate              *rate.Limiter
-	ConcurrentImportRequests     limit.ConcurrentRequestLimiter
 	ConcurrentExportRequests     limit.ConcurrentRequestLimiter
 	ConcurrentAddSSTableRequests limit.ConcurrentRequestLimiter
 	// concurrentRangefeedIters is a semaphore used to limit the number of
@@ -87,11 +86,20 @@ type EvalContext interface {
 	// results due to concurrent writes.
 	GetMVCCStats() enginepb.MVCCStats
 
-	// GetSplitQPS returns the queries/s request rate for this range.
+	// GetMaxSplitQPS returns the Replicas maximum queries/s request rate over a
+	// configured retention period.
 	//
-	// NOTE: This should not be used when the load based splitting cluster
-	// setting is disabled.
-	GetSplitQPS() float64
+	// NOTE: This should not be used when the load based splitting cluster setting
+	// is disabled.
+	GetMaxSplitQPS() (float64, bool)
+
+	// GetLastSplitQPS returns the Replica's most recent queries/s request rate.
+	//
+	// NOTE: This should not be used when the load based splitting cluster setting
+	// is disabled.
+	//
+	// TODO(nvanbenschoten): remove this method in v22.1.
+	GetLastSplitQPS() float64
 
 	GetGCThreshold() hlc.Timestamp
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
@@ -219,7 +227,10 @@ func (m *mockEvalCtxImpl) ContainsKey(key roachpb.Key) bool {
 func (m *mockEvalCtxImpl) GetMVCCStats() enginepb.MVCCStats {
 	return m.Stats
 }
-func (m *mockEvalCtxImpl) GetSplitQPS() float64 {
+func (m *mockEvalCtxImpl) GetMaxSplitQPS() (float64, bool) {
+	return m.QPS, true
+}
+func (m *mockEvalCtxImpl) GetLastSplitQPS() float64 {
 	return m.QPS
 }
 func (m *mockEvalCtxImpl) CanCreateTxnRecord(

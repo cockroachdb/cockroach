@@ -189,6 +189,9 @@ func tryNewOnDeleteFastCascadeBuilder(
 		if memo.CanBeCompositeSensitive(md, &sel.Filters) {
 			return nil, false
 		}
+		if sel.Relational().HasSubquery {
+			return nil, false
+		}
 		filters = sel.Filters
 
 	case opt.ScanOp:
@@ -499,13 +502,20 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	bindingProps *props.Relational,
 	oldValues opt.ColList,
 ) (outScope *scope) {
+	// We must fetch virtual computed columns for cascades that result in an
+	// update to the child table. The execution engine requires that the fetch
+	// columns are a superset of the update columns. See the related panic in
+	// execFactory.ConstructUpdate.
+	action := fk.DeleteReferenceAction()
+	fetchVirtualComputedCols := action == tree.SetNull || action == tree.SetDefault
+
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
 			includeMutations:       false,
 			includeSystem:          false,
 			includeVirtualInverted: false,
-			includeVirtualComputed: false,
+			includeVirtualComputed: fetchVirtualComputedCols,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -740,13 +750,16 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	oldValues opt.ColList,
 	newValues opt.ColList,
 ) (outScope *scope) {
+	// We must fetch virtual computed columns for cascades. The execution engine
+	// requires that the fetch columns are a superset of the update columns. See
+	// the related panic in execFactory.ConstructUpdate.
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
 			includeMutations:       false,
 			includeSystem:          false,
 			includeVirtualInverted: false,
-			includeVirtualComputed: false,
+			includeVirtualComputed: true,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -858,10 +871,12 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 		outScope.expr, mutationInput, on, memo.EmptyJoinPrivate,
 	)
 	// Append the columns from the right-hand side to the scope.
-	for _, col := range outCols {
+	for i, col := range outCols {
 		colMeta := md.ColumnMeta(col)
+		ord := fk.OriginColumnOrdinal(childTable, i%numFKCols)
+		c := childTable.Column(ord)
 		outScope.cols = append(outScope.cols, scopeColumn{
-			name: tree.Name(colMeta.Alias),
+			name: scopeColName(c.ColName()),
 			id:   col,
 			typ:  colMeta.Type,
 		})

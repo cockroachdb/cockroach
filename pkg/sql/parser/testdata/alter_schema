@@ -1,0 +1,31 @@
+parse
+ALTER SCHEMA s RENAME TO s2
+----
+ALTER SCHEMA s RENAME TO s2
+ALTER SCHEMA s RENAME TO s2 -- fully parenthesized
+ALTER SCHEMA s RENAME TO s2 -- literals removed
+ALTER SCHEMA _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER SCHEMA s OWNER TO foo
+----
+ALTER SCHEMA s OWNER TO foo
+ALTER SCHEMA s OWNER TO foo -- fully parenthesized
+ALTER SCHEMA s OWNER TO foo -- literals removed
+ALTER SCHEMA _ OWNER TO _ -- identifiers removed
+
+parse
+ALTER SCHEMA db.s RENAME TO s2
+----
+ALTER SCHEMA db.s RENAME TO s2
+ALTER SCHEMA db.s RENAME TO s2 -- fully parenthesized
+ALTER SCHEMA db.s RENAME TO s2 -- literals removed
+ALTER SCHEMA _._ RENAME TO _ -- identifiers removed
+
+parse
+ALTER SCHEMA db.s OWNER TO foo
+----
+ALTER SCHEMA db.s OWNER TO foo
+ALTER SCHEMA db.s OWNER TO foo -- fully parenthesized
+ALTER SCHEMA db.s OWNER TO foo -- literals removed
+ALTER SCHEMA _._ OWNER TO _ -- identifiers removed

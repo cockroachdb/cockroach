@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -51,6 +53,8 @@ func initCLIDefaults() {
 	setStmtDiagContextDefaults()
 	setAuthContextDefaults()
 	setImportContextDefaults()
+	setProxyContextDefaults()
+	setTestDirectorySvrContextDefaults()
 
 	initPreFlagsDefaults()
 
@@ -315,7 +319,9 @@ func setSQLContextDefaults() {
 
 // zipCtx captures the command-line parameters of the `zip` command.
 // See below for defaults.
-var zipCtx struct {
+var zipCtx zipContext
+
+type zipContext struct {
 	nodes nodeSelection
 
 	// redactLogs indicates whether log files should be redacted
@@ -324,6 +330,13 @@ var zipCtx struct {
 
 	// Duration (in seconds) to run CPU profile for.
 	cpuProfDuration time.Duration
+
+	// How much concurrency to use during the collection. The code
+	// attempts to access multiple nodes concurrently by default.
+	concurrency int
+
+	// The log/heap/etc files to include.
+	files fileSelection
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -331,8 +344,18 @@ var zipCtx struct {
 // test that exercises command-line parsing.
 func setZipContextDefaults() {
 	zipCtx.nodes = nodeSelection{}
+	zipCtx.files = fileSelection{}
 	zipCtx.redactLogs = false
 	zipCtx.cpuProfDuration = 5 * time.Second
+	zipCtx.concurrency = 15
+
+	// File selection covers the last 48 hours by default.
+	// We add 24 hours to now for the end timestamp to ensure
+	// that files created during the zip operation are
+	// also included.
+	now := timeutil.Now()
+	zipCtx.files.startTimestamp = timestampValue(now.Add(-48 * time.Hour))
+	zipCtx.files.endTimestamp = timestampValue(now.Add(24 * time.Hour))
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.
@@ -384,6 +407,8 @@ var debugCtx struct {
 	printSystemConfig bool
 	maxResults        int
 	decodeAsTableDesc string
+	verbose           bool
+	keyTypes          keyTypeFilter
 }
 
 // setDebugContextDefaults set the default values in debugCtx.  This
@@ -391,7 +416,7 @@ var debugCtx struct {
 // test that exercises command-line parsing.
 func setDebugContextDefaults() {
 	debugCtx.startKey = storage.NilKey
-	debugCtx.endKey = storage.MVCCKeyMax
+	debugCtx.endKey = storage.NilKey
 	debugCtx.values = false
 	debugCtx.sizes = false
 	debugCtx.replicated = false
@@ -400,6 +425,8 @@ func setDebugContextDefaults() {
 	debugCtx.maxResults = 0
 	debugCtx.printSystemConfig = false
 	debugCtx.decodeAsTableDesc = ""
+	debugCtx.verbose = false
+	debugCtx.keyTypes = showAll
 }
 
 // startCtx captures the command-line arguments for the `start` command.
@@ -589,6 +616,33 @@ func setImportContextDefaults() {
 	importCtx.ignoreUnsupported = false
 	importCtx.ignoreUnsupportedLog = ""
 	importCtx.rowLimit = 0
+}
+
+// proxyContext captures the command-line parameters of the `mt start-proxy` command.
+var proxyContext sqlproxyccl.ProxyOptions
+
+func setProxyContextDefaults() {
+	proxyContext.Denylist = ""
+	proxyContext.ListenAddr = "127.0.0.1:46257"
+	proxyContext.ListenCert = ""
+	proxyContext.ListenKey = ""
+	proxyContext.MetricsAddress = "0.0.0.0:8080"
+	proxyContext.RoutingRule = ""
+	proxyContext.DirectoryAddr = ""
+	proxyContext.SkipVerify = false
+	proxyContext.Insecure = false
+	proxyContext.RatelimitBaseDelay = 50 * time.Millisecond
+	proxyContext.ValidateAccessInterval = 30 * time.Second
+	proxyContext.PollConfigInterval = 30 * time.Second
+	proxyContext.IdleTimeout = 0
+}
+
+var testDirectorySvrContext struct {
+	port int
+}
+
+func setTestDirectorySvrContextDefaults() {
+	testDirectorySvrContext.port = 36257
 }
 
 // GetServerCfgStores provides direct public access to the StoreSpecList inside

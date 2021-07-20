@@ -12,6 +12,7 @@ package spanset
 
 import (
 	"context"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -289,6 +290,48 @@ func (i *EngineIterator) PrevEngineKey() (valid bool, err error) {
 	return i.checkKeyAllowed()
 }
 
+// SeekEngineKeyGEWithLimit is part of the storage.EngineIterator interface.
+func (i *EngineIterator) SeekEngineKeyGEWithLimit(
+	key storage.EngineKey, limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	state, err = i.i.SeekEngineKeyGEWithLimit(key, limit)
+	if state != pebble.IterValid {
+		return state, err
+	}
+	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+		return pebble.IterExhausted, err
+	}
+	return state, err
+}
+
+// SeekEngineKeyLTWithLimit is part of the storage.EngineIterator interface.
+func (i *EngineIterator) SeekEngineKeyLTWithLimit(
+	key storage.EngineKey, limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	state, err = i.i.SeekEngineKeyLTWithLimit(key, limit)
+	if state != pebble.IterValid {
+		return state, err
+	}
+	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
+		return pebble.IterExhausted, err
+	}
+	return state, err
+}
+
+// NextEngineKeyWithLimit is part of the storage.EngineIterator interface.
+func (i *EngineIterator) NextEngineKeyWithLimit(
+	limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	return i.i.NextEngineKeyWithLimit(limit)
+}
+
+// PrevEngineKeyWithLimit is part of the storage.EngineIterator interface.
+func (i *EngineIterator) PrevEngineKeyWithLimit(
+	limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	return i.i.PrevEngineKeyWithLimit(limit)
+}
+
 func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
 	key, err := i.i.UnsafeEngineKey()
 	if err != nil {
@@ -336,6 +379,11 @@ func (i *EngineIterator) GetRawIter() *pebble.Iterator {
 	return i.i.GetRawIter()
 }
 
+// Stats is part of the storage.EngineIterator interface.
+func (i *EngineIterator) Stats() storage.IteratorStats {
+	return i.i.Stats()
+}
+
 type spanSetReader struct {
 	r     storage.Reader
 	spans *SpanSet
@@ -361,9 +409,10 @@ func (s spanSetReader) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	dest io.WriteCloser,
+) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	return s.r.ExportMVCCToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
-		maxSize, useTBI)
+		maxSize, useTBI, dest)
 }
 
 func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {

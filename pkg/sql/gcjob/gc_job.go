@@ -80,7 +80,12 @@ func performGC(
 }
 
 // Resume is part of the jobs.Resumer interface.
-func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) error {
+func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) (err error) {
+	defer func() {
+		if err != nil && !r.isPermanentGCError(err) {
+			err = errors.Mark(err, jobs.NewRetryJobError("gc"))
+		}
+	}()
 	p := execCtx.(sql.JobExecContext)
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
@@ -102,11 +107,15 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 		if err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, details.InterleavedTable.ID); err != nil {
 			return err
 		}
+		interleavedIndexIDs := make([]descpb.IndexID, len(details.InterleavedIndexes))
+		for i := range details.InterleavedIndexes {
+			interleavedIndexIDs[i] = details.InterleavedIndexes[i].ID
+		}
 		if err := sql.TruncateInterleavedIndexes(
 			ctx,
 			execCfg,
 			tabledesc.NewBuilder(details.InterleavedTable).BuildImmutableTable(),
-			details.InterleavedIndexes,
+			interleavedIndexIDs,
 		); err != nil {
 			return err
 		}
@@ -179,6 +188,15 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) OnFailOrCancel(context.Context, interface{}) error {
 	return nil
+}
+
+// isPermanentGCError returns true if the error is a permanent job failure,
+// which indicates that the failed GC job cannot be retried.
+func (r *schemaChangeGCResumer) isPermanentGCError(err error) bool {
+	// Currently we classify errors based on Schema Change function to backport
+	// to 20.2 and 21.1. This functionality should be changed once #44594 is
+	// implemented.
+	return sql.IsPermanentSchemaChangeError(err)
 }
 
 func init() {

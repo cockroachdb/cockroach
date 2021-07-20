@@ -14,6 +14,7 @@ import (
 	"context"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -1060,6 +1061,98 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 			t.Error("expected txn record remaining after test, found none")
 		} else {
 			require.Equal(t, txn.IgnoredSeqNums, txnRec.IgnoredSeqNums)
+		}
+	})
+}
+
+// TestAssertNoCommitWaitIfCommitTrigger tests that an EndTxn that carries a
+// commit trigger and needs to commit-wait because it has a commit timestamp in
+// the future will return an assertion error. Such situations should trigger a
+// higher-level hook (maybeCommitWaitBeforeCommitTrigger) to perform the commit
+// wait sleep before the request acquires latches and begins evaluating.
+func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "commitTrigger", func(t *testing.T, commitTrigger bool) {
+		for _, cfg := range []struct {
+			name     string
+			commitTS func(now hlc.Timestamp) hlc.Timestamp
+			expError bool
+		}{
+			{
+				name:     "past",
+				commitTS: func(now hlc.Timestamp) hlc.Timestamp { return now },
+				expError: false,
+			},
+			{
+				name:     "past-syn",
+				commitTS: func(now hlc.Timestamp) hlc.Timestamp { return now.WithSynthetic(true) },
+				expError: false,
+			},
+			{
+				name:     "future-syn",
+				commitTS: func(now hlc.Timestamp) hlc.Timestamp { return now.Add(100, 0).WithSynthetic(true) },
+				// If the EndTxn carried a commit trigger and its transaction will need
+				// to commit-wait because the transaction has a future-time commit
+				// timestamp, evaluating the request should return an error.
+				expError: commitTrigger,
+			},
+		} {
+			t.Run(cfg.name, func(t *testing.T) {
+				ctx := context.Background()
+				db := storage.NewDefaultInMemForTesting()
+				defer db.Close()
+				batch := db.NewBatch()
+				defer batch.Close()
+
+				manual := hlc.NewManualClock(123)
+				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+				desc := roachpb.RangeDescriptor{
+					RangeID:  99,
+					StartKey: roachpb.RKey("a"),
+					EndKey:   roachpb.RKey("z"),
+				}
+
+				now := clock.Now()
+				commitTS := cfg.commitTS(now)
+				txn := roachpb.MakeTransaction("test", desc.StartKey.AsRawKey(), 0, now, 0)
+				txn.ReadTimestamp = commitTS
+				txn.WriteTimestamp = commitTS
+
+				// Issue the end txn command.
+				req := roachpb.EndTxnRequest{
+					RequestHeader: roachpb.RequestHeader{Key: txn.Key},
+					Commit:        true,
+				}
+				if commitTrigger {
+					req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
+						ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{SystemConfigSpan: true},
+					}
+				}
+				var resp roachpb.EndTxnResponse
+				_, err := EndTxn(ctx, batch, CommandArgs{
+					EvalCtx: (&MockEvalCtx{
+						Desc:  &desc,
+						Clock: clock,
+						CanCreateTxn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
+							return true, hlc.Timestamp{}, 0
+						},
+					}).EvalContext(),
+					Args: &req,
+					Header: roachpb.Header{
+						Timestamp: commitTS,
+						Txn:       &txn,
+					},
+				}, &resp)
+
+				if cfg.expError {
+					require.Error(t, err)
+					require.Regexp(t, `txn .* with modified-span \(system-config\) commit trigger needs commit wait`, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
 		}
 	})
 }

@@ -1,0 +1,53 @@
+@import "src/core/index.module";
+
+.numeric-stats-table {
+  .bar-chart {
+    width: 200px;
+  }
+}
+
+.statements-table__col {
+  &--bar-chart {
+    margin-left: 0;
+
+    &__label {
+      left: 0;
+      width: 40px;
+      min-width: 40px;
+    }
+  }
+}
+
+// Overrides to widths of specific table columns
+// to make them look nicer or emphasize certain
+// bar graphs over others, otherwise by default
+// widths of table columns will be governed by
+// the length of the name of the column
+.statements-table__col-count {
+  .statements-table__col--bar-chart {
+    width: 100px;
+  }
+}
+
+.statements-table__col-retries {
+  .statements-table__col--bar-chart {
+    width: 80px;
+  }
+}
+
+.statements-table__col-rows-read, .statements-table__col-latency {
+  .statements-table__col--bar-chart {
+    min-width: 150px;
+  }
+}
+
+
+.cl-table__col-query-text a {
+  font-family: $font-family--monospace;
+  font-size: 12px;
+  width: 400px;
+  div {
+    font-size: $font-size--small;
+    @include line-clamp(2);
+  }
+}

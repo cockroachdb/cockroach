@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -80,6 +81,11 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
 
+	// This test exercises code that has not been in use since the 20.1->20.2
+	// mixed version state. It is scheduled for removal and thus not worth
+	// de-flaking.
+	skip.WithIssue(t, 63842)
+
 	ctx := context.Background()
 
 	ver201 := cluster.MakeTestingClusterSettingsWithVersions(
@@ -90,11 +96,11 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Disable leniency for instant expiration
-	jobs.LeniencySetting.Override(&s.ClusterSettings().SV, 0)
+	jobs.LeniencySetting.Override(ctx, &s.ClusterSettings().SV, 0)
 	const cancelInterval = time.Duration(math.MaxInt64)
 	const adoptInterval = time.Microsecond
-	slinstance.DefaultTTL.Override(&s.ClusterSettings().SV, 2*adoptInterval)
-	slinstance.DefaultHeartBeat.Override(&s.ClusterSettings().SV, adoptInterval)
+	slinstance.DefaultTTL.Override(ctx, &s.ClusterSettings().SV, 2*adoptInterval)
+	slinstance.DefaultHeartBeat.Override(ctx, &s.ClusterSettings().SV, adoptInterval)
 
 	db := s.DB()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)

@@ -66,7 +66,7 @@ const (
 
 func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
 	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(multitenancyZoneCfgIssueNo)
+		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
 	}
 
 	return &delayedNode{
@@ -108,7 +108,7 @@ func getShowZoneConfigRow(
 			return nil, err
 		}
 	} else if zoneSpecifier.Database != "" {
-		_, database, err := p.Descriptors().GetImmutableDatabaseByName(
+		database, err := p.Descriptors().GetImmutableDatabaseByName(
 			ctx,
 			p.txn,
 			string(zoneSpecifier.Database),
@@ -181,7 +181,8 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 	constraints = strings.TrimSpace(constraints)
 	voterConstraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
 		Constraints: zone.VoterConstraints,
-		Inherited:   zone.InheritedVoterConstraints})
+		Inherited:   zone.InheritedVoterConstraints(),
+	})
 	if err != nil {
 		return "", err
 	}
@@ -232,7 +233,7 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 		maybeWriteComma(f)
 		f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
 	}
-	if !zone.InheritedVoterConstraints && zone.NumVoters != nil && *zone.NumVoters > 0 {
+	if !zone.InheritedVoterConstraints() && zone.NumVoters != nil && *zone.NumVoters > 0 {
 		maybeWriteComma(f)
 		f.Printf("\tvoter_constraints = %s", lex.EscapeSQLString(voterConstraints))
 	}

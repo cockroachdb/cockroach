@@ -13,7 +13,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/encoding",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
@@ -87,7 +86,7 @@ genrule(
        env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
          $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Type encoding_tmp.go
     """,
-    tools = [
+    exec_tools = [
         "@go_sdk//:bin/go",
         "@org_golang_x_tools//cmd/stringer",
     ],

@@ -60,8 +60,9 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.optimizer":                               {},
 	"kv.bulk_io_write.addsstable_max_rate":                 {},
 	// removed as of 20.1.
-	"schemachanger.lease.duration":       {},
-	"schemachanger.lease.renew_fraction": {},
+	"schemachanger.lease.duration":           {},
+	"schemachanger.lease.renew_fraction":     {},
+	"diagnostics.forced_stat_reset.interval": {},
 	// removed as of 20.2.
 	"rocksdb.ingest_backpressure.pending_compaction_threshold":         {},
 	"sql.distsql.temp_storage.joins":                                   {},
@@ -71,6 +72,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.optimizer_foreign_keys.enabled":                      {},
 	"sql.defaults.experimental_optimizer_foreign_key_cascades.enabled": {},
 	"sql.parallel_scans.enabled":                                       {},
+	"backup.table_statistics.enabled":                                  {},
 	// removed as of 21.1.
 	"sql.distsql.interleaved_joins.enabled": {},
 	"sql.testing.vectorize.batch_size":      {},
@@ -79,6 +81,8 @@ var retiredSettings = map[string]struct{}{
 	"kv.atomic_replication_changes.enabled": {},
 	// removed as of 21.2.
 	"sql.defaults.vectorize_row_count_threshold": {},
+	"cloudstorage.gs.default.key":                {},
+	"storage.sst_export.max_intents_per_error":   {},
 }
 
 // register adds a setting to the registry.

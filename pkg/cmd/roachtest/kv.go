@@ -35,13 +35,18 @@ func registerKV(r *testRegistry) {
 		nodes       int
 		cpus        int
 		readPercent int
-		batchSize   int
-		blockSize   int
-		splits      int // 0 implies default, negative implies 0
-		encryption  bool
-		sequential  bool
-		duration    time.Duration
-		tags        []string
+		// If true, the reads are limited reads over the full span of the table.
+		// Currently this also enables SFU writes on the workload since this is
+		// geared towards testing optimistic locking and latching.
+		spanReads      bool
+		batchSize      int
+		blockSize      int
+		splits         int // 0 implies default, negative implies 0
+		encryption     bool
+		sequential     bool
+		concMultiplier int
+		duration       time.Duration
+		tags           []string
 	}
 	computeNumSplits := func(opts kvOptions) int {
 		// TODO(ajwerner): set this default to a more sane value or remove it and
@@ -62,17 +67,41 @@ func registerKV(r *testRegistry) {
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, t, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
 
+		if opts.splits < 0 {
+			// In addition to telling the workload to not split, disable load-based
+			// splitting.
+			db := c.Conn(ctx, 1)
+			defer db.Close()
+			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'"); err != nil {
+				t.Fatalf("failed to disable load based splitting: %v", err)
+			}
+		}
+
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
-			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+			concurrencyMultiplier := 64
+			if opts.concMultiplier != 0 {
+				concurrencyMultiplier = opts.concMultiplier
+			}
+			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*concurrencyMultiplier))
 
 			splits := " --splits=" + strconv.Itoa(computeNumSplits(opts))
 			if opts.duration == 0 {
 				opts.duration = 10 * time.Minute
 			}
 			duration := " --duration=" + ifLocal("10s", opts.duration.String())
-			readPercent := fmt.Sprintf(" --read-percent=%d", opts.readPercent)
+			var readPercent string
+			if opts.spanReads {
+				// SFU makes sense only if we repeat writes to the same key. Here
+				// we've arbitrarily picked a cycle-length of 1000, so 1 in 1000
+				// writes will contend with the limited scan wrt locking.
+				readPercent =
+					fmt.Sprintf(" --span-percent=%d --span-limit=1 --sfu-writes=true --cycle-length=1000",
+						opts.readPercent)
+			} else {
+				readPercent = fmt.Sprintf(" --read-percent=%d", opts.readPercent)
+			}
 			histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
 			var batchSize string
 			if opts.batchSize > 0 {
@@ -102,6 +131,8 @@ func registerKV(r *testRegistry) {
 	for _, opts := range []kvOptions{
 		// Standard configs.
 		{nodes: 1, cpus: 8, readPercent: 0},
+		// CPU overload test, to stress admission control.
+		{nodes: 1, cpus: 8, readPercent: 50, concMultiplier: 8192, duration: 20 * time.Minute},
 		{nodes: 1, cpus: 8, readPercent: 95},
 		{nodes: 1, cpus: 32, readPercent: 0},
 		{nodes: 1, cpus: 32, readPercent: 95},
@@ -143,6 +174,10 @@ func registerKV(r *testRegistry) {
 		{nodes: 3, cpus: 32, readPercent: 0, sequential: true},
 		{nodes: 3, cpus: 32, readPercent: 95, sequential: true},
 
+		// Configs with reads, that are of limited spans, along with SFU writes.
+		{nodes: 1, cpus: 8, readPercent: 95, spanReads: true, splits: -1 /* no splits */, sequential: true},
+		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true, splits: -1 /* no splits */, sequential: true},
+
 		// Weekly larger scale configurations.
 		{nodes: 32, cpus: 8, readPercent: 0, tags: []string{"weekly"}, duration: time.Hour},
 		{nodes: 32, cpus: 8, readPercent: 95, tags: []string{"weekly"}, duration: time.Hour},
@@ -150,7 +185,11 @@ func registerKV(r *testRegistry) {
 		opts := opts
 
 		var nameParts []string
-		nameParts = append(nameParts, fmt.Sprintf("kv%d", opts.readPercent))
+		var limitedSpanStr string
+		if opts.spanReads {
+			limitedSpanStr = "limited-spans"
+		}
+		nameParts = append(nameParts, fmt.Sprintf("kv%d%s", opts.readPercent, limitedSpanStr))
 		if len(opts.tags) > 0 {
 			nameParts = append(nameParts, strings.Join(opts.tags, "/"))
 		}
@@ -170,6 +209,9 @@ func registerKV(r *testRegistry) {
 		}
 		if opts.sequential {
 			nameParts = append(nameParts, "seq")
+		}
+		if opts.concMultiplier != 0 { // support legacy test name which didn't include this multiplier
+			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
 		}
 
 		minVersion := "v2.0.0"
@@ -405,7 +447,10 @@ func registerKVGracefulDraining(r *testRegistry) {
 				// Before we start shutting down nodes, wait for the performance
 				// of the workload to stabilize at the expected allowed level.
 
-				adminURLs := c.ExternalAdminUIAddr(ctx, c.Node(1))
+				adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
+				if err != nil {
+					return err
+				}
 				url := "http://" + adminURLs[0] + "/ts/query"
 				getQPSTimeSeries := func(start, end time.Time) ([]tspb.TimeSeriesDatapoint, error) {
 					request := tspb.TimeSeriesQueryRequest{

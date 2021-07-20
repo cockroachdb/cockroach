@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -59,7 +60,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			wg.Add(len(rc))
 
 			for i := range rc {
-				rc[i].InitWithNumSenders(rowenc.OneIntCol, 1)
+				rc[i].InitWithNumSenders(types.OneIntCol, 1)
 
 				go func(i int) {
 					defer wg.Done()
@@ -98,7 +99,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 
 func BenchmarkMultiplexedRowChannel(b *testing.B) {
 	numRows := 1 << 16
-	row := rowenc.EncDatumRow{rowenc.IntEncDatum(0)}
+	row := rowenc.EncDatumRow{randgen.IntEncDatum(0)}
 	for _, senders := range []int{2, 4, 8} {
 		b.Run(fmt.Sprintf("senders=%d", senders), func(b *testing.B) {
 			b.SetBytes(int64(senders * numRows * 8))
@@ -106,7 +107,7 @@ func BenchmarkMultiplexedRowChannel(b *testing.B) {
 				var wg sync.WaitGroup
 				wg.Add(senders + 1)
 				mrc := &RowChannel{}
-				mrc.InitWithNumSenders(rowenc.OneIntCol, senders)
+				mrc.InitWithNumSenders(types.OneIntCol, senders)
 				go func() {
 					for {
 						if r, _ := mrc.Next(); r == nil {

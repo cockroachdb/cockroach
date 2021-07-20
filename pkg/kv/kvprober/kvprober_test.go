@@ -49,7 +49,7 @@ func TestProbe(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		m := &mock{t: t}
 		p := initTestProber(m)
-		readEnabled.Override(&p.settings.SV, true)
+		readEnabled.Override(ctx, &p.settings.SV, true)
 
 		p.probe(ctx, m)
 
@@ -66,7 +66,7 @@ func TestProbe(t *testing.T) {
 			noGet:   true,
 		}
 		p := initTestProber(m)
-		readEnabled.Override(&p.settings.SV, true)
+		readEnabled.Override(ctx, &p.settings.SV, true)
 
 		p.probe(ctx, m)
 
@@ -82,7 +82,7 @@ func TestProbe(t *testing.T) {
 			getErr: fmt.Errorf("inject get failure"),
 		}
 		p := initTestProber(m)
-		readEnabled.Override(&p.settings.SV, true)
+		readEnabled.Override(ctx, &p.settings.SV, true)
 
 		p.probe(ctx, m)
 

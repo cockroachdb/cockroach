@@ -9,9 +9,11 @@
 package backupccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // restorationData specifies the data that is to be restored in a restoration flow.
@@ -31,7 +33,7 @@ type restorationData interface {
 
 	// Peripheral data that is needed in the restoration flow relating to the data
 	// included in this bundle.
-	getRekeys() []roachpb.ImportRequest_TableRekey
+	getRekeys() []execinfrapb.TableRekey
 	getPKIDs() map[uint64]bool
 
 	// addTenant extends the set of data needed to restore to include a new tenant.
@@ -61,7 +63,7 @@ type restorationDataBase struct {
 	// spans is the spans included in this bundle.
 	spans []roachpb.Span
 	// rekeys maps old table IDs to their new table descriptor.
-	rekeys []roachpb.ImportRequest_TableRekey
+	rekeys []execinfrapb.TableRekey
 	// pkIDs stores the ID of the primary keys for all of the tables that we're
 	// restoring for RowCount calculation.
 	pkIDs map[uint64]bool
@@ -75,7 +77,7 @@ type restorationDataBase struct {
 var _ restorationData = &restorationDataBase{}
 
 // getRekeys implements restorationData.
-func (b *restorationDataBase) getRekeys() []roachpb.ImportRequest_TableRekey {
+func (b *restorationDataBase) getRekeys() []execinfrapb.TableRekey {
 	return b.rekeys
 }
 
@@ -107,3 +109,20 @@ func (b *restorationDataBase) isEmpty() bool {
 
 // isMainBundle implements restorationData.
 func (restorationDataBase) isMainBundle() bool { return false }
+
+// checkForMigratedData checks to see if any of the system tables in the set of
+// data that is to be restored has already been restored. If this is the case,
+// it is not safe to try and restore the data again since the migration may have
+// written to the temporary system table.
+func checkForMigratedData(details jobspb.RestoreDetails, dataToRestore restorationData) bool {
+	for _, systemTable := range dataToRestore.getSystemTables() {
+		// We only need to check if _any_ of the system tables in this batch of
+		// data have been migrated. This is because the migration can only
+		// happen after all of the data in the batch has been restored.
+		if _, ok := details.SystemTablesMigrated[systemTable.GetName()]; ok {
+			return true
+		}
+	}
+
+	return false
+}

@@ -110,7 +110,7 @@ project
            │    │    ├── constraint: /1: [/1 - ]
            │    │    ├── key: (1)
            │    │    ├── fd: (1)-->(2,3,9)
-           │    │    ├── ordering: +1 opt(9) [actual: +1]
+           │    │    ├── ordering: +1
            │    │    └── limit hint: 101.01
            │    └── filters
            │         └── NOT read:9 [outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
@@ -153,7 +153,7 @@ project
            │    │    ├── flags: force-index=article_idx_read_key
            │    │    ├── key: (1)
            │    │    ├── fd: (1)-->(2,3,9)
-           │    │    ├── ordering: +1 opt(9) [actual: +1]
+           │    │    ├── ordering: +1
            │    │    └── limit hint: 101.01
            │    └── filters
            │         └── NOT read:9 [outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
@@ -181,7 +181,7 @@ limit
  │    │    ├── constraint: /1: [/1 - ]
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(9)
- │    │    ├── ordering: +1 opt(9) [actual: +1]
+ │    │    ├── ordering: +1
  │    │    └── limit hint: 5.27
  │    └── filters
  │         └── NOT read:9 [outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]

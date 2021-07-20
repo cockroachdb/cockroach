@@ -1225,9 +1225,8 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			replicas,
 			nil,
 			existingStoreLocalities,
-			func(context.Context, roachpb.NodeID) bool { return true },
+			func(context.Context, roachpb.StoreID) bool { return true },
 			options,
-			voterTarget,
 		)
 		actual := len(targets) > 0
 		if actual != tc.expected {

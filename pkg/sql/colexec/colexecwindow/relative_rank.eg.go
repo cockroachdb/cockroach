@@ -182,8 +182,11 @@ type percentRankNoPartitionOp struct {
 
 var _ colexecop.ClosableOperator = &percentRankNoPartitionOp{}
 
-func (r *percentRankNoPartitionOp) Init() {
-	r.Input.Init()
+func (r *percentRankNoPartitionOp) Init(ctx context.Context) {
+	if !r.InitHelper.Init(ctx) {
+		return
+	}
+	r.Input.Init(r.Ctx)
 	r.state = relativeRankBuffering
 	usedMemoryLimitFraction := 0.0
 	r.bufferedTuples = colexecutils.NewSpillingQueue(
@@ -205,7 +208,7 @@ func (r *percentRankNoPartitionOp) Init() {
 	r.rankIncrement = 1
 }
 
-func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
+func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 	var err error
 	for {
 		switch r.state {
@@ -236,10 +239,10 @@ func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			// This example also shows why we need to use two different queues
 			// (since every partition can have multiple peer groups, the
 			// schedule of "flushing" is different).
-			batch := r.Input.Next(ctx)
+			batch := r.Input.Next()
 			n := batch.Length()
 			if n == 0 {
-				r.bufferedTuples.Enqueue(ctx, coldata.ZeroBatch)
+				r.bufferedTuples.Enqueue(r.Ctx, coldata.ZeroBatch)
 				// We have fully consumed the input, so now we can populate the output.
 				r.state = relativeRankEmitting
 				continue
@@ -265,7 +268,7 @@ func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 				}
 				r.scratch.SetLength(n)
 			})
-			r.bufferedTuples.Enqueue(ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
 
 			// Then, we need to update the sizes of the partitions.
 			// There is a single partition in the whole input.
@@ -274,7 +277,7 @@ func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			continue
 
 		case relativeRankEmitting:
-			if r.scratch, err = r.bufferedTuples.Dequeue(ctx); err != nil {
+			if r.scratch, err = r.bufferedTuples.Dequeue(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			n := r.scratch.Length()
@@ -335,7 +338,7 @@ func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(ctx); err != nil {
+			if err := r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -348,12 +351,14 @@ func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (r *percentRankNoPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() {
+func (r *percentRankNoPartitionOp) Close() error {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -380,8 +385,11 @@ type percentRankWithPartitionOp struct {
 
 var _ colexecop.ClosableOperator = &percentRankWithPartitionOp{}
 
-func (r *percentRankWithPartitionOp) Init() {
-	r.Input.Init()
+func (r *percentRankWithPartitionOp) Init(ctx context.Context) {
+	if !r.InitHelper.Init(ctx) {
+		return
+	}
+	r.Input.Init(r.Ctx)
 	r.state = relativeRankBuffering
 	usedMemoryLimitFraction := 0.0
 	r.partitionsState.SpillingQueue = colexecutils.NewSpillingQueue(
@@ -415,7 +423,7 @@ func (r *percentRankWithPartitionOp) Init() {
 	r.rankIncrement = 1
 }
 
-func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
+func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 	var err error
 	for {
 		switch r.state {
@@ -446,18 +454,18 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			// This example also shows why we need to use two different queues
 			// (since every partition can have multiple peer groups, the
 			// schedule of "flushing" is different).
-			batch := r.Input.Next(ctx)
+			batch := r.Input.Next()
 			n := batch.Length()
 			if n == 0 {
-				r.bufferedTuples.Enqueue(ctx, coldata.ZeroBatch)
+				r.bufferedTuples.Enqueue(r.Ctx, coldata.ZeroBatch)
 				// We need to flush the last vector of the running partitions
 				// sizes, including the very last partition.
 				runningPartitionsSizesCol := r.partitionsState.runningSizes.ColVec(0).Int64()
 				runningPartitionsSizesCol[r.partitionsState.idx] = r.numTuplesInPartition
 				r.partitionsState.idx++
 				r.partitionsState.runningSizes.SetLength(r.partitionsState.idx)
-				r.partitionsState.Enqueue(ctx, r.partitionsState.runningSizes)
-				r.partitionsState.Enqueue(ctx, coldata.ZeroBatch)
+				r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
+				r.partitionsState.Enqueue(r.Ctx, coldata.ZeroBatch)
 				// We have fully consumed the input, so now we can populate the output.
 				r.state = relativeRankEmitting
 				continue
@@ -485,7 +493,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 				}
 				r.scratch.SetLength(n)
 			})
-			r.bufferedTuples.Enqueue(ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
 
 			// Then, we need to update the sizes of the partitions.
 			partitionCol := batch.ColVec(r.partitionColIdx).Bool()
@@ -506,7 +514,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							if r.partitionsState.idx == coldata.BatchSize() {
 								// We need to flush the vector of partitions sizes.
 								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
-								r.partitionsState.Enqueue(ctx, r.partitionsState.runningSizes)
+								r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
 								r.partitionsState.idx = 0
 								r.partitionsState.runningSizes.ResetInternalBatch()
 							}
@@ -529,7 +537,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							if r.partitionsState.idx == coldata.BatchSize() {
 								// We need to flush the vector of partitions sizes.
 								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
-								r.partitionsState.Enqueue(ctx, r.partitionsState.runningSizes)
+								r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
 								r.partitionsState.idx = 0
 								r.partitionsState.runningSizes.ResetInternalBatch()
 							}
@@ -542,7 +550,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			continue
 
 		case relativeRankEmitting:
-			if r.scratch, err = r.bufferedTuples.Dequeue(ctx); err != nil {
+			if r.scratch, err = r.bufferedTuples.Dequeue(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			n := r.scratch.Length()
@@ -552,7 +560,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			}
 			// Get the next batch of partition sizes if we haven't already.
 			if r.partitionsState.dequeuedSizes == nil {
-				if r.partitionsState.dequeuedSizes, err = r.partitionsState.Dequeue(ctx); err != nil {
+				if r.partitionsState.dequeuedSizes, err = r.partitionsState.Dequeue(r.Ctx); err != nil {
 					colexecerror.InternalError(err)
 				}
 				r.partitionsState.idx = 0
@@ -591,7 +599,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 				//gcassert:bce
 				if partitionCol[i] {
 					if r.partitionsState.idx == r.partitionsState.dequeuedSizes.Length() {
-						if r.partitionsState.dequeuedSizes, err = r.partitionsState.Dequeue(ctx); err != nil {
+						if r.partitionsState.dequeuedSizes, err = r.partitionsState.Dequeue(r.Ctx); err != nil {
 							colexecerror.InternalError(err)
 						}
 						r.partitionsState.idx = 0
@@ -626,7 +634,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(ctx); err != nil {
+			if err := r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -639,15 +647,17 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (r *percentRankWithPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() {
+func (r *percentRankWithPartitionOp) Close() error {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.partitionsState.Close(ctx); err != nil {
+	if err := r.partitionsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -675,8 +685,11 @@ type cumeDistNoPartitionOp struct {
 
 var _ colexecop.ClosableOperator = &cumeDistNoPartitionOp{}
 
-func (r *cumeDistNoPartitionOp) Init() {
-	r.Input.Init()
+func (r *cumeDistNoPartitionOp) Init(ctx context.Context) {
+	if !r.InitHelper.Init(ctx) {
+		return
+	}
+	r.Input.Init(r.Ctx)
 	r.state = relativeRankBuffering
 	usedMemoryLimitFraction := 0.0
 	r.peerGroupsState.SpillingQueue = colexecutils.NewSpillingQueue(
@@ -705,7 +718,7 @@ func (r *cumeDistNoPartitionOp) Init() {
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 }
 
-func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
+func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 	var err error
 	for {
 		switch r.state {
@@ -736,18 +749,18 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			// This example also shows why we need to use two different queues
 			// (since every partition can have multiple peer groups, the
 			// schedule of "flushing" is different).
-			batch := r.Input.Next(ctx)
+			batch := r.Input.Next()
 			n := batch.Length()
 			if n == 0 {
-				r.bufferedTuples.Enqueue(ctx, coldata.ZeroBatch)
+				r.bufferedTuples.Enqueue(r.Ctx, coldata.ZeroBatch)
 				// We need to flush the last vector of the running peer groups
 				// sizes, including the very last peer group.
 				runningPeerGroupsSizesCol := r.peerGroupsState.runningSizes.ColVec(0).Int64()
 				runningPeerGroupsSizesCol[r.peerGroupsState.idx] = r.numPeers
 				r.peerGroupsState.idx++
 				r.peerGroupsState.runningSizes.SetLength(r.peerGroupsState.idx)
-				r.peerGroupsState.Enqueue(ctx, r.peerGroupsState.runningSizes)
-				r.peerGroupsState.Enqueue(ctx, coldata.ZeroBatch)
+				r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
+				r.peerGroupsState.Enqueue(r.Ctx, coldata.ZeroBatch)
 				// We have fully consumed the input, so now we can populate the output.
 				r.state = relativeRankEmitting
 				continue
@@ -773,7 +786,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 				}
 				r.scratch.SetLength(n)
 			})
-			r.bufferedTuples.Enqueue(ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
 
 			// Then, we need to update the sizes of the partitions.
 			// There is a single partition in the whole input.
@@ -798,7 +811,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 							if r.peerGroupsState.idx == coldata.BatchSize() {
 								// We need to flush the vector of peer group sizes.
 								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
-								r.peerGroupsState.Enqueue(ctx, r.peerGroupsState.runningSizes)
+								r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
 								r.peerGroupsState.idx = 0
 								r.peerGroupsState.runningSizes.ResetInternalBatch()
 							}
@@ -821,7 +834,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 							if r.peerGroupsState.idx == coldata.BatchSize() {
 								// We need to flush the vector of peer group sizes.
 								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
-								r.peerGroupsState.Enqueue(ctx, r.peerGroupsState.runningSizes)
+								r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
 								r.peerGroupsState.idx = 0
 								r.peerGroupsState.runningSizes.ResetInternalBatch()
 							}
@@ -833,7 +846,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			continue
 
 		case relativeRankEmitting:
-			if r.scratch, err = r.bufferedTuples.Dequeue(ctx); err != nil {
+			if r.scratch, err = r.bufferedTuples.Dequeue(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			n := r.scratch.Length()
@@ -843,7 +856,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			}
 			// Get the next batch of peer group sizes if we haven't already.
 			if r.peerGroupsState.dequeuedSizes == nil {
-				if r.peerGroupsState.dequeuedSizes, err = r.peerGroupsState.Dequeue(ctx); err != nil {
+				if r.peerGroupsState.dequeuedSizes, err = r.peerGroupsState.Dequeue(r.Ctx); err != nil {
 					colexecerror.InternalError(err)
 				}
 				r.peerGroupsState.idx = 0
@@ -887,7 +900,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 					// this peer group.
 					r.numPrecedingTuples += r.numPeers
 					if r.peerGroupsState.idx == r.peerGroupsState.dequeuedSizes.Length() {
-						if r.peerGroupsState.dequeuedSizes, err = r.peerGroupsState.Dequeue(ctx); err != nil {
+						if r.peerGroupsState.dequeuedSizes, err = r.peerGroupsState.Dequeue(r.Ctx); err != nil {
 							colexecerror.InternalError(err)
 						}
 						r.peerGroupsState.idx = 0
@@ -905,7 +918,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(ctx); err != nil {
+			if err := r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -918,15 +931,17 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (r *cumeDistNoPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() {
+func (r *cumeDistNoPartitionOp) Close() error {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.peerGroupsState.Close(ctx); err != nil {
+	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -955,8 +970,11 @@ type cumeDistWithPartitionOp struct {
 
 var _ colexecop.ClosableOperator = &cumeDistWithPartitionOp{}
 
-func (r *cumeDistWithPartitionOp) Init() {
-	r.Input.Init()
+func (r *cumeDistWithPartitionOp) Init(ctx context.Context) {
+	if !r.InitHelper.Init(ctx) {
+		return
+	}
+	r.Input.Init(r.Ctx)
 	r.state = relativeRankBuffering
 	usedMemoryLimitFraction := 0.0
 	r.partitionsState.SpillingQueue = colexecutils.NewSpillingQueue(
@@ -997,7 +1015,7 @@ func (r *cumeDistWithPartitionOp) Init() {
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 }
 
-func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
+func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 	var err error
 	for {
 		switch r.state {
@@ -1028,26 +1046,26 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			// This example also shows why we need to use two different queues
 			// (since every partition can have multiple peer groups, the
 			// schedule of "flushing" is different).
-			batch := r.Input.Next(ctx)
+			batch := r.Input.Next()
 			n := batch.Length()
 			if n == 0 {
-				r.bufferedTuples.Enqueue(ctx, coldata.ZeroBatch)
+				r.bufferedTuples.Enqueue(r.Ctx, coldata.ZeroBatch)
 				// We need to flush the last vector of the running partitions
 				// sizes, including the very last partition.
 				runningPartitionsSizesCol := r.partitionsState.runningSizes.ColVec(0).Int64()
 				runningPartitionsSizesCol[r.partitionsState.idx] = r.numTuplesInPartition
 				r.partitionsState.idx++
 				r.partitionsState.runningSizes.SetLength(r.partitionsState.idx)
-				r.partitionsState.Enqueue(ctx, r.partitionsState.runningSizes)
-				r.partitionsState.Enqueue(ctx, coldata.ZeroBatch)
+				r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
+				r.partitionsState.Enqueue(r.Ctx, coldata.ZeroBatch)
 				// We need to flush the last vector of the running peer groups
 				// sizes, including the very last peer group.
 				runningPeerGroupsSizesCol := r.peerGroupsState.runningSizes.ColVec(0).Int64()
 				runningPeerGroupsSizesCol[r.peerGroupsState.idx] = r.numPeers
 				r.peerGroupsState.idx++
 				r.peerGroupsState.runningSizes.SetLength(r.peerGroupsState.idx)
-				r.peerGroupsState.Enqueue(ctx, r.peerGroupsState.runningSizes)
-				r.peerGroupsState.Enqueue(ctx, coldata.ZeroBatch)
+				r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
+				r.peerGroupsState.Enqueue(r.Ctx, coldata.ZeroBatch)
 				// We have fully consumed the input, so now we can populate the output.
 				r.state = relativeRankEmitting
 				continue
@@ -1075,7 +1093,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 				}
 				r.scratch.SetLength(n)
 			})
-			r.bufferedTuples.Enqueue(ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
 
 			// Then, we need to update the sizes of the partitions.
 			partitionCol := batch.ColVec(r.partitionColIdx).Bool()
@@ -1096,7 +1114,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							if r.partitionsState.idx == coldata.BatchSize() {
 								// We need to flush the vector of partitions sizes.
 								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
-								r.partitionsState.Enqueue(ctx, r.partitionsState.runningSizes)
+								r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
 								r.partitionsState.idx = 0
 								r.partitionsState.runningSizes.ResetInternalBatch()
 							}
@@ -1119,7 +1137,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							if r.partitionsState.idx == coldata.BatchSize() {
 								// We need to flush the vector of partitions sizes.
 								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
-								r.partitionsState.Enqueue(ctx, r.partitionsState.runningSizes)
+								r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
 								r.partitionsState.idx = 0
 								r.partitionsState.runningSizes.ResetInternalBatch()
 							}
@@ -1148,7 +1166,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							if r.peerGroupsState.idx == coldata.BatchSize() {
 								// We need to flush the vector of peer group sizes.
 								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
-								r.peerGroupsState.Enqueue(ctx, r.peerGroupsState.runningSizes)
+								r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
 								r.peerGroupsState.idx = 0
 								r.peerGroupsState.runningSizes.ResetInternalBatch()
 							}
@@ -1171,7 +1189,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							if r.peerGroupsState.idx == coldata.BatchSize() {
 								// We need to flush the vector of peer group sizes.
 								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
-								r.peerGroupsState.Enqueue(ctx, r.peerGroupsState.runningSizes)
+								r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
 								r.peerGroupsState.idx = 0
 								r.peerGroupsState.runningSizes.ResetInternalBatch()
 							}
@@ -1183,7 +1201,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			continue
 
 		case relativeRankEmitting:
-			if r.scratch, err = r.bufferedTuples.Dequeue(ctx); err != nil {
+			if r.scratch, err = r.bufferedTuples.Dequeue(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			n := r.scratch.Length()
@@ -1193,7 +1211,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			}
 			// Get the next batch of partition sizes if we haven't already.
 			if r.partitionsState.dequeuedSizes == nil {
-				if r.partitionsState.dequeuedSizes, err = r.partitionsState.Dequeue(ctx); err != nil {
+				if r.partitionsState.dequeuedSizes, err = r.partitionsState.Dequeue(r.Ctx); err != nil {
 					colexecerror.InternalError(err)
 				}
 				r.partitionsState.idx = 0
@@ -1201,7 +1219,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			}
 			// Get the next batch of peer group sizes if we haven't already.
 			if r.peerGroupsState.dequeuedSizes == nil {
-				if r.peerGroupsState.dequeuedSizes, err = r.peerGroupsState.Dequeue(ctx); err != nil {
+				if r.peerGroupsState.dequeuedSizes, err = r.peerGroupsState.Dequeue(r.Ctx); err != nil {
 					colexecerror.InternalError(err)
 				}
 				r.peerGroupsState.idx = 0
@@ -1240,7 +1258,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 				//gcassert:bce
 				if partitionCol[i] {
 					if r.partitionsState.idx == r.partitionsState.dequeuedSizes.Length() {
-						if r.partitionsState.dequeuedSizes, err = r.partitionsState.Dequeue(ctx); err != nil {
+						if r.partitionsState.dequeuedSizes, err = r.partitionsState.Dequeue(r.Ctx); err != nil {
 							colexecerror.InternalError(err)
 						}
 						r.partitionsState.idx = 0
@@ -1260,7 +1278,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					// this peer group.
 					r.numPrecedingTuples += r.numPeers
 					if r.peerGroupsState.idx == r.peerGroupsState.dequeuedSizes.Length() {
-						if r.peerGroupsState.dequeuedSizes, err = r.peerGroupsState.Dequeue(ctx); err != nil {
+						if r.peerGroupsState.dequeuedSizes, err = r.peerGroupsState.Dequeue(r.Ctx); err != nil {
 							colexecerror.InternalError(err)
 						}
 						r.peerGroupsState.idx = 0
@@ -1278,7 +1296,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(ctx); err != nil {
+			if err := r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -1291,18 +1309,20 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (r *cumeDistWithPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() {
+func (r *cumeDistWithPartitionOp) Close() error {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.partitionsState.Close(ctx); err != nil {
+	if err := r.partitionsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.peerGroupsState.Close(ctx); err != nil {
+	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr

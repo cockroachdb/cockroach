@@ -29,6 +29,7 @@
     }
   },
   "exclude": [
-    "cypress"
+    "cypress",
+    "cluster-ui"
   ]
 }

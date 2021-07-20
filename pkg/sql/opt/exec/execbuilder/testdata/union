@@ -194,3 +194,604 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: uniontest@primary
           spans: FULL SCAN
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX (b, a))
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y, x))
+
+# Regression tests for #41245, #40797. Ensure we can plan ordered set ops
+# without a sort.
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT a FROM ab UNION SELECT x AS a FROM xy ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• union
+│ columns: (a)
+│ ordering: +a
+│ estimated row count: 2,000 (missing stats)
+│
+├── • scan
+│     columns: (a)
+│     ordering: +a
+│     estimated row count: 1,000 (missing stats)
+│     table: ab@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x)
+      ordering: +x
+      estimated row count: 1,000 (missing stats)
+      table: xy@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkVFLwzAUhd_9FZf7pBhZ273laZurUJjtbKco0oesuYxC19QkhY7R_y5rGbPiBOfjPTfnfCfJHs1HgRz91-ViGoRwPQ-SVfK0YPDix7Mo8W8g8Rf-_QoEPMTRI4g1PIdBFB7lBqbJcdfsIIrnfgyzNxDIsFSSQrElg_wdXUwZVlplZIzSB2nfHQhkg9xhmJdVbQ9yyjBTmpDv0ea2IOS4EuuCYhKS9MhBhpKsyIsuttlNKp1vhd4hw6QSpeFwhwyj2nKYuJi2DFVtT9nGig0hd1t2Gd8d8sX6Mr53ln_CKi1JkxwCJ-4tpu0PJee5sXmZ2ZH33XC2xPgvjxCTqVRpaJB-Ltk5NCS5of5GRtU6o6VWWYfpx6jzdYIkY_ut1w9B2a26X_pqdv9j9n41jwdmp03bq88AAAD__9FnAD0=
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT a, b FROM ab UNION SELECT x AS a, y AS b FROM xy ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• union
+│ columns: (a, b)
+│ ordering: +a,+b
+│ estimated row count: 2,000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     ordering: +a
+│     estimated row count: 1,000 (missing stats)
+│     table: ab@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x, y)
+      ordering: +x
+      estimated row count: 1,000 (missing stats)
+      table: xy@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkUFr4zAQhe_7K8ScdomW2M5NJycbLxhSO7XT0lJ8kK0hGBzLlRSwCf7vxXJL6tIU0p7EzJs335N0Av1cAYPgYbtZhhH5vQ7TXXq7oeQ-SFZxGvwhabAJ_u0IpyQn_5P4hvCc3EVhHL0pLVmmg9wN5-tM25E4WQcJWT0SDhRqKTDiB9TAnsCFjEKjZIFaSzW0TnYgFC0wh0JZN0cztDMKhVQI7ASmNBUCgx3PK0yQC1RzBygINLys7Nq28xtVHrjqgELa8Foz8heynoI8mvNGbfgegbk9_R7VnVJ5fg3Vu0g9w6QSqFBMMb47o743g6z_JN661KasCzP3Ppqo713MsrjmBRLUjaw1TgCXNjtDSBR7HC-m5VEVuFWysJixjK3PNgRqM6reWIS1lewXvTe7PzF7X5oXE7PTZ_2vlwAAAP__UP__WA==
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT a, b FROM ab UNION ALL SELECT x AS a, y AS b FROM xy ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• union all
+│ columns: (a, b)
+│ ordering: +a
+│ estimated row count: 2,000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     ordering: +a
+│     estimated row count: 1,000 (missing stats)
+│     table: ab@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x, y)
+      ordering: +x
+      estimated row count: 1,000 (missing stats)
+      table: xy@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkc9rq0AQx-_vrxjm9B5vQ9TePCVpLAhWU01LS_GwukMQjGt3DSjB_724tqRCU5r2JDPfHx-HPaJ-KdFF73ETLP0Q_q79ZJvcBQwevHgVJd4_SLzAu94CZ5DBTRzdAs_gPvSjEJZB8K62sEwGSzd833xtB1G89mJYPQFHhpUUFPI9aXSf0caUYa1kTlpLNayOxuCLFl2LYVHVh2ZYpwxzqQjdIzZFUxK6uOVZSTFxQWpuIUNBDS9KU9t2i1oVe646ZJjUvNIuzDDtGcpDc2rUDd8RunbPfka1p1SeXUJ1zlJPMKkEKRJTzML-j2n_ya-FcibruTNxn6Nbl9wck65lpembzSlDEjsaT9HyoHLaKJkbzDhGJmcWgnQzqs44-JWRzKN8DNu_CTtfhq8mYatP-z-vAQAA___WJ_y5
+
+# TODO(yuzefovich): The synchronizers in the below DistSQL plans are all
+# unordered. This is not a problem, but we shouldn't need an input synchronizer
+# at all when there is only one incoming stream. We should look into removing
+# it.
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT a, b FROM ab INTERSECT SELECT x AS a, y AS b FROM xy ORDER BY b, a
+----
+distribution: local
+vectorized: true
+·
+• intersect
+│ columns: (a, b)
+│ ordering: +b,+a
+│ estimated row count: 1,000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     ordering: +b,+a
+│     estimated row count: 1,000 (missing stats)
+│     table: ab@ab_b_a_idx
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x, y)
+      ordering: +y,+x
+      estimated row count: 1,000 (missing stats)
+      table: xy@xy_y_x_idx
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkl-Lm0AQwN_7KZZ5uuO2JJrcy0LBXGMh4MWrSmkpIqs7TQXr2t0VlJDvXlYPcoZL2lyfZP785jezuAf9uwIG_tenYLXZkpv1Jk7izwElX_zoIYz9WxL7gf8xIZySnHyKwkfCc7LZJn4U2_RztSOr2Lb09vvc1_UkjNZ-RB6-kZwSDhRqKXDLf6EG9h0cSCk0ShaotVQ2tR8aNqIDNqdQ1k1rbDqlUEiFwPZgSlMhMEh4XmGEXKCazYGCQMPLahjb9V7XZ33WZaXogELc8Foz8h7SAwXZmuNQbfgOgTkH-jaxMxXz3ON5lmf8X8XuNeJ1qU1ZF2bmTq2eQz2bCpVAhYIRz6Wec9a5eJNz8V_O5VnnUdXWchw2MaWW_FvLK4s_otphjCZsZsvp6knfIHvx_66CAChU-MPceO4d9Zy72w-q3P08hvbO1jAyHn3uxvtr3jVC3cha4-mtr06e2wNR7HB8MC1bVeCTksWgGcNw4IaEQG3G6mIMNvVYsgu-hJ2LsHsZdi_CywnsnMKLK2D3FF5ehO9P1k4P7_4EAAD__60NkI0=
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT b FROM ab INTERSECT ALL SELECT x AS b FROM xy ORDER BY b
+----
+distribution: local
+vectorized: true
+·
+• intersect all
+│ columns: (b)
+│ ordering: +b
+│ estimated row count: 1,000 (missing stats)
+│
+├── • scan
+│     columns: (b)
+│     ordering: +b
+│     estimated row count: 1,000 (missing stats)
+│     table: ab@ab_b_a_idx
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x)
+      ordering: +x
+      estimated row count: 1,000 (missing stats)
+      table: xy@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycUWGLnDAQ_d5fEebTHU059b4FCu71LAjeejVSWoos0Uyt4BqbRFAW_3tRWbYuu2233zJv5s2b93IA87MGBsGX12gTbsndc8hT_imi5HOQPMU8uCc8iIIPKcnJxyR-ISIn4TYNEj5hmyg6tnuy4ceZfiBx8hwk5OkryYFCoyRuxR4NsG_gQkah1apAY5SeoMM8EMoemEOhatrOTnBGoVAagR3AVrZGYJCKvMYEhUT94AAFiVZU9by2H_xWV3uhB6DAW9EYRt4BhbizjPguZCMF1dnTbmNFicDckf6fvrvWF7kv8l2-E7tK9pdO8K6e4F094aTcNUpL1ChXqtnE_NvIBR8vqEvkaOP2wVvbSIcW2fqHgUKN3-2d7769f6-r8sfy_IdsH2_JNkHTqsbgucGLm53JFcoSl5SM6nSBr1oVs8xSxjNvBiQau3S9pQibuTUn_zvZvYHsnpO9P5IfV2RnzMY3vwIAAP__7D8d8w==
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT b, a FROM ab INTERSECT ALL SELECT y AS b, x AS a FROM xy ORDER BY b
+----
+distribution: local
+vectorized: true
+·
+• intersect all
+│ columns: (b, a)
+│ ordering: +b,+a
+│ estimated row count: 1,000 (missing stats)
+│
+├── • scan
+│     columns: (b, a)
+│     ordering: +b,+a
+│     estimated row count: 1,000 (missing stats)
+│     table: ab@ab_b_a_idx
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (y, x)
+      ordering: +y,+x
+      estimated row count: 1,000 (missing stats)
+      table: xy@xy_y_x_idx
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycUVFrnTAYfd-vCN9TSzN6Y98CA29XB4K9dkbGxhCJ5psTnHFJBOXifx_qtjtLu9L7FL6Tc3LOyXcE-7MBDsHnh2gfHsjFXShS8TGi5FOQ3MYiuCQiiIL3KSkokeRDEt8TWZDwkAaJmOF9FP1hjGQvZtown7-5w0ji5C5IyO0XUgCFVis8yB9ogX8FBhmFzugSrdVmho4LIVQD8B2Fuu16N8MZhVIbBH4EV7sGgUMqiwYTlArN9Q4oKHSybpZnh9EfxnzMh7xWA1AQnWwtJ2-BQtw7TnyP-gyyiYLu3cnBOlkhcDbR81KwbQpZ-LLIi1yelcJ7NsXJvG-1UWhQbYyzWfkS5Ykq92gqFOji7trbNknHDvl25UChwW_uwmdX1PeuLt-Zuvp-Gv92ZNT3nu1485qfTtB2urX4uOuTL-_mgqgqXD_M6t6U-GB0udisY7zoFkChdeuttw5hu1wtS_hXzF4hZo_F3n_FNxvxbsqmN78CAAD__zutJUU=
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT b, a FROM ab EXCEPT SELECT y AS b, x AS a FROM xy ORDER BY b
+----
+distribution: local
+vectorized: true
+·
+• except
+│ columns: (b, a)
+│ ordering: +b,+a
+│ estimated row count: 1,000 (missing stats)
+│
+├── • scan
+│     columns: (b, a)
+│     ordering: +b,+a
+│     estimated row count: 1,000 (missing stats)
+│     table: ab@ab_b_a_idx
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (y, x)
+      ordering: +y,+x
+      estimated row count: 1,000 (missing stats)
+      table: xy@xy_y_x_idx
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykktGLm0AQxt_7VyzzdMdtSTS5l4WCuYuFgHemKuVKEVndaSpY1-6uoIT870XtNTVcLEmfwnwzv_m-2bgH_bMABu7L1lttnsnNehNG4SePks9u8OCH7i0JXc99jEhKCScfA_-J8JS4L4_uNnpttWQVdv2m-_091LTED9ZuQB6-kBQolFLgM_-BGthXsCCmUCmZodZSddK-H9iIBticQl5WtenkmEImFQLbg8lNgcAg4mmBAXKBajYHCgINz4t-LU8dniZpwpNcNEAhrHipGXkPFPzaMOLY1LEgPlCQtTk6aMN3CMw60OtSWOMUTes0bdImzVUp7EtSrHNt8jIzM3scwbGo00m-EqhQMDII5zwXV3ku_stzedbzaFWXclg2coo78l8jbwR_QrXDEI1fzZbj6FFbIXv9pleeBxQK_GZuHOuOOvbd7QeV774fyz9_5OSB95c8aoC6kqXG00Pf3DzvrkOxw-G1tKxVhlsls95mKP2e6wWB2gxdeyg25dDqAv4NW5PwYhq2J-HlCLZO4cUFsH0KLyfh-5PY8eHdrwAAAP__SsSUMg==
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT a, b FROM ab EXCEPT ALL SELECT x AS a, y AS b FROM xy ORDER BY b, a
+----
+distribution: local
+vectorized: true
+·
+• except all
+│ columns: (a, b)
+│ ordering: +b,+a
+│ estimated row count: 1,000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     ordering: +b,+a
+│     estimated row count: 1,000 (missing stats)
+│     table: ab@ab_b_a_idx
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x, y)
+      ordering: +y,+x
+      estimated row count: 1,000 (missing stats)
+      table: xy@xy_y_x_idx
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckVFrnEAQx9_7KYZ5SsiWnOZtoeAl2cKBiVeVklJE1tupFaxrd1dQDr97UVsuhqRt8rTMzP8_v52ZI9qfNXIUD_twu7uHs9tdkiafQgafRXwdJeIcEhGKmxQkgwI-xtEdyALEw43Yp7ANwz_lHrbJpBmm97ewHyCKb0UM11-gYCCRYaMV3csfZJF_RQ8zhq3RB7JWmyl1nAU71SPfMKyatnNTOmN40IaQH9FVribkmMqippikInO5QYaKnKzqua0sAlnkRS7zSvXIMGllYzm8x2xkqDt3amqdLAm5N7K3gb01uB-CfsiHvP9fsP8i-MTrGm0UGVIrVjY5_yV55vd3ZEpKyEXtpb_-fDq0xB8dFhnW9M2dBf4FC7yL8w-mKr-fQmQYdY5D4LHAf3HAq9dsNibb6sbS00Gf7byZpiNV0rItqztzoL3RhxmzhNHsmxOKrFuq_hLsmrk0n_6x2XuF2X9q9v9qvlqZN2M2vvsVAAD__wSzHgA=
+
+statement ok
+CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT, INDEX (b, c, d, e))
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT a, b, c, d, e FROM abcde UNION SELECT a, c, b, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• union
+│ columns: (a, b, c, d, e)
+│ ordering: +a,+b,+c,+d,+e
+│ estimated row count: 2 (missing stats)
+│
+├── • filter
+│   │ columns: (a, b, c, d, e)
+│   │ ordering: +a
+│   │ estimated row count: 1 (missing stats)
+│   │ filter: (c = 1) AND (d = e)
+│   │
+│   └── • scan
+│         columns: (a, b, c, d, e)
+│         ordering: +a
+│         estimated row count: 1,000 (missing stats)
+│         table: abcde@primary
+│         spans: FULL SCAN
+│
+└── • sort
+    │ columns: (a, c, b, d, e)
+    │ ordering: +a
+    │ estimated row count: 1 (missing stats)
+    │ order: +a
+    │
+    └── • filter
+        │ columns: (a, b, c, d, e)
+        │ estimated row count: 1 (missing stats)
+        │ filter: d = e
+        │
+        └── • scan
+              columns: (a, b, c, d, e)
+              estimated row count: 10 (missing stats)
+              table: abcde@abcde_b_c_d_e_idx
+              spans: /1-/2
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykku-L2k4Qxt9__4phXunXOWJ-HWVB2LuaowGbXBP7iyISs8MR8BK7WeGK-L8XE8HTalrbN4GdmWc-T57dDdbflygw-PI4uQsj6I3DdJp-mBB8CpL7OA36kAaT4O0U_oeHJH4Pvf0xI1gQ5ASKgNtWtsgVw8cojCM4TOXN4MlUHz6_C5IAejmMwO7DXTSGnoIRcB_iZBwkcP8VMiQsK8VR9sw1im9o44xwpauc67rSu9KmGQjVC4ohYVGu1mZXnhHmlWYUGzSFWTIKnGaLJSecKdbWEAkVm6xYNmsbR7L5zhfzfK7mPC_UCxKmq6ysBVj2jeXgbEtYrc0BUZvsiVHYW_pzGw_F0rBmbdnHHtq6AOnBCKR_EeZcA0srbVhbzjFK2gMkjNdGgLRJuiQdkh51QN1roK-Dds8FvdLFc6Z_HOK9uQj2_ipa73y0PenuHpsQIoymb_Zvbp93_6IF_6KFA7nSijWrX2Im6QxIugOS3oCkP8DZ9ozvcVGbosyN5Z8uaG7G_c3l3F6TUcL1qiprPiJd2jzcuWX1xO3f1tVa5_yoq7zBtMe40TUFxbVpu3Z7CMu2tTP4Wmx3ip1usdMp9o_E9qnY7RR73WTvX8h-p_j2hDzb_vczAAD__6qVwrQ=
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT a, b, c, d, e FROM abcde UNION SELECT  a, c, b, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
+----
+distribution: local
+vectorized: true
+·
+• union
+│ columns: (a, b, c, d, e)
+│ ordering: +b,+c,+d,+a,+e
+│ estimated row count: 2 (missing stats)
+│
+├── • filter
+│   │ columns: (a, b, c, d, e)
+│   │ ordering: +b,+d,+a
+│   │ estimated row count: 1 (missing stats)
+│   │ filter: (c = 1) AND (d = e)
+│   │
+│   └── • scan
+│         columns: (a, b, c, d, e)
+│         ordering: +b,+c,+d,+e,+a
+│         estimated row count: 1,000 (missing stats)
+│         table: abcde@abcde_b_c_d_e_idx
+│         spans: FULL SCAN
+│
+└── • filter
+    │ columns: (a, c, b, d, e)
+    │ ordering: +c,+d,+a
+    │ estimated row count: 1 (missing stats)
+    │ filter: d = e
+    │
+    └── • scan
+          columns: (a, b, c, d, e)
+          ordering: +c,+d,+e,+a
+          estimated row count: 10 (missing stats)
+          table: abcde@abcde_b_c_d_e_idx
+          spans: /1-/2
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkm-L2kAQxt_3UwzzSuscukmEsiDsXc3RgE2u0f6jiMTscARsYndXOBC_ezER_MPF1vZNYGfmmeeXZ3eL9tcKJYbfnib3UQydcTSdTT9NCL6E6UMyDbswDSfh-xm8hcc0-QidwzEjWBLkBJqAm1a2zDXD5zhKYjhO5fXgxVQXvn4I0xA6OYxAdOE-HkNHwwi4C0k6DlN4-H6ynyBDwrLSHGc_2aL8gQLnhGtT5WxtZfalbT0Q6ReUA8KiXG_cvjwnzCvDKLfoCrdilDjLlitOOdNs-gMk1OyyYlWvrelU_V0sF_lCL3hR6BcknK6z0kroi7u-h_MdYbVxRwvrsmdGKXb09xiPxcqxYdMX5wxNXYIKYARqiITJxklQgpRPyiMVkBq2Ini3IJwm4d2YxF0rgv9PKfivp9BR_v6NSCmjePbu8FQO0XRbEYJWhKNzZTQb1ue2yuuR8nukgh4p0SM17OF89wr3uLCuKHPXDy4WiPqO_D9c0_CWjFK266q0fObUtnmwp2X9zM3f2mpjcn4yVV7bNMek1tUFzdY1XdEcorJp7QFPxeKqODgTi0uxd1XsX3f2_8c5uCoeXjjPd29-BwAA__-0e5X_
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde UNION ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• union all
+│ columns: (a, b, c, d, e)
+│ ordering: +a
+│ estimated row count: 2 (missing stats)
+│
+├── • filter
+│   │ columns: (a, b, c, d, e)
+│   │ ordering: +a
+│   │ estimated row count: 1 (missing stats)
+│   │ filter: (c = 1) AND (d = e)
+│   │
+│   └── • scan
+│         columns: (a, b, c, d, e)
+│         ordering: +a
+│         estimated row count: 1,000 (missing stats)
+│         table: abcde@primary
+│         spans: FULL SCAN
+│
+└── • filter
+    │ columns: (a, b, c, d, e)
+    │ ordering: +a
+    │ estimated row count: 1 (missing stats)
+    │ filter: (c = 1) AND (d = e)
+    │
+    └── • scan
+          columns: (a, b, c, d, e)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: abcde@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskN1q20AQhe_7FMNcSe0GW5YCZcEgp95QgSqlkvtH0cVGOwSBolV319Bi_O7FUiFRiE3S5HJ-znznzA7trxY5iu9X6SrJwFsn5ab8nDL4KoqLvBQ-lCIVHzbwFi6L_BN401Je14rgS5bkGazSFB6Z-vDtoygEeDUsIfBhla3BU7AE8iEv1qKAix8gkWGnFWXylizynxhgxbA3uiZrtTm0dsNCon4jnzNsun7rDu2KYa0NId-ha1xLyHEjr1sqSCoyszkyVORk0w5nB0dxb5pbaf4gw7KXneVwhtWeod66u6PWyRtCHuzZ08GXTevIkJkFU-rY5-DF4eEHnPMk27z_94o4giXE5_5RC4vnWLifffHC7OF_ZQ9fM3t01MIdWRtFhtQUGwfvsNo_4jPTZ7qfRZPtY_T5cx5QkO11Z-mJlyuGpG5ojGL11tR0ZXQ9YMYyH3RDQ5F14zQYi6QbRweD98XBSXE0EQcPxYuT4vA0OXwJOTopPn9ArvZv_gYAAP__aIR-OA==
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde UNION ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
+----
+distribution: local
+vectorized: true
+·
+• union all
+│ columns: (a, b, c, d, e)
+│ ordering: +b,+c,+d,+a
+│ estimated row count: 2 (missing stats)
+│
+├── • filter
+│   │ columns: (a, b, c, d, e)
+│   │ ordering: +b,+d,+a
+│   │ estimated row count: 1 (missing stats)
+│   │ filter: (c = 1) AND (d = e)
+│   │
+│   └── • scan
+│         columns: (a, b, c, d, e)
+│         ordering: +b,+c,+d,+e,+a
+│         estimated row count: 1,000 (missing stats)
+│         table: abcde@abcde_b_c_d_e_idx
+│         spans: FULL SCAN
+│
+└── • filter
+    │ columns: (a, b, c, d, e)
+    │ ordering: +b,+d,+a
+    │ estimated row count: 1 (missing stats)
+    │ filter: (c = 1) AND (d = e)
+    │
+    └── • scan
+          columns: (a, b, c, d, e)
+          ordering: +b,+c,+d,+e,+a
+          estimated row count: 1,000 (missing stats)
+          table: abcde@abcde_b_c_d_e_idx
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskG9rm1AUxt_vUxzOq7ickhgtjAsB08UywWmn2T-GiPEeiuC87l4DhZDvPqKD1tKEdu0b4TzH5zy_--zR_KlRoP_jJlwFEUzWQbpJv4QE3_zkKk59C1I_9D9u4D1cJ_FnmIzHYltKhq9REEewCkN4YmvB909-4sOkhCXYFqyiNUwkLIEtiJO1n8DVT9gSlASSgAkKJGyU5Kj4zQbFL7QxI2y1KtkYpY_Svv8hkHco5oRV0-66o5wRlkozij12VVczCtwU25oTLiTr2RwJJXdFVfdnezqv_-bbvMxlznkl75AwbYvGCLjA7ECodt39edMVt4zCPtDzEa6rumPNemaP8wddwMRzjs0IIYJo8-FfQZ4LS_AurZMIi5cgPGxh8WYtOP_VgvOWLbgnEe6TlZasWY5jvcWUPGdKnjslz55idniCOVIXqp25I-cpkvlLykjYtKox_MzLGSHLWx6eZdROl3yjVdnHDGPc-3pBsumGrT0MQTOsjoAPzfZZszsy24_Ni7Nm53yy85pk96z58lFydnj3NwAA__-m3oqG
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde INTERSECT SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• intersect
+│ columns: (a, b, c, d, e)
+│ ordering: +a,+b,+c,+d,+e
+│ estimated row count: 1 (missing stats)
+│
+├── • filter
+│   │ columns: (a, b, c, d, e)
+│   │ ordering: +a
+│   │ estimated row count: 1 (missing stats)
+│   │ filter: (c = 1) AND (d = e)
+│   │
+│   └── • scan
+│         columns: (a, b, c, d, e)
+│         ordering: +a
+│         estimated row count: 1,000 (missing stats)
+│         table: abcde@primary
+│         spans: FULL SCAN
+│
+└── • filter
+    │ columns: (a, b, c, d, e)
+    │ ordering: +a
+    │ estimated row count: 1 (missing stats)
+    │ filter: (c = 1) AND (d = e)
+    │
+    └── • scan
+          columns: (a, b, c, d, e)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: abcde@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1uLm0AUx9_7KQ7nSZspibdsGQhMtnGpkI1blV4oeXD1NBVcteMEuoR896IWNobENrv7OOf4O_8LuMP6V44c3a93y7m3Am3hhVH4acngsxtc-6GrQ-gu3Q8RvIWbwL8Frf-M75OUwFtFbhA24xNbHb58dAMXtARmYOgwXy1AS2EGpIMfLNwArr9BjAyLMqVV_EA18u9o4JphJcuE6rqUzWjXfuClv5FPGGZFtVXNeM0wKSUh36HKVE7IMYrvcwooTkmOJ8gwJRVneXu2dSQqmT3E8hEZhlVc1Bze4XrPsNyqp6O1ijeE3Niz_xe-yXJFkuTY6Kt2cw6asJoOOOfeKnr_twphwwyEo5-1YF5i4TC7-cLs1rOyW6-Z3b7EwiKrVVYkamz3LQiDCZMJiwmbCQcZ-jIlSSkHYZxVdp6l7LyC8vSs8pPgtii7Sz29dUP-65MT9m9Jbigk5VfjaT9A9FgRP_i_58slMszph9KEMWLCHDFhjZiwR0w4I30ms83P06sm_FY1wXuVnCvh6pL6A6qrsqjpuIyTlydNA5RuqGu0LrcyoTtZJq1M9_Rbrh2kVKtua3QPr-hWjcFD2BiEnWHYHIStYdgahO1h2B6Epz3YOIadC2DzGJ4OwldHttf7N38CAAD__8p2GHI=
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde EXCEPT SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
+----
+distribution: local
+vectorized: true
+·
+• except
+│ columns: (a, b, c, d, e)
+│ ordering: +b,+c,+d,+a,+e
+│ estimated row count: 1 (missing stats)
+│
+├── • filter
+│   │ columns: (a, b, c, d, e)
+│   │ ordering: +b,+d,+a
+│   │ estimated row count: 1 (missing stats)
+│   │ filter: (c = 1) AND (d = e)
+│   │
+│   └── • scan
+│         columns: (a, b, c, d, e)
+│         ordering: +b,+c,+d,+e,+a
+│         estimated row count: 1,000 (missing stats)
+│         table: abcde@abcde_b_c_d_e_idx
+│         spans: FULL SCAN
+│
+└── • filter
+    │ columns: (a, b, c, d, e)
+    │ ordering: +b,+d,+a
+    │ estimated row count: 1 (missing stats)
+    │ filter: (c = 1) AND (d = e)
+    │
+    └── • scan
+          columns: (a, b, c, d, e)
+          ordering: +b,+c,+d,+e,+a
+          estimated row count: 1,000 (missing stats)
+          table: abcde@abcde_b_c_d_e_idx
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslNFr20AMxt_3Vwg9JYtG6thOx0Hg2sZlgTTpbLN1jBAcn5YZPNs7X6Cj9H8ftjdah8RbSl8Cku6n79MX8AOWP1MU6N3dzi9mC-hNZ0EYfJwTfPL8y2Xg9SHw5t5VCG_h2l_eQK9dRptYMXh3V95tCAdGffj8wfM96MUwAasPF4sp9BRMgPuw9KeeD5dfYEMQEygCJoiQMMsVL6IfXKL4ihauCAudx1yWua5aD_WDmbpHcUaYZMXOVO0VYZxrRvGAJjEpo8Aw2qTsc6RYD8-QULGJkrReW7uT9e96s47Xas3rRN0jYVBEWSngHa4eCfOdeVpfmmjLKKxH-n8L10lqWLMeWm39pi-gJ-0qGSHEbBG-_xOQdGAC0u0ftTA6xcLzFEavloL9ohTs10zBOcXCNClNksVm6LQtSIvkiKRN0iHpIuFSK9asBFRth6R1VN99kb77avrjo_pPsrssb_a1VFcV-a8nB464Yb3lgM2yGI7bZ4S_ChZ_PwQX8zkSpvzN9ORoQNIekHQGJK0BSXfQn-hk-_3wqLp_ZwTspXIsgfNT_gGfyyLPSt5P4uDms-p8Vltu4izznY75VudxLdOUy5qrG4pL00ytpphlzagy-By2OmGnGx51wnY3bHfCbjfsdMLjFmztw-4J8GgfHnfC53u2V49vfgcAAP__jLsjDg==
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde EXCEPT ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• except all
+│ columns: (a, b, c, d, e)
+│ ordering: +a,+b,+c,+d,+e
+│ estimated row count: 1 (missing stats)
+│
+├── • filter
+│   │ columns: (a, b, c, d, e)
+│   │ ordering: +a
+│   │ estimated row count: 1 (missing stats)
+│   │ filter: (c = 1) AND (d = e)
+│   │
+│   └── • scan
+│         columns: (a, b, c, d, e)
+│         ordering: +a
+│         estimated row count: 1,000 (missing stats)
+│         table: abcde@primary
+│         spans: FULL SCAN
+│
+└── • filter
+    │ columns: (a, b, c, d, e)
+    │ ordering: +a
+    │ estimated row count: 1 (missing stats)
+    │ filter: (c = 1) AND (d = e)
+    │
+    └── • scan
+          columns: (a, b, c, d, e)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: abcde@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskm-L2kAQxt_3UwzzKqlbNH-EsiCsd-ao4BmbhPZK8UUuO7WBXJLurtBD_O4lSeGMqK3tvZyZ_c0zz5PsUP8okGPwsFpM50uwZvM4iT8uGHwKopswDmyIg0Vwm8BbuIvCe7D6ZfqYSYLg4TZYJTBdLODE2IbPH4IoACuDCTg2TJczsCRMgGwIo1kQwc0XSJFhWUlapk-kkX9FB9cMa1VlpHWlmtaufTCXP5GPGOZlvTVNe80wqxQh36HJTUHIMUkfC4oolaSGI2QoyaR50a5tLxK1yp9S9YwM4zotNYd3uN4zrLbmZak26YaQO3v298J3eWFIkRo6fdWuz8ESXpMB53y-TN7_jkL4MAExts-e4F5zwqF39z-9e__k3XtN7_7ZE16Ut2WlJCmSPeF1Q_7pyQkf96Q2FJMJ66Hfd5I818QPfnZkWNA3YwlnwIQ7YMIbMOEPmBgP7InKN99Pj5BhuDUchMOEy4THhM_E-GwC42s-QkS6rkpNx0mc3Dxq7JPcUBenrrYqo5WqslamK8OWaxuStOmmTlfMy27UHHgIOxdhvwc7x7B7EfYuK3tXKLvHsH8RHh8pr_dvfgUAAP__ApejQg==
+
+query T
+EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde INTERSECT ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
+----
+distribution: local
+vectorized: true
+·
+• intersect all
+│ columns: (a, b, c, d, e)
+│ ordering: +b,+c,+d,+a,+e
+│ estimated row count: 1 (missing stats)
+│
+├── • filter
+│   │ columns: (a, b, c, d, e)
+│   │ ordering: +b,+d,+a
+│   │ estimated row count: 1 (missing stats)
+│   │ filter: (c = 1) AND (d = e)
+│   │
+│   └── • scan
+│         columns: (a, b, c, d, e)
+│         ordering: +b,+c,+d,+e,+a
+│         estimated row count: 1,000 (missing stats)
+│         table: abcde@abcde_b_c_d_e_idx
+│         spans: FULL SCAN
+│
+└── • filter
+    │ columns: (a, b, c, d, e)
+    │ ordering: +b,+d,+a
+    │ estimated row count: 1 (missing stats)
+    │ filter: (c = 1) AND (d = e)
+    │
+    └── • scan
+          columns: (a, b, c, d, e)
+          ordering: +b,+c,+d,+e,+a
+          estimated row count: 1,000 (missing stats)
+          table: abcde@abcde_b_c_d_e_idx
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9uLm1AQxt_7VwzzpM2UjZdAORA42calQjZuVXqhhGA801Swao8GtoT870Ut7BqStCn7EpjLN993fsE91j9zFOh9fljM_CUYcz-Kow8Lgo9eeBtEngmRt_DexfAa7sLgHoxhmWxSxeAvYy-M2vZssYATGyZ8eu-FHhgpTMEyYbacg6FgCmxCEM69EG6_wIYgJVAETJAgYVEqXiY_uEbxFS1cEVa6TLmuS9229t2Crx5RjAmzoto1bXtFmJaaUeyxyZqcUWCcbHIOOVGsb8ZIqLhJsrw726WT3e96s07Xas3rTD0iYVQlRS3gDa4OhOWueTpfN8mWUVgH-vcId1nesGZ9Yw39-74AQzotGSGEv4zf_gEkXZiCnJhnI9jXRHhOwX4xCs5_UXBekoJ7NsKT864otWLNamC8apV_WznxjnvWW464Caobd_iS-FfFYvg9IGHO3xpD2iOSzoikOyJpjUhORuZUZ9vvp0dIGOwaAdIiaZN0SLokJ2chTK75H0Kuq7Ko-RjGycvjlgCrLfdE63KnU37QZdrZ9GXQ6bqG4rrpp1Zf-EU_agM-F1sXxe5AbB-L7Yti57Kzc4WzdSx2L4onR86rw6vfAQAA___SNa8C
+
+# Regression test for #64181. Ensure that a projection on top of an ordered
+# UNION ALL correctly projects away ordering columns.
+query T
+EXPLAIN (DISTSQL,VERBOSE) WITH q (x, y) AS (
+  SELECT * FROM (VALUES ('a', 'a'), ('b', 'b'), ('c', 'c'))
+  UNION ALL
+  SELECT * FROM (VALUES ('d', 'd'))
+)
+SELECT 'e', y FROM q
+ORDER BY x
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: ("?column?", y)
+│
+└── • render
+    │ columns: ("?column?", x, y)
+    │ ordering: +x
+    │ estimated row count: 4
+    │ render ?column?: 'e'
+    │ render x: column1
+    │ render y: column2
+    │
+    └── • union all
+        │ columns: (column1, column2)
+        │ ordering: +column1
+        │ estimated row count: 4
+        │
+        ├── • sort
+        │   │ columns: (column1, column2)
+        │   │ ordering: +column1
+        │   │ estimated row count: 3
+        │   │ order: +column1
+        │   │
+        │   └── • values
+        │         columns: (column1, column2)
+        │         size: 2 columns, 3 rows
+        │         row 0, expr 0: 'a'
+        │         row 0, expr 1: 'a'
+        │         row 1, expr 0: 'b'
+        │         row 1, expr 1: 'b'
+        │         row 2, expr 0: 'c'
+        │         row 2, expr 1: 'c'
+        │
+        └── • values
+              columns: (column1, column2)
+              size: 2 columns, 1 row
+              row 0, expr 0: 'd'
+              row 0, expr 1: 'd'
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkUFv1DAQhe_8itFcHIPRJllOPnVLA0QKSYm3BYT2kMajaqUQZ20HbbXa_46SCJWtmqqF23j8vvfGngO6XYMSk2-X2SrNIbhI1Vp9yQRcJ-V5oRIOX9P1J9hBsBdwx2GlIFBJlrxfw2v4UBafIbheZVeJgoBVTACrGBcQsJuhvpnqeqhrxjlc5WmRwyrLYM5DD1rNOOd_JIyYgLtJt4OivEhKOP8OexTYGk159ZMcyh8Y4UZgZ01Nzhk7tA6jINV7lKHAbdv1fmhvBNbGEsoD-q1vCCU2pq4a-FU1PTkIFyEK1OSrbTPqjwJN7-9p56tbQhkdxT8mRIvoWQnxSxKUsZ7sIj5xxrPoDc7ZL2ft712N1WRJP2b6yAy5eWu6xfJUXVKrycphkVJKtS7T_KOAs3h2rvAlzy7JdaZ19KwPDYehSd_S9EhnelvTpTX1GDMdi5EbG5qcn26X0yFtx6tx83_D0ZNwfAKHD-H4f5KXT8LvHiRvjq9-BwAA__9bjjq0

@@ -71,6 +71,8 @@ func newPartiallyOrderedDistinct(
 // the input has been fully processed and, if not, to move to the next chunk
 // (where "chunk" is all tuples that are equal on the ordered columns).
 type partiallyOrderedDistinct struct {
+	colexecop.InitHelper
+
 	input    *chunkerOperator
 	distinct colexecop.ResettableOperator
 }
@@ -90,20 +92,23 @@ func (p *partiallyOrderedDistinct) Child(nth int, _ bool) execinfra.OpNode {
 	return nil
 }
 
-func (p *partiallyOrderedDistinct) Init() {
-	p.distinct.Init()
+func (p *partiallyOrderedDistinct) Init(ctx context.Context) {
+	if !p.InitHelper.Init(ctx) {
+		return
+	}
+	p.distinct.Init(p.Ctx)
 }
 
-func (p *partiallyOrderedDistinct) Next(ctx context.Context) coldata.Batch {
+func (p *partiallyOrderedDistinct) Next() coldata.Batch {
 	for {
-		batch := p.distinct.Next(ctx)
+		batch := p.distinct.Next()
 		if batch.Length() == 0 {
 			if p.input.done() {
 				// We're done, so return a zero-length batch.
 				return coldata.ZeroBatch
 			}
 			// p.distinct will reset p.Input.
-			p.distinct.Reset(ctx)
+			p.distinct.Reset(p.Ctx)
 		} else {
 			return batch
 		}
@@ -128,6 +133,8 @@ func newChunkerOperator(
 // indicates the end of a chunk, but when done() returns true, it indicates
 // that the input has been fully processed).
 type chunkerOperator struct {
+	colexecop.InitHelper
+
 	input      *chunker
 	inputTypes []*types.T
 	// haveChunksToEmit indicates whether we have spooled input and still there
@@ -167,17 +174,20 @@ func (c *chunkerOperator) Child(nth int, _ bool) execinfra.OpNode {
 	return nil
 }
 
-func (c *chunkerOperator) Init() {
-	c.input.init()
+func (c *chunkerOperator) Init(ctx context.Context) {
+	if !c.InitHelper.Init(ctx) {
+		return
+	}
+	c.input.init(c.Ctx)
 }
 
-func (c *chunkerOperator) Next(ctx context.Context) coldata.Batch {
+func (c *chunkerOperator) Next() coldata.Batch {
 	if c.currentChunkFinished {
 		return coldata.ZeroBatch
 	}
 	if !c.haveChunksToEmit {
 		// We don't have any chunks to emit, so we need to spool the input.
-		c.input.spool(ctx)
+		c.input.spool()
 		c.haveChunksToEmit = true
 		c.numTuplesInChunks = c.input.getNumTuples()
 		c.newChunksCol = c.input.getPartitionsCol()

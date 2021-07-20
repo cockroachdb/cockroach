@@ -93,6 +93,11 @@ type DistSQLPlanner struct {
 	// pool of workers.
 	runnerChan chan runnerRequest
 
+	// cancelFlowsCoordinator is responsible for batching up the requests to
+	// cancel remote flows initiated on the behalf of the current node when the
+	// local flows errored out.
+	cancelFlowsCoordinator cancelFlowsCoordinator
+
 	// gossip handle used to check node version compatibility.
 	gossip gossip.OptionalGossip
 
@@ -161,6 +166,7 @@ func NewDistSQLPlanner(
 	}
 
 	dsp.initRunners(ctx)
+	dsp.initCancelingWorkers(ctx)
 	return dsp
 }
 
@@ -440,6 +446,9 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err := checkExpr(n.lookupExpr); err != nil {
 			return cannotDistribute, err
 		}
+		if err := checkExpr(n.remoteLookupExpr); err != nil {
+			return cannotDistribute, err
+		}
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
@@ -634,7 +643,7 @@ type PlanningCtx struct {
 
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
-	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
+	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
@@ -683,8 +692,8 @@ func (p *PlanningCtx) EvaluateSubqueries() bool {
 // plans and their diagrams.
 func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
-) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-	return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error {
+	return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec, opChains execinfra.OpChains) error {
 		var diagram execinfrapb.FlowDiagram
 		if planner.instrumentation.shouldSaveDiagrams() {
 			diagramFlags := execinfrapb.DiagramFlags{
@@ -702,7 +711,9 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 			flowCtx := newFlowCtxForExplainPurposes(p, planner, &planner.extendedEvalCtx.DistSQLPlanner.rpcCtx.ClusterID)
 			getExplain := func(verbose bool) []string {
 				explain, err := colflow.ExplainVec(
-					ctx, flowCtx, flows, p.infra.LocalProcessors, verbose, planner.curPlan.flags.IsDistributed(),
+					ctx, flowCtx, flows, p.infra.LocalProcessors, opChains,
+					planner.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
+					verbose, planner.curPlan.flags.IsDistributed(),
 				)
 				if err != nil {
 					// In some edge cases (like when subqueries are present or
@@ -907,7 +918,21 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	// nodeMap maps a nodeID to an index inside the partitions array.
 	nodeMap := make(map[roachpb.NodeID]int)
 	it := planCtx.spanIter
-	for _, span := range spans {
+	for i := range spans {
+
+		span := spans[i]
+		if len(span.EndKey) == 0 {
+			// If we see a span to partition that has no end key, it means that we're
+			// going to do a point lookup on the start key of this span.
+			//
+			// The code below us doesn't really tolerate spans without an EndKey, so
+			// we manufacture a single-key span for this case.
+			span = roachpb.Span{
+				Key:    span.Key,
+				EndKey: span.Key.Next(),
+			}
+		}
+
 		// rSpan is the span we are currently partitioning.
 		rSpan, err := keys.SpanAddr(span)
 		if err != nil {
@@ -1011,10 +1036,9 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(nodeID roachpb.NodeID) bool {
 	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
 
-func getIndexIdx(index *descpb.IndexDescriptor, desc catalog.TableDescriptor) (uint32, error) {
-	foundIndex, _ := desc.FindIndexWithID(index.ID)
-	if foundIndex != nil && foundIndex.Public() {
-		return uint32(foundIndex.Ordinal()), nil
+func getIndexIdx(index catalog.Index, desc catalog.TableDescriptor) (uint32, error) {
+	if index.Public() {
+		return uint32(index.Ordinal()), nil
 	}
 	return 0, errors.Errorf("invalid index %v (table %s)", index, desc.GetName())
 }
@@ -1344,9 +1368,8 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		}
 	}
 
-	p.AddNoInputStage(
-		corePlacement, info.post, typs, dsp.convertOrdering(info.reqOrdering, info.colsToTableOrdinalMap),
-	)
+	// Note: we will set a merge ordering below.
+	p.AddNoInputStage(corePlacement, info.post, typs, execinfrapb.Ordering{})
 
 	outCols := getOutputColumnsFromColsForScan(info.cols, info.colsToTableOrdinalMap)
 	planToStreamColMap := make([]int, len(info.cols))
@@ -1368,28 +1391,45 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			}
 		}
 	}
-	p.AddProjection(outCols)
+	p.AddProjection(outCols, dsp.convertOrdering(info.reqOrdering, planToStreamColMap))
 
 	p.PlanToStreamColMap = planToStreamColMap
 	return nil
 }
 
-// selectRenders takes a PhysicalPlan that produces the results corresponding to
-// the select data source (a n.source) and updates it to produce results
-// corresponding to the render node itself. An evaluator stage is added if the
-// render node has any expressions which are not just simple column references.
-func (dsp *DistSQLPlanner) selectRenders(
+// createPlanForRender takes a PhysicalPlan and updates it to produce results
+// corresponding to the render node. An evaluator stage is added if the render
+// node has any expressions which are not just simple column references.
+func (dsp *DistSQLPlanner) createPlanForRender(
 	p *PhysicalPlan, n *renderNode, planCtx *PlanningCtx,
 ) error {
 	typs, err := getTypesForPlanResult(n, nil /* planToStreamColMap */)
 	if err != nil {
 		return err
 	}
-	err = p.AddRendering(n.render, planCtx, p.PlanToStreamColMap, typs)
+	if n.serialize {
+		// We need to serialize the physical plan by forcing all streams to be
+		// merged into one on the gateway node. However, it is beneficial to
+		// apply the rendering (or the projection) before merging streams in
+		// order to not send unnecessary data across the network. This
+		// optimization is possible if we have an empty merge ordering on the
+		// plan.
+		deferSerialization := len(p.MergeOrdering.Columns) == 0
+		if deferSerialization {
+			defer p.EnsureSingleStreamOnGateway()
+		} else {
+			p.EnsureSingleStreamOnGateway()
+		}
+	}
+	newColMap := identityMap(p.PlanToStreamColMap, len(n.render))
+	newMergeOrdering := dsp.convertOrdering(n.reqOrdering, newColMap)
+	err = p.AddRendering(
+		n.render, planCtx, p.PlanToStreamColMap, typs, newMergeOrdering,
+	)
 	if err != nil {
 		return err
 	}
-	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(n.render))
+	p.PlanToStreamColMap = newColMap
 	return nil
 }
 
@@ -2011,7 +2051,14 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		}
 		pkCols[i] = uint32(streamColOrd)
 	}
-	plan.AddProjection(pkCols)
+	// Note that we're using an empty merge ordering because we know for sure
+	// that we won't join streams before the next stage: below, we either call
+	// - AddNoGroupingStage, which doesn't join the streams, if we have multiple
+	//   streams, or
+	// - AddSingleGroupStage, if we have a single stream.
+	// The former does set the correct new merge ordering after the index join
+	// planning is done.
+	plan.AddProjection(pkCols, execinfrapb.Ordering{})
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Table:             *n.table.desc.TableDesc(),
@@ -2033,7 +2080,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(n.cols))
 
 	for i := range n.cols {
-		ord := tableOrdinal(n.table.desc, n.cols[i].ID, n.table.colCfg.visibility)
+		ord := tableOrdinal(n.table.desc, n.cols[i].GetID(), n.table.colCfg.visibility)
 		post.OutputColumns[i] = uint32(ord)
 	}
 
@@ -2103,6 +2150,18 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		var err error
 		joinReaderSpec.LookupExpr, err = physicalplan.MakeExpression(
 			n.lookupExpr, planCtx, indexVarMap,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if n.remoteLookupExpr != nil {
+		if n.lookupExpr == nil {
+			return nil, errors.AssertionFailedf("remoteLookupExpr is set but lookupExpr is not")
+		}
+		var err error
+		joinReaderSpec.RemoteLookupExpr, err = physicalplan.MakeExpression(
+			n.remoteLookupExpr, planCtx, indexVarMap,
 		)
 		if err != nil {
 			return nil, err
@@ -2718,7 +2777,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		if err != nil {
 			return nil, err
 		}
-		err = dsp.selectRenders(plan, n, planCtx)
+		err = dsp.createPlanForRender(plan, n, planCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -2895,7 +2954,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	if firstNotWrapped != nil {
 		// We found a DistSQL-plannable subtree - create an input spec for it.
 		input = []execinfrapb.InputSyncSpec{{
-			Type:        execinfrapb.InputSyncSpec_UNORDERED,
+			Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 			ColumnTypes: p.GetResultTypes(),
 		}}
 	}
@@ -2990,6 +3049,11 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 	var a rowenc.DatumAlloc
 	evalCtx := &planCtx.ExtendedEvalCtx.EvalContext
 	numRows := len(tuples)
+	if len(resultTypes) == 0 {
+		// Optimization for zero-column sets.
+		spec := dsp.createValuesSpec(planCtx, resultTypes, numRows, nil /* rawBytes */)
+		return spec, nil
+	}
 	rawBytes := make([][]byte, numRows)
 	for rowIdx, tuple := range tuples {
 		var buf []byte
@@ -3300,7 +3364,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				// TODO(solon): We could skip this stage if there is a strong key on
 				// the result columns.
 				plan.AddNoGroupingStage(distinctSpecs[side], execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), distinctOrds[side])
-				plan.AddProjection(streamCols)
 			}
 		}
 	}
@@ -3317,15 +3380,8 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		return nil, err
 	}
 
-	if len(leftPlan.MergeOrdering.Columns) != 0 || len(rightPlan.MergeOrdering.Columns) != 0 {
-		return nil, errors.AssertionFailedf("set op inputs should have no orderings")
-	}
-
-	// TODO(radu): for INTERSECT and EXCEPT, the mergeOrdering should be set when
-	// we can use merge joiners below. The optimizer needs to be modified to take
-	// advantage of this optimization and pass down merge orderings. Tracked by
-	// #40797.
-	var mergeOrdering execinfrapb.Ordering
+	// Set the merge ordering.
+	mergeOrdering := dsp.convertOrdering(n.reqOrdering, p.PlanToStreamColMap)
 
 	// Merge processors, streams, result routers, and stage counter.
 	leftRouters := leftPlan.ResultRouters
@@ -3395,9 +3451,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				// result, the plan will end up with a serial unordered synchronizer,
 				// which has exactly the behavior that we want (in particular, it won't
 				// execute the right child if the limit is reached by the left child).
-				// TODO(rytaft,yuzefovich): This currently only works with the
-				// vectorized engine. We should consider adding support for the serial
-				// unordered synchronizer in the row-based engine (see #61081).
 				p.EnsureSingleStreamPerNode(
 					false, /* forceSerialization */
 					execinfrapb.PostProcessSpec{Limit: n.hardLimit},
@@ -3463,11 +3516,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				leftPlan.MergeOrdering, rightPlan.MergeOrdering,
 				leftRouters, rightRouters, resultTypes,
 			)
-		}
-
-		// An EXCEPT ALL is like a left outer join, so there is no guaranteed ordering.
-		if n.unionType == tree.ExceptOp {
-			mergeOrdering = execinfrapb.Ordering{}
 		}
 
 		p.SetMergeOrdering(mergeOrdering)
@@ -3573,7 +3621,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 					Node: nodeID,
 					Spec: execinfrapb.ProcessorSpec{
 						Input: []execinfrapb.InputSyncSpec{{
-							Type:        execinfrapb.InputSyncSpec_UNORDERED,
+							Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 							ColumnTypes: prevStageResultTypes,
 						}},
 						Core: execinfrapb.ProcessorCoreUnion{Windower: &windowerSpec},
@@ -3639,6 +3687,7 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 		NamePattern:      n.fileNamePattern,
 		Options:          n.csvOpts,
 		ChunkRows:        int64(n.chunkRows),
+		ChunkSize:        n.chunkSize,
 		CompressionCodec: n.fileCompression,
 		UserProto:        planCtx.planner.User().EncodeProto(),
 	}}
@@ -3705,8 +3754,8 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 			projection = append(projection, uint32(outputCol))
 		}
 	}
-	plan.AddProjection(projection)
-	// Update PlanToStreamColMap to nil since it is no longer necessary.
+	plan.AddProjection(projection, execinfrapb.Ordering{})
+	// PlanToStreamColMap is no longer necessary.
 	plan.PlanToStreamColMap = nil
 
 	if len(metadataSenders) > 0 {

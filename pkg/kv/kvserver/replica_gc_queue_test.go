@@ -11,12 +11,14 @@
 package kvserver
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReplicaGCShouldQueue(t *testing.T) {
@@ -27,45 +29,44 @@ func TestReplicaGCShouldQueue(t *testing.T) {
 		return hlc.Timestamp{WallTime: t.Nanoseconds()}
 	}
 
-	base := 2 * (ReplicaGCQueueSuspectTimeout + ReplicaGCQueueInactivityThreshold)
+	base := 2 * (ReplicaGCQueueSuspectCheckInterval + ReplicaGCQueueCheckInterval)
 	var (
 		z       = ts(0)
 		bTS     = ts(base)
-		cTS     = ts(base + ReplicaGCQueueSuspectTimeout)
-		cTSnext = ts(base + ReplicaGCQueueSuspectTimeout + 1)
-		iTSprev = ts(base + ReplicaGCQueueInactivityThreshold - 1)
-		iTS     = ts(base + ReplicaGCQueueInactivityThreshold)
+		sTS     = ts(base + ReplicaGCQueueSuspectCheckInterval)
+		sTSnext = ts(base + ReplicaGCQueueSuspectCheckInterval + 1)
+		iTS     = ts(base + ReplicaGCQueueCheckInterval)
+		iTSnext = ts(base + ReplicaGCQueueCheckInterval + 1)
 	)
 
-	for i, test := range []struct {
-		now, lastCheck, lastActivity hlc.Timestamp
-		isCandidate                  bool
-
-		shouldQ  bool
-		priority float64
+	testcases := []struct {
+		now            hlc.Timestamp
+		lastCheck      hlc.Timestamp
+		isSuspect      bool
+		expectQueue    bool
+		expectPriority float64
 	}{
-		// Test outcomes when range is in candidate state.
-
-		// All timestamps current: candidacy plays no role.
-		{now: z, lastCheck: z, lastActivity: z, isCandidate: true, shouldQ: false, priority: 0},
+		// All timestamps current: suspect plays no role.
+		{now: z, lastCheck: z, isSuspect: true, expectQueue: false, expectPriority: 0},
 		// Threshold: no action taken.
-		{now: cTS, lastCheck: z, lastActivity: bTS, isCandidate: true, shouldQ: false, priority: 0},
-		// Queue with priority.
-		{now: cTSnext, lastCheck: z, lastActivity: bTS, isCandidate: true, shouldQ: true, priority: 1},
-		// Last processed recently: candidate still gets processed eagerly.
-		{now: cTSnext, lastCheck: bTS, lastActivity: z, isCandidate: true, shouldQ: true, priority: 1},
-		// Last processed recently: non-candidate stays put.
-		{now: cTSnext, lastCheck: bTS, lastActivity: z, isCandidate: false, shouldQ: false, priority: 0},
-		// Still no effect until iTS reached.
-		{now: iTSprev, lastCheck: bTS, lastActivity: z, isCandidate: false, shouldQ: false, priority: 0},
-		{now: iTS, lastCheck: bTS, lastActivity: z, isCandidate: true, shouldQ: true, priority: 1},
-		// Verify again that candidacy increases priority.
-		{now: iTS, lastCheck: bTS, lastActivity: z, isCandidate: false, shouldQ: true, priority: 0},
-	} {
-		if sq, pr := replicaGCShouldQueueImpl(
-			test.now, test.lastCheck, test.lastActivity, test.isCandidate,
-		); sq != test.shouldQ || pr != test.priority {
-			t.Errorf("%d: %+v: got (%t,%f)", i, test, sq, pr)
-		}
+		{now: sTS, lastCheck: bTS, isSuspect: true, expectQueue: false, expectPriority: 0},
+		// Last processed recently: suspect still gets processed eagerly.
+		{now: sTSnext, lastCheck: bTS, isSuspect: true, expectQueue: true, expectPriority: 1},
+		// Last processed recently: non-suspect stays put.
+		{now: sTSnext, lastCheck: bTS, isSuspect: false, expectQueue: false, expectPriority: 0},
+		// No effect until iTS crossed.
+		{now: iTS, lastCheck: bTS, isSuspect: false, expectQueue: false, expectPriority: 0},
+		{now: iTSnext, lastCheck: bTS, isSuspect: false, expectQueue: true, expectPriority: 0},
+		// Verify again that suspect increases priority.
+		{now: iTSnext, lastCheck: bTS, isSuspect: true, expectQueue: true, expectPriority: 1},
+	}
+	for _, tc := range testcases {
+		tc := tc
+		name := fmt.Sprintf("now=%s lastCheck=%s isSuspect=%v", tc.now, tc.lastCheck, tc.isSuspect)
+		t.Run(name, func(t *testing.T) {
+			shouldQueue, priority := replicaGCShouldQueueImpl(tc.now, tc.lastCheck, tc.isSuspect)
+			require.Equal(t, tc.expectQueue, shouldQueue)
+			require.Equal(t, tc.expectPriority, priority)
+		})
 	}
 }

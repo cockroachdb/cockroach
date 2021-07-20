@@ -253,7 +253,7 @@ limit
  │         │    │    │    │    │    │    │    └── ca_tax_st:5 IN (0, 1, 2) [outer=(5), constraints=(/5: [/0 - /0] [/1 - /1] [/2 - /2]; tight)]
  │         │    │    │    │    │    │    ├── key: (1)
  │         │    │    │    │    │    │    ├── fd: (1)-->(3,6)
- │         │    │    │    │    │    │    └── ordering: +1 opt(3) [actual: +1]
+ │         │    │    │    │    │    │    └── ordering: +1
  │         │    │    │    │    │    └── filters
  │         │    │    │    │    │         └── ca_c_id:3 = 0 [outer=(3), constraints=(/3: [/0 - /0]; tight), fd=()-->(3)]
  │         │    │    │    │    └── filters (true)
@@ -344,27 +344,27 @@ UPDATE last_trade
 ----
 update last_trade
  ├── columns: <none>
- ├── fetch columns: lt_s_symb:7 lt_dts:8 last_trade.lt_price:9 lt_open_price:10 lt_vol:11
+ ├── fetch columns: lt_s_symb:7 lt_dts:8 lt_price:9 lt_open_price:10 lt_vol:11
  ├── update-mapping:
  │    ├── lt_dts_new:15 => lt_dts:2
- │    ├── lt_price:16 => last_trade.lt_price:3
+ │    ├── lt_price_new:16 => lt_price:3
  │    └── lt_vol_new:14 => lt_vol:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: lt_price:16!null lt_vol_new:14!null lt_dts_new:15!null lt_s_symb:7!null lt_dts:8!null last_trade.lt_price:9!null lt_open_price:10!null lt_vol:11!null
+      ├── columns: lt_price_new:16!null lt_vol_new:14!null lt_dts_new:15!null lt_s_symb:7!null lt_dts:8!null lt_price:9!null lt_open_price:10!null lt_vol:11!null
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── key: ()
       ├── fd: ()-->(7-11,14-16)
       ├── scan last_trade
-      │    ├── columns: lt_s_symb:7!null lt_dts:8!null last_trade.lt_price:9!null lt_open_price:10!null lt_vol:11!null
+      │    ├── columns: lt_s_symb:7!null lt_dts:8!null lt_price:9!null lt_open_price:10!null lt_vol:11!null
       │    ├── constraint: /7: [/'SYMB' - /'SYMB']
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(7-11)
       └── projections
-           ├── 1E+2 [as=lt_price:16]
+           ├── 1E+2 [as=lt_price_new:16]
            ├── lt_vol:11 + 20 [as=lt_vol_new:14, outer=(11), immutable]
            └── '2020-06-17 22:27:42.148484' [as=lt_dts_new:15]
 
@@ -2551,26 +2551,26 @@ UPDATE trade SET t_tax = '0.00':::FLOAT8::DECIMAL WHERE t_id = 0
 ----
 update trade
  ├── columns: <none>
- ├── fetch columns: t_id:17 t_dts:18 t_st_id:19 t_tt_id:20 t_is_cash:21 t_s_symb:22 t_qty:23 t_bid_price:24 t_ca_id:25 t_exec_name:26 t_trade_price:27 t_chrg:28 t_comm:29 trade.t_tax:30 t_lifo:31
+ ├── fetch columns: t_id:17 t_dts:18 t_st_id:19 t_tt_id:20 t_is_cash:21 t_s_symb:22 t_qty:23 t_bid_price:24 t_ca_id:25 t_exec_name:26 t_trade_price:27 t_chrg:28 t_comm:29 t_tax:30 t_lifo:31
  ├── update-mapping:
- │    └── t_tax:34 => trade.t_tax:14
+ │    └── t_tax_new:34 => t_tax:14
  ├── check columns: check5:39
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: check5:39!null t_tax:34!null t_id:17!null t_dts:18!null t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null trade.t_tax:30!null t_lifo:31!null
+      ├── columns: check5:39!null t_tax_new:34!null t_id:17!null t_dts:18!null t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null t_tax:30!null t_lifo:31!null
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(17-31,34,39)
       ├── scan trade
-      │    ├── columns: t_id:17!null t_dts:18!null t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null trade.t_tax:30!null t_lifo:31!null
+      │    ├── columns: t_id:17!null t_dts:18!null t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null t_tax:30!null t_lifo:31!null
       │    ├── constraint: /17: [/0 - /0]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(17-31)
       └── projections
            ├── true [as=check5:39]
-           └── 0 [as=t_tax:34]
+           └── 0 [as=t_tax_new:34]
 
 # Q19
 opt
@@ -2655,31 +2655,31 @@ UPDATE trade
 ----
 update trade
  ├── columns: <none>
- ├── fetch columns: t_id:17 t_dts:18 trade.t_st_id:19 t_tt_id:20 t_is_cash:21 t_s_symb:22 t_qty:23 t_bid_price:24 t_ca_id:25 t_exec_name:26 trade.t_trade_price:27 t_chrg:28 trade.t_comm:29 t_tax:30 t_lifo:31
+ ├── fetch columns: t_id:17 t_dts:18 trade.t_st_id:19 t_tt_id:20 t_is_cash:21 t_s_symb:22 t_qty:23 t_bid_price:24 t_ca_id:25 t_exec_name:26 t_trade_price:27 t_chrg:28 t_comm:29 t_tax:30 t_lifo:31
  ├── update-mapping:
  │    ├── t_dts_new:34 => t_dts:2
  │    ├── t_st_id_new:35 => trade.t_st_id:3
- │    ├── t_trade_price:37 => trade.t_trade_price:11
- │    └── t_comm:38 => trade.t_comm:13
+ │    ├── t_trade_price_new:37 => t_trade_price:11
+ │    └── t_comm_new:38 => t_comm:13
  ├── check columns: check4:42
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: check4:42!null t_comm:38!null t_trade_price:37!null t_dts_new:34!null t_st_id_new:35!null t_id:17!null t_dts:18!null trade.t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null trade.t_trade_price:27 t_chrg:28!null trade.t_comm:29!null t_tax:30!null t_lifo:31!null
+ │    ├── columns: check4:42!null t_comm_new:38!null t_trade_price_new:37!null t_dts_new:34!null t_st_id_new:35!null t_id:17!null t_dts:18!null trade.t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null t_tax:30!null t_lifo:31!null
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(17-31,34,35,37,38,42)
  │    ├── scan trade
- │    │    ├── columns: t_id:17!null t_dts:18!null trade.t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null trade.t_trade_price:27 t_chrg:28!null trade.t_comm:29!null t_tax:30!null t_lifo:31!null
+ │    │    ├── columns: t_id:17!null t_dts:18!null trade.t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null t_tax:30!null t_lifo:31!null
  │    │    ├── constraint: /17: [/0 - /0]
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    └── fd: ()-->(17-31)
  │    └── projections
  │         ├── true [as=check4:42]
- │         ├── 0 [as=t_comm:38]
- │         ├── 1E+2 [as=t_trade_price:37]
+ │         ├── 0 [as=t_comm_new:38]
+ │         ├── 1E+2 [as=t_trade_price_new:37]
  │         ├── '2020-06-17 22:27:42.148484' [as=t_dts_new:34]
  │         └── 'SBMT' [as=t_st_id_new:35]
  └── f-k-checks
@@ -2763,26 +2763,26 @@ UPDATE broker
 ----
 update broker
  ├── columns: <none>
- ├── fetch columns: b_id:7 b_st_id:8 b_name:9 b_num_trades:10 broker.b_comm_total:11
+ ├── fetch columns: b_id:7 b_st_id:8 b_name:9 b_num_trades:10 b_comm_total:11
  ├── update-mapping:
  │    ├── b_num_trades_new:14 => b_num_trades:4
- │    └── b_comm_total:15 => broker.b_comm_total:5
+ │    └── b_comm_total_new:15 => b_comm_total:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: b_comm_total:15 b_num_trades_new:14!null b_id:7!null b_st_id:8!null b_name:9!null b_num_trades:10!null broker.b_comm_total:11!null
+      ├── columns: b_comm_total_new:15 b_num_trades_new:14!null b_id:7!null b_st_id:8!null b_name:9!null b_num_trades:10!null b_comm_total:11!null
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── key: ()
       ├── fd: ()-->(7-11,14,15)
       ├── scan broker
-      │    ├── columns: b_id:7!null b_st_id:8!null b_name:9!null b_num_trades:10!null broker.b_comm_total:11!null
+      │    ├── columns: b_id:7!null b_st_id:8!null b_name:9!null b_num_trades:10!null b_comm_total:11!null
       │    ├── constraint: /7: [/0 - /0]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(7-11)
       └── projections
-           ├── crdb_internal.round_decimal_values(broker.b_comm_total:11::DECIMAL, 2) [as=b_comm_total:15, outer=(11), immutable]
+           ├── crdb_internal.round_decimal_values(b_comm_total:11::DECIMAL, 2) [as=b_comm_total_new:15, outer=(11), immutable]
            └── b_num_trades:10 + 1 [as=b_num_trades_new:14, outer=(10), immutable]
 
 # Q25
@@ -2841,13 +2841,13 @@ project
  │    ├── columns: ca_id:1!null customer_account.ca_bal:6!null
  │    ├── fetch columns: ca_id:8 ca_b_id:9 ca_c_id:10 ca_name:11 ca_tax_st:12 customer_account.ca_bal:13
  │    ├── update-mapping:
- │    │    └── ca_bal:16 => customer_account.ca_bal:6
+ │    │    └── ca_bal_new:16 => customer_account.ca_bal:6
  │    ├── cardinality: [0 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(1,6)
  │    └── project
- │         ├── columns: ca_bal:16 ca_id:8!null ca_b_id:9!null ca_c_id:10!null ca_name:11 ca_tax_st:12!null customer_account.ca_bal:13!null
+ │         ├── columns: ca_bal_new:16 ca_id:8!null ca_b_id:9!null ca_c_id:10!null ca_name:11 ca_tax_st:12!null customer_account.ca_bal:13!null
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
@@ -2859,7 +2859,7 @@ project
  │         │    ├── key: ()
  │         │    └── fd: ()-->(8-13)
  │         └── projections
- │              └── crdb_internal.round_decimal_values(customer_account.ca_bal:13::DECIMAL + 1E+2, 2) [as=ca_bal:16, outer=(13), immutable]
+ │              └── crdb_internal.round_decimal_values(customer_account.ca_bal:13::DECIMAL + 1E+2, 2) [as=ca_bal_new:16, outer=(13), immutable]
  └── projections
       └── customer_account.ca_bal:6::FLOAT8 [as=ca_bal:18, outer=(6), immutable]
 

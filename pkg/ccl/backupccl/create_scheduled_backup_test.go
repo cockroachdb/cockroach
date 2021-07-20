@@ -152,6 +152,9 @@ func (h *testHelper) createBackupSchedule(
 		require.NoError(t, s.InitFromDatums(datums, cols))
 		schedules = append(schedules, s)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return schedules, nil
 }
@@ -273,6 +276,19 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
 					period:     24 * time.Hour,
 					runsNow:    true,
+				},
+			},
+		},
+		{
+			name:  "full-cluster-with-interleaved-table",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup?AWS_SECRET_ACCESS_KEY=neverappears' WITH INCLUDE_DEPRECATED_INTERLEAVES RECURRING '@hourly'",
+			user:  freeUser,
+			expectedSchedules: []expectedSchedule{
+				{
+					nameRe:     "BACKUP .+",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup?AWS_SECRET_ACCESS_KEY=neverappears' WITH detached, include_deprecated_interleaves",
+					shownStmt:  "BACKUP INTO 'nodelocal://0/backup?AWS_SECRET_ACCESS_KEY=redacted' WITH detached, include_deprecated_interleaves",
+					period:     time.Hour,
 				},
 			},
 		},
@@ -635,6 +651,7 @@ func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 
 	res := th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
 	require.False(t, res.Next())
+	require.NoError(t, res.Err())
 
 	th.sqlDB.Exec(t, "BEGIN;")
 	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/collection' RECURRING '@daily';")
@@ -642,6 +659,7 @@ func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 
 	res = th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
 	require.False(t, res.Next())
+	require.NoError(t, res.Err())
 }
 
 // Normally, we issue backups with AOST set to be the scheduled nextRun.

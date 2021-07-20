@@ -206,7 +206,7 @@ type vTableLookupJoinNode struct {
 	dbName string
 	db     catalog.DatabaseDescriptor
 	table  catalog.TableDescriptor
-	index  *descpb.IndexDescriptor
+	index  catalog.Index
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
 	// indexes only support a single indexed column currently.
 	eqCol             int
@@ -256,7 +256,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
-	_, db, err := params.p.Descriptors().GetImmutableDatabaseByName(
+	db, err := params.p.Descriptors().GetImmutableDatabaseByName(
 		params.ctx,
 		params.p.txn,
 		v.dbName,

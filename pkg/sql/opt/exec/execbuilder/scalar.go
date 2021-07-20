@@ -250,7 +250,7 @@ func (b *Builder) buildUnary(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.T
 		return nil, err
 	}
 	operator := opt.UnaryOpReverseMap[scalar.Op()]
-	return tree.NewTypedUnaryExpr(operator, input, scalar.DataType()), nil
+	return tree.NewTypedUnaryExpr(tree.MakeUnaryOperator(operator), input, scalar.DataType()), nil
 }
 
 func (b *Builder) buildBinary(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {

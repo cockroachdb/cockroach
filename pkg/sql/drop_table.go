@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -307,7 +309,7 @@ func (p *planner) dropTableImpl(
 	// Remove interleave relationships.
 	for _, idx := range tableDesc.NonDropIndexes() {
 		if idx.NumInterleaveAncestors() > 0 {
-			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx.IndexDesc()); err != nil {
+			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
 				return droppedViews, err
 			}
 		}
@@ -320,15 +322,15 @@ func (p *planner) dropTableImpl(
 	}
 
 	// Remove sequence dependencies.
-	for i := range tableDesc.Columns {
-		if err := p.removeSequenceDependencies(ctx, tableDesc, &tableDesc.Columns[i]); err != nil {
+	for _, col := range tableDesc.PublicColumns() {
+		if err := p.removeSequenceDependencies(ctx, tableDesc, col); err != nil {
 			return droppedViews, err
 		}
 	}
 
 	// Drop sequences that the columns of the table own.
-	for _, col := range tableDesc.Columns {
-		if err := p.dropSequencesOwnedByCol(ctx, &col, !droppingParent, behavior); err != nil {
+	for _, col := range tableDesc.PublicColumns() {
+		if err := p.dropSequencesOwnedByCol(ctx, col, !droppingParent, behavior); err != nil {
 			return droppedViews, err
 		}
 	}
@@ -393,7 +395,7 @@ func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledes
 	// allowed to scan the meta ranges directly.
 	if p.ExecCfg().Codec.ForSystemTenant() {
 		span := tableDesc.TableSpan(p.ExecCfg().Codec)
-		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, span)
+		ranges, err := kvclient.ScanMetaKVs(ctx, p.execCfg.DB.NewTxn(ctx, "unsplit-ranges-for-table"), span)
 		if err != nil {
 			return err
 		}
@@ -425,6 +427,16 @@ func (p *planner) initiateDropTable(
 ) error {
 	if tableDesc.Dropped() {
 		return errors.Errorf("table %q is already being dropped", tableDesc.Name)
+	}
+
+	// Exit early with an error if the table is undergoing a new-style schema
+	// change, before we try to get job IDs and update job statuses later. See
+	// createOrUpdateSchemaChangeJob.
+	if tableDesc.NewSchemaChangeJobID != 0 {
+		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot perform a schema change on table %q while it is undergoing a new-style schema change",
+			tableDesc.GetName(),
+		)
 	}
 
 	// If the table is not interleaved , use the delayed GC mechanism to
@@ -506,7 +518,7 @@ func (p *planner) markTableMutationJobsSuccessful(
 			ctx, p.txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				status := md.Status
 				switch status {
-				case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed:
+				case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, jobs.StatusRevertFailed:
 					log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
 					return nil
 				case jobs.StatusRunning, jobs.StatusPending:
@@ -639,12 +651,12 @@ func removeFKBackReferenceFromTable(
 }
 
 func (p *planner) removeInterleaveBackReference(
-	ctx context.Context, tableDesc *tabledesc.Mutable, idx *descpb.IndexDescriptor,
+	ctx context.Context, tableDesc *tabledesc.Mutable, idx catalog.Index,
 ) error {
-	if len(idx.Interleave.Ancestors) == 0 {
+	if idx.NumInterleaveAncestors() == 0 {
 		return nil
 	}
-	ancestor := idx.Interleave.Ancestors[len(idx.Interleave.Ancestors)-1]
+	ancestor := idx.GetInterleaveAncestor(idx.NumInterleaveAncestors() - 1)
 	var t *tabledesc.Mutable
 	if ancestor.TableID == tableDesc.ID {
 		t = tableDesc
@@ -666,10 +678,10 @@ func (p *planner) removeInterleaveBackReference(
 	targetIdx := targetIdxI.IndexDesc()
 	foundAncestor := false
 	for k, ref := range targetIdx.InterleavedBy {
-		if ref.Table == tableDesc.ID && ref.Index == idx.ID {
+		if ref.Table == tableDesc.ID && ref.Index == idx.GetID() {
 			if foundAncestor {
 				return errors.AssertionFailedf(
-					"ancestor entry in %s for %s@%s found more than once", t.Name, tableDesc.Name, idx.Name)
+					"ancestor entry in %s for %s@%s found more than once", t.Name, tableDesc.Name, idx.GetName())
 			}
 			targetIdx.InterleavedBy = append(targetIdx.InterleavedBy[:k], targetIdx.InterleavedBy[k+1:]...)
 			foundAncestor = true

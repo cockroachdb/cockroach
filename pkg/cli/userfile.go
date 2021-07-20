@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -186,7 +186,7 @@ func runUserFileGet(cmd *cobra.Command, args []string) error {
 	}
 	glob := conf.Path
 	conf.Path = "/"
-	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, conf, conn.conn.(cloud.SQLConnI))
+	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.conn.(cloud.SQLConnI))
 	if err != nil {
 		return err
 	}
@@ -367,7 +367,7 @@ func getUserfileConf(
 		return roachpb.ExternalStorage_FileTable{}, err
 	}
 
-	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
+	userFileTableConf, err := cloud.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
 	if err != nil {
 		return roachpb.ExternalStorage_FileTable{}, err
 	}
@@ -382,7 +382,7 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, er
 	}
 	prefix := conf.Path
 	conf.Path = ""
-	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, conf, conn.conn.(cloud.SQLConnI))
+	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.conn.(cloud.SQLConnI))
 	if err != nil {
 		return nil, err
 	}
@@ -433,7 +433,7 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 		return nil, err
 	}
 
-	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
+	userFileTableConf, err := cloud.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
 	if err != nil {
 		return nil, err
 	}
@@ -442,7 +442,7 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 	// ListFiles call below. Explicit glob patterns allows us to use the same
 	// ExternalStorage for both the ListFiles() and Delete() methods.
 	userFileTableConf.FileTableConfig.Path = ""
-	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
+	f, err := userfile.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
 		conn.conn.(cloud.SQLConnI))
 	if err != nil {
 		return nil, err

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,9 +38,9 @@ func newTestStorageFactory(t *testing.T) (cloud.ExternalStorageFromURIFactory, f
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
 	externalStorageFromURI := func(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
 		error) {
-		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
+		conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 		require.NoError(t, err)
-		return cloudimpl.TestingMakeLocalStorage(ctx, conf.LocalFile, settings, clientFactory, base.ExternalIODirConfig{})
+		return nodelocal.TestingMakeLocalStorage(ctx, conf.LocalFile, settings, clientFactory, base.ExternalIODirConfig{})
 	}
 	return externalStorageFromURI, dirCleanupFn
 }
@@ -63,7 +63,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		storage, err := externalStorageFromURI(ctx, uri, security.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
-		require.NoError(t, storage.WriteFile(ctx, backupManifestName, emptyReader))
+		require.NoError(t, cloud.WriteFile(ctx, storage, backupManifestName, emptyReader))
 	}
 
 	// writeLatest writes latestBackupSuffix to the LATEST file in the given
@@ -72,7 +72,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		storage, err := externalStorageFromURI(ctx, collectionURI, security.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
-		require.NoError(t, storage.WriteFile(ctx, latestFileName, bytes.NewReader([]byte(latestBackupSuffix))))
+		require.NoError(t, cloud.WriteFile(ctx, storage, latestFileName, bytes.NewReader([]byte(latestBackupSuffix))))
 	}
 
 	// localizeURI returns a slice of just the base URI if localities is nil.

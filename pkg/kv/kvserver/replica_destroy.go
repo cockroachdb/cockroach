@@ -186,8 +186,6 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 // is one, and removes the in-memory raft state.
 func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	r.raftMu.AssertHeld()
-	r.readOnlyCmdMu.Lock()
-	defer r.readOnlyCmdMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// NB: In the very rare scenario that we're being removed but currently

@@ -78,8 +78,8 @@ func prepareContainer() *TestContainer {
 	// Set the target duration to a second and the close fraction so small
 	// that the Provider will essentially close in a hot loop. In this test
 	// we'll block in the clock to pace the Provider's closer loop.
-	closedts.TargetDuration.Override(&st.SV, time.Second)
-	closedts.CloseFraction.Override(&st.SV, 1e-9)
+	closedts.TargetDuration.Override(context.Background(), &st.SV, time.Second)
+	closedts.CloseFraction.Override(context.Background(), &st.SV, 1e-9)
 
 	// We perform a little dance with the Dialer. It needs to be hooked up to the
 	// Server, but that's only created in NewContainer. The Dialer isn't used until

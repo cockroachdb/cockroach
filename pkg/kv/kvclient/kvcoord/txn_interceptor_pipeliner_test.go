@@ -55,11 +55,6 @@ func (m *mockLockedSender) MockSend(
 	m.mockFn = fn
 }
 
-// Reset resets the mockLockedSender mocking function to a no-op.
-func (m *mockLockedSender) Reset() {
-	m.mockFn = nil
-}
-
 // ChainMockSend sets a series of mocking functions on the mockLockedSender.
 // The provided mocking functions are set in the order that they are provided
 // and a given mocking function is set after the previous one has been called.
@@ -572,9 +567,9 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 
 	// Disable write_pipelining_max_outstanding_size,
 	// write_pipelining_max_batch_size, and max_intents_bytes limits.
-	pipelinedWritesMaxInFlightSize.Override(&tp.st.SV, math.MaxInt64)
-	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 0)
-	trackedWritesMaxSize.Override(&tp.st.SV, math.MaxInt64)
+	pipelinedWritesMaxInFlightSize.Override(ctx, &tp.st.SV, math.MaxInt64)
+	pipelinedWritesMaxBatchSize.Override(ctx, &tp.st.SV, 0)
+	trackedWritesMaxSize.Override(ctx, &tp.st.SV, math.MaxInt64)
 
 	const writes = 2048
 	keyBuf := roachpb.Key(strings.Repeat("a", writes+1))
@@ -840,7 +835,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	tp, mockSender := makeMockTxnPipeliner()
 
 	// Start with pipelining disabled. Should NOT use async consensus.
-	pipelinedWritesEnabled.Override(&tp.st.SV, false)
+	pipelinedWritesEnabled.Override(ctx, &tp.st.SV, false)
 
 	txn := makeTxnProto()
 	keyA, keyC := roachpb.Key("a"), roachpb.Key("c")
@@ -867,7 +862,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	require.Equal(t, 0, tp.ifWrites.len())
 
 	// Enable pipelining. Should use async consensus.
-	pipelinedWritesEnabled.Override(&tp.st.SV, true)
+	pipelinedWritesEnabled.Override(ctx, &tp.st.SV, true)
 
 	ba.Requests = nil
 	putArgs2 := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
@@ -895,7 +890,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 
 	// Disable pipelining again. Should NOT use async consensus but should still
 	// make sure to chain on to any overlapping in-flight writes.
-	pipelinedWritesEnabled.Override(&tp.st.SV, false)
+	pipelinedWritesEnabled.Override(ctx, &tp.st.SV, false)
 
 	ba.Requests = nil
 	putArgs4 := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
@@ -968,7 +963,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	tp, mockSender := makeMockTxnPipeliner()
 
 	// Set maxInFlightSize limit to 3 bytes.
-	pipelinedWritesMaxInFlightSize.Override(&tp.st.SV, 3)
+	pipelinedWritesMaxInFlightSize.Override(ctx, &tp.st.SV, 3)
 
 	txn := makeTxnProto()
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
@@ -1107,7 +1102,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	require.Equal(t, int64(0), tp.ifWrites.byteSize())
 
 	// Increase maxInFlightSize limit to 5 bytes.
-	pipelinedWritesMaxInFlightSize.Override(&tp.st.SV, 5)
+	pipelinedWritesMaxInFlightSize.Override(ctx, &tp.st.SV, 5)
 
 	// The original batch with 4 writes should succeed.
 	ba.Requests = nil
@@ -1145,7 +1140,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	tp, mockSender := makeMockTxnPipeliner()
 
 	// Set maxBatchSize limit to 1.
-	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 1)
+	pipelinedWritesMaxBatchSize.Override(ctx, &tp.st.SV, 1)
 
 	txn := makeTxnProto()
 	keyA, keyC := roachpb.Key("a"), roachpb.Key("c")
@@ -1194,7 +1189,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	require.Equal(t, 0, tp.ifWrites.len())
 
 	// Increase maxBatchSize limit to 2.
-	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 2)
+	pipelinedWritesMaxBatchSize.Override(ctx, &tp.st.SV, 2)
 
 	// Same batch now below limit.
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -1405,6 +1400,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	a := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key(nil)}
 	b := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key(nil)}
 	c := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key(nil)}
@@ -1450,7 +1446,7 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 	descDB := mockRangeDescriptorDBForDescs(descs...)
 	s := createTestDB(t)
 	st := s.Store.ClusterSettings()
-	trackedWritesMaxSize.Override(&st.SV, 10) /* 10 bytes and it will condense */
+	trackedWritesMaxSize.Override(ctx, &st.SV, 10) /* 10 bytes and it will condense */
 	defer s.Stop()
 
 	// Check end transaction locks, which should be condensed and split
@@ -1493,7 +1489,6 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 		ds,
 	)
 	db := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())
-	ctx := context.Background()
 
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 	// Disable txn pipelining so that all write spans are immediately

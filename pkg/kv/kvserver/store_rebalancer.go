@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
@@ -199,7 +200,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				continue
 			}
 
-			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(storeFilterNone)
+			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(storeFilterSuspect)
 			sr.rebalanceStore(ctx, mode, storeList)
 		}
 	})
@@ -309,8 +310,18 @@ func (sr *StoreRebalancer) rebalanceStore(
 		}
 
 		descBeforeRebalance := replWithStats.repl.Desc()
-		log.VEventf(ctx, 1, "rebalancing r%d (%.2f qps) from %v to %v to better balance load",
-			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas(), voterTargets)
+		log.VEventf(
+			ctx,
+			1,
+			"rebalancing r%d (%.2f qps) to better balance load: voters from %v to %v; non-voters from %v to %v",
+			replWithStats.repl.RangeID,
+			replWithStats.qps,
+			descBeforeRebalance.Replicas().Voters(),
+			voterTargets,
+			descBeforeRebalance.Replicas().NonVoters(),
+			nonVoterTargets,
+		)
+
 		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
 		if err := contextutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
 			return sr.rq.store.AdminRelocateRange(ctx, *descBeforeRebalance, voterTargets, nonVoterTargets)
@@ -440,6 +451,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			}
 
 			filteredStoreList := storeList.filter(zone.Constraints)
+			filteredStoreList = storeList.filter(zone.VoterConstraints)
 			if sr.rq.allocator.followTheWorkloadPrefersLocal(
 				ctx,
 				filteredStoreList,
@@ -472,6 +484,17 @@ type rangeRebalanceContext struct {
 	numDesiredVoters, numDesiredNonVoters int
 }
 
+func (rbc *rangeRebalanceContext) numDesiredReplicas(targetType targetReplicaType) int {
+	switch targetType {
+	case voterTarget:
+		return rbc.numDesiredVoters
+	case nonVoterTarget:
+		return rbc.numDesiredNonVoters
+	default:
+		panic(fmt.Sprintf("unknown targetReplicaType %s", targetType))
+	}
+}
+
 func (sr *StoreRebalancer) chooseRangeToRebalance(
 	ctx context.Context,
 	hottestRanges *[]replicaWithStats,
@@ -502,8 +525,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		// just unnecessary churn with no benefit to move ranges responsible for,
 		// for example, 1 qps on a store with 5000 qps.
 		const minQPSFraction = .001
-		if replWithStats.qps < localDesc.Capacity.QueriesPerSecond*minQPSFraction &&
-			float64(localDesc.Capacity.RangeCount) <= storeList.candidateRanges.mean {
+		if replWithStats.qps < localDesc.Capacity.QueriesPerSecond*minQPSFraction {
 			log.VEventf(
 				ctx,
 				5,
@@ -521,6 +543,16 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		rangeDesc, zone := replWithStats.repl.DescAndZone()
 		clusterNodes := sr.rq.allocator.storePool.ClusterNodeCount()
 		numDesiredVoters := GetNeededVoters(zone.GetNumVoters(), clusterNodes)
+		numDesiredNonVoters := GetNeededNonVoters(numDesiredVoters, int(zone.GetNumNonVoters()), clusterNodes)
+		if rs := rangeDesc.Replicas(); numDesiredVoters != len(rs.VoterDescriptors()) ||
+			numDesiredNonVoters != len(rs.NonVoterDescriptors()) {
+			// If the StoreRebalancer is allowed past this point, it may accidentally
+			// downreplicate and this can cause unavailable ranges.
+			//
+			// See: https://github.com/cockroachdb/cockroach/issues/54444#issuecomment-707706553
+			log.VEventf(ctx, 3, "range needs up/downreplication; not considering rebalance")
+			continue
+		}
 
 		rebalanceCtx := rangeRebalanceContext{
 			replWithStats:       replWithStats,
@@ -528,7 +560,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			zone:                zone,
 			clusterNodes:        clusterNodes,
 			numDesiredVoters:    numDesiredVoters,
-			numDesiredNonVoters: GetNeededNonVoters(numDesiredVoters, int(zone.GetNumNonVoters()), clusterNodes),
+			numDesiredNonVoters: numDesiredNonVoters,
 		}
 		targetVoterRepls, targetNonVoterRepls := sr.getRebalanceCandidatesBasedOnQPS(
 			ctx, rebalanceCtx, localDesc, storeMap, storeList, minQPS, maxQPS,
@@ -729,20 +761,21 @@ func (sr *StoreRebalancer) pickRemainingRepls(
 	options scorerOptions,
 	minQPS, maxQPS float64,
 	targetType targetReplicaType,
-) (finalTargetsForType []roachpb.ReplicaDescriptor) {
-	var numDesiredReplsForType int
+) []roachpb.ReplicaDescriptor {
+	// Alias the slice that corresponds to the set of replicas that is being
+	// appended to. This is because we want subsequent calls to
+	// `allocateTargetFromList` to observe the results of previous calls (note the
+	// append to the slice referenced by `finalTargetsForType`).
+	var finalTargetsForType *[]roachpb.ReplicaDescriptor
 	switch targetType {
 	case voterTarget:
-		finalTargetsForType = partialVoterTargets
-		numDesiredReplsForType = rebalanceCtx.numDesiredVoters
+		finalTargetsForType = &partialVoterTargets
 	case nonVoterTarget:
-		finalTargetsForType = partialNonVoterTargets
-		numDesiredReplsForType = rebalanceCtx.numDesiredNonVoters
+		finalTargetsForType = &partialNonVoterTargets
 	default:
-		log.Fatalf(ctx, "unknown targetReplicaType %s", targetType)
+		log.Fatalf(ctx, "unknown targetReplicaType: %s", targetType)
 	}
-
-	for len(finalTargetsForType) < numDesiredReplsForType {
+	for len(*finalTargetsForType) < rebalanceCtx.numDesiredReplicas(targetType) {
 		// Use the preexisting Allocate{Non}Voter logic to ensure that
 		// considerations such as zone constraints, locality diversity, and full
 		// disk come into play.
@@ -753,6 +786,10 @@ func (sr *StoreRebalancer) pickRemainingRepls(
 			partialVoterTargets,
 			partialNonVoterTargets,
 			options,
+			// The store rebalancer should never need to perform lateral relocations,
+			// so we ask the allocator to disregard all the nodes that exist in
+			// `partial{Non}VoterTargets`.
+			false, /* allowMultipleReplsPerNode */
 			targetType,
 		)
 		if target == nil {
@@ -780,12 +817,12 @@ func (sr *StoreRebalancer) pickRemainingRepls(
 			break
 		}
 
-		finalTargetsForType = append(finalTargetsForType, roachpb.ReplicaDescriptor{
+		*finalTargetsForType = append(*finalTargetsForType, roachpb.ReplicaDescriptor{
 			NodeID:  target.Node.NodeID,
 			StoreID: target.StoreID,
 		})
 	}
-	return finalTargetsForType
+	return *finalTargetsForType
 }
 
 // pickReplsToKeep determines the set of existing replicas for a range which
@@ -911,7 +948,7 @@ func (sr *StoreRebalancer) shouldNotMoveTo(
 	// about node liveness.
 	targetNodeID := candidateStore.Node.NodeID
 	if targetNodeID != sr.rq.store.Ident.NodeID {
-		if !sr.rq.store.cfg.StorePool.isNodeReadyForRoutineReplicaTransfer(ctx, targetNodeID) {
+		if !sr.rq.allocator.storePool.isStoreReadyForRoutineReplicaTransfer(ctx, candidateStore.StoreID) {
 			log.VEventf(ctx, 3,
 				"refusing to transfer replica to n%d/s%d", targetNodeID, candidateStore.StoreID)
 			return true

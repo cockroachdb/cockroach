@@ -1,0 +1,62 @@
+parse
+CREATE SCHEDULE FOR BACKUP TABLE foo INTO 'bar' RECURRING '@hourly'
+----
+CREATE SCHEDULE FOR BACKUP TABLE foo INTO 'bar' RECURRING '@hourly'
+CREATE SCHEDULE FOR BACKUP TABLE (foo) INTO ('bar') RECURRING ('@hourly') -- fully parenthesized
+CREATE SCHEDULE FOR BACKUP TABLE foo INTO _ RECURRING _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE SCHEDULE FOR BACKUP TABLE _ INTO 'bar' RECURRING '@hourly' -- identifiers removed
+
+parse
+CREATE SCHEDULE 'my schedule' FOR BACKUP TABLE foo INTO 'bar' RECURRING '@daily'
+----
+CREATE SCHEDULE 'my schedule' FOR BACKUP TABLE foo INTO 'bar' RECURRING '@daily'
+CREATE SCHEDULE ('my schedule') FOR BACKUP TABLE (foo) INTO ('bar') RECURRING ('@daily') -- fully parenthesized
+CREATE SCHEDULE _ FOR BACKUP TABLE foo INTO _ RECURRING _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE SCHEDULE 'my schedule' FOR BACKUP TABLE _ INTO 'bar' RECURRING '@daily' -- identifiers removed
+
+parse
+CREATE SCHEDULE FOR BACKUP TABLE foo INTO 'bar' RECURRING '@daily'
+----
+CREATE SCHEDULE FOR BACKUP TABLE foo INTO 'bar' RECURRING '@daily'
+CREATE SCHEDULE FOR BACKUP TABLE (foo) INTO ('bar') RECURRING ('@daily') -- fully parenthesized
+CREATE SCHEDULE FOR BACKUP TABLE foo INTO _ RECURRING _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE SCHEDULE FOR BACKUP TABLE _ INTO 'bar' RECURRING '@daily' -- identifiers removed
+
+parse
+CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO 'bar' RECURRING '@daily' FULL BACKUP ALWAYS
+----
+CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO 'bar' RECURRING '@daily' FULL BACKUP ALWAYS
+CREATE SCHEDULE FOR BACKUP TABLE (foo), (bar), (buz) INTO ('bar') RECURRING ('@daily') FULL BACKUP ALWAYS -- fully parenthesized
+CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO _ RECURRING _ FULL BACKUP ALWAYS -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE SCHEDULE FOR BACKUP TABLE _, _, _ INTO 'bar' RECURRING '@daily' FULL BACKUP ALWAYS -- identifiers removed
+
+parse
+CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO 'bar' RECURRING '@daily' FULL BACKUP '@weekly'
+----
+CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO 'bar' RECURRING '@daily' FULL BACKUP '@weekly'
+CREATE SCHEDULE FOR BACKUP TABLE (foo), (bar), (buz) INTO ('bar') RECURRING ('@daily') FULL BACKUP ('@weekly') -- fully parenthesized
+CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO _ RECURRING _ FULL BACKUP _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE SCHEDULE FOR BACKUP TABLE _, _, _ INTO 'bar' RECURRING '@daily' FULL BACKUP '@weekly' -- identifiers removed
+
+parse
+CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly'
+----
+CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly'
+CREATE SCHEDULE FOR BACKUP TABLE (foo), (bar), (buz) INTO ('bar') WITH revision_history RECURRING ('@daily') FULL BACKUP ('@weekly') -- fully parenthesized
+CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO _ WITH revision_history RECURRING _ FULL BACKUP _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE SCHEDULE FOR BACKUP TABLE _, _, _ INTO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly' -- identifiers removed
+
+parse
+CREATE SCHEDULE FOR BACKUP INTO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly' WITH SCHEDULE OPTIONS foo = 'bar'
+----
+CREATE SCHEDULE FOR BACKUP INTO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly' WITH SCHEDULE OPTIONS foo = 'bar'
+CREATE SCHEDULE FOR BACKUP INTO ('bar') WITH revision_history RECURRING ('@daily') FULL BACKUP ('@weekly') WITH SCHEDULE OPTIONS foo = ('bar') -- fully parenthesized
+CREATE SCHEDULE FOR BACKUP INTO _ WITH revision_history RECURRING _ FULL BACKUP _ WITH SCHEDULE OPTIONS foo = _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE SCHEDULE FOR BACKUP INTO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly' WITH SCHEDULE OPTIONS _ = 'bar' -- identifiers removed

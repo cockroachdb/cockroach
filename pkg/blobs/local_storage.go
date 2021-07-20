@@ -11,6 +11,7 @@
 package blobs
 
 import (
+	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -64,16 +65,49 @@ func (l *LocalStorage) prependExternalIODir(path string) (string, error) {
 	return localBase, nil
 }
 
-// WriteFile prepends IO dir to filename and writes the content to that local file.
-func (l *LocalStorage) WriteFile(filename string, content io.Reader) (err error) {
+type localWriter struct {
+	f         *os.File
+	ctx       context.Context
+	tmp, dest string
+}
+
+func (l localWriter) Write(p []byte) (int, error) {
+	return l.f.Write(p)
+}
+
+func (l localWriter) Close() error {
+	if err := l.ctx.Err(); err != nil {
+		closeErr := l.f.Close()
+		rmErr := os.Remove(l.tmp)
+		return errors.CombineErrors(err, errors.Wrap(errors.CombineErrors(rmErr, closeErr), "cleaning up"))
+	}
+
+	syncErr := l.f.Sync()
+	closeErr := l.f.Close()
+	if err := errors.CombineErrors(closeErr, syncErr); err != nil {
+		return err
+	}
+	// Finally put the file to its final location.
+	return errors.Wrapf(
+		fileutil.Move(l.tmp, l.dest),
+		"moving temporary file to final location %q",
+		l.dest,
+	)
+}
+
+// Writer prepends IO dir to filename and writes the content to that local file.
+func (l *LocalStorage) Writer(ctx context.Context, filename string) (io.WriteCloser, error) {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	targetDir := filepath.Dir(fullPath)
 	if err = os.MkdirAll(targetDir, 0755); err != nil {
-		return errors.Wrapf(err, "creating target local directory %q", targetDir)
+		return nil, errors.Wrapf(err, "creating target local directory %q", targetDir)
 	}
 
 	// We generate the temporary file in the desired target directory.
@@ -87,45 +121,9 @@ func (l *LocalStorage) WriteFile(filename string, content io.Reader) (err error)
 	// what the "*" in the suffix means.
 	tmpFile, err := ioutil.TempFile(targetDir, filepath.Base(fullPath)+"*.tmp")
 	if err != nil {
-		return errors.Wrap(err, "creating temporary file")
+		return nil, errors.Wrap(err, "creating temporary file")
 	}
-	tmpFileFullName := tmpFile.Name()
-	defer func() {
-		if err != nil {
-			// When an error occurs, we need to clean up the newly created
-			// temporary file.
-			_ = os.Remove(tmpFileFullName)
-			//
-			// TODO(someone): in the special case where an attempt is made
-			// to upload to a sub-directory of the ext i/o dir for the first
-			// time (MkdirAll above did create the sub-directory), and the
-			// copy/rename fails, we're now left with a newly created but empty
-			// sub-directory.
-			//
-			// We cannot safely remove that target directory here, because
-			// perhaps there is another concurrent operation that is also
-			// targeting it. A more principled approach could be to use a
-			// mutex lock on directory accesses, and/or occasionally prune
-			// empty sub-directories upon node start-ups.
-		}
-	}()
-
-	// Copy the data into the temp file. We use a closure here to
-	// ensure the temp file is closed after the copy is done.
-	if err = func() error {
-		defer tmpFile.Close()
-		if _, err := io.Copy(tmpFile, content); err != nil {
-			return errors.Wrapf(err, "writing to temporary file %q", tmpFileFullName)
-		}
-		return errors.Wrapf(tmpFile.Sync(), "flushing temporary file %q", tmpFileFullName)
-	}(); err != nil {
-		return err
-	}
-
-	// Finally put the file to its final location.
-	return errors.Wrapf(
-		fileutil.Move(tmpFileFullName, fullPath),
-		"moving temporary file to final location %q", fullPath)
+	return localWriter{tmp: tmpFile.Name(), dest: fullPath, f: tmpFile, ctx: ctx}, nil
 }
 
 // ReadFile prepends IO dir to filename and reads the content of that local file.

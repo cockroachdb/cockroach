@@ -331,3 +331,16 @@ SELECT w FROM t ORDER BY k LIMIT 1;
 
 statement ok
 SET disallow_full_table_scans = false;
+
+# Regression test for incorrectly de-duplicating rows before reaching LIMIT. (Issue #65171)
+statement ok
+CREATE TABLE t65171 (x INT, y INT, INDEX(x, y))
+
+statement ok
+INSERT INTO t65171 VALUES (1, 2), (1, 2), (2, 3)
+
+query II
+SELECT * FROM t65171 WHERE x = 1 OR x = 2 ORDER BY y LIMIT 2
+----
+1  2
+1  2

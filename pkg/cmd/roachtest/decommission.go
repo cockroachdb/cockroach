@@ -12,21 +12,19 @@ package main
 
 import (
 	"context"
-	"encoding/csv"
 	"fmt"
 	"math/rand"
 	"reflect"
-	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -274,7 +272,11 @@ func runDecommission(ctx context.Context, t *test, c *cluster, nodes int, durati
 			db := c.Conn(ctx, pinnedNode)
 			defer db.Close()
 
-			sArgs := startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", c.InternalAddr(ctx, c.Node(pinnedNode))[0], node))
+			internalAddrs, err := c.InternalAddr(ctx, c.Node(pinnedNode))
+			if err != nil {
+				return err
+			}
+			sArgs := startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", internalAddrs[0], node))
 			if err := c.StartE(ctx, c.Node(node), sArgs); err != nil {
 				return err
 			}
@@ -329,7 +331,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			decommissionHeader,
 			{strconv.Itoa(targetNode), "true", `\d+`, "true", "decommissioning", "false"},
 		}
-		if err := h.matchCSV(o, exp); err != nil {
+		if err := cli.MatchCSV(o, exp); err != nil {
 			t.Fatal(err)
 		}
 
@@ -344,10 +346,11 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				t.Fatalf("node-status failed: %v", err)
 			}
 
-			numCols := h.getCsvNumCols(o)
+			numCols, err := cli.GetCsvNumCols(o)
+			require.NoError(t, err)
 			exp := h.expectCell(targetNode-1, /* node IDs are 1-indexed */
 				statusHeaderMembershipColumnIdx, `decommissioning`, c.spec.NodeCount, numCols)
-			if err := h.matchCSV(o, exp); err != nil {
+			if err := cli.MatchCSV(o, exp); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -373,10 +376,11 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				t.Fatalf("node-status failed: %v", err)
 			}
 
-			numCols := h.getCsvNumCols(o)
+			numCols, err := cli.GetCsvNumCols(o)
+			require.NoError(t, err)
 			exp := h.expectCell(targetNode-1, /* node IDs are 1-indexed */
 				statusHeaderMembershipColumnIdx, `active`, c.spec.NodeCount, numCols)
-			if err := h.matchCSV(o, exp); err != nil {
+			if err := cli.MatchCSV(o, exp); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -408,7 +412,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 					rowRegex := []string{strconv.Itoa(i), "true", `\d+`, "true", "decommissioning", "false"}
 					exp = append(exp, rowRegex)
 				}
-				if err := h.matchCSV(o, exp); err != nil {
+				if err := cli.MatchCSV(o, exp); err != nil {
 					t.Fatalf("decommission failed: %v", err)
 				}
 				return nil
@@ -428,13 +432,14 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				t.Fatalf("node-status failed: %v", err)
 			}
 
-			numCols := h.getCsvNumCols(o)
+			numCols, err := cli.GetCsvNumCols(o)
+			require.NoError(t, err)
 			var colRegex []string
 			for i := 1; i <= c.spec.NodeCount; i++ {
 				colRegex = append(colRegex, `decommissioning`)
 			}
 			exp := h.expectColumn(statusHeaderMembershipColumnIdx, colRegex, c.spec.NodeCount, numCols)
-			if err := h.matchCSV(o, exp); err != nil {
+			if err := cli.MatchCSV(o, exp); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -472,13 +477,14 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				t.Fatalf("node-status failed: %v", err)
 			}
 
-			numCols := h.getCsvNumCols(o)
+			numCols, err := cli.GetCsvNumCols(o)
+			require.NoError(t, err)
 			var colRegex []string
 			for i := 1; i <= c.spec.NodeCount; i++ {
 				colRegex = append(colRegex, `active`)
 			}
 			exp := h.expectColumn(statusHeaderMembershipColumnIdx, colRegex, c.spec.NodeCount, numCols)
-			if err := h.matchCSV(o, exp); err != nil {
+			if err := cli.MatchCSV(o, exp); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -529,7 +535,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				{strconv.Itoa(targetNodeB), "true", "0", "true", "decommissioned", "false"},
 				decommissionFooter,
 			}
-			return h.matchCSV(o, exp)
+			return cli.MatchCSV(o, exp)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -552,7 +558,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 					}
 					exp = append(exp, []string{strconv.Itoa(i)})
 				}
-				return h.matchCSV(o, exp)
+				return cli.MatchCSV(o, exp)
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -567,7 +573,8 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				t.Fatalf("node-status failed: %v", err)
 			}
 
-			numCols := h.getCsvNumCols(o)
+			numCols, err := cli.GetCsvNumCols(o)
+			require.NoError(t, err)
 			if err := retry.WithMaxAttempts(ctx, retry.Options{}, 50, func() error {
 				colRegex := []string{}
 				for i := 1; i <= c.spec.NodeCount; i++ {
@@ -577,7 +584,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 					colRegex = append(colRegex, strconv.Itoa(i))
 				}
 				exp := h.expectIDsInStatusOut(colRegex, numCols)
-				return h.matchCSV(o, exp)
+				return cli.MatchCSV(o, exp)
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -614,7 +621,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				{strconv.Itoa(targetNodeB), "false", "0", "true", "decommissioned", "false"},
 				decommissionFooter,
 			}
-			if err := h.matchCSV(o, exp); err != nil {
+			if err := cli.MatchCSV(o, exp); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -705,7 +712,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			{strconv.Itoa(targetNode), "true|false", "0", "true", "decommissioned", "false"},
 			decommissionFooter,
 		}
-		if err := h.matchCSV(o, exp); err != nil {
+		if err := cli.MatchCSV(o, exp); err != nil {
 			t.Fatal(err)
 		}
 
@@ -725,7 +732,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 					exp = append(exp, []string{fmt.Sprintf("[^%d]", targetNode)})
 				}
 
-				return h.matchCSV(o, exp)
+				return cli.MatchCSV(o, exp)
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -738,13 +745,14 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 					t.Fatalf("node-status failed: %v", err)
 				}
 
-				numCols := h.getCsvNumCols(o)
+				numCols, err := cli.GetCsvNumCols(o)
+				require.NoError(t, err)
 				var expC []string
 				for i := 1; i <= c.spec.NodeCount-len(h.randNodeBlocklist); i++ {
 					expC = append(expC, fmt.Sprintf("[^%d].*", targetNode))
 				}
 				exp := h.expectIDsInStatusOut(expC, numCols)
-				return h.matchCSV(o, exp)
+				return cli.MatchCSV(o, exp)
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -757,7 +765,11 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			c.Wipe(ctx, c.Node(targetNode))
 
 			joinNode := h.getRandNode()
-			joinAddr := c.InternalAddr(ctx, c.Node(joinNode))[0]
+			internalAddrs, err := c.InternalAddr(ctx, c.Node(joinNode))
+			if err != nil {
+				t.Fatal(err)
+			}
+			joinAddr := internalAddrs[0]
 			c.Start(ctx, t, c.Node(targetNode), startArgs(
 				fmt.Sprintf("-a=--join %s", joinAddr),
 			))
@@ -768,7 +780,8 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			if err != nil {
 				t.Fatalf("node-status failed: %v", err)
 			}
-			numCols := h.getCsvNumCols(o)
+			numCols, err := cli.GetCsvNumCols(o)
+			require.NoError(t, err)
 			var expC []string
 			// The decommissioned nodes should all disappear. (We
 			// abuse that nodeIDs are single-digit in this test).
@@ -783,7 +796,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				expC = append(expC, re)
 			}
 			exp := h.expectIDsInStatusOut(expC, numCols)
-			return h.matchCSV(o, exp)
+			return cli.MatchCSV(o, exp)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -935,72 +948,6 @@ func (h *decommTestHelper) recommission(
 		}
 	}
 	return execCLI(ctx, h.t, h.c, runNode, args...)
-}
-
-func elideInsecureDeprecationNotice(csvStr string) string {
-	// v20.1 introduces a deprecation notice for --insecure. Skip over it.
-	// TODO(knz): Remove this when --insecure is dropped.
-	// See: https://github.com/cockroachdb/cockroach/issues/53404
-	lines := strings.SplitN(csvStr, "\n", 3)
-	if len(lines) > 0 && strings.HasPrefix(lines[0], "Flag --insecure has been deprecated") {
-		csvStr = lines[2]
-	}
-	return csvStr
-}
-
-// getCsvNumCols returns the number of columns in the given csv string.
-func (h *decommTestHelper) getCsvNumCols(csvStr string) (cols int) {
-	csvStr = elideInsecureDeprecationNotice(csvStr)
-	reader := csv.NewReader(strings.NewReader(csvStr))
-	records, err := reader.Read()
-	if err != nil {
-		h.t.Fatal(errors.Errorf("error reading csv input: \n %v\n errors:%s", csvStr, err))
-	}
-	return len(records)
-}
-
-// matchCSV matches a multi-line csv string with the provided regex
-// (matchColRow[i][j] will be matched against the i-th line, j-th column).
-func (h *decommTestHelper) matchCSV(csvStr string, matchColRow [][]string) (err error) {
-	defer func() {
-		if err != nil {
-			err = errors.Errorf("csv input:\n%v\nexpected:\n%s\nerrors:%s",
-				csvStr, pretty.Sprint(matchColRow), err)
-		}
-	}()
-
-	csvStr = elideInsecureDeprecationNotice(csvStr)
-	reader := csv.NewReader(strings.NewReader(csvStr))
-	reader.FieldsPerRecord = -1
-	records, err := reader.ReadAll()
-	if err != nil {
-		return err
-	}
-
-	lr, lm := len(records), len(matchColRow)
-	if lr < lm {
-		return errors.Errorf("csv has %d rows, but expected at least %d", lr, lm)
-	}
-
-	// Compare only the last len(matchColRow) records. That is, if we want to
-	// match 4 rows and we have 100 records, we only really compare
-	// records[96:], that is, the last four rows.
-	records = records[lr-lm:]
-
-	for i := range records {
-		if lr, lm := len(records[i]), len(matchColRow[i]); lr != lm {
-			return errors.Errorf("row #%d: csv has %d columns, but expected %d", i+1, lr, lm)
-		}
-		for j := range records[i] {
-			pat, str := matchColRow[i][j], records[i][j]
-			re := regexp.MustCompile(pat)
-			if !re.MatchString(str) {
-				err = errors.Errorf("%v\nrow #%d, col #%d: found %q which does not match %q",
-					err, i+1, j+1, str, pat)
-			}
-		}
-	}
-	return err
 }
 
 // expectColumn constructs a matching regex for a given column (identified

@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -204,7 +206,7 @@ func getAllDescChanges(
 				// Note that the modification time of descriptors on disk is usually 0.
 				// See the comment on MaybeSetDescriptorModificationTime... for more.
 				t, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(r.Desc, rev.Timestamp)
-				if t != nil && t.ReplacementOf.ID != descpb.InvalidID {
+				if priorIDs != nil && t != nil && t.ReplacementOf.ID != descpb.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}
 			}
@@ -212,6 +214,46 @@ func getAllDescChanges(
 		}
 	}
 	return res, nil
+}
+
+func loadAllDescsInInterval(
+	ctx context.Context, codec keys.SQLCodec, db *kv.DB, startTime, endTime hlc.Timestamp,
+) ([]catalog.Descriptor, error) {
+	seen := make(map[descpb.ID]struct{})
+	allDescs := make([]catalog.Descriptor, 0)
+
+	currentDescs, err := backupresolver.LoadAllDescs(ctx, codec, db, endTime)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, desc := range currentDescs {
+		if _, wasSeen := seen[desc.GetID()]; wasSeen {
+			continue
+		}
+		seen[desc.GetID()] = struct{}{}
+		allDescs = append(allDescs, desc)
+	}
+
+	revs, err := getAllDescChanges(ctx, codec, db, startTime, endTime, nil /* priorIDs */)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, rev := range revs {
+		if rev.Desc == nil {
+			// rev.Desc may be nil when the descriptor was deleted in this revision.
+			continue
+		}
+		desc := catalogkv.NewBuilder(rev.Desc).BuildImmutable()
+		if _, wasSeen := seen[desc.GetID()]; wasSeen {
+			continue
+		}
+		seen[desc.GetID()] = struct{}{}
+		allDescs = append(allDescs, desc)
+	}
+
+	return allDescs, nil
 }
 
 // validateMultiRegionBackup validates that for all tables included in the
@@ -369,7 +411,7 @@ func fullClusterTargets(
 				}
 			} else {
 				// Add all user tables that are not in a DROP state.
-				if desc.GetState() != descpb.DescriptorState_DROP {
+				if !desc.Dropped() {
 					fullClusterDescs = append(fullClusterDescs, desc)
 				}
 			}
@@ -444,13 +486,17 @@ func selectTargets(
 	return matched.Descs, matched.RequestedDBs, nil, nil
 }
 
+// EntryFiles is a group of sst files of a backup table range
+type EntryFiles []execinfrapb.RestoreFileSpec
+
 // BackupTableEntry wraps information of a table retrieved
 // from backup manifests.
 // exported to cliccl for exporting data directly from backup sst.
 type BackupTableEntry struct {
-	Desc  catalog.TableDescriptor
-	Span  roachpb.Span
-	Files []roachpb.ImportRequest_File
+	Desc                 catalog.TableDescriptor
+	Span                 roachpb.Span
+	Files                []EntryFiles
+	LastSchemaChangeTime hlc.Timestamp
 }
 
 // MakeBackupTableEntry looks up the descriptor of fullyQualifiedTableName
@@ -474,9 +520,12 @@ func MakeBackupTableEntry(
 		for i, b := range backupManifests {
 			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
 				if endTime != b.EndTime && b.MVCCFilter != MVCCFilter_All {
-					return BackupTableEntry{}, errors.Newf(
-						"reading data for requested time requires that BACKUP was created with %q"+
-							" or should specify the time to be an exact backup time, nearest backup time is %s", backupOptRevisionHistory, timeutil.Unix(0, b.EndTime.WallTime).UTC())
+					errorHints := "reading data for requested time requires that BACKUP was created with %q" +
+						" or should specify the time to be an exact backup time, nearest backup time is %s"
+					return BackupTableEntry{}, errors.WithHintf(
+						errors.Newf("unknown read time: %s", timeutil.Unix(0, endTime.WallTime).UTC()),
+						errorHints, backupOptRevisionHistory, timeutil.Unix(0, b.EndTime.WallTime).UTC(),
+					)
 				}
 				ind = i
 				break
@@ -522,11 +571,44 @@ func MakeBackupTableEntry(
 		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
 	}
 
-	res := BackupTableEntry{
+	lastSchemaChangeTime := findLastSchemaChangeTime(backupManifests, tbDesc, endTime)
+
+	backupTableEntry := BackupTableEntry{
 		tbDesc,
 		tablePrimaryIndexSpan,
-		entry[0].Files,
+		make([]EntryFiles, 0),
+		lastSchemaChangeTime,
 	}
 
-	return res, nil
+	for _, e := range entry {
+		backupTableEntry.Files = append(backupTableEntry.Files, e.Files)
+	}
+
+	return backupTableEntry, nil
+}
+
+func findLastSchemaChangeTime(
+	backupManifests []BackupManifest, tbDesc catalog.TableDescriptor, endTime hlc.Timestamp,
+) hlc.Timestamp {
+	lastSchemaChangeTime := endTime
+	for i := len(backupManifests) - 1; i >= 0; i-- {
+		manifest := backupManifests[i]
+		for j := len(manifest.DescriptorChanges) - 1; j >= 0; j-- {
+			rev := manifest.DescriptorChanges[j]
+
+			if endTime.LessEq(rev.Time) {
+				continue
+			}
+
+			if rev.ID == tbDesc.GetID() {
+				d := catalogkv.NewBuilder(rev.Desc).BuildExistingMutable()
+				revDesc, _ := catalog.AsTableDescriptor(d)
+				if !reflect.DeepEqual(revDesc.PublicColumns(), tbDesc.PublicColumns()) {
+					return lastSchemaChangeTime
+				}
+				lastSchemaChangeTime = rev.Time
+			}
+		}
+	}
+	return lastSchemaChangeTime
 }

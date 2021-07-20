@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -48,7 +47,7 @@ func makeRunControlTestCases(t *testing.T) ([]runControlTestCase, func()) {
 	testCases[0].conn1 = tc.ServerConn(0).Conn
 	testCases[0].conn2 = tc.ServerConn(1).Conn
 
-	_, tenantDB := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	_, tenantDB := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: serverutils.TestTenantID()})
 	testCases[1].name = "Tenant"
 	testCases[1].conn1 = tenantDB.Conn
 	testCases[1].conn2 = tenantDB.Conn
@@ -183,7 +182,11 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 
 			var id string
 			if !rows.Next() {
-				t.Fatal("no sessions on node 1")
+				if err := rows.Err(); err != nil {
+					t.Fatalf("unexpected error querying sessions: %s", err.Error())
+				} else {
+					t.Fatal("no sessions on node 1")
+				}
 			}
 			if err := rows.Scan(&id); err != nil {
 				t.Fatal(err)

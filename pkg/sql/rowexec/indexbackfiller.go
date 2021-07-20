@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -105,6 +104,10 @@ func (ib *indexBackfiller) OutputTypes() []*types.T {
 	return nil
 }
 
+func (ib *indexBackfiller) MustBeStreaming() bool {
+	return false
+}
+
 // indexEntryBatch represents a "batch" of index entries which are constructed
 // and sent for ingestion. Breaking up the index entries into these batches
 // serves for better progress reporting as explained in the ingestIndexEntries
@@ -130,8 +133,12 @@ func (ib *indexBackfiller) constructIndexEntries(
 		todo := ib.spec.Spans[i].Span
 		for todo.Key != nil {
 			startKey := todo.Key
+			readAsOf := ib.spec.ReadAsOf
+			if readAsOf.IsEmpty() { // old gateway
+				readAsOf = ib.spec.WriteAsOf
+			}
 			todo.Key, entries, memUsedBuildingBatch, err = ib.buildIndexEntryBatch(ctx, todo,
-				ib.spec.ReadAsOf)
+				readAsOf)
 			if err != nil {
 				return err
 			}
@@ -187,8 +194,9 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		MaxBufferSize:  maxBufferSize,
 		StepBufferSize: stepSize,
 		SkipDuplicates: ib.ContainsInvertedIndex(),
+		BatchTimestamp: ib.spec.ReadAsOf,
 	}
-	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.ReadAsOf, opts)
+	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.WriteAsOf, opts)
 	if err != nil {
 		return err
 	}
@@ -350,8 +358,7 @@ func (ib *indexBackfiller) Run(ctx context.Context) {
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
 	semaCtx := tree.MakeSemaContext()
-	if err := ib.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, ib.flowCtx.NewEvalCtx(),
-		ib.output); err != nil {
+	if err := ib.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, ib.flowCtx.NewEvalCtx()); err != nil {
 		ib.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		return
 	}
@@ -388,7 +395,7 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 		return orig
 	}
 
-	desc, err := ib.desc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
+	desc, err := ib.desc.MakeFirstMutationPublic(catalog.IncludeConstraints)
 	if err != nil {
 		return err
 	}

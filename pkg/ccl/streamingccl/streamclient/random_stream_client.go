@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -386,7 +387,7 @@ func (m *randomStreamClient) makeRandomKey(
 	r *rand.Rand, tableDesc *tabledesc.Mutable,
 ) roachpb.KeyValue {
 	// Create a key holding a random integer.
-	k, err := rowenc.TestingMakePrimaryIndexKey(tableDesc, r.Intn(m.config.valueRange))
+	k, err := randgen.TestingMakePrimaryIndexKey(tableDesc, r.Intn(m.config.valueRange))
 	if err != nil {
 		panic(err)
 	}

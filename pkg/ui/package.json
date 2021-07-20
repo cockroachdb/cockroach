@@ -15,7 +15,8 @@
     "cypress:update-snapshots": "yarn cypress run --env updateSnapshots=true --spec 'cypress/integration/**/*.visual.spec.ts'"
   },
   "dependencies": {
-    "@cockroachlabs/cluster-ui": "^0.2.15",
+    "@cockroachlabs/cluster-ui": "link:./cluster-ui",
+    "@cockroachlabs/icons": "0.3.0",
     "analytics-node": "^3.5.0",
     "antd": "^3.25.2",
     "babel-polyfill": "^6.26.0",
@@ -87,8 +88,8 @@
     "@types/redux-thunk": "^2.1.0",
     "@types/sinon": "^7.5.1",
     "@types/storybook__react": "^4.0.2",
-    "@typescript-eslint/eslint-plugin": "^4.11.0",
-    "@typescript-eslint/parser": "^4.11.0",
+    "@typescript-eslint/eslint-plugin": "^4.22.0",
+    "@typescript-eslint/parser": "^4.22.0",
     "babel-loader": "^8.0.6",
     "babel-plugin-import": "^1.12.2",
     "bytebuffer": "^5.0.1",
@@ -122,7 +123,7 @@
     "nib": "^1.1.2",
     "prettier": "^2.2.1",
     "prop-types": "^15.5.10",
-    "protobufjs": "^6.7.3",
+    "protobufjs": "6.8.6",
     "redux-saga-test-plan": "^4.0.0-beta.2",
     "rimraf": "^2.6.1",
     "sinon": "^7.5.0",
@@ -135,13 +136,15 @@
     "thread-loader": "^2.1.3",
     "topojson": "^3.0.2",
     "ts-loader": "^6.2.1",
-    "typescript": "^3.8.0",
+    "typescript": "4.2.4",
+    "uplot": "^1.6.8",
     "url-loader": "2.1.0",
     "us-atlas": "^1.0.2",
     "webpack": "^4.41.5",
     "webpack-cli": "^3.3.10",
     "webpack-dev-server": "^3.10.1",
     "webpack-visualizer-plugin": "^0.1.11",
+    "webpackbar": "^5.0.0-3",
     "world-atlas": "^1.1.4"
   },
   "resolutions": {
@@ -157,7 +160,9 @@
     "node-fetch": "~2.6.1",
     "serialize-javascript": "~3.1.0",
     "yargs-parser": "~13.1.2",
-    "lodash": "^4.17.20"
+    "lodash": "^4.17.20",
+    "**/@typescript-eslint/eslint-plugin": "^4.22.0",
+    "**/@typescript-eslint/parser": "^4.22.0"
   },
   "engines": {
     "node": ">=12",

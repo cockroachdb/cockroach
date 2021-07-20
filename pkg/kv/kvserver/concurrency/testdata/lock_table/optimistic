@@ -1,0 +1,111 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+new-txn txn=txn2 ts=11,1 epoch=0
+----
+
+# req1 will acquire locks for txn1
+
+new-request r=req1 txn=txn1 ts=10,1 spans=w@c,h
+----
+
+scan r=req1
+----
+start-waiting: false
+
+should-wait r=req1
+----
+false
+
+acquire r=req1 k=c durability=u
+----
+global: num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+acquire r=req1 k=g durability=u
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+dequeue r=req1
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+new-request r=req2 txn=txn2 ts=11,1 spans=r@a,d
+----
+
+scan r=req2
+----
+start-waiting: true
+
+should-wait r=req2
+----
+true
+
+dequeue r=req2
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+new-request r=req3 txn=txn2 ts=11,1 spans=r@a,d+r@f,i
+----
+
+scan-opt r=req3
+----
+start-waiting: false
+
+should-wait r=req3
+----
+false
+
+print
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+check-opt-no-conflicts r=req3 spans=r@a,c
+----
+no-conflicts: true
+
+check-opt-no-conflicts r=req3 spans=r@a,d
+----
+no-conflicts: false
+
+check-opt-no-conflicts r=req3 spans=r@a,c+r@f,g
+----
+no-conflicts: true
+
+check-opt-no-conflicts r=req3 spans=r@a,c+r@f,h
+----
+no-conflicts: false
+
+dequeue r=req3
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0

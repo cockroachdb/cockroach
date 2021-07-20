@@ -55,8 +55,8 @@
     $indexJoinPrivate
 )
 
-# SplitScanIntoUnionScans splits a non-inverted scan under a limit into a union
-# of limited scans. Example:
+# SplitLimitedScanIntoUnionScans splits a non-inverted scan under a limit into a
+# union-all of limited scans over disjoint intervals. Example:
 #
 #    CREATE TABLE tab (region STRING, data INT NOT NULL, INDEX (region, data));
 #
@@ -74,21 +74,23 @@
 #    ORDER BY data
 #    LIMIT 1;
 #
-# See the SplitScanIntoUnionScans function in xform/custom_funcs for details.
-[SplitScanIntoUnionScans, Explore]
+# See the SplitLimitedScanIntoUnionScans function in xform/custom_funcs for
+# details.
+[SplitLimitedScanIntoUnionScans, Explore]
 (Limit
     $scan:(Scan $scanPrivate:*) &
         ^(ScanIsLimited $scanPrivate) &
         ^(ScanIsInverted $scanPrivate)
     $limitExpr:(Const $limit:*) & (IsPositiveInt $limit)
     $ordering:* &
-        (Succeeded
-            $unionScans:(SplitScanIntoUnionScans
+        (Let
+            ($unionScans $ok):(SplitLimitedScanIntoUnionScans
                 $ordering
                 $scan
                 $scanPrivate
                 $limit
             )
+            $ok
         )
 )
 =>

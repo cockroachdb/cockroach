@@ -337,6 +337,16 @@ func TestDuplicateTable(t *testing.T) {
 		t.Fatalf("expected partial index predicates to be duplicated")
 	}
 
+	colMeta := md.ColumnMeta(dupB)
+	if colMeta.Table != dupA {
+		t.Fatalf("expected new column to reference new table ID")
+	}
+
+	colMeta = md.ColumnMeta(dupB2)
+	if colMeta.Table != dupA {
+		t.Fatalf("expected new column to reference new table ID")
+	}
+
 	col = pred.(*memo.VariableExpr).Col
 	if col == b {
 		t.Errorf("expected partial index predicate to reference new column ID %d, got %d", dupB, col)

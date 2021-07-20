@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -86,12 +85,12 @@ func TestDefaultAggregateFunc(t *testing.T) {
 			name: "JsonAggWithStringAgg",
 			typs: []*types.T{types.Int, types.Jsonb, types.String},
 			input: colexectestutils.Tuples{
-				{nil, `'{"id": 1}'`, "a"},
-				{nil, `'{"id": 2}'`, "b"},
-				{0, `'{"id": 1}'`, "c"},
-				{0, `'{"id": 2}'`, "d"},
-				{0, `'{"id": 2}'`, "e"},
-				{1, `'{"id": 3}'`, "f"},
+				{nil, `{"id": 1}`, "a"},
+				{nil, `{"id": 2}`, "b"},
+				{0, `{"id": 1}`, "c"},
+				{0, `{"id": 2}`, "d"},
+				{0, `{"id": 2}`, "e"},
+				{1, `{"id": 3}`, "f"},
 			},
 			groupCols: []uint32{0},
 			aggCols:   [][]uint32{{0}, {1}, {2}, {2}},
@@ -102,15 +101,15 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				execinfrapb.StringAgg,
 			},
 			expected: colexectestutils.Tuples{
-				{nil, `'[{"id": 1}, {"id": 2}]'`, `'["a", "b"]'`, "a_b"},
-				{0, `'[{"id": 1}, {"id": 2}, {"id": 2}]'`, `'["c", "d", "e"]'`, "c_d_e"},
-				{1, `'[{"id": 3}]'`, `'["f"]'`, "f"},
+				{nil, `[{"id": 1}, {"id": 2}]`, `["a", "b"]`, "a_b"},
+				{0, `[{"id": 1}, {"id": 2}, {"id": 2}]`, `["c", "d", "e"]`, "c_d_e"},
+				{1, `[{"id": 3}]`, `["f"]`, "f"},
 			},
 			constArguments: [][]execinfrapb.Expression{nil, nil, nil, {{Expr: "'_'"}}},
 		},
 		{
 			name: "XorAgg",
-			typs: rowenc.TwoIntCols,
+			typs: types.TwoIntCols,
 			input: colexectestutils.Tuples{
 				{nil, 3},
 				{nil, 1},

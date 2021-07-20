@@ -40,7 +40,7 @@ func (c *CustomFuncs) NegateComparison(
 // FindRedundantConjunct takes the left and right operands of an Or operator as
 // input. It examines each conjunct from the left expression and determines
 // whether it appears as a conjunct in the right expression. If so, it returns
-// the matching conjunct. Otherwise, it returns nil. For example:
+// the matching conjunct. Otherwise, it returns ok=false. For example:
 //
 //   A OR A                               =>  A
 //   B OR A                               =>  nil
@@ -51,21 +51,23 @@ func (c *CustomFuncs) NegateComparison(
 // Once a redundant conjunct has been found, it is extracted via a call to the
 // ExtractRedundantConjunct function. Redundant conjuncts are extracted from
 // multiple nested Or operators by repeated application of these functions.
-func (c *CustomFuncs) FindRedundantConjunct(left, right opt.ScalarExpr) opt.ScalarExpr {
+func (c *CustomFuncs) FindRedundantConjunct(
+	left, right opt.ScalarExpr,
+) (_ opt.ScalarExpr, ok bool) {
 	// Recurse over each conjunct from the left expression and determine whether
 	// it's redundant.
 	for {
 		// Assume a left-deep And expression tree normalized by NormalizeNestedAnds.
 		if and, ok := left.(*memo.AndExpr); ok {
 			if c.isConjunct(and.Right, right) {
-				return and.Right
+				return and.Right, true
 			}
 			left = and.Left
 		} else {
 			if c.isConjunct(left, right) {
-				return left
+				return left, true
 			}
-			return nil
+			return nil, false
 		}
 	}
 }

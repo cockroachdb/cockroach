@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "nodelocal",
+    srcs = ["nodelocal_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud/nodelocal",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/blobs",
+        "//pkg/roachpb",
+        "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
+        "//pkg/storage/cloud",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)
+
+go_test(
+    name = "nodelocal_test",
+    srcs = ["nodelocal_storage_test.go"],
+    embed = [":nodelocal"],
+    deps = [
+        "//pkg/base",
+        "//pkg/blobs",
+        "//pkg/security",
+        "//pkg/settings/cluster",
+        "//pkg/storage/cloud",
+        "//pkg/storage/cloud/cloudtestutils",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+    ],
+)

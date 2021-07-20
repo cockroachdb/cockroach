@@ -45,6 +45,24 @@ const (
 	Schema = "schema"
 )
 
+// MutationPublicationFilter is used by MakeFirstMutationPublic to filter the
+// mutation types published.
+type MutationPublicationFilter int
+
+const (
+	// IgnoreConstraints is used in MakeFirstMutationPublic to indicate that the
+	// table descriptor returned should not include newly added constraints, which
+	// is useful when passing the returned table descriptor to be used in
+	// validating constraints to be added.
+	IgnoreConstraints MutationPublicationFilter = 1
+	// IgnoreConstraintsAndPKSwaps is used in MakeFirstMutationPublic to indicate that the
+	// table descriptor returned should include newly added constraints.
+	IgnoreConstraintsAndPKSwaps = 2
+	// IncludeConstraints is used in MakeFirstMutationPublic to indicate that the
+	// table descriptor returned should include newly added constraints.
+	IncludeConstraints = 0
+)
+
 // DescriptorBuilder interfaces are used to build catalog.Descriptor
 // objects.
 type DescriptorBuilder interface {
@@ -122,7 +140,7 @@ type Descriptor interface {
 
 	// GetReferencedDescIDs returns the IDs of all descriptors directly referenced
 	// by this descriptor, including itself.
-	GetReferencedDescIDs() DescriptorIDSet
+	GetReferencedDescIDs() (DescriptorIDSet, error)
 
 	// ValidateSelf checks the internal consistency of the descriptor.
 	ValidateSelf(vea ValidationErrorAccumulator)
@@ -134,8 +152,7 @@ type Descriptor interface {
 	ValidateTxnCommit(vea ValidationErrorAccumulator, vdg ValidationDescGetter)
 }
 
-// DatabaseDescriptor will eventually be called dbdesc.Descriptor.
-// It is implemented by Immutable.
+// DatabaseDescriptor encapsulates the concept of a database.
 type DatabaseDescriptor interface {
 	Descriptor
 
@@ -154,13 +171,6 @@ type DatabaseDescriptor interface {
 	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error
 	GetSchemaID(name string) descpb.ID
 	GetNonDroppedSchemaName(schemaID descpb.ID) string
-}
-
-// SchemaDescriptor will eventually be called schemadesc.Descriptor.
-// It is implemented by Immutable.
-type SchemaDescriptor interface {
-	Descriptor
-	SchemaDesc() *descpb.SchemaDescriptor
 }
 
 // TableDescriptor is an interface around the table descriptor types.
@@ -216,7 +226,7 @@ type TableDescriptor interface {
 	// See also Index.Ordinal().
 	NonDropIndexes() []Index
 
-	// NonDropIndexes returns a slice of all partial indexes in the underlying
+	// PartialIndexes returns a slice of all partial indexes in the underlying
 	// proto, in their canonical order. This is equivalent to taking the slice
 	// produced by AllIndexes and removing indexes with empty expressions.
 	PartialIndexes() []Index
@@ -297,7 +307,8 @@ type TableDescriptor interface {
 	IsAs() bool
 
 	HasColumnBackfillMutation() bool
-	MakeFirstMutationPublic(includeConstraints bool) (TableDescriptor, error)
+	MakeFirstMutationPublic(includeConstraints MutationPublicationFilter) (TableDescriptor, error)
+	MakePublic() TableDescriptor
 	AllMutations() []Mutation
 	GetGCMutations() []descpb.TableDescriptor_GCDescriptorMutation
 	GetMutationJobs() []descpb.TableDescriptor_MutationJob
@@ -308,6 +319,7 @@ type TableDescriptor interface {
 	) (descpb.IDs, error)
 
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
+	GetDependedOnBy() []descpb.TableDescriptor_Reference
 	GetDependsOn() []descpb.ID
 	GetDependsOnTypes() []descpb.ID
 	GetConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
@@ -339,13 +351,15 @@ type TypeDescriptor interface {
 	HydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver) error
 	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
 	HasPendingSchemaChanges() bool
-	GetIDClosure() map[descpb.ID]struct{}
+	GetIDClosure() (map[descpb.ID]struct{}, error)
 	IsCompatibleWith(other TypeDescriptor) error
 
 	PrimaryRegionName() (descpb.RegionName, error)
 	RegionNames() (descpb.RegionNames, error)
 	RegionNamesIncludingTransitioning() (descpb.RegionNames, error)
-	RegionNamesForZoneConfigValidation() (descpb.RegionNames, error)
+	RegionNamesForValidation() (descpb.RegionNames, error)
+	TransitioningRegionNames() (descpb.RegionNames, error)
+
 	GetArrayTypeID() descpb.ID
 	GetKind() descpb.TypeDescriptor_Kind
 

@@ -1,0 +1,29 @@
+diff -urN a/unix/BUILD.bazel b/unix/BUILD.bazel
+--- a/unix/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/unix/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -1,7 +1,7 @@
+ load("@io_bazel_rules_go//go:def.bzl", "go_library")
+ 
+ cc_library(
+-    name = "libedit_unix_cdeps",
++    name = "edit",
+     srcs = select({
+         "@io_bazel_rules_go//go/platform:android": glob([
+             "src/*.c",
+@@ -45,6 +45,7 @@
+         "//conditions:default": "shim",
+     }),
+     copts = ["-DGO_LIBEDIT_NO_BUILD"],
++    visibility = ["//visibility:public"],
+ )
+ 
+ go_library(
+@@ -86,7 +87,7 @@
+         "wrap-wcsdup.c",
+     ],
+     cdeps = [
+-        ":libedit_unix_cdeps",
++        ":edit",
+     ],
+     cgo = True,
+     clinkopts = select({

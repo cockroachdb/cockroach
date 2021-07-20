@@ -73,7 +73,7 @@ func (m *sinklessReplicationClient) ConsumePartition(
 		return nil, nil, err
 	}
 
-	_, err = conn.QueryContext(ctx, `SET enable_experimental_stream_replication = true`)
+	_, err = conn.ExecContext(ctx, `SET enable_experimental_stream_replication = true`)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -122,6 +122,10 @@ func (m *sinklessReplicationClient) ConsumePartition(
 				errCh <- ctx.Err()
 				return
 			}
+		}
+		if err := rows.Err(); err != nil {
+			errCh <- err
+			return
 		}
 	}()
 

@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -61,6 +62,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/tool"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
@@ -183,6 +185,56 @@ func printKey(kv storage.MVCCKeyValue) (bool, error) {
 	return false, nil
 }
 
+func transactionPredicate(kv storage.MVCCKeyValue) bool {
+	if kv.Key.IsValue() {
+		return false
+	}
+	_, suffix, _, err := keys.DecodeRangeKey(kv.Key.Key)
+	if err != nil {
+		return false
+	}
+	return keys.LocalTransactionSuffix.Equal(suffix)
+}
+
+func intentPredicate(kv storage.MVCCKeyValue) bool {
+	if kv.Key.IsValue() {
+		return false
+	}
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+		return false
+	}
+	return meta.Txn != nil
+}
+
+var keyTypeParams = map[keyTypeFilter]struct {
+	predicate      func(kv storage.MVCCKeyValue) bool
+	minKey, maxKey storage.MVCCKey
+}{
+	showAll: {
+		predicate: func(kv storage.MVCCKeyValue) bool { return true },
+		minKey:    storage.NilKey,
+		maxKey:    storage.MVCCKeyMax,
+	},
+	showTxns: {
+		predicate: transactionPredicate,
+		minKey:    storage.NilKey,
+		maxKey:    storage.MVCCKey{Key: keys.LocalMax},
+	},
+	showValues: {
+		predicate: func(kv storage.MVCCKeyValue) bool {
+			return kv.Key.IsValue()
+		},
+		minKey: storage.NilKey,
+		maxKey: storage.MVCCKeyMax,
+	},
+	showIntents: {
+		predicate: intentPredicate,
+		minKey:    storage.NilKey,
+		maxKey:    storage.MVCCKeyMax,
+	},
+}
+
 func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -230,8 +282,19 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	keyTypeOptions := keyTypeParams[debugCtx.keyTypes]
+	if debugCtx.startKey.Equal(storage.NilKey) {
+		debugCtx.startKey = keyTypeOptions.minKey
+	}
+	if debugCtx.endKey.Equal(storage.NilKey) {
+		debugCtx.endKey = keyTypeOptions.maxKey
+	}
+
 	results := 0
-	return db.MVCCIterate(debugCtx.startKey.Key, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+	iterFunc := func(kv storage.MVCCKeyValue) error {
+		if !keyTypeOptions.predicate(kv) {
+			return nil
+		}
 		done, err := printer(kv)
 		if err != nil {
 			return err
@@ -244,7 +307,27 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 			return iterutil.StopIteration()
 		}
 		return nil
-	})
+	}
+	endKey := debugCtx.endKey.Key
+	splitScan := false
+	// If the startKey is local and the endKey is global, split into two parts
+	// to do the scan. This is because MVCCKeyAndIntentsIterKind cannot span
+	// across the two key kinds.
+	if (len(debugCtx.startKey.Key) == 0 || keys.IsLocal(debugCtx.startKey.Key)) && !(keys.IsLocal(endKey) || bytes.Equal(endKey, keys.LocalMax)) {
+		splitScan = true
+		endKey = keys.LocalMax
+	}
+	if err := db.MVCCIterate(
+		debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind, iterFunc); err != nil {
+		return err
+	}
+	if splitScan {
+		if err := db.MVCCIterate(keys.LocalMax, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind,
+			iterFunc); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func runDebugBallast(cmd *cobra.Command, args []string) error {
@@ -669,7 +752,9 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var debugPebbleCmd = &cobra.Command{
+// DebugPebbleCmd is the root of all debug pebble commands.
+// Exported to allow modification by CCL code.
+var DebugPebbleCmd = &cobra.Command{
 	Use:   "pebble [command]",
 	Short: "run a Pebble introspection tool command",
 	Long: `
@@ -1159,13 +1244,13 @@ var debugMergeLogsCommand = &cobra.Command{
 	Short: "merge multiple log files from different machines into a single stream",
 	Long: `
 Takes a list of glob patterns (not left exclusively to the shell because of
-MAX_ARG_STRLEN, usually 128kB) pointing to log files and merges them into a
-single stream printed to stdout. Files not matching the log file name pattern
-are ignored. If log lines appear out of order within a file (which happens), the
-timestamp is ratcheted to the highest value seen so far. The command supports
-efficient time filtering as well as multiline regexp pattern matching via flags.
-If the filter regexp contains captures, such as '^abc(hello)def(world)', only
-the captured parts will be printed.
+MAX_ARG_STRLEN, usually 128kB) which will be walked and whose contained log
+files and merged them into a single stream printed to stdout. Files not matching
+the log file name pattern are ignored. If log lines appear out of order within
+a file (which happens), the timestamp is ratcheted to the highest value seen so far.
+The command supports efficient time filtering as well as multiline regexp pattern
+matching via flags. If the filter regexp contains captures, such as
+'^abc(hello)def(world)', only the captured parts will be printed.
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runDebugMergeLogs,
@@ -1183,7 +1268,7 @@ var debugMergeLogsOpts = struct {
 	keepRedactable bool
 	redactInput    bool
 }{
-	program:        regexp.MustCompile("^cockroach.*$"),
+	program:        nil, // match everything
 	file:           regexp.MustCompile(log.FilePattern),
 	keepRedactable: true,
 	redactInput:    false,
@@ -1230,6 +1315,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugEnvCmd,
 	debugZipCmd,
 	debugMergeLogsCommand,
+	debugListFilesCmd,
 	debugResetQuorumCmd,
 )
 
@@ -1270,6 +1356,12 @@ func (m lockValueFormatter) Format(f fmt.State, c rune) {
 	fmt.Fprint(f, kvserver.SprintIntent(m.value))
 }
 
+// pebbleToolFS is the vfs.FS that the pebble tool should use.
+// It is necessary because an FS must be passed to tool.New before
+// the command line flags are parsed (i.e. before we can determine
+// if we have an encrypted FS).
+var pebbleToolFS = &swappableFS{vfs.Default}
+
 func init() {
 	DebugCmd.AddCommand(debugCmds...)
 
@@ -1294,12 +1386,19 @@ func init() {
 	// and merger functions must be specified to pebble that match the ones used
 	// to write those files.
 	pebbleTool := tool.New(tool.Mergers(storage.MVCCMerger),
-		tool.DefaultComparer(storage.EngineComparer))
-	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
-	DebugCmd.AddCommand(debugPebbleCmd)
+		tool.DefaultComparer(storage.EngineComparer),
+		tool.FS(&absoluteFS{pebbleToolFS}),
+	)
+	DebugPebbleCmd.AddCommand(pebbleTool.Commands...)
+	initPebbleCmds(DebugPebbleCmd)
+	DebugCmd.AddCommand(DebugPebbleCmd)
 
-	debugDoctorCmd.AddCommand(debugDoctorCmds...)
+	doctorExamineCmd.AddCommand(doctorExamineClusterCmd, doctorExamineZipDirCmd)
+	doctorRecreateCmd.AddCommand(doctorRecreateClusterCmd, doctorRecreateZipDirCmd)
+	debugDoctorCmd.AddCommand(doctorExamineCmd, doctorRecreateCmd, doctorExamineFallbackClusterCmd, doctorExamineFallbackZipDirCmd)
 	DebugCmd.AddCommand(debugDoctorCmd)
+
+	DebugCmd.AddCommand(debugJobTraceFromClusterCmd)
 
 	f := debugSyncBenchCmd.Flags()
 	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
@@ -1341,4 +1440,46 @@ func init() {
 
 	f = debugCheckLogConfigCmd.Flags()
 	f.Var(&debugLogChanSel, "only-channels", "selection of channels to include in the output diagram.")
+}
+
+func initPebbleCmds(cmd *cobra.Command) {
+	for _, c := range cmd.Commands() {
+		wrapped := c.PreRunE
+		c.PreRunE = func(cmd *cobra.Command, args []string) error {
+			if wrapped != nil {
+				if err := wrapped(cmd, args); err != nil {
+					return err
+				}
+			}
+			return pebbleCryptoInitializer()
+		}
+		initPebbleCmds(c)
+	}
+}
+
+func pebbleCryptoInitializer() error {
+	storageConfig := base.StorageConfig{
+		Settings: serverCfg.Settings,
+		Dir:      serverCfg.Stores.Specs[0].Path,
+	}
+
+	if PopulateRocksDBConfigHook != nil {
+		if err := PopulateRocksDBConfigHook(&storageConfig); err != nil {
+			return err
+		}
+	}
+
+	cfg := storage.PebbleConfig{
+		StorageConfig: storageConfig,
+		Opts:          storage.DefaultPebbleOptions(),
+	}
+
+	// This has the side effect of storing the encrypted FS into cfg.Opts.FS.
+	_, _, err := storage.ResolveEncryptedEnvOptions(&cfg)
+	if err != nil {
+		return err
+	}
+
+	pebbleToolFS.set(cfg.Opts.FS)
+	return nil
 }

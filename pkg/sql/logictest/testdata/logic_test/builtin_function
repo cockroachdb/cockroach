@@ -1928,6 +1928,37 @@ SELECT length(gen_random_uuid()::BYTES), gen_random_uuid() = gen_random_uuid()
 ----
 16 false
 
+query IB
+SELECT length(gen_random_ulid()::BYTES), gen_random_ulid() = gen_random_ulid()
+----
+16 false
+
+query TTTT
+SELECT uuid_to_ulid('0178951c-b665-30a7-19a2-a18999834858'),
+       ulid_to_uuid('01F2AHSDK562KHK8N1H6CR6J2R'),
+       ulid_to_uuid(uuid_to_ulid('0178951c-b665-30a7-19a2-a18999834858')),
+       uuid_to_ulid(ulid_to_uuid('01F2AHSDK562KHK8N1H6CR6J2R'))
+----
+01F2AHSDK562KHK8N1H6CR6J2R  0178951c-b665-30a7-19a2-a18999834858  0178951c-b665-30a7-19a2-a18999834858  01F2AHSDK562KHK8N1H6CR6J2R
+
+let $ulid1
+SELECT gen_random_ulid()
+
+# Proper sorting of ULIDs inside the same millisecond is not guaranteed, we need this to enforce correct behavior.
+statement ok
+SELECT pg_sleep(0.001)
+
+let $ulid2
+SELECT gen_random_ulid()
+
+query BBBB
+SELECT '$ulid1' < '$ulid2',
+       '$ulid1' > '$ulid2',
+       uuid_to_ulid('$ulid1') < uuid_to_ulid('$ulid2'),
+       uuid_to_ulid('$ulid1') > uuid_to_ulid('$ulid2')
+----
+true  false  true  false
+
 query TTTTTT
 SELECT to_uuid('63616665-6630-3064-6465-616462656566'),
        to_uuid('{63616665-6630-3064-6465-616462656566}'),
@@ -2651,7 +2682,7 @@ NULL
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
 ----
-\x2805500158017801
+\x2805500158017800
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
@@ -2701,7 +2732,7 @@ SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_te
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
 ----
-\x2805500158017801
+\x2805500158017800
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
@@ -2755,6 +2786,38 @@ SELECT getdatabaseencoding()
 ----
 UTF8
 
+subtest get_byte
+
+query I
+SELECT get_byte('Th\000omas'::BYTEA, 4)
+----
+109
+
+query error byte index 10 out of valid range
+SELECT get_byte('abc'::BYTEA, 10)
+
+query error byte index -10 out of valid range
+SELECT get_byte('abc'::BYTEA, -10)
+
+subtest set_byte
+
+query T
+SELECT set_byte('Th\000omas'::BYTEA, 2, 64)
+----
+Th@omas
+
+# A substitute value that's larger than 8 bit will be truncated.
+query T
+SELECT set_byte('Th\000omas'::BYTEA, 2, 16448)
+----
+Th@omas
+
+query error byte index 10 out of valid range
+SELECT set_byte('abc'::BYTEA, 10, 123)
+
+query error byte index -10 out of valid range
+SELECT set_byte('abc'::BYTEA, -10, 123)
+
 subtest get_bit
 
 query I rowsort
@@ -2775,27 +2838,37 @@ SELECT get_bit(B'10110', 10)
 query error get_bit\(\): GetBitAtIndex: bit index 0 out of valid range \(0..-1\)
 SELECT get_bit(B'', 0);
 
-# Binary representation of 'l' is 01101100
-# Binary representation of \o145 is 01100101
-# Binary representation of \x61\x62\x6C are 01100001 01100010 01101100
-
-query I rowsort
-SELECT get_bit(b'\145\x6C\l', 0) UNION SELECT get_bit(b'\145\x6C\l', 13)
+query II
+SELECT i, get_bit('\x11'::BYTEA, i) FROM generate_series(0, 7) i ORDER BY i;
 ----
-0
-1
+0  1
+1  0
+2  0
+3  0
+4  1
+5  0
+6  0
+7  0
 
-query I rowsort
-SELECT get_bit(b'\145', 7) UNION SELECT get_bit(b'\145', 0)
+query II rowsort
+SELECT i, get_bit('\x11ef'::BYTEA, i) FROM generate_series(0, 15) i ORDER BY i;
 ----
-1
-0
-
-query I rowsort
-SELECT get_bit('\x6162'::bytea, 7) UNION SELECT get_bit('\x6162'::bytea, 12)
-----
-1
-0
+0   1
+1   0
+2   0
+3   0
+4   1
+5   0
+6   0
+7   0
+8   1
+9   1
+10  1
+11  1
+12  0
+13  1
+14  1
+15  1
 
 query error get_bit\(\): bit index 8 out of valid range \(0..7\)
 SELECT get_bit(b'\x61', 8)
@@ -2820,27 +2893,43 @@ SELECT set_bit('000000'::varbit, 5, 1) UNION SELECT set_bit('111111'::varbit, 5,
 query error set_bit\(\): SetBitAtIndex: bit index 10 out of valid range \(0..6\)
 SELECT set_bit(B'1101010', 10, 1)
 
-query error set_bit\(\): new bit must be 0 or 1.
+query error set_bit\(\): new bit must be 0 or 1
 SELECT set_bit(B'1001010', 0, 2)
 
 query error set_bit\(\): SetBitAtIndex: bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(B'', 0, 1)
 
-# Binary representation of 'a' 'b' 'c' 'f' 'l'  are 01100001 01100010 01100011 01100110 01101100
-# Binary representation of \o145 is 1100101
-# Binary representation of \x61\x62\x66\x6C are 01100001 01100010 01100110 01101100
-
-query T rowsort
-SELECT set_bit(b'ab', 6, 1) UNION SELECT set_bit(b'\x61\x66', 15, 0)
+query IT
+SELECT i, encode(set_bit('\x00'::BYTEA, i, 1), 'hex') FROM generate_series(0, 7) i ORDER BY i
 ----
-cb
-af
+0  01
+1  02
+2  04
+3  08
+4  10
+5  20
+6  40
+7  80
 
-query T rowsort
-SELECT set_bit('a'::bytea, 5, 0) UNION SELECT set_bit('\x6162'::bytea, 13, 1)
+query IT
+SELECT i, encode(set_bit('\x0000'::bytea, i, 1), 'hex') FROM generate_series(0, 15) i ORDER BY i
 ----
-a
-af
+0   0100
+1   0200
+2   0400
+3   0800
+4   1000
+5   2000
+6   4000
+7   8000
+8   0001
+9   0002
+10  0004
+11  0008
+12  0010
+13  0020
+14  0040
+15  0080
 
 query error set_bit\(\): bit index 16 out of valid range \(0..15\)
 SELECT set_bit(b'ac', 16, 0)
@@ -2848,7 +2937,7 @@ SELECT set_bit(b'ac', 16, 0)
 query error set_bit\(\): bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(b'', 0, 1)
 
-query error set_bit\(\): new bit must be 0 or 1.
+query error set_bit\(\): new bit must be 0 or 1
 SELECT set_bit(b'\145\x6C\l', 0, 2)
 
 subtest num_nulls_test
@@ -2973,3 +3062,81 @@ query B
 SELECT * FROM crdb_internal.set_trace_verbose(0, false)
 WHERE false
 ----
+
+# set timezone to something other then UTC
+statement ok
+SET timezone = 'Europe/Berlin'
+
+query T
+select generate_series('2021-07-05'::timestamptz, '2021-07-06'::timestamptz, '1day'::interval)
+----
+2021-07-05 00:00:00 +0200 CEST
+2021-07-06 00:00:00 +0200 CEST
+
+statement ok
+SET TIME ZONE +0
+
+statement ok
+set timezone = 'Europe/Bucharest';
+
+# the following two queries should provide the same output
+query T
+select '2020-10-25 00:00'::TIMESTAMPTZ + (i::text || ' hour')::interval from generate_series(0, 24) AS g(i);
+----
+2020-10-25 00:00:00 +0300 EEST
+2020-10-25 01:00:00 +0300 EEST
+2020-10-25 02:00:00 +0300 EEST
+2020-10-25 03:00:00 +0300 EEST
+2020-10-25 03:00:00 +0200 EET
+2020-10-25 04:00:00 +0200 EET
+2020-10-25 05:00:00 +0200 EET
+2020-10-25 06:00:00 +0200 EET
+2020-10-25 07:00:00 +0200 EET
+2020-10-25 08:00:00 +0200 EET
+2020-10-25 09:00:00 +0200 EET
+2020-10-25 10:00:00 +0200 EET
+2020-10-25 11:00:00 +0200 EET
+2020-10-25 12:00:00 +0200 EET
+2020-10-25 13:00:00 +0200 EET
+2020-10-25 14:00:00 +0200 EET
+2020-10-25 15:00:00 +0200 EET
+2020-10-25 16:00:00 +0200 EET
+2020-10-25 17:00:00 +0200 EET
+2020-10-25 18:00:00 +0200 EET
+2020-10-25 19:00:00 +0200 EET
+2020-10-25 20:00:00 +0200 EET
+2020-10-25 21:00:00 +0200 EET
+2020-10-25 22:00:00 +0200 EET
+2020-10-25 23:00:00 +0200 EET
+
+query T
+select generate_series('2020-10-25 00:00'::TIMESTAMPTZ, '2020-10-25 23:00'::TIMESTAMPTZ, '1 hour');
+----
+2020-10-25 00:00:00 +0300 EEST
+2020-10-25 01:00:00 +0300 EEST
+2020-10-25 02:00:00 +0300 EEST
+2020-10-25 03:00:00 +0300 EEST
+2020-10-25 03:00:00 +0200 EET
+2020-10-25 04:00:00 +0200 EET
+2020-10-25 05:00:00 +0200 EET
+2020-10-25 06:00:00 +0200 EET
+2020-10-25 07:00:00 +0200 EET
+2020-10-25 08:00:00 +0200 EET
+2020-10-25 09:00:00 +0200 EET
+2020-10-25 10:00:00 +0200 EET
+2020-10-25 11:00:00 +0200 EET
+2020-10-25 12:00:00 +0200 EET
+2020-10-25 13:00:00 +0200 EET
+2020-10-25 14:00:00 +0200 EET
+2020-10-25 15:00:00 +0200 EET
+2020-10-25 16:00:00 +0200 EET
+2020-10-25 17:00:00 +0200 EET
+2020-10-25 18:00:00 +0200 EET
+2020-10-25 19:00:00 +0200 EET
+2020-10-25 20:00:00 +0200 EET
+2020-10-25 21:00:00 +0200 EET
+2020-10-25 22:00:00 +0200 EET
+2020-10-25 23:00:00 +0200 EET
+
+statement ok
+SET TIME ZONE +0

@@ -1,0 +1,68 @@
+listCommits owner=cockroachdb repo=cockroach github.CommitsListOptions{SHA:"", Path:"", Author:"bran", Since:time.Time{wall:, ext:}, Until:time.Time{wall:, ext:}, ListOptions:github.ListOptions{Page:0, PerPage:1}}
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "sql/tests: TestRandomSyntaxSQLSmith failed" label:branch-release-0.1: [github.Issue{Number:30, Title:"boom", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.1"}]}]
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "sql/tests: TestRandomSyntaxSQLSmith failed" -label:branch-release-0.1: [github.Issue{Number:31, Title:"boom related", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.2"}]}]
+createComment owner=cockroachdb repo=cockroach issue=30:
+
+sql/tests.TestRandomSyntaxSQLSmith [failed](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=buildLog) on release-0.1 @ [abcd123](https://github.com/cockroachdb/cockroach/commits/abcd123):
+
+Random syntax error:
+
+```
+    rsg_test.go:755: Crash detected: server panic: pq: internal error: something bad
+```
+Query:
+
+```
+		SELECT
+			foo
+		FROM
+			bar
+		LIMIT
+			33:::INT8;
+```
+Schema:
+
+```
+    rsg_test.go:575: To reproduce, use schema:
+    rsg_test.go:577: 
+        	CREATE TABLE table1 (col1_0 BOOL);
+        ;
+    rsg_test.go:577: 
+        
+        CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
+        ;
+    rsg_test.go:579: 
+    rsg_test.go:580: -- test log scope end --
+test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTestRandomSyntaxSQLSmith460792454
+--- FAIL: TestRandomSyntaxSQLSmith (300.69s)
+```
+<details><summary>Reproduce</summary>
+<p>
+<p>To reproduce, try:
+
+```bash
+make test TESTS=TestRandomSyntaxSQLSmith PKG=./pkg/sql/tests 2>&1
+```
+</p>
+<p>Parameters in this failure:
+
+- TAGS=deadlock
+
+- GOFLAGS=race
+</p>
+</p>
+</details>
+<details><summary>Same failure on other branches</summary>
+<p>
+
+- #31 boom related [C-test-failure O-robot release-0.2]
+</p>
+</details>
+/cc hodor
+<sub>
+
+[This test on roachdash](https://roachdash.crdb.dev/?filter=status:open%20t:.*TestRandomSyntaxSQLSmith.*&sort=title+created&display=lastcommented+project) | [Improve this report!](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)
+</sub>
+
+
+Rendered: https://github.com/cockroachdb/cockroach/issues/new?body=sql%2Ftests.TestRandomSyntaxSQLSmith+%5Bfailed%5D%28https%3A%2F%2Fteamcity.example.com%2FviewLog.html%3FbuildId%3D8008135%26tab%3DbuildLog%29+on+release-0.1+%40+%5Babcd123%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Fcommits%2Fabcd123%29%3A%0A%0ARandom+syntax+error%3A%0A%0A%60%60%60%0A++++rsg_test.go%3A755%3A+Crash+detected%3A+server+panic%3A+pq%3A+internal+error%3A+something+bad%0A%60%60%60%0AQuery%3A%0A%0A%60%60%60%0A%09%09SELECT%0A%09%09%09foo%0A%09%09FROM%0A%09%09%09bar%0A%09%09LIMIT%0A%09%09%0933%3A%3A%3AINT8%3B%0A%60%60%60%0ASchema%3A%0A%0A%60%60%60%0A++++rsg_test.go%3A575%3A+To+reproduce%2C+use+schema%3A%0A++++rsg_test.go%3A577%3A+%0A++++++++%09CREATE+TABLE+table1+%28col1_0+BOOL%29%3B%0A++++++++%3B%0A++++rsg_test.go%3A577%3A+%0A++++++++%0A++++++++CREATE+TYPE+greeting+AS+ENUM+%28%27hello%27%2C+%27howdy%27%2C+%27hi%27%2C+%27good+day%27%2C+%27morning%27%29%3B%0A++++++++%3B%0A++++rsg_test.go%3A579%3A+%0A++++rsg_test.go%3A580%3A+--+test+log+scope+end+--%0Atest+logs+left+over+in%3A+%2Fgo%2Fsrc%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Fartifacts%2FlogTestRandomSyntaxSQLSmith460792454%0A---+FAIL%3A+TestRandomSyntaxSQLSmith+%28300.69s%29%0A%60%60%60%0A%3Cdetails%3E%3Csummary%3EReproduce%3C%2Fsummary%3E%0A%3Cp%3E%0A%3Cp%3ETo+reproduce%2C+try%3A%0A%0A%60%60%60bash%0Amake+test+TESTS%3DTestRandomSyntaxSQLSmith+PKG%3D.%2Fpkg%2Fsql%2Ftests+2%3E%261%0A%60%60%60%0A%3C%2Fp%3E%0A%3Cp%3EParameters+in+this+failure%3A%0A%0A-+TAGS%3Ddeadlock%0A%0A-+GOFLAGS%3Drace%0A%3C%2Fp%3E%0A%3C%2Fp%3E%0A%3C%2Fdetails%3E%0A%3Cdetails%3E%3Csummary%3ESame+failure+on+other+branches%3C%2Fsummary%3E%0A%3Cp%3E%0A%0A-+%2331+boom+related+%5BC-test-failure+O-robot+release-0.2%5D%0A%3C%2Fp%3E%0A%3C%2Fdetails%3E%0A%2Fcc+hodor%0A%3Csub%3E%0A%0A%5BThis+test+on+roachdash%5D%28https%3A%2F%2Froachdash.crdb.dev%2F%3Ffilter%3Dstatus%3Aopen%2520t%3A.%2ATestRandomSyntaxSQLSmith.%2A%26sort%3Dtitle%2Bcreated%26display%3Dlastcommented%2Bproject%29+%7C+%5BImprove+this+report%21%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Ftree%2Fmaster%2Fpkg%2Fcmd%2Finternal%2Fissues%29%0A%3C%2Fsub%3E%0A&title=%3Ccomment%3E

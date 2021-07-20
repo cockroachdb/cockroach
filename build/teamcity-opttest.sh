@@ -21,7 +21,7 @@ tc_end_block "Compile C dependencies"
 tc_start_block "Run opt tests with fast_int_set_large"
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
-  make testrace \
+  make test \
   GOTESTFLAGS=-json \
   TAGS=fast_int_set_large \
   PKG=./pkg/sql/opt... \
@@ -32,7 +32,7 @@ tc_end_block "Run opt tests with fast_int_set_large"
 tc_start_block "Run opt tests with fast_int_set_small"
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
-  make testrace \
+  make test \
   GOTESTFLAGS=-json \
   TAGS=fast_int_set_small \
   PKG=./pkg/sql/opt... \

@@ -48,8 +48,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	AutomaticStatisticsClusterMode.Override(&st.SV, false)
-	AutomaticStatisticsMinStaleRows.Override(&st.SV, 5)
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	AutomaticStatisticsMinStaleRows.Override(ctx, &st.SV, 5)
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
@@ -130,7 +130,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	AutomaticStatisticsClusterMode.Override(&st.SV, false)
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
@@ -372,7 +372,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	AutomaticStatisticsClusterMode.Override(&st.SV, false)
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
@@ -399,7 +399,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
-	AutomaticStatisticsClusterMode.Override(&st.SV, true)
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
 
 	if err := refresher.Start(
 		ctx, s.Stopper(), time.Millisecond, /* refreshInterval */
@@ -466,7 +466,7 @@ func TestMutationsChannel(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	AutomaticStatisticsClusterMode.Override(&st.SV, true)
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
 	r := Refresher{
 		st:        st,
 		mutations: make(chan mutation, refreshChanBufferLen),
@@ -492,7 +492,7 @@ func TestDefaultColumns(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	AutomaticStatisticsClusterMode.Override(&st.SV, false)
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 

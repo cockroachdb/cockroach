@@ -427,7 +427,8 @@ CREATE TABLE crdb_internal.jobs (
    fraction_completed FLOAT8 NULL,
    high_water_timestamp DECIMAL NULL,
    error STRING NULL,
-   coordinator_id INT8 NULL
+   coordinator_id INT8 NULL,
+   trace_id INT8 NULL
 )  CREATE TABLE crdb_internal.jobs (
    job_id INT8 NULL,
    job_type STRING NULL,
@@ -444,7 +445,21 @@ CREATE TABLE crdb_internal.jobs (
    fraction_completed FLOAT8 NULL,
    high_water_timestamp DECIMAL NULL,
    error STRING NULL,
-   coordinator_id INT8 NULL
+   coordinator_id INT8 NULL,
+   trace_id INT8 NULL
+)  {}  {}
+CREATE TABLE crdb_internal.kv_node_liveness (
+   node_id INT8 NOT NULL,
+   epoch INT8 NOT NULL,
+   expiration STRING NOT NULL,
+   draining BOOL NOT NULL,
+   membership STRING NOT NULL
+)  CREATE TABLE crdb_internal.kv_node_liveness (
+   node_id INT8 NOT NULL,
+   epoch INT8 NOT NULL,
+   expiration STRING NOT NULL,
+   draining BOOL NOT NULL,
+   membership STRING NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.kv_node_status (
    node_id INT8 NOT NULL,
@@ -534,6 +549,11 @@ CREATE TABLE crdb_internal.leases (
    parent_id INT8 NOT NULL,
    expiration TIMESTAMP NOT NULL,
    deleted BOOL NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.lost_descriptors_with_data (
+   descid INT8 NOT NULL
+)  CREATE TABLE crdb_internal.lost_descriptors_with_data (
+   descid INT8 NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_build_info (
    node_id INT8 NOT NULL,
@@ -656,6 +676,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,
    application_name STRING NOT NULL,
    flags STRING NOT NULL,
+   statement_id STRING NOT NULL,
    key STRING NOT NULL,
    anonymized STRING NULL,
    count INT8 NOT NULL,
@@ -694,6 +715,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,
    application_name STRING NOT NULL,
    flags STRING NOT NULL,
+   statement_id STRING NOT NULL,
    key STRING NOT NULL,
    anonymized STRING NULL,
    count INT8 NOT NULL,
@@ -2106,7 +2128,8 @@ CREATE TABLE pg_catalog.pg_class (
    relrewrite OID NULL,
    relrowsecurity BOOL NULL,
    relpartbound STRING NULL,
-   INDEX pg_class_oid_idx (oid ASC) STORING (relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound)
+   relminmxid INT8 NULL,
+   INDEX pg_class_oid_idx (oid ASC) STORING (relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
 )  CREATE TABLE pg_catalog.pg_class (
    oid OID NOT NULL,
    relname NAME NOT NULL,
@@ -2143,7 +2166,8 @@ CREATE TABLE pg_catalog.pg_class (
    relrewrite OID NULL,
    relrowsecurity BOOL NULL,
    relpartbound STRING NULL,
-   INDEX pg_class_oid_idx (oid ASC) STORING (relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound)
+   relminmxid INT8 NULL,
+   INDEX pg_class_oid_idx (oid ASC) STORING (relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
 )  {}  {}
 CREATE TABLE pg_catalog.pg_collation (
    oid OID NULL,
@@ -2179,7 +2203,7 @@ CREATE TABLE pg_catalog.pg_constraint (
    oid OID NULL,
    conname NAME NULL,
    connamespace OID NULL,
-   contype STRING NULL,
+   contype "char" NULL,
    condeferrable BOOL NULL,
    condeferred BOOL NULL,
    convalidated BOOL NULL,
@@ -2187,9 +2211,9 @@ CREATE TABLE pg_catalog.pg_constraint (
    contypid OID NULL,
    conindid OID NULL,
    confrelid OID NULL,
-   confupdtype STRING NULL,
-   confdeltype STRING NULL,
-   confmatchtype STRING NULL,
+   confupdtype "char" NULL,
+   confdeltype "char" NULL,
+   confmatchtype "char" NULL,
    conislocal BOOL NULL,
    coninhcount INT4 NULL,
    connoinherit BOOL NULL,
@@ -2202,12 +2226,13 @@ CREATE TABLE pg_catalog.pg_constraint (
    conbin STRING NULL,
    consrc STRING NULL,
    condef STRING NULL,
-   INDEX pg_constraint_conrelid_idx (conrelid ASC) STORING (oid, conname, connamespace, contype, condeferrable, condeferred, convalidated, contypid, conindid, confrelid, confupdtype, confdeltype, confmatchtype, conislocal, coninhcount, connoinherit, conkey, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, condef)
+   conparentid OID NULL,
+   INDEX pg_constraint_conrelid_idx (conrelid ASC) STORING (oid, conname, connamespace, contype, condeferrable, condeferred, convalidated, contypid, conindid, confrelid, confupdtype, confdeltype, confmatchtype, conislocal, coninhcount, connoinherit, conkey, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, condef, conparentid)
 )  CREATE TABLE pg_catalog.pg_constraint (
    oid OID NULL,
    conname NAME NULL,
    connamespace OID NULL,
-   contype STRING NULL,
+   contype "char" NULL,
    condeferrable BOOL NULL,
    condeferred BOOL NULL,
    convalidated BOOL NULL,
@@ -2215,9 +2240,9 @@ CREATE TABLE pg_catalog.pg_constraint (
    contypid OID NULL,
    conindid OID NULL,
    confrelid OID NULL,
-   confupdtype STRING NULL,
-   confdeltype STRING NULL,
-   confmatchtype STRING NULL,
+   confupdtype "char" NULL,
+   confdeltype "char" NULL,
+   confmatchtype "char" NULL,
    conislocal BOOL NULL,
    coninhcount INT4 NULL,
    connoinherit BOOL NULL,
@@ -2230,7 +2255,8 @@ CREATE TABLE pg_catalog.pg_constraint (
    conbin STRING NULL,
    consrc STRING NULL,
    condef STRING NULL,
-   INDEX pg_constraint_conrelid_idx (conrelid ASC) STORING (oid, conname, connamespace, contype, condeferrable, condeferred, convalidated, contypid, conindid, confrelid, confupdtype, confdeltype, confmatchtype, conislocal, coninhcount, connoinherit, conkey, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, condef)
+   conparentid OID NULL,
+   INDEX pg_constraint_conrelid_idx (conrelid ASC) STORING (oid, conname, connamespace, contype, condeferrable, condeferred, convalidated, contypid, conindid, confrelid, confupdtype, confdeltype, confmatchtype, conislocal, coninhcount, connoinherit, conkey, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, condef, conparentid)
 )  {}  {}
 CREATE TABLE pg_catalog.pg_conversion (
    oid OID NULL,
@@ -2553,6 +2579,19 @@ CREATE TABLE pg_catalog.pg_inherits (
    inhparent OID NULL,
    inhseqno INT4 NULL
 )  {}  {}
+CREATE TABLE pg_catalog.pg_init_privs (
+   classoid OID NULL,
+   initprivs STRING[] NULL,
+   objoid OID NULL,
+   objsubid INT4 NULL,
+   privtype "char" NULL
+)  CREATE TABLE pg_catalog.pg_init_privs (
+   classoid OID NULL,
+   initprivs STRING[] NULL,
+   objoid OID NULL,
+   objsubid INT4 NULL,
+   privtype "char" NULL
+)  {}  {}
 CREATE TABLE pg_catalog.pg_language (
    oid OID NULL,
    lanname NAME NULL,
@@ -2582,6 +2621,15 @@ CREATE TABLE pg_catalog.pg_largeobject (
    data BYTES NULL,
    loid OID NULL,
    pageno INT4 NULL
+)  {}  {}
+CREATE TABLE pg_catalog.pg_largeobject_metadata (
+   oid OID NULL,
+   lomacl STRING[] NULL,
+   lomowner OID NULL
+)  CREATE TABLE pg_catalog.pg_largeobject_metadata (
+   oid OID NULL,
+   lomacl STRING[] NULL,
+   lomowner OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_locks (
    locktype STRING NULL,
@@ -2670,7 +2718,7 @@ CREATE TABLE pg_catalog.pg_operator (
    oprname NAME NULL,
    oprnamespace OID NULL,
    oprowner OID NULL,
-   oprkind STRING NULL,
+   oprkind "char" NULL,
    oprcanmerge BOOL NULL,
    oprcanhash BOOL NULL,
    oprleft OID NULL,
@@ -2686,7 +2734,7 @@ CREATE TABLE pg_catalog.pg_operator (
    oprname NAME NULL,
    oprnamespace OID NULL,
    oprowner OID NULL,
-   oprkind STRING NULL,
+   oprkind "char" NULL,
    oprcanmerge BOOL NULL,
    oprcanhash BOOL NULL,
    oprleft OID NULL,
@@ -2711,6 +2759,25 @@ CREATE TABLE pg_catalog.pg_opfamily (
    oid OID NULL,
    opfmethod OID NULL
 )  {}  {}
+CREATE TABLE pg_catalog.pg_partitioned_table (
+   partrelid OID NULL,
+   partstrat "char" NULL,
+   partattrs INT2VECTOR NULL,
+   partclass OIDVECTOR NULL,
+   partcollation OIDVECTOR NULL,
+   partdefid OID NULL,
+   partexprs STRING NULL,
+   partnatts INT2 NULL
+)  CREATE TABLE pg_catalog.pg_partitioned_table (
+   partrelid OID NULL,
+   partstrat "char" NULL,
+   partattrs INT2VECTOR NULL,
+   partclass OIDVECTOR NULL,
+   partcollation OIDVECTOR NULL,
+   partdefid OID NULL,
+   partexprs STRING NULL,
+   partnatts INT2 NULL
+)  {}  {}
 CREATE TABLE pg_catalog.pg_policies (
    with_check STRING NULL,
    cmd STRING NULL,
@@ -2729,6 +2796,25 @@ CREATE TABLE pg_catalog.pg_policies (
    roles NAME[] NULL,
    schemaname NAME NULL,
    tablename NAME NULL
+)  {}  {}
+CREATE TABLE pg_catalog.pg_policy (
+   polrelid OID NULL,
+   polroles OID[] NULL,
+   polwithcheck STRING NULL,
+   oid OID NULL,
+   polcmd "char" NULL,
+   polname NAME NULL,
+   polpermissive BOOL NULL,
+   polqual STRING NULL
+)  CREATE TABLE pg_catalog.pg_policy (
+   polrelid OID NULL,
+   polroles OID[] NULL,
+   polwithcheck STRING NULL,
+   oid OID NULL,
+   polcmd "char" NULL,
+   polname NAME NULL,
+   polpermissive BOOL NULL,
+   polqual STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_prepared_statements (
    name STRING NULL,
@@ -2779,7 +2865,7 @@ CREATE TABLE pg_catalog.pg_proc (
    prorettype OID NULL,
    proargtypes OIDVECTOR NULL,
    proallargtypes OID[] NULL,
-   proargmodes STRING[] NULL,
+   proargmodes "char"[] NULL,
    proargnames STRING[] NULL,
    proargdefaults STRING NULL,
    protrftypes OID[] NULL,
@@ -2812,7 +2898,7 @@ CREATE TABLE pg_catalog.pg_proc (
    prorettype OID NULL,
    proargtypes OIDVECTOR NULL,
    proallargtypes OID[] NULL,
-   proargmodes STRING[] NULL,
+   proargmodes "char"[] NULL,
    proargnames STRING[] NULL,
    proargdefaults STRING NULL,
    protrftypes OID[] NULL,
@@ -2884,12 +2970,54 @@ CREATE TABLE pg_catalog.pg_replication_origin (
    roident OID NULL,
    roname STRING NULL
 )  {}  {}
+CREATE TABLE pg_catalog.pg_replication_origin_status (
+   local_lsn STRING NULL,
+   remote_lsn STRING NULL,
+   external_id STRING NULL,
+   local_id OID NULL
+)  CREATE TABLE pg_catalog.pg_replication_origin_status (
+   local_lsn STRING NULL,
+   remote_lsn STRING NULL,
+   external_id STRING NULL,
+   local_id OID NULL
+)  {}  {}
+CREATE TABLE pg_catalog.pg_replication_slots (
+   safe_wal_size INT8 NULL,
+   wal_status STRING NULL,
+   plugin NAME NULL,
+   restart_lsn STRING NULL,
+   xmin INT8 NULL,
+   confirmed_flush_lsn STRING NULL,
+   database NAME NULL,
+   datoid OID NULL,
+   active BOOL NULL,
+   catalog_xmin INT8 NULL,
+   slot_name NAME NULL,
+   active_pid INT4 NULL,
+   slot_type STRING NULL,
+   temporary BOOL NULL
+)  CREATE TABLE pg_catalog.pg_replication_slots (
+   safe_wal_size INT8 NULL,
+   wal_status STRING NULL,
+   plugin NAME NULL,
+   restart_lsn STRING NULL,
+   xmin INT8 NULL,
+   confirmed_flush_lsn STRING NULL,
+   database NAME NULL,
+   datoid OID NULL,
+   active BOOL NULL,
+   catalog_xmin INT8 NULL,
+   slot_name NAME NULL,
+   active_pid INT4 NULL,
+   slot_type STRING NULL,
+   temporary BOOL NULL
+)  {}  {}
 CREATE TABLE pg_catalog.pg_rewrite (
    oid OID NULL,
    rulename NAME NULL,
    ev_class OID NULL,
-   ev_type STRING NULL,
-   ev_enabled STRING NULL,
+   ev_type "char" NULL,
+   ev_enabled "char" NULL,
    is_instead BOOL NULL,
    ev_qual STRING NULL,
    ev_action STRING NULL
@@ -2897,8 +3025,8 @@ CREATE TABLE pg_catalog.pg_rewrite (
    oid OID NULL,
    rulename NAME NULL,
    ev_class OID NULL,
-   ev_type STRING NULL,
-   ev_enabled STRING NULL,
+   ev_type "char" NULL,
+   ev_enabled "char" NULL,
    is_instead BOOL NULL,
    ev_qual STRING NULL,
    ev_action STRING NULL
@@ -2995,6 +3123,31 @@ CREATE TABLE pg_catalog.pg_sequence (
    seqmin INT8 NULL,
    seqcache INT8 NULL,
    seqcycle BOOL NULL
+)  {}  {}
+CREATE TABLE pg_catalog.pg_sequences (
+   schemaname NAME NULL,
+   sequencename NAME NULL,
+   sequenceowner NAME NULL,
+   data_type REGTYPE NULL,
+   start_value INT8 NULL,
+   min_value INT8 NULL,
+   max_value INT8 NULL,
+   increment_by INT8 NULL,
+   cycle BOOL NULL,
+   cache_size INT8 NULL,
+   last_value INT8 NULL
+)  CREATE TABLE pg_catalog.pg_sequences (
+   schemaname NAME NULL,
+   sequencename NAME NULL,
+   sequenceowner NAME NULL,
+   data_type REGTYPE NULL,
+   start_value INT8 NULL,
+   min_value INT8 NULL,
+   max_value INT8 NULL,
+   increment_by INT8 NULL,
+   cycle BOOL NULL,
+   cache_size INT8 NULL,
+   last_value INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_settings (
    name STRING NULL,
@@ -3187,6 +3340,17 @@ CREATE TABLE pg_catalog.pg_subscription (
    subenabled BOOL NULL,
    subowner OID NULL
 )  {}  {}
+CREATE TABLE pg_catalog.pg_subscription_rel (
+   srrelid OID NULL,
+   srsubid OID NULL,
+   srsublsn STRING NULL,
+   srsubstate "char" NULL
+)  CREATE TABLE pg_catalog.pg_subscription_rel (
+   srrelid OID NULL,
+   srsubid OID NULL,
+   srsublsn STRING NULL,
+   srsubstate "char" NULL
+)  {}  {}
 CREATE TABLE pg_catalog.pg_tables (
    schemaname NAME NULL,
    tablename NAME NULL,
@@ -3260,7 +3424,7 @@ CREATE TABLE pg_catalog.pg_trigger (
    tgname NAME NULL,
    tgfoid OID NULL,
    tgtype INT2 NULL,
-   tgenabled STRING NULL,
+   tgenabled "char" NULL,
    tgisinternal BOOL NULL,
    tgconstrrelid OID NULL,
    tgconstrindid OID NULL,
@@ -3280,7 +3444,7 @@ CREATE TABLE pg_catalog.pg_trigger (
    tgname NAME NULL,
    tgfoid OID NULL,
    tgtype INT2 NULL,
-   tgenabled STRING NULL,
+   tgenabled "char" NULL,
    tgisinternal BOOL NULL,
    tgconstrrelid OID NULL,
    tgconstrindid OID NULL,

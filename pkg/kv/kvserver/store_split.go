@@ -311,11 +311,9 @@ func (s *Store) SplitRange(
 		if exRng != rightReplOrNil {
 			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, rightReplOrNil)
 		}
-		// NB: We only remove from uninitReplicas and the replicaQueues maps here
-		// so that we don't leave open a window where a replica is temporarily not
-		// present in Store.mu.replicas.
+		// NB: We only remove from uninitReplicas here so that we don't leave open a
+		// window where a replica is temporarily not present in Store.mu.replicas.
 		delete(s.mu.uninitReplicas, rightDesc.RangeID)
-		s.replicaQueues.Delete(int64(rightDesc.RangeID))
 	}
 
 	leftRepl.setDescRaftMuLocked(ctx, newLeftDesc)

@@ -74,6 +74,10 @@ type PostDeserializationTableDescriptorChanges struct {
 	// UpgradedFormatVersion indicates that the FormatVersion was upgraded.
 	UpgradedFormatVersion bool
 
+	// UpgradedIndexFormatVersion indicates that the format version of at least
+	// one index descriptor was upgraded
+	UpgradedIndexFormatVersion bool
+
 	// FixedPrivileges indicates that the privileges were fixed.
 	//
 	// TODO(ajwerner): Determine whether this still needs to exist of can be
@@ -83,14 +87,6 @@ type PostDeserializationTableDescriptorChanges struct {
 	// UpgradedForeignKeyRepresentation indicates that the foreign key
 	// representation was upgraded.
 	UpgradedForeignKeyRepresentation bool
-}
-
-// FindIndexPartitionByName searches this index descriptor for a partition whose name
-// is the input and returns it, or nil if no match is found.
-func FindIndexPartitionByName(
-	desc *descpb.IndexDescriptor, name string,
-) *descpb.PartitioningDescriptor {
-	return desc.Partitioning.FindPartitionByName(name)
 }
 
 // DescriptorType returns the type of this descriptor.
@@ -132,7 +128,7 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if idx.NumStoredColumns() == 0 {
+	if idx.NumSecondaryStoredColumns() == 0 {
 		return 1, nil
 	}
 	return len(desc.Families), nil
@@ -143,9 +139,9 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 // convention for automatically-named indexes.
 func buildIndexName(tableDesc *Mutable, index catalog.Index) string {
 	idx := index.IndexDesc()
-	segments := make([]string, 0, len(idx.ColumnNames)+2)
+	segments := make([]string, 0, len(idx.KeyColumnNames)+2)
 	segments = append(segments, tableDesc.Name)
-	segments = append(segments, idx.ColumnNames[idx.ExplicitColumnStartIdx():]...)
+	segments = append(segments, idx.KeyColumnNames[idx.ExplicitColumnStartIdx():]...)
 	if idx.Unique {
 		segments = append(segments, "key")
 	} else {
@@ -504,27 +500,44 @@ func (desc *wrapper) getAllReferencedTypesInTableColumns(
 	// collect the closure of ID's referenced.
 	ids := make(map[descpb.ID]struct{})
 	for id := range visitor.OIDs {
-		typDesc, err := getType(typedesc.UserDefinedTypeOIDToID(id))
+		uid, err := typedesc.UserDefinedTypeOIDToID(id)
 		if err != nil {
 			return nil, err
 		}
-		for child := range typDesc.GetIDClosure() {
+		typDesc, err := getType(uid)
+		if err != nil {
+			return nil, err
+		}
+		children, err := typDesc.GetIDClosure()
+		if err != nil {
+			return nil, err
+		}
+		for child := range children {
 			ids[child] = struct{}{}
 		}
 	}
 
 	// Now add all of the column types in the table.
-	addIDsInColumn := func(c *descpb.ColumnDescriptor) {
-		for id := range typedesc.GetTypeDescriptorClosure(c.Type) {
+	addIDsInColumn := func(c *descpb.ColumnDescriptor) error {
+		children, err := typedesc.GetTypeDescriptorClosure(c.Type)
+		if err != nil {
+			return err
+		}
+		for id := range children {
 			ids[id] = struct{}{}
 		}
+		return nil
 	}
 	for i := range desc.Columns {
-		addIDsInColumn(&desc.Columns[i])
+		if err := addIDsInColumn(&desc.Columns[i]); err != nil {
+			return nil, err
+		}
 	}
 	for _, mut := range desc.Mutations {
 		if c := mut.GetColumn(); c != nil {
-			addIDsInColumn(c)
+			if err := addIDsInColumn(c); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -604,7 +617,7 @@ func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 }
 
 func (desc *Mutable) ensurePrimaryKey() error {
-	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() {
+	if len(desc.PrimaryIndex.KeyColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
 		nameExists := func(name string) bool {
 			_, err := desc.FindColumnWithName(tree.Name(name))
@@ -612,7 +625,7 @@ func (desc *Mutable) ensurePrimaryKey() error {
 		}
 		s := "unique_rowid()"
 		col := &descpb.ColumnDescriptor{
-			Name:        GenerateUniqueConstraintName("rowid", nameExists),
+			Name:        GenerateUniqueName("rowid", nameExists),
 			Type:        types.Int,
 			DefaultExpr: &s,
 			Hidden:      true,
@@ -620,9 +633,9 @@ func (desc *Mutable) ensurePrimaryKey() error {
 		}
 		desc.AddColumn(col)
 		idx := descpb.IndexDescriptor{
-			Unique:           true,
-			ColumnNames:      []string{col.Name},
-			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			Unique:              true,
+			KeyColumnNames:      []string{col.Name},
+			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 		}
 		if err := desc.AddIndex(idx, true); err != nil {
 			return err
@@ -653,73 +666,77 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	}
 
 	// Populate IDs.
+	primaryColIDs := desc.GetPrimaryIndex().CollectKeyColumnIDs()
 	for _, idx := range desc.AllIndexes() {
+		maybeUpgradeIndexFormatVersion(idx.IndexDesc())
 		if idx.GetID() != 0 {
 			// This index has already been populated. Nothing to do.
 			continue
 		}
-		index := idx.IndexDesc()
-		index.ID = desc.NextIndexID
+		idx.IndexDesc().ID = desc.NextIndexID
 		desc.NextIndexID++
 
-		for j, colName := range index.ColumnNames {
-			if len(index.ColumnIDs) <= j {
-				index.ColumnIDs = append(index.ColumnIDs, 0)
+		for j, colName := range idx.IndexDesc().KeyColumnNames {
+			if len(idx.IndexDesc().KeyColumnIDs) <= j {
+				idx.IndexDesc().KeyColumnIDs = append(idx.IndexDesc().KeyColumnIDs, 0)
 			}
-			if index.ColumnIDs[j] == 0 {
-				index.ColumnIDs[j] = columnNames[colName]
+			if idx.IndexDesc().KeyColumnIDs[j] == 0 {
+				idx.IndexDesc().KeyColumnIDs[j] = columnNames[colName]
 			}
 		}
 
-		if !idx.Primary() && index.EncodingType == descpb.SecondaryIndexEncoding {
-			indexHasOldStoredColumns := index.HasOldStoredColumns()
-			// Need to clear ExtraColumnIDs and StoreColumnIDs because they are used
-			// by ContainsColumnID.
-			index.ExtraColumnIDs = nil
-			index.StoreColumnIDs = nil
+		if !idx.Primary() && idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
+			indexHasOldStoredColumns := idx.HasOldStoredColumns()
+			// Need to clear KeySuffixColumnIDs and StoreColumnIDs
+			idx.IndexDesc().KeySuffixColumnIDs = nil
+			idx.IndexDesc().StoreColumnIDs = nil
+			colIDs := idx.CollectKeyColumnIDs()
 			var extraColumnIDs []descpb.ColumnID
-			for _, primaryColID := range desc.PrimaryIndex.ColumnIDs {
-				if !index.ContainsColumnID(primaryColID) {
+			for _, primaryColID := range desc.PrimaryIndex.KeyColumnIDs {
+				if !colIDs.Contains(primaryColID) {
 					extraColumnIDs = append(extraColumnIDs, primaryColID)
+					colIDs.Add(primaryColID)
 				}
 			}
-			index.ExtraColumnIDs = extraColumnIDs
+			idx.IndexDesc().KeySuffixColumnIDs = extraColumnIDs
 
-			for _, colName := range index.StoreColumnNames {
+			for _, colName := range idx.IndexDesc().StoreColumnNames {
 				col, err := desc.FindColumnWithName(tree.Name(colName))
 				if err != nil {
 					return err
 				}
-				if desc.PrimaryIndex.ContainsColumnID(col.GetID()) {
+				if primaryColIDs.Contains(col.GetID()) {
 					// If the primary index contains a stored column, we don't need to
 					// store it - it's already part of the index.
-					err = pgerror.Newf(
-						pgcode.DuplicateColumn, "index %q already contains column %q", index.Name, col.GetName())
-					err = errors.WithDetailf(err, "column %q is part of the primary index and therefore implicit in all indexes", col.GetName())
+					err = pgerror.Newf(pgcode.DuplicateColumn,
+						"index %q already contains column %q", idx.GetName(), col.GetName())
+					err = errors.WithDetailf(err,
+						"column %q is part of the primary index and therefore implicit in all indexes", col.GetName())
 					return err
 				}
-				if index.ContainsColumnID(col.GetID()) {
+				if colIDs.Contains(col.GetID()) {
 					return pgerror.Newf(
 						pgcode.DuplicateColumn,
-						"index %q already contains column %q", index.Name, col.GetName())
+						"index %q already contains column %q", idx.GetName(), col.GetName())
 				}
 				if indexHasOldStoredColumns {
-					index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.GetID())
+					idx.IndexDesc().KeySuffixColumnIDs = append(idx.IndexDesc().KeySuffixColumnIDs, col.GetID())
 				} else {
-					index.StoreColumnIDs = append(index.StoreColumnIDs, col.GetID())
+					idx.IndexDesc().StoreColumnIDs = append(idx.IndexDesc().StoreColumnIDs, col.GetID())
 				}
+				colIDs.Add(col.GetID())
 			}
 		}
 
-		index.CompositeColumnIDs = nil
-		for _, colID := range index.ColumnIDs {
+		idx.IndexDesc().CompositeColumnIDs = nil
+		for _, colID := range idx.IndexDesc().KeyColumnIDs {
 			if compositeColIDs.Contains(colID) {
-				index.CompositeColumnIDs = append(index.CompositeColumnIDs, colID)
+				idx.IndexDesc().CompositeColumnIDs = append(idx.IndexDesc().CompositeColumnIDs, colID)
 			}
 		}
-		for _, colID := range index.ExtraColumnIDs {
+		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
 			if compositeColIDs.Contains(colID) {
-				index.CompositeColumnIDs = append(index.CompositeColumnIDs, colID)
+				idx.IndexDesc().CompositeColumnIDs = append(idx.IndexDesc().CompositeColumnIDs, colID)
 			}
 		}
 	}
@@ -758,7 +775,7 @@ func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.Colum
 	}
 
 	var primaryIndexColIDs catalog.TableColSet
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
 		primaryIndexColIDs.Add(colID)
 	}
 
@@ -1052,7 +1069,7 @@ func (desc *Mutable) AddFamily(fam descpb.ColumnFamilyDescriptor) {
 // AddIndex adds an index to the table.
 func (desc *Mutable) AddIndex(idx descpb.IndexDescriptor, primary bool) error {
 	if idx.Type == descpb.IndexDescriptor_FORWARD {
-		if err := checkColumnsValidForIndex(desc, idx.ColumnNames); err != nil {
+		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
 			return err
 		}
 
@@ -1072,7 +1089,7 @@ func (desc *Mutable) AddIndex(idx descpb.IndexDescriptor, primary bool) error {
 		}
 
 	} else {
-		if err := checkColumnsValidForInvertedIndex(desc, idx.ColumnNames); err != nil {
+		if err := checkColumnsValidForInvertedIndex(desc, idx.KeyColumnNames); err != nil {
 			return err
 		}
 		desc.AddPublicNonPrimaryIndex(idx)
@@ -1140,9 +1157,9 @@ func (desc *Mutable) RemoveColumnFromFamily(colID descpb.ColumnID) {
 
 // RenameColumnDescriptor updates all references to a column name in
 // a table descriptor including indexes and families.
-func (desc *Mutable) RenameColumnDescriptor(column *descpb.ColumnDescriptor, newColName string) {
-	colID := column.ID
-	column.Name = newColName
+func (desc *Mutable) RenameColumnDescriptor(column catalog.Column, newColName string) {
+	colID := column.GetID()
+	column.ColumnDesc().Name = newColName
 
 	for i := range desc.Families {
 		for j := range desc.Families[i].ColumnIDs {
@@ -1154,9 +1171,9 @@ func (desc *Mutable) RenameColumnDescriptor(column *descpb.ColumnDescriptor, new
 
 	for _, idx := range desc.AllIndexes() {
 		idxDesc := idx.IndexDesc()
-		for i, id := range idxDesc.ColumnIDs {
+		for i, id := range idxDesc.KeyColumnIDs {
 			if id == colID {
-				idxDesc.ColumnNames[i] = newColName
+				idxDesc.KeyColumnNames[i] = newColName
 			}
 		}
 		for i, id := range idxDesc.StoreColumnIDs {
@@ -1211,31 +1228,6 @@ func (desc *wrapper) NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error) {
 		names[i] = col.GetName()
 	}
 	return names, nil
-}
-
-// RenameIndexDescriptor renames an index descriptor.
-func (desc *Mutable) RenameIndexDescriptor(index *descpb.IndexDescriptor, name string) error {
-	id := index.ID
-	if id == desc.PrimaryIndex.ID {
-		idx := desc.PrimaryIndex
-		idx.Name = name
-		desc.SetPrimaryIndex(idx)
-		return nil
-	}
-	for i, idx := range desc.Indexes {
-		if idx.ID == id {
-			idx.Name = name
-			desc.SetPublicNonPrimaryIndex(i+1, idx)
-			return nil
-		}
-	}
-	for _, m := range desc.Mutations {
-		if idx := m.GetIndex(); idx != nil && idx.ID == id {
-			idx.Name = name
-			return nil
-		}
-	}
-	return fmt.Errorf("index with id = %d does not exist", id)
 }
 
 // DropConstraint drops a constraint, either by removing it from the table
@@ -1393,7 +1385,12 @@ func (desc *Mutable) RenameConstraint(
 			}
 			return dependentViewRenameError("index", tableRef.ID)
 		}
-		return desc.RenameIndexDescriptor(detail.Index, newName)
+		idx, err := desc.FindIndexWithID(detail.Index.ID)
+		if err != nil {
+			return err
+		}
+		idx.IndexDesc().Name = newName
+		return nil
 
 	case descpb.ConstraintTypeUnique:
 		if detail.Index != nil {
@@ -1403,9 +1400,11 @@ func (desc *Mutable) RenameConstraint(
 				}
 				return dependentViewRenameError("index", tableRef.ID)
 			}
-			if err := desc.RenameIndexDescriptor(detail.Index, newName); err != nil {
+			idx, err := desc.FindIndexWithID(detail.Index.ID)
+			if err != nil {
 				return err
 			}
+			idx.IndexDesc().Name = newName
 		} else if detail.UniqueWithoutIndexConstraint != nil {
 			if detail.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
 				return unimplemented.NewWithIssueDetailf(42844,
@@ -1495,10 +1494,10 @@ func (desc *wrapper) IsInterleaved() bool {
 // IsPrimaryIndexDefaultRowID returns whether or not the table's primary
 // index is the default primary key on the hidden rowid column.
 func (desc *wrapper) IsPrimaryIndexDefaultRowID() bool {
-	if len(desc.PrimaryIndex.ColumnIDs) != 1 {
+	if len(desc.PrimaryIndex.KeyColumnIDs) != 1 {
 		return false
 	}
-	col, err := desc.FindColumnWithID(desc.PrimaryIndex.ColumnIDs[0])
+	col, err := desc.FindColumnWithID(desc.PrimaryIndex.KeyColumnIDs[0])
 	if err != nil {
 		// Should never be in this case.
 		panic(err)
@@ -1592,6 +1591,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				for i, c := range desc.Checks {
 					if c.Name == t.Constraint.Check.Name {
 						desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
+						break
 					}
 				}
 				col, err := desc.FindColumnWithID(t.Constraint.NotNullColumn)
@@ -1617,24 +1617,12 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			// index encoding and stores all columns. This ensures that it will be properly
 			// encoded and decoded when it is accessed after it is no longer the primary key
 			// but before it is dropped entirely during the index drop process.
-			primaryIndexCopy := protoutil.Clone(&desc.PrimaryIndex).(*descpb.IndexDescriptor)
+			primaryIndexCopy := desc.GetPrimaryIndex().IndexDescDeepCopy()
 			primaryIndexCopy.EncodingType = descpb.PrimaryIndexEncoding
-			for _, col := range desc.Columns {
-				containsCol := false
-				for _, colID := range primaryIndexCopy.ColumnIDs {
-					if colID == col.ID {
-						containsCol = true
-						break
-					}
-				}
-				if !containsCol {
-					primaryIndexCopy.StoreColumnIDs = append(primaryIndexCopy.StoreColumnIDs, col.ID)
-					primaryIndexCopy.StoreColumnNames = append(primaryIndexCopy.StoreColumnNames, col.Name)
-				}
-			}
+			PopulateAllStoreColumns(&primaryIndexCopy, desc)
 			// Move the old primary index from the table descriptor into the mutations queue
 			// to schedule it for deletion.
-			if err := desc.AddIndexMutation(primaryIndexCopy, descpb.DescriptorMutation_DROP); err != nil {
+			if err := desc.AddIndexMutation(&primaryIndexCopy, descpb.DescriptorMutation_DROP); err != nil {
 				return err
 			}
 
@@ -1739,14 +1727,14 @@ func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) 
 		return err == nil
 	}
 
-	uniqueName := GenerateUniqueConstraintName(newCol.GetName(), nameExists)
+	uniqueName := GenerateUniqueName(newCol.GetName(), nameExists)
 
 	// Remember the name of oldCol, because newCol will take it.
 	oldColName := oldCol.GetName()
 
 	// Rename old column to this new name, and rename newCol to oldCol's name.
-	desc.RenameColumnDescriptor(oldCol.ColumnDesc(), uniqueName)
-	desc.RenameColumnDescriptor(newCol.ColumnDesc(), oldColName)
+	desc.RenameColumnDescriptor(oldCol, uniqueName)
+	desc.RenameColumnDescriptor(newCol, oldColName)
 
 	// Swap Column Family ordering for oldCol and newCol.
 	// Both columns must be in the same family since the new column is
@@ -1950,11 +1938,11 @@ func (desc *Mutable) AddIndexMutation(
 
 	switch idx.Type {
 	case descpb.IndexDescriptor_FORWARD:
-		if err := checkColumnsValidForIndex(desc, idx.ColumnNames); err != nil {
+		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
 			return err
 		}
 	case descpb.IndexDescriptor_INVERTED:
-		if err := checkColumnsValidForInvertedIndex(desc, idx.ColumnNames); err != nil {
+		if err := checkColumnsValidForInvertedIndex(desc, idx.KeyColumnNames); err != nil {
 			return err
 		}
 	}
@@ -2011,23 +1999,13 @@ func (desc *Mutable) addMutation(m descpb.DescriptorMutation) {
 	desc.Mutations = append(desc.Mutations, m)
 }
 
-// IgnoreConstraints is used in MakeFirstMutationPublic to indicate that the
-// table descriptor returned should not include newly added constraints, which
-// is useful when passing the returned table descriptor to be used in
-// validating constraints to be added.
-const IgnoreConstraints = false
-
-// IncludeConstraints is used in MakeFirstMutationPublic to indicate that the
-// table descriptor returned should include newly added constraints.
-const IncludeConstraints = true
-
 // MakeFirstMutationPublic creates a Mutable from the
 // immutable by making the first mutation public.
 // This is super valuable when trying to run SQL over data associated
 // with a schema mutation that is still not yet public: Data validation,
 // error reporting.
 func (desc *wrapper) MakeFirstMutationPublic(
-	includeConstraints bool,
+	includeConstraints catalog.MutationPublicationFilter,
 ) (catalog.TableDescriptor, error) {
 	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
 	table := NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
@@ -2039,41 +2017,28 @@ func (desc *wrapper) MakeFirstMutationPublic(
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		if includeConstraints || mutation.GetConstraint() == nil {
-			if err := table.MakeMutationComplete(mutation); err != nil {
-				return nil, err
-			}
-		}
 		i++
+		if mutation.GetPrimaryKeySwap() != nil && includeConstraints == catalog.IgnoreConstraintsAndPKSwaps {
+			continue
+		} else if mutation.GetConstraint() != nil && includeConstraints > catalog.IncludeConstraints {
+			continue
+		}
+		if err := table.MakeMutationComplete(mutation); err != nil {
+			return nil, err
+		}
 	}
 	table.Mutations = table.Mutations[i:]
 	table.Version++
 	return table, nil
 }
 
-// ColumnNeedsBackfill returns true if adding or dropping (according to
-// the direction) the given column requires backfill.
-func ColumnNeedsBackfill(
-	direction descpb.DescriptorMutation_Direction, desc *descpb.ColumnDescriptor,
-) bool {
-	if desc.Virtual {
-		// Virtual columns are not stored in the primary index, so they do not need
-		// backfill.
-		return false
-	}
-	if direction == descpb.DescriptorMutation_DROP {
-		// In all other cases, DROP requires backfill.
-		return true
-	}
-	// ADD requires backfill for:
-	//  - columns with non-NULL default value
-	//  - computed columns
-	//  - non-nullable columns (note: if a non-nullable column doesn't have a
-	//    default value, the backfill will fail unless the table is empty).
-	if desc.HasNullDefault() {
-		return false
-	}
-	return desc.HasDefault() || !desc.Nullable || desc.IsComputed()
+// MakePublic creates a Mutable from the immutable by making the it public.
+func (desc *wrapper) MakePublic() catalog.TableDescriptor {
+	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
+	table := NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
+	table.State = descpb.DescriptorState_PUBLIC
+	table.Version++
+	return table
 }
 
 // HasPrimaryKey returns true if the table has a primary key.
@@ -2084,14 +2049,11 @@ func (desc *wrapper) HasPrimaryKey() bool {
 // HasColumnBackfillMutation returns whether the table has any queued column
 // mutations that require a backfill.
 func (desc *wrapper) HasColumnBackfillMutation() bool {
-	for _, m := range desc.Mutations {
-		col := m.GetColumn()
-		if col == nil {
-			// Index backfills don't affect changefeeds.
-			continue
-		}
-		if ColumnNeedsBackfill(m.Direction, col) {
-			return true
+	for _, m := range desc.AllMutations() {
+		if col := m.AsColumn(); col != nil {
+			if catalog.ColumnNeedsBackfill(col) {
+				return true
+			}
 		}
 	}
 	return false
@@ -2238,16 +2200,6 @@ func (desc *wrapper) GetFamilyOfColumn(
 	return nil, errors.Newf("no column family found for column id %v", colID)
 }
 
-// PartitionNames returns a slice containing the name of every partition and
-// subpartition in an arbitrary order.
-func (desc *wrapper) PartitionNames() []string {
-	var names []string
-	for _, index := range desc.NonDropIndexes() {
-		names = append(names, index.PartitionNames()...)
-	}
-	return names
-}
-
 // SetAuditMode configures the audit mode on the descriptor.
 func (desc *Mutable) SetAuditMode(mode tree.AuditMode) (bool, error) {
 	prev := desc.AuditMode
@@ -2309,9 +2261,9 @@ func (desc *immutable) ActiveChecks() []descpb.TableDescriptor_CheckConstraint {
 
 // IsShardColumn returns true if col corresponds to a non-dropped hash sharded
 // index. This method assumes that col is currently a member of desc.
-func (desc *Mutable) IsShardColumn(col *descpb.ColumnDescriptor) bool {
+func (desc *Mutable) IsShardColumn(col catalog.Column) bool {
 	return nil != catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
-		return idx.IsSharded() && idx.GetShardColumnName() == col.Name
+		return idx.IsSharded() && idx.GetShardColumnName() == col.GetName()
 	})
 }
 
@@ -2320,11 +2272,10 @@ func (desc *wrapper) TableDesc() *descpb.TableDescriptor {
 	return &desc.TableDescriptor
 }
 
-// GenerateUniqueConstraintName attempts to generate a unique constraint name
-// with the given prefix.
-// It will first try prefix by itself, then it will subsequently try
-// adding numeric digits at the end, starting from 1.
-func GenerateUniqueConstraintName(prefix string, nameExistsFunc func(name string) bool) string {
+// GenerateUniqueName attempts to generate a unique name with the given prefix.
+// It will first try prefix by itself, then it will subsequently try adding
+// numeric digits at the end, starting from 1.
+func GenerateUniqueName(prefix string, nameExistsFunc func(name string) bool) string {
 	name := prefix
 	for i := 1; nameExistsFunc(name); i++ {
 		name = fmt.Sprintf("%s_%d", prefix, i)

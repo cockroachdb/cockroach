@@ -43,7 +43,7 @@ type DatumVec interface {
 	// Cap returns the underlying capacity of the vector.
 	Cap() int
 	// MarshalAt returns the marshaled representation of datum at index i.
-	MarshalAt(i int) ([]byte, error)
+	MarshalAt(appendTo []byte, i int) ([]byte, error)
 	// UnmarshalTo unmarshals the byte representation of a datum and sets it at
 	// index i.
 	UnmarshalTo(i int, b []byte) error

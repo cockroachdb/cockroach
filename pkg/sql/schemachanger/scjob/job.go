@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -102,19 +101,35 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	if err != nil {
 		return err
 	}
+	restoreTableIDs := func(txn *kv.Txn, descriptors *descs.Collection) error {
+		return scexec.UpdateDescriptorJobIDs(
+			ctx, txn, descriptors, n.job.Payload().DescriptorIDs, n.job.ID(), jobspb.InvalidJobID,
+		)
+	}
 
-	for _, s := range sc.Stages {
-		var descriptorsWithUpdatedVersions []lease.IDVersion
+	for i, s := range sc.Stages {
 		if err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 			jt := badJobTracker{
 				txn:         txn,
 				descriptors: descriptors,
 				codec:       execCtx.ExecCfg().Codec,
 			}
-			if err := scexec.NewExecutor(txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller, jt).ExecuteOps(ctx, s.Ops); err != nil {
+			if err := scexec.NewExecutor(
+				txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller,
+				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs, execCtx.ExecCfg().JobRegistry,
+			).ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{
+				Statements: n.job.Payload().Statement,
+				Phase:      scplan.PostCommitPhase,
+			}); err != nil {
 				return err
 			}
-			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
+			// If this is the last stage, also update all the table descriptors to
+			// remove the job ID.
+			if i == len(sc.Stages)-1 {
+				if err := restoreTableIDs(txn, descriptors); err != nil {
+					return err
+				}
+			}
 			return n.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				pg := md.Progress.GetNewSchemaChange()
 				pg.States = makeStates(s.After)
@@ -124,13 +139,27 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		}); err != nil {
 			return err
 		}
+		err := execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
+		if err != nil {
+			return err
+		}
+	}
 
-		// Wait for new versions.
-		if err := sql.WaitToUpdateLeasesMultiple(
-			ctx,
-			lm,
-			descriptorsWithUpdatedVersions,
-		); err != nil {
+	// If no stages exist, then execute a singe transaction
+	// within this job to allow schema changes again.
+	if len(sc.Stages) == 0 {
+		err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			err := restoreTableIDs(txn, descriptors)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		err = execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
+		if err != nil {
 			return err
 		}
 	}

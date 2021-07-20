@@ -103,7 +103,7 @@ type Operator interface {
 	operator()
 }
 
-var _ Operator = UnaryOperator(0)
+var _ Operator = (*UnaryOperator)(nil)
 var _ Operator = BinaryOperator(0)
 var _ Operator = ComparisonOperator(0)
 
@@ -963,7 +963,7 @@ func (node *Array) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(FmtParsable) && node.typ != nil {
 		if node.typ.ArrayContents().Family() != types.UnknownFamily {
 			ctx.WriteString(":::")
-			ctx.Buffer.WriteString(node.typ.SQLString())
+			ctx.FormatTypeReference(node.typ)
 		}
 	}
 }
@@ -1254,22 +1254,41 @@ func (node *BinaryExpr) Format(ctx *FmtCtx) {
 	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.isPadded())
 }
 
-// UnaryOperator represents a unary operator.
-type UnaryOperator int
+// UnaryOperator represents a unary operator used in a UnaryExpr.
+type UnaryOperator struct {
+	Symbol UnaryOperatorSymbol
+	// IsOperator is true if OPERATOR(symbol) is used.
+	IsOperator bool
+}
+
+// MakeUnaryOperator creates a UnaryOperator given a symbol.
+func MakeUnaryOperator(symbol UnaryOperatorSymbol) UnaryOperator {
+	return UnaryOperator{Symbol: symbol}
+}
+
+func (o UnaryOperator) String() string {
+	if o.IsOperator {
+		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
+	}
+	return o.Symbol.String()
+}
 
 func (UnaryOperator) operator() {}
 
-// UnaryExpr.Operator
+// UnaryOperatorSymbol represents a unary operator.
+type UnaryOperatorSymbol int
+
+// UnaryExpr.Operator.Symbol
 const (
-	UnaryMinus UnaryOperator = iota
+	UnaryMinus UnaryOperatorSymbol = iota
 	UnaryComplement
 	UnarySqrt
 	UnaryCbrt
 
-	NumUnaryOperators
+	NumUnaryOperatorSymbols
 )
 
-var _ = NumUnaryOperators
+var _ = NumUnaryOperatorSymbols
 
 var unaryOpName = [...]string{
 	UnaryMinus:      "-",
@@ -1278,8 +1297,8 @@ var unaryOpName = [...]string{
 	UnaryCbrt:       "||/",
 }
 
-func (i UnaryOperator) String() string {
-	if i < 0 || i > UnaryOperator(len(unaryOpName)-1) {
+func (i UnaryOperatorSymbol) String() string {
+	if i < 0 || i > UnaryOperatorSymbol(len(unaryOpName)-1) {
 		return fmt.Sprintf("UnaryOp(%d)", i)
 	}
 	return unaryOpName[i]
@@ -1303,7 +1322,7 @@ func (node *UnaryExpr) Format(ctx *FmtCtx) {
 	_, isOp := e.(operatorExpr)
 	_, isDatum := e.(Datum)
 	_, isConstant := e.(Constant)
-	if isOp || (node.Operator == UnaryMinus && (isDatum || isConstant)) {
+	if isOp || (node.Operator.Symbol == UnaryMinus && (isDatum || isConstant)) {
 		ctx.WriteByte('(')
 		ctx.FormatNode(e)
 		ctx.WriteByte(')')
@@ -1322,14 +1341,14 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ *types.T) *UnaryExp
 	node := &UnaryExpr{Operator: op, Expr: expr}
 	node.typ = typ
 	innerType := expr.ResolvedType()
-	for _, o := range UnaryOps[op] {
+	for _, o := range UnaryOps[op.Symbol] {
 		o := o.(*UnaryOp)
 		if innerType.Equivalent(o.Typ) && node.typ.Equivalent(o.ReturnType) {
 			node.fn = o
 			return node
 		}
 	}
-	panic(errors.AssertionFailedf("invalid TypedExpr with unary op %d: %s", op, expr))
+	panic(errors.AssertionFailedf("invalid TypedExpr with unary op %d: %s", op.Symbol, expr))
 }
 
 // FuncExpr represents a function call.

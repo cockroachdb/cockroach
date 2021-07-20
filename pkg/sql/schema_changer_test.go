@@ -39,12 +39,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -53,8 +51,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -90,7 +90,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 	var id = descpb.ID(keys.MinNonPredefinedUserDescID + 1 /* skip over DB ID */)
 	var instance = base.SQLInstanceID(2)
 	stopper := stop.NewStopper()
-	cfg := base.NewLeaseManagerConfig()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	rf, err := rangefeed.NewFactory(stopper, kvDB, nil /* knobs */)
 	require.NoError(t, err)
@@ -105,7 +104,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 		lease.ManagerTestingKnobs{},
 		stopper,
 		rf,
-		cfg,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.Background())
@@ -1385,29 +1383,34 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	upTableVersion = func() {
 		leaseMgr := s.LeaseManager().(*lease.Manager)
-		ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 		var version descpb.DescriptorVersion
-		if err := descs.Txn(ctx, s.ClusterSettings(), leaseMgr, ie, kvDB, func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-		) error {
-			table, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			table, err := catalogkv.MustGetMutableTableDescByID(
+				ctx, txn, keys.SystemSQLCodec, tableDesc.GetID())
 			if err != nil {
 				return err
 			}
-			return descsCol.WriteDesc(ctx, false /* kvTrace */, table, txn)
+			table.MaybeIncrementVersion()
+			ba := txn.NewBatch()
+			if err := catalogkv.WriteDescToBatch(
+				ctx, false /* kvTrace */, s.ClusterSettings(), ba,
+				keys.SystemSQLCodec, table.GetID(), table,
+			); err != nil {
+				return err
+			}
+			version = table.GetVersion()
+			return txn.Run(ctx, ba)
 		}); err != nil {
 			t.Error(err)
 		}
 
 		// Grab a lease at the latest version so that we are confident
 		// that all future leases will be taken at the latest version.
-		table, _, err := leaseMgr.TestingAcquireAndAssertMinVersion(ctx, s.Clock().Now(), id, version+1)
+		table, err := leaseMgr.TestingAcquireAndAssertMinVersion(ctx, s.Clock().Now(), id, version)
 		if err != nil {
 			t.Error(err)
 		}
-		if err := leaseMgr.Release(table); err != nil {
-			t.Error(err)
-		}
+		table.Release(ctx)
 	}
 
 	// Bulk insert.
@@ -3071,7 +3074,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 		if len(tableDesc.AllMutations()) != 0 {
 			return errors.Errorf("expected 0 mutations after cancellation, found %d", len(tableDesc.AllMutations()))
 		}
-		if tableDesc.GetPrimaryIndex().NumColumns() != 1 || tableDesc.GetPrimaryIndex().GetColumnName(0) != "rowid" {
+		if tableDesc.GetPrimaryIndex().NumKeyColumns() != 1 || tableDesc.GetPrimaryIndex().GetKeyColumnName(0) != "rowid" {
 			return errors.Errorf("expected primary key change to not succeed after cancellation")
 		}
 		return nil
@@ -3750,14 +3753,14 @@ CREATE TABLE d.t (
 	// Verify that this descriptor uses the new STORING encoding. Overwrite it
 	// with one that uses the old encoding.
 	for _, index := range tableDesc.PublicNonPrimaryIndexes() {
-		if index.NumExtraColumns() != 1 {
-			t.Fatalf("ExtraColumnIDs not set properly: %s", tableDesc)
+		if index.NumKeySuffixColumns() != 1 {
+			t.Fatalf("KeySuffixColumnIDs not set properly: %s", tableDesc)
 		}
-		if index.NumStoredColumns() != 1 {
+		if index.NumSecondaryStoredColumns() != 1 {
 			t.Fatalf("StoreColumnIDs not set properly: %s", tableDesc)
 		}
-		newIndexDesc := *index.IndexDesc()
-		newIndexDesc.ExtraColumnIDs = append(newIndexDesc.ExtraColumnIDs, newIndexDesc.StoreColumnIDs...)
+		newIndexDesc := index.IndexDescDeepCopy()
+		newIndexDesc.KeySuffixColumnIDs = append(newIndexDesc.KeySuffixColumnIDs, newIndexDesc.StoreColumnIDs...)
 		newIndexDesc.StoreColumnIDs = nil
 		tableDesc.SetPublicNonPrimaryIndex(index.Ordinal(), newIndexDesc)
 	}
@@ -4463,13 +4466,15 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()
+	var gcAt hlc.Timestamp
 	runGC := func(sp roachpb.Span) error {
 		if tc == nil {
 			return nil
 		}
+		gcAt = tc.Server(0).Clock().Now()
 		gcr := roachpb.GCRequest{
 			RequestHeader: roachpb.RequestHeaderFromSpan(sp),
-			Threshold:     tc.Server(0).Clock().Now(),
+			Threshold:     gcAt,
 		}
 		_, err := kv.SendWrapped(ctx, tc.Server(0).DistSenderI().(*kvcoord.DistSender), &gcr)
 		if err != nil {
@@ -4500,12 +4505,22 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE t`)
 	sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
 	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
-	if _, err := db.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); err != nil {
+	if _, err := db.Exec(`CREATE UNIQUE INDEX index_created_in_test ON t.test (v)`); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := sqltestutils.CheckTableKeyCount(context.Background(), kvDB, 2, 0); err != nil {
 		t.Fatal(err)
+	}
+
+	got := sqlDB.QueryStr(t, `
+		SELECT p->'schemaChange'->'writeTimestamp'->>'wallTime' < $1, jsonb_pretty(p)
+		FROM (SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS p FROM system.jobs)
+		WHERE p->>'description' LIKE 'CREATE UNIQUE INDEX index_created_in_test%'`,
+		gcAt.WallTime,
+	)[0]
+	if got[0] != "true" {
+		t.Fatalf("expected write-ts < gc time. details: %s", got[1])
 	}
 }
 
@@ -6943,7 +6958,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 					tc.jobRegex)
 				require.Len(t, result, 1)
 				status, jobError := result[0][0], result[0][1]
-				require.Equal(t, string(jobs.StatusFailed), status)
+				require.Equal(t, string(jobs.StatusRevertFailed), status)
 				require.Regexp(t,
 					"cannot be reverted, manual cleanup may be required: "+
 						"schema change jobs on databases and schemas cannot be reverted",
@@ -7398,4 +7413,39 @@ COMMIT;
 		}
 	})
 
+}
+
+// Ensures that errors coming from hlc due to clocks being out of sync are not
+// treated as permanent failures.
+func TestClockSyncErrorsAreNotPermanent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var tc serverutils.TestClusterInterface
+	ctx := context.Background()
+	var updatedClock int64 // updated with atomics
+	tc = testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+						if atomic.AddInt64(&updatedClock, 1) > 1 {
+							return nil
+						}
+						clock := tc.Server(0).Clock()
+						now := clock.Now()
+						farInTheFuture := now.Add(time.Hour.Nanoseconds(), 0)
+
+						return clock.UpdateAndCheckMaxOffset(ctx, farInTheFuture.UnsafeToClockTimestamp())
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY)`)
+	// Before the commit which added this test, the below command would fail
+	// due to a permanent error.
+	tdb.Exec(t, `ALTER TABLE t ADD COLUMN j INT NOT NULL DEFAULT 42`)
 }

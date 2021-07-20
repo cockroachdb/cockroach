@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -414,4 +415,254 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 		// observed status to be set.
 		require.Equal(t, roachpb.ABORTED, th.mu.finalObservedStatus)
 	})
+}
+
+// TestTxnHeartbeaterAsyncAbortWaitsForInFlight tests that the txnHeartbeater
+// will wait for an in-flight request to complete before sending the
+// EndTxn rollback request.
+func TestTxnHeartbeaterAsyncAbortWaitsForInFlight(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	txn := makeTxnProto()
+	th, mockSender, mockGatekeeper := makeMockTxnHeartbeater(&txn)
+	defer th.stopper.Stop(ctx)
+
+	// Mock the heartbeat request, which should wait for an in-flight put via
+	// putReady then return an aborted txn and signal hbAborted.
+	putReady := make(chan struct{})
+	hbAborted := make(chan struct{})
+	mockGatekeeper.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		<-putReady
+		defer close(hbAborted)
+
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.ABORTED
+		return br, nil
+	})
+
+	putResume := make(chan struct{})
+	rollbackSent := make(chan struct{})
+	mockSender.ChainMockSend(
+		// Mock a Put, which signals putReady and then waits for putResume
+		// before returning a response.
+		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			th.mu.Unlock() // without txnLockGatekeeper, we must unlock manually
+			defer th.mu.Lock()
+			close(putReady)
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+
+			<-putResume
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		},
+		// Mock an EndTxn, which signals rollbackSent.
+		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			defer close(rollbackSent)
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+			etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
+			require.Equal(t, &txn, ba.Txn)
+			require.False(t, etReq.Commit)
+			require.True(t, etReq.Poison)
+			require.True(t, etReq.TxnHeartbeating)
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			br.Txn.Status = roachpb.ABORTED
+			return br, nil
+		},
+	)
+
+	// Spawn a goroutine to send the Put.
+	require.NoError(t, th.stopper.RunAsyncTask(ctx, "put", func(ctx context.Context) {
+		var ba roachpb.BatchRequest
+		ba.Header = roachpb.Header{Txn: txn.Clone()}
+		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
+
+		th.mu.Lock() // without TxnCoordSender, we must lock manually
+		defer th.mu.Unlock()
+		br, pErr := th.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+	}))
+
+	<-putReady  // wait for put
+	<-hbAborted // wait for heartbeat abort
+	select {
+	case <-rollbackSent: // we don't expect a rollback yet
+		require.Fail(t, "received unexpected EndTxn")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(putResume) // make put return
+	<-rollbackSent   // we now expect the rollback
+
+	// The heartbeat loop should eventually close.
+	waitForHeartbeatLoopToStop(t, &th)
+}
+
+// TestTxnHeartbeaterAsyncAbortCollapsesRequests tests that when the
+// txnHeartbeater has an async abort rollback in flight, any client
+// rollbacks will wait for the async rollback to complete and return
+// its result.
+func TestTxnHeartbeaterAsyncAbortCollapsesRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	txn := makeTxnProto()
+	th, mockSender, mockGatekeeper := makeMockTxnHeartbeater(&txn)
+	defer th.stopper.Stop(ctx)
+
+	// Mock the heartbeat request, which simply aborts and signals hbAborted.
+	hbAborted := make(chan struct{})
+	mockGatekeeper.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		defer close(hbAborted)
+
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.ABORTED
+		return br, nil
+	})
+
+	// Mock an EndTxn response, which signals rollbackReady and blocks
+	// until rollbackUnblock is closed.
+	rollbackReady := make(chan struct{})
+	rollbackUnblock := make(chan struct{})
+	mockSender.ChainMockSend(
+		// The first Put request is expected and should just return.
+		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		},
+		// The first EndTxn request from the heartbeater is expected, so block and return.
+		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			th.mu.Unlock() // manually unlock for concurrency, no txnLockGatekeeper
+			defer th.mu.Lock()
+			close(rollbackReady)
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+			<-rollbackUnblock
+
+			etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
+			require.Equal(t, &txn, ba.Txn)
+			require.False(t, etReq.Commit)
+			require.True(t, etReq.Poison)
+			require.True(t, etReq.TxnHeartbeating)
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			br.Txn.Status = roachpb.ABORTED
+			return br, nil
+		},
+		// The second EndTxn request from the client is unexpected, so
+		// return an error response.
+		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			return nil, roachpb.NewError(errors.Errorf("unexpected request: %v", ba))
+		},
+	)
+
+	// Kick off the heartbeat loop.
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: txn.Clone()}
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
+
+	th.mu.Lock() // manually lock, there's no TxnCoordSender
+	br, pErr := th.SendLocked(ctx, ba)
+	th.mu.Unlock()
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Wait for the heartbeater to abort and send an EndTxn.
+	<-hbAborted
+	<-rollbackReady
+
+	// Send a rollback from the client. This should be collapsed together
+	// with the heartbeat abort, and block until it returns. We spawn
+	// a goroutine to unblock the rollback.
+	require.NoError(t, th.stopper.RunAsyncTask(ctx, "put", func(ctx context.Context) {
+		time.Sleep(100 * time.Millisecond)
+		close(rollbackUnblock)
+	}))
+
+	ba = roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: txn.Clone()}
+	ba.Add(&roachpb.EndTxnRequest{Commit: false})
+
+	th.mu.Lock() // manually lock, there's no TxnCoordSender
+	br, pErr = th.SendLocked(ctx, ba)
+	th.mu.Unlock()
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// The heartbeat loop should eventually close.
+	waitForHeartbeatLoopToStop(t, &th)
+}
+
+func heartbeaterRunning(th *txnHeartbeater) bool {
+	th.mu.Lock()
+	defer th.mu.Unlock()
+	return th.heartbeatLoopRunningLocked()
+}
+
+// TestTxnHeartbeaterCommitLoopHandling tests that interceptor cancels
+// heartbeats early for rolled back transactions while keeping it untouched
+// for committed ones.
+func TestTxnHeartbeaterEndTxnLoopHandling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		transactionCommit      bool
+		expectHeartbeatRunning bool
+	}{
+		{true, true},
+		{false, false},
+	} {
+		t.Run(fmt.Sprintf("commit:%t", tc.transactionCommit), func(t *testing.T) {
+			ctx := context.Background()
+			txn := makeTxnProto()
+			th, _, _ := makeMockTxnHeartbeater(&txn)
+			defer th.stopper.Stop(ctx)
+
+			// Kick off the heartbeat loop.
+			key := roachpb.Key("a")
+			var ba roachpb.BatchRequest
+			ba.Header = roachpb.Header{Txn: txn.Clone()}
+			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
+
+			br, pErr := th.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+			require.True(t, heartbeaterRunning(&th), "heartbeat running")
+
+			// End transaction to validate heartbeat state.
+			var ba2 roachpb.BatchRequest
+			ba2.Header = roachpb.Header{Txn: txn.Clone()}
+			ba2.Add(&roachpb.EndTxnRequest{RequestHeader: roachpb.RequestHeader{Key: key}, Commit: tc.transactionCommit})
+
+			th.mu.Lock()
+			br, pErr = th.SendLocked(ctx, ba2)
+			th.mu.Unlock()
+
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+			require.Equal(t, tc.expectHeartbeatRunning, heartbeaterRunning(&th), "heartbeat loop state")
+		})
+	}
 }

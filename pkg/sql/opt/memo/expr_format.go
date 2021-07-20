@@ -202,7 +202,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
-	case *ScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
+	case *ScanExpr, *PlaceholderScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *SequenceSelectExpr,
 		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
 		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,
@@ -328,10 +328,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatColList(e, tp, "right columns:", private.RightCols)
 		}
 
-	case *ScanExpr:
-		if t.IsCanonical() {
+	case *ScanExpr, *PlaceholderScanExpr:
+		private := t.Private().(*ScanPrivate)
+		if t.Op() == opt.ScanOp && private.IsCanonical() {
 			// For the canonical scan, show the expressions attached to the TableMeta.
-			tab := md.TableMeta(t.Table)
+			tab := md.TableMeta(private.Table)
 			if tab.Constraints != nil {
 				c := tp.Childf("check constraint expressions")
 				for i := 0; i < tab.Constraints.ChildCount(); i++ {
@@ -367,7 +368,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				}
 			}
 		}
-		if c := t.Constraint; c != nil {
+		if c := private.Constraint; c != nil {
 			if c.IsContradiction() {
 				tp.Childf("constraint: contradiction")
 			} else if c.Spans.Count() == 1 {
@@ -379,26 +380,26 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				}
 			}
 		}
-		if ic := t.InvertedConstraint; ic != nil {
-			idx := md.Table(t.Table).Index(t.Index)
+		if ic := private.InvertedConstraint; ic != nil {
+			idx := md.Table(private.Table).Index(private.Index)
 			var b strings.Builder
 			for i := idx.NonInvertedPrefixColumnCount(); i < idx.KeyColumnCount(); i++ {
 				b.WriteRune('/')
-				b.WriteString(fmt.Sprintf("%d", t.Table.ColumnID(idx.Column(i).Ordinal())))
+				b.WriteString(fmt.Sprintf("%d", private.Table.ColumnID(idx.Column(i).Ordinal())))
 			}
 			n := tp.Childf("inverted constraint: %s", b.String())
 			ic.Format(n, "spans")
 		}
-		if t.HardLimit.IsSet() {
-			tp.Childf("limit: %s", t.HardLimit)
+		if private.HardLimit.IsSet() {
+			tp.Childf("limit: %s", private.HardLimit)
 		}
-		if !t.Flags.Empty() {
-			if t.Flags.NoIndexJoin {
+		if !private.Flags.Empty() {
+			if private.Flags.NoIndexJoin {
 				tp.Childf("flags: no-index-join")
-			} else if t.Flags.ForceIndex {
-				idx := md.Table(t.Table).Index(t.Flags.Index)
+			} else if private.Flags.ForceIndex {
+				idx := md.Table(private.Table).Index(private.Flags.Index)
 				dir := ""
-				switch t.Flags.Direction {
+				switch private.Flags.Direction {
 				case tree.DefaultDirection:
 				case tree.Ascending:
 					dir = ",fwd"
@@ -408,9 +409,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Childf("flags: force-index=%s%s", idx.Name(), dir)
 			}
 		}
-		if t.Locking != nil {
+		if private.Locking != nil {
 			strength := ""
-			switch t.Locking.Strength {
+			switch private.Locking.Strength {
 			case tree.ForNone:
 			case tree.ForKeyShare:
 				strength = "for-key-share"
@@ -424,7 +425,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				panic(errors.AssertionFailedf("unexpected strength"))
 			}
 			wait := ""
-			switch t.Locking.WaitPolicy {
+			switch private.Locking.WaitPolicy {
 			case tree.LockWaitBlock:
 			case tree.LockWaitSkip:
 				wait = ",skip-locked"
@@ -463,6 +464,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(t.LookupExpr) > 0 {
 				n := tp.Childf("lookup expression")
 				f.formatExpr(&t.LookupExpr, n)
+			}
+			if len(t.RemoteLookupExpr) > 0 {
+				n := tp.Childf("remote lookup expression")
+				f.formatExpr(&t.RemoteLookupExpr, n)
 			}
 		}
 		if t.LookupColsAreTableKey {
@@ -744,9 +749,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				reqStr := required.Ordering.String()
 				provStr := provided.String()
 				if provStr == reqStr {
-					tp.Childf("ordering: %s", required.Ordering.String())
+					tp.Childf("ordering: %s", reqStr)
 				} else {
-					tp.Childf("ordering: %s [actual: %s]", required.Ordering.String(), provided.String())
+					tp.Childf("ordering: %s [actual: %s]", reqStr, provStr)
 				}
 			}
 		}
@@ -791,6 +796,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !t.Syntax.As() {
 			return
 		}
+
+	case *PlaceholderScanExpr:
+		// Show the child scalar expressions under a "span" heading.
+		tp = tp.Childf("span")
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {
@@ -1003,9 +1012,12 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 	var private interface{}
 	switch t := scalar.(type) {
-	case *NullExpr, *TupleExpr, *CollateExpr:
+	case *NullExpr, *TupleExpr:
 		// Private is redundant with logical type property.
 		private = nil
+
+	case *CollateExpr:
+		fmt.Fprintf(f.Buffer, " locale='%s'", t.Locale)
 
 	case *AnyExpr:
 		// We don't want to show the OriginalExpr; just show Cmp.
@@ -1333,7 +1345,7 @@ func (f *ExprFmtCtx) formatCol(label string, id opt.ColumnID, notNullCols opt.Co
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to
 // happen in reverse (the code lives in the ordering package, and depending on
 // that directly would be a dependency loop).
-var ScanIsReverseFn func(md *opt.Metadata, s *ScanPrivate, required *physical.OrderingChoice) bool
+var ScanIsReverseFn func(md *opt.Metadata, s *ScanPrivate, required *props.OrderingChoice) bool
 
 // FormatPrivate outputs a description of the private to f.Buffer.
 func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Required) {
@@ -1411,7 +1423,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 			fmt.Fprintf(f.Buffer, " ordering=%s", t.Ordering)
 		}
 
-	case *physical.OrderingChoice:
+	case *props.OrderingChoice:
 		if !t.Any() {
 			fmt.Fprintf(f.Buffer, " ordering=%s", t)
 		}

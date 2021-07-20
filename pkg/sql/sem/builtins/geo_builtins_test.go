@@ -17,7 +17,7 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -70,7 +70,7 @@ func TestGeoBuiltinsPointEmptyArgs(t *testing.T) {
 											panic("unexpected condition")
 										}
 									} else {
-										datums = append(datums, rowenc.RandDatum(rng, overload.Types.GetAt(i), false))
+										datums = append(datums, randgen.RandDatum(rng, overload.Types.GetAt(i), false))
 									}
 								}
 								var call strings.Builder

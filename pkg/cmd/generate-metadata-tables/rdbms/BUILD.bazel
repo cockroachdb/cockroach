@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "generate-metadata-tables-rdbms_lib",
+    srcs = [
+        "metadata.go",
+        "mysql.go",
+        "postgres.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-metadata-tables/rdbms",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/sql",
+        "//pkg/sql/types",
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_jackc_pgx//:pgx",
+        "@com_github_lib_pq//oid",
+    ],
+)

@@ -47,6 +47,11 @@ type StoreTestingKnobs struct {
 
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter kvserverbase.ReplicaProposalFilter
+	// TestingProposalSubmitFilter can be used by tests to observe and optionally
+	// drop Raft proposals before they are handed to etcd/raft to begin the
+	// process of replication. Dropped proposals are still eligible to be
+	// reproposed due to ticks.
+	TestingProposalSubmitFilter func(*ProposalData) (drop bool, err error)
 
 	// TestingApplyFilter is called before applying the results of a
 	// command on each replica. If it returns an error, the command will
@@ -111,7 +116,56 @@ type StoreTestingKnobs struct {
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance
 	// queue.
 	DisableTimeSeriesMaintenanceQueue bool
-	// DisableRaftSnapshotQueue disables the raft snapshot queue.
+	// DisableRaftSnapshotQueue disables the raft snapshot queue. Use this
+	// sparingly, as it tends to produce flaky tests during up-replication where
+	// the explicit learner snapshot gets lost. Since uninitialized replicas
+	// reject the raft leader's MsgApp with a rejection that hints at index zero,
+	// Raft will always want to send another snapshot if it gets to talk to the
+	// follower before it applied the snapshot. In the common case, the mechanism
+	// we have to suppress raft snapshots while an explicit snapshot is in flight
+	// avoids the duplication of work. However, in the uncommon case, the raft
+	// leader is on a different store and so no suppression takes place. This
+	// duplication is avoided by turning the raft snapshot queue off, but
+	// unfortunately there are certain conditions under which the explicit
+	// snapshot may fail to produce the desired result of an initialized follower
+	// which the leader will append to.
+	//
+	// For example, if there is a term change between when the snapshot is
+	// constructed and received, the follower will silently drop the snapshot
+	// without signaling an error to the sender, i.e. the leader. (To work around
+	// that, once could adjust the term for the message in that case in
+	// `(*Replica).stepRaftGroup` to prevent the message from getting dropped).
+	//
+	// Another problem is that the snapshot may apply but fail to inform the
+	// leader of this fact. Once a Raft leader has determined that a follower
+	// needs a snapshot, it will keep asking for a snapshot to be sent until a) a
+	// call to .ReportSnapshotStatus acks that a snapshot got applied, or b) an
+	// MsgAppResp is received from from the follower acknowledging an index
+	// *greater than or equal to the PendingSnapshotIndex* it tracks for that
+	// follower (such an MsgAppResp is emitted in response to applying the
+	// snapshot), whichever occurs first.
+	//
+	//
+	// However, neither may happen despite the snapshot applying successfully. The
+	// call to `ReportSnapshotStatus` may not occur on the correct Replica, since
+	// Raft leader can change during replication operations, and MsgAppResp can
+	// get dropped. Even if the MsgAppResp does get to the leader, the contained
+	// index (which is the index of the snapshot that got applied) may be less
+	// than the index at which the leader asked for a snapshot (since the applied
+	// snapshot is an external snapshot, and may have been initiated before the
+	// raft leader even wanted a snapshot) - again leaving the leader to continue
+	// asking for a snapshot. Lastly, even if we improved the raft code to accept
+	// all snapshots that allow it to continue replicating the log, there may have
+	// been a log truncation separating the snapshot from the log.
+	//
+	// Either way, the result in all of the rare cases above this is that an
+	// additional snapshot must be sent from the Raft snapshot queue until the
+	// leader will include the follower in log replication. It is thus ill-advised
+	// to turn the snap queue off except when this is known to be a good idea.
+	//
+	// An example of a test that becomes flaky with this set to false is
+	// TestReportUnreachableRemoveRace, though it needs a 20-node roachprod-stress
+	// cluster to reliably reproduce this within a few minutes.
 	DisableRaftSnapshotQueue bool
 	// DisableConsistencyQueue disables the consistency checker.
 	DisableConsistencyQueue bool
@@ -280,6 +334,11 @@ type StoreTestingKnobs struct {
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
 	TimeSeriesDataStore TimeSeriesDataStore
+
+	// Called whenever a range campaigns as a result of a tick. This
+	// is called under the replica lock and raftMu, so basically don't
+	// acquire any locks in this method.
+	OnRaftTimeoutCampaign func(roachpb.RangeID)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

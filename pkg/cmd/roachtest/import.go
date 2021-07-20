@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
@@ -31,16 +32,16 @@ func registerImportNodeShutdown(r *testRegistry) {
 			}
 			importStmt := fmt.Sprintf(`
 				IMPORT TABLE %[1]s
-				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/%[1]s.sql'
+				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/%[1]s.sql?AUTH=implicit'
 				CSV DATA (
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.1',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.2',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.3',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.4',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.5',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.6',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.7',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.8'
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.1?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.2?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.3?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.4?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.5?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.6?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.7?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.8?AUTH=implicit'
 				) WITH  delimiter='|', detached
 			`, tableName)
 			gatewayDB := c.Conn(ctx, gatewayNode)
@@ -86,7 +87,8 @@ func registerImportNodeShutdown(r *testRegistry) {
 }
 
 func registerImportTPCC(r *testRegistry) {
-	runImportTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int) {
+	runImportTPCC := func(ctx context.Context, t *test, c *cluster, testName string,
+		timeout time.Duration, warehouses int) {
 		// Randomize starting with encryption-at-rest enabled.
 		c.encryptAtRandom = true
 		c.Put(ctx, cockroach, "./cockroach")
@@ -102,12 +104,24 @@ func registerImportTPCC(r *testRegistry) {
 		hc := NewHealthChecker(c, c.All())
 		m.Go(hc.Runner)
 
+		tick := initBulkJobPerfArtifacts(ctx, testName, timeout)
 		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
 			defer hc.Done()
 			cmd := fmt.Sprintf(workloadStr, warehouses)
+			// Tick once before starting the import, and once after to capture the
+			// total elapsed time. This is used by roachperf to compute and display
+			// the average MB/sec per node.
+			tick()
 			c.Run(ctx, c.Node(1), cmd)
+			tick()
+
+			// Upload the perf artifacts to any one of the nodes so that the test
+			// runner copies it into an appropriate directory path.
+			if err := c.PutE(ctx, c.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+				log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+			}
 			return nil
 		})
 		m.Wait()
@@ -115,13 +129,15 @@ func registerImportTPCC(r *testRegistry) {
 
 	const warehouses = 1000
 	for _, numNodes := range []int{4, 32} {
+		testName := fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes)
+		timeout := 5 * time.Hour
 		r.Add(testSpec{
-			Name:    fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
+			Name:    testName,
 			Owner:   OwnerBulkIO,
 			Cluster: makeClusterSpec(numNodes),
-			Timeout: 5 * time.Hour,
+			Timeout: timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {
-				runImportTPCC(ctx, t, c, warehouses)
+				runImportTPCC(ctx, t, c, testName, timeout, warehouses)
 			},
 		})
 	}
@@ -134,7 +150,8 @@ func registerImportTPCC(r *testRegistry) {
 		Cluster: makeClusterSpec(8, cpu(16), geo(), zones(geoZones)),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runImportTPCC(ctx, t, c, geoWarehouses)
+			runImportTPCC(ctx, t, c, fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
+				5*time.Hour, geoWarehouses)
 		},
 	})
 }
@@ -162,6 +179,8 @@ func registerImportTPCH(r *testRegistry) {
 			Cluster: makeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {
+				tick := initBulkJobPerfArtifacts(ctx, t.Name(), item.timeout)
+
 				// Randomize starting with encryption-at-rest enabled.
 				c.encryptAtRandom = true
 				c.Put(ctx, cockroach, "./cockroach")
@@ -214,21 +233,36 @@ func registerImportTPCH(r *testRegistry) {
 					defer hc.Done()
 					t.WorkerStatus(`running import`)
 					defer t.WorkerStatus()
+
+					// Tick once before starting the import, and once after to capture the
+					// total elapsed time. This is used by roachperf to compute and display
+					// the average MB/sec per node.
+					tick()
 					_, err := conn.Exec(`
-				IMPORT TABLE csv.lineitem
-				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql'
-				CSV DATA (
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.1',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.2',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.3',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.4',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.5',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.6',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.7',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.8'
-				) WITH  delimiter='|'
-			`)
-					return errors.Wrap(err, "import failed")
+						IMPORT TABLE csv.lineitem
+						CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql?AUTH=implicit'
+						CSV DATA (
+						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.1?AUTH=implicit',
+						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.2?AUTH=implicit',
+						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.3?AUTH=implicit',
+						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.4?AUTH=implicit',
+						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.5?AUTH=implicit',
+						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.6?AUTH=implicit',
+						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.7?AUTH=implicit',
+						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.8?AUTH=implicit'
+						) WITH  delimiter='|'
+					`)
+					if err != nil {
+						return errors.Wrap(err, "import failed")
+					}
+					tick()
+
+					// Upload the perf artifacts to any one of the nodes so that the test
+					// runner copies it into an appropriate directory path.
+					if err := c.PutE(ctx, c.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+					}
+					return nil
 				})
 
 				t.Status("waiting")

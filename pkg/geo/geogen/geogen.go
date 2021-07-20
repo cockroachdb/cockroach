@@ -327,8 +327,11 @@ func RandomGeometry(rng *rand.Rand, srid geopb.SRID) geo.Geometry {
 // the given SRID.
 func RandomGeometryWithLayout(rng *rand.Rand, srid geopb.SRID, layout geom.Layout) geo.Geometry {
 	randomBounds := MakeRandomGeomBounds()
-	proj, ok := geoprojbase.Projections[srid]
-	if ok {
+	if srid != 0 {
+		proj, err := geoprojbase.Projection(srid)
+		if err != nil {
+			panic(err)
+		}
 		randomBounds.minX, randomBounds.maxX = proj.Bounds.MinX, proj.Bounds.MaxX
 		randomBounds.minY, randomBounds.maxY = proj.Bounds.MinY, proj.Bounds.MaxY
 	}

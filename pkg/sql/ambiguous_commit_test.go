@@ -63,6 +63,7 @@ func (t *interceptingTransport) SendNext(
 func TestAmbiguousCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	if mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) == 1 {
 		// This test relies on the fact that the mutation batch consisting of a
@@ -157,7 +158,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		for _, server := range tc.Servers {
 			st := server.ClusterSettings()
 			st.Manual.Store(true)
-			sql.DistSQLClusterExecMode.Override(&st.SV, int64(sessiondata.DistSQLOff))
+			sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(sessiondata.DistSQLOff))
 		}
 
 		sqlDB := tc.Conns[0]

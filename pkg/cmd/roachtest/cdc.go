@@ -87,7 +87,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		ts := timeutil.Now().Format(`20060102150405`)
 		// cockroach-tmp is a multi-region bucket with a TTL to clean up old
 		// data.
-		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts
+		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
 	} else {
 		t.Status("installing kafka")
 		kafka.install(ctx)
@@ -156,10 +156,24 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		// changefeed is never considered sufficiently caught up. We could
 		// instead make targetSteadyLatency less aggressive, but it'd be nice to
 		// keep it where it is.
+		//
+		// TODO(ssd): As of 797819b35f5 this is actually increasing rather than decreasing
+		// the closed_timestamp.target_duration. We can probably remove this. However,
+		// as of 2021-04-20, we want to understand why this test has started failing more often
+		// before changing this.
 		if _, err := db.Exec(
 			`SET CLUSTER SETTING kv.closed_timestamp.target_duration='10s'`,
 		); err != nil {
 			t.Fatal(err)
+		}
+
+		// With a target_duration of 10s, we won't see slow span logs from changefeeds untils we are > 100s
+		// behind, which is well above the 60s targetSteadyLatency we have in some tests.
+		if _, err := db.Exec(
+			`SET CLUSTER SETTING changefeed.slow_span_log_threshold='30s'`,
+		); err != nil {
+			// We don't hard fail here because, not all versions support this setting
+			t.l.Printf("failed to set cluster setting: %s", err)
 		}
 
 		var targets string
@@ -585,9 +599,10 @@ func runCDCKafkaAuth(ctx context.Context, t *test, c *cluster) {
 
 func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
-		Name:    "cdc/tpcc-1000",
-		Owner:   OwnerCDC,
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Name:            "cdc/tpcc-1000",
+		Owner:           OwnerCDC,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -599,10 +614,11 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/tpcc-1000/sink=null",
-		Owner:   OwnerCDC,
-		Cluster: makeClusterSpec(4, cpu(16)),
-		Tags:    []string{"manual"},
+		Name:            "cdc/tpcc-1000/sink=null",
+		Owner:           OwnerCDC,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		Tags:            []string{"manual"},
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -615,9 +631,10 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/initial-scan",
-		Owner:   OwnerCDC,
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Name:            "cdc/initial-scan",
+		Owner:           OwnerCDC,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -630,9 +647,10 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/sink-chaos",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Name:            "cdc/sink-chaos",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -645,9 +663,10 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/crdb-chaos",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Name:            "cdc/crdb-chaos",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -667,7 +686,8 @@ func registerCDC(r *testRegistry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             ledgerWorkloadType,
@@ -680,9 +700,10 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/cloud-sink-gcs/rangefeed=true",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType: tpccWorkloadType,
@@ -700,25 +721,28 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/kafka-auth",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(1),
+		Name:            "cdc/kafka-auth",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(1),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/bank",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(4),
+		Name:            "cdc/bank",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(4),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCBank(ctx, t, c)
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/schemareg",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(1),
+		Name:            "cdc/schemareg",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(1),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
 		},
@@ -1106,7 +1130,11 @@ func (k kafkaManager) install(ctx context.Context) {
 
 func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 	k.c.status("generating TLS certificates")
-	kafkaIP := k.c.InternalIP(ctx, k.nodes)[0]
+	ips, err := k.c.InternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	kafkaIP := ips[0]
 
 	testCerts, err := makeTestCerts(kafkaIP)
 	if err != nil {
@@ -1271,23 +1299,43 @@ func (k kafkaManager) chaosLoop(
 }
 
 func (k kafkaManager) sinkURL(ctx context.Context) string {
-	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9092`
+	ips, err := k.c.InternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	return `kafka://` + ips[0] + `:9092`
 }
 
 func (k kafkaManager) sinkURLTLS(ctx context.Context) string {
-	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9093`
+	ips, err := k.c.InternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	return `kafka://` + ips[0] + `:9093`
 }
 
 func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
-	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9094`
+	ips, err := k.c.InternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	return `kafka://` + ips[0] + `:9094`
 }
 
 func (k kafkaManager) consumerURL(ctx context.Context) string {
-	return k.c.ExternalIP(ctx, k.nodes)[0] + `:9092`
+	ips, err := k.c.ExternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	return ips[0] + `:9092`
 }
 
 func (k kafkaManager) schemaRegistryURL(ctx context.Context) string {
-	return `http://` + k.c.InternalIP(ctx, k.nodes)[0] + `:8081`
+	ips, err := k.c.InternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	return `http://` + ips[0] + `:8081`
 }
 
 func (k kafkaManager) createTopic(ctx context.Context, topic string) error {

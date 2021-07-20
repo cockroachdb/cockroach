@@ -1,0 +1,365 @@
+parse
+CREATE DATABASE a
+----
+CREATE DATABASE a
+CREATE DATABASE a -- fully parenthesized
+CREATE DATABASE a -- literals removed
+CREATE DATABASE _ -- identifiers removed
+
+parse
+EXPLAIN CREATE DATABASE a
+----
+EXPLAIN CREATE DATABASE a
+EXPLAIN CREATE DATABASE a -- fully parenthesized
+EXPLAIN CREATE DATABASE a -- literals removed
+EXPLAIN CREATE DATABASE _ -- identifiers removed
+
+# NB: the template is not currently edited out
+# because we don't support the feature yet.
+
+parse
+CREATE DATABASE a TEMPLATE = 'template0'
+----
+CREATE DATABASE a TEMPLATE = 'template0'
+CREATE DATABASE a TEMPLATE = 'template0' -- fully parenthesized
+CREATE DATABASE a TEMPLATE = 'template0' -- literals removed
+CREATE DATABASE _ TEMPLATE = 'template0' -- identifiers removed
+
+parse
+CREATE DATABASE a TEMPLATE = 'invalid'
+----
+CREATE DATABASE a TEMPLATE = 'invalid'
+CREATE DATABASE a TEMPLATE = 'invalid' -- fully parenthesized
+CREATE DATABASE a TEMPLATE = 'invalid' -- literals removed
+CREATE DATABASE _ TEMPLATE = 'invalid' -- identifiers removed
+
+parse
+CREATE DATABASE a TEMPLATE = template0
+----
+CREATE DATABASE a TEMPLATE = 'template0' -- normalized!
+CREATE DATABASE a TEMPLATE = 'template0' -- fully parenthesized
+CREATE DATABASE a TEMPLATE = 'template0' -- literals removed
+CREATE DATABASE _ TEMPLATE = 'template0' -- identifiers removed
+
+parse
+CREATE DATABASE a TEMPLATE = invalid
+----
+CREATE DATABASE a TEMPLATE = 'invalid' -- normalized!
+CREATE DATABASE a TEMPLATE = 'invalid' -- fully parenthesized
+CREATE DATABASE a TEMPLATE = 'invalid' -- literals removed
+CREATE DATABASE _ TEMPLATE = 'invalid' -- identifiers removed
+
+# NB: the encoding is not currently edited out
+# because we don't support the feature yet.
+
+parse
+CREATE DATABASE a ENCODING = 'UTF8'
+----
+CREATE DATABASE a ENCODING = 'UTF8'
+CREATE DATABASE a ENCODING = 'UTF8' -- fully parenthesized
+CREATE DATABASE a ENCODING = 'UTF8' -- literals removed
+CREATE DATABASE _ ENCODING = 'UTF8' -- identifiers removed
+
+parse
+CREATE DATABASE a ENCODING = 'INVALID'
+----
+CREATE DATABASE a ENCODING = 'INVALID'
+CREATE DATABASE a ENCODING = 'INVALID' -- fully parenthesized
+CREATE DATABASE a ENCODING = 'INVALID' -- literals removed
+CREATE DATABASE _ ENCODING = 'INVALID' -- identifiers removed
+
+parse
+CREATE DATABASE a WITH ENCODING = 'foo'
+----
+CREATE DATABASE a ENCODING = 'foo' -- normalized!
+CREATE DATABASE a ENCODING = 'foo' -- fully parenthesized
+CREATE DATABASE a ENCODING = 'foo' -- literals removed
+CREATE DATABASE _ ENCODING = 'foo' -- identifiers removed
+
+
+# NB: the collation is not currently edited out
+# because we don't support the feature yet.
+
+parse
+CREATE DATABASE a LC_COLLATE = 'C.UTF-8'
+----
+CREATE DATABASE a LC_COLLATE = 'C.UTF-8'
+CREATE DATABASE a LC_COLLATE = 'C.UTF-8' -- fully parenthesized
+CREATE DATABASE a LC_COLLATE = 'C.UTF-8' -- literals removed
+CREATE DATABASE _ LC_COLLATE = 'C.UTF-8' -- identifiers removed
+
+parse
+CREATE DATABASE a LC_COLLATE = 'INVALID'
+----
+CREATE DATABASE a LC_COLLATE = 'INVALID'
+CREATE DATABASE a LC_COLLATE = 'INVALID' -- fully parenthesized
+CREATE DATABASE a LC_COLLATE = 'INVALID' -- literals removed
+CREATE DATABASE _ LC_COLLATE = 'INVALID' -- identifiers removed
+
+# NB: the customization is not currently edited out
+# because we don't support the feature yet.
+
+parse
+CREATE DATABASE a LC_CTYPE = 'C.UTF-8'
+----
+CREATE DATABASE a LC_CTYPE = 'C.UTF-8'
+CREATE DATABASE a LC_CTYPE = 'C.UTF-8' -- fully parenthesized
+CREATE DATABASE a LC_CTYPE = 'C.UTF-8' -- literals removed
+CREATE DATABASE _ LC_CTYPE = 'C.UTF-8' -- identifiers removed
+
+parse
+CREATE DATABASE a LC_CTYPE = 'INVALID'
+----
+CREATE DATABASE a LC_CTYPE = 'INVALID'
+CREATE DATABASE a LC_CTYPE = 'INVALID' -- fully parenthesized
+CREATE DATABASE a LC_CTYPE = 'INVALID' -- literals removed
+CREATE DATABASE _ LC_CTYPE = 'INVALID' -- identifiers removed
+
+parse
+CREATE DATABASE a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID'
+----
+CREATE DATABASE a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID'
+CREATE DATABASE a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID' -- fully parenthesized
+CREATE DATABASE a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID' -- literals removed
+CREATE DATABASE _ TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID' -- identifiers removed
+
+parse
+CREATE DATABASE a CONNECTION LIMIT = 13
+----
+CREATE DATABASE a CONNECTION LIMIT = 13
+CREATE DATABASE a CONNECTION LIMIT = 13 -- fully parenthesized
+CREATE DATABASE a CONNECTION LIMIT = _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE DATABASE _ CONNECTION LIMIT = 13 -- identifiers removed
+
+parse
+CREATE DATABASE a WITH CONNECTION LIMIT = 13
+----
+CREATE DATABASE a CONNECTION LIMIT = 13 -- normalized!
+CREATE DATABASE a CONNECTION LIMIT = 13 -- fully parenthesized
+CREATE DATABASE a CONNECTION LIMIT = _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE DATABASE _ CONNECTION LIMIT = 13 -- identifiers removed
+
+parse
+CREATE DATABASE a WITH CONNECTION LIMIT -1
+----
+CREATE DATABASE a -- normalized!
+CREATE DATABASE a -- fully parenthesized
+CREATE DATABASE a -- literals removed
+CREATE DATABASE _ -- identifiers removed
+
+parse
+CREATE DATABASE a REGIONS = "us-west-1", "us-west-2"
+----
+CREATE DATABASE a REGIONS = "us-west-1", "us-west-2"
+CREATE DATABASE a REGIONS = "us-west-1", "us-west-2" -- fully parenthesized
+CREATE DATABASE a REGIONS = "us-west-1", "us-west-2" -- literals removed
+CREATE DATABASE _ REGIONS = _, _ -- identifiers removed
+
+parse
+CREATE DATABASE a SURVIVE REGION FAILURE
+----
+CREATE DATABASE a SURVIVE REGION FAILURE
+CREATE DATABASE a SURVIVE REGION FAILURE -- fully parenthesized
+CREATE DATABASE a SURVIVE REGION FAILURE -- literals removed
+CREATE DATABASE _ SURVIVE REGION FAILURE -- identifiers removed
+
+parse
+CREATE DATABASE a SURVIVE ZONE FAILURE
+----
+CREATE DATABASE a SURVIVE ZONE FAILURE
+CREATE DATABASE a SURVIVE ZONE FAILURE -- fully parenthesized
+CREATE DATABASE a SURVIVE ZONE FAILURE -- literals removed
+CREATE DATABASE _ SURVIVE ZONE FAILURE -- identifiers removed
+
+
+parse
+CREATE DATABASE a PRIMARY REGION "us-west-1"
+----
+CREATE DATABASE a PRIMARY REGION "us-west-1"
+CREATE DATABASE a PRIMARY REGION "us-west-1" -- fully parenthesized
+CREATE DATABASE a PRIMARY REGION "us-west-1" -- literals removed
+CREATE DATABASE _ PRIMARY REGION _ -- identifiers removed
+
+
+parse
+CREATE DATABASE a PRIMARY REGION = "us-west-1"
+----
+CREATE DATABASE a PRIMARY REGION "us-west-1" -- normalized!
+CREATE DATABASE a PRIMARY REGION "us-west-1" -- fully parenthesized
+CREATE DATABASE a PRIMARY REGION "us-west-1" -- literals removed
+CREATE DATABASE _ PRIMARY REGION _ -- identifiers removed
+
+parse
+ALTER DATABASE a SET PRIMARY REGION "us-west-1"
+----
+ALTER DATABASE a PRIMARY REGION "us-west-1" -- normalized!
+ALTER DATABASE a PRIMARY REGION "us-west-1" -- fully parenthesized
+ALTER DATABASE a PRIMARY REGION "us-west-1" -- literals removed
+ALTER DATABASE _ PRIMARY REGION _ -- identifiers removed
+
+
+parse
+CREATE DATABASE IF NOT EXISTS a
+----
+CREATE DATABASE IF NOT EXISTS a
+CREATE DATABASE IF NOT EXISTS a -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a -- literals removed
+CREATE DATABASE IF NOT EXISTS _ -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0'
+----
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0'
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0' -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0' -- literals removed
+CREATE DATABASE IF NOT EXISTS _ TEMPLATE = 'template0' -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'invalid'
+----
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'invalid'
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'invalid' -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'invalid' -- literals removed
+CREATE DATABASE IF NOT EXISTS _ TEMPLATE = 'invalid' -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a ENCODING = 'UTF8'
+----
+CREATE DATABASE IF NOT EXISTS a ENCODING = 'UTF8'
+CREATE DATABASE IF NOT EXISTS a ENCODING = 'UTF8' -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a ENCODING = 'UTF8' -- literals removed
+CREATE DATABASE IF NOT EXISTS _ ENCODING = 'UTF8' -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a ENCODING = 'INVALID'
+----
+CREATE DATABASE IF NOT EXISTS a ENCODING = 'INVALID'
+CREATE DATABASE IF NOT EXISTS a ENCODING = 'INVALID' -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a ENCODING = 'INVALID' -- literals removed
+CREATE DATABASE IF NOT EXISTS _ ENCODING = 'INVALID' -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a LC_COLLATE = 'C.UTF-8'
+----
+CREATE DATABASE IF NOT EXISTS a LC_COLLATE = 'C.UTF-8'
+CREATE DATABASE IF NOT EXISTS a LC_COLLATE = 'C.UTF-8' -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a LC_COLLATE = 'C.UTF-8' -- literals removed
+CREATE DATABASE IF NOT EXISTS _ LC_COLLATE = 'C.UTF-8' -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a LC_COLLATE = 'INVALID'
+----
+CREATE DATABASE IF NOT EXISTS a LC_COLLATE = 'INVALID'
+CREATE DATABASE IF NOT EXISTS a LC_COLLATE = 'INVALID' -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a LC_COLLATE = 'INVALID' -- literals removed
+CREATE DATABASE IF NOT EXISTS _ LC_COLLATE = 'INVALID' -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'C.UTF-8'
+----
+CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'C.UTF-8'
+CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'C.UTF-8' -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'C.UTF-8' -- literals removed
+CREATE DATABASE IF NOT EXISTS _ LC_CTYPE = 'C.UTF-8' -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'INVALID'
+----
+CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'INVALID'
+CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'INVALID' -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'INVALID' -- literals removed
+CREATE DATABASE IF NOT EXISTS _ LC_CTYPE = 'INVALID' -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID'
+----
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID'
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID' -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID' -- literals removed
+CREATE DATABASE IF NOT EXISTS _ TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID' -- identifiers removed
+
+
+parse
+CREATE DATABASE a REGION "us-west-1"
+----
+CREATE DATABASE a REGIONS = "us-west-1" -- normalized!
+CREATE DATABASE a REGIONS = "us-west-1" -- fully parenthesized
+CREATE DATABASE a REGIONS = "us-west-1" -- literals removed
+CREATE DATABASE _ REGIONS = _ -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a REGIONS = "us-west-1", "us-west-2"
+----
+CREATE DATABASE IF NOT EXISTS a REGIONS = "us-west-1", "us-west-2"
+CREATE DATABASE IF NOT EXISTS a REGIONS = "us-west-1", "us-west-2" -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a REGIONS = "us-west-1", "us-west-2" -- literals removed
+CREATE DATABASE IF NOT EXISTS _ REGIONS = _, _ -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a SURVIVE REGION FAILURE
+----
+CREATE DATABASE IF NOT EXISTS a SURVIVE REGION FAILURE
+CREATE DATABASE IF NOT EXISTS a SURVIVE REGION FAILURE -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a SURVIVE REGION FAILURE -- literals removed
+CREATE DATABASE IF NOT EXISTS _ SURVIVE REGION FAILURE -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a SURVIVE = REGION FAILURE
+----
+CREATE DATABASE IF NOT EXISTS a SURVIVE REGION FAILURE -- normalized!
+CREATE DATABASE IF NOT EXISTS a SURVIVE REGION FAILURE -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a SURVIVE REGION FAILURE -- literals removed
+CREATE DATABASE IF NOT EXISTS _ SURVIVE REGION FAILURE -- identifiers removed
+
+
+parse
+CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE
+----
+CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE
+CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE -- literals removed
+CREATE DATABASE IF NOT EXISTS _ SURVIVE ZONE FAILURE -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a SURVIVE = ZONE FAILURE
+----
+CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE -- normalized!
+CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE -- literals removed
+CREATE DATABASE IF NOT EXISTS _ SURVIVE ZONE FAILURE -- identifiers removed
+
+parse
+CREATE DATABASE IF NOT EXISTS a SURVIVE = AVAILABILITY ZONE FAILURE
+----
+CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE -- normalized!
+CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE -- literals removed
+CREATE DATABASE IF NOT EXISTS _ SURVIVE ZONE FAILURE -- identifiers removed
+
+
+parse
+CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1"
+----
+CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1"
+CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1" -- fully parenthesized
+CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1" -- literals removed
+CREATE DATABASE IF NOT EXISTS _ PRIMARY REGION _ -- identifiers removed
+
+
+error
+CREATE DATABASE a b
+----
+at or near "b": syntax error
+DETAIL: source SQL:
+CREATE DATABASE a b
+                  ^
+
+error
+CREATE DATABASE a b c
+----
+at or near "b": syntax error
+DETAIL: source SQL:
+CREATE DATABASE a b c
+                  ^

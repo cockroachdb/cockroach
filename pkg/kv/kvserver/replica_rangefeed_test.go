@@ -98,8 +98,8 @@ func TestReplicaRangefeed(t *testing.T) {
 		// Disable closed timestamps as this test was designed assuming no closed
 		// timestamps would get propagated.
 		settings := cluster.MakeTestingClusterSettings()
-		closedts.TargetDuration.Override(&settings.SV, 24*time.Hour)
-		kvserver.RangefeedEnabled.Override(&settings.SV, true)
+		closedts.TargetDuration.Override(ctx, &settings.SV, 24*time.Hour)
+		kvserver.RangefeedEnabled.Override(ctx, &settings.SV, true)
 		args.ServerArgsPerNode[i] = base.TestServerArgs{Settings: settings}
 	}
 	tc := testcluster.StartTestCluster(t, numNodes, args)
@@ -364,7 +364,7 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	// immediately even if it didn't return the correct error.
 	stream.Cancel()
 
-	kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, true)
+	kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, true)
 	pErr := store.RangeFeed(&req, stream)
 	const exp = "expiration-based leases are incompatible with rangefeeds"
 	if !testutils.IsPError(pErr, exp) {
@@ -749,7 +749,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				},
 				Span: rangefeedSpan,
 			}
-			kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, true)
+			kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, true)
 			pErr := store.RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
@@ -759,7 +759,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Disable rangefeeds, which stops logical op logs from being provided
 		// with Raft commands.
-		kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, false)
+		kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, false)
 
 		// Perform a write on the range.
 		writeKey := encoding.EncodeStringAscending(keys.SystemSQLCodec.TablePrefix(55), "c")

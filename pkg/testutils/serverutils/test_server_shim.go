@@ -218,7 +218,7 @@ type TestServerInterface interface {
 	DiagnosticsReporter() interface{}
 
 	// StartTenant spawns off tenant process connecting to this TestServer.
-	StartTenant(params base.TestTenantArgs) (TestTenantInterface, error)
+	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
 
 	// ScratchRange splits off a range suitable to be used as KV scratch space.
 	// (it doesn't overlap system spans or SQL tables).
@@ -340,7 +340,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 func StartTenant(
 	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
 ) (TestTenantInterface, *gosql.DB) {
-	tenant, err := ts.StartTenant(params)
+	tenant, err := ts.StartTenant(context.Background(), params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,8 +351,15 @@ func StartTenant(
 	}
 
 	goDB := OpenDBConn(
-		t, tenant.SQLAddr(), "", false /* insecure */, stopper)
+		t, tenant.SQLAddr(), params.UseDatabase, false /* insecure */, stopper)
 	return tenant, goDB
+}
+
+// TestTenantID returns a roachpb.TenantID that can be used when
+// starting a test Tenant. The returned tenant IDs match those built
+// into the test certificates.
+func TestTenantID() roachpb.TenantID {
+	return roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0])
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters

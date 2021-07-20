@@ -46,9 +46,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -266,7 +267,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		if _, err := getEncoder(details.Opts, details.Targets); err != nil {
+		if _, err := getEncoder(ctx, details.Opts, details.Targets); err != nil {
 			return err
 		}
 		if isCloudStorageSink(parsedSink) {
@@ -292,18 +293,17 @@ func changefeedPlanHook(
 			if err != nil {
 				telemetry.Count(`changefeed.core.error`)
 			}
-			return MaybeStripRetryableErrorMarker(err)
+			return changefeedbase.MaybeStripRetryableErrorMarker(err)
 		}
 
-		settings := p.ExecCfg().Settings
 		// Changefeeds are based on the Rangefeed abstraction, which requires the
 		// `kv.rangefeed.enabled` setting to be true.
-		if !kvserver.RangefeedEnabled.Get(&settings.SV) {
+		if !kvserver.RangefeedEnabled.Get(&p.ExecCfg().Settings.SV) {
 			return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
 				docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 		}
 		if err := utilccl.CheckEnterpriseEnabled(
-			settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
 		); err != nil {
 			return err
 		}
@@ -318,11 +318,11 @@ func changefeedPlanHook(
 		{
 			var nilOracle timestampLowerBoundOracle
 			canarySink, err := getSink(
-				ctx, details.SinkURI, p.ExecCfg().NodeID.SQLInstanceID(), details.Opts, details.Targets,
-				settings, nilOracle, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User(),
+				ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details, nilOracle, p.User(), mon.BoundAccount{},
+				jobspb.InvalidJobID,
 			)
 			if err != nil {
-				return MaybeStripRetryableErrorMarker(err)
+				return changefeedbase.MaybeStripRetryableErrorMarker(err)
 			}
 			if err := canarySink.Close(); err != nil {
 				return err
@@ -415,7 +415,7 @@ func changefeedPlanHook(
 func changefeedJobDescription(
 	p sql.PlanHookState, changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
 ) (string, error) {
-	cleanedSinkURI, err := cloudimpl.SanitizeExternalStorageURI(sinkURI, []string{changefeedbase.SinkParamSASLPassword})
+	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{changefeedbase.SinkParamSASLPassword})
 	if err != nil {
 		return "", err
 	}
@@ -435,6 +435,18 @@ func changefeedJobDescription(
 	return tree.AsStringWithFQNames(c, ann), nil
 }
 
+// validateNonNegativeDuration returns a nil error if optValue can be
+// parsed as a duration and is non-negative; otherwise, an error is
+// returned.
+func validateNonNegativeDuration(optName string, optValue string) error {
+	if d, err := time.ParseDuration(optValue); err != nil {
+		return err
+	} else if d < 0 {
+		return errors.Errorf("negative durations are not accepted: %s='%s'", optName, optValue)
+	}
+	return nil
+}
+
 func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails, error) {
 	if details.Opts == nil {
 		// The proto MarshalTo method omits the Opts field if the map is empty.
@@ -445,11 +457,8 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 	{
 		const opt = changefeedbase.OptResolvedTimestamps
 		if o, ok := details.Opts[opt]; ok && o != `` {
-			if d, err := time.ParseDuration(o); err != nil {
+			if err := validateNonNegativeDuration(opt, o); err != nil {
 				return jobspb.ChangefeedDetails{}, err
-			} else if d < 0 {
-				return jobspb.ChangefeedDetails{}, errors.Errorf(
-					`negative durations are not accepted: %s='%s'`, opt, o)
 			}
 		}
 	}
@@ -591,7 +600,14 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 		if err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh); err == nil {
 			return nil
 		}
-		if !IsRetryableError(err) {
+
+		if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+			if knobs != nil && knobs.HandleDistChangefeedError != nil {
+				err = knobs.HandleDistChangefeedError(err)
+			}
+		}
+
+		if !changefeedbase.IsRetryableError(err) {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}

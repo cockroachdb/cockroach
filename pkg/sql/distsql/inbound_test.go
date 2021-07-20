@@ -97,7 +97,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 
 	streamID := execinfrapb.StreamID(1)
 	outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
-	outbox.Init(rowenc.OneIntCol)
+	outbox.Init(types.OneIntCol)
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no
 	// goroutines were leaked. Grab the flow's waitGroup to avoid a copy warning.
@@ -105,7 +105,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	wg := f.GetWaitGroup()
 
 	// Use RegisterFlow to register our consumer, which we will control.
-	consumer := distsqlutils.NewRowBuffer(rowenc.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
+	consumer := distsqlutils.NewRowBuffer(types.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
 	connectionInfo := map[execinfrapb.StreamID]*flowinfra.InboundStreamInfo{
 		streamID: flowinfra.NewInboundStreamInfo(
 			flowinfra.RowInboundStreamHandler{RowReceiver: consumer},

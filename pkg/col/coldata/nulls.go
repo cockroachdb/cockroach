@@ -345,22 +345,29 @@ func (n *Nulls) Or(n2 *Nulls) *Nulls {
 	if len(n.nulls) > len(n2.nulls) {
 		n, n2 = n2, n
 	}
-	nulls := make([]byte, len(n2.nulls))
+	res := &Nulls{
+		maybeHasNulls: n.maybeHasNulls || n2.maybeHasNulls,
+		nulls:         make([]byte, len(n2.nulls)),
+	}
 	if n.maybeHasNulls && n2.maybeHasNulls {
 		for i := 0; i < len(n.nulls); i++ {
-			nulls[i] = n.nulls[i] & n2.nulls[i]
+			res.nulls[i] = n.nulls[i] & n2.nulls[i]
 		}
 		// If n2 is longer, we can just copy the remainder.
-		copy(nulls[len(n.nulls):], n2.nulls[len(n.nulls):])
+		copy(res.nulls[len(n.nulls):], n2.nulls[len(n.nulls):])
 	} else if n.maybeHasNulls {
-		copy(nulls, n.nulls)
+		copy(res.nulls, n.nulls)
+		// We need to set all positions after len(n.nulls) to valid.
+		res.UnsetNullsAfter(8 * len(n.nulls))
 	} else if n2.maybeHasNulls {
-		copy(nulls, n2.nulls)
+		// Since n2 is not of a smaller length, we can copy its bitmap without
+		// having to do anything extra.
+		copy(res.nulls, n2.nulls)
+	} else {
+		// We need to set the whole bitmap to valid.
+		res.UnsetNulls()
 	}
-	return &Nulls{
-		maybeHasNulls: n.maybeHasNulls || n2.maybeHasNulls,
-		nulls:         nulls,
-	}
+	return res
 }
 
 // makeCopy returns a copy of n which can be modified independently.

@@ -107,12 +107,18 @@ func (w *LeaseRemovalTracker) LeaseRemovedNotification(
 	}
 }
 
+// ExpireLeases ia a hack for testing that manually sets expirations to a past
+// timestamp.
 func (m *Manager) ExpireLeases(clock *hlc.Clock) {
-	past := clock.Now().GoTime().Add(-time.Millisecond)
+	past := hlc.Timestamp{
+		WallTime: clock.Now().GoTime().Add(-time.Millisecond).UnixNano(),
+	}
 
 	m.names.mu.Lock()
 	for _, desc := range m.names.descriptors {
-		desc.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
+		desc.mu.Lock()
+		desc.mu.expiration = past
+		desc.mu.Unlock()
 	}
 	m.names.mu.Unlock()
 }

@@ -32,6 +32,8 @@ export const ALTER_DATABASE_DROP_REGION = "alter_database_drop_region";
 export const ALTER_DATABASE_PRIMARY_REGION = "alter_database_primary_region";
 // Recorded when the survival goal of a database is altered.
 export const ALTER_DATABASE_SURVIVAL_GOAL = "alter_database_survival_goal";
+// Recorded when a table's owner is changed.
+export const ALTER_TABLE_OWNER = "alter_table_owner";
 // Recorded when a table is created.
 export const CREATE_TABLE = "create_table";
 // Recorded when a table is dropped.
@@ -56,8 +58,20 @@ export const DROP_VIEW = "drop_view";
 export const CREATE_TYPE = "create_type";
 // Recorded when a type is altered.
 export const ALTER_TYPE = "alter_type";
+// Recorded when a type's owner is changed.
+export const ALTER_TYPE_OWNER = "alter_type_owner";
+// Recorded when a database's comment is changed.
+export const COMMENT_ON_DATABASE = "comment_on_database";
+// Recorded when a table's comment is changed.
+export const COMMENT_ON_TABLE = "comment_on_table";
+// Recorded when a index's comment is changed.
+export const COMMENT_ON_INDEX = "comment_on_index";
+// Recorded when a column's comment is changed.
+export const COMMENT_ON_COLUMN = "comment_on_column";
 // Recorded when a type is dropped.
 export const DROP_TYPE = "drop_type";
+// Recorded when a type is renamed.
+export const RENAME_TYPE = "rename_type";
 // Recorded when a sequence is created.
 export const CREATE_SEQUENCE = "create_sequence";
 // Recorded when a sequence is altered.
@@ -97,6 +111,8 @@ export const CHANGE_TABLE_PRIVILEGE = "change_table_privilege";
 export const CHANGE_SCHEMA_PRIVILEGE = "change_schema_privilege";
 // Recorded when privileges are added to a user.
 export const CHANGE_TYPE_PRIVILEGE = "change_type_privilege";
+// Recorded when a schema is set.
+export const SET_SCHEMA = "set_schema";
 // Recorded when a schema is created.
 export const CREATE_SCHEMA = "create_schema";
 // Recorded when a schema is dropped.
@@ -117,6 +133,14 @@ export const ALTER_ROLE = "alter_role";
 export const IMPORT = "import";
 // Recorded when a restore job is in different stages of execution.
 export const RESTORE = "restore";
+// Recorded when crdb_internal.unsafe_delete_descriptor is executed.
+export const UNSAFE_DELETE_DESCRIPTOR = "unsafe_delete_descriptor";
+// Recorded when crdb_internal.unsafe_delete_namespace_entry is executed.
+export const UNSAFE_DELETE_NAMESPACE_ENTRY = "unsafe_delete_namespace_entry";
+// Recorded when crdb_internal.unsafe_upsert_descriptor is executed.
+export const UNSAFE_UPSERT_DESCRIPTOR = "unsafe_upsert_descriptor";
+// Recorded when crdb_internal.unsafe_upsert_namespace_entry is executed.
+export const UNSAFE_UPSERT_NAMESPACE_ENTRY = "unsafe_upsert_namespace_entry";
 
 // Node Event Types
 export const nodeEvents = [

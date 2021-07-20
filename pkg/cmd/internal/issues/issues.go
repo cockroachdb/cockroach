@@ -69,6 +69,7 @@ var oldFriendsMap = map[string]string{
 	"vivekmenezes": "",
 	"lucy-zhang":   "ajwerner",
 	"mjibson":      "rafiss",
+	"danhhz":       "",
 }
 
 // context augments context.Context with a logger.
@@ -307,7 +308,13 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 
 	authorHandle := p.getAuthorGithubHandle(ctx, req.AuthorEmail)
 	if authorHandle != "" {
-		req.Mention = append(req.Mention, "@"+authorHandle)
+		// This is intentionally missing an "@" because we don't want
+		// to ping former interns and employees (and haven't done the
+		// work to let this code here determine whether the author is
+		// still a member of the repo). We rely primarily on
+		// mentioning a team and adding to its project column. The
+		// author is only informative.
+		req.Mention = append(req.Mention, authorHandle)
 	}
 
 	data := p.templateData(

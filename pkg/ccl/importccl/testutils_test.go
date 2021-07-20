@@ -271,10 +271,10 @@ func (es *generatorExternalStorage) Size(ctx context.Context, basename string) (
 	return int64(es.gen.size), nil
 }
 
-func (es *generatorExternalStorage) WriteFile(
-	ctx context.Context, basename string, content io.ReadSeeker,
-) error {
-	return errors.New("unsupported")
+func (es *generatorExternalStorage) Writer(
+	ctx context.Context, basename string,
+) (io.WriteCloser, error) {
+	return nil, errors.New("unsupported")
 }
 
 func (es *generatorExternalStorage) ListFiles(ctx context.Context, _ string) ([]string, error) {

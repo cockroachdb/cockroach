@@ -649,7 +649,7 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RangeProblems"></a>
 #### RangeProblems
 
-
+RangeProblems describes issues reported by a range. For internal use only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -669,12 +669,13 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RangeStatistics"></a>
 #### RangeStatistics
 
-
+RangeStatistics describes statistics reported by a range. For internal use
+only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| queries_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
-| writes_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  |  | [reserved](#support-status) |
+| queries_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
 
 
 
@@ -832,7 +833,7 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RangeProblems"></a>
 #### RangeProblems
 
-
+RangeProblems describes issues reported by a range. For internal use only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -852,12 +853,13 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RangeStatistics"></a>
 #### RangeStatistics
 
-
+RangeStatistics describes statistics reported by a range. For internal use
+only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| queries_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
-| writes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  |  | [reserved](#support-status) |
+| queries_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
 
 
 
@@ -1181,7 +1183,7 @@ ActiveQuery represents a query in flight on some Session.
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | Start timestamp of this query. | [reserved](#support-status) |
 | is_distributed | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if this query is distributed. | [reserved](#support-status) |
 | phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. | [reserved](#support-status) |
-| progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  |  | [reserved](#support-status) |
+| progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  | progress is an estimate of the fraction of this query that has been processed. | [reserved](#support-status) |
 | sql_anon | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. | [reserved](#support-status) |
 
 
@@ -1309,7 +1311,7 @@ ActiveQuery represents a query in flight on some Session.
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | Start timestamp of this query. | [reserved](#support-status) |
 | is_distributed | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if this query is distributed. | [reserved](#support-status) |
 | phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. | [reserved](#support-status) |
-| progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  |  | [reserved](#support-status) |
+| progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  | progress is an estimate of the fraction of this query that has been processed. | [reserved](#support-status) |
 | sql_anon | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. | [reserved](#support-status) |
 
 
@@ -2341,7 +2343,7 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RangeProblems"></a>
 #### RangeProblems
 
-
+RangeProblems describes issues reported by a range. For internal use only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -2361,12 +2363,13 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RangeStatistics"></a>
 #### RangeStatistics
 
-
+RangeStatistics describes statistics reported by a range. For internal use
+only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| queries_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
-| writes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  |  | [reserved](#support-status) |
+| queries_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
 
 
 
@@ -2867,6 +2870,96 @@ Request object for issuing a SQL stats reset request.
 
 Response object returned by ResetSQLStats.
 
+
+
+
+
+
+
+
+## RequestCA
+
+`GET /_join/v1/ca`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+CARequest requests the CA cert anchoring this service.
+
+No information needed.
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+CAResponse contains a PEM encoded copy of the CA cert for this service.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| ca_cert | [bytes](#cockroach.server.serverpb.CAResponse-bytes) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+## RequestCertBundle
+
+`GET /_join/v1/requestbundle`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+CertBundleRequest requests the bundle of initialization CAs for a new node.
+It provides authentication in the form of a joinToken containing a
+sharedSecret.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| token_id | [string](#cockroach.server.serverpb.CertBundleRequest-string) |  |  | [reserved](#support-status) |
+| shared_secret | [bytes](#cockroach.server.serverpb.CertBundleRequest-bytes) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+CertBundleResponse contains a copy of all CAs needed to intialize TLS for
+a new node.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| bundle | [bytes](#cockroach.server.serverpb.CertBundleResponse-bytes) |  |  | [reserved](#support-status) |
 
 
 
@@ -3789,17 +3882,17 @@ JobsResponse contains the job record for each matching job.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| jobs | [JobsResponse.Job](#cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobsResponse.Job) | repeated |  | [reserved](#support-status) |
+| jobs | [JobResponse](#cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobResponse) | repeated |  | [reserved](#support-status) |
 
 
 
 
 
 
-<a name="cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobsResponse.Job"></a>
-#### JobsResponse.Job
+<a name="cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobResponse"></a>
+#### JobResponse
 
-
+JobResponse contains the job record for a job.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -3819,6 +3912,65 @@ JobsResponse contains the job record for each matching job.
 | highwater_timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  | highwater_timestamp is the highwater timestamp returned as normal timestamp. This is appropriate for display to humans. | [reserved](#support-status) |
 | highwater_decimal | [string](#cockroach.server.serverpb.JobsResponse-string) |  | highwater_decimal is the highwater timestamp in the proprietary decimal form used by logical timestamps internally. This is appropriate to pass to a "AS OF SYSTEM TIME" SQL statement. | [reserved](#support-status) |
 | running_status | [string](#cockroach.server.serverpb.JobsResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## Job
+
+`GET /_admin/v1/jobs/{job_id}`
+
+Job returns the job record for the job of the given job_id.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+JobRequest requests system job information for the given job_id.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| job_id | [int64](#cockroach.server.serverpb.JobRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+JobResponse contains the job record for a job.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [int64](#cockroach.server.serverpb.JobResponse-int64) |  |  | [reserved](#support-status) |
+| type | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| description | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| statement | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| username | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| descriptor_ids | [uint32](#cockroach.server.serverpb.JobResponse-uint32) | repeated |  | [reserved](#support-status) |
+| status | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| created | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| started | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| finished | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| modified | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| fraction_completed | [float](#cockroach.server.serverpb.JobResponse-float) |  |  | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| highwater_timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  | highwater_timestamp is the highwater timestamp returned as normal timestamp. This is appropriate for display to humans. | [reserved](#support-status) |
+| highwater_decimal | [string](#cockroach.server.serverpb.JobResponse-string) |  | highwater_decimal is the highwater timestamp in the proprietary decimal form used by logical timestamps internally. This is appropriate to pass to a "AS OF SYSTEM TIME" SQL statement. | [reserved](#support-status) |
+| running_status | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+
 
 
 

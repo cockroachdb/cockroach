@@ -45,8 +45,8 @@ func runDecommissionMixedVersions(
 	u := newVersionUpgradeTest(c,
 		// We upload both binaries to each node, to be able to vary the binary
 		// used when issuing `cockroach node` subcommands.
-		uploadVersion(allNodes, predecessorVersion),
-		uploadVersion(allNodes, mainVersion),
+		uploadVersionStep(allNodes, predecessorVersion),
+		uploadVersionStep(allNodes, mainVersion),
 
 		startVersion(allNodes, predecessorVersion),
 		waitForUpgradeStep(allNodes),
@@ -246,9 +246,9 @@ func checkAllMembership(from int, membership string) versionStep {
 	}
 }
 
-// uploadVersion uploads the specified cockroach binary version on the specified
+// uploadVersionStep uploads the specified cockroach binary version on the specified
 // nodes.
-func uploadVersion(nodes nodeListOption, version string) versionStep {
+func uploadVersionStep(nodes nodeListOption, version string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		// Put the binary.
 		u.uploadVersion(ctx, t, nodes, version)

@@ -38,7 +38,7 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.writeIndent("\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/memo\"\n")
-	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical\"\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/props\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/types\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/errors\"\n")
@@ -116,6 +116,14 @@ func (g *factoryGen) genConstructFuncs() {
 			}
 			g.w.writeIndent("return item\n")
 		} else {
+			g.w.writeIndent("_f.constructorStackDepth++\n")
+			g.w.nestIndent("if _f.constructorStackDepth > maxConstructorStackDepth {\n")
+			g.w.writeIndent("// If the constructor call stack depth exceeds the limit, call\n")
+			g.w.writeIndent("// onMaxConstructorStackDepthExceeded and skip all rules.\n")
+			g.w.writeIndent("_f.onMaxConstructorStackDepthExceeded()\n")
+			g.w.writeIndent("goto SKIP_RULES\n")
+			g.w.unnest("}\n\n")
+
 			// Only include normalization rules for the current define.
 			rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Normalize")
 			sortRulesByPriority(rules)
@@ -126,6 +134,8 @@ func (g *factoryGen) genConstructFuncs() {
 				g.w.newline()
 			}
 
+			g.w.writeIndent("SKIP_RULES:\n")
+
 			g.w.writeIndent("e := _f.mem.Memoize%s(", define.Name)
 			for i, field := range fields {
 				if i != 0 {
@@ -133,14 +143,15 @@ func (g *factoryGen) genConstructFuncs() {
 				}
 				g.w.write("%s", unTitle(g.md.fieldName(field)))
 			}
-
 			g.w.write(")\n")
 
 			if define.Tags.Contains("Relational") {
-				g.w.writeIndent("return _f.onConstructRelational(e)\n")
+				g.w.writeIndent("expr := _f.onConstructRelational(e)\n")
 			} else {
-				g.w.writeIndent("return _f.onConstructScalar(e)\n")
+				g.w.writeIndent("expr := _f.onConstructScalar(e)\n")
 			}
+			g.w.writeIndent("_f.constructorStackDepth--\n")
+			g.w.writeIndent("return expr\n")
 		}
 
 		g.w.unnest("}\n\n")

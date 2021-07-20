@@ -33,6 +33,42 @@ limit
  └── const: 1 [type=int]
 
 build
+SELECT * FROM xyzs WHERE x = y LIMIT 1
+----
+limit
+ ├── columns: x:1(int!null) y:2(int!null) z:3(float!null) s:4(string)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4), (2)==(1), (1)==(2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+(1|2)) (-4,+3,+(1|2))
+ ├── project
+ │    ├── columns: x:1(int!null) y:2(int!null) z:3(float!null) s:4(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3,4), (3,4)~~>(1,2), (1)==(2), (2)==(1)
+ │    ├── limit hint: 1.00
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+(1|2)) (-4,+3,+(1|2))
+ │    └── select
+ │         ├── columns: x:1(int!null) y:2(int!null) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(3-5), (3,4)~~>(1,2,5), (1)==(2), (2)==(1)
+ │         ├── limit hint: 1.00
+ │         ├── prune: (3-5)
+ │         ├── interesting orderings: (+(1|2)) (-4,+3,+(1|2))
+ │         ├── scan xyzs
+ │         │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+ │         │    ├── prune: (1-5)
+ │         │    └── interesting orderings: (+1) (-4,+3,+1)
+ │         └── filters
+ │              └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ │                   ├── variable: x:1 [type=int]
+ │                   └── variable: y:2 [type=int]
+ └── const: 1 [type=int]
+
+build
 SELECT count(*) FROM xyzs LIMIT 10
 ----
 limit
@@ -183,4 +219,114 @@ scan xyzs@secondary
  ├── key: (1)
  ├── fd: ()-->(4)
  ├── prune: (1)
- └── interesting orderings: (+1) (-4)
+ └── interesting orderings: (+1 opt(4))
+
+# Regression test for #65038. Copy FDs from input regardless of the limit value
+# to avoid error during test builds: "ordering column group X contains
+# non-equivalent columns".
+exec-ddl
+CREATE TABLE t65038 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+----
+
+opt
+SELECT 1
+FROM t65038 AS t1
+WHERE t1.b IN (
+  SELECT 1
+  FROM t65038 CROSS JOIN t65038 AS t2
+    JOIN t65038 AS t3 ON
+      t2.a = t3.a
+      AND t2.c = t3.c
+      AND t2.b = t3.b
+  ORDER BY t2.b
+  LIMIT 1
+)
+ORDER BY t1.a ASC;
+----
+sort
+ ├── columns: "?column?":18(int!null)  [hidden: t1.a:1(int!null)]
+ ├── key: (1)
+ ├── fd: ()-->(18)
+ ├── ordering: +1 opt(18) [actual: +1]
+ ├── prune: (1,18)
+ ├── interesting orderings: (+1 opt(18))
+ └── project
+      ├── columns: "?column?":18(int!null) t1.a:1(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(18)
+      ├── prune: (1,18)
+      ├── interesting orderings: (+1 opt(18))
+      ├── semi-join (cross)
+      │    ├── columns: t1.a:1(int!null) t1.b:2(int!null)
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2)
+      │    ├── prune: (1)
+      │    ├── interesting orderings: (+1 opt(2))
+      │    ├── select
+      │    │    ├── columns: t1.a:1(int!null) t1.b:2(int!null)
+      │    │    ├── key: (1)
+      │    │    ├── fd: ()-->(2)
+      │    │    ├── prune: (1)
+      │    │    ├── interesting orderings: (+1 opt(2))
+      │    │    ├── scan t65038 [as=t1]
+      │    │    │    ├── columns: t1.a:1(int!null) t1.b:2(int)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2)
+      │    │    │    ├── prune: (1,2)
+      │    │    │    └── interesting orderings: (+1)
+      │    │    └── filters
+      │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      │    │              ├── variable: t1.b:2 [type=int]
+      │    │              └── const: 1 [type=int]
+      │    ├── limit
+      │    │    ├── columns: t2.a:9(int!null) t2.b:10(int!null) t2.c:11(int!null) t3.a:13(int!null) t3.b:14(int!null) t3.c:15(int!null)
+      │    │    ├── internal-ordering: +(10|14)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(9-11,13-15), (13)==(9), (11)==(15), (15)==(11), (10)==(14), (14)==(10), (9)==(13)
+      │    │    ├── interesting orderings: (+(10|14))
+      │    │    ├── sort
+      │    │    │    ├── columns: t2.a:9(int!null) t2.b:10(int!null) t2.c:11(int!null) t3.a:13(int!null) t3.b:14(int!null) t3.c:15(int!null)
+      │    │    │    ├── fd: (9)-->(10,11), (13)-->(14,15), (9)==(13), (13)==(9), (11)==(15), (15)==(11), (10)==(14), (14)==(10)
+      │    │    │    ├── ordering: +(10|14) [actual: +10]
+      │    │    │    ├── limit hint: 1.00
+      │    │    │    ├── interesting orderings: (+9) (+13)
+      │    │    │    └── inner-join (cross)
+      │    │    │         ├── columns: t2.a:9(int!null) t2.b:10(int!null) t2.c:11(int!null) t3.a:13(int!null) t3.b:14(int!null) t3.c:15(int!null)
+      │    │    │         ├── fd: (9)-->(10,11), (13)-->(14,15), (9)==(13), (13)==(9), (11)==(15), (15)==(11), (10)==(14), (14)==(10)
+      │    │    │         ├── interesting orderings: (+9) (+13)
+      │    │    │         ├── scan t65038
+      │    │    │         │    └── unfiltered-cols: (5-8)
+      │    │    │         ├── inner-join (merge)
+      │    │    │         │    ├── columns: t2.a:9(int!null) t2.b:10(int!null) t2.c:11(int!null) t3.a:13(int!null) t3.b:14(int!null) t3.c:15(int!null)
+      │    │    │         │    ├── left ordering: +9,+10,+11
+      │    │    │         │    ├── right ordering: +13,+14,+15
+      │    │    │         │    ├── key: (13)
+      │    │    │         │    ├── fd: (9)-->(10,11), (13)-->(14,15), (9)==(13), (13)==(9), (11)==(15), (15)==(11), (10)==(14), (14)==(10)
+      │    │    │         │    ├── interesting orderings: (+9) (+13)
+      │    │    │         │    ├── scan t65038 [as=t2]
+      │    │    │         │    │    ├── columns: t2.a:9(int!null) t2.b:10(int) t2.c:11(int)
+      │    │    │         │    │    ├── key: (9)
+      │    │    │         │    │    ├── fd: (9)-->(10,11)
+      │    │    │         │    │    ├── ordering: +9
+      │    │    │         │    │    ├── prune: (9-11)
+      │    │    │         │    │    ├── interesting orderings: (+9)
+      │    │    │         │    │    └── unfiltered-cols: (9-12)
+      │    │    │         │    ├── scan t65038 [as=t3]
+      │    │    │         │    │    ├── columns: t3.a:13(int!null) t3.b:14(int) t3.c:15(int)
+      │    │    │         │    │    ├── key: (13)
+      │    │    │         │    │    ├── fd: (13)-->(14,15)
+      │    │    │         │    │    ├── ordering: +13
+      │    │    │         │    │    ├── prune: (13-15)
+      │    │    │         │    │    ├── interesting orderings: (+13)
+      │    │    │         │    │    └── unfiltered-cols: (13-16)
+      │    │    │         │    └── filters (true)
+      │    │    │         └── filters (true)
+      │    │    └── const: 1 [type=int]
+      │    └── filters (true)
+      └── projections
+           └── const: 1 [as="?column?":18, type=int]

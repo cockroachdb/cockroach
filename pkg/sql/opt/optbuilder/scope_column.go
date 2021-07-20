@@ -25,9 +25,11 @@ import (
 // interface. During name resolution, unresolved column names in the AST are
 // replaced with a scopeColumn.
 type scopeColumn struct {
-	// name is the current name of this column. It is usually the same as
-	// the original name, unless this column was renamed with an AS expression.
-	name  tree.Name
+	// name is the current name of this column in the scope. It is used to
+	// resolve column references when building expressions and to populate the
+	// metadata with a descriptive name.
+	name scopeColumnName
+
 	table tree.TableName
 	typ   *types.T
 
@@ -68,8 +70,9 @@ type scopeColumn struct {
 // clearName sets the empty table and column name. This is used to make the
 // column anonymous so that it cannot be referenced, but will still be
 // projected.
+// TODO(mgartner): Do we still need this?
 func (c *scopeColumn) clearName() {
-	c.name = ""
+	c.name.Anonymize()
 	c.table = tree.TableName{}
 }
 
@@ -123,7 +126,8 @@ func (c *scopeColumn) Format(ctx *tree.FmtCtx) {
 		ctx.FormatNode(&c.table.ObjectName)
 		ctx.WriteByte('.')
 	}
-	ctx.FormatNode(&c.name)
+	colName := c.name.ReferenceName()
+	ctx.FormatNode(&colName)
 }
 
 // Walk is part of the tree.Expr interface.
@@ -151,3 +155,87 @@ func (*scopeColumn) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 // Variable is part of the tree.VariableExpr interface. This prevents the
 // column from being evaluated during normalization.
 func (*scopeColumn) Variable() {}
+
+// scopeColumnName represents the name of a scopeColumn. The struct tracks two
+// names: refName represents the name that can reference the scopeColumn, while
+// metadataName is the name used when adding the scopeColumn to the metadata.
+//
+// Separating these names allows a column to be referenced by one name while
+// optbuilder builds expressions, but added to the metadata and displayed in opt
+// trees with another. This is useful for:
+//
+//   1. Creating more descriptive metadata names, while having refNames that are
+//      required for column resolution while building expressions. This is
+//      particularly useful in mutations where there are multiple versions of
+//      target table columns for fetching, inserting, and updating that must be
+//      referenced by the same name.
+//
+//   2. Creating descriptive metadata names for anonymous columns that
+//      cannot be referenced. This is useful for columns like synthesized
+//      check constraint columns and partial index columns which cannot be
+//      referenced by other expressions. Prior to the creation of
+//      scopeColumnName, the same descriptive name added to the metadata
+//      could be referenced, making optbuilder vulnerable to "ambiguous
+//      column" bugs when a user table had a column with the same name.
+//
+type scopeColumnName struct {
+	// refName is the name used when resolving columns while building an
+	// expression. If it is empty, the column is anonymous and cannot be
+	// referenced. It is usually the same as the original column name, unless
+	// this column was renamed with an AS expression.
+	refName tree.Name
+
+	// metadataName is the name used when adding the column to the metadata. It
+	// is inconsequential while building expressions; it only makes plans more
+	// readable.
+	metadataName string
+}
+
+// scopeColName creates a scopeColumnName that can be referenced by the given
+// name and will be added to the metadata with the given name. If name is an
+// empty string, the returned scopeColumnName is anonymous; it cannot be
+// referenced in expressions and it will be added to the metadata with a name of
+// the form "column<ID>".
+func scopeColName(name tree.Name) scopeColumnName {
+	return scopeColumnName{
+		refName:      name,
+		metadataName: string(name),
+	}
+}
+
+// WithMetadataName returns a copy of s with the metadata name set to the given
+// name. This only affects the name of the column in the metadata. It does not
+// change the name by which the column can be referenced.
+func (s scopeColumnName) WithMetadataName(name string) scopeColumnName {
+	s.metadataName = name
+	return s
+}
+
+// Anonymize makes the scopeColumnName unable to be referenced.
+func (s *scopeColumnName) Anonymize() {
+	s.refName = ""
+}
+
+// IsAnonymous returns true if the scopeColumnName is a name that cannot be
+// referenced.
+func (s *scopeColumnName) IsAnonymous() bool {
+	return s.refName == ""
+}
+
+// MatchesReferenceName returns true if the given name references the
+// scopeColumn with this scopeColumnName.
+func (s *scopeColumnName) MatchesReferenceName(ref tree.Name) bool {
+	return s.refName == ref
+}
+
+// ReferenceName returns the name that the scopeColumn with this scopeColumnName
+// can be referenced by.
+func (s *scopeColumnName) ReferenceName() tree.Name {
+	return s.refName
+}
+
+// MetadataName returns the string to use when adding the scopeColumn with this
+// scopeColumnName to metadata.
+func (s *scopeColumnName) MetadataName() string {
+	return s.metadataName
+}

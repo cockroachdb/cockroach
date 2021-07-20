@@ -1,5 +1,13 @@
-alter_rename_view_stmt ::=
+alter_view_stmt ::=
 	'ALTER' 'VIEW' view_name 'RENAME' 'TO' view_name
 	| 'ALTER' 'MATERIALIZED' 'VIEW' view_name 'RENAME' 'TO' view_name
 	| 'ALTER' 'VIEW' 'IF' 'EXISTS' view_name 'RENAME' 'TO' view_name
 	| 'ALTER' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' view_name 'RENAME' 'TO' view_name
+	| 'ALTER' 'VIEW' view_name 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'MATERIALIZED' 'VIEW' view_name 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' view_name 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' view_name 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'VIEW' view_name 'OWNER' 'TO' role_spec
+	| 'ALTER' 'MATERIALIZED' 'VIEW' view_name 'OWNER' 'TO' role_spec
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' view_name 'OWNER' 'TO' role_spec
+	| 'ALTER' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' view_name 'OWNER' 'TO' role_spec

@@ -56,6 +56,9 @@ message SessionData {
   // SeqState gives access to the SQL sequences that have been manipulated by
   // the session.
   SequenceState seq_state = 11 [(gogoproto.nullable) = false];
+  // WorkMemLimit determines how much RAM (in bytes) a single operation of a
+  // single query can use before it has to spill to disk.
+  int64 WorkMemLimit = 12;
 }
 
 // DataConversionConfig contains the parameters that influence the conversion
@@ -90,8 +93,10 @@ enum VectorizeExecMode {
   option (gogoproto.goproto_enum_prefix) = false;
   option (gogoproto.goproto_enum_stringer) = false;
 
-  // VectorizeOff means that columnar execution is disabled.
-  VectorizeOff = 0;
+  // VectorizeUnset means the VectorizeExecMode wasn't explicitly set. Having
+  // the first enum value as zero is required by proto3. This is mapped to
+  // VectorizeOn.
+  VectorizeUnset = 0;
   reserved 1;
   // VectorizeOn means that any supported queries will be run using the
   // columnar execution.
@@ -99,6 +104,8 @@ enum VectorizeExecMode {
   // VectorizeExperimentalAlways means that we attempt to vectorize all
   // queries; unsupported queries will fail. Mostly used for testing.
   VectorizeExperimentalAlways = 3;
+  // VectorizeOff means that columnar execution is disabled.
+  VectorizeOff = 4;
 }
 
 // SequenceState is used to marshall the sessiondata.SequenceState struct.

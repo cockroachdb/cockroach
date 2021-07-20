@@ -58,13 +58,16 @@ vectorized: <hidden>
 rows read from KV: 5 (40 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
+cluster regions: <hidden>
 ·
 • group (scalar)
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 1
 │
 └── • scan
       cluster nodes: <hidden>
+      cluster regions: <hidden>
       actual row count: 5
       KV rows read: 5
       KV bytes read: 40 B
@@ -84,9 +87,11 @@ vectorized: <hidden>
 rows read from KV: 10 (80 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
+cluster regions: <hidden>
 ·
 • merge join
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 5
 │ equality: (k) = (k)
 │ left cols are key
@@ -94,6 +99,7 @@ network usage: <hidden>
 │
 ├── • scan
 │     cluster nodes: <hidden>
+│     cluster regions: <hidden>
 │     actual row count: 5
 │     KV rows read: 5
 │     KV bytes read: 40 B
@@ -103,6 +109,7 @@ network usage: <hidden>
 │
 └── • scan
       cluster nodes: <hidden>
+      cluster regions: <hidden>
       actual row count: 5
       KV rows read: 5
       KV bytes read: 40 B
@@ -110,7 +117,7 @@ network usage: <hidden>
       table: kw@primary
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsmt1u2zYUx-_3FMS52la5MiU7TQQUMDZ0QLo1HtJiN4MvGOnMFmyLHknH8YI81l5gTzbImtv6Q5_IQsr0XSSKls6P_3P0F3MeQf45gwA-vvvl3Y-fyPfkp9vhBzK9J--H1zdkuiLDGzK9fz0lb8l09XoKDiQ8whs2RwnB70DBAQ8c8MGBHjjQh5EDC8FDlJKL9JLHzYTr6AGCrgNxsliq9PTIgZALhOARVKxmCAF8YnczvEUWoXC74ECEisWzzW2m94OFiOdMrMGBjwuWyIB03PTGP_9GVDzHgHT_-VtmxyFPFCYq5snBkOArSQSyKCA0O3O3Vrg9dUl-AAfumAonKAlfqsVSBSR9lM287QkKoycHsqMswm0Ed2syYXKy--yD9PqRA1KxMUJAn5xmSC72kKwOkbi0pVC8XChffoeLCAVG-7_zKr1xpauO8P2AYozveZygcOme5mb4h_p2QF9991bE40n2JzgwTKMdUGfgOQPfGaSixwcMl4do5-yBzHHOxZqw2YyHTGEUkO6GZzomQ5FSJVEsp4dX1Cb-haZfgeYyOUbqKKQb3uELl_Z38eQEXfrY_dzH7u08Nq2eGbS8WLhex_XbmBm0KZQ3FcpFW6F4uVBesFzQ0ywXXnWJeRXyzu-4vTZKjDaFclkh79oKxcuF8oJ5551m3vnVJeZXyLtex-23UWK0KZSrCnnXViheLpQXzDv_NPOuV11ivQp51--0UWC0KZJ-edZ1XEpYEhFKuJqgaCMeLxfPC-Zf7zTzr2QH5BblgicS9z5Tj_9yN4WI0RizpZF8KUL8VfBwc5vscLiZt_lqiFCqbNTLDq6T7ZBUTBV95v7P8LqZaqoHcJEbQIJqxcWUzJjCJFx_jmB7fsVitRtbhBJFzGbxX-ww8O20_7IyxPh-E9dXQ9v0_Dy2iXk7Okcp2Rj3Jz8_kivNSGgBkstnQULrIqH5OrdWJrRvIxNaoxx6JpbD4gAucgOwdk2vNCPRUg6LkdB8nVsrk71yaAkTb59J92sm_u4bYn-yXziZ7taironFtNfQHJ-wIoqR5NvtlqypbnNs4JraaY5LmOg2x1pcQ7-hOT5hmRQjybfbxpTD4gB0m2MD19ROc1zCRLc51lIOL-qYYzuQvDkb5npIrNyfLkaSb8GNeWkWB6DdMBuY-toNsxahX54Ncz0kVu5PFyPJt-DGlMPiALQbZi3lsISJbsOsRehXZ8N88E-Hpv0XJyyTEia6LbOJOrFy27qESYENN-bNWRaCla6ZNm3CsJeJbt-spyaa3dhhok4KvLg5NfHciHEESq1ODEvy_6DBxCjvbCIT3d5ZT-4UM7HTOxcz0b6FbSSUfDduzsuzTsuaLT6xTs-aLX6iThvcmYkR-9hGQsl34-bUxIPmFQu98-jpm38DAAD___I9hlI=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsmt1u2zYUx-_3FMS52la5MiU7TQQUMDZ0QLo1HtJiN4MvGOnMFiyLLknH8YI81l5gTzbImtv6Q19GG1Km7yLRlA5_-p-jv5jzCPJjAgG8f_Pbm58_kB_JL7fDd2R6T94Or2_IdEmGN2R6_3JKXpPp8uUUHEh5hDdshhKCP4GCAx444IMDPXCgDyMH5oKHKCUX2U8e1xOuowcIug7E6XyhstMjB0IuEIJHULFKEAL4wO4SvEUWoXC74ECEisXJ-jbT-8FcxDMmVuDA-zlLZUA6bnbjX_8gKp5hQLr__iPz45CnClMV83RvSPClJAJZFBCan7lbKdycuiQ_gQN3TIUTlIQv1HyhApKFsp63OUFh9ORAfpSvcLOCuxWZMDnZjn2Q_X7kgFRsjBDQJ-c4JBc7SJb7SFzaUiheIZTP1-EiQoHR7nVeZDeu9asDfN-hGONbHqcoXLqjuQT_Ut8P6IsfXot4PMn_BAeG2WoH1Bl4zsB3Bpno8QHDxT7aGXsgM5xxsSIsSXjIFEYB6a55ZmPyY0IUzuYkiuWULCQb42a4Me7PKP0aKBfpIUwHCd3wDp-7tL_NpmDFlWH3C8PubYVN66cFra4Urtdx_TamBT0WyqsataKtULxCKM9YK-gJ1gqvvr68Gknnd9xeG_VFj4VyWSPp2grFK4TyjEnnnWDS-fX15ddIul7H7bdRX_RYKFc1kq6tULxCKM-YdP4JJl2vvr56NZKu32mjuuixSPrVKddxKWFpRCjhaoKijXi8QjzPmHy9E0y-ii2PW5Rznkrc-TQ9fOVuRhCjMebPRfKFCPF3wcP1bfLD4Xre-kshQqnyUS8_uE43Q1IxVfZp-y3JdXO91I_-ojD6FNWSiylJmMI0XH0Kf3N-yWK1vbAIJYqYJfHfbH_Vm2n_52OI8f162V8MbRLz09h6zZvRGcoMxe7kr4_kSjMSWoLk8qsgoU2R0GKRWysT2reRCW1QCz3jamF59BeF0Vv7QK80I9FSC8uR0GKRWyuTnVpoCRNvl0n3Syb-9uthd7JfOplu16KucZW0d6QnPmE5lCMpNtpteKC6PbGBD9ROT1zBRLcn1uIX-kd64hOWSTmSYqNtRi0sj163JzbwgdrpiSuY6PbEWmrhRRNPbAeSV2er3AyJlXvS5UiK_bcZb8zy6LVbZQPzXrtV1qLyy7NVbobEyj3pciTF_tuMWlgevXarrKUWVjDRbZW1qPzqbJX3_stwbKvFCcukgolus2yiTqzcra5gUuLBzXhtVsVvpV-mx_Zb2MtEt2PWUxDNbuMwUSclRtyQgnjuuTgApVHThSXJv9dLYpRrNpGJbtesJ3fKmdjpmsuZaN-5NhJKsRU35M3ZpDvNFofYpD3NFjPRpOntzMSI7WsjoRRbcUMK4l6rioWuefT03X8BAAD__55xcPI=
 
 # Verify execution.
 statement ok
@@ -129,23 +136,17 @@ statement ok
 RESET vectorize
 
 # Regression test for #38919.
-statement ok
-SET optimizer = on
-
 query B
 SELECT EXISTS(SELECT * FROM kv WHERE k > 2)
 ----
 true
-
-statement ok
-RESET optimizer
 
 query T
 EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 ----
 │
 ├ Node 1
-│ └ *colexec.Materializer
+│ └ *colflow.BatchFlowCoordinator
 │   └ *colexec.InvariantsChecker
 │     └ *colexec.orderedAggregator
 │       └ *colexecbase.distinctChainOps
@@ -212,7 +213,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 ----
 │
 ├ Node 1
-│ └ *colexec.Materializer
+│ └ *colflow.BatchFlowCoordinator
 │   └ *colexec.InvariantsChecker
 │     └ *colexec.orderedAggregator
 │       └ *colexecbase.distinctChainOps

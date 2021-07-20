@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -33,20 +33,20 @@ const exportFilePatternDefault = exportFilePatternPart + ".csv"
 
 // csvExporter data structure to augment the compression
 // and csv writer, encapsulating the internals to make
-// exporting oblivious for the consumers
+// exporting oblivious for the consumers.
 type csvExporter struct {
 	compressor *gzip.Writer
 	buf        *bytes.Buffer
 	csvWriter  *csv.Writer
 }
 
-// Write append record to csv file
+// Write append record to csv file.
 func (c *csvExporter) Write(record []string) error {
 	return c.csvWriter.Write(record)
 }
 
 // Close closes the compressor writer which
-// appends archive footers
+// appends archive footers.
 func (c *csvExporter) Close() error {
 	if c.compressor != nil {
 		return c.compressor.Close()
@@ -55,7 +55,7 @@ func (c *csvExporter) Close() error {
 }
 
 // Flush flushes both csv and compressor writer if
-// initialized
+// initialized.
 func (c *csvExporter) Flush() error {
 	c.csvWriter.Flush()
 	if c.compressor != nil {
@@ -68,17 +68,17 @@ func (c *csvExporter) Flush() error {
 func (c *csvExporter) ResetBuffer() {
 	c.buf.Reset()
 	if c.compressor != nil {
-		// Brings compressor to its initial state
+		// Brings compressor to its initial state.
 		c.compressor.Reset(c.buf)
 	}
 }
 
-// Bytes results in the slice of bytes with compressed content
+// Bytes results in the slice of bytes with compressed content.
 func (c *csvExporter) Bytes() []byte {
 	return c.buf.Bytes()
 }
 
-// Len returns length of the buffer with content
+// Len returns length of the buffer with content.
 func (c *csvExporter) Len() int {
 	return c.buf.Len()
 }
@@ -139,7 +139,7 @@ func newCSVWriterProcessor(
 		output:      output,
 	}
 	semaCtx := tree.MakeSemaContext()
-	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx(), output); err != nil {
+	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx()); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -162,6 +162,10 @@ func (sp *csvWriter) OutputTypes() []*types.T {
 		res[i] = colinfo.ExportColumns[i].Typ
 	}
 	return res
+}
+
+func (sp *csvWriter) MustBeStreaming() bool {
+	return false
 }
 
 func (sp *csvWriter) Run(ctx context.Context) {
@@ -192,6 +196,11 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			var rows int64
 			writer.ResetBuffer()
 			for {
+				// If the bytes.Buffer sink exceeds the target size of a CSV file, we
+				// flush before exporting any additional rows.
+				if int64(writer.buf.Len()) >= sp.spec.ChunkSize {
+					break
+				}
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
 					break
 				}
@@ -233,7 +242,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				return errors.Wrap(err, "failed to flush csv writer")
 			}
 
-			conf, err := cloudimpl.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
+			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
 			if err != nil {
 				return err
 			}
@@ -259,7 +268,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 			size := writer.Len()
 
-			if err := es.WriteFile(ctx, filename, bytes.NewReader(writer.Bytes())); err != nil {
+			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
 				return err
 			}
 			res := rowenc.EncDatumRow{
@@ -277,7 +286,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				),
 			}
 
-			cs, err := sp.out.EmitRow(ctx, res)
+			cs, err := sp.out.EmitRow(ctx, res, sp.output)
 			if err != nil {
 				return err
 			}

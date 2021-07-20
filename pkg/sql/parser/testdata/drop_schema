@@ -1,0 +1,127 @@
+parse
+DROP SCHEMA a
+----
+DROP SCHEMA a
+DROP SCHEMA a -- fully parenthesized
+DROP SCHEMA a -- literals removed
+DROP SCHEMA _ -- identifiers removed
+
+parse
+DROP SCHEMA a, b
+----
+DROP SCHEMA a, b
+DROP SCHEMA a, b -- fully parenthesized
+DROP SCHEMA a, b -- literals removed
+DROP SCHEMA _, _ -- identifiers removed
+
+parse
+DROP SCHEMA IF EXISTS a, b, c
+----
+DROP SCHEMA IF EXISTS a, b, c
+DROP SCHEMA IF EXISTS a, b, c -- fully parenthesized
+DROP SCHEMA IF EXISTS a, b, c -- literals removed
+DROP SCHEMA IF EXISTS _, _, _ -- identifiers removed
+
+parse
+DROP SCHEMA IF EXISTS a, b CASCADE
+----
+DROP SCHEMA IF EXISTS a, b CASCADE
+DROP SCHEMA IF EXISTS a, b CASCADE -- fully parenthesized
+DROP SCHEMA IF EXISTS a, b CASCADE -- literals removed
+DROP SCHEMA IF EXISTS _, _ CASCADE -- identifiers removed
+
+parse
+DROP SCHEMA IF EXISTS a, b RESTRICT
+----
+DROP SCHEMA IF EXISTS a, b RESTRICT
+DROP SCHEMA IF EXISTS a, b RESTRICT -- fully parenthesized
+DROP SCHEMA IF EXISTS a, b RESTRICT -- literals removed
+DROP SCHEMA IF EXISTS _, _ RESTRICT -- identifiers removed
+
+parse
+DROP SCHEMA a RESTRICT
+----
+DROP SCHEMA a RESTRICT
+DROP SCHEMA a RESTRICT -- fully parenthesized
+DROP SCHEMA a RESTRICT -- literals removed
+DROP SCHEMA _ RESTRICT -- identifiers removed
+
+parse
+DROP SCHEMA a.a
+----
+DROP SCHEMA a.a
+DROP SCHEMA a.a -- fully parenthesized
+DROP SCHEMA a.a -- literals removed
+DROP SCHEMA _._ -- identifiers removed
+
+parse
+DROP SCHEMA a.a, b.b, c.c
+----
+DROP SCHEMA a.a, b.b, c.c
+DROP SCHEMA a.a, b.b, c.c -- fully parenthesized
+DROP SCHEMA a.a, b.b, c.c -- literals removed
+DROP SCHEMA _._, _._, _._ -- identifiers removed
+
+parse
+DROP SCHEMA a, b.b, c
+----
+DROP SCHEMA a, b.b, c
+DROP SCHEMA a, b.b, c -- fully parenthesized
+DROP SCHEMA a, b.b, c -- literals removed
+DROP SCHEMA _, _._, _ -- identifiers removed
+
+parse
+DROP SCHEMA IF EXISTS a.a, b.b, c.c
+----
+DROP SCHEMA IF EXISTS a.a, b.b, c.c
+DROP SCHEMA IF EXISTS a.a, b.b, c.c -- fully parenthesized
+DROP SCHEMA IF EXISTS a.a, b.b, c.c -- literals removed
+DROP SCHEMA IF EXISTS _._, _._, _._ -- identifiers removed
+
+parse
+DROP SCHEMA IF EXISTS a, b, c.c
+----
+DROP SCHEMA IF EXISTS a, b, c.c
+DROP SCHEMA IF EXISTS a, b, c.c -- fully parenthesized
+DROP SCHEMA IF EXISTS a, b, c.c -- literals removed
+DROP SCHEMA IF EXISTS _, _, _._ -- identifiers removed
+
+parse
+DROP SCHEMA IF EXISTS a.a, b.b CASCADE
+----
+DROP SCHEMA IF EXISTS a.a, b.b CASCADE
+DROP SCHEMA IF EXISTS a.a, b.b CASCADE -- fully parenthesized
+DROP SCHEMA IF EXISTS a.a, b.b CASCADE -- literals removed
+DROP SCHEMA IF EXISTS _._, _._ CASCADE -- identifiers removed
+
+parse
+DROP SCHEMA IF EXISTS a.a, b CASCADE
+----
+DROP SCHEMA IF EXISTS a.a, b CASCADE
+DROP SCHEMA IF EXISTS a.a, b CASCADE -- fully parenthesized
+DROP SCHEMA IF EXISTS a.a, b CASCADE -- literals removed
+DROP SCHEMA IF EXISTS _._, _ CASCADE -- identifiers removed
+
+parse
+DROP SCHEMA IF EXISTS a.a, b.c RESTRICT
+----
+DROP SCHEMA IF EXISTS a.a, b.c RESTRICT
+DROP SCHEMA IF EXISTS a.a, b.c RESTRICT -- fully parenthesized
+DROP SCHEMA IF EXISTS a.a, b.c RESTRICT -- literals removed
+DROP SCHEMA IF EXISTS _._, _._ RESTRICT -- identifiers removed
+
+parse
+DROP SCHEMA IF EXISTS a, b.b RESTRICT
+----
+DROP SCHEMA IF EXISTS a, b.b RESTRICT
+DROP SCHEMA IF EXISTS a, b.b RESTRICT -- fully parenthesized
+DROP SCHEMA IF EXISTS a, b.b RESTRICT -- literals removed
+DROP SCHEMA IF EXISTS _, _._ RESTRICT -- identifiers removed
+
+parse
+DROP SCHEMA a.a RESTRICT
+----
+DROP SCHEMA a.a RESTRICT
+DROP SCHEMA a.a RESTRICT -- fully parenthesized
+DROP SCHEMA a.a RESTRICT -- literals removed
+DROP SCHEMA _._ RESTRICT -- identifiers removed

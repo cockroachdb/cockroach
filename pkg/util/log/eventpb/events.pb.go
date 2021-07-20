@@ -3,11 +3,15 @@
 
 package eventpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import io "io"
+import (
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/gogo/protobuf/types"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -18,7 +22,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // CommonEventDetails contains the fields common to all events.
 type CommonEventDetails struct {
@@ -33,21 +37,21 @@ func (m *CommonEventDetails) Reset()         { *m = CommonEventDetails{} }
 func (m *CommonEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonEventDetails) ProtoMessage()    {}
 func (*CommonEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_events_1dbe437e52f03141, []int{0}
+	return fileDescriptor_656955fd5b536468, []int{0}
 }
 func (m *CommonEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *CommonEventDetails) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *CommonEventDetails) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CommonEventDetails.Merge(dst, src)
+func (m *CommonEventDetails) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CommonEventDetails.Merge(m, src)
 }
 func (m *CommonEventDetails) XXX_Size() int {
 	return m.Size()
@@ -63,6 +67,10 @@ var xxx_messageInfo_CommonEventDetails proto.InternalMessageInfo
 type CommonSQLEventDetails struct {
 	// A normalized copy of the SQL statement that triggered the event.
 	Statement string `protobuf:"bytes,1,opt,name=statement,proto3" json:",omitempty"`
+	// The statement tag. This is separate from the statement string,
+	// since the statement string can contain sensitive information. The
+	// tag is guaranteed not to.
+	Tag string `protobuf:"bytes,6,opt,name=tag,proto3" json:",omitempty" redact:"nonsensitive"`
 	// The user account that triggered the event.
 	User string `protobuf:"bytes,2,opt,name=user,proto3" json:",omitempty"`
 	// The primary object descriptor affected by the operation. Set to zero for operations
@@ -80,21 +88,21 @@ func (m *CommonSQLEventDetails) Reset()         { *m = CommonSQLEventDetails{} }
 func (m *CommonSQLEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonSQLEventDetails) ProtoMessage()    {}
 func (*CommonSQLEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_events_1dbe437e52f03141, []int{1}
+	return fileDescriptor_656955fd5b536468, []int{1}
 }
 func (m *CommonSQLEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *CommonSQLEventDetails) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *CommonSQLEventDetails) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CommonSQLEventDetails.Merge(dst, src)
+func (m *CommonSQLEventDetails) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CommonSQLEventDetails.Merge(m, src)
 }
 func (m *CommonSQLEventDetails) XXX_Size() int {
 	return m.Size()
@@ -129,21 +137,21 @@ func (m *CommonJobEventDetails) Reset()         { *m = CommonJobEventDetails{} }
 func (m *CommonJobEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonJobEventDetails) ProtoMessage()    {}
 func (*CommonJobEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_events_1dbe437e52f03141, []int{2}
+	return fileDescriptor_656955fd5b536468, []int{2}
 }
 func (m *CommonJobEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *CommonJobEventDetails) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *CommonJobEventDetails) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CommonJobEventDetails.Merge(dst, src)
+func (m *CommonJobEventDetails) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CommonJobEventDetails.Merge(m, src)
 }
 func (m *CommonJobEventDetails) XXX_Size() int {
 	return m.Size()
@@ -159,10 +167,49 @@ func init() {
 	proto.RegisterType((*CommonSQLEventDetails)(nil), "cockroach.util.log.eventpb.CommonSQLEventDetails")
 	proto.RegisterType((*CommonJobEventDetails)(nil), "cockroach.util.log.eventpb.CommonJobEventDetails")
 }
+
+func init() { proto.RegisterFile("util/log/eventpb/events.proto", fileDescriptor_656955fd5b536468) }
+
+var fileDescriptor_656955fd5b536468 = []byte{
+	// 511 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x93, 0x4f, 0x8b, 0xd3, 0x40,
+	0x18, 0xc6, 0x9b, 0xed, 0x9f, 0xb5, 0xe3, 0x76, 0xd5, 0xc1, 0xc5, 0x50, 0x30, 0x29, 0xb9, 0x58,
+	0x61, 0x69, 0x05, 0x4f, 0x2b, 0x88, 0x90, 0xad, 0x0b, 0x5d, 0x44, 0x70, 0x15, 0x0f, 0x5e, 0xca,
+	0x24, 0x79, 0xcd, 0x4e, 0x4d, 0xf2, 0x0e, 0x99, 0x69, 0xa1, 0x5f, 0xc1, 0x93, 0x1f, 0x6b, 0x8f,
+	0x7b, 0xdc, 0x53, 0xd0, 0xf4, 0xb6, 0x47, 0x3f, 0x81, 0x24, 0xa9, 0xd9, 0xb4, 0x5d, 0x84, 0xf5,
+	0x94, 0x84, 0xf9, 0x3d, 0x99, 0xe7, 0x7d, 0x9e, 0x19, 0xf2, 0x74, 0xa6, 0x78, 0x30, 0x0c, 0xd0,
+	0x1f, 0xc2, 0x1c, 0x22, 0x25, 0x9c, 0xe2, 0x29, 0x07, 0x22, 0x46, 0x85, 0xb4, 0xeb, 0xa2, 0xfb,
+	0x2d, 0x46, 0xe6, 0x9e, 0x0f, 0x32, 0x70, 0x10, 0xa0, 0x3f, 0x58, 0x81, 0xdd, 0xc7, 0x3e, 0xfa,
+	0x98, 0x63, 0xc3, 0xec, 0xad, 0x50, 0x74, 0x4d, 0x1f, 0xd1, 0x0f, 0x60, 0x98, 0x7f, 0x39, 0xb3,
+	0xaf, 0x43, 0xc5, 0x43, 0x90, 0x8a, 0x85, 0xa2, 0x00, 0xac, 0xef, 0x1a, 0xa1, 0xc7, 0x18, 0x86,
+	0x18, 0xbd, 0xcd, 0x7e, 0x34, 0x02, 0xc5, 0x78, 0x20, 0xe9, 0x21, 0x69, 0x97, 0xa4, 0xae, 0xf5,
+	0xb4, 0x7e, 0xdd, 0xde, 0xbf, 0x4e, 0x4c, 0x72, 0x88, 0x21, 0x57, 0x10, 0x0a, 0xb5, 0x38, 0xbb,
+	0x01, 0xe8, 0x09, 0x21, 0xb9, 0x8d, 0x89, 0x5a, 0x08, 0xd0, 0x77, 0x7a, 0x5a, 0xbf, 0x6d, 0x3f,
+	0x5b, 0xc7, 0x7f, 0x27, 0xe6, 0x41, 0x0c, 0x1e, 0x73, 0xd5, 0x2b, 0x2b, 0xc2, 0x48, 0x42, 0x24,
+	0xb9, 0xe2, 0x73, 0xb0, 0xce, 0xda, 0xb9, 0xf4, 0xd3, 0x42, 0x80, 0xb5, 0xdc, 0x21, 0x07, 0x85,
+	0x99, 0x8f, 0x1f, 0xde, 0x6d, 0xfa, 0x91, 0x8a, 0x29, 0x08, 0x21, 0x52, 0xb9, 0x9f, 0xf6, 0xb6,
+	0x9f, 0x12, 0xa0, 0x47, 0xa4, 0xae, 0x98, 0xaf, 0xb7, 0xee, 0x66, 0x24, 0xd3, 0x50, 0x8b, 0x34,
+	0x66, 0x12, 0xe2, 0xd5, 0x10, 0x9b, 0x7b, 0xe4, 0x6b, 0xf4, 0x98, 0x74, 0x3c, 0x90, 0x6e, 0xcc,
+	0x85, 0xc2, 0x78, 0xc2, 0x3d, 0xbd, 0xde, 0xd3, 0xfa, 0x1d, 0xdb, 0x48, 0x13, 0x73, 0x6f, 0x54,
+	0x2e, 0x8c, 0x47, 0x1b, 0xe2, 0xbd, 0x1b, 0xd1, 0xd8, 0xa3, 0x47, 0xe4, 0x21, 0x13, 0x22, 0xe0,
+	0x2e, 0x53, 0x1c, 0xa3, 0x49, 0xc4, 0x42, 0xd0, 0x1b, 0xb7, 0x6e, 0xfa, 0xa0, 0xc2, 0xbd, 0x67,
+	0x21, 0xd0, 0xd7, 0x84, 0x8a, 0x80, 0xb9, 0x70, 0x8e, 0x81, 0x07, 0xf1, 0x64, 0xce, 0x82, 0x19,
+	0x48, 0xbd, 0xd9, 0xab, 0xdf, 0x22, 0x7e, 0x54, 0x21, 0x3f, 0xe7, 0xa0, 0x75, 0x5d, 0xa6, 0x7c,
+	0x8a, 0xce, 0x5a, 0xca, 0x03, 0xd2, 0x9a, 0xa2, 0x93, 0x4d, 0x54, 0x54, 0xfe, 0x24, 0x4d, 0xcc,
+	0xe6, 0x29, 0x3a, 0x5b, 0xa3, 0x34, 0xa7, 0xe8, 0x8c, 0x3d, 0x6a, 0x93, 0x7b, 0x19, 0xff, 0x3f,
+	0xad, 0xef, 0x4e, 0xd1, 0xc9, 0x3a, 0xa7, 0x2f, 0xc8, 0xfd, 0xbf, 0xb9, 0x70, 0x8c, 0xf2, 0x28,
+	0xb7, 0xa7, 0xa8, 0x22, 0x65, 0x45, 0x8d, 0x7f, 0x54, 0x74, 0x42, 0xf6, 0xd7, 0x2a, 0x2a, 0xe2,
+	0xe9, 0xd8, 0x66, 0x9a, 0x98, 0x9d, 0x6a, 0x47, 0x72, 0x43, 0xde, 0xa9, 0x96, 0x24, 0xe9, 0x1b,
+	0xd2, 0xca, 0x8e, 0xd5, 0x4c, 0xde, 0xf5, 0x30, 0xad, 0x64, 0xf6, 0xf3, 0x8b, 0x5f, 0x46, 0xed,
+	0x22, 0x35, 0xb4, 0xcb, 0xd4, 0xd0, 0xae, 0x52, 0x43, 0xfb, 0x99, 0x1a, 0xda, 0x8f, 0xa5, 0x51,
+	0xbb, 0x5c, 0x1a, 0xb5, 0xab, 0xa5, 0x51, 0xfb, 0xb2, 0xbb, 0xba, 0xc1, 0x4e, 0x2b, 0xbf, 0x91,
+	0x2f, 0xff, 0x04, 0x00, 0x00, 0xff, 0xff, 0x01, 0xc0, 0x2d, 0x84, 0x05, 0x04, 0x00, 0x00,
+}
+
 func (m *CommonEventDetails) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -170,28 +217,34 @@ func (m *CommonEventDetails) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *CommonEventDetails) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CommonEventDetails) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Timestamp != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintEvents(dAtA, i, uint64(m.Timestamp))
-	}
 	if len(m.EventType) > 0 {
-		dAtA[i] = 0x12
-		i++
+		i -= len(m.EventType)
+		copy(dAtA[i:], m.EventType)
 		i = encodeVarintEvents(dAtA, i, uint64(len(m.EventType)))
-		i += copy(dAtA[i:], m.EventType)
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if m.Timestamp != 0 {
+		i = encodeVarintEvents(dAtA, i, uint64(m.Timestamp))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *CommonSQLEventDetails) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -199,55 +252,64 @@ func (m *CommonSQLEventDetails) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *CommonSQLEventDetails) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CommonSQLEventDetails) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Statement) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintEvents(dAtA, i, uint64(len(m.Statement)))
-		i += copy(dAtA[i:], m.Statement)
-	}
-	if len(m.User) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintEvents(dAtA, i, uint64(len(m.User)))
-		i += copy(dAtA[i:], m.User)
-	}
-	if m.DescriptorID != 0 {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintEvents(dAtA, i, uint64(m.DescriptorID))
-	}
-	if len(m.ApplicationName) > 0 {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintEvents(dAtA, i, uint64(len(m.ApplicationName)))
-		i += copy(dAtA[i:], m.ApplicationName)
+	if len(m.Tag) > 0 {
+		i -= len(m.Tag)
+		copy(dAtA[i:], m.Tag)
+		i = encodeVarintEvents(dAtA, i, uint64(len(m.Tag)))
+		i--
+		dAtA[i] = 0x32
 	}
 	if len(m.PlaceholderValues) > 0 {
-		for _, s := range m.PlaceholderValues {
+		for iNdEx := len(m.PlaceholderValues) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.PlaceholderValues[iNdEx])
+			copy(dAtA[i:], m.PlaceholderValues[iNdEx])
+			i = encodeVarintEvents(dAtA, i, uint64(len(m.PlaceholderValues[iNdEx])))
+			i--
 			dAtA[i] = 0x2a
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
 		}
 	}
-	return i, nil
+	if len(m.ApplicationName) > 0 {
+		i -= len(m.ApplicationName)
+		copy(dAtA[i:], m.ApplicationName)
+		i = encodeVarintEvents(dAtA, i, uint64(len(m.ApplicationName)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.DescriptorID != 0 {
+		i = encodeVarintEvents(dAtA, i, uint64(m.DescriptorID))
+		i--
+		dAtA[i] = 0x18
+	}
+	if len(m.User) > 0 {
+		i -= len(m.User)
+		copy(dAtA[i:], m.User)
+		i = encodeVarintEvents(dAtA, i, uint64(len(m.User)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Statement) > 0 {
+		i -= len(m.Statement)
+		copy(dAtA[i:], m.Statement)
+		i = encodeVarintEvents(dAtA, i, uint64(len(m.Statement)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *CommonJobEventDetails) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -255,32 +317,21 @@ func (m *CommonJobEventDetails) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *CommonJobEventDetails) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CommonJobEventDetails) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.JobID != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintEvents(dAtA, i, uint64(m.JobID))
-	}
-	if len(m.JobType) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintEvents(dAtA, i, uint64(len(m.JobType)))
-		i += copy(dAtA[i:], m.JobType)
-	}
-	if len(m.Description) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintEvents(dAtA, i, uint64(len(m.Description)))
-		i += copy(dAtA[i:], m.Description)
-	}
-	if len(m.User) > 0 {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintEvents(dAtA, i, uint64(len(m.User)))
-		i += copy(dAtA[i:], m.User)
+	if len(m.Status) > 0 {
+		i -= len(m.Status)
+		copy(dAtA[i:], m.Status)
+		i = encodeVarintEvents(dAtA, i, uint64(len(m.Status)))
+		i--
+		dAtA[i] = 0x32
 	}
 	if len(m.DescriptorIDs) > 0 {
 		dAtA2 := make([]byte, len(m.DescriptorIDs)*10)
@@ -294,28 +345,51 @@ func (m *CommonJobEventDetails) MarshalTo(dAtA []byte) (int, error) {
 			dAtA2[j1] = uint8(num)
 			j1++
 		}
-		dAtA[i] = 0x2a
-		i++
+		i -= j1
+		copy(dAtA[i:], dAtA2[:j1])
 		i = encodeVarintEvents(dAtA, i, uint64(j1))
-		i += copy(dAtA[i:], dAtA2[:j1])
+		i--
+		dAtA[i] = 0x2a
 	}
-	if len(m.Status) > 0 {
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintEvents(dAtA, i, uint64(len(m.Status)))
-		i += copy(dAtA[i:], m.Status)
+	if len(m.User) > 0 {
+		i -= len(m.User)
+		copy(dAtA[i:], m.User)
+		i = encodeVarintEvents(dAtA, i, uint64(len(m.User)))
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	if len(m.Description) > 0 {
+		i -= len(m.Description)
+		copy(dAtA[i:], m.Description)
+		i = encodeVarintEvents(dAtA, i, uint64(len(m.Description)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.JobType) > 0 {
+		i -= len(m.JobType)
+		copy(dAtA[i:], m.JobType)
+		i = encodeVarintEvents(dAtA, i, uint64(len(m.JobType)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.JobID != 0 {
+		i = encodeVarintEvents(dAtA, i, uint64(m.JobID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintEvents(dAtA []byte, offset int, v uint64) int {
+	offset -= sovEvents(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *CommonEventDetails) Size() (n int) {
 	if m == nil {
@@ -360,6 +434,10 @@ func (m *CommonSQLEventDetails) Size() (n int) {
 			n += 1 + l + sovEvents(uint64(l))
 		}
 	}
+	l = len(m.Tag)
+	if l > 0 {
+		n += 1 + l + sovEvents(uint64(l))
+	}
 	return n
 }
 
@@ -399,14 +477,7 @@ func (m *CommonJobEventDetails) Size() (n int) {
 }
 
 func sovEvents(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozEvents(x uint64) (n int) {
 	return sovEvents(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -426,7 +497,7 @@ func (m *CommonEventDetails) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -454,7 +525,7 @@ func (m *CommonEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Timestamp |= (int64(b) & 0x7F) << shift
+				m.Timestamp |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -473,7 +544,7 @@ func (m *CommonEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -483,6 +554,9 @@ func (m *CommonEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -524,7 +598,7 @@ func (m *CommonSQLEventDetails) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -552,7 +626,7 @@ func (m *CommonSQLEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -562,6 +636,9 @@ func (m *CommonSQLEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -581,7 +658,7 @@ func (m *CommonSQLEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -591,6 +668,9 @@ func (m *CommonSQLEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -610,7 +690,7 @@ func (m *CommonSQLEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.DescriptorID |= (uint32(b) & 0x7F) << shift
+				m.DescriptorID |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -629,7 +709,7 @@ func (m *CommonSQLEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -639,6 +719,9 @@ func (m *CommonSQLEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -658,7 +741,7 @@ func (m *CommonSQLEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -668,10 +751,45 @@ func (m *CommonSQLEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
 			m.PlaceholderValues = append(m.PlaceholderValues, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Tag", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Tag = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -709,7 +827,7 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -737,7 +855,7 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.JobID |= (int64(b) & 0x7F) << shift
+				m.JobID |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -756,7 +874,7 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -766,6 +884,9 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -785,7 +906,7 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -795,6 +916,9 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -814,7 +938,7 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -824,6 +948,9 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -841,7 +968,7 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					v |= (uint32(b) & 0x7F) << shift
+					v |= uint32(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -858,7 +985,7 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
+					packedLen |= int(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -867,12 +994,15 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 					return ErrInvalidLengthEvents
 				}
 				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthEvents
+				}
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
 				var elementCount int
 				var count int
-				for _, integer := range dAtA {
+				for _, integer := range dAtA[iNdEx:postIndex] {
 					if integer < 128 {
 						count++
 					}
@@ -892,7 +1022,7 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						v |= (uint32(b) & 0x7F) << shift
+						v |= uint32(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -916,7 +1046,7 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -926,6 +1056,9 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -955,6 +1088,7 @@ func (m *CommonJobEventDetails) Unmarshal(dAtA []byte) error {
 func skipEvents(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -986,10 +1120,8 @@ func skipEvents(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -1006,94 +1138,34 @@ func skipEvents(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthEvents
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowEvents
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipEvents(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupEvents
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthEvents
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthEvents = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowEvents   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthEvents        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowEvents          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupEvents = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("util/log/eventpb/events.proto", fileDescriptor_events_1dbe437e52f03141)
-}
-
-var fileDescriptor_events_1dbe437e52f03141 = []byte{
-	// 513 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x93, 0x4f, 0x8b, 0xd3, 0x4e,
-	0x1c, 0xc6, 0x9b, 0xed, 0xbf, 0x5f, 0xe7, 0xb7, 0x5d, 0x75, 0x70, 0x31, 0x14, 0x4c, 0x4a, 0x2e,
-	0x56, 0x58, 0x5a, 0xd1, 0x93, 0x82, 0x08, 0xdd, 0xba, 0xd0, 0xa2, 0x82, 0xab, 0x78, 0xf0, 0x52,
-	0x26, 0xc9, 0xd7, 0xec, 0xd4, 0x24, 0xdf, 0x21, 0x33, 0x2d, 0xf4, 0x2d, 0x78, 0xf2, 0x65, 0xf8,
-	0x52, 0xf6, 0xb8, 0xc7, 0x3d, 0x05, 0x4d, 0x6f, 0x1e, 0x05, 0xef, 0x92, 0xa4, 0x66, 0xd3, 0x76,
-	0x11, 0x3d, 0x25, 0x61, 0x3e, 0x4f, 0xe6, 0xf9, 0x3e, 0xcf, 0x0c, 0xb9, 0x3b, 0x57, 0xdc, 0x1f,
-	0xf8, 0xe8, 0x0d, 0x60, 0x01, 0xa1, 0x12, 0x76, 0xfe, 0x94, 0x7d, 0x11, 0xa1, 0x42, 0xda, 0x71,
-	0xd0, 0xf9, 0x18, 0x21, 0x73, 0xce, 0xfa, 0x29, 0xd8, 0xf7, 0xd1, 0xeb, 0xaf, 0xc1, 0xce, 0x6d,
-	0x0f, 0x3d, 0xcc, 0xb0, 0x41, 0xfa, 0x96, 0x2b, 0x3a, 0xa6, 0x87, 0xe8, 0xf9, 0x30, 0xc8, 0xbe,
-	0xec, 0xf9, 0x87, 0x81, 0xe2, 0x01, 0x48, 0xc5, 0x02, 0x91, 0x03, 0xd6, 0x27, 0x8d, 0xd0, 0x63,
-	0x0c, 0x02, 0x0c, 0x9f, 0xa7, 0x3f, 0x1a, 0x81, 0x62, 0xdc, 0x97, 0xf4, 0x88, 0xb4, 0x0a, 0x52,
-	0xd7, 0xba, 0x5a, 0xaf, 0x3a, 0x3c, 0xf8, 0x1e, 0x9b, 0xe4, 0x08, 0x03, 0xae, 0x20, 0x10, 0x6a,
-	0x79, 0x7a, 0x05, 0xd0, 0x13, 0x42, 0x32, 0x1b, 0x53, 0xb5, 0x14, 0xa0, 0xef, 0x75, 0xb5, 0x5e,
-	0x6b, 0x78, 0x6f, 0x13, 0xff, 0x11, 0x9b, 0x87, 0x11, 0xb8, 0xcc, 0x51, 0x4f, 0xac, 0x10, 0x43,
-	0x09, 0xa1, 0xe4, 0x8a, 0x2f, 0xc0, 0x3a, 0x6d, 0x65, 0xd2, 0xb7, 0x4b, 0x01, 0xd6, 0x97, 0x3d,
-	0x72, 0x98, 0x9b, 0x79, 0xf3, 0xfa, 0xc5, 0xb6, 0x1f, 0xa9, 0x98, 0x82, 0x00, 0x42, 0x95, 0xf9,
-	0x69, 0xed, 0xfa, 0x29, 0x00, 0x6a, 0x91, 0xda, 0x5c, 0x42, 0xb4, 0x76, 0xb2, 0x0d, 0x66, 0x6b,
-	0xf4, 0x98, 0xb4, 0x5d, 0x90, 0x4e, 0xc4, 0x85, 0xc2, 0x68, 0xca, 0x5d, 0xbd, 0xda, 0xd5, 0x7a,
-	0xed, 0xa1, 0x91, 0xc4, 0xe6, 0xfe, 0xa8, 0x58, 0x18, 0x8f, 0xb6, 0xc4, 0xfb, 0x57, 0xa2, 0xb1,
-	0x4b, 0x1f, 0x93, 0x9b, 0x4c, 0x08, 0x9f, 0x3b, 0x4c, 0x71, 0x0c, 0xa7, 0x21, 0x0b, 0x40, 0xaf,
-	0x5d, 0xbb, 0xe9, 0x8d, 0x12, 0xf7, 0x8a, 0x05, 0x40, 0x9f, 0x12, 0x2a, 0x7c, 0xe6, 0xc0, 0x19,
-	0xfa, 0x2e, 0x44, 0xd3, 0x05, 0xf3, 0xe7, 0x20, 0xf5, 0x7a, 0xb7, 0x7a, 0x8d, 0xf8, 0x56, 0x89,
-	0x7c, 0x97, 0x81, 0xd6, 0xcf, 0x22, 0xaa, 0x09, 0xda, 0x1b, 0x51, 0xf5, 0x49, 0x63, 0x86, 0x76,
-	0x3a, 0x51, 0xde, 0xdb, 0x9d, 0x24, 0x36, 0xeb, 0x13, 0xb4, 0x77, 0x46, 0xa9, 0xcf, 0xd0, 0x1e,
-	0xbb, 0xf4, 0x25, 0xf9, 0x2f, 0xe5, 0x4b, 0xd5, 0x3d, 0x4c, 0x62, 0xb3, 0x39, 0x41, 0x3b, 0xed,
-	0xe4, 0x6f, 0x5b, 0x6c, 0xce, 0x72, 0x9e, 0x3e, 0x20, 0xff, 0xff, 0x8e, 0x88, 0x63, 0x98, 0xa5,
-	0xba, 0x3b, 0x50, 0x19, 0x29, 0xda, 0xaa, 0xfd, 0xa1, 0xad, 0x13, 0x72, 0xb0, 0xd1, 0x56, 0x9e,
-	0x54, 0x7b, 0x68, 0x26, 0xb1, 0xd9, 0x2e, 0xd7, 0x25, 0xb7, 0xe4, 0xed, 0x72, 0x5f, 0x92, 0x3e,
-	0x23, 0x8d, 0xf4, 0x98, 0xcc, 0xa5, 0xde, 0xf8, 0xb7, 0x53, 0xba, 0x96, 0x0d, 0xef, 0x9f, 0x7f,
-	0x33, 0x2a, 0xe7, 0x89, 0xa1, 0x5d, 0x24, 0x86, 0x76, 0x99, 0x18, 0xda, 0xd7, 0xc4, 0xd0, 0x3e,
-	0xaf, 0x8c, 0xca, 0xc5, 0xca, 0xa8, 0x5c, 0xae, 0x8c, 0xca, 0xfb, 0xe6, 0xfa, 0x46, 0xda, 0x8d,
-	0xec, 0x86, 0x3d, 0xfa, 0x15, 0x00, 0x00, 0xff, 0xff, 0x9f, 0x8d, 0xa7, 0xc7, 0xd5, 0x03, 0x00,
-	0x00,
-}

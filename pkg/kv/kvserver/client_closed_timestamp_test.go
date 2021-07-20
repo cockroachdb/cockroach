@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -35,6 +36,7 @@ import (
 // becomes the leaseholder. See #48553 for more details.
 func TestClosedTimestampWorksWhenRequestsAreSentToNonLeaseHolders(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 60682, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()

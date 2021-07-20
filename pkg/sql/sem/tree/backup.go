@@ -36,10 +36,11 @@ const (
 
 // BackupOptions describes options for the BACKUP execution.
 type BackupOptions struct {
-	CaptureRevisionHistory bool
-	EncryptionPassphrase   Expr
-	Detached               bool
-	EncryptionKMSURI       StringOrPlaceholderOptList
+	CaptureRevisionHistory       bool
+	EncryptionPassphrase         Expr
+	Detached                     bool
+	EncryptionKMSURI             StringOrPlaceholderOptList
+	IncludeDeprecatedInterleaves bool
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -114,6 +115,7 @@ type RestoreOptions struct {
 	SkipMissingSequenceOwners bool
 	SkipMissingViews          bool
 	Detached                  bool
+	SkipLocalitiesCheck       bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -230,6 +232,11 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("kms = ")
 		ctx.FormatNode(&o.EncryptionKMSURI)
 	}
+
+	if o.IncludeDeprecatedInterleaves {
+		maybeAddSep()
+		ctx.WriteString("include_deprecated_interleaves")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -261,6 +268,14 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		o.EncryptionKMSURI = other.EncryptionKMSURI
 	} else if other.EncryptionKMSURI != nil {
 		return errors.New("kms specified multiple times")
+	}
+
+	if o.IncludeDeprecatedInterleaves {
+		if other.IncludeDeprecatedInterleaves {
+			return errors.New("include_deprecated_interleaves option specified multiple times")
+		}
+	} else {
+		o.IncludeDeprecatedInterleaves = other.IncludeDeprecatedInterleaves
 	}
 
 	return nil
@@ -325,6 +340,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("detached")
 	}
+
+	if o.SkipLocalitiesCheck {
+		maybeAddSep()
+		ctx.WriteString("skip_localities_check")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -388,6 +408,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.Detached = other.Detached
 	}
 
+	if o.SkipLocalitiesCheck {
+		if other.SkipLocalitiesCheck {
+			return errors.New("skip_localities_check specified multiple times")
+		}
+	} else {
+		o.SkipLocalitiesCheck = other.SkipLocalitiesCheck
+	}
+
 	return nil
 }
 
@@ -401,5 +429,6 @@ func (o RestoreOptions) IsDefault() bool {
 		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.IntoDB == options.IntoDB &&
-		o.Detached == options.Detached
+		o.Detached == options.Detached &&
+		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck
 }

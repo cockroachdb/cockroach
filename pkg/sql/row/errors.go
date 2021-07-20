@@ -101,8 +101,8 @@ func NewUniquenessConstraintViolationError(
 	skipCols := index.ExplicitColumnStartIdx()
 	return errors.WithDetail(
 		pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
-			"duplicate key value violates unique constraint %q", index.Name,
-		), index.Name),
+			"duplicate key value violates unique constraint %q", index.GetName(),
+		), index.GetName()),
 		fmt.Sprintf(
 			"Key (%s)=(%s) already exists.",
 			strings.Join(names[skipCols:], ","),
@@ -134,7 +134,7 @@ func NewLockNotAvailableError(
 		strings.Join(colNames, ","),
 		strings.Join(values, ","),
 		tableDesc.GetName(),
-		index.Name)
+		index.GetName())
 }
 
 // DecodeRowInfo takes a table descriptor, a key, and an optional value and
@@ -146,7 +146,7 @@ func DecodeRowInfo(
 	key roachpb.Key,
 	value *roachpb.Value,
 	allColumns bool,
-) (_ *descpb.IndexDescriptor, columnNames []string, columnValues []string, _ error) {
+) (_ catalog.Index, columnNames []string, columnValues []string, _ error) {
 	// Strip the tenant prefix and pretend to use the system tenant's SQL codec
 	// for the rest of this function. This is safe because the key is just used
 	// to decode the corresponding datums and never escapes this function.
@@ -167,40 +167,46 @@ func DecodeRowInfo(
 
 	var colIDs []descpb.ColumnID
 	if !allColumns {
-		colIDs = make([]descpb.ColumnID, index.NumColumns())
-		for i := range colIDs {
-			colIDs[i] = index.GetColumnID(i)
+		colIDs = make([]descpb.ColumnID, index.NumKeyColumns())
+		for i := 0; i < index.NumKeyColumns(); i++ {
+			colIDs[i] = index.GetKeyColumnID(i)
 		}
 	} else if index.Primary() {
-		colIDs = make([]descpb.ColumnID, len(tableDesc.PublicColumns()))
-		for i, col := range tableDesc.PublicColumns() {
+		publicColumns := tableDesc.PublicColumns()
+		colIDs = make([]descpb.ColumnID, len(publicColumns))
+		for i, col := range publicColumns {
 			colIDs[i] = col.GetID()
 		}
 	} else {
-		colIDs = make([]descpb.ColumnID, 0, index.NumColumns()+index.NumExtraColumns()+index.NumStoredColumns())
-		_ = index.ForEachColumnID(func(id descpb.ColumnID) error {
-			colIDs = append(colIDs, id)
-			return nil
-		})
+		maxNumIDs := index.NumKeyColumns() + index.NumKeySuffixColumns() + index.NumSecondaryStoredColumns()
+		colIDs = make([]descpb.ColumnID, 0, maxNumIDs)
+		for i := 0; i < index.NumKeyColumns(); i++ {
+			colIDs = append(colIDs, index.GetKeyColumnID(i))
+		}
+		for i := 0; i < index.NumKeySuffixColumns(); i++ {
+			colIDs = append(colIDs, index.GetKeySuffixColumnID(i))
+		}
+		for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
+			colIDs = append(colIDs, index.GetStoredColumnID(i))
+		}
 	}
-
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(colIDs)-1)
 
 	var colIdxMap catalog.TableColMap
-	cols := make([]descpb.ColumnDescriptor, len(colIDs))
+	cols := make([]catalog.Column, len(colIDs))
 	for i, colID := range colIDs {
 		colIdxMap.Set(colID, i)
 		col, err := tableDesc.FindColumnWithID(colID)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		cols[i] = *col.ColumnDesc()
+		cols[i] = col
 	}
 
 	tableArgs := FetcherTableArgs{
 		Desc:             tableDesc,
-		Index:            index.IndexDesc(),
+		Index:            index,
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: indexID != tableDesc.GetPrimaryIndexID(),
 		Cols:             cols,
@@ -237,13 +243,13 @@ func DecodeRowInfo(
 	names := make([]string, len(cols))
 	values := make([]string, len(cols))
 	for i := range cols {
-		names[i] = cols[i].Name
+		names[i] = cols[i].GetName()
 		if datums[i] == tree.DNull {
 			continue
 		}
 		values[i] = datums[i].String()
 	}
-	return index.IndexDesc(), names, values, nil
+	return index, names, values, nil
 }
 
 func (f *singleKVFetcher) close(context.Context) {}

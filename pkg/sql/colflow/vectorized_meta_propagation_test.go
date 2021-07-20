@@ -16,11 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -46,9 +48,9 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 
 	nRows := 10
 	nCols := 1
-	types := rowenc.OneIntCol
+	typs := types.OneIntCol
 
-	input := distsqlutils.NewRowBuffer(types, rowenc.MakeIntRows(nRows, nCols), distsqlutils.RowBufferArgs{})
+	input := distsqlutils.NewRowBuffer(typs, randgen.MakeIntRows(nRows, nCols), distsqlutils.RowBufferArgs{})
 	mtsSpec := execinfrapb.ProcessorCoreUnion{
 		MetadataTestSender: &execinfrapb.MetadataTestSenderSpec{
 			ID: uuid.MakeV4().String(),
@@ -66,26 +68,17 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	col, err := colexec.NewBufferingColumnarizer(ctx, testAllocator, &flowCtx, 1, mts)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	col := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 1, mts)
 	noop := colexecop.NewNoop(col)
-	mat, err := colexec.NewMaterializer(
+	mat := colexec.NewMaterializer(
 		&flowCtx,
 		2, /* processorID */
-		noop,
-		types,
-		nil, /* output */
-		nil, /* getStats */
-		[]colexecop.MetadataSource{col},
-		nil, /* toClose */
-		nil, /* cancelFlow */
+		colexecargs.OpWithMetaInfo{
+			Root:            noop,
+			MetadataSources: colexecop.MetadataSources{col},
+		},
+		typs,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	mtr, err := execinfra.NewMetadataTestReceiver(
 		&flowCtx,

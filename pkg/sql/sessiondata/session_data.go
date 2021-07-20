@@ -230,6 +230,10 @@ type LocalOnlySessionData struct {
 	// EnableSeqScan is a dummy setting for the enable_seqscan var.
 	EnableSeqScan bool
 
+	// EnableExpressionBasedIndexes indicates whether creating expression-based
+	// indexes is allowed.
+	EnableExpressionBasedIndexes bool
+
 	// EnableUniqueWithoutIndexConstraints indicates whether creating unique
 	// constraints without an index is allowed.
 	// TODO(rytaft): remove this once unique without index constraints are fully
@@ -260,13 +264,21 @@ type LocalOnlySessionData struct {
 
 // IsTemporarySchemaID returns true if the given ID refers to any of the temp
 // schemas created by the session.
-func (s *SessionData) IsTemporarySchemaID(ID uint32) bool {
-	for _, tempSchemaID := range s.DatabaseIDToTempSchemaID {
-		if tempSchemaID == ID {
-			return true
+func (s *SessionData) IsTemporarySchemaID(schemaID uint32) bool {
+	_, exists := s.MaybeGetDatabaseForTemporarySchemaID(schemaID)
+	return exists
+}
+
+// MaybeGetDatabaseForTemporarySchemaID returns the corresponding database and
+// true if the schemaID refers to any of the temp schemas created by this
+// session.
+func (s *SessionData) MaybeGetDatabaseForTemporarySchemaID(schemaID uint32) (uint32, bool) {
+	for dbID, tempSchemaID := range s.DatabaseIDToTempSchemaID {
+		if tempSchemaID == schemaID {
+			return dbID, true
 		}
 	}
-	return false
+	return 0, false
 }
 
 // GetTemporarySchemaIDForDb returns the schemaID for the temporary schema if

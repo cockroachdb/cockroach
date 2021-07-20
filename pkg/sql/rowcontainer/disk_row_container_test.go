@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -124,9 +125,9 @@ func TestDiskRowContainer(t *testing.T) {
 			for _, ordering := range orderings {
 				typs := make([]*types.T, numCols)
 				for i := range typs {
-					typs[i] = rowenc.RandSortingType(rng)
+					typs[i] = randgen.RandSortingType(rng)
 				}
-				row := rowenc.RandEncDatumRowOfTypes(rng, typs)
+				row := randgen.RandEncDatumRowOfTypes(rng, typs)
 				func() {
 					d := MakeDiskRowContainer(diskMonitor, typs, ordering, tempEngine)
 					defer d.Close(ctx)
@@ -175,8 +176,8 @@ func TestDiskRowContainer(t *testing.T) {
 		numRows := 1024
 		for _, ordering := range orderings {
 			// numRows rows with numCols columns of random types.
-			types := rowenc.RandSortingTypes(rng, numCols)
-			rows := rowenc.RandEncDatumRowsOfTypes(rng, numRows, types)
+			types := randgen.RandSortingTypes(rng, numCols)
+			rows := randgen.RandEncDatumRowsOfTypes(rng, numRows, types)
 			func() {
 				d := MakeDiskRowContainer(diskMonitor, types, ordering, tempEngine)
 				defer d.Close(ctx)
@@ -256,7 +257,7 @@ func TestDiskRowContainer(t *testing.T) {
 			},
 		}
 		// Use random types and random rows.
-		types := rowenc.RandSortingTypes(rng, numCols)
+		types := randgen.RandSortingTypes(rng, numCols)
 		numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
 		d := MakeDiskRowContainer(diskMonitor, types, ordering, tempEngine)
 		defer d.Close(ctx)
@@ -297,8 +298,8 @@ func TestDiskRowContainer(t *testing.T) {
 		numCols := 2
 		numRows := 10
 		// Use random types and random rows.
-		types := rowenc.RandSortingTypes(rng, numCols)
-		rows := rowenc.RandEncDatumRowsOfTypes(rng, numRows, types)
+		types := randgen.RandSortingTypes(rng, numCols)
+		rows := randgen.RandEncDatumRowsOfTypes(rng, numRows, types)
 		// There are no ordering columns when using the numberedRowIterator.
 		d := MakeDiskRowContainer(diskMonitor, types, nil, tempEngine)
 		defer d.Close(ctx)
@@ -340,7 +341,7 @@ func makeUniqueRows(
 	types []*types.T,
 	ordering colinfo.ColumnOrdering,
 ) (int, rowenc.EncDatumRows) {
-	rows := rowenc.RandEncDatumRowsOfTypes(rng, numRows, types)
+	rows := randgen.RandEncDatumRowsOfTypes(rng, numRows, types)
 	// It is possible there was some duplication, so remove duplicates.
 	var alloc rowenc.DatumAlloc
 	sort.Slice(rows, func(i, j int) bool {
@@ -427,12 +428,12 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	d := MakeDiskRowContainer(diskMonitor, rowenc.OneIntCol, nil /* ordering */, tempEngine)
+	d := MakeDiskRowContainer(diskMonitor, types.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const numCols = 1
 	const numRows = 100
-	rows := rowenc.MakeIntRows(numRows, numCols)
+	rows := randgen.MakeIntRows(numRows, numCols)
 	for _, row := range rows {
 		if err := d.AddRow(ctx, row); err != nil {
 			t.Fatal(err)
@@ -447,8 +448,8 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 			} else if cmp != 0 {
 				return fmt.Errorf(
 					"unexpected row %v, expected %v",
-					row.String(rowenc.OneIntCol),
-					otherRow.String(rowenc.OneIntCol),
+					row.String(types.OneIntCol),
+					otherRow.String(types.OneIntCol),
 				)
 			}
 		}
@@ -502,7 +503,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	}
 
 	// Add a couple extra rows to check that they're picked up by the iterator.
-	extraRows := rowenc.MakeIntRows(4, 1)
+	extraRows := randgen.MakeIntRows(4, 1)
 	for _, row := range extraRows {
 		if err := d.AddRow(ctx, row); err != nil {
 			t.Fatal(err)
@@ -554,14 +555,14 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 
-	d := MakeDiskRowContainer(monitor, rowenc.OneIntCol, nil /* ordering */, tempEngine)
+	d := MakeDiskRowContainer(monitor, types.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const (
 		numCols = 1
 		numRows = 100
 	)
-	rows := rowenc.MakeIntRows(numRows, numCols)
+	rows := randgen.MakeIntRows(numRows, numCols)
 
 	const (
 		numResets            = 4
@@ -592,8 +593,8 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if row.String(rowenc.OneIntCol) != firstRow.String(rowenc.OneIntCol) {
-				t.Fatalf("unexpected row read %s, expected %s", row.String(rowenc.OneIntCol), firstRow.String(rowenc.OneIntCol))
+			if row.String(types.OneIntCol) != firstRow.String(types.OneIntCol) {
+				t.Fatalf("unexpected row read %s, expected %s", row.String(types.OneIntCol), firstRow.String(types.OneIntCol))
 			}
 		}()
 

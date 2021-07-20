@@ -1,0 +1,92 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+syntax = "proto3";
+package cockroach.ccl.sqlproxyccl.tenant;
+option go_package="tenant";
+
+import "gogoproto/gogo.proto";
+
+// WatchEndpointsRequest is empty as we want to get all notifications.
+message WatchEndpointsRequest {}
+
+// EventType shows the event type of the notifications that the server streams to its clients.
+enum EventType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  ADDED = 0;
+  MODIFIED = 1;
+  DELETED = 2;
+}
+
+// WatchEndpointsResponse represents the notifications that the server sends to its clients when clients
+// want to monitor the directory server activity.
+message WatchEndpointsResponse {
+  // EventType is the type of the notifications - added, modified, deleted.
+  EventType typ = 1;
+  // IP is the endpoint that this notification applies to.
+  string ip = 2 [(gogoproto.customname) = "IP"];
+  // TenantID is the tenant that owns the endpoint.
+  uint64 tenant_id = 3[(gogoproto.customname) = "TenantID"];
+}
+
+// ListEndpointsRequest is used to query the server for the list of current endpoints of a given tenant.
+message ListEndpointsRequest {
+  // TenantID identifies the tenant for which the client is requesting a list of the endpoints.
+  uint64 tenant_id = 1[(gogoproto.customname) = "TenantID"];
+}
+
+// EnsureEndpointRequest is used to ensure that a tenant's backend is active. If there is an active backend then the
+// server doesn't have to do anything. If there isn't an active backend, then the server has to bring a new one up.
+message EnsureEndpointRequest {
+  // TenantID is the id of the tenant for which an active backend is requested.
+  uint64 tenant_id = 1[(gogoproto.customname) = "TenantID"];
+}
+
+// EnsureEndpointResponse is empty and indicates that the server processed the request.
+message EnsureEndpointResponse {
+}
+
+// Endpoint contains the information about a tenant endpoint. Most often it is a combination of an ip address and port.
+// i.e. 132.130.1.11:34576
+message Endpoint {
+  // IP is the ip and port combo identifying the tenant endpoint.
+  string IP = 1[(gogoproto.customname) = "IP"];
+}
+
+// ListEndpointsResponse is sent back as a result of requesting the list of endpoints for a given tenant.
+message ListEndpointsResponse {
+  // Endpoints is the list of endpoints currently active for the requested tenant.
+  repeated Endpoint endpoints = 1;
+}
+
+// GetTenantRequest is used by a client to request from the sever metadata related to a given tenant.
+message GetTenantRequest {
+  // TenantID identifies the tenant for which the metadata is being requested.
+  uint64 tenant_id = 1[(gogoproto.customname) = "TenantID"];
+}
+
+// GetTenantResponse is sent back when a client requests metadata for a tenant.
+message GetTenantResponse {
+  // ClusterName is the name of the tenant's cluster.
+  string cluster_name = 1; // add more metadata if needed
+}
+
+// Directory specifies a service that keeps track and manages tenant backends, related metadata and their endpoints.
+service Directory {
+  // ListEndpoints is used to query the server for the list of current endpoints of a given tenant.
+  rpc ListEndpoints(ListEndpointsRequest) returns (ListEndpointsResponse);
+  // WatchEndpoints is used to get a stream, that is used to receive notifications about changes in tenant
+  // backend's state - added, modified and deleted.
+  rpc WatchEndpoints(WatchEndpointsRequest) returns (stream WatchEndpointsResponse);
+  // EnsureEndpoint is used to ensure that a tenant's backend is active. If there is an active backend then the
+  // server doesn't have to do anything. If there isn't an active backend, then the server has to bring a new one up.
+  rpc EnsureEndpoint(EnsureEndpointRequest) returns (EnsureEndpointResponse);
+  // GetTenant is used to fetch the metadata of a specific tenant.
+  rpc GetTenant(GetTenantRequest) returns (GetTenantResponse);
+}

@@ -38,25 +38,26 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		typs     = []*types.T{types.Int}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
+	input.Init(ctx)
 	outbox, err := NewOutbox(testAllocator, input, typs, nil /* getStats */, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
 	// batches to return. Verify this assumption.
-	require.Panics(t, func() { input.Next(ctx) })
+	require.Panics(t, func() { input.Next() })
 
 	// The actual test verifies that the Outbox handles input execution tree
 	// panics by not panicking and returning.
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		outbox.runWithStream(ctx, rpcLayer.client, nil /* cancelFn */)
+		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
 		wg.Done()
 	}()
 
 	inboxMemAccount := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAccount.Close(ctx)
-	inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, func() { close(rpcLayer.server.csChan) })
@@ -64,12 +65,13 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	// The outbox will be sending the panic as eagerly. This Next call will
 	// propagate the panic.
 	err = colexecerror.CatchVectorizedRuntimeError(func() {
-		inbox.Next(ctx).Length()
+		inbox.Init(ctx)
+		inbox.Next()
 	})
 	require.Error(t, err)
 
 	// Expect no metadata.
-	meta := inbox.DrainMeta(ctx)
+	meta := inbox.DrainMeta()
 	require.True(t, len(meta) == 0)
 
 	require.True(t, testutils.IsError(err, "runtime error: index out of range"), err)
@@ -94,7 +96,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		var sourceDrained uint32
 		outbox, err := NewOutbox(allocator, input, typs, nil /* getStats */, []colexecop.MetadataSource{
 			colexectestutils.CallbackMetadataSource{
-				DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
+				DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 					atomic.StoreUint32(&sourceDrained, 1)
 					return nil
 				},
@@ -121,7 +123,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		// Close the csChan to unblock the Recv goroutine (we don't need it for this
 		// test).
 		close(rpcLayer.client.csChan)
-		outbox.runWithStream(ctx, rpcLayer.client, nil /* cancelFn */)
+		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
 
 		require.True(t, atomic.LoadUint32(sourceDrained) == 1)
 	})
@@ -131,14 +133,14 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	t.Run("AfterOutboxError", func(t *testing.T) {
 		// This test, similar to TestOutboxCatchesPanics, relies on the fact that
 		// a BatchBuffer panics when there are no batches to return.
-		require.Panics(t, func() { input.Next(ctx) })
+		require.Panics(t, func() { input.Next() })
 
 		rpcLayer := makeMockFlowStreamRPCLayer()
 		outbox, sourceDrained, err := newOutboxWithMetaSources(testAllocator)
 		require.NoError(t, err)
 
 		close(rpcLayer.client.csChan)
-		outbox.runWithStream(ctx, rpcLayer.client, nil /* cancelFn */)
+		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
 
 		require.True(t, atomic.LoadUint32(sourceDrained) == 1)
 	})

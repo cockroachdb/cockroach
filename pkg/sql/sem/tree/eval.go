@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -55,6 +54,10 @@ import (
 var (
 	// ErrIntOutOfRange is reported when integer arithmetic overflows.
 	ErrIntOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range")
+	// ErrInt4OutOfRange is reported when casting to INT4 overflows.
+	ErrInt4OutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range for type int4")
+	// ErrInt2OutOfRange is reported when casting to INT2 overflows.
+	ErrInt2OutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range for type int2")
 	// ErrFloatOutOfRange is reported when float arithmetic overflows.
 	ErrFloatOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
 	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
@@ -104,7 +107,9 @@ func (*UnaryOp) preferred() bool {
 	return false
 }
 
-func unaryOpFixups(ops map[UnaryOperator]unaryOpOverload) map[UnaryOperator]unaryOpOverload {
+func unaryOpFixups(
+	ops map[UnaryOperatorSymbol]unaryOpOverload,
+) map[UnaryOperatorSymbol]unaryOpOverload {
 	for op, overload := range ops {
 		for i, impl := range overload {
 			casted := impl.(*UnaryOp)
@@ -120,7 +125,7 @@ func unaryOpFixups(ops map[UnaryOperator]unaryOpOverload) map[UnaryOperator]unar
 type unaryOpOverload []overloadImpl
 
 // UnaryOps contains the unary operations indexed by operation type.
-var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
+var UnaryOps = unaryOpFixups(map[UnaryOperatorSymbol]unaryOpOverload{
 	UnaryMinus: {
 		&UnaryOp{
 			Typ:        types.Int,
@@ -428,12 +433,20 @@ func initNonArrayToNonArrayConcatenation() {
 			RightType:    rightType,
 			ReturnType:   types.String,
 			NullableArgs: false,
-			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				if _, ok := left.(*DString); ok {
-					return NewDString(string(MustBeDString(left)) + AsStringWithFlags(right, FmtPgwireText)), nil
+			Fn: func(evalCtx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if leftType == types.String {
+					casted, err := PerformCast(evalCtx, right, types.String)
+					if err != nil {
+						return nil, err
+					}
+					return NewDString(string(MustBeDString(left)) + string(MustBeDString(casted))), nil
 				}
-				if _, ok := right.(*DString); ok {
-					return NewDString(AsStringWithFlags(left, FmtPgwireText) + string(MustBeDString(right))), nil
+				if rightType == types.String {
+					casted, err := PerformCast(evalCtx, left, types.String)
+					if err != nil {
+						return nil, err
+					}
+					return NewDString(string(MustBeDString(casted)) + string(MustBeDString(right))), nil
 				}
 				return nil, errors.New("neither LHS or RHS matched DString")
 			},
@@ -487,25 +500,18 @@ func (o binOpOverload) lookupImpl(left, right *types.T) (*BinOp, bool) {
 	return nil, false
 }
 
-// getJSONPath is used for the #> and #>> operators.
-func getJSONPath(j DJSON, ary DArray) (Datum, error) {
+// GetJSONPath is used for the #> and #>> operators.
+func GetJSONPath(j json.JSON, ary DArray) (json.JSON, error) {
 	// TODO(justin): this is slightly annoying because we have to allocate
 	// a new array since the JSON package isn't aware of DArray.
 	path := make([]string, len(ary.Array))
 	for i, v := range ary.Array {
 		if v == DNull {
-			return DNull, nil
+			return nil, nil
 		}
 		path[i] = string(MustBeDString(v))
 	}
-	result, err := json.FetchPath(j.JSON, path)
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return DNull, nil
-	}
-	return &DJSON{result}, nil
+	return json.FetchPath(j, path)
 }
 
 // BinOps contains the binary operations indexed by operation type.
@@ -1874,7 +1880,14 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.MakeArray(types.String),
 			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				path, err := GetJSONPath(left.(*DJSON).JSON, *MustBeDArray(right))
+				if err != nil {
+					return nil, err
+				}
+				if path == nil {
+					return DNull, nil
+				}
+				return &DJSON{path}, nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -1935,14 +1948,14 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.MakeArray(types.String),
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				res, err := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				res, err := GetJSONPath(left.(*DJSON).JSON, *MustBeDArray(right))
 				if err != nil {
 					return nil, err
 				}
-				if res == DNull {
+				if res == nil {
 					return DNull, nil
 				}
-				text, err := res.(*DJSON).JSON.AsText()
+				text, err := res.AsText()
 				if err != nil {
 					return nil, err
 				}
@@ -3051,10 +3064,39 @@ type EvalDatabase interface {
 	) (isVisible bool, exists bool, err error)
 }
 
+// TypeResolver is an interface for resolving types and type OIDs.
+type TypeResolver interface {
+	TypeReferenceResolver
+
+	// ResolveOIDFromString looks up the populated value of the OID with the
+	// desired resultType which matches the provided name.
+	//
+	// The return value is a fresh DOid of the input oid.Oid with name and OID
+	// set to the result of the query. If there was not exactly one result to the
+	// query, an error will be returned.
+	ResolveOIDFromString(
+		ctx context.Context, resultType *types.T, toResolve *DString,
+	) (*DOid, error)
+
+	// ResolveOIDFromOID looks up the populated value of the oid with the
+	// desired resultType which matches the provided oid.
+	//
+	// The return value is a fresh DOid of the input oid.Oid with name and OID
+	// set to the result of the query. If there was not exactly one result to the
+	// query, an error will be returned.
+	ResolveOIDFromOID(
+		ctx context.Context, resultType *types.T, toResolve *DOid,
+	) (*DOid, error)
+}
+
 // EvalPlanner is a limited planner that can be used from EvalContext.
 type EvalPlanner interface {
 	EvalDatabase
-	TypeReferenceResolver
+	TypeResolver
+
+	// GetImmutableTableInterfaceByID returns an interface{} with
+	// catalog.TableDescriptor to avoid a circular dependency.
+	GetImmutableTableInterfaceByID(ctx context.Context, id int) (interface{}, error)
 
 	// GetTypeFromValidSQLSyntax parses a column type when the input
 	// string uses the parseable SQL representation of a type name, e.g.
@@ -3098,14 +3140,6 @@ type EvalPlanner interface {
 		force bool,
 	) error
 
-	// CompactEngineSpan is used to compact an engine key span at the given
-	// (nodeID, storeID). If we add more overloads to the compact_span builtin,
-	// this parameter list should be changed to a struct union to accommodate
-	// those overloads.
-	CompactEngineSpan(
-		ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
-	) error
-
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner
 	// implementation in authorization.go
@@ -3114,6 +3148,14 @@ type EvalPlanner interface {
 		member security.SQLUsername,
 	) (map[security.SQLUsername]bool, error)
 }
+
+// CompactEngineSpanFunc is used to compact an engine key span at the given
+// (nodeID, storeID). If we add more overloads to the compact_span builtin,
+// this parameter list should be changed to a struct union to accommodate
+// those overloads.
+type CompactEngineSpanFunc func(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+) error
 
 // EvalSessionAccessor is a limited interface to access session variables.
 type EvalSessionAccessor interface {
@@ -3232,7 +3274,8 @@ type SequenceOperators interface {
 // errors when run by any tenant other than the system tenant.
 type TenantOperator interface {
 	// CreateTenant attempts to install a new tenant in the system. It returns
-	// an error if the tenant already exists.
+	// an error if the tenant already exists. The new tenant is created at the
+	// current active version of the cluster performing the create.
 	CreateTenant(ctx context.Context, tenantID uint64) error
 
 	// DestroyTenant attempts to uninstall an existing tenant from the system.
@@ -3421,6 +3464,9 @@ type EvalContext struct {
 	SQLLivenessReader sqlliveness.Reader
 
 	SQLStatsResetter SQLStatsResetter
+
+	// CompactEngineSpan is used to force compaction of a span in a store.
+	CompactEngineSpan CompactEngineSpanFunc
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
@@ -3442,13 +3488,11 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) EvalContext {
 	ctx := EvalContext{
-		Codec: keys.SystemSQLCodec,
-		Txn:   &kv.Txn{},
-		SessionData: &sessiondata.SessionData{SessionData: sessiondatapb.SessionData{
-			VectorizeMode: sessiondatapb.VectorizeOn,
-		}},
-		Settings: st,
-		NodeID:   base.TestingIDContainer,
+		Codec:       keys.SystemSQLCodec,
+		Txn:         &kv.Txn{},
+		SessionData: &sessiondata.SessionData{},
+		Settings:    st,
+		NodeID:      base.TestingIDContainer,
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor
@@ -3764,75 +3808,6 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 // name of the function into group 1.
 // e.g. function(a, b, c) or function( a )
 var pgSignatureRegexp = regexp.MustCompile(`^\s*([\w\."]+)\s*\((?:(?:\s*[\w"]+\s*,)*\s*[\w"]+)?\s*\)\s*$`)
-
-// regTypeInfo contains details on a pg_catalog table that has a reg* type.
-type regTypeInfo struct {
-	tableName string
-	// nameCol is the name of the column that contains the table's entity name.
-	nameCol string
-	// objName is a human-readable name describing the objects in the table.
-	objName string
-	// errType is the pg error code in case the object does not exist.
-	errType pgcode.Code
-}
-
-// regTypeInfos maps an oid.Oid to a regTypeInfo that describes the pg_catalog
-// table that contains the entities of the type of the key.
-var regTypeInfos = map[oid.Oid]regTypeInfo{
-	oid.T_regclass:     {"pg_class", "relname", "relation", pgcode.UndefinedTable},
-	oid.T_regtype:      {"pg_type", "typname", "type", pgcode.UndefinedObject},
-	oid.T_regproc:      {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
-	oid.T_regprocedure: {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
-	oid.T_regnamespace: {"pg_namespace", "nspname", "namespace", pgcode.UndefinedObject},
-}
-
-// queryOidWithJoin looks up the name or OID of an input OID or string in the
-// pg_catalog table that the input oid.Oid belongs to. If the input Datum
-// is a DOid, the relevant table will be queried by OID; if the input is a
-// DString, the table will be queried by its name column.
-//
-// The return value is a fresh DOid of the input oid.Oid with name and OID
-// set to the result of the query. If there was not exactly one result to the
-// query, an error will be returned.
-func queryOidWithJoin(
-	ctx *EvalContext, typ *types.T, d Datum, joinClause string, additionalWhere string,
-) (*DOid, error) {
-	ret := &DOid{semanticType: typ}
-	info := regTypeInfos[typ.Oid()]
-	var queryCol string
-	switch d.(type) {
-	case *DOid:
-		queryCol = "oid"
-	case *DString:
-		queryCol = info.nameCol
-	default:
-		return nil, errors.AssertionFailedf("invalid argument to OID cast: %s", d)
-	}
-	results, err := ctx.InternalExecutor.QueryRow(
-		ctx.Ctx(), "queryOidWithJoin",
-		ctx.Txn,
-		fmt.Sprintf(
-			"SELECT %s.oid, %s FROM pg_catalog.%s %s WHERE %s = $1 %s",
-			info.tableName, info.nameCol, info.tableName, joinClause, queryCol, additionalWhere),
-		d)
-	if err != nil {
-		if errors.HasType(err, (*MultipleResultsError)(nil)) {
-			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
-				"more than one %s named %s", info.objName, d)
-		}
-		return nil, err
-	}
-	if results.Len() == 0 {
-		return nil, pgerror.Newf(info.errType, "%s %s does not exist", info.objName, d)
-	}
-	ret.DInt = results[0].(*DOid).DInt
-	ret.name = AsStringWithFlags(results[1], FmtBareStrings)
-	return ret, nil
-}
-
-func queryOid(ctx *EvalContext, typ *types.T, d Datum) (*DOid, error) {
-	return queryOidWithJoin(ctx, typ, d, "", "")
-}
 
 // Eval implements the TypedExpr interface.
 func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {

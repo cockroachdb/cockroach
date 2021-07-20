@@ -12,16 +12,16 @@ package kvserver
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/google/btree"
 )
 
 // ReplicaPlaceholder represents a "lock" of a part of the keyspace on a given
-// *Store for the application of a (preemptive or Raft) snapshot. Placeholders
+// *Store for the receipt and application of a raft snapshot. Placeholders
 // are kept synchronously in two places in (*Store).mu, namely the
-// replicaPlaceholders and replicaByKey maps, and exist only while the Raft
-// scheduler tries to apply raft.Ready containing a snapshot to some Replica.
+// replicaPlaceholders and replicaByKey maps.
 //
 // To see why placeholders are necessary, consider the case in which two
 // snapshots arrive at a Store, one for r1 and bounds [a,c) and the other for r2
@@ -52,12 +52,42 @@ import (
 // existing placeholder (inserting its own atomically when none found), so that
 // g2 would later fail the overlap check on g1's placeholder.
 //
-// Placeholders are removed by the goroutine that inserted them at the end of
-// the respective Raft cycle, so they usually live only for as long as it takes
-// to write the snapshot to disk. See (*Store).processRaftSnapshotRequest for
-// details.
+// The rules for placeholders are as follows:
+//
+// - placeholders are only installed for uninitialized replicas (under raftMu).
+//   In particular, a snapshot that gets sent to an initialized replica installs
+//   no placeholder (the initialized replica plays the role of the placeholder).
+// - they do not overlap any initialized replica's key bounds. (This invariant
+//   is maintained via Store.mu.replicasByKey).
+// - a placeholder can only be removed by the operation that installed it, and
+//   that operation *must* eventually remove it. In practice, they are inserted
+//   before receiving the snapshot data, so they are fairly long-lived. They
+//   are removed when the receipt of the snapshot fails, the snapshot is discarded,
+//   or the snapshot was fully applied (in which case the placeholder is exchanged
+//   for a RangeDescriptor).
+// - placeholders must not be copied (i.e. always pass by reference).
+//
+// In particular, when removing a placeholder we don't have to worry about
+// whether we're removing our own or someone else's. This is because they
+// can't overlap; and if we inserted one it's still there (since nobody else
+// can delete it).
+//
+// Note also that both initialized and uninitialized replicas can get
+// replicaGC'ed (which also removes any placeholders). It is thus possible for a
+// snapshot to begin streaming to either an uninitialized (via a placeholder) or
+// initialized replica, and for that replica to be removed by replicaGC by the
+// time the snapshot is ready to apply. This will simply result the snapshot
+// being discarded (and has to - applying the snapshot could lead to the races
+// that placeholders were introduced for in the first place) due to the
+// replicaID being rejected by the range tombstone (written during replicaGC) in
+// snapshot application.
+//
+// See (*Store).receiveSnapshot for where placeholders are installed. This will
+// eventually call (*Store).processRaftSnapshotRequest which triggers the actual
+// application.
 type ReplicaPlaceholder struct {
 	rangeDesc roachpb.RangeDescriptor
+	tainted   int32 // atomic
 }
 
 var _ rangeKeyItem = (*ReplicaPlaceholder)(nil)
@@ -77,6 +107,10 @@ func (r *ReplicaPlaceholder) Less(i btree.Item) bool {
 }
 
 func (r *ReplicaPlaceholder) String() string {
-	return fmt.Sprintf("range=%d [%s-%s) (placeholder)",
-		r.Desc().RangeID, r.rangeDesc.StartKey, r.rangeDesc.EndKey)
+	tainted := ""
+	if atomic.LoadInt32(&r.tainted) != 0 {
+		tainted = ",tainted"
+	}
+	return fmt.Sprintf("range=%d [%s-%s) (placeholder%s)",
+		r.Desc().RangeID, r.rangeDesc.StartKey, r.rangeDesc.EndKey, tainted)
 }

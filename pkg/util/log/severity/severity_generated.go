@@ -8,16 +8,16 @@ import "github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 // severity could not be determined.
 const UNKNOWN = logpb.Severity_UNKNOWN
 
-// INFO is used for informational messages, when no action
-// is required as a result.
+// INFO is used for informational messages that do not
+// require action.
 const INFO = logpb.Severity_INFO
 
 // WARNING is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// where normal operation is expected to resume automatically.
 const WARNING = logpb.Severity_WARNING
 
 // ERROR is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 const ERROR = logpb.Severity_ERROR
 

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -29,7 +28,7 @@ import (
 // these tables and views on the public schema, but we instead do it in
 // our own defined virtual table / schema.
 var pgExtension = virtualSchema{
-	name: sessiondata.PgExtensionSchemaName,
+	name: catconstants.PgExtensionSchemaName,
 	tableDefs: map[descpb.ID]virtualSchemaDef{
 		catconstants.PgExtensionGeographyColumnsTableID: pgExtensionGeographyColumnsTable,
 		catconstants.PgExtensionGeometryColumnsTableID:  pgExtensionGeometryColumnsTable,
@@ -143,7 +142,7 @@ CREATE TABLE pg_extension.spatial_ref_sys (
 	proj4text varchar(2048)
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		for _, projection := range geoprojbase.Projections {
+		for _, projection := range geoprojbase.AllProjections() {
 			if err := addRow(
 				tree.NewDInt(tree.DInt(projection.SRID)),
 				tree.NewDString(projection.AuthName),

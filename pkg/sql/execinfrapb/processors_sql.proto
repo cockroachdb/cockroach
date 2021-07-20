@@ -32,14 +32,15 @@ import "gogoproto/gogo.proto";
 // "pre-canned" rows. This is not intended to be used for very large datasets.
 message ValuesCoreSpec {
   // There is one DatumInfo for each element in a row. Can be empty, in which
-  // case raw_bytes must be empty.
+  // case raw_bytes will be empty.
   repeated DatumInfo columns = 1 [(gogoproto.nullable) = false];
 
   // The number of rows is especially useful when we have zero columns.
   optional uint64 num_rows = 3 [(gogoproto.nullable) = false];
 
-  // Each raw block encodes one or more data rows; each datum is encoded
-  // according to the corresponding DatumInfo.
+  // Each raw block encodes one row; each datum is encoded according to the
+  // corresponding DatumInfo. As an optimization, if columns is empty, this will
+  // be empty rather than containing empty byte strings.
   repeated bytes raw_bytes = 2;
 }
 
@@ -295,6 +296,22 @@ message JoinReaderSpec {
   // For example, a valid LookupExpr for N=2 and M=2 might be:
   //   @3 IN (10, 20) AND @2 = @4.
   optional Expression lookup_expr = 16 [(gogoproto.nullable) = false];
+
+  // If RemoteLookupExpr is set, this is a locality optimized lookup join. In
+  // this case, LookupExpr contains the lookup join conditions targeting ranges
+  // located on local nodes (relative to the gateway region), and
+  // RemoteLookupExpr contains the lookup join conditions targeting remote
+  // nodes. The optimizer will only plan a locality optimized lookup join if it
+  // is known that each lookup returns at most one row. This fact allows the
+  // joinReader to use the local conditions in LookupExpr first, and if a match
+  // is found locally for each input row, there is no need to search remote
+  // nodes. If a local match is not found for all input rows, the joinReader
+  // uses RemoteLookupExpr to search remote nodes.
+  //
+  // The same restrictions on supported expressions that apply to LookupExpr
+  // also apply to RemoteLookupExpr. See the comment above LookupExpr for more
+  // details.
+  optional Expression remote_lookup_expr = 17 [(gogoproto.nullable) = false];
 
   // LookupColumns, like LookupExpr, represents the part of the join condition
   // used to perform the lookup into the index. It is used as an optimization

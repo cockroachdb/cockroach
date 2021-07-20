@@ -1,0 +1,87 @@
+parse
+ALTER RANGE default CONFIGURE ZONE = 'foo'
+----
+ALTER RANGE default CONFIGURE ZONE = 'foo'
+ALTER RANGE default CONFIGURE ZONE = ('foo') -- fully parenthesized
+ALTER RANGE default CONFIGURE ZONE = _ -- literals removed
+ALTER RANGE _ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+EXPLAIN ALTER RANGE default CONFIGURE ZONE = 'foo'
+----
+EXPLAIN ALTER RANGE default CONFIGURE ZONE = 'foo'
+EXPLAIN ALTER RANGE default CONFIGURE ZONE = ('foo') -- fully parenthesized
+EXPLAIN ALTER RANGE default CONFIGURE ZONE = _ -- literals removed
+EXPLAIN ALTER RANGE _ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+ALTER RANGE meta CONFIGURE ZONE = 'foo'
+----
+ALTER RANGE meta CONFIGURE ZONE = 'foo'
+ALTER RANGE meta CONFIGURE ZONE = ('foo') -- fully parenthesized
+ALTER RANGE meta CONFIGURE ZONE = _ -- literals removed
+ALTER RANGE _ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+ALTER RANGE default CONFIGURE ZONE USING foo = bar, baz = yay
+----
+ALTER RANGE default CONFIGURE ZONE USING foo = bar, baz = yay
+ALTER RANGE default CONFIGURE ZONE USING foo = (bar), baz = (yay) -- fully parenthesized
+ALTER RANGE default CONFIGURE ZONE USING foo = bar, baz = yay -- literals removed
+ALTER RANGE _ CONFIGURE ZONE USING _ = _, _ = _ -- identifiers removed
+
+parse
+ALTER RANGE meta CONFIGURE ZONE USING foo = bar, baz = yay
+----
+ALTER RANGE meta CONFIGURE ZONE USING foo = bar, baz = yay
+ALTER RANGE meta CONFIGURE ZONE USING foo = (bar), baz = (yay) -- fully parenthesized
+ALTER RANGE meta CONFIGURE ZONE USING foo = bar, baz = yay -- literals removed
+ALTER RANGE _ CONFIGURE ZONE USING _ = _, _ = _ -- identifiers removed
+
+parse
+ALTER RANGE default CONFIGURE ZONE USING foo.bar = yay
+----
+ALTER RANGE default CONFIGURE ZONE USING "foo.bar" = yay -- normalized!
+ALTER RANGE default CONFIGURE ZONE USING "foo.bar" = (yay) -- fully parenthesized
+ALTER RANGE default CONFIGURE ZONE USING "foo.bar" = yay -- literals removed
+ALTER RANGE _ CONFIGURE ZONE USING _ = _ -- identifiers removed
+
+parse
+ALTER RANGE meta CONFIGURE ZONE USING foo.bar = yay
+----
+ALTER RANGE meta CONFIGURE ZONE USING "foo.bar" = yay -- normalized!
+ALTER RANGE meta CONFIGURE ZONE USING "foo.bar" = (yay) -- fully parenthesized
+ALTER RANGE meta CONFIGURE ZONE USING "foo.bar" = yay -- literals removed
+ALTER RANGE _ CONFIGURE ZONE USING _ = _ -- identifiers removed
+
+parse
+ALTER RANGE default CONFIGURE ZONE DISCARD
+----
+ALTER RANGE default CONFIGURE ZONE DISCARD
+ALTER RANGE default CONFIGURE ZONE DISCARD -- fully parenthesized
+ALTER RANGE default CONFIGURE ZONE DISCARD -- literals removed
+ALTER RANGE _ CONFIGURE ZONE DISCARD -- identifiers removed
+
+parse
+ALTER RANGE meta CONFIGURE ZONE DISCARD
+----
+ALTER RANGE meta CONFIGURE ZONE DISCARD
+ALTER RANGE meta CONFIGURE ZONE DISCARD -- fully parenthesized
+ALTER RANGE meta CONFIGURE ZONE DISCARD -- literals removed
+ALTER RANGE _ CONFIGURE ZONE DISCARD -- identifiers removed
+
+parse
+ALTER RANGE default CONFIGURE ZONE USING DEFAULT
+----
+ALTER RANGE default CONFIGURE ZONE USING DEFAULT
+ALTER RANGE default CONFIGURE ZONE USING DEFAULT -- fully parenthesized
+ALTER RANGE default CONFIGURE ZONE USING DEFAULT -- literals removed
+ALTER RANGE _ CONFIGURE ZONE USING DEFAULT -- identifiers removed
+
+parse
+ALTER RANGE meta CONFIGURE ZONE USING DEFAULT
+----
+ALTER RANGE meta CONFIGURE ZONE USING DEFAULT
+ALTER RANGE meta CONFIGURE ZONE USING DEFAULT -- fully parenthesized
+ALTER RANGE meta CONFIGURE ZONE USING DEFAULT -- literals removed
+ALTER RANGE _ CONFIGURE ZONE USING DEFAULT -- identifiers removed

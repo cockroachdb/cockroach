@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -112,20 +113,8 @@ func (w index) GetType() descpb.IndexDescriptor_Type {
 }
 
 // GetPartitioning returns the partitioning descriptor of the index.
-func (w index) GetPartitioning() descpb.PartitioningDescriptor {
-	return w.desc.Partitioning
-}
-
-// FindPartitionByName searches the index's partitioning descriptor for a
-// partition whose name is the input and returns it, or nil if no match is found.
-func (w index) FindPartitionByName(name string) descpb.PartitioningDescriptor {
-	return *w.desc.Partitioning.FindPartitionByName(name)
-}
-
-// PartitionNames returns a slice containing the name of every partition and
-// subpartition in an arbitrary order.
-func (w index) PartitionNames() []string {
-	return w.desc.Partitioning.PartitionNames()
+func (w index) GetPartitioning() catalog.Partitioning {
+	return &partitioning{desc: &w.desc.Partitioning}
 }
 
 // ExplicitColumnStartIdx returns the first index in which the column is
@@ -150,28 +139,51 @@ func (w index) IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnI
 // HasOldStoredColumns returns whether the index has stored columns in the old
 // format (data encoded the same way as if they were in an implicit column).
 func (w index) HasOldStoredColumns() bool {
-	return w.desc.HasOldStoredColumns()
+	return w.NumKeySuffixColumns() > 0 &&
+		!w.Primary() &&
+		len(w.desc.StoreColumnIDs) < len(w.desc.StoreColumnNames)
 }
 
 // InvertedColumnID returns the ColumnID of the inverted column of the inverted
-// index. This is always the last column in ColumnIDs. Panics if the index is
+// index. This is always the last column in KeyColumnIDs. Panics if the index is
 // not inverted.
 func (w index) InvertedColumnID() descpb.ColumnID {
 	return w.desc.InvertedColumnID()
 }
 
 // InvertedColumnName returns the name of the inverted column of the inverted
-// index. This is always the last column in ColumnNames. Panics if the index is
+// index. This is always the last column in KeyColumnNames. Panics if the index is
 // not inverted.
 func (w index) InvertedColumnName() string {
 	return w.desc.InvertedColumnName()
 }
 
-// ContainsColumnID returns true if the index descriptor contains the specified
-// column ID either in its explicit column IDs, the extra column IDs, or the
-// stored column IDs.
-func (w index) ContainsColumnID(colID descpb.ColumnID) bool {
-	return w.desc.ContainsColumnID(colID)
+// CollectKeyColumnIDs creates a new set containing the column IDs in the key
+// of this index.
+func (w index) CollectKeyColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(w.desc.KeyColumnIDs...)
+}
+
+// CollectSecondaryStoredColumnIDs creates a new set containing the column IDs
+// stored in this index if it is a secondary index.
+func (w index) CollectSecondaryStoredColumnIDs() catalog.TableColSet {
+	if w.Primary() {
+		return catalog.TableColSet{}
+	}
+	return catalog.MakeTableColSet(w.desc.StoreColumnIDs...)
+}
+
+// CollectKeySuffixColumnIDs creates a new set containing the key suffix column
+// IDs in this index. These are the columns from the table's primary index which
+// are otherwise not in this index.
+func (w index) CollectKeySuffixColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(w.desc.KeySuffixColumnIDs...)
+}
+
+// CollectCompositeColumnIDs creates a new set containing the composite column
+// IDs.
+func (w index) CollectCompositeColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(w.desc.CompositeColumnIDs...)
 }
 
 // GetGeoConfig returns the geo config in the index descriptor.
@@ -230,36 +242,35 @@ func (w index) GetInterleavedBy(interleavedByOrdinal int) descpb.ForeignKeyRefer
 	return w.desc.InterleavedBy[interleavedByOrdinal]
 }
 
-// NumColumns returns the number of columns as per the index descriptor.
-func (w index) NumColumns() int {
-	return len(w.desc.ColumnIDs)
+// NumKeyColumns returns the number of columns in the index key.
+func (w index) NumKeyColumns() int {
+	return len(w.desc.KeyColumnIDs)
 }
 
-// GetColumnID returns the ID of the columnOrdinal-th column.
-func (w index) GetColumnID(columnOrdinal int) descpb.ColumnID {
-	return w.desc.ColumnIDs[columnOrdinal]
+// GetKeyColumnID returns the ID of the columnOrdinal-th column in the index key.
+func (w index) GetKeyColumnID(columnOrdinal int) descpb.ColumnID {
+	return w.desc.KeyColumnIDs[columnOrdinal]
 }
 
-// GetColumnName returns the name of the columnOrdinal-th column.
-func (w index) GetColumnName(columnOrdinal int) string {
-	return w.desc.ColumnNames[columnOrdinal]
+// GetKeyColumnName returns the name of the columnOrdinal-th column in the index
+// key.
+func (w index) GetKeyColumnName(columnOrdinal int) string {
+	return w.desc.KeyColumnNames[columnOrdinal]
 }
 
-// GetColumnDirection returns the direction of the columnOrdinal-th column.
-func (w index) GetColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction {
-	return w.desc.ColumnDirections[columnOrdinal]
+// GetKeyColumnDirection returns the direction of the columnOrdinal-th column in
+// the index key.
+func (w index) GetKeyColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction {
+	return w.desc.KeyColumnDirections[columnOrdinal]
 }
 
-// ForEachColumnID applies its argument fn to each of the column IDs in the
-// index descriptor. If there is an error, that error is returned immediately.
-func (w index) ForEachColumnID(fn func(colID descpb.ColumnID) error) error {
-	return w.desc.RunOverAllColumns(fn)
-}
-
-// NumStoredColumns returns the number of columns which the index stores in
-// addition to the columns which are explicitly part of the index (STORING
-// clause). Only used for secondary indexes.
-func (w index) NumStoredColumns() int {
+// NumSecondaryStoredColumns returns the number of columns which the index
+// stores in addition to the columns which are explicitly part of the index
+// (STORING clause). Returns 0 if the index isn't secondary.
+func (w index) NumSecondaryStoredColumns() int {
+	if w.Primary() {
+		return 0
+	}
 	return len(w.desc.StoreColumnIDs)
 }
 
@@ -273,15 +284,17 @@ func (w index) GetStoredColumnName(storedColumnOrdinal int) string {
 	return w.desc.StoreColumnNames[storedColumnOrdinal]
 }
 
-// NumExtraColumns returns the number of additional columns referenced by the
-// index descriptor.
-func (w index) NumExtraColumns() int {
-	return len(w.desc.ExtraColumnIDs)
+// NumKeySuffixColumns returns the number of additional columns referenced by
+// the index descriptor, which are not part of the index key but which are part
+// of the table's primary key.
+func (w index) NumKeySuffixColumns() int {
+	return len(w.desc.KeySuffixColumnIDs)
 }
 
-// GetExtraColumnID returns the ID of the extraColumnOrdinal-th extra column.
-func (w index) GetExtraColumnID(extraColumnOrdinal int) descpb.ColumnID {
-	return w.desc.ExtraColumnIDs[extraColumnOrdinal]
+// GetKeySuffixColumnID returns the ID of the extraColumnOrdinal-th key suffix
+// column.
+func (w index) GetKeySuffixColumnID(keySuffixColumnOrdinal int) descpb.ColumnID {
+	return w.desc.KeySuffixColumnIDs[keySuffixColumnOrdinal]
 }
 
 // NumCompositeColumns returns the number of composite columns referenced by the
@@ -294,6 +307,131 @@ func (w index) NumCompositeColumns() int {
 // composite column.
 func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID {
 	return w.desc.CompositeColumnIDs[compositeColumnOrdinal]
+}
+
+// partitioning is the backing struct for a catalog.Partitioning interface.
+type partitioning struct {
+	desc *descpb.PartitioningDescriptor
+}
+
+// PartitioningDesc returns the underlying protobuf descriptor.
+func (p partitioning) PartitioningDesc() *descpb.PartitioningDescriptor {
+	return p.desc
+}
+
+// DeepCopy returns a deep copy of the receiver.
+func (p partitioning) DeepCopy() catalog.Partitioning {
+	return &partitioning{desc: protoutil.Clone(p.desc).(*descpb.PartitioningDescriptor)}
+}
+
+// FindPartitionByName recursively searches the partitioning for a partition
+// whose name matches the input and returns it, or nil if no match is found.
+func (p partitioning) FindPartitionByName(name string) (found catalog.Partitioning) {
+	_ = p.forEachPartitionName(func(partitioning catalog.Partitioning, currentName string) error {
+		if name == currentName {
+			found = partitioning
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	return found
+}
+
+// ForEachPartitionName applies fn on each of the partition names in this
+// partition and recursively in its subpartitions.
+// Supports iterutil.Done.
+func (p partitioning) ForEachPartitionName(fn func(name string) error) error {
+	err := p.forEachPartitionName(func(_ catalog.Partitioning, name string) error {
+		return fn(name)
+	})
+	if iterutil.Done(err) {
+		return nil
+	}
+	return err
+}
+
+func (p partitioning) forEachPartitionName(
+	fn func(partitioning catalog.Partitioning, name string) error,
+) error {
+	for _, l := range p.desc.List {
+		err := fn(p, l.Name)
+		if err != nil {
+			return err
+		}
+		err = partitioning{desc: &l.Subpartitioning}.forEachPartitionName(fn)
+		if err != nil {
+			return err
+		}
+	}
+	for _, r := range p.desc.Range {
+		err := fn(p, r.Name)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// NumLists returns the number of list elements in the underlying partitioning
+// descriptor.
+func (p partitioning) NumLists() int {
+	return len(p.desc.List)
+}
+
+// NumRanges returns the number of range elements in the underlying
+// partitioning descriptor.
+func (p partitioning) NumRanges() int {
+	return len(p.desc.Range)
+}
+
+// ForEachList applies fn on each list element of the wrapped partitioning.
+// Supports iterutil.Done.
+func (p partitioning) ForEachList(
+	fn func(name string, values [][]byte, subPartitioning catalog.Partitioning) error,
+) error {
+	for _, l := range p.desc.List {
+		subp := partitioning{desc: &l.Subpartitioning}
+		err := fn(l.Name, l.Values, subp)
+		if err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// ForEachRange applies fn on each range element of the wrapped partitioning.
+// Supports iterutil.Done.
+func (p partitioning) ForEachRange(fn func(name string, from, to []byte) error) error {
+	for _, r := range p.desc.Range {
+		err := fn(r.Name, r.FromInclusive, r.ToExclusive)
+		if err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// NumColumns is how large of a prefix of the columns in an index are used in
+// the function mapping column values to partitions. If this is a
+// subpartition, this is offset to start from the end of the parent
+// partition's columns. If NumColumns is 0, then there is no partitioning.
+func (p partitioning) NumColumns() int {
+	return int(p.desc.NumColumns)
+}
+
+// NumImplicitColumns specifies the number of columns that implicitly prefix a
+// given index. This occurs if a user specifies a PARTITION BY which is not a
+// prefix of the given index, in which case the KeyColumnIDs are added in front
+// of the index and this field denotes the number of columns added as a prefix.
+// If NumImplicitColumns is 0, no implicit columns are defined for the index.
+func (p partitioning) NumImplicitColumns() int {
+	return int(p.desc.NumImplicitColumns)
 }
 
 // indexCache contains precomputed slices of catalog.Index interfaces.

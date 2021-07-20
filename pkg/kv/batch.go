@@ -49,7 +49,10 @@ type Batch struct {
 	// The Header which will be used to send the resulting BatchRequest.
 	// To be modified directly.
 	Header roachpb.Header
-	reqs   []roachpb.RequestUnion
+	// The AdmissionHeader which will be used when sending the resulting
+	// BatchRequest. To be modified directly.
+	AdmissionHeader roachpb.AdmissionHeader
+	reqs            []roachpb.RequestUnion
 	// Set when AddRawRequest is used, in which case using the "other"
 	// operations renders the batch unusable.
 	raw bool
@@ -254,7 +257,6 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.RequestLeaseRequest:
 			case *roachpb.CheckConsistencyRequest:
 			case *roachpb.WriteBatchRequest:
-			case *roachpb.ImportRequest:
 			case *roachpb.AdminScatterRequest:
 			case *roachpb.AddSSTableRequest:
 			case *roachpb.MigrateRequest:

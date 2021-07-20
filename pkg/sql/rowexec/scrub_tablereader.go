@@ -113,13 +113,13 @@ func newScrubTableReader(
 		}
 	} else {
 		colIdxMap := catalog.ColumnIDToOrdinalMap(tr.tableDesc.PublicColumns())
-		err := tr.tableDesc.PublicNonPrimaryIndexes()[spec.IndexIdx-1].ForEachColumnID(func(id descpb.ColumnID) error {
-			neededColumns.Add(colIdxMap.GetDefault(id))
-			return nil
+		idx := tr.tableDesc.PublicNonPrimaryIndexes()[spec.IndexIdx-1]
+		colIDs := idx.CollectKeyColumnIDs()
+		colIDs.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+		colIDs.UnionWith(idx.CollectKeySuffixColumnIDs())
+		colIDs.ForEach(func(colID descpb.ColumnID) {
+			neededColumns.Add(colIdxMap.GetDefault(colID))
 		})
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	var fetcher row.Fetcher
@@ -196,7 +196,7 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 	}
 	var primaryKeyValues bytes.Buffer
 	primaryKeyValues.WriteByte('(')
-	for i, id := range table.PrimaryIndex.ColumnIDs {
+	for i, id := range table.PrimaryIndex.KeyColumnIDs {
 		if i > 0 {
 			primaryKeyValues.WriteByte(',')
 		}

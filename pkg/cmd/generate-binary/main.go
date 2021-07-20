@@ -200,6 +200,11 @@ var inputs = map[string][]string{
 		"42.0",
 		"420000",
 		"420000.0",
+		"6000500000000.0000000",
+		"10000",
+		"800000000",
+		"9E+4",
+		"99E100",
 	},
 
 	"'%s'::float8": {
@@ -208,8 +213,8 @@ var inputs = map[string][]string{
 		// float encodings. These deviations are still correct, and it's not worth
 		// special casing them into the code, so they are commented out here.
 		//"NaN",
-		//"Inf",
-		//"-Inf",
+		"Inf",
+		"-Inf",
 		"-000.000",
 		"-0000021234.23246346000000",
 		"-1.2",
@@ -229,8 +234,8 @@ var inputs = map[string][]string{
 		// float encodings. These deviations are still correct, and it's not worth
 		// special casing them into the code, so they are commented out here.
 		//"NaN",
-		//"Inf",
-		//"-Inf",
+		"Inf",
+		"-Inf",
 		"-000.000",
 		"-0000021234.2",
 		"-1.2",
@@ -297,7 +302,6 @@ var inputs = map[string][]string{
 		"9004-10-19 10:23:54",
 	},
 
-	/* TODO(mjibson): fix these; there's a slight timezone display difference
 	"'%s'::timestamptz": {
 		"1999-01-08 04:05:06+00",
 		"1999-01-08 04:05:06+00:00",
@@ -312,7 +316,22 @@ var inputs = map[string][]string{
 		"4004-10-19 10:23:54",
 		"9004-10-19 10:23:54",
 	},
-	*/
+
+	"'%s'::timetz": {
+		"04:05:06+00",
+		"04:05:06+00:00",
+		"04:05:06+10",
+		"04:05:06+10:00",
+		"04:05:06+10:30",
+		"04:05:06",
+		"10:23:54",
+		"00:00:00",
+		"10:23:54",
+		"10:23:54 BC",
+		"10:23:54",
+		"10:23:54+1:2:3",
+		"10:23:54+1:2",
+	},
 
 	"'%s'::date": {
 		"1999-01-08",

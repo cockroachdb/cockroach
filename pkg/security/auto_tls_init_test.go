@@ -44,7 +44,6 @@ func TestDummyCreateServiceCertAndKey(t *testing.T) {
 		context.Background(), nil, /* loggerFn */
 		time.Minute,
 		"dummy-common-name",
-		"test Service cert generation",
 		[]string{"localhost", "127.0.0.1"},
 		caCert,
 		caKey,

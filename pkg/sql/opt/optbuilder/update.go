@@ -197,9 +197,6 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 		// Add source column ID to the list of columns to update.
 		mb.updateColIDs[ord] = sourceCol.id
-
-		// Rename the column to match the target column being updated.
-		sourceCol.name = mb.tab.Column(ord).ColName()
 	}
 
 	addCol := func(expr tree.Expr, targetColID opt.ColumnID) {
@@ -227,7 +224,10 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		targetColMeta := mb.md.ColumnMeta(targetColID)
 		desiredType := targetColMeta.Type
 		texpr := inScope.resolveType(expr, desiredType)
-		scopeCol := projectionsScope.addColumn(targetColMeta.Alias+"_new", texpr)
+		colName := scopeColName(tree.Name(targetColMeta.Alias)).WithMetadataName(
+			targetColMeta.Alias + "_new",
+		)
+		scopeCol := projectionsScope.addColumn(colName, texpr)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
 
 		checkCol(scopeCol, targetColID)
@@ -246,6 +246,8 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 				// Type check and rename columns.
 				for i := range subqueryScope.cols {
 					checkCol(&subqueryScope.cols[i], mb.targetColList[n])
+					ord := mb.tabID.ColumnOrdinal(mb.targetColList[n])
+					subqueryScope.cols[i].name = scopeColName(mb.tab.Column(ord).ColName())
 					n++
 				}
 
@@ -329,11 +331,7 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
-	// Keep a reference to the scope before the check constraint columns are
-	// projected. We use this scope when projecting the partial index put
-	// columns because the check columns are not in-scope for those expressions.
-	preCheckScope := mb.outScope
-
+	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
 	// Add the partial index predicate expressions to the table metadata.
@@ -342,7 +340,7 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.b.addPartialIndexPredicatesForTable(mb.md.TableMeta(mb.tabID), nil /* scan */)
 
 	// Project partial index PUT and DEL boolean columns.
-	mb.projectPartialIndexPutAndDelCols(preCheckScope, mb.fetchScope)
+	mb.projectPartialIndexPutAndDelCols()
 
 	mb.buildUniqueChecksForUpdate()
 

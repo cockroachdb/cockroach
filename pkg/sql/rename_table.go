@@ -107,20 +107,20 @@ func (n *renameTableNode) startExec(params runParams) error {
 	prevDBID := tableDesc.ParentID
 
 	var targetDbDesc catalog.DatabaseDescriptor
-	var targetSchemaDesc catalog.ResolvedSchema
+	var targetSchemaDesc catalog.SchemaDescriptor
 	// If the target new name has no qualifications, then assume that the table
 	// is intended to be renamed into the same database and schema.
 	newTn := n.newTn
 	if !newTn.ExplicitSchema && !newTn.ExplicitCatalog {
 		newTn.ObjectNamePrefix = oldTn.ObjectNamePrefix
 		var err error
-		_, targetDbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
+		targetDbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
 			string(oldTn.CatalogName), tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return err
 		}
 
-		_, targetSchemaDesc, err = p.ResolveUncachedSchemaDescriptor(ctx, targetDbDesc.GetID(), oldTn.Schema(), true)
+		targetSchemaDesc, err = p.ResolveUncachedSchemaDescriptor(ctx, targetDbDesc.GetID(), oldTn.Schema(), true)
 		if err != nil {
 			return err
 		}
@@ -210,7 +210,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		params.p.txn,
 		p.ExecCfg().Codec,
 		targetDbDesc.GetID(),
-		targetSchemaDesc.ID,
+		targetSchemaDesc.GetID(),
 		newTn,
 	)
 	if err != nil {

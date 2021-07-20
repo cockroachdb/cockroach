@@ -17,14 +17,29 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+// asyncRollbackTimeout is the context timeout during rollback() for a client
+// who has already disconnected. This is needed to asynchronously clean up the
+// client's intents and txn record. If the intent resolver has spare async task
+// capacity, this timeout only needs to be long enough for the EndTxn request to
+// make it through Raft, but if the cleanup task is synchronous (to backpressure
+// clients) then cleanup will be abandoned when the timeout expires.
+//
+// We generally want to clean up if possible, so we set it high at 1 minute. If
+// the transaction is very large or cleanup is very costly (e.g. hits a slow
+// path for some reason), and the async pool is full (i.e. the system is
+// under load), then it makes sense to abandon the cleanup before too long.
+const asyncRollbackTimeout = time.Minute
 
 // Txn is an in-progress distributed database transaction. A Txn is safe for
 // concurrent use by multiple goroutines.
@@ -72,6 +87,12 @@ type Txn struct {
 		// deadline.
 		deadline *hlc.Timestamp
 	}
+
+	// admissionHeader is used for admission control for work done in this
+	// transaction. Only certain paths initialize this properly, and the
+	// remaining just use the zero value. The set of code paths that initialize
+	// this are expected to expand over time.
+	admissionHeader roachpb.AdmissionHeader
 }
 
 // NewTxn returns a new RootTxn.
@@ -109,9 +130,16 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	return NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
 }
 
-// NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL.
+// NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL. Note
+// that this initializes Txn.admissionHeader to specify that the source is
+// FROM_SQL.
 func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	txn := NewTxn(ctx, db, gatewayNodeID)
+	txn.admissionHeader = roachpb.AdmissionHeader{
+		Priority:   int32(admission.NormalPri),
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     roachpb.AdmissionHeader_FROM_SQL,
+	}
 	_ = txn.ConfigureStepping(ctx, SteppingEnabled)
 	return txn
 }
@@ -358,7 +386,7 @@ func (txn *Txn) DisablePipelining() error {
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
-	return &Batch{txn: txn}
+	return &Batch{txn: txn, AdmissionHeader: txn.admissionHeader}
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
@@ -608,6 +636,10 @@ func (txn *Txn) Run(ctx context.Context, b *Batch) error {
 }
 
 func (txn *Txn) commit(ctx context.Context) error {
+	// A batch with only endTxnReq is not subject to admission control, in order
+	// to reduce contention by releasing locks. In multi-tenant settings, it
+	// will be subject to admission control, and the zero CreateTime will give
+	// it preference within the tenant.
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
 	_, pErr := txn.Send(ctx, ba)
@@ -684,29 +716,29 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 	return err
 }
 
-// UpdateDeadlineMaybe sets the transactions deadline to the lower of the
-// current one (if any) and the passed value.
-//
-// The deadline cannot be lower than txn.ReadTimestamp.
-func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
+// UpdateDeadline sets the transactions deadline to the passed deadline.
+// It may move the deadline to any timestamp above the current read timestamp.
+// If the deadline is below the current provisional commit timestamp (write timestamp),
+// then the transaction will fail with a deadline error during the commit.
+// The deadline cannot be lower than txn.ReadTimestamp and we make the assumption
+// the read timestamp will not change during execution, which is valid today.
+func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) error {
 	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(errors.AssertionFailedf("UpdateDeadlineMaybe() called on leaf txn"), ctx))
+		panic(errors.WithContextTags(errors.AssertionFailedf("UpdateDeadline() called on leaf txn"), ctx))
 	}
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	if txn.mu.deadline == nil || deadline.Less(*txn.mu.deadline) {
-		readTimestamp := txn.readTimestampLocked()
-		if deadline.Less(txn.readTimestampLocked()) {
-			log.Fatalf(ctx, "deadline below read timestamp is nonsensical; "+
-				"txn has would have no change to commit. Deadline: %s. Read timestamp: %s.",
-				deadline, readTimestamp)
-		}
-		txn.mu.deadline = new(hlc.Timestamp)
-		*txn.mu.deadline = deadline
-		return true
+
+	readTimestamp := txn.readTimestampLocked()
+	if deadline.Less(readTimestamp) {
+		return errors.AssertionFailedf("deadline below read timestamp is nonsensical; "+
+			"txn has would have no chance to commit. Deadline: %s. Read timestamp: %s Previous Deadline: %s.",
+			deadline, readTimestamp, txn.mu.deadline)
 	}
-	return false
+	txn.mu.deadline = new(hlc.Timestamp)
+	*txn.mu.deadline = deadline
+	return nil
 }
 
 // resetDeadlineLocked resets the deadline.
@@ -727,48 +759,58 @@ func (txn *Txn) Rollback(ctx context.Context) error {
 func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	log.VEventf(ctx, 2, "rolling back transaction")
 
-	sync := true
-	if ctx.Err() != nil {
-		sync = false
-	}
-	if sync {
+	// If the client has already disconnected, fall back to asynchronous cleanup
+	// below. Note that this is the common path when a client disconnects in the
+	// middle of an open transaction or during statement execution.
+	if ctx.Err() == nil {
+		// A batch with only endTxnReq is not subject to admission control, in
+		// order to reduce contention by releasing locks. In multi-tenant
+		// settings, it will be subject to admission control, and the zero
+		// CreateTime will give it preference within the tenant.
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
 		_, pErr := txn.Send(ctx, ba)
 		if pErr == nil {
 			return nil
 		}
-		// If ctx has been canceled, assume that caused the error and try again
-		// async below.
+		// If rollback errored and the ctx was canceled during rollback, assume
+		// ctx cancellation caused the error and try again async below.
 		if ctx.Err() == nil {
 			return pErr
 		}
 	}
 
-	// We don't have a client whose context we can attach to, but we do want to limit how
-	// long this request is going to be around or it could leak a goroutine (in case of a
-	// long-lived network partition).
+	// We don't have a client whose context we can attach to, but we do want to
+	// limit how long this request is going to be around for to avoid leaking a
+	// goroutine (in case of a long-lived network partition). If it gets through
+	// Raft, and the intent resolver has free async task capacity, the actual
+	// cleanup will be independent of this context.
 	stopper := txn.db.ctx.Stopper
 	ctx, cancel := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
 	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
 		defer cancel()
+		// A batch with only endTxnReq is not subject to admission control, in
+		// order to reduce contention by releasing locks. In multi-tenant
+		// settings, it will be subject to admission control, and the zero
+		// CreateTime will give it preference within the tenant.
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
-		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", 3*time.Second, func(ctx context.Context) error {
-			if _, pErr := txn.Send(ctx, ba); pErr != nil {
-				if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
-					statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
-					// A common cause of these async rollbacks failing is when they're
-					// triggered by a ctx canceled while a commit is in-flight (and it's too
-					// late for it to be canceled), and so the rollback finds the txn to be
-					// already committed. We don't spam the logs with those.
-					log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
-				} else {
-					log.Infof(ctx, "async rollback failed: %s", pErr)
+		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
+			func(ctx context.Context) error {
+				if _, pErr := txn.Send(ctx, ba); pErr != nil {
+					if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
+						statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
+						// A common cause of these async rollbacks failing is when they're
+						// triggered by a ctx canceled while a commit is in-flight (and it's too
+						// late for it to be canceled), and so the rollback finds the txn to be
+						// already committed. We don't spam the logs with those.
+						log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
+					} else {
+						log.Infof(ctx, "async rollback failed: %s", pErr)
+					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
 	}); err != nil {
 		cancel()
 		return roachpb.NewError(err)
@@ -928,6 +970,10 @@ func (txn *Txn) Send(
 	if txn.gatewayNodeID != 0 {
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
 	}
+
+	// Some callers have not initialized ba using a Batch constructed using
+	// Txn.NewBatch. So we fallback to initializing here.
+	ba.AdmissionHeader = txn.admissionHeader
 
 	txn.mu.Lock()
 	requestTxnID := txn.mu.ID
@@ -1148,7 +1194,7 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 //
 // The transaction's epoch is bumped, simulating to an extent what the
 // TxnCoordSender does on retriable errors. The transaction's timestamp is only
-// bumped to the extent that txn.ReadTimestamp is racheted up to txn.Timestamp.
+// bumped to the extent that txn.ReadTimestamp is racheted up to txn.WriteTimestamp.
 // TODO(andrei): This method should take in an up-to-date timestamp, but
 // unfortunately its callers don't currently have that handy.
 func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) error {
@@ -1317,4 +1363,25 @@ func (txn *Txn) ManualRefresh(ctx context.Context) error {
 	sender := txn.mu.sender
 	txn.mu.Unlock()
 	return sender.ManualRefresh(ctx)
+}
+
+// DeferCommitWait defers the transaction's commit-wait operation, passing
+// responsibility of commit-waiting from the Txn to the caller of this
+// method. The method returns a function which the caller must eventually
+// run if the transaction completes without error. This function is safe to
+// call multiple times.
+//
+// WARNING: failure to run the returned function could lead to consistency
+// violations where a future, causally dependent transaction may fail to
+// observe the writes performed by this transaction.
+func (txn *Txn) DeferCommitWait(ctx context.Context) func(context.Context) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.DeferCommitWait(ctx)
+}
+
+// AdmissionHeader returns the admission header for work done in the context
+// of this transaction.
+func (txn *Txn) AdmissionHeader() roachpb.AdmissionHeader {
+	return txn.admissionHeader
 }

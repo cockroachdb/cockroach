@@ -193,7 +193,7 @@ func MakeSimpleTableDescriptor(
 // and mark references an validated. This function sets the table to PUBLIC
 // and the FKs to unvalidated.
 func fixDescriptorFKState(tableDesc *tabledesc.Mutable) error {
-	tableDesc.State = descpb.DescriptorState_PUBLIC
+	tableDesc.SetPublic()
 	for i := range tableDesc.OutboundFKs {
 		tableDesc.OutboundFKs[i].Validity = descpb.ConstraintValidity_Unvalidated
 	}
@@ -323,7 +323,7 @@ func (r *fkResolver) Txn() *kv.Txn {
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r *fkResolver) LogicalSchemaAccessor() catalog.Accessor {
+func (r *fkResolver) Accessor() catalog.Accessor {
 	return nil
 }
 

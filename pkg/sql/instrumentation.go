@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -105,6 +107,9 @@ type instrumentationHelper struct {
 	vectorized   bool
 
 	traceMetadata execNodeTraceMetadata
+
+	// regions used only on EXPLAIN ANALYZE to be displayed as top-level stat.
+	regions []string
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -165,7 +170,8 @@ func (ih *instrumentationHelper) Setup(
 	// We don't know yet if we will hit an error, so we assume we don't. The
 	// worst that can happen is that for statements that always error out, we
 	// will always save the tree plan.
-	stats, _ := appStats.getStatsForStmt(fingerprint, implicitTxn, nil /* error */, false /* createIfNonexistent */)
+	stats, _, _, _, _ := appStats.getStatsForStmt(
+		fingerprint, implicitTxn, p.SessionData().Database, nil /* stmtErr */, false /* createIfNonexistent */)
 
 	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(stats)
 
@@ -239,11 +245,11 @@ func (ih *instrumentationHelper) Finish(
 	}
 
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
-		ih.traceMetadata.annotateExplain(
+		ih.regions = ih.traceMetadata.annotateExplain(
 			ih.explainPlan,
-			p.curPlan.distSQLFlowInfos,
 			trace,
 			cfg.TestingKnobs.DeterministicExplain,
+			p,
 		)
 	}
 
@@ -261,7 +267,7 @@ func (ih *instrumentationHelper) Finish(
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
 	} else {
 		// TODO(radu): this should be unified with other stmt stats accesses.
-		stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
+		stmtStats, _, _, _, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, p.SessionData().Database, retErr, false)
 		if stmtStats != nil {
 			stmtStats.recordExecStats(queryLevelStats)
 			if collectTxnExecStats || ih.implicitTxn {
@@ -283,7 +289,7 @@ func (ih *instrumentationHelper) Finish(
 		placeholders := p.extendedEvalCtx.Placeholders
 		ob := ih.buildExplainAnalyzePlan(
 			explain.Flags{Verbose: true, ShowTypes: true},
-			&statsCollector.phaseTimes,
+			statsCollector.phaseTimes,
 			&queryLevelStats,
 		)
 		bundle = buildStatementBundle(
@@ -307,7 +313,7 @@ func (ih *instrumentationHelper) Finish(
 		return setExplainBundleResult(ctx, res, bundle, cfg)
 
 	case explainAnalyzePlanOutput, explainAnalyzeDistSQLOutput:
-		phaseTimes := &statsCollector.phaseTimes
+		phaseTimes := statsCollector.phaseTimes
 		var flows []flowInfo
 		if ih.outputMode == explainAnalyzeDistSQLOutput {
 			flows = p.curPlan.distSQLFlowInfos
@@ -407,15 +413,15 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.Expl
 // with the EXPLAIN ANALYZE plan. BuildString/BuildStringRows can be used on the
 // result.
 func (ih *instrumentationHelper) buildExplainAnalyzePlan(
-	flags explain.Flags, phaseTimes *phaseTimes, queryStats *execstats.QueryLevelStats,
+	flags explain.Flags, phaseTimes *sessionphase.Times, queryStats *execstats.QueryLevelStats,
 ) *explain.OutputBuilder {
 	ob := explain.NewOutputBuilder(flags)
 	if ih.explainPlan == nil {
 		// Return an empty builder if there is no plan.
 		return ob
 	}
-	ob.AddPlanningTime(phaseTimes.getPlanningLatency())
-	ob.AddExecutionTime(phaseTimes.getRunLatency())
+	ob.AddPlanningTime(phaseTimes.GetPlanningLatency())
+	ob.AddExecutionTime(phaseTimes.GetRunLatency())
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
 
@@ -431,6 +437,11 @@ func (ih *instrumentationHelper) buildExplainAnalyzePlan(
 
 	ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 	ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
+	ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
+
+	if len(ih.regions) > 0 {
+		ob.AddRegionsStats(ih.regions)
+	}
 
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		ob.AddTopLevelField("error emitting plan", fmt.Sprint(err))
@@ -445,7 +456,7 @@ func (ih *instrumentationHelper) buildExplainAnalyzePlan(
 func (ih *instrumentationHelper) setExplainAnalyzeResult(
 	ctx context.Context,
 	res RestrictedCommandResult,
-	phaseTimes *phaseTimes,
+	phaseTimes *sessionphase.Times,
 	queryLevelStats *execstats.QueryLevelStats,
 	distSQLFlowInfos []flowInfo,
 	trace tracing.Recording,
@@ -509,10 +520,24 @@ func (m execNodeTraceMetadata) associateNodeWithComponents(
 
 // annotateExplain aggregates the statistics in the trace and annotates
 // explain.Nodes with execution stats.
+// It returns a list of all regions on which any of the statements
+// where executed on.
 func (m execNodeTraceMetadata) annotateExplain(
-	plan *explain.Plan, flowInfos []flowInfo, spans []tracingpb.RecordedSpan, makeDeterministic bool,
-) {
+	plan *explain.Plan, spans []tracingpb.RecordedSpan, makeDeterministic bool, p *planner,
+) []string {
 	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
+	var allRegions []string
+
+	// Retrieve which region each node is on.
+	regionsInfo := make(map[int64]string)
+	descriptors, _ := getAllNodeDescriptors(p)
+	for _, descriptor := range descriptors {
+		for _, tier := range descriptor.Locality.Tiers {
+			if tier.Key == "region" {
+				regionsInfo[int64(descriptor.NodeID)] = tier.Value
+			}
+		}
+	}
 
 	var walk func(n *explain.Node)
 	walk = func(n *explain.Node) {
@@ -522,9 +547,11 @@ func (m execNodeTraceMetadata) annotateExplain(
 
 			incomplete := false
 			var nodes util.FastIntSet
+			regionsMap := make(map[string]struct{})
 			for _, c := range components {
 				if c.Type == execinfrapb.ComponentID_PROCESSOR {
 					nodes.Add(int(c.SQLInstanceID))
+					regionsMap[regionsInfo[int64(c.SQLInstanceID)]] = struct{}{}
 				}
 				stats := statsMap[c]
 				if stats == nil {
@@ -543,6 +570,17 @@ func (m execNodeTraceMetadata) annotateExplain(
 				for i, ok := nodes.Next(0); ok; i, ok = nodes.Next(i + 1) {
 					nodeStats.Nodes = append(nodeStats.Nodes, fmt.Sprintf("n%d", i))
 				}
+				regions := make([]string, 0, len(regionsMap))
+				for r := range regionsMap {
+					// Add only if the region is not an empty string (it will be an
+					// empty string if the region is not setup).
+					if r != "" {
+						regions = append(regions, r)
+					}
+				}
+				sort.Strings(regions)
+				nodeStats.Regions = regions
+				allRegions = util.CombineUniqueString(allRegions, regions)
 				n.Annotate(exec.ExecutionStatsID, &nodeStats)
 			}
 		}
@@ -559,4 +597,6 @@ func (m execNodeTraceMetadata) annotateExplain(
 	for i := range plan.Checks {
 		walk(plan.Checks[i])
 	}
+
+	return allRegions
 }

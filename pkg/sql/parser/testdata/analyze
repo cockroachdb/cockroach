@@ -1,0 +1,33 @@
+parse
+ANALYZE t
+----
+ANALYZE t
+ANALYZE t -- fully parenthesized
+ANALYZE t -- literals removed
+ANALYZE _ -- identifiers removed
+
+parse
+ANALYZE db.sc.t
+----
+ANALYZE db.sc.t
+ANALYZE db.sc.t -- fully parenthesized
+ANALYZE db.sc.t -- literals removed
+ANALYZE _._._ -- identifiers removed
+
+error
+ANALYZE
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+ANALYZE
+       ^
+HINT: try \h ANALYZE
+
+error
+ANALYSE
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+ANALYSE
+       ^
+HINT: try \h ANALYZE

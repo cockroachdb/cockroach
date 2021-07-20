@@ -179,5 +179,234 @@ j  b
 statement ok
 SET experimental_use_new_schema_changer = 'on'
 
+statement error pq: cannot explain a non-schema change statement
+EXPLAIN (DDL) ALTER TABLE bar ALTER COLUMN j TYPE BOOL
+
 statement ok
 DROP TABLE foo, bar
+
+# Sequence sanity tests
+statement ok
+CREATE SEQUENCE SQ1;
+
+statement ok
+CREATE TABLE blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('sq1'), title text);
+
+statement ok
+CREATE TABLE blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('sq1'), title text);
+
+# Failure without cascade
+statement error pq: cannot drop sequence sq1 because other objects depend on it
+EXPLAIN (DDL) DROP SEQUENCE sq1;
+
+statement ok
+EXPLAIN (DDL) DROP SEQUENCE sq1 CASCADE;
+
+# Success with cascade
+statement ok
+DROP SEQUENCE IF EXISTS doesnotexist, sq1 CASCADE;
+
+# Tables should be safe to drop since references are fixed.
+statement ok
+DROP TABLE blog_posts;
+
+statement ok
+DROP TABLE blog_posts2;
+
+# Test that user defined types used in views are tracked.
+subtest view_user_defined_types
+
+statement ok
+CREATE TYPE typ AS ENUM('a')
+
+statement ok
+CREATE VIEW v AS (SELECT 'a'::typ::string AS k)
+
+statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+DROP VIEW v
+
+statement ok
+CREATE VIEW v AS (WITH r AS (SELECT 'a'::typ < 'a'::typ AS k) SELECT k FROM r)
+
+statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+DROP VIEW v
+
+statement ok
+CREATE TABLE t (i INT, k STRING AS ('a'::typ::string) STORED)
+
+statement ok
+CREATE VIEW v AS (SELECT i FROM t)
+
+# Note that v does not depend on typ since it does not use column k.
+statement error cannot drop type "typ" because other objects \(\[test.public.t\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+CREATE VIEW v_dep AS (SELECT k FROM t)
+
+# Since v_dep depends on t.k which uses type typ, v_dep has a dependency to typ.
+statement error cannot drop type "typ" because other objects \(\[test.public.t test.public.v_dep\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+CREATE TYPE typ2 AS ENUM('a')
+
+statement ok
+CREATE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
+
+statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it
+DROP TYPE typ2
+
+statement ok
+CREATE OR REPLACE VIEW v3 AS (SELECT 'a' AS k)
+
+statement ok
+DROP TYPE typ2
+
+statement ok
+CREATE TYPE typ2 AS ENUM('a')
+
+statement ok
+CREATE OR REPLACE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
+
+statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it
+DROP TYPE typ2
+
+statement ok
+ALTER TYPE typ2 RENAME TO typ3
+
+statement error cannot drop type "typ3" because other objects \(\[test.public.v3\]\) still depend on it
+DROP TYPE typ3
+
+statement ok
+CREATE TYPE typ4 AS ENUM('a')
+
+statement ok
+CREATE TABLE t4 (i INT, j typ4)
+
+statement ok
+CREATE VIEW v4 AS (SELECT i FROM t4)
+
+# Note that v4 does not depend on typ4.
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4\]\) still depend on it
+DROP TYPE typ4
+
+statement ok
+ALTER TABLE t4 DROP COLUMN j
+
+statement ok
+DROP TYPE typ4
+
+statement ok
+CREATE TYPE typ4 AS ENUM('a')
+
+statement ok
+ALTER TABLE t4 ADD COLUMN j typ4
+
+statement ok
+CREATE VIEW v4_dep AS (SELECT j FROM t4)
+
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep\]\) still depend on it
+DROP type typ4
+
+statement ok
+CREATE TYPE typ5 AS ENUM('a')
+
+statement ok
+CREATE TABLE t5 (i INT, j STRING DEFAULT 'a'::typ5::string)
+
+# Note that v5 does not depend on typ5.
+statement ok
+CREATE VIEW v5 AS (SELECT i FROM t5)
+
+statement error cannot drop type "typ5" because other objects \(\[test.public.t5\]\) still depend on it
+DROP TYPE typ5
+
+statement ok
+CREATE VIEW v5_dep AS (SELECT j FROM t5)
+
+# Since v5_dep depends on t5.j which uses type typ5, v5_dep has a dependency to typ5.
+statement error cannot drop type "typ5" because other objects \(\[test.public.t5 test.public.v5_dep\]\) still depend on it
+DROP TYPE typ5
+
+statement ok
+CREATE VIEW v6 AS (SELECT j FROM v4_dep)
+
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep test.public.v6\]\) still depend on it
+DROP TYPE typ4
+
+statement ok
+CREATE TYPE typ6 AS ENUM('a');
+CREATE TABLE t6 (i INT, k typ6);
+CREATE INDEX idx ON t6 (i) WHERE k < 'a'::typ6
+
+statement ok
+CREATE VIEW v7 AS (SELECT i FROM t6)
+
+# Note that v7 does not depend on t6.
+statement error cannot drop type "typ6" because other objects \(\[test.public.t6\]\) still depend on it
+DROP TYPE typ6
+
+statement ok
+CREATE VIEW v7_dep AS (SELECT i FROM t6@idx WHERE k < 'a'::typ6)
+
+# v7_dep depends on typ6 now.
+statement error cannot drop type "typ6" because other objects \(\[test.public.t6 test.public.v7_dep\]\) still depend on it
+DROP TYPE typ6
+
+
+subtest view-sanity
+
+statement ok
+CREATE TABLE t1 (id INT PRIMARY KEY, name varchar(256));
+
+statement ok
+CREATE VIEW v1Dep AS (SELECT name FROM t1);
+
+statement ok
+CREATE VIEW v2Dep AS (SELECT name AS N1, name AS N2 FROM v1Dep);
+
+statement ok
+CREATE VIEW v3Dep AS (SELECT name, n1 FROM v1Dep, v2Dep);
+
+statement ok
+CREATE VIEW v4Dep AS (SELECT n2, n1 FROM v2Dep);
+
+statement ok
+explain (DDL, DEPS) DROP VIEW v1Dep CASCADE;
+
+statement error cannot drop view "test.public.v1dep" because view "test.public.v2dep" depends on it
+DROP VIEW v1Dep RESTRICT;
+
+statement error pq: "v1dep" is not a materialized view
+DROP MATERIALIZED VIEW v1Dep
+
+statement ok
+DROP VIEW v1Dep CASCADE;
+
+statement error pq: relation "v4dep" does not exist
+SELECT * FROM v4Dep;
+
+statement error pq: relation "v3dep" does not exist
+SELECT * FROM v3Dep;
+
+statement error pq: relation "v2dep" does not exist
+SELECT * FROM v2Dep;
+
+statement error pq: relation "v1dep" does not exist
+SELECT * FROM v1Dep;
+
+statement ok
+CREATE MATERIALIZED VIEW mv AS SELECT name FROM t1
+
+statement error pq: "mv" is a materialized view
+DROP VIEW mv
+
+statement ok
+DROP MATERIALIZED VIEW mv

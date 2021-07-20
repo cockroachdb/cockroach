@@ -21,7 +21,7 @@ import (
 var activerecordResultRegex = regexp.MustCompile(`^(?P<test>[^\s]+#[^\s]+) = (?P<timing>\d+\.\d+ s) = (?P<result>.)$`)
 var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)\.?(?P<subpoint>\d*)$`)
 var supportedRailsVersion = "6.1"
-var activerecordAdapterVersion = "v6.1.0-beta.3"
+var activerecordAdapterVersion = "v6.1.0"
 
 // This test runs activerecord's full test suite against a single cockroach node.
 
@@ -42,12 +42,14 @@ func registerActiveRecord(r *testRegistry) {
 		}
 		c.Start(ctx, t, c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(
+			ctx, version, c, node[0], nil,
+		); err != nil {
 			t.Fatal(err)
 		}
 
@@ -230,7 +232,7 @@ func registerActiveRecord(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		MinVersion: "v20.1.0",
+		MinVersion: "v20.2.0",
 		Name:       "activerecord",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),

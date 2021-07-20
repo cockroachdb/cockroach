@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -74,14 +75,11 @@ func runTestFlow(
 
 	var rowBuf distsqlutils.RowBuffer
 
-	ctx, flow, err := distSQLSrv.SetupSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf)
+	ctx, flow, _, err := distSQLSrv.SetupLocalSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := flow.Start(ctx, func() {}); err != nil {
-		t.Fatal(err)
-	}
-	flow.Wait()
+	flow.Run(ctx, func() {})
 	flow.Cleanup(ctx)
 
 	if !rowBuf.ProducerClosed() {
@@ -127,16 +125,17 @@ func checkDistAggregationInfo(
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
-			Table: *tableDesc.TableDesc(),
-			Spans: make([]execinfrapb.TableReaderSpan, 1),
+			Table:         *tableDesc.TableDesc(),
+			Spans:         make([]execinfrapb.TableReaderSpan, 1),
+			NeededColumns: []uint32{uint32(colIdx)},
 		}
 
 		var err error
-		tr.Spans[0].Span.Key, err = rowenc.TestingMakePrimaryIndexKey(tableDesc, startPK)
+		tr.Spans[0].Span.Key, err = randgen.TestingMakePrimaryIndexKey(tableDesc, startPK)
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.Spans[0].Span.EndKey, err = rowenc.TestingMakePrimaryIndexKey(tableDesc, endPK)
+		tr.Spans[0].Span.EndKey, err = randgen.TestingMakePrimaryIndexKey(tableDesc, endPK)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -204,13 +203,26 @@ func checkDistAggregationInfo(
 	txn := kv.NewTxn(ctx, srv.DB(), srv.NodeID())
 
 	// First run a flow that aggregates all the rows without any local stages.
-
+	nonDistFinalOutputTypes := finalOutputTypes
+	if info.FinalRendering != nil {
+		h := tree.MakeTypesOnlyIndexedVarHelper(finalOutputTypes)
+		renderExpr, err := info.FinalRendering(&h, varIdxs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var expr execinfrapb.Expression
+		expr, err = MakeExpression(renderExpr, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		nonDistFinalOutputTypes = []*types.T{expr.LocalExpr.ResolvedType()}
+	}
 	rowsNonDist := runTestFlow(
 		t, srv, txn,
 		makeTableReader(1, numRows+1, 0),
 		execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
-				Type:        execinfrapb.InputSyncSpec_UNORDERED,
+				Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 				ColumnTypes: []*types.T{colType},
 				Streams: []execinfrapb.StreamEndpointSpec{
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 0},
@@ -225,7 +237,7 @@ func checkDistAggregationInfo(
 					{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE},
 				},
 			}},
-			ResultTypes: finalOutputTypes,
+			ResultTypes: nonDistFinalOutputTypes,
 		},
 	)
 
@@ -251,7 +263,7 @@ func checkDistAggregationInfo(
 	}
 	finalProc := execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{
-			Type:        execinfrapb.InputSyncSpec_UNORDERED,
+			Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 			ColumnTypes: intermediaryTypes,
 		}},
 		Core: execinfrapb.ProcessorCoreUnion{Aggregator: &execinfrapb.AggregatorSpec{
@@ -271,7 +283,7 @@ func checkDistAggregationInfo(
 		tr := makeTableReader(1+i*numRows/numParallel, 1+(i+1)*numRows/numParallel, 2*i)
 		agg := execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
-				Type:        execinfrapb.InputSyncSpec_UNORDERED,
+				Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 				ColumnTypes: []*types.T{colType},
 				Streams: []execinfrapb.StreamEndpointSpec{
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(2 * i)},
@@ -307,7 +319,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		finalProc.Post.RenderExprs = []execinfrapb.Expression{expr}
-
+		finalProc.ResultTypes = []*types.T{expr.LocalExpr.ResolvedType()}
 	}
 
 	procs = append(procs, finalProc)
@@ -431,17 +443,17 @@ func TestDistAggregationTable(t *testing.T) {
 			return []tree.Datum{
 				tree.NewDInt(tree.DInt(row)),
 				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
-				rowenc.RandDatum(rng, types.Int, true),
+				randgen.RandDatum(rng, types.Int, true),
 				// Note that we use INT4 here, yet the table schema uses INT8 -
 				// this is ok since we want to limit the range of values but use
 				// the default INT type.
-				rowenc.RandDatum(rng, types.Int4, true),
+				randgen.RandDatum(rng, types.Int4, true),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) == 0)),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) != 0)),
-				rowenc.RandDatum(rng, types.Decimal, false),
-				rowenc.RandDatum(rng, types.Decimal, true),
-				rowenc.RandDatum(rng, types.Float, false),
-				rowenc.RandDatum(rng, types.Float, true),
+				randgen.RandDatum(rng, types.Decimal, false),
+				randgen.RandDatum(rng, types.Decimal, true),
+				randgen.RandDatum(rng, types.Float, false),
+				randgen.RandDatum(rng, types.Float, true),
 				tree.NewDBytes(tree.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},

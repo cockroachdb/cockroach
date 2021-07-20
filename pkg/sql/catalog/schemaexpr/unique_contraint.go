@@ -37,7 +37,7 @@ func ValidateUniqueWithoutIndexPredicate(
 	pred tree.Expr,
 	semaCtx *tree.SemaContext,
 ) (string, error) {
-	expr, _, err := DequalifyAndValidateExpr(
+	expr, _, _, err := DequalifyAndValidateExpr(
 		ctx,
 		desc,
 		pred,

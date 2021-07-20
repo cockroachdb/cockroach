@@ -94,6 +94,12 @@ message StatementStatistics {
   // SQLType is the type of the sql (DDL, DML, DCL or TCL)
   optional string sql_type = 22 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQLType"];
 
+  // LastExecTimestamp is the last timestamp the statement was executed.
+  optional google.protobuf.Timestamp last_exec_timestamp = 23 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // Nodes is the ordered list of nodes ids on which the statement was executed.
+  repeated int64 nodes = 24;
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;
@@ -172,6 +178,7 @@ message StatementStatisticsKey {
   optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
   optional bool vec = 7 [(gogoproto.nullable) = false];
   optional bool full_scan = 8 [(gogoproto.nullable) = false];
+  optional string database = 9 [(gogoproto.nullable) = false];
 }
 
 // CollectedStatementStatistics wraps collected timings and metadata for some

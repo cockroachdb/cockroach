@@ -1,0 +1,27 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (id INT PRIMARY KEY);
+
+# Check that there is no columnarizer-materializer pair on top of the root of
+# the execution tree if the root is a wrapped row-execution processor.
+query T
+EXPLAIN (VEC, VERBOSE) INSERT INTO t VALUES (1)
+----
+│
+└ Node 1
+  └ *colflow.FlowCoordinator
+    └ *sql.planNodeToRowSource
+
+query T
+EXPLAIN (VEC, VERBOSE) SELECT * FROM t AS t1 INNER LOOKUP JOIN t AS t2 ON t1.id = t2.id
+----
+│
+└ Node 1
+  └ *colflow.FlowCoordinator
+    └ *rowexec.joinReader
+      └ *colexec.Materializer
+        └ *colexec.InvariantsChecker
+          └ *colexecutils.CancelChecker
+            └ *colexec.InvariantsChecker
+              └ *colfetcher.ColBatchScan

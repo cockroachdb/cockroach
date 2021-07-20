@@ -101,7 +101,7 @@ with &1
  │    ├── insert-mapping:
  │    │    ├── b:6 => xyz.x:1
  │    │    ├── a:5 => xyz.y:2
- │    │    └── column10:10 => xyz.z:3
+ │    │    └── z_default:10 => xyz.z:3
  │    ├── update-mapping:
  │    │    └── upsert_y:17 => xyz.y:2
  │    ├── return-mapping:
@@ -111,26 +111,26 @@ with &1
  │    ├── volatile, mutations
  │    ├── stats: [rows=9.94974875, distinct(1)=9.94974875, null(1)=0, distinct(2)=9.94974875, null(2)=0]
  │    └── project
- │         ├── columns: upsert_x:16(string) upsert_y:17(int!null) upsert_z:18(float) a:5(int!null) b:6(string) column10:10(float) xyz.x:11(string) xyz.y:12(int) xyz.z:13(float) xyz.crdb_internal_mvcc_timestamp:14(decimal) y_new:15(int!null)
+ │         ├── columns: upsert_x:16(string) upsert_y:17(int!null) upsert_z:18(float) a:5(int!null) b:6(string) z_default:10(float) xyz.x:11(string) xyz.y:12(int) xyz.z:13(float) xyz.crdb_internal_mvcc_timestamp:14(decimal) y_new:15(int!null)
  │         ├── immutable
  │         ├── stats: [rows=9.94974875, distinct(16)=9.94974875, null(16)=0, distinct(17)=9.94974875, null(17)=0]
  │         ├── lax-key: (6,11)
  │         ├── fd: ()-->(10,15), (6)~~>(5), (11)-->(12-14), (6,11)-->(16), (5,11)-->(17), (6,11)~~>(5,17,18)
  │         ├── project
- │         │    ├── columns: y_new:15(int!null) a:5(int!null) b:6(string) column10:10(float) xyz.x:11(string) xyz.y:12(int) xyz.z:13(float) xyz.crdb_internal_mvcc_timestamp:14(decimal)
+ │         │    ├── columns: y_new:15(int!null) a:5(int!null) b:6(string) z_default:10(float) xyz.x:11(string) xyz.y:12(int) xyz.z:13(float) xyz.crdb_internal_mvcc_timestamp:14(decimal)
  │         │    ├── immutable
  │         │    ├── stats: [rows=9.94974875, distinct(6,11)=9.94974875, null(6,11)=0, distinct(5,11,15)=9.94974875, null(5,11,15)=0]
  │         │    ├── lax-key: (6,11)
  │         │    ├── fd: ()-->(10,15), (6)~~>(5), (11)-->(12-14)
  │         │    ├── left-join (hash)
- │         │    │    ├── columns: a:5(int!null) b:6(string) column10:10(float) xyz.x:11(string) xyz.y:12(int) xyz.z:13(float) xyz.crdb_internal_mvcc_timestamp:14(decimal)
+ │         │    │    ├── columns: a:5(int!null) b:6(string) z_default:10(float) xyz.x:11(string) xyz.y:12(int) xyz.z:13(float) xyz.crdb_internal_mvcc_timestamp:14(decimal)
  │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │         │    │    ├── immutable
  │         │    │    ├── stats: [rows=9.94974875, distinct(11)=9.94974875, null(11)=0, distinct(5,11)=9.94974875, null(5,11)=0, distinct(6,11)=9.94974875, null(6,11)=0]
  │         │    │    ├── lax-key: (6,11)
  │         │    │    ├── fd: ()-->(10), (6)~~>(5), (11)-->(12-14)
  │         │    │    ├── ensure-upsert-distinct-on
- │         │    │    │    ├── columns: a:5(int!null) b:6(string) column10:10(float)
+ │         │    │    │    ├── columns: a:5(int!null) b:6(string) z_default:10(float)
  │         │    │    │    ├── grouping columns: b:6(string)
  │         │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
  │         │    │    │    ├── immutable
@@ -138,7 +138,7 @@ with &1
  │         │    │    │    ├── lax-key: (6)
  │         │    │    │    ├── fd: ()-->(10), (6)~~>(5,10)
  │         │    │    │    ├── project
- │         │    │    │    │    ├── columns: column10:10(float) a:5(int!null) b:6(string)
+ │         │    │    │    │    ├── columns: z_default:10(float) a:5(int!null) b:6(string)
  │         │    │    │    │    ├── immutable
  │         │    │    │    │    ├── stats: [rows=9.94974875, distinct(6)=6.31184239, null(6)=0]
  │         │    │    │    │    ├── fd: ()-->(10)
@@ -161,12 +161,12 @@ with &1
  │         │    │    │    │    │         └── filters
  │         │    │    │    │    │              └── c:7 = 1.0 [type=bool, outer=(7), constraints=(/7: [/1.0 - /1.0]; tight), fd=()-->(7)]
  │         │    │    │    │    └── projections
- │         │    │    │    │         └── NULL::FLOAT8 [as=column10:10, type=float, immutable]
+ │         │    │    │    │         └── NULL::FLOAT8 [as=z_default:10, type=float, immutable]
  │         │    │    │    └── aggregations
  │         │    │    │         ├── first-agg [as=a:5, type=int, outer=(5)]
  │         │    │    │         │    └── a:5 [type=int]
- │         │    │    │         └── first-agg [as=column10:10, type=float, outer=(10)]
- │         │    │    │              └── column10:10 [type=float]
+ │         │    │    │         └── first-agg [as=z_default:10, type=float, outer=(10)]
+ │         │    │    │              └── z_default:10 [type=float]
  │         │    │    ├── scan xyz
  │         │    │    │    ├── columns: xyz.x:11(string!null) xyz.y:12(int!null) xyz.z:13(float) xyz.crdb_internal_mvcc_timestamp:14(decimal)
  │         │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
@@ -179,7 +179,7 @@ with &1
  │         └── projections
  │              ├── CASE WHEN xyz.x:11 IS NULL THEN b:6 ELSE xyz.x:11 END [as=upsert_x:16, type=string, outer=(6,11)]
  │              ├── CASE WHEN xyz.x:11 IS NULL THEN a:5 ELSE y_new:15 END [as=upsert_y:17, type=int, outer=(5,11,15)]
- │              └── CASE WHEN xyz.x:11 IS NULL THEN column10:10 ELSE xyz.z:13 END [as=upsert_z:18, type=float, outer=(10,11,13)]
+ │              └── CASE WHEN xyz.x:11 IS NULL THEN z_default:10 ELSE xyz.z:13 END [as=upsert_z:18, type=float, outer=(10,11,13)]
  └── select
       ├── columns: x:19(string!null) y:20(int!null) z:21(float)
       ├── stats: [rows=1, distinct(20)=1, null(20)=0]
@@ -203,13 +203,13 @@ upsert xyz
  ├── upsert-mapping:
  │    ├── b:6 => x:1
  │    ├── a:5 => y:2
- │    └── column10:10 => z:3
+ │    └── z_default:10 => z:3
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── fd: ()-->(3)
  └── project
-      ├── columns: column10:10(float) a:5(int!null) b:6(string)
+      ├── columns: z_default:10(float) a:5(int!null) b:6(string)
       ├── cardinality: [0 - 0]
       ├── immutable
       ├── stats: [rows=0]
@@ -235,7 +235,7 @@ upsert xyz
       │         └── filters
       │              └── false [type=bool, constraints=(contradiction; tight)]
       └── projections
-           └── NULL::FLOAT8 [as=column10:10, type=float, immutable]
+           └── NULL::FLOAT8 [as=z_default:10, type=float, immutable]
 
 # Nullable conflict column. Ensure that ensure-upsert-distinct-on passes through
 # the input's null count.
@@ -250,7 +250,7 @@ upsert uv
  ├── canary column: u:10(int)
  ├── fetch columns: u:10(int) v:11(int)
  ├── insert-mapping:
- │    ├── column9:9 => u:1
+ │    ├── u_default:9 => u:1
  │    └── z:8 => v:2
  ├── update-mapping:
  │    └── upsert_v:15 => v:2
@@ -258,26 +258,26 @@ upsert uv
  ├── volatile, mutations
  ├── stats: [rows=0]
  └── project
-      ├── columns: upsert_u:14(int) upsert_v:15(int) z:8(int) column9:9(int) u:10(int) v:11(int) uv.crdb_internal_mvcc_timestamp:12(decimal) v_new:13(int!null)
+      ├── columns: upsert_u:14(int) upsert_v:15(int) z:8(int) u_default:9(int) u:10(int) v:11(int) uv.crdb_internal_mvcc_timestamp:12(decimal) v_new:13(int!null)
       ├── volatile
       ├── stats: [rows=1000]
       ├── lax-key: (8,10)
       ├── fd: ()-->(13), (8)~~>(9), (10)-->(11,12), (11)~~>(10,12), (9,10)-->(14), (8,10)-->(15), (8,10)~~>(9,14)
       ├── project
-      │    ├── columns: v_new:13(int!null) z:8(int) column9:9(int) u:10(int) v:11(int) uv.crdb_internal_mvcc_timestamp:12(decimal)
+      │    ├── columns: v_new:13(int!null) z:8(int) u_default:9(int) u:10(int) v:11(int) uv.crdb_internal_mvcc_timestamp:12(decimal)
       │    ├── volatile
       │    ├── stats: [rows=1000]
       │    ├── lax-key: (8,10)
       │    ├── fd: ()-->(13), (8)~~>(9), (10)-->(11,12), (11)~~>(10,12)
       │    ├── left-join (hash)
-      │    │    ├── columns: z:8(int) column9:9(int) u:10(int) v:11(int) uv.crdb_internal_mvcc_timestamp:12(decimal)
+      │    │    ├── columns: z:8(int) u_default:9(int) u:10(int) v:11(int) uv.crdb_internal_mvcc_timestamp:12(decimal)
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    ├── volatile
       │    │    ├── stats: [rows=1000, distinct(11)=991, null(11)=0]
       │    │    ├── lax-key: (8,10)
       │    │    ├── fd: (8)~~>(9), (10)-->(11,12), (11)~~>(10,12)
       │    │    ├── ensure-upsert-distinct-on
-      │    │    │    ├── columns: z:8(int) column9:9(int)
+      │    │    │    ├── columns: z:8(int) u_default:9(int)
       │    │    │    ├── grouping columns: z:8(int)
       │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    │    ├── volatile
@@ -285,7 +285,7 @@ upsert uv
       │    │    │    ├── lax-key: (8)
       │    │    │    ├── fd: (8)~~>(9)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9(int) z:8(int)
+      │    │    │    │    ├── columns: u_default:9(int) z:8(int)
       │    │    │    │    ├── volatile
       │    │    │    │    ├── stats: [rows=1000, distinct(8)=100, null(8)=0]
       │    │    │    │    ├── project
@@ -300,10 +300,10 @@ upsert uv
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── xyz.z:6::INT8 [as=z:8, type=int, outer=(6), immutable]
       │    │    │    │    └── projections
-      │    │    │    │         └── unique_rowid() [as=column9:9, type=int, volatile]
+      │    │    │    │         └── unique_rowid() [as=u_default:9, type=int, volatile]
       │    │    │    └── aggregations
-      │    │    │         └── first-agg [as=column9:9, type=int, outer=(9)]
-      │    │    │              └── column9:9 [type=int]
+      │    │    │         └── first-agg [as=u_default:9, type=int, outer=(9)]
+      │    │    │              └── u_default:9 [type=int]
       │    │    ├── scan uv
       │    │    │    ├── columns: u:10(int!null) v:11(int) uv.crdb_internal_mvcc_timestamp:12(decimal)
       │    │    │    ├── stats: [rows=1000, distinct(11)=991, null(11)=10]
@@ -314,7 +314,7 @@ upsert uv
       │    └── projections
       │         └── 1 [as=v_new:13, type=int]
       └── projections
-           ├── CASE WHEN u:10 IS NULL THEN column9:9 ELSE u:10 END [as=upsert_u:14, type=int, outer=(9,10)]
+           ├── CASE WHEN u:10 IS NULL THEN u_default:9 ELSE u:10 END [as=upsert_u:14, type=int, outer=(9,10)]
            └── CASE WHEN u:10 IS NULL THEN z:8 ELSE v_new:13 END [as=upsert_v:15, type=int, outer=(8,10,13)]
 
 # Multiple conflict columns.

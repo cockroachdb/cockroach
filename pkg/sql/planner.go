@@ -17,10 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -41,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -94,8 +90,6 @@ type extendedEvalContext struct {
 	// SchemaChangeJobCache refers to schemaChangeJobsCache in extraTxnState.
 	SchemaChangeJobCache map[descpb.ID]*jobs.Job
 
-	schemaAccessors *schemaInterface
-
 	sqlStatsCollector *sqlStatsCollector
 
 	SchemaChangerState *SchemaChangerState
@@ -125,12 +119,6 @@ func (evalCtx *extendedEvalContext) QueueJob(
 	}
 	*evalCtx.Jobs = append(*evalCtx.Jobs, jobID)
 	return job, nil
-}
-
-// schemaInterface provides access to the database and table descriptors.
-// See schema_accessors.go.
-type schemaInterface struct {
-	logical catalog.Accessor
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -293,7 +281,12 @@ func newInternalPlanner(
 		// deprecatedDatabaseCache, so we can leave it uninitialized.
 		// Furthermore, we're not concerned about the efficiency of querying tables
 		// with user-defined types, hence the nil hydratedTables.
-		collection: descs.NewCollection(execCfg.Settings, execCfg.LeaseManager, nil /* hydratedTables */),
+		collection: descs.NewCollection(
+			execCfg.Settings,
+			execCfg.LeaseManager,
+			nil, // hydratedTables
+			execCfg.VirtualSchemas,
+		),
 	}
 	for _, opt := range opts {
 		opt(params)
@@ -347,11 +340,12 @@ func newInternalPlanner(
 	p.semaCtx.SearchPath = sd.SearchPath
 	p.semaCtx.TypeResolver = p
 
-	plannerMon := mon.NewUnlimitedMonitor(ctx,
-		fmt.Sprintf("internal-planner.%s.%s", user, opName),
+	plannerMon := mon.NewMonitor(fmt.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
+		-1, /* increment */
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
+	plannerMon.Start(ctx, execCfg.RootMemoryMonitor, mon.BoundAccount{})
 
 	p.extendedEvalCtx = internalExtendedEvalCtx(
 		ctx, sd, dataMutator, params.collection, txn, ts, ts, execCfg, plannerMon,
@@ -442,14 +436,13 @@ func internalExtendedEvalCtx(
 		NodesStatusServer: execCfg.NodesStatusServer,
 		Descs:             tables,
 		ExecCfg:           execCfg,
-		schemaAccessors:   newSchemaInterface(tables, execCfg.VirtualSchemas),
 		DistSQLPlanner:    execCfg.DistSQLPlanner,
 	}
 }
 
 // LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.
-func (p *planner) LogicalSchemaAccessor() catalog.Accessor {
-	return p.extendedEvalCtx.schemaAccessors.logical
+func (p *planner) Accessor() catalog.Accessor {
+	return p.Descriptors()
 }
 
 // SemaCtx provides access to the planner's SemaCtx.
@@ -773,29 +766,6 @@ type txnModesSetter interface {
 	// transaction.
 	// asOfTs, if not empty, is the evaluation of modes.AsOf.
 	setTransactionModes(modes tree.TransactionModes, asOfTs hlc.Timestamp) error
-}
-
-// CompactEngineSpan is part of the EvalPlanner interface.
-func (p *planner) CompactEngineSpan(
-	ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
-) error {
-	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return errorutil.UnsupportedWithMultiTenancy(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
-	}
-	conn, err := p.ExecCfg().DistSender.NodeDialer().Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
-	if err != nil {
-		return errors.Wrapf(err, "could not dial node ID %d", nodeID)
-	}
-	client := kvserver.NewPerStoreClient(conn)
-	req := &kvserver.CompactEngineSpanRequest{
-		StoreRequestHeader: kvserver.StoreRequestHeader{
-			NodeID:  roachpb.NodeID(nodeID),
-			StoreID: roachpb.StoreID(storeID),
-		},
-		Span: roachpb.Span{Key: roachpb.Key(startKey), EndKey: roachpb.Key(endKey)},
-	}
-	_, err = client.CompactEngineSpan(ctx, req)
-	return err
 }
 
 // validateDescriptor is a convenience function for validating

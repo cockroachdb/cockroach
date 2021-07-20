@@ -32,11 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -114,9 +116,24 @@ func makeMockFlowStreamRPCLayer() mockFlowStreamRPCLayer {
 func handleStream(
 	ctx context.Context, inbox *Inbox, stream flowStreamServer, doneFn func(),
 ) chan error {
+	return handleStreamWithFlowCtxDone(ctx, inbox, stream, nil /* flowCtxDone */, doneFn)
+}
+
+// handleStreamWithFlowCtxDone is the same as handleStream but also takes in
+// an optional Done channel for the flow context of the inbox host.
+func handleStreamWithFlowCtxDone(
+	ctx context.Context,
+	inbox *Inbox,
+	stream flowStreamServer,
+	flowCtxDone <-chan struct{},
+	doneFn func(),
+) chan error {
 	handleStreamErrCh := make(chan error, 1)
+	if flowCtxDone == nil {
+		flowCtxDone = make(<-chan struct{})
+	}
 	go func() {
-		handleStreamErrCh <- inbox.RunWithStream(ctx, stream)
+		handleStreamErrCh <- inbox.RunWithStream(ctx, stream, flowCtxDone)
 		if doneFn != nil {
 			doneFn()
 		}
@@ -140,14 +157,15 @@ func TestOutboxInbox(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	type cancellationType int
 	const (
-		// In this scenario, no cancellation happens and all the data is pushed from
-		// the Outbox to the Inbox.
+		// In this scenario, no cancellation happens and all the data is pushed
+		// from the Outbox to the Inbox.
 		noCancel cancellationType = iota
-		// streamCtxCancel models a scenario in which the Outbox host cancels the
-		// flow.
+		// streamCtxCancel models a scenario in which the Outbox host cancels
+		// the flow.
 		streamCtxCancel
 		// readerCtxCancel models a scenario in which the Inbox host cancels the
-		// flow.
+		// flow. This is considered a graceful termination, and the flow context
+		// isn't canceled.
 		readerCtxCancel
 		// transportBreaks models a scenario in which the transport breaks.
 		transportBreaks
@@ -194,29 +212,46 @@ func TestOutboxInbox(t *testing.T) {
 			typs        = []*types.T{types.Int}
 			inputBuffer = colexecop.NewBatchBuffer()
 			// Generate some random behavior before passing the random number
-			// generator to be used in the Outbox goroutine (to avoid races). These
-			// sleep variables enable a sleep for up to half a millisecond with a .25
-			// probability before cancellation.
+			// generator to be used in the Outbox goroutine (to avoid races).
+			// These sleep variables enable a sleep for up to half a millisecond
+			// with a .25 probability before cancellation.
 			sleepBeforeCancellation = rng.Float64() <= 0.25
 			sleepTime               = time.Microsecond * time.Duration(rng.Intn(500))
+			// stopwatch is used to measure how long it takes for the outbox to
+			// exit once the transport broke.
+			stopwatch                    = timeutil.NewStopWatch()
+			transportBreaksProducerSleep = 4 * time.Second
 		)
 
-		// Test random selection as the Outbox should be deselecting before sending
-		// over data. Nulls and types are not worth testing as those are tested in
-		// colserde.
+		// Test random selection as the Outbox should be deselecting before
+		// sending over data. Nulls and types are not worth testing as those are
+		// tested in colserde.
 		args := coldatatestutils.RandomDataOpArgs{
 			DeterministicTyps: typs,
 			NumBatches:        64,
 			Selection:         true,
-			BatchAccumulator:  inputBuffer.Add,
+			BatchAccumulator: func(_ context.Context, b coldata.Batch, typs []*types.T) {
+				inputBuffer.Add(b, typs)
+			},
 		}
 
 		if cancellationScenario != noCancel {
-			// Crank up the number of batches so cancellation always happens in the
-			// middle of execution (or before).
+			// Crank up the number of batches so cancellation always happens in
+			// the middle of execution (or before).
 			args.NumBatches = math.MaxInt64
-			// Disable accumulation to avoid memory blowups.
-			args.BatchAccumulator = nil
+			if cancellationScenario == transportBreaks {
+				// Insert an artificial sleep in order to simulate that the
+				// input to the outbox takes a while to produce each batch.
+				args.BatchAccumulator = func(ctx context.Context, b coldata.Batch, typs []*types.T) {
+					select {
+					case <-ctx.Done():
+					case <-time.After(transportBreaksProducerSleep):
+					}
+				}
+			} else {
+				// Disable accumulation to avoid memory blowups.
+				args.BatchAccumulator = nil
+			}
 		}
 		inputMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inputMemAcc.Close(ctx)
@@ -234,18 +269,34 @@ func TestOutboxInbox(t *testing.T) {
 
 		inboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inboxMemAcc.Close(ctx)
-		inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 
 		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
 
 		var (
-			canceled uint32
-			wg       sync.WaitGroup
+			flowCtxCanceled uint32
+			// Because the outboxCtx must be a child of the flow context, we
+			// assume that if flowCtxCanceled is non-zero, then
+			// outboxCtxCanceled is too and don't check that explicitly.
+			outboxCtxCanceled uint32
+			wg                sync.WaitGroup
 		)
 		wg.Add(1)
 		go func() {
-			outbox.runWithStream(streamCtx, clientStream, func() { atomic.StoreUint32(&canceled, 1) })
+			// There is a bit of trickery going on here with the context
+			// management caused by the fact that we're using an internal
+			// runWithStream method rather than exported Run method. The goal is
+			// to create a context of the node on which the outbox runs and keep
+			// it different from the streamCtx. This matters in
+			// 'transportBreaks' scenario.
+			var flowCtxCancelFn context.CancelFunc
+			outbox.runnerCtx, flowCtxCancelFn = context.WithCancel(ctx)
+			flowCtxCancel := func() {
+				atomic.StoreUint32(&flowCtxCanceled, 1)
+				flowCtxCancelFn()
+			}
+			outbox.runWithStream(streamCtx, clientStream, flowCtxCancel, func() { atomic.StoreUint32(&outboxCtxCanceled, 1) })
 			wg.Done()
 		}()
 
@@ -264,6 +315,7 @@ func TestOutboxInbox(t *testing.T) {
 			case transportBreaks:
 				err := conn.Close() // nolint:grpcconnclose
 				require.NoError(t, err)
+				stopwatch.Start()
 			}
 			wg.Done()
 		}()
@@ -275,13 +327,16 @@ func TestOutboxInbox(t *testing.T) {
 		inputBatches := colexecutils.NewDeselectorOp(
 			colmem.NewAllocator(ctx, &deselectorMemAcc, coldata.StandardColumnFactory), inputBuffer, typs,
 		)
-		inputBatches.Init()
+		inputBatches.Init(ctx)
 		outputBatches := colexecop.NewBatchBuffer()
 		var readerErr error
 		for {
 			var outputBatch coldata.Batch
 			if err := colexecerror.CatchVectorizedRuntimeError(func() {
-				outputBatch = inbox.Next(readerCtx)
+				// Note that it is ok that we call Init on every iteration - it
+				// is a noop every time except for the first one.
+				inbox.Init(readerCtx)
+				outputBatch = inbox.Next()
 			}); err != nil {
 				readerErr = err
 				break
@@ -323,17 +378,19 @@ func TestOutboxInbox(t *testing.T) {
 		// Verify expected state.
 		switch cancellationScenario {
 		case noCancel:
-			// Verify that the Outbox terminated gracefully (did not cancel its flow).
-			require.True(t, atomic.LoadUint32(&canceled) == 0)
+			// Verify that the Outbox terminated gracefully (did not cancel the
+			// flow context).
+			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 0)
+			require.True(t, atomic.LoadUint32(&outboxCtxCanceled) == 1)
 			// And the Inbox did as well.
 			require.NoError(t, streamHandlerErr)
 			require.NoError(t, readerErr)
 
-			// If no cancellation happened, the output can be fully verified against
-			// the input.
+			// If no cancellation happened, the output can be fully verified
+			// against the input.
 			for batchNum := 0; ; batchNum++ {
-				outputBatch := outputBatches.Next(ctx)
-				inputBatch := inputBatches.Next(ctx)
+				outputBatch := outputBatches.Next()
+				inputBatch := inputBatches.Next()
 				require.Equal(t, outputBatch.Length(), inputBatch.Length())
 				if outputBatch.Length() == 0 {
 					break
@@ -348,36 +405,132 @@ func TestOutboxInbox(t *testing.T) {
 				}
 			}
 		case streamCtxCancel:
-			// If the stream context gets canceled, GRPC should take care of closing
-			// and cleaning up the stream. The Inbox stream handler should have
-			// received the context cancellation and returned.
+			// If the stream context gets canceled, gRPC should take care of
+			// closing and cleaning up the stream. The Inbox stream handler
+			// should have received the context cancellation and returned.
 			require.Regexp(t, "context canceled", streamHandlerErr)
 			// The Inbox propagates this cancellation on its host.
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
 
-			// Recving on a canceled stream produces a context canceled error, but
-			// Sending produces an EOF, that should have triggered a flow context
-			// cancellation (which is redundant) in the Outbox.
-			require.True(t, atomic.LoadUint32(&canceled) == 1)
+			// Recving on a canceled stream produces a context canceled error
+			// which prompts the watchdog goroutine of the outbox to cancel the
+			// flow.
+			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 1)
 		case readerCtxCancel:
-			// If the reader context gets canceled, the Inbox should have returned
-			// from the stream handler.
-			require.Regexp(t, "context canceled", streamHandlerErr)
-			// The Inbox should propagate this error upwards.
+			// If the reader context gets canceled, it is treated as a graceful
+			// termination of the stream, so we expect no error from the stream
+			// handler.
+			require.Nil(t, streamHandlerErr)
+			// The Inbox should still propagate this error upwards.
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
 
-			// The cancellation should have been communicated to the Outbox, resulting
-			// in a Send EOF and a flow cancellation on the Outbox's host.
-			require.True(t, atomic.LoadUint32(&canceled) == 1)
+			// The cancellation should have been communicated to the Outbox,
+			// resulting in the watchdog goroutine canceling the outbox context
+			// (but not the flow).
+			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 0)
+			require.True(t, atomic.LoadUint32(&outboxCtxCanceled) == 1)
 		case transportBreaks:
 			// If the transport breaks, the scenario is very similar to
-			// streamCtxCancel. GRPC will cancel the stream handler's context.
+			// streamCtxCancel. gRPC will cancel the stream handler's context.
+			stopwatch.Stop()
+			// We expect that the outbox exits much sooner than it receives the
+			// next batch from its input in this scenario.
+			require.Less(t, int64(stopwatch.Elapsed()), int64(transportBreaksProducerSleep/2), "Outbox took too long to exit on transport breakage")
 			require.True(t, testutils.IsError(streamHandlerErr, "context canceled"), streamHandlerErr)
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
 
-			require.True(t, atomic.LoadUint32(&canceled) == 1)
+			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 1)
 		}
 	})
+}
+
+// TestInboxHostCtxCancellation verifies that the inbox-outbox pair is properly
+// shutdown if the inbox host's flow context is canceled and Inbox.Init is never
+// called.
+func TestInboxHostCtxCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set up the RPC layer.
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
+	require.NoError(t, err)
+
+	rng, _ := randutil.NewPseudoRand()
+	conn, err := grpc.Dial(addr.String(), grpc.WithInsecure())
+	require.NoError(t, err)
+	defer func() {
+		err := conn.Close() // nolint:grpcconnclose
+		require.NoError(t, err)
+	}()
+
+	// Simulate the "remote" node with a separate context.
+	outboxHostCtx, outboxHostCtxCancel := context.WithCancel(context.Background())
+	// Derive a separate context for the outbox itself (this is what is done in
+	// Outbox.Run).
+	outboxCtx, outboxCtxCancel := context.WithCancel(outboxHostCtx)
+
+	// Initiate the FlowStream RPC from the outbox.
+	client := execinfrapb.NewDistSQLClient(conn)
+	clientStream, err := client.FlowStream(outboxCtx)
+	require.NoError(t, err)
+
+	// Create and run the outbox.
+	//
+	// The input to the outbox doesn't matter, so we just create an arbitrary
+	// operator that returns a single row with no columns.
+	typs := []*types.T{}
+	outboxInput := colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 1 /* numTuples */, nil /* opToInitialize */)
+	outboxMemAcc := testMemMonitor.MakeBoundAccount()
+	defer outboxMemAcc.Close(outboxHostCtx)
+	outbox, err := NewOutbox(
+		colmem.NewAllocator(outboxHostCtx, &outboxMemAcc, coldata.StandardColumnFactory),
+		outboxInput, typs, nil /* getStats */, nil /* metadataSources */, nil, /* toClose */
+	)
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		outbox.runWithStream(outboxCtx, clientStream, outboxHostCtxCancel, outboxCtxCancel)
+		wg.Done()
+	}()
+
+	// Create the inbox on the "local" node (simulated by a separate context).
+	inboxHostCtx, inboxHostCtxCancel := context.WithCancel(context.Background())
+	inboxMemAcc := testMemMonitor.MakeBoundAccount()
+	defer inboxMemAcc.Close(inboxHostCtx)
+	inbox, err := NewInbox(colmem.NewAllocator(inboxHostCtx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+	require.NoError(t, err)
+
+	// Spawn up the stream handler (a separate goroutine) for the server side
+	// of the FlowStream RPC.
+	serverStreamNotification := <-mockServer.InboundStreams
+	serverStream := serverStreamNotification.Stream
+	streamHandlerErrCh := handleStreamWithFlowCtxDone(
+		serverStream.Context(), inbox, serverStream,
+		inboxHostCtx.Done(), func() { close(serverStreamNotification.Donec) },
+	)
+
+	// Here is the meat of the test - the inbox is never initialized, and,
+	// instead, the inbox host's flow context is canceled after some delay.
+	var sleepBeforeCancellation = rng.Float64() <= 0.25
+	var sleepTime = time.Microsecond * time.Duration(rng.Intn(500))
+	wg.Add(1)
+	go func() {
+		if sleepBeforeCancellation {
+			time.Sleep(sleepTime)
+		}
+		inboxHostCtxCancel()
+		wg.Done()
+	}()
+
+	// Wait for the Outbox to return.
+	wg.Wait()
+	// Make sure the Inbox stream handler returned.
+	streamHandlerErr := <-streamHandlerErrCh
+	require.Equal(t, cancelchecker.QueryCanceledError, streamHandlerErr)
 }
 
 func TestOutboxInboxMetadataPropagation(t *testing.T) {
@@ -431,9 +584,9 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				// Simulate the inbox flow calling Next an arbitrary amount of times
 				// (including none).
 				for i := 0; i < numNextsBeforeDrain; i++ {
-					inbox.Next(ctx)
+					inbox.Next()
 				}
-				return inbox.DrainMeta(ctx)
+				return inbox.DrainMeta()
 			},
 		},
 		{
@@ -443,12 +596,12 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			numBatches: 4,
 			test: func(ctx context.Context, inbox *Inbox) []execinfrapb.ProducerMetadata {
 				for {
-					b := inbox.Next(ctx)
+					b := inbox.Next()
 					if b.Length() == 0 {
 						break
 					}
 				}
-				return inbox.DrainMeta(ctx)
+				return inbox.DrainMeta()
 			},
 		},
 		{
@@ -464,7 +617,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				for {
 					var b coldata.Batch
 					if err := colexecerror.CatchVectorizedRuntimeError(func() {
-						b = inbox.Next(ctx)
+						b = inbox.Next()
 					}); err != nil {
 						return []execinfrapb.ProducerMetadata{{Err: err}}
 					}
@@ -507,7 +660,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 				input, typs, nil /* getStats */, []colexecop.MetadataSource{
 					colexectestutils.CallbackMetadataSource{
-						DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
+						DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 							return expectedMetadata
 						},
 					},
@@ -516,28 +669,35 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			inboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer inboxMemAcc.Close(ctx)
-			inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+			inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 			require.NoError(t, err)
 
 			var (
-				canceled uint32
-				wg       sync.WaitGroup
+				flowCanceled, outboxCanceled uint32
+				wg                           sync.WaitGroup
 			)
 			wg.Add(1)
 			go func() {
-				outbox.runWithStream(ctx, clientStream, func() { atomic.StoreUint32(&canceled, 1) })
+				outbox.runWithStream(
+					ctx,
+					clientStream,
+					func() { atomic.StoreUint32(&flowCanceled, 1) },
+					func() { atomic.StoreUint32(&outboxCanceled, 1) },
+				)
 				wg.Done()
 			}()
 
 			streamHanderErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
 
+			inbox.Init(ctx)
 			meta := tc.test(ctx, inbox)
 
 			wg.Wait()
 			require.NoError(t, <-streamHanderErrCh)
-			// Require that the outbox did not cancel the flow, this is a graceful
-			// drain.
-			require.True(t, atomic.LoadUint32(&canceled) == 0)
+			// Require that the outbox did not cancel the flow and did cancel
+			// the outbox since this is a graceful drain.
+			require.True(t, atomic.LoadUint32(&flowCanceled) == 0)
+			require.True(t, atomic.LoadUint32(&outboxCanceled) == 1)
 
 			// Verify that we received the expected metadata.
 			if tc.verifyExpectedMetadata != nil {
@@ -592,27 +752,28 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAcc.Close(ctx)
-	inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 	require.NoError(b, err)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		outbox.runWithStream(ctx, clientStream, nil /* cancelFn */)
+		outbox.runWithStream(ctx, clientStream, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
 		wg.Done()
 	}()
 
 	streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
 
+	inbox.Init(ctx)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		inbox.Next(ctx)
+		inbox.Next()
 	}
 	b.StopTimer()
 
 	// This is a way of telling the Outbox we're satisfied with the data received.
-	meta := inbox.DrainMeta(ctx)
+	meta := inbox.DrainMeta()
 	require.True(b, len(meta) == 0)
 
 	require.NoError(b, <-streamHandlerErrCh)
@@ -639,7 +800,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	var inTags *logtags.Buffer
 
 	nextDone := make(chan struct{})
-	input := &colexecop.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
+	input := &colexecop.CallbackOperator{NextCb: func() coldata.Batch {
 		b := testAllocator.NewMemBatchWithFixedCapacity(typs, 0)
 		inTags = logtags.FromContext(ctx)
 		nextDone <- struct{}{}
@@ -662,7 +823,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 			roachpb.NodeID(0),
 			execinfrapb.FlowID{UUID: uuid.MakeV4()},
 			outboxStreamID,
-			nil, /* cancelFn */
+			nil, /* flowCtxCancel */
 			0,   /* connectionTimeout */
 		)
 		outboxDone <- struct{}{}
@@ -691,20 +852,20 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 	testCases := []struct {
 		name string
 		// test is the body of the test to be run.
-		test func(context.Context, *Inbox)
+		test func(*Inbox)
 	}{
 		{
 			// CtxTaggedInNext verifies that Next adds StreamID to the Context in maybeInit.
 			name: "CtxTaggedInNext",
-			test: func(ctx context.Context, inbox *Inbox) {
-				inbox.Next(ctx)
+			test: func(inbox *Inbox) {
+				inbox.Next()
 			},
 		},
 		{
 			// CtxTaggedInDrainMeta verifies that DrainMeta adds StreamID to the Context in maybeInit.
 			name: "CtxTaggedInDrainMeta",
-			test: func(ctx context.Context, inbox *Inbox) {
-				inbox.DrainMeta(ctx)
+			test: func(inbox *Inbox) {
+				inbox.DrainMeta()
 			},
 		},
 	}
@@ -716,7 +877,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 			typs := []*types.T{types.Int}
 
-			inbox, err := NewInbox(ctx, testAllocator, typs, streamID)
+			inbox, err := NewInbox(testAllocator, typs, streamID)
 			require.NoError(t, err)
 
 			ctxExtract := make(chan struct{})
@@ -732,7 +893,8 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 			inboxTested := make(chan struct{})
 			go func() {
-				tc.test(ctx, inbox)
+				inbox.Init(ctx)
+				tc.test(inbox)
 				inboxTested <- struct{}{}
 			}()
 

@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -1424,10 +1425,11 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 // Test that a lease extension (a RequestLeaseRequest that doesn't change the
 // lease holder) is not blocked by ongoing reads. The test relies on the fact
 // that RequestLeaseRequest does not declare to touch the whole key span of the
-// range, and thus don't conflict through the command queue with other reads.
+// range, and thus don't conflict through latches with other reads.
 func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	readBlocked := make(chan struct{})
 	cmdFilter := func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if fArgs.Hdr.UserPriority == 42 {
@@ -1449,7 +1451,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			},
 		})
 	s := srv.(*server.TestServer)
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	if err != nil {
@@ -1465,7 +1467,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 		}
-		if _, pErr := kv.SendWrappedWith(context.Background(), s.DB().NonTransactionalSender(),
+		if _, pErr := kv.SendWrappedWith(ctx, s.DB().NonTransactionalSender(),
 			roachpb.Header{UserPriority: 42},
 			&getReq); pErr != nil {
 			errChan <- pErr.GoError()
@@ -1502,21 +1504,21 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		}
 
 		for {
-			curLease, _, err := s.GetRangeLease(context.Background(), key)
+			leaseInfo, _, err := s.GetRangeLease(ctx, key, server.AllowQueryToBeForwardedToDifferentNode)
 			if err != nil {
 				t.Fatal(err)
 			}
-			leaseReq.PrevLease = curLease
+			leaseReq.PrevLease = leaseInfo.CurrentOrProspective()
 
-			_, pErr := kv.SendWrapped(context.Background(), s.DB().NonTransactionalSender(), &leaseReq)
+			_, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), &leaseReq)
 			if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
-				log.Infof(context.Background(), "retrying lease after %s", pErr)
+				log.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
 				// Lease rejected? Try again. The extension should work because
 				// extending is idempotent (assuming the PrevLease matches).
-				log.Infof(context.Background(), "retrying lease after %s", pErr)
+				log.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if pErr != nil {
@@ -2627,7 +2629,12 @@ func TestReplicaTombstone(t *testing.T) {
 		// this as a heartbeat. This demonstrates case (4) where a raft message
 		// to a newer replica ID (in this case a heartbeat) removes an initialized
 		// Replica.
-		_, err = tc.AddVoters(key, tc.Target(2))
+		//
+		// Don't use tc.AddVoter; this would retry internally as we're faking a
+		// a snapshot error here (and these are all considered retriable).
+		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, key, tc.LookupRangeOrFatal(t, key), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(2)),
+		)
 		require.Regexp(t, "boom", err)
 		tombstone := waitForTombstone(t, store.Engine(), rangeID)
 		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
@@ -2643,7 +2650,9 @@ func TestReplicaTombstone(t *testing.T) {
 		// We could replica GC these replicas without too much extra work but they
 		// also should be rare. Note this is not new with learner replicas.
 		setMinHeartbeat(5)
-		_, err = tc.AddVoters(key, tc.Target(2))
+		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, key, tc.LookupRangeOrFatal(t, key), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(2)),
+		)
 		require.Regexp(t, "boom", err)
 		// We will start out reading the old tombstone so keep retrying.
 		testutils.SucceedsSoon(t, func() error {
@@ -3210,7 +3219,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 					_, r := getFirstStoreReplica(t, s, tableKey)
 					if _, z := r.DescAndZone(); z.GC.TTLSeconds != int32(exp) {
 						_, sysCfg := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
-						require.NoError(t, sysCfg.MaybeGossipSystemConfig(ctx))
+						sysCfg.RaftLock()
+						require.NoError(t, sysCfg.MaybeGossipSystemConfigRaftMuLocked(ctx))
+						sysCfg.RaftUnlock()
 						return errors.Errorf("expected %d, got %d", exp, z.GC.TTLSeconds)
 					}
 				}
@@ -3224,7 +3235,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 				for i := 0; i < tc.NumServers(); i++ {
 					s, r := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
 					if kvserver.StrictGCEnforcement.Get(&s.ClusterSettings().SV) != val {
-						require.NoError(t, r.MaybeGossipSystemConfig(ctx))
+						r.RaftLock()
+						require.NoError(t, r.MaybeGossipSystemConfigRaftMuLocked(ctx))
+						r.RaftUnlock()
 						return errors.Errorf("expected %v, got %v", val, !val)
 					}
 				}
@@ -3341,7 +3354,7 @@ func TestProposalOverhead(t *testing.T) {
 		}
 		// Sometime the logical portion of the timestamp can be non-zero which makes
 		// the overhead non-deterministic.
-		args.Cmd.ReplicatedEvalResult.Timestamp.Logical = 0
+		args.Cmd.ReplicatedEvalResult.WriteTimestamp.Logical = 0
 		atomic.StoreUint32(&overhead, uint32(args.Cmd.Size()-args.Cmd.WriteBatch.Size()))
 		// We don't want to print the WriteBatch because it's explicitly
 		// excluded from the size computation. Nil'ing it out does not
@@ -3604,14 +3617,14 @@ func TestTenantID(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
 			_, repl := getFirstStoreReplica(t, tc.Server(0), keys.UserTableDataMin)
-			ri := repl.State()
+			ri := repl.State(ctx)
 			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
 		}
 		// Ensure that a range with a tenant prefix has the proper tenant ID.
 		tc.SplitRangeOrFatal(t, tenant2Prefix)
 		{
 			_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
-			ri := repl.State()
+			ri := repl.State(ctx)
 			require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
 		}
 	})
@@ -3665,18 +3678,18 @@ func TestTenantID(t *testing.T) {
 
 		uninitializedRepl, _, err := tc.Server(1).GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, repl.RangeID)
 		require.NoError(t, err)
-		ri := uninitializedRepl.State()
+		ri := uninitializedRepl.State(ctx)
 		require.Equal(t, uint64(0), ri.TenantID)
 		close(blockSnapshot)
 		require.NoError(t, <-addReplicaErr)
-		ri = uninitializedRepl.State() // now initialized
+		ri = uninitializedRepl.State(ctx) // now initialized
 		require.Equal(t, tenant2.ToUint64(), ri.TenantID)
 	})
 	t.Run("(3) upon restart", func(t *testing.T) {
 		tc.StopServer(0)
 		tc.AddAndStartServer(t, stickySpecTestServerArgs)
 		_, repl := getFirstStoreReplica(t, tc.Server(2), tenant2Prefix)
-		ri := repl.State()
+		ri := repl.State(ctx)
 		require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
 	})
 
@@ -3773,4 +3786,197 @@ func TestRaftSchedulerPrioritizesNodeLiveness(t *testing.T) {
 	// Assert that the node liveness range is prioritized.
 	priorityID := store.RaftSchedulerPriorityID()
 	require.Equal(t, livenessRangeID, priorityID)
+}
+
+func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
+	ctx := context.Background()
+	args := base.TestServerArgs{}
+	s, _, db := serverutils.StartServer(t, args)
+
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		defer func() {
+			t.Log(err)
+		}()
+		if err := txn.Put(ctx, "a", "a"); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, "b", "b"); err != nil {
+			return err
+		}
+		return txn.Commit(ctx)
+	}))
+	tup, err := db.Get(ctx, "a")
+	require.NoError(t, err)
+	require.NotNil(t, tup.Value)
+	tup, err = db.Get(ctx, "b")
+	require.NoError(t, err)
+	require.NotNil(t, tup.Value)
+	return s, db
+}
+
+// TestOptimisticEvalRetry tests the case where an optimistically evaluated
+// scan encounters contention from a concurrent txn holding unreplicated
+// exclusive locks, and therefore re-evaluates pessimistically, and eventually
+// succeeds once the contending txn commits.
+func TestOptimisticEvalRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db := setupDBAndWriteAAndB(t)
+	defer s.Stopper().Stop(ctx)
+
+	txn1 := db.NewTxn(ctx, "locking txn")
+	_, err := txn1.ScanForUpdate(ctx, "a", "c", 0)
+	require.NoError(t, err)
+
+	readDone := make(chan error)
+	go func() {
+		readDone <- db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			defer func() {
+				t.Log(err)
+			}()
+			// We can't actually prove that the optimistic evaluation path was
+			// taken, but it should happen based on the fact that this is a limited
+			// scan with a limit of 1 row, and the replica has 2 rows.
+			_, err = txn.Scan(ctx, "a", "c", 1)
+			if err != nil {
+				return err
+			}
+			return txn.Commit(ctx)
+		})
+	}()
+	removedLocks := false
+	timer := timeutil.NewTimer()
+	timer.Reset(time.Second * 2)
+	defer timer.Stop()
+	done := false
+	for !done {
+		select {
+		case err := <-readDone:
+			if !removedLocks {
+				t.Fatal("read completed before exclusive locks were released")
+			}
+			require.NoError(t, err)
+			require.True(t, removedLocks)
+			done = true
+		case <-timer.C:
+			require.NoError(t, txn1.Commit(ctx))
+			removedLocks = true
+		}
+	}
+}
+
+// TestOptimisticEvalNoContention tests the case where an optimistically
+// evaluated scan has a span that overlaps with a concurrent txn holding
+// unreplicated exclusive locks, but the actual span that is read does not
+// overlap, and therefore the scan succeeds before the lock holding txn
+// commits.
+func TestOptimisticEvalNoContention(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db := setupDBAndWriteAAndB(t)
+	defer s.Stopper().Stop(ctx)
+
+	txn1 := db.NewTxn(ctx, "locking txn")
+	_, err := txn1.ScanForUpdate(ctx, "b", "c", 0)
+	require.NoError(t, err)
+
+	readDone := make(chan error)
+	go func() {
+		readDone <- db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			defer func() {
+				t.Log(err)
+			}()
+			// There is no contention when doing optimistic evaluation, since it can read a
+			// which is not locked.
+			_, err = txn.Scan(ctx, "a", "c", 1)
+			if err != nil {
+				return err
+			}
+			return txn.Commit(ctx)
+		})
+	}()
+	err = <-readDone
+	require.NoError(t, err)
+	require.NoError(t, txn1.Commit(ctx))
+}
+
+func BenchmarkOptimisticEval(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	args := base.TestServerArgs{}
+	s, _, db := serverutils.StartServer(b, args)
+	defer s.Stopper().Stop(ctx)
+
+	require.NoError(b, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		defer func() {
+			b.Log(err)
+		}()
+		if err := txn.Put(ctx, "a", "a"); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, "b", "b"); err != nil {
+			return err
+		}
+		return txn.Commit(ctx)
+	}))
+	tup, err := db.Get(ctx, "a")
+	require.NoError(b, err)
+	require.NotNil(b, tup.Value)
+	tup, err = db.Get(ctx, "b")
+	require.NoError(b, err)
+	require.NotNil(b, tup.Value)
+
+	for _, realContention := range []bool{false, true} {
+		b.Run(fmt.Sprintf("real-contention=%t", realContention),
+			func(b *testing.B) {
+				lockStart := "b"
+				if realContention {
+					lockStart = "a"
+				}
+				finishWrites := make(chan struct{})
+				var writers sync.WaitGroup
+				for i := 0; i < 1; i++ {
+					writers.Add(1)
+					go func() {
+						for {
+							txn := db.NewTxn(ctx, "locking txn")
+							_, err = txn.ScanForUpdate(ctx, lockStart, "c", 0)
+							require.NoError(b, err)
+							time.Sleep(5 * time.Millisecond)
+							// Normally, it would do a write here, but we don't bother.
+							require.NoError(b, txn.Commit(ctx))
+							select {
+							case _, recv := <-finishWrites:
+								if !recv {
+									writers.Done()
+									return
+								}
+							default:
+							}
+						}
+					}()
+				}
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					_ = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+						_, err = txn.Scan(ctx, "a", "c", 1)
+						if err != nil {
+							panic(err)
+						}
+						err = txn.Commit(ctx)
+						if err != nil {
+							panic(err)
+						}
+						return err
+					})
+				}
+				b.StopTimer()
+				close(finishWrites)
+				writers.Wait()
+			})
+	}
 }

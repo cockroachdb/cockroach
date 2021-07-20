@@ -49,37 +49,13 @@ func (ex *connExecutor) execPrepare(
 		ex.deletePreparedStmt(ctx, "")
 	}
 
-	// If we were provided any type hints, attempt to resolve any user defined
-	// type OIDs into types.T's.
-	if parseCmd.TypeHints != nil {
-		for i := range parseCmd.TypeHints {
-			if parseCmd.TypeHints[i] == nil {
-				if i >= len(parseCmd.RawTypeHints) {
-					return retErr(
-						pgwirebase.NewProtocolViolationErrorf(
-							"expected %d arguments, got %d",
-							len(parseCmd.TypeHints),
-							len(parseCmd.RawTypeHints),
-						),
-					)
-				}
-				if types.IsOIDUserDefinedType(parseCmd.RawTypeHints[i]) {
-					var err error
-					parseCmd.TypeHints[i], err = ex.planner.ResolveTypeByOID(ctx, parseCmd.RawTypeHints[i])
-					if err != nil {
-						return retErr(err)
-					}
-				}
-			}
-		}
-	}
-
 	stmt := makeStatement(parseCmd.Statement, ex.generateID())
 	ps, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
 		stmt,
 		parseCmd.TypeHints,
+		parseCmd.RawTypeHints,
 		PreparedStatementOriginWire,
 	)
 	if err != nil {
@@ -116,12 +92,15 @@ func (ex *connExecutor) execPrepare(
 // also returned. It is illegal to call this when a statement with that name
 // already exists (even for anonymous prepared statements).
 //
-// placeholderHints are used to assist in inferring placeholder types.
+// placeholderHints are used to assist in inferring placeholder types. The
+// rawTypeHints are optional and represent OIDs indicated for the placeholders
+// coming from the client via the wire protocol.
 func (ex *connExecutor) addPreparedStmt(
 	ctx context.Context,
 	name string,
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
+	rawTypeHints []oid.Oid,
 	origin PreparedStatementOrigin,
 ) (*PreparedStatement, error) {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
@@ -129,7 +108,7 @@ func (ex *connExecutor) addPreparedStmt(
 	}
 
 	// Prepare the query. This completes the typing of placeholders.
-	prepared, err := ex.prepare(ctx, stmt, placeholderHints, origin)
+	prepared, err := ex.prepare(ctx, stmt, placeholderHints, rawTypeHints, origin)
 	if err != nil {
 		return nil, err
 	}
@@ -152,18 +131,11 @@ func (ex *connExecutor) prepare(
 	ctx context.Context,
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
+	rawTypeHints []oid.Oid,
 	origin PreparedStatementOrigin,
 ) (*PreparedStatement, error) {
-	if placeholderHints == nil {
-		placeholderHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
-	}
 
 	prepared := &PreparedStatement{
-		PrepareMetadata: querycache.PrepareMetadata{
-			PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
-				TypeHints: placeholderHints,
-			},
-		},
 		memAcc:   ex.sessionMon.MakeBoundAccount(),
 		refCount: 1,
 
@@ -177,16 +149,6 @@ func (ex *connExecutor) prepare(
 	if stmt.AST == nil {
 		return prepared, nil
 	}
-	prepared.Statement = stmt.Statement
-	prepared.AnonymizedStr = stmt.AnonymizedStr
-
-	// Point to the prepared state, which can be further populated during query
-	// preparation.
-	stmt.Prepared = prepared
-
-	if err := tree.ProcessPlaceholderAnnotations(&ex.planner.semaCtx, stmt.AST, placeholderHints); err != nil {
-		return nil, err
-	}
 
 	// Preparing needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking. If we already have an open transaction for
@@ -199,7 +161,7 @@ func (ex *connExecutor) prepare(
 
 	var flags planFlags
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
-		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+		ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 		p := &ex.planner
 		if origin != PreparedStatementOriginSQL {
 			// If the PREPARE command was issued as a SQL statement, then we
@@ -210,6 +172,48 @@ func (ex *connExecutor) prepare(
 			// instrumentation.
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
 		}
+
+		if placeholderHints == nil {
+			placeholderHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
+		} else if rawTypeHints != nil {
+			// If we were provided any type hints, attempt to resolve any user defined
+			// type OIDs into types.T's.
+			for i := range placeholderHints {
+				if placeholderHints[i] == nil {
+					if i >= len(rawTypeHints) {
+						return pgwirebase.NewProtocolViolationErrorf(
+							"expected %d arguments, got %d",
+							len(placeholderHints),
+							len(rawTypeHints),
+						)
+					}
+					if types.IsOIDUserDefinedType(rawTypeHints[i]) {
+						var err error
+						placeholderHints[i], err = ex.planner.ResolveTypeByOID(ctx, rawTypeHints[i])
+						if err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+
+		prepared.PrepareMetadata = querycache.PrepareMetadata{
+			PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
+				TypeHints: placeholderHints,
+			},
+		}
+		prepared.Statement = stmt.Statement
+		prepared.AnonymizedStr = stmt.AnonymizedStr
+
+		// Point to the prepared state, which can be further populated during query
+		// preparation.
+		stmt.Prepared = prepared
+
+		if err := tree.ProcessPlaceholderAnnotations(&ex.planner.semaCtx, stmt.AST, placeholderHints); err != nil {
+			return err
+		}
+
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p)
@@ -227,6 +231,11 @@ func (ex *connExecutor) prepare(
 		if err := ex.server.cfg.DB.Txn(ctx, prepare); err != nil {
 			return nil, err
 		}
+		// Prepare with an implicit transaction will end up creating
+		// a new transaction. Once this transaction is complete,
+		// we can safely release the leases, otherwise we will
+		// incorrectly hold leases for later operations.
+		ex.extraTxnState.descCollection.ReleaseAll(ctx)
 	}
 
 	// Account for the memory used by this prepared statement.
@@ -402,6 +411,15 @@ func (ex *connExecutor) execBind(
 		for i := 0; i < numCols; i++ {
 			columnFormatCodes[i] = bindCmd.OutFormats[0]
 		}
+	}
+
+	// This is a huge kludge to deal with the fact that we're resolving types
+	// using a planner with a committed transaction. This ends up being almost
+	// okay because the execution is going to re-acquire leases on these types.
+	// Regardless, holding this lease is worse than not holding it. Users might
+	// expect to get type mismatch errors if a rename of the type occurred.
+	if ex.getTransactionState() == NoTxnStateStr {
+		ex.planner.Descriptors().ReleaseAll(ctx)
 	}
 
 	// Create the new PreparedPortal.

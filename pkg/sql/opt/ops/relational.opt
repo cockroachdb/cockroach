@@ -92,6 +92,24 @@ define ScanPrivate {
     # to constrain the lookup spans further. This flag is used to record telemetry
     # about how often this optimization is getting applied.
     PartitionConstrainedScan bool
+
+    # ExactPrefix caches the exact prefix of the Constraint.
+    ExactPrefix int
+}
+
+# PlaceholderScan is a special variant of Scan. It scans exactly one span of a
+# non-inverted index, and the span has the same start and end key. The values
+# for the span key are child scalar operators which are either constants or
+# placeholders. This operator evaluates the placeholders at execbuild time.
+#
+# PlaceholderScan cannot have a Constraint or InvertedConstraint.
+[Relational]
+define PlaceholderScan {
+    # Span contains the values for a constraint span key; they map 1-1 to a
+    # prefix of the index columns. They are either constant values or
+    # placeholders.
+    Span ScalarListExpr
+    _ ScanPrivate
 }
 
 # SequenceSelect represents a read from a sequence as a data source. It always returns
@@ -346,6 +364,22 @@ define LookupJoinPrivate {
     # to a contiguous prefix of the index columns.
     LookupExpr FiltersExpr
 
+    # If RemoteLookupExpr is set, this is a locality optimized semi, inner, or
+    # left lookup join. In this case, LookupExpr contains the lookup join
+    # conditions targeting ranges located on local nodes (relative to the
+    # gateway region), and RemoteLookupExpr contains the lookup join conditions
+    # targeting remote nodes. The optimizer will only plan a locality optimized
+    # lookup join if it is known that each lookup returns at most one row. This
+    # fact allows the execution engine to use the local conditions in LookupExpr
+    # first, and if a match is found locally for each input row, there is no
+    # need to search remote nodes. If a local match is not found for all input
+    # rows, the execution engine uses RemoteLookupExpr to search remote nodes.
+    #
+    # The same restrictions on supported expressions that apply to LookupExpr
+    # also apply to RemoteLookupExpr. See the comment above LookupExpr for more
+    # details.
+    RemoteLookupExpr FiltersExpr
+
     # Cols is the union between the set of input columns that are returned by
     # the lookup join and the set of lookup columns retrieved through lookup.
     #
@@ -373,9 +407,9 @@ define LookupJoinPrivate {
     IsSecondJoinInPairedJoiner bool
 
     # LocalityOptimized is true if this lookup join is part of a locality
-    # optimized search strategy, indicating that it either requires all local
-    # (relative to the gateway region) or all remote lookups. Currently, only
-    # anti joins can be locality optimized, and they are implemented with two
+    # optimized search strategy. For semi, inner, and left joins, this means
+    # that RemoteLookupExpr will be non-nil. See comments above that field for
+    # details. Locality optimized anti joins, however, are implemented with two
     # nested anti lookup joins in which the first join targets local partitions
     # and the second join targets remote partitions. Therefore,
     # LocalityOptimized is used as a hint to the coster to reduce the cost of
@@ -1188,4 +1222,14 @@ define FakeRel {
 [Private]
 define FakeRelPrivate {
     Props RelPropsPtr
+}
+
+# NormCycleTestRel is a relational operator for testing that normalization rule
+# cycles are detected by the Factory and a stack overflow is prevented. Two
+# rules for this expression, NormCycleTestRelTrueToFalse and
+# NormCycleTestRelFalseToTrue, create a normalization rule cycle. See the cycle
+# test file for tests that use this expression.
+[Relational]
+define NormCycleTestRel {
+    Scalar ScalarExpr
 }

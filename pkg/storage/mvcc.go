@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble"
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 )
@@ -53,6 +54,12 @@ const (
 	// compatibility. See:
 	// https://wpdev.uservoice.com/forums/266908-command-prompt-console-bash-on-ubuntu-on-windo/suggestions/17310124-add-ability-to-change-max-number-of-open-files-for
 	MinimumMaxOpenFiles = 1700
+	// Default value for maximum number of intents reported by ExportToSST
+	// and Scan operations in WriteIntentError is set to half of the maximum
+	// lock table size.
+	// This value is subject to tuning in real environment as we have more
+	// data available.
+	maxIntentsPerWriteIntentErrorDefault = 5000
 )
 
 var (
@@ -68,6 +75,14 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	"minimum duration between syncs of the RocksDB WAL",
 	0*time.Millisecond,
 )
+
+// MaxIntentsPerWriteIntentError sets maximum number of intents returned in
+// WriteIntentError in operations that return multiple intents per error.
+// Currently it is used in Scan, ReverseScan, and ExportToSST.
+var MaxIntentsPerWriteIntentError = settings.RegisterIntSetting(
+	"storage.mvcc.max_intents_per_error",
+	"maximum number of intents returned in error during export of scan requests",
+	maxIntentsPerWriteIntentErrorDefault)
 
 var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_ROCKSDB_CONCURRENCY", func() int {
@@ -866,7 +881,7 @@ func mvccGet(
 	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
-	defer pebbleMVCCScannerPool.Put(mvccScanner)
+	defer mvccScanner.release()
 
 	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
 	// specify an empty key for the end key which will ensure we don't retrieve a
@@ -1373,7 +1388,7 @@ func replayTransactionalWrite(
 // Note that, when writing transactionally, the txn's timestamps
 // dictate the timestamp of the operation, and the timestamp parameter
 // is redundant. Specifically, the intent is written at the txn's
-// provisional commit timestamp, txn.Timestamp, unless it is
+// provisional commit timestamp, txn.WriteTimestamp, unless it is
 // forwarded by an existing committed value above that timestamp.
 // However, reads (e.g., for a ConditionalPut) are performed at the
 // txn's read timestamp (txn.ReadTimestamp) to ensure that the
@@ -1472,9 +1487,9 @@ func mvccPutInternal(
 
 	// Determine the read and write timestamps for the write. For a
 	// non-transactional write, these will be identical. For a transactional
-	// write, we read at the transaction's original timestamp (forwarded by any
-	// refresh timestamp) but write intents at its provisional commit timestamp.
-	// See the comment on the txn.Timestamp field definition for rationale.
+	// write, we read at the transaction's read timestamp but write intents at its
+	// provisional commit timestamp. See the comment on the txn.WriteTimestamp field
+	// definition for rationale.
 	readTimestamp := timestamp
 	writeTimestamp := timestamp
 	if txn != nil {
@@ -2362,7 +2377,7 @@ func mvccScanToBytes(
 	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
-	defer pebbleMVCCScannerPool.Put(mvccScanner)
+	defer mvccScanner.release()
 
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
@@ -2372,6 +2387,7 @@ func mvccScanToBytes(
 		ts:               timestamp,
 		maxKeys:          opts.MaxKeys,
 		targetBytes:      opts.TargetBytes,
+		maxIntents:       opts.MaxIntents,
 		inconsistent:     opts.Inconsistent,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
@@ -2508,6 +2524,12 @@ type MVCCScanOptions struct {
 	//
 	// The zero value indicates no limit.
 	TargetBytes int64
+	// MaxIntents is a maximum number of intents collected by scanner in
+	// consistent mode before returning WriteIntentError.
+	//
+	// Not used in inconsistent scans.
+	// The zero value indicates no limit.
+	MaxIntents int64
 }
 
 func (opts *MVCCScanOptions) validate() error {
@@ -2676,8 +2698,8 @@ func MVCCIterate(
 	return intents, nil
 }
 
-// MVCCResolveWriteIntent either commits or aborts (rolls back) an
-// extant write intent for a given txn according to commit parameter.
+// MVCCResolveWriteIntent either commits, aborts (rolls back), or moves forward
+// in time an extant write intent for a given txn according to commit parameter.
 // ResolveWriteIntent will skip write intents of other txns. It returns
 // whether or not an intent was found to resolve.
 //
@@ -2704,30 +2726,19 @@ func MVCCIterate(
 func MVCCResolveWriteIntent(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate,
 ) (bool, error) {
-	iterAndBuf := GetBufUsingIter(rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true}))
-	ok, err := MVCCResolveWriteIntentUsingIter(ctx, rw, iterAndBuf, ms, intent)
-	// Using defer would be more convenient, but it is measurably slower.
-	iterAndBuf.Cleanup()
-	return ok, err
-}
-
-// MVCCResolveWriteIntentUsingIter is a variant of MVCCResolveWriteIntent that
-// uses iterator and buffer passed as parameters (e.g. when used in a loop).
-func MVCCResolveWriteIntentUsingIter(
-	ctx context.Context,
-	rw ReadWriter,
-	iterAndBuf IterAndBuf,
-	ms *enginepb.MVCCStats,
-	intent roachpb.LockUpdate,
-) (bool, error) {
 	if len(intent.Key) == 0 {
 		return false, emptyKeyError()
 	}
 	if len(intent.EndKey) > 0 {
 		return false, errors.Errorf("can't resolve range intent as point intent")
 	}
+
+	iterAndBuf := GetBufUsingIter(rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true}))
 	iterAndBuf.iter.SeekIntentGE(intent.Key, intent.Txn.ID)
-	return mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
+	ok, err := mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
+	// Using defer would be more convenient, but it is measurably slower.
+	iterAndBuf.Cleanup()
+	return ok, err
 }
 
 // unsafeNextVersion positions the iterator at the successor to latestKey. If this value
@@ -3108,12 +3119,6 @@ func GetBufUsingIter(iter MVCCIterator) IterAndBuf {
 	}
 }
 
-// SwitchIter switches to iter, and relinquishes ownership of the existing
-// iter.
-func (b *IterAndBuf) SwitchIter(iter MVCCIterator) {
-	b.iter = iter
-}
-
 // Cleanup must be called to release the resources when done.
 func (b IterAndBuf) Cleanup() {
 	b.buf.release()
@@ -3122,40 +3127,22 @@ func (b IterAndBuf) Cleanup() {
 	}
 }
 
-// MVCCResolveWriteIntentRange commits or aborts (rolls back) the
-// range of write intents specified by start and end keys for a given
-// txn. ResolveWriteIntentRange will skip write intents of other
-// txns. Returns the number of intents resolved and a resume span if
-// the max keys limit was exceeded.
+// MVCCResolveWriteIntentRange commits or aborts (rolls back) the range of write
+// intents specified by start and end keys for a given txn.
+// ResolveWriteIntentRange will skip write intents of other txns. A max of zero
+// means unbounded. A max of -1 means resolve nothing and returns the entire
+// intent span as the resume span. Returns the number of intents resolved and a
+// resume span if the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate, max int64,
-) (int64, *roachpb.Span, error) {
-	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.EndKey})
-	defer iterAndBuf.Cleanup()
-	return MVCCResolveWriteIntentRangeUsingIter(ctx, rw, iterAndBuf, ms, intent, max)
-}
-
-// MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back)
-// the range of write intents specified by start and end keys for a
-// given txn. ResolveWriteIntentRange will skip write intents of other
-// txns.
-//
-// Returns the number of intents resolved and a resume span if the max
-// keys limit was exceeded. A max of zero means unbounded. A max of -1
-// means resolve nothing and return the entire intent span as the resume
-// span.
-func MVCCResolveWriteIntentRangeUsingIter(
-	ctx context.Context,
-	rw ReadWriter,
-	iterAndBuf IterAndBuf,
-	ms *enginepb.MVCCStats,
-	intent roachpb.LockUpdate,
-	max int64,
 ) (int64, *roachpb.Span, error) {
 	if max < 0 {
 		resumeSpan := intent.Span // don't inline or `intent` would escape to heap
 		return 0, &resumeSpan, nil
 	}
+
+	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.EndKey})
+	defer iterAndBuf.Cleanup()
 
 	encKey := MakeMVCCMetadataKey(intent.Key)
 	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
@@ -3725,7 +3712,9 @@ func ComputeStatsForRange(
 
 // computeCapacity returns capacity details for the engine's available storage,
 // by querying the underlying file system.
-func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, error) {
+func computeCapacity(
+	m *pebble.Metrics, path string, maxSizeBytes int64, auxDir string,
+) (roachpb.StoreCapacity, error) {
 	fileSystemUsage := gosigar.FileSystemUsage{}
 	dir := path
 	if dir == "" {
@@ -3758,13 +3747,17 @@ func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, er
 	fsuTotal := int64(fileSystemUsage.Total)
 	fsuAvail := int64(fileSystemUsage.Avail)
 
-	// Find the total size of all the files in the r.dir and all its
-	// subdirectories.
-	var totalUsedBytes int64
-	if errOuter := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	// Pebble has detailed accounting of its own disk space usage, and it's
+	// incrementally updated which helps avoid O(# files) work here.
+	totalUsedBytes := int64(m.DiskSpaceUsage())
+
+	// We don't have incremental accounting of the disk space usage of files
+	// in the auxiliary directory. Walk the auxiliary directory and all its
+	// subdirectories, adding to the total used bytes.
+	if errOuter := filepath.Walk(auxDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			// This can happen if rocksdb removes files out from under us - just keep
-			// going to get the best estimate we can.
+			// This can happen if CockroachDB removes files out from under us -
+			// just keep going to get the best estimate we can.
 			if oserror.IsNotExist(err) {
 				return nil
 			}

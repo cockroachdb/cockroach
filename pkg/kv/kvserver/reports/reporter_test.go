@@ -563,7 +563,7 @@ func TestZoneChecker(t *testing.T) {
 	}
 	keyScanner := keysutils.MakePrettyScannerForNamedTables(
 		map[string]int{"t1": t1ID} /* tableNameToID */, nil /* idxNameToID */)
-	rngs, err := processSplits(keyScanner, splits)
+	rngs, err := processSplits(keyScanner, splits, nil /* stores */)
 	require.NoError(t, err)
 
 	var zc zoneResolver

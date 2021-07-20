@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -224,7 +225,7 @@ var varGen = map[string]sessionVar{
 
 			if len(dbName) != 0 {
 				// Verify database descriptor exists.
-				if _, _, err := evalCtx.Descs.GetImmutableDatabaseByName(
+				if _, err := evalCtx.Descs.GetImmutableDatabaseByName(
 					ctx, evalCtx.Txn, dbName, tree.DatabaseLookupFlags{Required: true},
 				); err != nil {
 					return "", err
@@ -409,6 +410,27 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)).String()
+		},
+	},
+
+	// CockroachDB extension.
+	`distsql_workmem`: {
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			limit, err := humanizeutil.ParseBytes(s)
+			if err != nil {
+				return err
+			}
+			if limit <= 0 {
+				return errors.New("distsql_workmem can only be set to a positive value")
+			}
+			m.SetDistSQLWorkMem(limit)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return humanizeutil.IBytes(evalCtx.SessionData.WorkMemLimit)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return humanizeutil.IBytes(settingWorkMemBytes.Get(sv))
 		},
 	},
 
@@ -1233,6 +1255,27 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return formatBoolAsPostgresSetting(experimentalAlterColumnTypeGeneralMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
+	// TODO(mgartner): remove this once expression-based indexes are fully
+	// supported.
+	`experimental_enable_expression_based_indexes`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_expression_based_indexes`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`experimental_enable_expression_based_indexes`, s)
+			if err != nil {
+				return err
+			}
+			m.SetExpressionBasedIndexes(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.EnableExpressionBasedIndexes)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(experimentalExpressionBasedIndexesMode.Get(sv))
 		},
 	},
 

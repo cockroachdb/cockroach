@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -140,7 +141,7 @@ func (b *Builder) analyzeSelectList(
 						outScope.cols = make([]scopeColumn, 0, len(selects)+len(exprs)-1)
 					}
 					for j, e := range exprs {
-						outScope.addColumn(aliases[j], e)
+						outScope.addColumn(scopeColName(tree.Name(aliases[j])), e)
 					}
 					continue
 				}
@@ -161,7 +162,7 @@ func (b *Builder) analyzeSelectList(
 			outScope.cols = make([]scopeColumn, 0, len(selects))
 		}
 		alias := b.getColName(e)
-		outScope.addColumn(alias, texpr)
+		outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
 	}
 }
 
@@ -186,9 +187,17 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 	unresolved, ok := e.(*tree.UnresolvedName)
 	if ok && !unresolved.Star && unresolved.NumParts == 1 {
 		colName := unresolved.Parts[0]
-		_, srcMeta, _, err := inScope.FindSourceProvidingColumn(b.ctx, tree.Name(colName))
-		if err != nil {
-			panic(err)
+		_, srcMeta, _, resolveErr := inScope.FindSourceProvidingColumn(b.ctx, tree.Name(colName))
+		if resolveErr != nil {
+			if sqlerrors.IsUndefinedColumnError(resolveErr) {
+				// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
+				// Attempt to resolve as a TupleStar.
+				return func() tree.TypedExpr {
+					defer wrapColTupleStarPanic(resolveErr)
+					return inScope.resolveType(columnNameAsTupleStar(colName), types.Any)
+				}()
+			}
+			panic(resolveErr)
 		}
 		return srcMeta.(tree.TypedExpr)
 	}
@@ -287,7 +296,7 @@ func (b *Builder) finishBuildScalarRef(
 		// Avoid synthesizing a new column if possible.
 		existing := outScope.findExistingCol(col, false /* allowSideEffects */)
 		if existing == nil || existing == outCol {
-			if outCol.name == "" {
+			if outCol.name.IsAnonymous() {
 				outCol.name = col.name
 			}
 			group := b.factory.ConstructVariable(col.id)
@@ -330,20 +339,15 @@ func makeProjectionBuilder(b *Builder, inScope *scope) projectionBuilder {
 // given expression is a just bare column reference, it returns that column's ID
 // and a nil scalar expression.
 func (pb *projectionBuilder) Add(
-	name tree.Name, expr tree.Expr, desiredType *types.T,
+	name scopeColumnName, expr tree.Expr, desiredType *types.T,
 ) (opt.ColumnID, opt.ScalarExpr) {
 	if pb.outScope == nil {
 		pb.outScope = pb.inScope.replace()
 		pb.outScope.appendColumnsFromScope(pb.inScope)
 	}
 	typedExpr := pb.inScope.resolveAndRequireType(expr, desiredType)
-	// Instead of passing the column name here, we let the column get an
-	// auto-generated name in the metadata. We then override it below. This
-	// reduces clashes between column names in the metadata.
-	// TODO(radu): is this really better than using the real column name?
-	scopeCol := pb.outScope.addColumn("" /* alias */, typedExpr)
+	scopeCol := pb.outScope.addColumn(name, typedExpr)
 	scalar := pb.b.buildScalar(typedExpr, pb.inScope, pb.outScope, scopeCol, nil)
-	scopeCol.name = name
 
 	return scopeCol.id, scalar
 }

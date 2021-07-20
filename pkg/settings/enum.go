@@ -12,6 +12,7 @@ package settings
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -77,11 +78,11 @@ func (e *EnumSetting) GetAvailableValuesAsHint() string {
 	return "Available values: " + strings.Join(vals, ", ")
 }
 
-func (e *EnumSetting) set(sv *Values, k int64) error {
+func (e *EnumSetting) set(ctx context.Context, sv *Values, k int64) error {
 	if _, ok := e.enumValues[k]; !ok {
 		return errors.Errorf("unrecognized value %d", k)
 	}
-	return e.IntSetting.set(sv, k)
+	return e.IntSetting.set(ctx, sv, k)
 }
 
 func enumValuesToDesc(enumValues map[int64]string) string {

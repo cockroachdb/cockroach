@@ -151,8 +151,8 @@ func (v *VersionSetting) GetInternal(sv *Values) interface{} {
 }
 
 // SetInternal updates the setting's value in the provided Values container.
-func (v *VersionSetting) SetInternal(sv *Values, newVal interface{}) {
-	sv.setGeneric(v.getSlotIdx(), newVal)
+func (v *VersionSetting) SetInternal(ctx context.Context, sv *Values, newVal interface{}) {
+	sv.setGeneric(ctx, v.getSlotIdx(), newVal)
 }
 
 // setToDefault is part of the extendingSetting interface. This is a no-op for
@@ -161,7 +161,7 @@ func (v *VersionSetting) SetInternal(sv *Values, newVal interface{}) {
 //
 // TODO(irfansharif): Is this true? Shouldn't the default here just the the
 // version we initialize with?
-func (v *VersionSetting) setToDefault(_ *Values) {}
+func (v *VersionSetting) setToDefault(ctx context.Context, sv *Values) {}
 
 // RegisterVersionSetting adds the provided version setting to the global
 // registry.
@@ -185,6 +185,6 @@ func TestingRegisterVersionSetting(key, desc string, impl VersionSettingImpl) *V
 // it out of the settings package before long (see TODO on the type itself). In
 // our current usage we don't rely on attaching pre-change triggers, so let's
 // not add it needlessly.
-func (v *VersionSetting) SetOnChange(_ *Values, _ func()) {
+func (v *VersionSetting) SetOnChange(sv *Values, fn func(ctx context.Context)) {
 	panic("unimplemented")
 }

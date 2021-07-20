@@ -4,12 +4,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scpb",
-    srcs = ["elements.go"],
+    srcs = [
+        "attribute.go",
+        "elements.go",
+        ":gen-attribute-stringer",  # keep
+    ],
     embed = [":scpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/lexbase",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -30,8 +35,12 @@ go_proto_library(
 go_test(
     name = "scpb_test",
     size = "small",
-    srcs = ["elements_test.go"],
+    srcs = [
+        "attribute_test.go",
+        "elements_test.go",
+    ],
     embed = [":scpb"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
 
 proto_library(
@@ -42,5 +51,28 @@ proto_library(
     deps = [
         "//pkg/sql/catalog/descpb:descpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+# Keep this genrule and not using common string function due to extra flags eg: trimprefix
+genrule(
+    name = "gen-attribute-stringer",
+    srcs = [
+        "attribute.go",
+    ],
+    outs = ["attribute_string.go"],
+    # golang.org/x/tools executes commands via
+    # golang.org/x/sys/execabs which requires all PATH lookups to
+    # result in absolute paths. To account for this, we resolve the
+    # relative path returned by location to an absolute path.
+    cmd = """
+       GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+       GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+       env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Attribute -trimprefix Attribute $<
+    """,
+    exec_tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

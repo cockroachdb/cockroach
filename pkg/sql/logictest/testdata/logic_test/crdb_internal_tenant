@@ -8,6 +8,8 @@ SELECT count(distinct(node_id)), count(*)  FROM crdb_internal.node_runtime_info
 query IT
 SELECT node_id, name FROM crdb_internal.leases ORDER BY name
 ----
+0  eventlog
+0  jobs
 0  role_members
 0  role_options
 0  system
@@ -48,9 +50,11 @@ crdb_internal  index_columns                table  NULL  NULL  NULL
 crdb_internal  interleaved                  table  NULL  NULL  NULL
 crdb_internal  invalid_objects              table  NULL  NULL  NULL
 crdb_internal  jobs                         table  NULL  NULL  NULL
+crdb_internal  kv_node_liveness             table  NULL  NULL  NULL
 crdb_internal  kv_node_status               table  NULL  NULL  NULL
 crdb_internal  kv_store_status              table  NULL  NULL  NULL
 crdb_internal  leases                       table  NULL  NULL  NULL
+crdb_internal  lost_descriptors_with_data   table  NULL  NULL  NULL
 crdb_internal  node_build_info              table  NULL  NULL  NULL
 crdb_internal  node_contention_events       table  NULL  NULL  NULL
 crdb_internal  node_inflight_trace_spans    table  NULL  NULL  NULL
@@ -150,10 +154,10 @@ Channel
 
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
-query ITTTTTTTTTTTRTTI colnames
+query ITTTTTTTTTTTRTTII colnames
 SELECT * FROM crdb_internal.jobs WHERE false
 ----
-job_id  job_type  description  statement  user_name  descriptor_ids  status  running_status  created  started  finished  modified  fraction_completed  high_water_timestamp  error  coordinator_id
+job_id  job_type  description  statement  user_name  descriptor_ids  status  running_status  created  started  finished  modified  fraction_completed  high_water_timestamp  error  coordinator_id  trace_id
 
 query IITTITTT colnames
 SELECT * FROM crdb_internal.schema_changes WHERE table_id < 0
@@ -165,10 +169,10 @@ SELECT * FROM crdb_internal.leases WHERE node_id < 0
 ----
 node_id  table_id  name  parent_id  expiration  deleted
 
-query ITTTTIIITRRRRRRRRRRRRRRRRRRRRRRRRRRBB colnames
+query ITTTTTIIITRRRRRRRRRRRRRRRRRRRRRRRRRRBB colnames
 SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
 ----
-node_id  application_name  flags  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  implicit_txn  full_scan
+node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  implicit_txn  full_scan
 
 query ITTTIIRRRRRRRRRRRRRRRRRR colnames
 SELECT * FROM crdb_internal.node_transaction_statistics WHERE node_id < 0
@@ -329,7 +333,7 @@ select crdb_internal.get_vmodule()
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-20.2
+21.1
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -417,7 +421,7 @@ select * from crdb_internal.gossip_alerts
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-20.2
+21.1
 
 user root
 
@@ -549,9 +553,9 @@ SELECT * FROM t_53504
 query ITTTI colnames
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
 ----
-node_id  application_name     key                   statement_ids                                                     count
-0        test_txn_statistics  4572719807723346491   {14727561584397653505,14727561584397653505}                       2
-0        test_txn_statistics  6826443595058283584   {14727561584397653505,14727561584397653505,14727561584397653505}  1
-0        test_txn_statistics  7134109142904971730   {14727561584397653517}                                            1
-0        test_txn_statistics  7134109142904971742   {14727561584397653505}                                            1
-0        test_txn_statistics  10166963080898232577  {2484845987516053214}                                             1
+node_id  application_name     key                   statement_ids                                                  count
+0        test_txn_statistics  10922505138341351577  {4104808689124681542}                                          1
+0        test_txn_statistics  12762606372390135532  {8833422719858486605,8833422719858486605,8833422719858486605}  1
+0        test_txn_statistics  15417266716795083410  {8833422719858486605}                                          1
+0        test_txn_statistics  15417266716795083422  {8833422719858486593}                                          1
+0        test_txn_statistics  17236010932163349339  {8833422719858486605,8833422719858486605}                      2

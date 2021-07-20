@@ -185,7 +185,7 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 // - iter: for iterating, is defined as
 //   iter [lower=<lower>] [upper=<upper>] [prefix=<true|false>]
 //   followed by newline separated sequence of operations:
-//     next, prev, seek-lt, seek-ge, set-upper, next-key
+//     next, prev, seek-lt, seek-ge, set-upper, next-key, stats
 //
 // Keys are interpreted as:
 // - starting with L is interpreted as a local-range key.
@@ -363,6 +363,9 @@ func TestIntentInterleavingIter(t *testing.T) {
 						k := scanRoachKey(t, d, "k")
 						iter.SetUpperBound(k)
 						fmt.Fprintf(&b, "set-upper %s\n", string(makePrintableKey(MVCCKey{Key: k}).Key))
+					case "stats":
+						stats := iter.Stats()
+						fmt.Fprintf(&b, "stats: %s\n", stats.Stats.String())
 					default:
 						fmt.Fprintf(&b, "unknown command: %s\n", d.Cmd)
 					}
@@ -813,6 +816,8 @@ func intentInterleavingIterBench(b *testing.B, runFunc func(b *testing.B, state 
 }
 
 func BenchmarkIntentInterleavingIterNext(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
 		b.Run(state.benchPrefix,
 			func(b *testing.B) {
@@ -848,6 +853,8 @@ func BenchmarkIntentInterleavingIterNext(b *testing.B) {
 }
 
 func BenchmarkIntentInterleavingIterPrev(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
 		b.Run(state.benchPrefix,
 			func(b *testing.B) {
@@ -883,6 +890,8 @@ func BenchmarkIntentInterleavingIterPrev(b *testing.B) {
 }
 
 func BenchmarkIntentInterleavingSeekGEAndIter(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
 		for _, seekStride := range []int{1, 10} {
 			b.Run(fmt.Sprintf("%s/seekStride=%d", state.benchPrefix, seekStride),

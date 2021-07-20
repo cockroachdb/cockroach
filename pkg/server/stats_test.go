@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -37,6 +38,12 @@ import (
 func TestTelemetrySQLStatsIndependence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// This test fails if the central reporting server from CRL
+	// breaks. It should be improved to customize the reporting URL and
+	// mock the registration collector with an in-memory server.
+	skip.WithIssue(t, 63851)
+
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -91,7 +98,7 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 	params.Settings = cluster.MakeClusterSettings()
 	// Set the SQL stat refresh rate very low so that SQL stats are continuously
 	// flushed into the telemetry reporting stats pool.
-	sql.SQLStatReset.Override(&params.Settings.SV, 10*time.Millisecond)
+	sql.SQLStatReset.Override(ctx, &params.Settings.SV, 10*time.Millisecond)
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 

@@ -1,7 +1,0 @@
-doctor cluster
-----
-debug doctor cluster
-Examining 36 descriptors and 37 namespace entries...
-  ParentID  50, ParentSchemaID 29: relation "foo" (53): expected matching namespace entry, found none
-Examining 1 running jobs...
-ERROR: validation failed

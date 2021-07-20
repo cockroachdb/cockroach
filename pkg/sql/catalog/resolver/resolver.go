@@ -42,8 +42,10 @@ type SchemaResolver interface {
 	tree.ObjectNameTargetResolver
 	tree.QualifiedNameResolver
 
+	// Accessor is a crufty name and interface that wraps the *descs.Collection.
+	Accessor() catalog.Accessor
+
 	Txn() *kv.Txn
-	LogicalSchemaAccessor() catalog.Accessor
 	CurrentDatabase() string
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(required bool) tree.CommonLookupFlags
@@ -58,10 +60,10 @@ type SchemaResolver interface {
 var ErrNoPrimaryKey = pgerror.Newf(pgcode.NoPrimaryKey,
 	"requested table does not have a primary key")
 
-// GetObjectNames retrieves the names of all objects in the target database/
-// schema. If explicitPrefix is set, the returned table names will have an
-// explicit schema and catalog name.
-func GetObjectNames(
+// GetObjectNamesAndIDs retrieves the names and IDs of all objects in the
+// target database/schema. If explicitPrefix is set, the returned
+// table names will have an explicit schema and catalog name.
+func GetObjectNamesAndIDs(
 	ctx context.Context,
 	txn *kv.Txn,
 	sc SchemaResolver,
@@ -69,12 +71,11 @@ func GetObjectNames(
 	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	explicitPrefix bool,
-) (res tree.TableNames, err error) {
-	return sc.LogicalSchemaAccessor().GetObjectNames(ctx, txn, codec, dbDesc, scName,
-		tree.DatabaseListFlags{
-			CommonLookupFlags: sc.CommonLookupFlags(true /* required */),
-			ExplicitPrefix:    explicitPrefix,
-		})
+) (tree.TableNames, descpb.IDs, error) {
+	return sc.Accessor().GetObjectNamesAndIDs(ctx, txn, dbDesc, scName, tree.DatabaseListFlags{
+		CommonLookupFlags: sc.CommonLookupFlags(true /* required */),
+		ExplicitPrefix:    explicitPrefix,
+	})
 }
 
 // ResolveExistingTableObject looks up an existing object.
@@ -238,20 +239,11 @@ func ResolveTargetObject(
 		return nil, prefix, err
 	}
 	scInfo := scMeta.(*catalog.ResolvedObjectPrefix)
-	if scInfo.Schema.Kind == catalog.SchemaVirtual {
+	if scInfo.Schema.SchemaKind() == catalog.SchemaVirtual {
 		return nil, prefix, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}
 	return scInfo, prefix, nil
-}
-
-// StaticSchemaIDMap is a map of statically known schema IDs.
-var StaticSchemaIDMap = map[descpb.ID]string{
-	keys.PublicSchemaID:              tree.PublicSchema,
-	catconstants.PgCatalogID:         sessiondata.PgCatalogName,
-	catconstants.InformationSchemaID: sessiondata.InformationSchemaName,
-	catconstants.CrdbInternalID:      sessiondata.CRDBInternalSchemaName,
-	catconstants.PgExtensionSchemaID: sessiondata.PgExtensionSchemaName,
 }
 
 // ResolveSchemaNameByID resolves a schema's name based on db and schema id.
@@ -262,10 +254,8 @@ func ResolveSchemaNameByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, schemaID descpb.ID,
 ) (string, error) {
 	// Fast-path for public schema and virtual schemas, to avoid hot lookups.
-	for id, schemaName := range StaticSchemaIDMap {
-		if id == schemaID {
-			return schemaName, nil
-		}
+	if schemaName, ok := catconstants.StaticSchemaIDMap[uint32(schemaID)]; ok {
+		return schemaName, nil
 	}
 	schemas, err := GetForDatabase(ctx, txn, codec, dbID)
 	if err != nil {

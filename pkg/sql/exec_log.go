@@ -276,14 +276,10 @@ func (p *planner) maybeLogStatementInternal(
 		TxnCounter:    uint32(txnCounter),
 	}
 
-	if logV {
-		// Copy to the debug log / trace.
-		log.VEventf(ctx, execType.vLevel(), "%+v", execDetails)
-	}
-
 	if auditEventsDetected {
 		// TODO(knz): re-add the placeholders and age into the logging event.
-		for _, ev := range p.curPlan.auditEvents {
+		entries := make([]eventLogEntry, len(p.curPlan.auditEvents))
+		for i, ev := range p.curPlan.auditEvents {
 			mode := "r"
 			if ev.writing {
 				mode = "rw"
@@ -303,15 +299,18 @@ func (p *planner) maybeLogStatementInternal(
 					tableName = tn.FQString()
 				}
 			}
-
-			p.logEventOnlyExternally(ctx, ev.desc.GetID(),
-				&eventpb.SensitiveTableAccess{
+			entries[i] = eventLogEntry{
+				targetID: int32(ev.desc.GetID()),
+				event: &eventpb.SensitiveTableAccess{
 					CommonSQLExecDetails: execDetails,
 					TableName:            tableName,
 					AccessMode:           mode,
-				})
+				},
+			}
 		}
+		p.logEventsOnlyExternally(ctx, entries...)
 	}
+
 	if slowQueryLogEnabled && (
 	// Did the user request pumping queries into the slow query log when
 	// the logical plan has full scans?
@@ -321,26 +320,42 @@ func (p *planner) maybeLogStatementInternal(
 		switch {
 		case execType == executorTypeExec:
 			// Non-internal queries are always logged to the slow query log.
-			p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
-				&eventpb.SlowQuery{CommonSQLExecDetails: execDetails})
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SlowQuery{CommonSQLExecDetails: execDetails}})
 
 		case execType == executorTypeInternal && slowInternalQueryLogEnabled:
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
-			p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
-				&eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails})
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails}})
 		}
 	}
 
-	if logExecuteEnabled {
-		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
-			&eventpb.QueryExecute{CommonSQLExecDetails: execDetails})
+	if logExecuteEnabled || logV {
+		// The API contract for logEventsWithOptions() is that it returns
+		// no error when system.eventlog is not written to.
+		_ = p.logEventsWithOptions(ctx,
+			1, /* depth */
+			eventLogOptions{
+				// We pass LogToDevChannelIfVerbose because we have a log.V
+				// request for this file, which means the operator wants to
+				// see a copy of the execution on the DEV Channel.
+				dst:               LogExternally | LogToDevChannelIfVerbose,
+				verboseTraceLevel: execType.vLevel(),
+			},
+			eventLogEntry{event: &eventpb.QueryExecute{CommonSQLExecDetails: execDetails}})
 	}
 
 	if shouldLogToAdminAuditLog {
-		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
-			&eventpb.AdminQuery{CommonSQLExecDetails: execDetails})
+		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
 	}
+}
+
+func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...eventLogEntry) {
+	// The API contract for logEventsWithOptions() is that it returns
+	// no error when system.eventlog is not written to.
+	_ = p.logEventsWithOptions(ctx,
+		2, /* depth: we want to use the caller location */
+		eventLogOptions{dst: LogExternally},
+		entries...)
 }
 
 // maybeAudit marks the current plan being constructed as flagged

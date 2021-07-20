@@ -48,6 +48,11 @@ var Subdomain = func() string {
 const gceLocalSSDStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
 
+if [ -e /mnt/data1/.roachprod-initialized ]; then
+  echo "Already initialized, exiting."
+  exit 0
+fi
+
 mount_opts="defaults"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 
@@ -75,7 +80,8 @@ if [ "${disknum}" -eq "0" ]; then
 fi
 
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
-sudo service sshguard stop
+systemctl stop sshguard
+systemctl mask sshguard
 # increase the number of concurrent unauthenticated connections to the sshd
 # daemon. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Load_Balancing.
 # By default, only 10 unauthenticated connections are permitted before sshd
@@ -120,6 +126,13 @@ sysctl --system  # reload sysctl settings
 sudo apt-get update -q
 sudo apt-get install -qy chrony
 
+# Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
+systemctl stop unattended-upgrades
+apt-get purge -y unattended-upgrades
+
+systemctl stop cron
+systemctl mask cron
+
 # Override the chrony config. In particular,
 # log aggressively when clock is adjusted (0.01s)
 # and exclusively use google's time servers.
@@ -141,6 +154,15 @@ EOF
 
 sudo /etc/init.d/chrony restart
 sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
+
+for timer in apt-daily-upgrade.timer apt-daily.timer e2scrub_all.timer fstrim.timer man-db.timer e2scrub_all.timer ; do
+  systemctl mask $timer
+done
+
+for service in apport.service atd.service; do
+  systemctl stop $service
+  systemctl mask $service
+done
 
 sudo touch /mnt/data1/.roachprod-initialized
 `

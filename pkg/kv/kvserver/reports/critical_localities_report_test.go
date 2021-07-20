@@ -12,6 +12,8 @@ package reports
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +27,150 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLocalityReport(t *testing.T) {
+type criticalLocality struct {
+	object       string
+	locality     LocalityRepr
+	atRiskRanges int32
+}
+
+func (c criticalLocality) less(o criticalLocality) bool {
+	if comp := strings.Compare(c.object, o.object); comp != 0 {
+		return comp == -1
+	}
+	if comp := strings.Compare(string(c.locality), string(o.locality)); comp != 0 {
+		return comp == -1
+	}
+	return false
+}
+
+type criticalLocalitiesTestCase struct {
+	baseReportTestCase
+	name string
+	exp  []criticalLocality
+}
+
+func TestCriticalLocalitiesReport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tests := []criticalLocalitiesTestCase{
+		{
+			name: "simple",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{replicas: 3},
+				schema: []database{
+					{
+						name: "db1",
+						zone: &zone{replicas: 3},
+						tables: []table{
+							{name: "t1", zone: &zone{replicas: 3}},
+							// Critical localities for t2 are counted towards db1's zone,
+							// since t2 doesn't define a zone.
+							{name: "t2"},
+							// Critical localities for t3 are counted towards db1's zone since
+							// t3's zone, although it exists, doesn't set any of the
+							// "replication attributes".
+							{name: "t3", zone: &zone{}},
+						},
+					},
+					{
+						name: "db2",
+						tables: []table{
+							// Critical localities for t4 and t5 are counted towards the
+							// default zone, since neither the table nor the db define a
+							// qualifying zone.
+							{name: "t4"},
+							{name: "t5"},
+							{name: "t6", zone: &zone{replicas: 3}},
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t1/pk/100", stores: "1 2 3"},
+					{key: "/Table/t1/pk/150", stores: "1 2 3"},
+					{key: "/Table/t1/pk/200", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
+					// This range causes az1 and az2 to both become critical.
+					{key: "/Table/t3", stores: "1 2 4"},
+					{key: "/Table/t4", stores: "1 2 3"},
+					// All the learners are dead, but learners don't matter. So only reg1
+					// is critical for this range.
+					{key: "/Table/t5", stores: "1 2 3 4l 5l 6l 7l"},
+					// Joint-consensus case. Here 1,2,3 are part of the outgoing quorum and
+					// 1,4,8 are part of the incoming quorum. 4 and 5 are dead, which
+					// makes all the other nodes critical. So localities "reg1",
+					// "reg1,az1", "reg1,az=2" and "reg8" are critical for this range.
+					{key: "/Table/t6", stores: "1 2o 4o 5i 8i"},
+				},
+				nodes: []node{
+					{id: 1, stores: []store{{id: 1}}, locality: "region=reg1,az=az1"},
+					{id: 2, stores: []store{{id: 2}}, locality: "region=reg1,az=az2"},
+					{id: 3, stores: []store{{id: 3}}},
+					{id: 4, stores: []store{{id: 4}}, dead: true},
+					{id: 5, stores: []store{{id: 5}}, dead: true},
+					{id: 6, stores: []store{{id: 6}}, dead: true},
+					{id: 7, stores: []store{{id: 7}}, dead: true},
+					{id: 8, stores: []store{{id: 8}}, locality: "region=reg8"},
+				},
+			},
+			exp: []criticalLocality{
+				{object: "db1", locality: "region=reg1", atRiskRanges: 3},
+				{object: "t1", locality: "region=reg1", atRiskRanges: 8},
+				{object: "db1", locality: "region=reg1,az=az1", atRiskRanges: 1},
+				{object: "db1", locality: "region=reg1,az=az2", atRiskRanges: 1},
+				{object: "default", locality: "region=reg1", atRiskRanges: 2},
+				{object: "t6", locality: "region=reg1", atRiskRanges: 1},
+				{object: "t6", locality: "region=reg1,az=az1", atRiskRanges: 1},
+				{object: "t6", locality: "region=reg1,az=az2", atRiskRanges: 1},
+				{object: "t6", locality: "region=reg8", atRiskRanges: 1},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runCriticalLocalitiesTestCase(ctx, t, tc)
+		})
+	}
+}
+
+func runCriticalLocalitiesTestCase(
+	ctx context.Context, t *testing.T, tc criticalLocalitiesTestCase,
+) {
+	ctc, err := compileTestCase(tc.baseReportTestCase)
+	require.NoError(t, err)
+
+	rep, err := computeCriticalLocalitiesReport(
+		ctx, ctc.nodeLocalities, &ctc.iter, ctc.checker, ctc.cfg, ctc.resolver,
+	)
+	require.NoError(t, err)
+
+	gotRows := make([]criticalLocality, len(rep))
+	i := 0
+	for k, v := range rep {
+		gotRows[i] = criticalLocality{
+			object:       ctc.zoneToObject[k.ZoneKey],
+			locality:     k.locality,
+			atRiskRanges: v.atRiskRanges,
+		}
+		i++
+	}
+	// Sort the report's keys.
+	sort.Slice(gotRows, func(i, j int) bool {
+		return gotRows[i].less(gotRows[j])
+	})
+	sort.Slice(tc.exp, func(i, j int) bool {
+		return tc.exp[i].less(tc.exp[j])
+	})
+
+	require.Equal(t, tc.exp, gotRows)
+}
+
+func TestCriticalLocalitiesSaving(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -34,7 +179,7 @@ func TestLocalityReport(t *testing.T) {
 	// This test uses the cluster as a recipient for a report saved from outside
 	// the cluster. We disable the cluster's own production of reports so that it
 	// doesn't interfere with the test.
-	ReporterInterval.Override(&st.SV, 0)
+	ReporterInterval.Override(ctx, &st.SV, 0)
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	con := s.InternalExecutor().(sqlutil.InternalExecutor)
 	defer s.Stopper().Stop(ctx)

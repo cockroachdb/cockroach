@@ -236,9 +236,13 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 			// Get the report via HTTP.
 			// Flag -s is to remove progress on stderr, so that the buffer
 			// contains the JSON of the response and nothing else.
+			adminAddrs, err := q.c.InternalAdminUIAddr(ctx, q.c.Node(otherNodeID))
+			if err != nil {
+				q.Fatal(err)
+			}
 			buf, err := q.c.RunWithBuffer(ctx, q.t.l, q.c.Node(otherNodeID),
 				"curl", "-s", fmt.Sprintf("http://%s/_status/ranges/%d",
-					q.c.InternalAdminUIAddr(ctx, q.c.Node(otherNodeID))[0], i))
+					adminAddrs[0], i))
 			if err != nil {
 				q.Fatal(err)
 			}
@@ -413,7 +417,7 @@ func registerQuitAllNodes(r *testRegistry) {
 	// short --drain-wait for the remaining nodes under quorum.
 	r.Add(testSpec{
 		Name:       "quit-all-nodes",
-		Owner:      OwnerKV,
+		Owner:      OwnerServer,
 		Cluster:    makeClusterSpec(5),
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {

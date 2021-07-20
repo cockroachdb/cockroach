@@ -21,14 +21,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
@@ -319,7 +316,7 @@ func (r *Registry) WaitForJobs(
 	// populate the crdb_internal.jobs vtable.
 	query := fmt.Sprintf(
 		`SELECT count(*) FROM system.jobs WHERE id IN (%s)
-       AND (status != 'succeeded' AND status != 'failed' AND status != 'canceled')`,
+       AND (status != $1 AND status != $2 AND status != $3 AND status != $4)`,
 		buf.String())
 	for r := retry.StartWithCtx(ctx, retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
@@ -335,6 +332,10 @@ func (r *Registry) WaitForJobs(
 			nil, /* txn */
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query,
+			StatusSucceeded,
+			StatusFailed,
+			StatusCanceled,
+			StatusRevertFailed,
 		)
 		if err != nil {
 			return errors.Wrap(err, "polling for queued jobs to complete")
@@ -396,7 +397,7 @@ func (r *Registry) NewJob(record Record, jobID jobspb.JobID) *Job {
 	}
 	job.mu.payload = jobspb.Payload{
 		Description:   record.Description,
-		Statement:     record.Statement,
+		Statement:     record.Statements,
 		UsernameProto: record.Username.EncodeProto(),
 		DescriptorIDs: record.DescriptorIDs,
 		Details:       jobspb.WrapPayloadDetails(record.Details),
@@ -530,18 +531,10 @@ func (r *Registry) CreateStartableJobWithTxn(
 
 	var resumerCtx context.Context
 	var cancel func()
-	var span *tracing.Span
 	var execDone chan struct{}
 	if !alreadyInitialized {
-		// Construct a context which contains a tracing span that follows from the
-		// span in the parent context. We don't directly use the parent span because
-		// we want independent lifetimes and cancellation. For the same reason, we
-		// don't use the Context returned by ForkSpan.
+		// Using a new context allows for independent lifetimes and cancellation.
 		resumerCtx, cancel = r.makeCtx()
-		_, span = tracing.ForkSpan(ctx, "job")
-		if span != nil {
-			resumerCtx = tracing.ContextWithSpan(resumerCtx, span)
-		}
 
 		if r.startUsingSQLLivenessAdoption(ctx) {
 			r.mu.Lock()
@@ -565,7 +558,6 @@ func (r *Registry) CreateStartableJobWithTxn(
 		*sj = &StartableJob{}
 		(*sj).resumerCtx = resumerCtx
 		(*sj).cancel = cancel
-		(*sj).span = span
 		(*sj).execDone = execDone
 	}
 	(*sj).Job = j
@@ -668,16 +660,25 @@ func (r *Registry) Start(
 	}
 
 	removeClaimsFromDeadSessions := func(ctx context.Context, s sqlliveness.Session) {
-		if _, err := r.ex.QueryRowEx(
-			ctx, "expire-sessions", nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()}, `
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Run the expiration transaction at low priority to ensure that it does
+			// not contend with foreground reads. Note that the adoption and cancellation
+			// queries also use low priority so they will interact nicely.
+			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
+				return errors.WithAssertionFailure(err)
+			}
+			_, err := r.ex.ExecEx(
+				ctx, "expire-sessions", nil,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()}, `
 UPDATE system.jobs
    SET claim_session_id = NULL
  WHERE claim_session_id <> $1
    AND status IN `+claimableStatusTupleString+`
    AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)`,
-			s.ID().UnsafeBytes(),
-		); err != nil {
+				s.ID().UnsafeBytes(),
+			)
+			return err
+		}); err != nil {
 			log.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}
@@ -741,7 +742,7 @@ UPDATE system.jobs
 	if err := stopper.RunAsyncTask(context.Background(), "jobs/gc", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		settingChanged := make(chan struct{}, 1)
-		gcSetting.SetOnChange(&r.settings.SV, func() {
+		gcSetting.SetOnChange(&r.settings.SV, func(ctx context.Context) {
 			select {
 			case settingChanged <- struct{}{}:
 			default:
@@ -871,40 +872,6 @@ func (r *Registry) maybeCancelJobsDeprecated(
 	}
 }
 
-// isOrphaned tries to detect if there are no mutations left to be done for the
-// job which will make it a candidate for garbage collection. Jobs can be left
-// in such inconsistent state if they fail before being removed from the jobs table.
-func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (bool, error) {
-	if payload.Type() != jobspb.TypeSchemaChange {
-		return false, nil
-	}
-	for _, id := range payload.DescriptorIDs {
-		pendingMutations := false
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			td, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.TODOSQLCodec, id)
-			if err != nil {
-				return err
-			}
-			hasAnyMutations := len(td.AllMutations()) != 0 || len(td.GetGCMutations()) != 0
-			hasDropJob := td.TableDesc().DropJobID != 0
-			pendingMutations = hasAnyMutations || hasDropJob
-			return nil
-		}); err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				// Treat missing table descriptors as no longer relevant for the
-				// job payload. See
-				// https://github.com/cockroachdb/cockroach/45399.
-				continue
-			}
-			return false, err
-		}
-		if pendingMutations {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
 const cleanupPageSize = 100
 
 func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) error {
@@ -950,12 +917,6 @@ func (r *Registry) cleanupOldJobsPage(
 		}
 		remove := false
 		switch Status(*row[2].(*tree.DString)) {
-		case StatusRunning, StatusPending:
-			done, err := r.isOrphaned(ctx, payload)
-			if err != nil {
-				return false, 0, err
-			}
-			remove = done && row[3].(*tree.DTimestamp).Time.Before(olderThan)
 		case StatusSucceeded, StatusCanceled, StatusFailed:
 			remove = payload.FinishedMicros < oldMicros
 		}
@@ -972,7 +933,7 @@ func (r *Registry) cleanupOldJobsPage(
 
 	log.VEventf(ctx, 2, "read potentially expired jobs: %d", numRows)
 	if len(toDelete.Array) > 0 {
-		log.Infof(ctx, "cleaning up expired job records: %d", len(toDelete.Array))
+		log.Infof(ctx, "attempting to clean up %d expired job records", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
 		var nDeleted int
 		if nDeleted, err = r.ex.Exec(
@@ -980,10 +941,7 @@ func (r *Registry) cleanupOldJobsPage(
 		); err != nil {
 			return false, 0, errors.Wrap(err, "deleting old jobs")
 		}
-		if nDeleted != len(toDelete.Array) {
-			return false, 0, errors.AssertionFailedf("asked to delete %d rows but %d were actually deleted",
-				len(toDelete.Array), nDeleted)
-		}
+		log.Infof(ctx, "cleaned up %d expired job records", nDeleted)
 	}
 	// If we got as many rows as we asked for, there might be more.
 	morePages := numRows == pageSize
@@ -1292,7 +1250,7 @@ func (r *Registry) stepThroughStateMachine(
 			}
 			return sErr
 		}
-		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusFailed,
+		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusRevertFailed,
 			errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", job.ID()))
 	case StatusFailed:
 		if jobErr == nil {
@@ -1304,6 +1262,17 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Wrapf(err, "job %d: could not mark as failed: %s", job.ID(), jobErr)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
+		return jobErr
+	case StatusRevertFailed:
+		if jobErr == nil {
+			return errors.AssertionFailedf("job %d: has StatusRevertFailed but no error was provided",
+				job.ID())
+		}
+		if err := job.revertFailed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
+			// If we can't transactionally mark the job as failed then it will be
+			// restarted during the next adopt loop and reverting will be retried.
+			return errors.Wrapf(err, "job %d: could not mark as revert field: %s", job.ID(), jobErr)
+		}
 		return jobErr
 	default:
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,

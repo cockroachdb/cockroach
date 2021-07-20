@@ -2,6 +2,5 @@
 
 set -xeuo pipefail
 
-bazel build //pkg/cmd/cockroach-short
-# Stage artifacts.
-cp $(bazel info bazel-bin)/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short /artifacts
+bazel build //pkg/cmd/bazci
+$(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci build //pkg/cmd/cockroach-short

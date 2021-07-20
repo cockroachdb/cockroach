@@ -13,7 +13,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -135,7 +135,7 @@ func (p *joinPredicate) eval(ctx *tree.EvalContext, leftRow, rightRow tree.Datum
 		copy(p.curRow[:len(leftRow)], leftRow)
 		copy(p.curRow[len(leftRow):], rightRow)
 		ctx.PushIVarContainer(p.iVarHelper.Container())
-		pred, err := schemaexpr.RunFilter(p.onCond, ctx)
+		pred, err := execinfrapb.RunFilter(p.onCond, ctx)
 		ctx.PopIVarContainer()
 		return pred, err
 	}

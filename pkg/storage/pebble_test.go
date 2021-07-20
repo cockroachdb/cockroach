@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
@@ -420,10 +421,17 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 func TestPebbleDiskSlowEmit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	settings := cluster.MakeTestingClusterSettings()
-	MaxSyncDurationFatalOnExceeded.Override(&settings.SV, false)
-	p := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, settings)
+	MaxSyncDurationFatalOnExceeded.Override(ctx, &settings.SV, false)
+	p := newPebbleInMem(
+		context.Background(),
+		roachpb.Attributes{},
+		1<<20,   /* cacheSize */
+		512<<20, /* storeSize */
+		settings,
+	)
 	defer p.Close()
 
 	require.Equal(t, uint64(0), p.diskSlowCount)
@@ -541,4 +549,92 @@ func BenchmarkMVCCKeyCompare(b *testing.B) {
 	if testing.Verbose() {
 		fmt.Fprint(ioutil.Discard, c)
 	}
+}
+
+type testValue struct {
+	key       roachpb.Key
+	value     roachpb.Value
+	timestamp hlc.Timestamp
+	txn       *roachpb.Transaction
+}
+
+func intent(key roachpb.Key, val string, ts hlc.Timestamp) testValue {
+	var value = roachpb.MakeValueFromString(val)
+	value.InitChecksum(key)
+	tx := roachpb.MakeTransaction(fmt.Sprintf("txn-%v", key), key, roachpb.NormalUserPriority, ts, 1000)
+	var txn = &tx
+	return testValue{key, value, ts, txn}
+}
+
+func value(key roachpb.Key, val string, ts hlc.Timestamp) testValue {
+	var value = roachpb.MakeValueFromString(val)
+	value.InitChecksum(key)
+	return testValue{key, value, ts, nil}
+}
+
+func fillInData(ctx context.Context, engine Engine, data []testValue) error {
+	batch := engine.NewBatch()
+	for _, val := range data {
+		if err := MVCCPut(ctx, batch, nil, val.key, val.timestamp, val.value, val.txn); err != nil {
+			return err
+		}
+	}
+	return batch.Commit(true)
+}
+
+func ts(ts int64) hlc.Timestamp {
+	return hlc.Timestamp{WallTime: ts}
+}
+
+func key(k int) roachpb.Key {
+	return []byte(fmt.Sprintf("%05d", k))
+}
+
+func requireTxnForValue(t *testing.T, val testValue, intent roachpb.Intent) {
+	require.Equal(t, val.txn.Key, intent.Txn.Key)
+}
+
+func TestSstExportFailureIntentBatching(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Test function uses a fixed time and key range to produce SST.
+	// Use varying inserted keys for values and intents to putting them in and out of ranges.
+	checkReportedErrors := func(data []testValue, expectedIntentIndices []int) func(*testing.T) {
+		return func(t *testing.T) {
+			ctx := context.Background()
+
+			engine := createTestPebbleEngine()
+			defer engine.Close()
+
+			require.NoError(t, fillInData(ctx, engine, data))
+
+			destination := &MemFile{}
+			_, _, err := engine.ExportMVCCToSst(key(10), key(20000), ts(999), ts(2000),
+				true, 0, 0, true, destination)
+			if len(expectedIntentIndices) == 0 {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				e := (*roachpb.WriteIntentError)(nil)
+				if !errors.As(err, &e) {
+					require.Fail(t, "Expected WriteIntentFailure, got %T", err)
+				}
+				require.Equal(t, len(expectedIntentIndices), len(e.Intents))
+				for i, dataIdx := range expectedIntentIndices {
+					requireTxnForValue(t, data[dataIdx], e.Intents[i])
+				}
+			}
+		}
+	}
+
+	// Export range is fixed to k:["00010", "10000"), ts:(999, 2000] for all tests.
+	testDataCount := int(MaxIntentsPerWriteIntentError.Default() + 1)
+	testData := make([]testValue, testDataCount*2)
+	expectedErrors := make([]int, testDataCount)
+	for i := 0; i < testDataCount; i++ {
+		testData[i*2] = value(key(i*2+11), "value", ts(1000))
+		testData[i*2+1] = intent(key(i*2+12), "intent", ts(1001))
+		expectedErrors[i] = i*2 + 1
+	}
+	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxIntentsPerWriteIntentError.Default()]))
 }

@@ -173,6 +173,33 @@ func TestInternalFullTableScan(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// Test for regression https://github.com/cockroachdb/cockroach/issues/65523
+func TestInternalStmtFingerprintLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := db.Exec("SET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints = 0;")
+	require.NoError(t, err)
+
+	_, err = db.Exec("SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints = 0;")
+	require.NoError(t, err)
+
+	ie := sql.MakeInternalExecutor(
+		ctx,
+		s.(*server.TestServer).Server.PGServer().SQLServer,
+		sql.MemoryMetrics{},
+		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+	)
+
+	_, err = ie.Exec(ctx, "stmt-exceeds-fingerprint-limit", nil, "SELECT 1")
+	require.NoError(t, err)
+}
+
 func TestQueryIsAdminWithNoTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

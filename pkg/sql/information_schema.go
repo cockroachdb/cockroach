@@ -25,11 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/errors"
@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	pgCatalogName = sessiondata.PgCatalogName
+	pgCatalogName = catconstants.PgCatalogName
 )
 
 var pgCatalogNameDString = tree.NewDString(pgCatalogName)
@@ -45,8 +45,8 @@ var pgCatalogNameDString = tree.NewDString(pgCatalogName)
 // informationSchema lists all the table definitions for
 // information_schema.
 var informationSchema = virtualSchema{
-	name: sessiondata.InformationSchemaName,
-	allTableNames: buildStringSet(
+	name: catconstants.InformationSchemaName,
+	undefinedTables: buildStringSet(
 		// Generated with:
 		// select distinct '"'||table_name||'",' from information_schema.tables
 		//    where table_schema='information_schema' order by table_name;
@@ -55,27 +55,16 @@ var informationSchema = virtualSchema{
 		"_pg_foreign_table_columns",
 		"_pg_foreign_tables",
 		"_pg_user_mappings",
-		"administrable_role_authorizations",
-		"applicable_roles",
 		"attributes",
-		"character_sets",
 		"check_constraint_routine_usage",
-		"check_constraints",
-		"collation_character_set_applicability",
-		"collations",
 		"column_domain_usage",
 		"column_options",
-		"column_privileges",
-		"column_udt_usage",
-		"columns",
-		"constraint_column_usage",
 		"constraint_table_usage",
 		"data_type_privileges",
 		"domain_constraints",
 		"domain_udt_usage",
 		"domains",
 		"element_types",
-		"enabled_roles",
 		"foreign_data_wrapper_options",
 		"foreign_data_wrappers",
 		"foreign_server_options",
@@ -83,18 +72,11 @@ var informationSchema = virtualSchema{
 		"foreign_table_options",
 		"foreign_tables",
 		"information_schema_catalog_name",
-		"key_column_usage",
-		"parameters",
-		"referential_constraints",
 		"role_column_grants",
 		"role_routine_grants",
-		"role_table_grants",
 		"role_udt_grants",
 		"role_usage_grants",
 		"routine_privileges",
-		"routines",
-		"schemata",
-		"sequences",
 		"sql_features",
 		"sql_implementation_info",
 		"sql_languages",
@@ -102,13 +84,9 @@ var informationSchema = virtualSchema{
 		"sql_parts",
 		"sql_sizing",
 		"sql_sizing_profiles",
-		"table_constraints",
-		"table_privileges",
-		"tables",
 		"transforms",
 		"triggered_update_columns",
 		"triggers",
-		"type_privileges",
 		"udt_privileges",
 		"usage_privileges",
 		"user_defined_types",
@@ -117,7 +95,6 @@ var informationSchema = virtualSchema{
 		"view_column_usage",
 		"view_routine_usage",
 		"view_table_usage",
-		"views",
 	),
 	tableDefs: map[descpb.ID]virtualSchemaDef{
 		catconstants.InformationSchemaAdministrableRoleAuthorizationsID:  informationSchemaAdministrableRoleAuthorizations,
@@ -1090,13 +1067,13 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
+				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
 					return addRow(
 						tree.NewDString(db.GetName()), // catalog_name
-						tree.NewDString(sc.Name),      // schema_name
+						tree.NewDString(sc.GetName()), // schema_name
 						tree.DNull,                    // default_character_set_name
 						tree.DNull,                    // sql_path
-						yesOrNoDatum(sc.Kind == catalog.SchemaUserDefined), // crdb_is_user_defined
+						yesOrNoDatum(sc.SchemaKind() == catalog.SchemaUserDefined), // crdb_is_user_defined
 					)
 				})
 			})
@@ -1188,17 +1165,19 @@ CREATE TABLE information_schema.schema_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
+				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
 					var privs []descpb.UserPrivilegeString
-					if sc.Kind == catalog.SchemaUserDefined {
+					if sc.SchemaKind() == catalog.SchemaUserDefined {
 						// User defined schemas have their own privileges.
-						privs = sc.Desc.GetPrivileges().Show(privilege.Schema)
+						privs = sc.GetPrivileges().Show(privilege.Schema)
 					} else {
 						// Other schemas inherit from the parent database.
+						// TODO(ajwerner): Fix this because it's bogus for everything other
+						// than public.
 						privs = db.GetPrivileges().Show(privilege.Database)
 					}
 					dbNameStr := tree.NewDString(db.GetName())
-					scNameStr := tree.NewDString(sc.Name)
+					scNameStr := tree.NewDString(sc.GetName())
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
 					for _, u := range privs {
@@ -1208,7 +1187,7 @@ CREATE TABLE information_schema.schema_privileges (
 							// Non-user defined schemas inherit privileges from the database,
 							// but the USAGE privilege is conferred by having SELECT privilege
 							// on the database. (There is no SELECT privilege on schemas.)
-							if sc.Kind != catalog.SchemaUserDefined {
+							if sc.SchemaKind() != catalog.SchemaUserDefined {
 								if privKind == privilege.SELECT {
 									priv = privilege.USAGE.String()
 								} else if !privilege.SchemaPrivileges.Contains(privKind) {
@@ -1320,16 +1299,16 @@ CREATE TABLE information_schema.statistics (
 				scNameStr := tree.NewDString(scName)
 				tbNameStr := tree.NewDString(table.GetName())
 
-				appendRow := func(index *descpb.IndexDescriptor, colName string, sequence int,
+				appendRow := func(index catalog.Index, colName string, sequence int,
 					direction tree.Datum, isStored, isImplicit bool,
 				) error {
 					return addRow(
 						dbNameStr,                         // table_catalog
 						scNameStr,                         // table_schema
 						tbNameStr,                         // table_name
-						yesOrNoDatum(!index.Unique),       // non_unique
+						yesOrNoDatum(!index.IsUnique()),   // non_unique
 						scNameStr,                         // index_schema
-						tree.NewDString(index.Name),       // index_name
+						tree.NewDString(index.GetName()),  // index_name
 						tree.NewDInt(tree.DInt(sequence)), // seq_in_index
 						tree.NewDString(colName),          // column_name
 						tree.DNull,                        // collation
@@ -1341,33 +1320,33 @@ CREATE TABLE information_schema.statistics (
 				}
 
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-					// Columns in the primary key that aren't in index.ColumnNames or
+					// Columns in the primary key that aren't in index.KeyColumnNames or
 					// index.StoreColumnNames are implicit columns in the index.
 					var implicitCols map[string]struct{}
 					var hasImplicitCols bool
 					if index.HasOldStoredColumns() {
 						// Old STORING format: implicit columns are extra columns minus stored
 						// columns.
-						hasImplicitCols = index.NumExtraColumns() > index.NumStoredColumns()
+						hasImplicitCols = index.NumKeySuffixColumns() > index.NumSecondaryStoredColumns()
 					} else {
 						// New STORING format: implicit columns are extra columns.
-						hasImplicitCols = index.NumExtraColumns() > 0
+						hasImplicitCols = index.NumKeySuffixColumns() > 0
 					}
 					if hasImplicitCols {
 						implicitCols = make(map[string]struct{})
-						for i := 0; i < table.GetPrimaryIndex().NumColumns(); i++ {
-							col := table.GetPrimaryIndex().GetColumnName(i)
+						for i := 0; i < table.GetPrimaryIndex().NumKeyColumns(); i++ {
+							col := table.GetPrimaryIndex().GetKeyColumnName(i)
 							implicitCols[col] = struct{}{}
 						}
 					}
 
 					sequence := 1
-					for i := 0; i < index.NumColumns(); i++ {
-						col := index.GetColumnName(i)
+					for i := 0; i < index.NumKeyColumns(); i++ {
+						col := index.GetKeyColumnName(i)
 						// We add a row for each column of index.
-						dir := dStringForIndexDirection(index.GetColumnDirection(i))
+						dir := dStringForIndexDirection(index.GetKeyColumnDirection(i))
 						if err := appendRow(
-							index.IndexDesc(),
+							index,
 							col,
 							sequence,
 							dir,
@@ -1379,10 +1358,10 @@ CREATE TABLE information_schema.statistics (
 						sequence++
 						delete(implicitCols, col)
 					}
-					for i := 0; i < index.NumStoredColumns(); i++ {
+					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 						col := index.GetStoredColumnName(i)
 						// We add a row for each stored column of index.
-						if err := appendRow(index.IndexDesc(), col, sequence,
+						if err := appendRow(index, col, sequence,
 							indexDirectionNA, true, false); err != nil {
 							return err
 						}
@@ -1396,11 +1375,11 @@ CREATE TABLE information_schema.statistics (
 						//
 						// Note that simply iterating over implicitCols map
 						// produces non-deterministic output.
-						for i := 0; i < table.GetPrimaryIndex().NumColumns(); i++ {
-							col := table.GetPrimaryIndex().GetColumnName(i)
+						for i := 0; i < table.GetPrimaryIndex().NumKeyColumns(); i++ {
+							col := table.GetPrimaryIndex().GetKeyColumnName(i)
 							if _, isImplicit := implicitCols[col]; isImplicit {
 								// We add a row for each implicit column of index.
-								if err := appendRow(index.IndexDesc(), col, sequence,
+								if err := appendRow(index, col, sequence,
 									indexDirectionAsc, false, true); err != nil {
 									return err
 								}
@@ -1771,30 +1750,22 @@ func forEachSchema(
 	ctx context.Context,
 	p *planner,
 	db catalog.DatabaseDescriptor,
-	fn func(sc catalog.ResolvedSchema) error,
+	fn func(sc catalog.SchemaDescriptor) error,
 ) error {
 	schemaNames, err := getSchemaNames(ctx, p, db)
 	if err != nil {
 		return err
 	}
 
-	vtableEntries := p.getVirtualTabler().getEntries()
-	schemas := make([]catalog.ResolvedSchema, 0, len(schemaNames)+len(vtableEntries))
+	vtableEntries := p.getVirtualTabler().getSchemas()
+	schemas := make([]catalog.SchemaDescriptor, 0, len(schemaNames)+len(vtableEntries))
 	var userDefinedSchemaIDs []descpb.ID
 	for id, name := range schemaNames {
 		switch {
-		case strings.HasPrefix(name, sessiondata.PgTempSchemaName):
-			schemas = append(schemas, catalog.ResolvedSchema{
-				Name: name,
-				ID:   id,
-				Kind: catalog.SchemaTemporary,
-			})
+		case strings.HasPrefix(name, catconstants.PgTempSchemaName):
+			schemas = append(schemas, schemadesc.NewTemporarySchema(name, id, db.GetID()))
 		case name == tree.PublicSchema:
-			schemas = append(schemas, catalog.ResolvedSchema{
-				Name: name,
-				ID:   id,
-				Kind: catalog.SchemaPublic,
-			})
+			schemas = append(schemas, schemadesc.GetPublicSchema())
 		default:
 			// The default case is a user defined schema. Collect the ID to get the
 			// descriptor later.
@@ -1815,23 +1786,15 @@ func forEachSchema(
 		if !canSeeDescriptor {
 			continue
 		}
-		schemas = append(schemas, catalog.ResolvedSchema{
-			Name: desc.GetName(),
-			ID:   desc.GetID(),
-			Kind: catalog.SchemaUserDefined,
-			Desc: desc,
-		})
+		schemas = append(schemas, desc)
 	}
 
 	for _, schema := range vtableEntries {
-		schemas = append(schemas, catalog.ResolvedSchema{
-			Name: schema.desc.GetName(),
-			Kind: catalog.SchemaVirtual,
-		})
+		schemas = append(schemas, schema.Desc())
 	}
 
 	sort.Slice(schemas, func(i int, j int) bool {
-		return schemas[i].Name < schemas[j].Name
+		return schemas[i].GetName() < schemas[j].GetName()
 	})
 
 	for _, sc := range schemas {
@@ -2122,7 +2085,7 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	if virtualOpts == virtualMany || virtualOpts == virtualCurrentDB {
 		// Virtual descriptors first.
 		vt := p.getVirtualTabler()
-		vEntries := vt.getEntries()
+		vEntries := vt.getSchemas()
 		vSchemaNames := vt.getSchemaNames()
 		iterate := func(dbDesc catalog.DatabaseDescriptor) error {
 			for _, virtSchemaName := range vSchemaNames {

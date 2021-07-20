@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,6 +44,7 @@ func TestInvertedFilterer(t *testing.T) {
 	// done in helpers called by invertedFilterer that have their own
 	// comprehensive tests. The intersection intersects the spans for the
 	// inverted column values 1 and 3.
+	// TODO(yuzefovich): add some unit tests that prefiltering works.
 	testCases := []ProcessorTestCase{
 		{
 			Name: "simple-intersection-and-onexpr",
@@ -61,7 +62,7 @@ func TestInvertedFilterer(t *testing.T) {
 					{3, 50},
 					{3, 51},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
@@ -69,7 +70,7 @@ func TestInvertedFilterer(t *testing.T) {
 					{nil, 41},
 					{nil, 50},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: &execinfrapb.InvertedFiltererSpec{},
@@ -86,14 +87,14 @@ func TestInvertedFilterer(t *testing.T) {
 					{12, 3, 41},
 					{14, 3, 43},
 				},
-				Types: rowenc.MakeIntCols(3),
+				Types: types.MakeIntCols(3),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
 					{12, nil, 41},
 					{14, nil, 43},
 				},
-				Types: rowenc.MakeIntCols(3),
+				Types: types.MakeIntCols(3),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: &execinfrapb.InvertedFiltererSpec{

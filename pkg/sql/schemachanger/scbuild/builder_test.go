@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -51,43 +52,50 @@ func TestBuilderAlterTable(t *testing.T) {
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "create-table":
+			case "create-table", "create-view", "create-type", "create-sequence":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				require.Len(t, stmts, 1)
-				create, ok := stmts[0].AST.(*tree.CreateTable)
-				if !ok {
-					t.Fatal("not a CREATE TABLE statement")
+				tableName := ""
+				switch node := stmts[0].AST.(type) {
+				case *tree.CreateTable:
+					tableName = node.Table.String()
+				case *tree.CreateSequence:
+					tableName = node.Name.String()
+				case *tree.CreateView:
+					tableName = node.Name.String()
+				case *tree.CreateType:
+					tableName = ""
+				default:
+					t.Fatal("not a CREATE TABLE/SEQUENCE/VIEW statement")
 				}
-
 				tdb.Exec(t, d.Input)
 
-				tableName := create.Table.String()
-				var tableID descpb.ID
-				tdb.QueryRow(t, `SELECT $1::regclass::int`, tableName).Scan(&tableID)
-				if tableID == 0 {
-					t.Fatalf("failed to read ID of new table %s", tableName)
+				if len(tableName) > 0 {
+					var tableID descpb.ID
+					tdb.QueryRow(t, `SELECT $1::regclass::int`, tableName).Scan(&tableID)
+					if tableID == 0 {
+						t.Fatalf("failed to read ID of new table %s", tableName)
+					}
+					t.Logf("created relation with id %d", tableID)
 				}
-				t.Logf("created table with id %d", tableID)
 
 				return ""
 			case "build":
-				b, cleanup := newTestingBuilder(s)
+				deps, cleanup := newTestingBuilderDeps(s)
 				defer cleanup()
 
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
-
-				var ts []*scpb.Node
+				var outputNodes []*scpb.Node
 				for i := range stmts {
-					next, err := b.Build(ctx, ts, stmts[i].AST)
+					outputNodes, err = scbuild.Build(ctx, stmts[i].AST, *deps, outputNodes)
 					require.NoError(t, err)
-					ts = next
 				}
 
-				return marshalNodes(t, ts)
+				return marshalNodes(t, outputNodes)
 			case "unimplemented":
-				b, cleanup := newTestingBuilder(s)
+				deps, cleanup := newTestingBuilderDeps(s)
 				defer cleanup()
 
 				stmts, err := parser.Parse(d.Input)
@@ -97,7 +105,7 @@ func TestBuilderAlterTable(t *testing.T) {
 				stmt := stmts[0]
 				alter, ok := stmt.AST.(*tree.AlterTable)
 				require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-				_, err = b.AlterTable(ctx, nil, alter)
+				_, err = scbuild.Build(ctx, alter, *deps, nil)
 				require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				return ""
 
@@ -134,7 +142,7 @@ func marshalNodes(t *testing.T, nodes []*scpb.Node) string {
 	return string(out)
 }
 
-func newTestingBuilder(s serverutils.TestServerInterface) (*scbuild.Builder, func()) {
+func newTestingBuilderDeps(s serverutils.TestServerInterface) (*scbuild.Dependencies, func()) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	ip, cleanup := sql.NewInternalPlanner(
 		"test",
@@ -150,6 +158,15 @@ func newTestingBuilder(s serverutils.TestServerInterface) (*scbuild.Builder, fun
 		resolver.SchemaResolver
 		SemaCtx() *tree.SemaContext
 		EvalContext() *tree.EvalContext
+		scbuild.AuthorizationAccessor
+		Descriptors() *descs.Collection
 	})
-	return scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext()), cleanup
+	buildDeps := scbuild.Dependencies{
+		Res:          planner,
+		SemaCtx:      planner.SemaCtx(),
+		EvalCtx:      planner.EvalContext(),
+		Descs:        planner.Descriptors(),
+		AuthAccessor: planner,
+	}
+	return &buildDeps, cleanup
 }

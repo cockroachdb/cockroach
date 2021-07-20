@@ -51,13 +51,22 @@
         "values": false
       },
       "lines": true,
+<<<<<<< HEAD
       "linewidth": 1,
       "nullPointMode": "null",
+=======
+      "linewidth": 2,
+      "nullPointMode": "null as zero",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -67,8 +76,15 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "rate(sys_host_net_recv_bytes{job=\"crdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$rate_interval])",
           "interval": "",
+=======
+          "exemplar": true,
+          "expr": "sys_cpu_combined_percent_normalized{job='cockroachdb',cluster=~\"$cluster\",instance=~\"$node\"}",
+          "interval": "",
+          "intervalFactor": 1,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -77,7 +93,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Network Bytes Sent",
+=======
+      "title": "CPU Percent",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -93,6 +113,7 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "bytes",
           "label": "bytes (MiB)",
           "logBase": 1,
@@ -101,6 +122,18 @@
           "show": true
         },
         {
+=======
+          "$$hashKey": "object:233",
+          "format": "percentunit",
+          "label": "CPU (percentage)",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:234",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -119,23 +152,38 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+<<<<<<< HEAD
       "datasource": null,
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
+=======
+      "datasource": "${DS_PROMETHEUS}",
+      "description": "Memory in use across all nodes",
+      "fieldConfig": {
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 8
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 16,
+=======
+      "id": 4,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -152,7 +200,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -162,17 +214,36 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "rate(sys_host_net_recv_bytes{job=\"crdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
+=======
+          "exemplar": true,
+          "expr": "sys_rss{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        },
+        {
+          "expr": "",
+          "interval": "",
+          "legendFormat": "",
+          "refId": "C"
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Network Bytes Received",
+=======
+      "title": "Memory Usage",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -188,14 +259,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "bytes",
           "label": "bytes (MiB)",
+=======
+          "$$hashKey": "object:78",
+          "format": "bytes",
+          "label": "memory usage",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:79",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -216,21 +297,33 @@
       "dashes": false,
       "datasource": null,
       "fieldConfig": {
+<<<<<<< HEAD
         "defaults": {
           "custom": {}
         },
+=======
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 16
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 14,
+=======
+      "id": 6,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -247,7 +340,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -257,7 +354,12 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "rate(sys_host_disk_iopsinprogress{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval])",
+=======
+          "exemplar": true,
+          "expr": "rate(sys_host_disk_read_bytes{job=\"cockroachdb\",instance=~\"$node\",cluster=~\"$cluster\"}[$__rate_interval])",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -267,7 +369,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Disk OPS in Progress",
+=======
+      "title": "Disk Read B/s",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -283,14 +389,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "short",
           "label": "IOPS",
+=======
+          "$$hashKey": "object:183",
+          "format": "bytes",
+          "label": "bytes",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": null,
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:184",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -311,21 +427,33 @@
       "dashes": false,
       "datasource": null,
       "fieldConfig": {
+<<<<<<< HEAD
         "defaults": {
           "custom": {}
         },
+=======
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 24
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 12,
+=======
+      "id": 8,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -342,7 +470,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -352,7 +484,11 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "rate(sys_host_disk_write_count{job=\"crdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$rate_interval])",
+=======
+          "expr": "rate(sys_host_disk_write_bytes{job=\"cockroachdb\",instance=~\"$node\",cluster=~\"$cluster\"}[$__rate_interval])",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -362,7 +498,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Disk Write Ops",
+=======
+      "title": "Disk Write B/s",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -378,14 +518,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "short",
           "label": "Write Ops",
+=======
+          "$$hashKey": "object:655",
+          "format": "bytes",
+          "label": "bytes",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:656",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -406,16 +556,24 @@
       "dashes": false,
       "datasource": null,
       "fieldConfig": {
+<<<<<<< HEAD
         "defaults": {
           "custom": {}
         },
+=======
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 32
       },
@@ -437,7 +595,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -447,7 +609,12 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "rate(sys_host_disk_read_count{job=\"crdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$rate_interval])",
+=======
+          "exemplar": true,
+          "expr": "rate(sys_host_disk_read_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -458,7 +625,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Disk Read Ops",
+=======
+      "title": "Disk Read IOPS",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -474,14 +645,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "short",
           "label": "Read Ops",
+=======
+          "$$hashKey": "object:761",
+          "format": "short",
+          "label": "IOPS",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:762",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -502,21 +683,33 @@
       "dashes": false,
       "datasource": null,
       "fieldConfig": {
+<<<<<<< HEAD
         "defaults": {
           "custom": {}
         },
+=======
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 40
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 8,
+=======
+      "id": 12,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -533,7 +726,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -543,7 +740,12 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "rate(sys_host_disk_write_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$rate_interval])",
+=======
+          "exemplar": true,
+          "expr": "rate(sys_host_disk_write_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -553,7 +755,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Disk Writes Bytes",
+=======
+      "title": "Disk Write IOPS",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -569,14 +775,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "bytes",
           "label": "bytes(MiB)",
+=======
+          "$$hashKey": "object:850",
+          "format": "short",
+          "label": "IOPS",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:851",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -597,21 +813,33 @@
       "dashes": false,
       "datasource": null,
       "fieldConfig": {
+<<<<<<< HEAD
         "defaults": {
           "custom": {}
         },
+=======
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 48
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 6,
+=======
+      "id": 14,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -628,7 +856,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -638,7 +870,12 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "rate(sys_host_disk_read_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$rate_interval])",
+=======
+          "exemplar": true,
+          "expr": "rate(sys_host_disk_iopsinprogress{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -648,7 +885,11 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
+<<<<<<< HEAD
       "title": "Disk Reads by Bytes",
+=======
+      "title": "Disk Ops In Progress",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -664,14 +905,24 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
           "format": "bytes",
           "label": "Bytes (MiB)",
+=======
+          "$$hashKey": "object:926",
+          "format": "short",
+          "label": "Ops",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "logBase": 1,
           "max": null,
           "min": null,
           "show": true
         },
         {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:927",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -690,24 +941,39 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+<<<<<<< HEAD
        "datasource": "${DS_PROMETHEUS}",
       "description": "",
       "fieldConfig": {
         "defaults": {
           "custom": {}
         },
+=======
+      "datasource": null,
+      "description": "Free disk space available to CockroachDB data.\n\n[How is this metric calculated?](https://www.cockroachlabs.com/docs/v21.1/ui-storage-dashboard.html#capacity-metrics)",
+      "fieldConfig": {
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
+<<<<<<< HEAD
         "w": 12,
+=======
+        "w": 24,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "x": 0,
         "y": 56
       },
       "hiddenSeries": false,
+<<<<<<< HEAD
       "id": 4,
+=======
+      "id": 20,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "legend": {
         "avg": false,
         "current": false,
@@ -724,7 +990,11 @@
         "alertThreshold": true
       },
       "percentage": false,
+<<<<<<< HEAD
       "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -734,6 +1004,7 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "rate(container_memory_usage_bytes{job=\"crdb\",clusterfilter=~\"$clusterfilter\", instance=~\"$node\"}[5m])",
           "interval": "",
           "legendFormat": "{{instance}",
@@ -750,13 +1021,20 @@
           "interval": "",
           "legendFormat": "",
           "refId": "C"
+=======
+          "exemplar": true,
+          "expr": "capacity_available{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
+          "refId": "A"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Memory Usage",
+      "title": "Available Disk Capacity",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -772,14 +1050,16 @@
       },
       "yaxes": [
         {
-          "format": "short",
-          "label": null,
+          "$$hashKey": "object:103",
+          "format": "bytes",
+          "label": "capacity",
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+          "$$hashKey": "object:104",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -798,23 +1078,21 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-       "datasource": "${DS_PROMETHEUS}",
+      "datasource": null,
       "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
+        "defaults": {},
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 64
       },
       "hiddenSeries": false,
-      "id": 2,
+      "id": 16,
       "legend": {
         "avg": false,
         "current": false,
@@ -825,13 +1103,13 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "linewidth": 1,
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.7",
+      "pluginVersion": "",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -841,18 +1119,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sys_cpu_combined_percent_normalized{job='crdb',cluster=~\"$clusterfilter\",instance=~\"$node\"}) by (instance)",
+          "expr": "rate(sys_host_net_recv_bytes{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
           "interval": "",
-          "intervalFactor": 1,
           "legendFormat": "{{instance}}",
           "refId": "A"
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "CPU % by Node",
+<<<<<<< HEAD
+      "title": "Memory Usage",
+=======
+      "title": "Network Bytes Received",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -868,6 +1150,147 @@
       },
       "yaxes": [
         {
+<<<<<<< HEAD
+          "format": "short",
+          "label": null,
+=======
+          "$$hashKey": "object:1076",
+          "format": "bytes",
+          "label": "bytes",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+<<<<<<< HEAD
+=======
+          "$$hashKey": "object:1077",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+<<<<<<< HEAD
+       "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+=======
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+<<<<<<< HEAD
+        "w": 12,
+        "x": 0,
+        "y": 64
+      },
+      "hiddenSeries": false,
+      "id": 2,
+=======
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "hiddenSeries": false,
+      "id": 18,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+<<<<<<< HEAD
+      "linewidth": 2,
+      "nullPointMode": "null as zero",
+=======
+      "linewidth": 1,
+      "nullPointMode": "null",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+<<<<<<< HEAD
+      "pluginVersion": "7.3.7",
+=======
+      "pluginVersion": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+<<<<<<< HEAD
+          "expr": "sum(sys_cpu_combined_percent_normalized{job='crdb',cluster=~\"$clusterfilter\",instance=~\"$node\"}) by (instance)",
+          "interval": "",
+          "intervalFactor": 1,
+=======
+          "exemplar": true,
+          "expr": "rate(sys_host_net_send_bytes{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
+          "interval": "",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+<<<<<<< HEAD
+      "title": "CPU % by Node",
+=======
+      "title": "Network Bytes Sent",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+<<<<<<< HEAD
           "format": "percentunit",
           "label": "CPU (percentage)",
           "logBase": 1,
@@ -876,6 +1299,18 @@
           "show": true
         },
         {
+=======
+          "$$hashKey": "object:708",
+          "format": "bytes",
+          "label": "bytes",
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:709",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -890,12 +1325,18 @@
       }
     }
   ],
+<<<<<<< HEAD
   "schemaVersion": 26,
+=======
+  "refresh": false,
+  "schemaVersion": 27,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
+<<<<<<< HEAD
         "allValue": null,
         "current": {},
          "datasource": "${DS_PROMETHEUS}",
@@ -908,6 +1349,48 @@
         "name": "clusterfilter",
         "options": [],
         "query": "sys_uptime{job=\"crdb\"}",
+=======
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "my-cockroachdb-cluster",
+          "value": "my-cockroachdb-cluster"
+        },
+        "datasource": "${DS_PROMETHEUS}",
+        "definition": "sys_uptime{job=\"cockroachdb\"}",
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "Cluster",
+        "multi": false,
+        "name": "cluster",
+        "options": [],
+        "query": {
+          "query": "sys_uptime{job=\"cockroachdb\"}",
+          "refId": "Prometheusa-cluster-Variable-Query"
+        },
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -919,10 +1402,22 @@
         "useTags": false
       },
       {
+<<<<<<< HEAD
         "allValue": ".*",
         "current": {},
          "datasource": "${DS_PROMETHEUS}",
         "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
+=======
+        "allValue": "",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "${DS_PROMETHEUS}",
+        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
+        "description": null,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -930,7 +1425,14 @@
         "multi": false,
         "name": "node",
         "options": [],
+<<<<<<< HEAD
         "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
+=======
+        "query": {
+          "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
+          "refId": "Prometheusa-node-Variable-Query"
+        },
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -945,7 +1447,16 @@
         "auto": false,
         "auto_count": 30,
         "auto_min": "10s",
+<<<<<<< HEAD
         "current": {},
+=======
+        "current": {
+          "selected": false,
+          "text": "30s",
+          "value": "30s"
+        },
+        "description": null,
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
         "error": null,
         "hide": 0,
         "label": "Rate Interval",
@@ -1005,12 +1516,21 @@
     ]
   },
   "time": {
+<<<<<<< HEAD
     "from": "now-6h",
+=======
+    "from": "now-1h",
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22
     "to": "now"
   },
   "timepicker": {},
   "timezone": "utc",
   "title": "CRDB Console: Hardware",
   "uid": "crdb-console-hardware",
+<<<<<<< HEAD
   "version": 18
 }
+=======
+  "version": 4
+}
+>>>>>>> 70bff8275cd0d2050fd3bc3e5885943ffdb9ed22

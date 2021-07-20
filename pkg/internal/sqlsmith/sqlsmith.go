@@ -292,6 +292,16 @@ var SimpleDatums = simpleOption("simple datums", func(s *Smither) {
 	s.simpleDatums = true
 })
 
+// MutationsOnly causes the Smither to emit 80% INSERT, 10% UPDATE, and 10%
+// DELETE statements.
+var MutationsOnly = simpleOption("mutations only", func(s *Smither) {
+	s.stmtWeights = []statementWeight{
+		{8, makeInsert},
+		{1, makeUpdate},
+		{1, makeDelete},
+	}
+})
+
 // IgnoreFNs causes the Smither to ignore functions that match the regex.
 func IgnoreFNs(regex string) SmitherOption {
 	r := regexp.MustCompile(regex)

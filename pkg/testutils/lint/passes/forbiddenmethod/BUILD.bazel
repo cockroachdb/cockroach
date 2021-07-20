@@ -11,6 +11,7 @@ go_library(
     srcs = [
         "analyzers.go",
         "forbiddenmethod.go",
+        "naked_go.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod",
     visibility = ["//visibility:public"],
@@ -25,7 +26,11 @@ go_library(
 go_test(
     name = "forbiddenmethod_test",
     size = "small",
-    srcs = ["descriptormarshal_test.go"],
+    srcs = [
+        "descriptormarshal_test.go",
+        "main_test.go",
+        "naked_go_test.go",
+    ],
     data = [
         ":testdata",
         "@go_sdk//:files",

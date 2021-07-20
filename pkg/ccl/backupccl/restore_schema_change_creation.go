@@ -85,7 +85,7 @@ func jobDescriptionFromMutationID(
 			case *descpb.DescriptorMutation_Index:
 				jobDescBuilder.WriteString("index ")
 				jobDescBuilder.WriteString(t.Index.Name + " for " + tableDesc.Name + " (")
-				jobDescBuilder.WriteString(strings.Join(t.Index.ColumnNames, ", "))
+				jobDescBuilder.WriteString(strings.Join(t.Index.KeyColumnNames, ", "))
 				jobDescBuilder.WriteString(")")
 			case *descpb.DescriptorMutation_Constraint:
 				jobDescBuilder.WriteString("constraint ")
@@ -100,7 +100,7 @@ func jobDescriptionFromMutationID(
 						indexMut.Index.ID == newIndexID &&
 						otherMut.MutationID == m.MutationID &&
 						m.Direction == descpb.DescriptorMutation_ADD {
-						jobDescBuilder.WriteString(strings.Join(indexMut.Index.ColumnNames, ", "))
+						jobDescBuilder.WriteString(strings.Join(indexMut.Index.KeyColumnNames, ", "))
 					}
 				}
 				jobDescBuilder.WriteString(")")

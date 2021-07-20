@@ -118,11 +118,14 @@
         ) &
         (HasStrictKey $input)
     $filters:* &
-        (ExprPairSucceeded
-            $pair:(ExprPairForSplitDisjunction
-                $scanPrivate
-                $filters
-            )
+        (Let
+            (
+                $leftFilter
+                $rightFilter
+                $itemToReplace
+                $ok
+            ):(SplitDisjunction $scanPrivate $filters)
+            $ok
         )
 )
 =>
@@ -133,8 +136,8 @@
             (MapFilterCols
                 (ReplaceFiltersItem
                     $filters
-                    (ExprPairFiltersItemToReplace $pair)
-                    (ExprPairLeft $pair)
+                    $itemToReplace
+                    $leftFilter
                 )
                 (OutputCols $input)
                 (OutputCols $leftScan)
@@ -145,8 +148,8 @@
             (MapFilterCols
                 (ReplaceFiltersItem
                     $filters
-                    (ExprPairFiltersItemToReplace $pair)
-                    (ExprPairRight $pair)
+                    $itemToReplace
+                    $rightFilter
                 )
                 (OutputCols $input)
                 (OutputCols $rightScan)
@@ -199,62 +202,61 @@
         ) &
         ^(HasStrictKey $input)
     $filters:* &
-        (ExprPairSucceeded
-            $pair:(ExprPairForSplitDisjunction
-                $scanPrivate
-                $filters
-            )
+        (Let
+            (
+                $leftFilter
+                $rightFilter
+                $itemToReplace
+                $ok
+            ):(SplitDisjunction $scanPrivate $filters)
+            $ok
         )
 )
 =>
 (Project
-    (DistinctOn
-        (UnionAll
-            (Select
-                $leftScan:(Scan
-                    (AddPrimaryKeyColsToScanPrivate
-                        (DuplicateScanPrivate $scanPrivate)
-                    )
-                )
-                (MapFilterCols
-                    (ReplaceFiltersItem
-                        $filters
-                        (ExprPairFiltersItemToReplace $pair)
-                        (ExprPairLeft $pair)
-                    )
-                    $outCols:(UnionCols
-                        (OutputCols $input)
-                        $groupingCols:(PrimaryKeyCols
-                            (TableIDFromScanPrivate $scanPrivate)
-                        )
-                    )
-                    (OutputCols $leftScan)
+    (Union
+        (Select
+            $leftScan:(Scan
+                (AddPrimaryKeyColsToScanPrivate
+                    (DuplicateScanPrivate $scanPrivate)
                 )
             )
-            (Select
-                $rightScan:(Scan
-                    (AddPrimaryKeyColsToScanPrivate
-                        (DuplicateScanPrivate $scanPrivate)
+            (MapFilterCols
+                (ReplaceFiltersItem
+                    $filters
+                    $itemToReplace
+                    $leftFilter
+                )
+                $outCols:(UnionCols
+                    (OutputCols $input)
+                    (PrimaryKeyCols
+                        (TableIDFromScanPrivate $scanPrivate)
                     )
                 )
-                (MapFilterCols
-                    (ReplaceFiltersItem
-                        $filters
-                        (ExprPairFiltersItemToReplace $pair)
-                        (ExprPairRight $pair)
-                    )
-                    $outCols
-                    (OutputCols $rightScan)
-                )
-            )
-            (MakeSetPrivate
                 (OutputCols $leftScan)
-                (OutputCols $rightScan)
-                $outCols
             )
         )
-        (MakeAggCols ConstAgg (OutputCols $input))
-        (MakeGrouping $groupingCols (EmptyOrdering))
+        (Select
+            $rightScan:(Scan
+                (AddPrimaryKeyColsToScanPrivate
+                    (DuplicateScanPrivate $scanPrivate)
+                )
+            )
+            (MapFilterCols
+                (ReplaceFiltersItem
+                    $filters
+                    $itemToReplace
+                    $rightFilter
+                )
+                $outCols
+                (OutputCols $rightScan)
+            )
+        )
+        (MakeSetPrivate
+            (OutputCols $leftScan)
+            (OutputCols $rightScan)
+            $outCols
+        )
     )
     []
     (OutputCols $input)

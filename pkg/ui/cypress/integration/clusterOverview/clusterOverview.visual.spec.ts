@@ -8,9 +8,25 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-describe("Cluster Overview - visual regression tests", () => {
+describe("Cluster Overview - check the number of live nodes and total ranges", () => {
   it("renders default view", () => {
-    cy.visit("#/statements");
-    cy.matchImageSnapshot();
+    cy.visit("#/overview");
+    cy.findAllByText("Capacity Usage");
+    cy.findByText("Node Status");
+    cy.findByText("Replication Status");
+    cy.log("find the number of live nodes");
+    cy.findAllByText("1");
+    cy.log("find the number of ranges in replication status");
+    cy.findAllByText("39");
+  });
+});
+
+describe("Cluster Overview - Check Node map", () => {
+  it("checks node maps information", () => {
+    cy.visit("#/overview");
+    cy.findAllByText("Node List").eq(1).click({ force: true });
+    cy.findAllByText("Node Map").click();
+    cy.log("Show the Node Map");
+    cy.findByText("View the Node Map");
   });
 });

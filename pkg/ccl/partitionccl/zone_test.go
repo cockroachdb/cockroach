@@ -307,8 +307,8 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				}
 
 				directions := []encoding.Direction{encoding.Ascending /* index ID */}
-				for i := 0; i < idx.NumColumns(); i++ {
-					cd := idx.GetColumnDirection(i)
+				for i := 0; i < idx.NumKeyColumns(); i++ {
+					cd := idx.GetKeyColumnDirection(i)
 					ed, err := cd.ToEncodingDirection()
 					if err != nil {
 						t.Fatal(err)

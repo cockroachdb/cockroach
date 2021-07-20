@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -426,11 +427,12 @@ func (r *Replica) leasePostApplyLocked(
 		}
 		applyReadSummaryToTimestampCache(r.store.tsCache, r.descRLocked(), sum)
 
-		// Reset the request counts used to make lease placement decisions whenever
-		// starting a new lease.
+		// Reset the request counts used to make lease placement decisions and
+		// load-based splitting/merging decisions whenever starting a new lease.
 		if r.leaseholderStats != nil {
 			r.leaseholderStats.resetRequestCounts()
 		}
+		r.loadBasedSplitter.Reset(r.Clock().PhysicalTime())
 	}
 
 	// Inform the concurrency manager that the lease holder has been updated.
@@ -502,10 +504,17 @@ func (r *Replica) leasePostApplyLocked(
 		// NB: run these in an async task to keep them out of the critical section
 		// (r.mu is held here).
 		_ = r.store.stopper.RunAsyncTask(ctx, "lease-triggers", func(ctx context.Context) {
-			if err := r.MaybeGossipSystemConfig(ctx); err != nil {
+			// Re-acquire the raftMu, as we are now in an async task.
+			r.raftMu.Lock()
+			defer r.raftMu.Unlock()
+			if _, err := r.IsDestroyed(); err != nil {
+				// Nothing to do.
+				return
+			}
+			if err := r.MaybeGossipSystemConfigRaftMuLocked(ctx); err != nil {
 				log.Errorf(ctx, "%v", err)
 			}
-			if err := r.MaybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
+			if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, keys.NodeLivenessSpan); err != nil {
 				log.Errorf(ctx, "%v", err)
 			}
 
@@ -533,6 +542,11 @@ func (r *Replica) leasePostApplyLocked(
 	}
 }
 
+var addSSTPreApplyWarn = struct {
+	threshold time.Duration
+	log.EveryN
+}{30 * time.Second, log.Every(5 * time.Second)}
+
 func addSSTablePreApply(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -557,7 +571,19 @@ func addSSTablePreApply(
 		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
 	}
 
+	tBegin := timeutil.Now()
+	var tEndDelayed time.Time
+	defer func() {
+		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
+			log.Infof(ctx,
+				"ingesting SST of size %s at index %d took %.2fs (%.2fs on which in PreIngestDelay)",
+				humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(), tEndDelayed.Sub(tBegin).Seconds(),
+			)
+		}
+	}()
+
 	eng.PreIngestDelay(ctx)
+	tEndDelayed = timeutil.Now()
 
 	copied := false
 	if eng.InMem() {
@@ -682,21 +708,21 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	}
 
 	if lResult.MaybeGossipSystemConfig {
-		if err := r.MaybeGossipSystemConfig(ctx); err != nil {
+		if err := r.MaybeGossipSystemConfigRaftMuLocked(ctx); err != nil {
 			log.Errorf(ctx, "%v", err)
 		}
 		lResult.MaybeGossipSystemConfig = false
 	}
 
 	if lResult.MaybeGossipSystemConfigIfHaveFailure {
-		if err := r.MaybeGossipSystemConfigIfHaveFailure(ctx); err != nil {
+		if err := r.MaybeGossipSystemConfigIfHaveFailureRaftMuLocked(ctx); err != nil {
 			log.Errorf(ctx, "%v", err)
 		}
 		lResult.MaybeGossipSystemConfigIfHaveFailure = false
 	}
 
 	if lResult.MaybeGossipNodeLiveness != nil {
-		if err := r.MaybeGossipNodeLiveness(ctx, *lResult.MaybeGossipNodeLiveness); err != nil {
+		if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, *lResult.MaybeGossipNodeLiveness); err != nil {
 			log.Errorf(ctx, "%v", err)
 		}
 		lResult.MaybeGossipNodeLiveness = nil
@@ -739,18 +765,23 @@ func (r *Replica) evaluateProposal(
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	lul hlc.Timestamp,
-	latchSpans *spanset.SpanSet,
+	latchSpans, lockSpans *spanset.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
 	if ba.Timestamp.IsEmpty() {
 		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
 	// Evaluate the commands. If this returns without an error, the batch should
-	// be committed. Note that we don't hold any locks at this point. This is
-	// important since evaluating a proposal is expensive.
+	// be committed. Note that we don't hold any locks at this point, except a
+	// shared RLock on raftMuReadOnlyMu. This is important since evaluating a
+	// proposal is expensive.
+	//
+	// Note that, during evaluation, ba's read and write timestamps might get
+	// bumped (see evaluateWriteBatchWithServersideRefreshes).
+	//
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
-	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, lul, latchSpans)
+	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, lul, latchSpans, lockSpans)
 
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance
@@ -760,7 +791,9 @@ func (r *Replica) evaluateProposal(
 	}
 
 	if pErr != nil {
-		pErr = r.maybeSetCorrupt(ctx, pErr)
+		if _, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+			return &res, false /* needConsensus */, pErr
+		}
 
 		txn := pErr.GetTxn()
 		if txn != nil && ba.Txn == nil {
@@ -804,7 +837,15 @@ func (r *Replica) evaluateProposal(
 		// Set the proposal's replicated result, which contains metadata and
 		// side-effects that are to be replicated to all replicas.
 		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
-		res.Replicated.Timestamp = ba.Timestamp
+		if ba.IsIntentWrite() {
+			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
+		} else {
+			// For misc requests, use WriteTimestamp to propagate a clock signal. This
+			// is particularly important for lease transfers, as it assures that the
+			// follower getting the lease will have a clock above the start time of
+			// its lease.
+			res.Replicated.WriteTimestamp = r.store.Clock().Now()
+		}
 		res.Replicated.Delta = ms.ToStatsDelta()
 
 		// This is the result of a migration. See the field for more details.
@@ -871,9 +912,9 @@ func (r *Replica) requestToProposal(
 	ba *roachpb.BatchRequest,
 	st kvserverpb.LeaseStatus,
 	lul hlc.Timestamp,
-	latchSpans *spanset.SpanSet,
+	latchSpans, lockSpans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
-	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, lul, latchSpans)
+	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, lul, latchSpans, lockSpans)
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{

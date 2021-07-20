@@ -167,6 +167,10 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 		relProps.Rule.RejectNullCols.UnionWith(deriveScanRejectNullCols(in))
 	}
 
+	if relProps.Rule.RejectNullCols.Intersects(relProps.NotNullCols) {
+		panic(errors.AssertionFailedf("null rejection requested on non-null column"))
+	}
+
 	return relProps.Rule.RejectNullCols
 }
 
@@ -337,6 +341,11 @@ func deriveScanRejectNullCols(in memo.RelExpr) opt.ColSet {
 			rejectNullCols.UnionWith(isNotNullCols(predFilters))
 		}
 	}
+
+	// Some of the columns may already be not-null (e.g. if the scan is
+	// constrained). Requesting rejection on such columns can lead to infinite
+	// rule application (see #64661).
+	rejectNullCols.DifferenceWith(in.Relational().NotNullCols)
 
 	return rejectNullCols
 }

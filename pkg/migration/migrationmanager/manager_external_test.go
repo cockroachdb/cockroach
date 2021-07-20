@@ -76,8 +76,8 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 						if cv != endCV {
 							return nil, false
 						}
-						return migration.NewSQLMigration("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps migration.SQLDeps,
+						return migration.NewTenantMigration("test", cv, func(
+							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
 						) error {
 							canResume := make(chan error)
 							ch <- canResume
@@ -159,6 +159,20 @@ RETURNING id;`).Scan(&secondID))
 	}()
 
 	testutils.SucceedsSoon(t, func() error {
+		// TODO(yuzefovich): this check is quite unfortunate since it relies on
+		// the assumption that all recordings from the child spans are imported
+		// into the tracer. However, this is not the case for the DistSQL
+		// processors where child spans are created with
+		// WithParentAndManualCollection option which requires explicitly
+		// importing the recordings from the children. This only happens when
+		// the execution flow is drained which cannot happen until we close
+		// the 'unblock' channel, and this we cannot do until we see the
+		// expected message in the trace.
+		//
+		// At the moment it works in a very fragile manner (by making sure that
+		// no processors actually create their own spans). Instead, a different
+		// way to observe the status of the migration manager should be
+		// introduced and should be used here.
 		if tracing.FindMsgInRecording(getRecording(), "found existing migration job") > 0 {
 			return nil
 		}
@@ -196,7 +210,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 						if cv != endCV {
 							return nil, false
 						}
-						return migration.NewKVMigration("test", cv, func(
+						return migration.NewSystemMigration("test", cv, func(
 							ctx context.Context, version clusterversion.ClusterVersion, c migration.Cluster,
 						) error {
 							return c.DB().Migrate(ctx, desc.StartKey, desc.EndKey, cv.Version)
@@ -311,7 +325,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 						return versions
 					},
 					RegistryOverride: func(cv clusterversion.ClusterVersion) (migration.Migration, bool) {
-						return migration.NewKVMigration("test", cv, func(
+						return migration.NewSystemMigration("test", cv, func(
 							ctx context.Context, version clusterversion.ClusterVersion, c migration.Cluster,
 						) error {
 							if atomic.AddInt32(&active, 1) != 1 {
@@ -399,8 +413,8 @@ func TestPauseMigration(t *testing.T) {
 						if cv != endCV {
 							return nil, false
 						}
-						return migration.NewSQLMigration("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps migration.SQLDeps,
+						return migration.NewTenantMigration("test", cv, func(
+							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
 						) error {
 							canResume := make(chan error)
 							ch <- migrationEvent{

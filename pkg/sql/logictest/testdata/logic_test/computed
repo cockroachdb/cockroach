@@ -310,6 +310,13 @@ CREATE TABLE y (
   b TIMESTAMPTZ AS (a::TIMESTAMPTZ) STORED
 )
 
+# Make sure the error has a hint that mentions parse_timestamp().
+statement error context-dependent operators are not allowed in computed column.*\nHINT:.*use parse_timestamp
+CREATE TABLE y (
+  a STRING,
+  b TIMESTAMP AS (a::TIMESTAMP) STORED
+)
+
 statement error context-dependent operators are not allowed in computed column
 CREATE TABLE y (
   a TIMESTAMPTZ,
@@ -343,21 +350,8 @@ CREATE TABLE y (
   a INT AS (3) STORED DEFAULT 4
 )
 
-# TODO(justin,bram): this should be allowed.
 statement ok
 CREATE TABLE x (a INT PRIMARY KEY)
-
-statement error computed columns cannot reference non-restricted FK columns
-CREATE TABLE y (
-  q INT REFERENCES x (a) ON UPDATE CASCADE,
-  r INT AS (q) STORED
-)
-
-statement error computed columns cannot reference non-restricted FK columns
-CREATE TABLE y (
-  q INT REFERENCES x (a) ON DELETE CASCADE,
-  r INT AS (q) STORED
-)
 
 statement error computed column "r" cannot reference a foreign key
 CREATE TABLE y (
@@ -374,6 +368,72 @@ CREATE TABLE y (
   a INT,
   r INT AS (1) STORED REFERENCES x
 )
+
+# Tests for computed columns that reference foreign key columns.
+subtest referencing_fks
+
+statement ok
+CREATE TABLE p (p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE c_update (
+  p_cascade INT REFERENCES p (p) ON UPDATE CASCADE,
+  p_default INT DEFAULT 0 REFERENCES p (p) ON UPDATE SET DEFAULT,
+  p_null INT REFERENCES p (p) ON UPDATE SET NULL,
+  c_cascade INT AS (p_cascade + 100) STORED,
+  c_default INT AS (p_default) STORED,
+  c_null INT AS (p_null + 100) STORED
+)
+
+statement ok
+CREATE TABLE c_delete_cascade (
+  p_cascade INT REFERENCES p (p) ON DELETE CASCADE,
+  c_cascade INT AS (p_cascade + 100) STORED
+)
+
+statement ok
+CREATE TABLE c_delete_set (
+  p_default INT DEFAULT 0 REFERENCES p (p) ON DELETE SET DEFAULT,
+  p_null INT REFERENCES p (p) ON DELETE SET NULL,
+  c_default INT AS (p_default) STORED,
+  c_null INT AS (p_null + 100) STORED
+)
+
+statement ok
+INSERT INTO p VALUES (0), (1), (2), (3)
+
+statement ok
+INSERT INTO c_update VALUES (1, 1, 1), (2, 2, 2)
+
+statement ok
+UPDATE p SET p = 10 WHERE p = 1
+
+query IIIIII colnames,rowsort
+SELECT * FROM c_update
+----
+p_cascade  p_default  p_null  c_cascade  c_default  c_null
+2          2          2       102        2          102
+10         0          NULL    110        0          NULL
+
+statement ok
+INSERT INTO c_delete_cascade VALUES (2), (3);
+INSERT INTO c_delete_set VALUES (2, 2), (3, 3);
+
+statement ok
+DELETE FROM p WHERE p = 3
+
+query II colnames,rowsort
+SELECT * FROM c_delete_cascade
+----
+p_cascade  c_cascade
+2          102
+
+query IIII colnames,rowsort
+SELECT * FROM c_delete_set
+----
+p_default  p_null  c_default  c_null
+0          NULL    0          NULL
+2          2       2          102
 
 # Regression test for #36036.
 statement ok

@@ -134,8 +134,6 @@ const (
 	WriteBatch
 	// Export dumps a keyrange into files.
 	Export
-	// Import bulk loads key/value entries.
-	Import
 	// AdminScatter moves replicas and leaseholders for a selection of ranges.
 	// Best-effort.
 	AdminScatter

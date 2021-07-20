@@ -104,6 +104,11 @@ func MakeColumnDefDescs(
 	}
 
 	if d.IsComputed() {
+		// Note: We do not validate the computed column expression here because
+		// it may reference columns that have not yet been added to a table
+		// descriptor. Callers must validate the expression with
+		// schemaexpr.ValidateComputedColumnExpression once all possible
+		// reference columns are part of the table descriptor.
 		s := tree.Serialize(d.Computed.Expr)
 		col.ComputeExpr = &s
 	}
@@ -112,9 +117,9 @@ func MakeColumnDefDescs(
 	if d.PrimaryKey.IsPrimaryKey || (d.Unique.IsUnique && !d.Unique.WithoutIndex) {
 		if !d.PrimaryKey.Sharded {
 			idx = &descpb.IndexDescriptor{
-				Unique:           true,
-				ColumnNames:      []string{string(d.Name)},
-				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				Unique:              true,
+				KeyColumnNames:      []string{string(d.Name)},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 			}
 		} else {
 			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
@@ -123,9 +128,9 @@ func MakeColumnDefDescs(
 			}
 			shardColName := GetShardColumnName([]string{string(d.Name)}, buckets)
 			idx = &descpb.IndexDescriptor{
-				Unique:           true,
-				ColumnNames:      []string{shardColName, string(d.Name)},
-				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				Unique:              true,
+				KeyColumnNames:      []string{shardColName, string(d.Name)},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				Sharded: descpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         shardColName,
@@ -220,7 +225,7 @@ func (desc *wrapper) collectConstraintInfo(
 			// This prevents the auto-created rowid primary key index from showing up
 			// in show constraints.
 			hidden := true
-			for _, id := range index.ColumnIDs {
+			for _, id := range index.KeyColumnIDs {
 				if !colHiddenMap[id] {
 					hidden = false
 					break
@@ -230,7 +235,7 @@ func (desc *wrapper) collectConstraintInfo(
 				continue
 			}
 			detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypePK}
-			detail.Columns = index.ColumnNames
+			detail.Columns = index.KeyColumnNames
 			detail.Index = index
 			info[index.Name] = detail
 		} else if index.Unique {
@@ -239,7 +244,7 @@ func (desc *wrapper) collectConstraintInfo(
 					"duplicate constraint name: %q", index.Name)
 			}
 			detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeUnique}
-			detail.Columns = index.ColumnNames
+			detail.Columns = index.KeyColumnNames
 			detail.Index = index
 			info[index.Name] = detail
 		}
@@ -522,4 +527,21 @@ func FindVirtualColumn(
 	virtualColumn := found.DeepCopy()
 	*virtualColumn.ColumnDesc() = *virtualColDesc
 	return virtualColumn
+}
+
+// PopulateAllStoreColumns populates the store column IDs and names slices with
+// all non-virtual public columns in the table which aren't already in the index
+// key.
+func PopulateAllStoreColumns(idx *descpb.IndexDescriptor, tbl catalog.TableDescriptor) {
+	idx.StoreColumnNames, idx.StoreColumnIDs = nil, nil
+	publicColumns := tbl.PublicColumns()
+	presentInIndex := catalog.MakeTableColSet(idx.KeyColumnIDs...)
+	for _, col := range publicColumns {
+		// We do not store virtual columns.
+		if col.IsVirtual() || presentInIndex.Contains(col.GetID()) {
+			continue
+		}
+		idx.StoreColumnIDs = append(idx.StoreColumnIDs, col.GetID())
+		idx.StoreColumnNames = append(idx.StoreColumnNames, col.GetName())
+	}
 }

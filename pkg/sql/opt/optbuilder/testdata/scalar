@@ -821,8 +821,31 @@ concat [type=jsonb]
 build-scalar
 'hello' COLLATE en
 ----
-collate [type=collatedstring{en}]
+collate locale='en' [type=collatedstring{en}]
  └── const: 'hello' [type=string]
+
+build-scalar
+'hello' COLLATE en_US
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── const: 'hello' [type=string]
+
+build-scalar
+'hello' COLLATE "en_US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── const: 'hello' [type=string]
+
+build-scalar
+'hello' COLLATE "en-US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── const: 'hello' [type=string]
+
+build-scalar
+'hello' COLLATE "foo"
+----
+error: invalid locale foo: language: subtag "foo" is well-formed but unknown
 
 build-scalar
 random()
@@ -1153,8 +1176,31 @@ tuple [type=tuple{tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, 
 build-scalar vars=(a string)
 a COLLATE en
 ----
-collate [type=collatedstring{en}]
+collate locale='en' [type=collatedstring{en}]
  └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE en_US
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE "en_US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE "en-US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE "foo"
+----
+error: invalid locale foo: language: subtag "foo" is well-formed but unknown
 
 exec-ddl
 CREATE TABLE u (x INT)

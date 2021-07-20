@@ -18,5 +18,8 @@ go_test(
     size = "small",
     srcs = ["duration_test.go"],
     embed = [":duration"],
-    deps = ["//pkg/util/log"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+    ],
 )

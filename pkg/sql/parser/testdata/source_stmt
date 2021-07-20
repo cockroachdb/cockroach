@@ -1,0 +1,15 @@
+parse
+SELECT * FROM [EXPLAIN SELECT 1]
+----
+SELECT * FROM [EXPLAIN SELECT 1]
+SELECT (*) FROM [EXPLAIN SELECT (1)] -- fully parenthesized
+SELECT * FROM [EXPLAIN SELECT _] -- literals removed
+SELECT * FROM [EXPLAIN SELECT 1] -- identifiers removed
+
+parse
+SELECT * FROM [SHOW TRANSACTION STATUS]
+----
+SELECT * FROM [SHOW TRANSACTION STATUS]
+SELECT (*) FROM [SHOW TRANSACTION STATUS] -- fully parenthesized
+SELECT * FROM [SHOW TRANSACTION STATUS] -- literals removed
+SELECT * FROM [SHOW TRANSACTION STATUS] -- identifiers removed

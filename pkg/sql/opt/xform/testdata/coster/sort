@@ -144,16 +144,16 @@ SELECT * FROM abc  WHERE a = b ORDER BY b, a, c
 ----
 sort (segmented)
  ├── columns: a:1!null b:2!null c:3
- ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
- ├── cost: 11322.6714
+ ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0, distinct(1,2)=4, null(1,2)=0]
+ ├── cost: 11282.6714
  ├── fd: (1)==(2), (2)==(1)
  ├── ordering: +(1|2),+3 [actual: +1,+3]
  └── select
       ├── columns: a:1!null b:2!null c:3
-      ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
+      ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0, distinct(1,2)=4, null(1,2)=0]
       ├── cost: 10804.03
       ├── fd: (1)==(2), (2)==(1)
-      ├── ordering: +1
+      ├── ordering: +(1|2) [actual: +1]
       ├── scan abc@ab
       │    ├── columns: a:1!null b:2 c:3
       │    ├── constraint: /1/2/4: (/NULL - ]

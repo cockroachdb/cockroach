@@ -14,9 +14,26 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 )
+
+func init() {
+	if bazel.BuiltWithBazel() {
+		path, err := os.Getwd()
+		if err != nil {
+			panic(err)
+		}
+		// dot wants HOME set.
+		err = os.Setenv("HOME", path)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
 
 func TestServer(t *testing.T) {
 	storage := NewMemStorage(1, 0)

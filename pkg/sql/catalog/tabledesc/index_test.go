@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -238,12 +239,8 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "IsDisabled", idx.GetName())
 		require.False(t, idx.IsCreatedExplicitly(),
 			errMsgFmt, "IsCreatedExplicitly", idx.GetName())
-		require.Equal(t, descpb.IndexDescriptorVersion(0x2), idx.GetVersion(),
+		require.Equal(t, descpb.IndexDescriptorVersion(0x3), idx.GetVersion(),
 			errMsgFmt, "GetVersion", idx.GetName())
-		require.Equal(t, descpb.PartitioningDescriptor{}, idx.GetPartitioning(),
-			errMsgFmt, "GetPartitioning", idx.GetName())
-		require.Equal(t, []string(nil), idx.PartitionNames(),
-			errMsgFmt, "PartitionNames", idx.GetName())
 		require.Equal(t, 0, idx.NumInterleaveAncestors(),
 			errMsgFmt, "NumInterleaveAncestors", idx.GetName())
 		require.Equal(t, 0, idx.NumInterleavedBy(),
@@ -275,20 +272,23 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "GetShardColumnName", idx.GetName())
 		require.Equal(t, idx == s4, !(&descpb.ShardedDescriptor{}).Equal(idx.GetSharded()),
 			errMsgFmt, "GetSharded", idx.GetName())
-		require.Equalf(t, idx != s3, idx.NumStoredColumns() == 0,
-			errMsgFmt, "NumStoredColumns", idx.GetName())
+		require.Equalf(t, idx != s3, idx.NumSecondaryStoredColumns() == 0,
+			errMsgFmt, "NumSecondaryStoredColumns", idx.GetName())
 	}
 
 	// Check index columns.
 	for i, idx := range indexes {
 		expectedColNames := indexColumns[i]
-		actualColNames := make([]string, idx.NumColumns())
+		actualColNames := make([]string, idx.NumKeyColumns())
+		colIDs := idx.CollectKeyColumnIDs()
+		colIDs.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+		colIDs.UnionWith(idx.CollectKeySuffixColumnIDs())
 		for j := range actualColNames {
-			actualColNames[j] = idx.GetColumnName(j)
-			require.Equalf(t, idx == s1, idx.GetColumnDirection(j) == descpb.IndexDescriptor_DESC,
+			actualColNames[j] = idx.GetKeyColumnName(j)
+			require.Equalf(t, idx == s1, idx.GetKeyColumnDirection(j) == descpb.IndexDescriptor_DESC,
 				"mismatched column directions for index '%s'", idx.GetName())
-			require.True(t, idx.ContainsColumnID(idx.GetColumnID(j)),
-				"column ID resolution failure for column '%s' in index '%s'", idx.GetColumnName(j), idx.GetName())
+			require.True(t, colIDs.Contains(idx.GetKeyColumnID(j)),
+				"column ID resolution failure for column '%s' in index '%s'", idx.GetKeyColumnName(j), idx.GetName())
 		}
 		require.Equalf(t, expectedColNames, actualColNames,
 			"mismatched columns for index '%s'", idx.GetName())
@@ -298,11 +298,11 @@ func TestIndexInterface(t *testing.T) {
 	for i, idx := range indexes {
 		expectedExtraColIDs := make([]descpb.ColumnID, len(extraColumnsAsPkColOrdinals[i]))
 		for j, pkColOrdinal := range extraColumnsAsPkColOrdinals[i] {
-			expectedExtraColIDs[j] = pk.GetColumnID(pkColOrdinal)
+			expectedExtraColIDs[j] = pk.GetKeyColumnID(pkColOrdinal)
 		}
-		actualExtraColIDs := make([]descpb.ColumnID, idx.NumExtraColumns())
+		actualExtraColIDs := make([]descpb.ColumnID, idx.NumKeySuffixColumns())
 		for j := range actualExtraColIDs {
-			actualExtraColIDs[j] = idx.GetExtraColumnID(j)
+			actualExtraColIDs[j] = idx.GetKeySuffixColumnID(j)
 		}
 		require.Equalf(t, expectedExtraColIDs, actualExtraColIDs,
 			"mismatched extra columns for index '%s'", idx.GetName())
@@ -310,10 +310,82 @@ func TestIndexInterface(t *testing.T) {
 
 	// Check particular index column features.
 	require.Equal(t, "c6", s2.InvertedColumnName())
-	require.Equal(t, s2.GetColumnID(0), s2.InvertedColumnID())
+	require.Equal(t, s2.GetKeyColumnID(0), s2.InvertedColumnID())
 	require.Equal(t, "c7", s6.InvertedColumnName())
-	require.Equal(t, s6.GetColumnID(0), s6.InvertedColumnID())
-	require.Equal(t, 2, s3.NumStoredColumns())
+	require.Equal(t, s6.GetKeyColumnID(0), s6.InvertedColumnID())
+	require.Equal(t, 2, s3.NumSecondaryStoredColumns())
 	require.Equal(t, "c5", s3.GetStoredColumnName(0))
 	require.Equal(t, "c6", s3.GetStoredColumnName(1))
+}
+
+// TestIndexStrictColumnIDs tests that the index format version value
+// descpb.StrictIndexColumnIDGuaranteesVersion can prevent issues stemming from
+// redundant column IDs in descpb.IndexDescriptor.
+func TestIndexStrictColumnIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Create a regular table with a secondary index.
+	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	_, err := conn.Exec(`
+		CREATE DATABASE d;
+		CREATE TABLE d.t (
+			c1 INT,
+			c2 INT,
+			CONSTRAINT pk PRIMARY KEY (c1 ASC),
+			INDEX sec (c2 ASC)
+		);
+	`)
+	require.NoError(t, err)
+
+	// Mess with the table descriptor to add redundant columns in the secondary
+	// index while still passing validation.
+	mut := catalogkv.TestingGetMutableExistingTableDescriptor(db, keys.SystemSQLCodec, "d", "t")
+	idx := &mut.Indexes[0]
+	id := idx.KeyColumnIDs[0]
+	name := idx.KeyColumnNames[0]
+	idx.Version = descpb.SecondaryIndexFamilyFormatVersion
+	idx.StoreColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
+	idx.StoreColumnNames = append([]string{}, name, name, name, name)
+	idx.KeySuffixColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
+	mut.Version++
+	require.NoError(t, catalog.ValidateSelf(mut))
+
+	// Store the corrupted table descriptor.
+	err = db.Put(
+		ctx,
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, mut.GetID()),
+		mut.DescriptorProto(),
+	)
+	require.NoError(t, err)
+
+	// Add a new row.
+	_, err = conn.Exec(`
+		SET tracing = on,kv;
+		INSERT INTO d.t VALUES (0, 0);
+		SET tracing = off;
+	`)
+	require.NoError(t, err)
+
+	// Retrieve KV trace and check for redundant values.
+	rows, err := conn.Query(`SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'InitPut%'`)
+	require.NoError(t, err)
+	defer rows.Close()
+	require.True(t, rows.Next())
+	var msg string
+	err = rows.Scan(&msg)
+	require.NoError(t, err)
+	expected := fmt.Sprintf(`InitPut /Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, mut.GetID())
+	require.Equal(t, expected, msg)
+
+	// Test that with the strict guarantees, this table descriptor would have been
+	// considered invalid.
+	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+	expected = fmt.Sprintf(`relation "t" (%d): index "sec" has duplicates in KeySuffixColumnIDs: [2 2 2 2]`, mut.GetID())
+	require.EqualError(t, catalog.ValidateSelf(mut), expected)
+
+	_, err = conn.Exec(`ALTER TABLE d.t DROP COLUMN c2`)
+	require.NoError(t, err)
+
 }

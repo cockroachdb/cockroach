@@ -29,7 +29,7 @@ func TestMultiRegionNoLicense(t *testing.T) {
 	defer utilccl.TestingDisableEnterprise()()
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
+		t, 3 /* numServers */, base.TestingKnobs{},
 	)
 	defer cleanup()
 
@@ -54,7 +54,7 @@ func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 	defer utilccl.TestingEnableEnterprise()()
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
+		t, 3 /* numServers */, base.TestingKnobs{},
 	)
 	defer cleanup()
 
@@ -124,7 +124,7 @@ func TestGlobalReadsAfterEnterpriseDisabled(t *testing.T) {
 	defer utilccl.TestingEnableEnterprise()()
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 1 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
+		t, 1 /* numServers */, base.TestingKnobs{},
 	)
 	defer cleanup()
 

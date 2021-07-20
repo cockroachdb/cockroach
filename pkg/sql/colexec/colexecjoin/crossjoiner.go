@@ -51,7 +51,7 @@ func NewCrossJoiner(
 			fdSemaphore,
 			diskAcc,
 		),
-		twoInputNode:          newTwoInputNode(left, right),
+		joinHelper:            newJoinHelper(left, right),
 		unlimitedAllocator:    unlimitedAllocator,
 		outputTypes:           joinType.MakeOutputTypes(leftTypes, rightTypes),
 		maxOutputBatchMemSize: memoryLimit,
@@ -60,7 +60,7 @@ func NewCrossJoiner(
 
 type crossJoiner struct {
 	*crossJoinerBase
-	twoInputNode
+	*joinHelper
 
 	unlimitedAllocator    *colmem.Allocator
 	inputsConsumed        bool
@@ -78,18 +78,22 @@ type crossJoiner struct {
 var _ colexecop.ClosableOperator = &crossJoiner{}
 var _ colexecop.ResettableOperator = &crossJoiner{}
 
-func (c *crossJoiner) Init() {
-	c.inputOne.Init()
-	c.inputTwo.Init()
+func (c *crossJoiner) Init(ctx context.Context) {
+	if !c.joinHelper.init(ctx) {
+		return
+	}
+	// Note that c.joinHelper.Ctx might contain an updated context, so we use
+	// that rather than ctx.
+	c.crossJoinerBase.init(c.joinHelper.Ctx)
 }
 
-func (c *crossJoiner) Next(ctx context.Context) coldata.Batch {
+func (c *crossJoiner) Next() coldata.Batch {
 	if !c.inputsConsumed {
-		c.consumeInputs(ctx)
+		c.consumeInputs(c.Ctx)
 		c.setupForBuilding()
 	}
 	if c.numTotalOutputTuples == c.numAlreadyEmitted {
-		if err := c.Close(ctx); err != nil {
+		if err := c.Close(); err != nil {
 			colexecerror.InternalError(err)
 		}
 		return coldata.ZeroBatch
@@ -107,14 +111,14 @@ func (c *crossJoiner) Next(ctx context.Context) coldata.Batch {
 		if c.isLeftAllNulls {
 			setAllNulls(c.output.ColVecs()[:len(c.left.types)], willEmit)
 		} else {
-			c.buildFromLeftInput(ctx, 0 /* destStartIdx */)
+			c.buildFromLeftInput(c.Ctx, 0 /* destStartIdx */)
 		}
 	}
 	if c.joinType.ShouldIncludeRightColsInOutput() {
 		if c.isRightAllNulls {
 			setAllNulls(c.output.ColVecs()[c.builderState.rightColOffset:], willEmit)
 		} else {
-			c.buildFromRightInput(ctx, 0 /* destStartIdx */)
+			c.buildFromRightInput(c.Ctx, 0 /* destStartIdx */)
 		}
 	}
 	c.output.SetLength(willEmit)
@@ -136,22 +140,22 @@ func (c *crossJoiner) consumeInputs(ctx context.Context) {
 	case descpb.LeftSemiJoin:
 		// With LEFT SEMI join we only need to know whether the right input is
 		// empty or not.
-		c.right.numTuples = c.inputTwo.Next(ctx).Length()
+		c.right.numTuples = c.inputTwo.Next().Length()
 		needLeftTuples = c.right.numTuples != 0
 	case descpb.RightSemiJoin:
 		// With RIGHT SEMI join we only need to know whether the left input is
 		// empty or not.
-		c.left.numTuples = c.inputOne.Next(ctx).Length()
+		c.left.numTuples = c.inputOne.Next().Length()
 		needRightTuples = c.left.numTuples != 0
 	case descpb.LeftAntiJoin:
 		// With LEFT ANTI join we only need to know whether the right input is
 		// empty or not.
-		c.right.numTuples = c.inputTwo.Next(ctx).Length()
+		c.right.numTuples = c.inputTwo.Next().Length()
 		needLeftTuples = c.right.numTuples == 0
 	case descpb.RightAntiJoin:
 		// With RIGHT ANTI join we only need to know whether the left input is
 		// empty or not.
-		c.left.numTuples = c.inputOne.Next(ctx).Length()
+		c.left.numTuples = c.inputOne.Next().Length()
 		needRightTuples = c.left.numTuples == 0
 	case descpb.IntersectAllJoin, descpb.ExceptAllJoin:
 		// With set-operation joins we only need the number of tuples from the
@@ -167,7 +171,7 @@ func (c *crossJoiner) consumeInputs(ctx context.Context) {
 
 	if needLeftTuples {
 		for {
-			batch := c.inputOne.Next(ctx)
+			batch := c.inputOne.Next()
 			c.left.tuples.Enqueue(ctx, batch)
 			if batch.Length() == 0 {
 				break
@@ -177,7 +181,7 @@ func (c *crossJoiner) consumeInputs(ctx context.Context) {
 	}
 	if needRightTuples {
 		for {
-			batch := c.inputTwo.Next(ctx)
+			batch := c.inputTwo.Next()
 			c.right.tuples.Enqueue(ctx, batch)
 			if batch.Length() == 0 {
 				break
@@ -187,7 +191,7 @@ func (c *crossJoiner) consumeInputs(ctx context.Context) {
 	}
 	if needOnlyNumRightTuples {
 		for {
-			batch := c.inputTwo.Next(ctx)
+			batch := c.inputTwo.Next()
 			if batch.Length() == 0 {
 				break
 			}
@@ -301,6 +305,7 @@ func newCrossJoinerBase(
 }
 
 type crossJoinerBase struct {
+	initHelper   colexecop.InitHelper
 	joinType     descpb.JoinType
 	left, right  cjState
 	builderState struct {
@@ -311,6 +316,10 @@ type crossJoinerBase struct {
 		rightColOffset int
 	}
 	output coldata.Batch
+}
+
+func (b *crossJoinerBase) init(ctx context.Context) {
+	b.initHelper.Init(ctx)
 }
 
 func (b *crossJoinerBase) setupBuilder() {
@@ -429,7 +438,8 @@ func (b *crossJoinerBase) Reset(ctx context.Context) {
 	b.builderState.right.reset()
 }
 
-func (b *crossJoinerBase) Close(ctx context.Context) error {
+func (b *crossJoinerBase) Close() error {
+	ctx := b.initHelper.EnsureCtx()
 	var lastErr error
 	if b.left.tuples != nil {
 		lastErr = b.left.tuples.Close(ctx)

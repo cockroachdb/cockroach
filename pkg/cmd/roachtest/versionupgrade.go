@@ -93,13 +93,24 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 	if false {
 		// The version to create/update the fixture for. Must be released (i.e.
 		// can download it from the homepage); if that is not the case use the
-		// empty string which uses the local cockroach binary.
-		newV := "20.2.6"
-		predV, err := PredecessorVersion(*version.MustParse("v" + newV))
-		if err != nil {
-			t.Fatal(err)
-		}
-		makeVersionFixtureAndFatal(ctx, t, c, predV, newV)
+		// empty string which uses the local cockroach binary. Make sure that
+		// this binary then has the correct version. For example, to make a
+		// "v20.2" fixture, you will need a binary that has "v20.2" in the
+		// output of `./cockroach version`, and this process will end up
+		// creating fixtures that have "v20.2" in them. This would be part
+		// of tagging the master branch as v21.1 in the process of going
+		// through the major release for v20.2.
+		//
+		// In the common case, one should populate this with the version (instead of
+		// using the empty string) as this is the most straightforward and least
+		// error-prone way to generate the fixtures.
+		//
+		// Please note that you do *NOT* need to update the fixtures in a patch
+		// release. This only happens as part of preparing the master branch for the
+		// next release. The release team runbooks, at time of writing, reflect
+		// this.
+		makeFixtureVersion := "21.2.0" // for 21.2 release in late 2021
+		makeVersionFixtureAndFatal(ctx, t, c, makeFixtureVersion)
 	}
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
@@ -237,29 +248,55 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 	return db
 }
 
+// uploadVersion uploads the specified crdb version to nodes. It returns the
+// path of the uploaded binaries on the nodes, suitable to be used with
+// `roachdprod start --binary=<path>`.
+func uploadVersion(
+	ctx context.Context, t *test, c *cluster, nodes nodeListOption, newVersion string,
+) (binaryName string) {
+	binaryName = "./cockroach"
+	if newVersion == "" {
+		if err := c.PutE(ctx, t.l, cockroach, binaryName, nodes); err != nil {
+			t.Fatal(err)
+		}
+	} else if binary, ok := t.versionsBinaryOverride[newVersion]; ok {
+		// If an override has been specified for newVersion, use that binary.
+		t.l.Printf("using binary override for version %s: %s", newVersion, binary)
+		binaryName = "./cockroach-" + newVersion
+		if err := c.PutE(ctx, t.l, binary, binaryName, nodes); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		v := "v" + newVersion
+		dir := v
+		binaryName = filepath.Join(dir, "cockroach")
+		// Check if the cockroach binary already exists.
+		if err := c.RunE(ctx, nodes, "test", "-e", binaryName); err != nil {
+			if err := c.RunE(ctx, nodes, "mkdir", "-p", dir); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.Stage(ctx, c.l, "release", v, dir, nodes); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return binaryPathFromVersion(newVersion)
+}
+
+// binaryPathFromVersion shows where the binary for the given version
+// can be found on roachprod nodes. It's either `./cockroach` or the
+// path to which a released binary is staged.
+func binaryPathFromVersion(v string) string {
+	if v == "" {
+		return "./cockroach"
+	}
+	return filepath.Join("v"+v, "cockroach")
+}
+
 func (u *versionUpgradeTest) uploadVersion(
 	ctx context.Context, t *test, nodes nodeListOption, newVersion string,
 ) option {
-	if newVersion == "" {
-		binary := cockroach
-		target := "./cockroach"
-		u.c.Put(ctx, binary, target, nodes)
-		return startArgs("--binary=" + target)
-	}
-
-	newVersion = "v" + newVersion
-	dir := newVersion
-	target := filepath.Join(dir, "cockroach")
-	// Check if the cockroach binary already exists.
-	if err := u.c.RunE(ctx, nodes, "test", "-e", target); err != nil {
-		if err := u.c.RunE(ctx, nodes, "mkdir", "-p", dir); err != nil {
-			t.Fatal(err)
-		}
-		if err := u.c.Stage(ctx, u.c.l, "release", newVersion, dir, nodes); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return startArgs("--binary=" + target)
+	return startArgs("--binary=" + uploadVersion(ctx, t, u.c, nodes, newVersion))
 }
 
 // binaryVersion returns the binary running on the (one-indexed) node.
@@ -485,19 +522,42 @@ func stmtFeatureTest(
 	}
 }
 
-// makeVersionFixtureAndFatal creates fixtures to "age out" old versions of CockroachDB.
-// We want to test data that was created at v1.0, but we don't actually want to
-// run a long chain of binaries starting all the way at v1.0. Instead, we
-// periodically bake a set of store directories that originally started out on
-// v1.0 and maintain it as a fixture for this test.
-//
-// The checkpoints will be created in the log directories downloaded as part of
-// the artifacts. The test will fail on purpose when it's done with instructions
-// on where to move the files.
+// makeVersionFixtureAndFatal creates fixtures from which we can test
+// mixed-version clusters (i.e. version X mixing with X-1). The fixtures date
+// back all the way to v1.0; when development begins on version X, we make a
+// fixture for version X-1 by running a starting the version X-2 cluster from
+// the X-2 fixtures, upgrading it to version X-1, and copy the resulting store
+// directories to the log directories (which are part of the artifacts). The
+// test will then fail on purpose when it's done with instructions on where to
+// move the files.
 func makeVersionFixtureAndFatal(
-	ctx context.Context, t *test, c *cluster, predecessorVersion string, makeFixtureVersion string,
+	ctx context.Context, t *test, c *cluster, makeFixtureVersion string,
 ) {
+	var useLocalBinary bool
+	if makeFixtureVersion == "" {
+		c.Start(ctx, t, c.Node(1))
+		require.NoError(t, c.Conn(ctx, 1).QueryRowContext(
+			ctx,
+			`select regexp_extract(value, '^v([0-9]+\.[0-9]+\.[0-9]+)') from crdb_internal.node_build_info where field = 'Version';`,
+		).Scan(&makeFixtureVersion))
+		c.Wipe(ctx, c.Node(1))
+		useLocalBinary = true
+	}
+
+	predecessorVersion, err := PredecessorVersion(*version.MustParse("v" + makeFixtureVersion))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	c.l.Printf("making fixture for %s (starting at %s)", makeFixtureVersion, predecessorVersion)
+
+	if useLocalBinary {
+		// Make steps below use the main cockroach binary (in particular, don't try
+		// to download the released version for makeFixtureVersion which may not yet
+		// exist)
+		makeFixtureVersion = ""
+	}
+
 	c.encryptDefault = false
 	newVersionUpgradeTest(c,
 		// Start the cluster from a fixture. That fixture's cluster version may
@@ -536,7 +596,7 @@ func makeVersionFixtureAndFatal(
 			name := checkpointName(u.binaryVersion(ctx, t, 1).String())
 			u.c.Stop(ctx, c.All())
 
-			c.Run(ctx, c.All(), cockroach, "debug", "pebble", "db", "checkpoint",
+			c.Run(ctx, c.All(), binaryPathFromVersion(makeFixtureVersion), "debug", "pebble", "db", "checkpoint",
 				"{store-dir}", "{store-dir}/"+name)
 			// The `cluster-bootstrapped` marker can already be found within
 			// store-dir, but the rocksdb checkpoint step above does not pick it

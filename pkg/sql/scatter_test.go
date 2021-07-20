@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -140,7 +140,7 @@ func TestScatterResponse(t *testing.T) {
 			expectedKey = keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
 		} else {
 			var err error
-			expectedKey, err = rowenc.TestingMakePrimaryIndexKey(tableDesc, i*10)
+			expectedKey, err = randgen.TestingMakePrimaryIndexKey(tableDesc, i*10)
 			if err != nil {
 				t.Fatal(err)
 			}

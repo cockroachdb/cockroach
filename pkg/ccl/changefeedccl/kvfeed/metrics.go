@@ -14,8 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
-const pollRequestNanosHistMaxLatency = time.Hour
-
 var (
 	metaChangefeedBufferEntriesIn = metric.Metadata{
 		Name:        "changefeed.buffer_entries.in",
@@ -29,12 +27,6 @@ var (
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaChangefeedPollRequestNanos = metric.Metadata{
-		Name:        "changefeed.poll_request_nanos",
-		Help:        "Time spent fetching changes",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
 )
 
 // Metrics is a metric.Struct for kvfeed metrics.
@@ -42,9 +34,8 @@ var (
 // TODO(ajwerner): Make these metrics more reasonable given the removal of the
 // poller and polling in general.
 type Metrics struct {
-	BufferEntriesIn      *metric.Counter
-	BufferEntriesOut     *metric.Counter
-	PollRequestNanosHist *metric.Histogram
+	BufferEntriesIn  *metric.Counter
+	BufferEntriesOut *metric.Counter
 }
 
 // MakeMetrics constructs a Metrics struct with the provided histogram window.
@@ -52,22 +43,6 @@ func MakeMetrics(histogramWindow time.Duration) Metrics {
 	return Metrics{
 		BufferEntriesIn:  metric.NewCounter(metaChangefeedBufferEntriesIn),
 		BufferEntriesOut: metric.NewCounter(metaChangefeedBufferEntriesOut),
-		// Metrics for changefeed performance debugging: - PollRequestNanos and
-		// PollRequestNanosHist, things are first
-		//   fetched with some limited concurrency. We're interested in both the
-		//   total amount of time fetching as well as outliers, so we need both
-		//   the counter and the histogram.
-		// - N/A. Each change is put into a buffer. Right now nothing measures
-		//   this since the buffer doesn't actually buffer and so it just tracks
-		//   the poll sleep time.
-		// - ProcessingNanos. Everything from the buffer until the SQL row is
-		//   about to be emitted. This includes TableMetadataNanos, which is
-		//   dependent on network calls, so also tracked in case it's ever the
-		//   cause of a ProcessingNanos blowup.
-		// - EmitNanos and FlushNanos. All of our interactions with the sink.
-		PollRequestNanosHist: metric.NewHistogram(
-			metaChangefeedPollRequestNanos, histogramWindow,
-			pollRequestNanosHistMaxLatency.Nanoseconds(), 1),
 	}
 }
 

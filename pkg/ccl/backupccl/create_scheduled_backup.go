@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -231,8 +231,9 @@ func doCreateBackupSchedules(
 	// Prepare backup statement (full).
 	backupNode := &tree.Backup{
 		Options: tree.BackupOptions{
-			CaptureRevisionHistory: eval.BackupOptions.CaptureRevisionHistory,
-			Detached:               true,
+			CaptureRevisionHistory:       eval.BackupOptions.CaptureRevisionHistory,
+			Detached:                     true,
+			IncludeDeprecatedInterleaves: eval.BackupOptions.IncludeDeprecatedInterleaves,
 		},
 		Nested:         true,
 		AppendToLatest: false,
@@ -416,7 +417,7 @@ func checkForExistingBackupsInCollection(
 			"the schedule can be created with the 'ignore_existing_backups' option",
 			collectionURI)
 	}
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Newf("unexpected error occurred when checking for existing backups in %s",
 			collectionURI)
 	}
@@ -699,7 +700,7 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloudimpl.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
@@ -713,7 +714,7 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloudimpl.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
@@ -725,7 +726,7 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloudimpl.RedactKMSURI(raw.RawString())
+		clean, err := cloud.RedactKMSURI(raw.RawString())
 		if err != nil {
 			return nil, err
 		}

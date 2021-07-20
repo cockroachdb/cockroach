@@ -42,10 +42,10 @@ func (b *BatchBuffer) Add(batch coldata.Batch, _ []*types.T) {
 }
 
 // Init is part of the Operator interface.
-func (b *BatchBuffer) Init() {}
+func (b *BatchBuffer) Init(context.Context) {}
 
 // Next is part of the Operator interface.
-func (b *BatchBuffer) Next(context.Context) coldata.Batch {
+func (b *BatchBuffer) Next() coldata.Batch {
 	batch := b.buffer[0]
 	b.buffer = b.buffer[1:]
 	return batch
@@ -103,7 +103,7 @@ func NewRepeatableBatchSource(
 }
 
 // Next is part of the Operator interface.
-func (s *RepeatableBatchSource) Next(context.Context) coldata.Batch {
+func (s *RepeatableBatchSource) Next() coldata.Batch {
 	s.batchesReturned++
 	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
 		return coldata.ZeroBatch
@@ -128,7 +128,7 @@ func (s *RepeatableBatchSource) Next(context.Context) coldata.Batch {
 }
 
 // Init is part of the Operator interface.
-func (s *RepeatableBatchSource) Init() {}
+func (s *RepeatableBatchSource) Init(context.Context) {}
 
 // ResetBatchesToReturn sets a limit on how many batches the source returns, as
 // well as resetting how many batches the source has returned so far.
@@ -137,19 +137,39 @@ func (s *RepeatableBatchSource) ResetBatchesToReturn(b int) {
 	s.batchesReturned = 0
 }
 
-// CallbackOperator is a testing utility struct that delegates Next calls to a
-// callback provided by the user.
+// CallbackOperator is a testing utility struct that delegates calls to Init,
+// Next, and Close to the callbacks provided by the user.
 type CallbackOperator struct {
 	ZeroInputNode
-	NextCb func(ctx context.Context) coldata.Batch
+	InitCb  func(context.Context)
+	NextCb  func() coldata.Batch
+	CloseCb func() error
 }
 
+var _ ClosableOperator = &CallbackOperator{}
+
 // Init is part of the Operator interface.
-func (o *CallbackOperator) Init() {}
+func (o *CallbackOperator) Init(ctx context.Context) {
+	if o.InitCb == nil {
+		return
+	}
+	o.InitCb(ctx)
+}
 
 // Next is part of the Operator interface.
-func (o *CallbackOperator) Next(ctx context.Context) coldata.Batch {
-	return o.NextCb(ctx)
+func (o *CallbackOperator) Next() coldata.Batch {
+	if o.NextCb == nil {
+		return coldata.ZeroBatch
+	}
+	return o.NextCb()
+}
+
+// Close is part of the ClosableOperator interface.
+func (o *CallbackOperator) Close() error {
+	if o.CloseCb == nil {
+		return nil
+	}
+	return o.CloseCb()
 }
 
 // TestingSemaphore is a semaphore.Semaphore that never blocks and is always

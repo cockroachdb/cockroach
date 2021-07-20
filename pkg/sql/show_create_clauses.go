@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -106,25 +107,35 @@ func ShowCreateView(
 	}
 	f.WriteString(") AS ")
 
-	// Convert sequences referenced by ID in the view back to their names.
-	decodedViewQuery, err := formatViewQueryForDisplay(ctx, semaCtx, desc)
+	// Deserialize user-defined types in the view query.
+	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, desc)
 	if err != nil {
 		log.Warningf(ctx,
-			"error converting sequence IDs to names for view %s (%v): %+v",
+			"error deserializing user defined types for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
 		f.WriteString(desc.GetViewQuery())
 	} else {
-		f.WriteString(decodedViewQuery)
+		// Convert sequences referenced by ID in the view back to their names.
+		sequenceReplacedViewQuery, err := formatViewQuerySequencesForDisplay(
+			ctx, semaCtx, typeReplacedViewQuery)
+		if err != nil {
+			log.Warningf(ctx,
+				"error converting sequence IDs to names for view %s (%v): %+v",
+				desc.GetName(), desc.GetID(), err)
+			f.WriteString(typeReplacedViewQuery)
+		} else {
+			f.WriteString(sequenceReplacedViewQuery)
+		}
 	}
+
 	return f.CloseAndGetString(), nil
 }
 
-// formatViewQueryForDisplay formats the given viewQuery by
-// parsing it into a statement, walking the statement and
-// looking for any IDs in the statement, and replacing the
-// IDs with the descriptor's fully qualified name.
-func formatViewQueryForDisplay(
-	ctx context.Context, semaCtx *tree.SemaContext, desc catalog.TableDescriptor,
+// formatViewQuerySequencesForDisplay walks the view query and
+// looks for sequence IDs in the statement. If it finds any,
+// it will replace the IDs with the descriptor's fully qualified name.
+func formatViewQuerySequencesForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, viewQuery string,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		newExpr, err = schemaexpr.ReplaceIDsWithFQNames(ctx, expr, semaCtx)
@@ -132,6 +143,50 @@ func formatViewQueryForDisplay(
 			return false, expr, err
 		}
 		return false, newExpr, nil
+	}
+
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return "", err
+	}
+
+	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceFunc)
+	if err != nil {
+		return "", err
+	}
+	return newStmt.String(), nil
+}
+
+// formatViewQueryTypesForDisplay walks the view query and
+// look for serialized user-defined types. If it finds any,
+// it will deserialize it to display its name.
+func formatViewQueryTypesForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, desc catalog.TableDescriptor,
+) (string, error) {
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		switch n := expr.(type) {
+		case *tree.AnnotateTypeExpr, *tree.CastExpr:
+			texpr, err := tree.TypeCheck(ctx, n, semaCtx, types.Any)
+			if err != nil {
+				return false, expr, err
+			}
+			if !texpr.ResolvedType().UserDefined() {
+				return true, expr, nil
+			}
+
+			formattedExpr, err := schemaexpr.FormatExprForDisplay(
+				ctx, desc, expr.String(), semaCtx, tree.FmtParsable)
+			if err != nil {
+				return false, expr, err
+			}
+			newExpr, err = parser.ParseExpr(formattedExpr)
+			if err != nil {
+				return false, expr, err
+			}
+			return false, newExpr, nil
+		default:
+			return true, expr, nil
+		}
 	}
 
 	viewQuery := desc.GetViewQuery()
@@ -287,6 +342,9 @@ func ShowCreateSequence(
 	if opts.Virtual {
 		f.Printf(" VIRTUAL")
 	}
+	if opts.CacheSize > 1 {
+		f.Printf(" CACHE %d", opts.CacheSize)
+	}
 	return f.CloseAndGetString(), nil
 }
 
@@ -329,12 +387,12 @@ func showCreateLocality(desc catalog.TableDescriptor, f *tree.FmtCtx) error {
 // it is equal to the given dbPrefix. This allows us to elide the prefix
 // when the given index is interleaved in a table of the current database.
 func showCreateInterleave(
-	idx *descpb.IndexDescriptor, buf *bytes.Buffer, dbPrefix string, lCtx simpleSchemaResolver,
+	idx catalog.Index, buf *bytes.Buffer, dbPrefix string, lCtx simpleSchemaResolver,
 ) error {
-	if len(idx.Interleave.Ancestors) == 0 {
+	if idx.NumInterleaveAncestors() == 0 {
 		return nil
 	}
-	intl := idx.Interleave
+	intl := idx.IndexDesc().Interleave
 	parentTableID := intl.Ancestors[len(intl.Ancestors)-1].TableID
 	var err error
 	var parentName tree.TableName
@@ -357,7 +415,7 @@ func showCreateInterleave(
 	fmtCtx.FormatNode(&parentName)
 	buf.WriteString(fmtCtx.CloseAndGetString())
 	buf.WriteString(" (")
-	formatQuoteNames(buf, idx.ColumnNames[:sharedPrefixLen]...)
+	formatQuoteNames(buf, idx.IndexDesc().KeyColumnNames[:sharedPrefixLen]...)
 	buf.WriteString(")")
 	return nil
 }
@@ -368,21 +426,21 @@ func ShowCreatePartitioning(
 	a *rowenc.DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
-	idxDesc *descpb.IndexDescriptor,
-	partDesc *descpb.PartitioningDescriptor,
+	idx catalog.Index,
+	part catalog.Partitioning,
 	buf *bytes.Buffer,
 	indent int,
 	colOffset int,
 ) error {
 	isPrimaryKeyOfPartitionAllByTable :=
-		tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() == idxDesc.ID && colOffset == 0
+		tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() == idx.GetID() && colOffset == 0
 
-	if partDesc.NumColumns == 0 && !isPrimaryKeyOfPartitionAllByTable {
+	if part.NumColumns() == 0 && !isPrimaryKeyOfPartitionAllByTable {
 		return nil
 	}
 	// Do not print PARTITION BY clauses of non-primary indexes belonging to a table
 	// that is PARTITION BY ALL. The ALL will be printed for the PRIMARY INDEX clause.
-	if tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() != idxDesc.ID {
+	if tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() != idx.GetID() {
 		return nil
 	}
 	// Do not print PARTITION ALL BY if we are a REGIONAL BY ROW table.
@@ -406,77 +464,84 @@ func ShowCreatePartitioning(
 		buf.WriteString(`ALL `)
 	}
 	buf.WriteString(`BY `)
-	if len(partDesc.List) > 0 {
+	if part.NumLists() > 0 {
 		buf.WriteString(`LIST`)
-	} else if len(partDesc.Range) > 0 {
+	} else if part.NumRanges() > 0 {
 		buf.WriteString(`RANGE`)
 	} else if isPrimaryKeyOfPartitionAllByTable {
 		buf.WriteString(`NOTHING`)
 		return nil
 	} else {
-		return errors.Errorf(`invalid partition descriptor: %v`, partDesc)
+		return errors.Errorf(`invalid partition descriptor: %v`, part.PartitioningDesc())
 	}
 	buf.WriteString(` (`)
-	for i := 0; i < int(partDesc.NumColumns); i++ {
+	for i := 0; i < part.NumColumns(); i++ {
 		if i != 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(idxDesc.ColumnNames[colOffset+i])
+		buf.WriteString(idx.GetKeyColumnName(colOffset + i))
 	}
 	buf.WriteString(`) (`)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i := range partDesc.List {
-		part := &partDesc.List[i]
-		if i != 0 {
+	isFirst := true
+	err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+		if !isFirst {
 			buf.WriteString(`, `)
 		}
+		isFirst = false
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		fmtCtx.FormatNameP(&part.Name)
+		fmtCtx.FormatNameP(&name)
 		_, _ = fmtCtx.Buffer.WriteTo(buf)
 		buf.WriteString(` VALUES IN (`)
-		for j, values := range part.Values {
+		for j, values := range values {
 			if j != 0 {
 				buf.WriteString(`, `)
 			}
 			tuple, _, err := rowenc.DecodePartitionTuple(
-				a, codec, tableDesc, idxDesc, partDesc, values, fakePrefixDatums)
+				a, codec, tableDesc, idx, part, values, fakePrefixDatums)
 			if err != nil {
 				return err
 			}
 			buf.WriteString(tuple.String())
 		}
 		buf.WriteString(`)`)
-		if err := ShowCreatePartitioning(
-			a, codec, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
-			colOffset+int(partDesc.NumColumns),
-		); err != nil {
-			return err
-		}
+		return ShowCreatePartitioning(
+			a, codec, tableDesc, idx, subPartitioning, buf, indent+1, colOffset+part.NumColumns(),
+		)
+	})
+	if err != nil {
+		return err
 	}
-	for i, part := range partDesc.Range {
-		if i != 0 {
+	isFirst = true
+	err = part.ForEachRange(func(name string, from, to []byte) error {
+		if !isFirst {
 			buf.WriteString(`, `)
 		}
+		isFirst = false
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		buf.WriteString(part.Name)
+		buf.WriteString(name)
 		buf.WriteString(" VALUES FROM ")
 		fromTuple, _, err := rowenc.DecodePartitionTuple(
-			a, codec, tableDesc, idxDesc, partDesc, part.FromInclusive, fakePrefixDatums)
+			a, codec, tableDesc, idx, part, from, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
 		buf.WriteString(fromTuple.String())
 		buf.WriteString(" TO ")
 		toTuple, _, err := rowenc.DecodePartitionTuple(
-			a, codec, tableDesc, idxDesc, partDesc, part.ToExclusive, fakePrefixDatums)
+			a, codec, tableDesc, idx, part, to, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
 		buf.WriteString(toTuple.String())
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	buf.WriteString("\n")
 	buf.WriteString(indentStr)

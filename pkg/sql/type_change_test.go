@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -482,6 +483,10 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	defer jobs.TestingSetAdoptAndCancelIntervals(
+		100*time.Millisecond, 100*time.Millisecond,
+	)()
+
 	testCases := []struct {
 		desc       string
 		query      string
@@ -528,9 +533,10 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 			finishedSchemaChange.Add(1)
 
 			params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
-				RunBeforeEnumMemberPromotion: func() {
+				RunBeforeEnumMemberPromotion: func() error {
 					typeSchemaChangeStarted.Done()
 					blockTypeSchemaChange.Wait()
+					return nil
 				},
 			}
 

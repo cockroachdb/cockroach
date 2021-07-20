@@ -158,6 +158,23 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
     constraints = '[+region=test]',
     lease_preferences = '[[+region=test]]'
 
+# Test SHOW CREATE TABLE correctly shows the CREATE TABLE.
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+   id INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   FAMILY "primary" (id)
+);
+ALTER TABLE test.public.a CONFIGURE ZONE USING
+  range_min_bytes = 200001,
+  range_max_bytes = 400000,
+  gc.ttlseconds = 3600,
+  num_replicas = 1,
+  constraints = '[+region=test]',
+  lease_preferences = '[[+region=test]]'
+
 # Check that we can reset the configuration to defaults.
 
 statement ok
@@ -195,7 +212,6 @@ ORDER BY feature_name
 ----
 sql.schema.alter_range.configure_zone
 sql.schema.alter_table.configure_zone
-
 
 # Check that configuring num_voters separately from num_replicas behaves as
 # expected, across setting them directly and through inheritance.
@@ -289,3 +305,35 @@ ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
 
 statement error pq: user root does not have ZONECONFIG or CREATE privilege on relation columns
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
+
+# Test tables in different schemas do not show the zone configs
+# of the other.
+
+statement ok
+CREATE TABLE same_table_name();
+ALTER TABLE same_table_name CONFIGURE ZONE USING gc.ttlseconds = 500;
+CREATE SCHEMA alternative_schema;
+CREATE TABLE alternative_schema.same_table_name();
+ALTER TABLE alternative_schema.same_table_name CONFIGURE ZONE USING gc.ttlseconds = 600
+
+query TT
+SHOW CREATE TABLE same_table_name
+----
+same_table_name  CREATE TABLE public.same_table_name (
+                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                 CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                 FAMILY "primary" (rowid)
+);
+ALTER TABLE test.public.same_table_name CONFIGURE ZONE USING
+  gc.ttlseconds = 500
+
+query TT
+SHOW CREATE TABLE alternative_schema.same_table_name
+----
+alternative_schema.same_table_name  CREATE TABLE alternative_schema.same_table_name (
+                                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                    FAMILY "primary" (rowid)
+);
+ALTER TABLE test.alternative_schema.same_table_name CONFIGURE ZONE USING
+  gc.ttlseconds = 600

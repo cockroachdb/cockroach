@@ -318,6 +318,7 @@ const (
 	RangeFeedRetryErrType                   ErrorDetailType = 38
 	IndeterminateCommitErrType              ErrorDetailType = 39
 	InvalidLeaseErrType                     ErrorDetailType = 40
+	OptimisticEvalConflictsErrType          ErrorDetailType = 41
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -327,7 +328,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 41
+	NumErrors int = 42
 )
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -503,7 +504,7 @@ func (e *LeaseRejectedError) Error() string {
 }
 
 func (e *LeaseRejectedError) message(_ *Error) string {
-	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested, e.Message)
+	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested.String(), e.Message)
 }
 
 var _ ErrorDetailInterface = &LeaseRejectedError{}
@@ -1256,3 +1257,24 @@ func (e *InvalidLeaseError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &InvalidLeaseError{}
+
+// NewOptimisticEvalConflictsError initializes a new
+// OptimisticEvalConflictsError.
+func NewOptimisticEvalConflictsError() *OptimisticEvalConflictsError {
+	return &OptimisticEvalConflictsError{}
+}
+
+func (e *OptimisticEvalConflictsError) Error() string {
+	return e.message(nil)
+}
+
+func (e *OptimisticEvalConflictsError) message(pErr *Error) string {
+	return "optimistic eval encountered conflict"
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *OptimisticEvalConflictsError) Type() ErrorDetailType {
+	return OptimisticEvalConflictsErrType
+}
+
+var _ ErrorDetailInterface = &OptimisticEvalConflictsError{}

@@ -55,12 +55,23 @@ const (
 	// many batches by the DistSender.
 	gcBatchSize = 1024
 
-	// intentResolverBatchSize is the maximum number of intents that will be
-	// resolved in a single batch. Batches that span many ranges (which is
-	// possible for the commit of a transaction that spans many ranges) will be
-	// split into many batches by the DistSender.
+	// intentResolverBatchSize is the maximum number of single-intent resolution
+	// requests that will be sent in a single batch. Batches that span many
+	// ranges (which is possible for the commit of a transaction that spans many
+	// ranges) will be split into many batches by the DistSender.
 	// TODO(ajwerner): justify this value
 	intentResolverBatchSize = 100
+
+	// intentResolverRangeBatchSize is the maximum number of ranged intent
+	// resolutions requests that will be sent in a single batch.  It is set
+	// lower that intentResolverBatchSize since each request can fan out to a
+	// large number of intents.
+	intentResolverRangeBatchSize = 10
+
+	// intentResolverRangeRequestSize is the maximum number of intents a single
+	// range request can resolve. When exceeded, the response will include a
+	// ResumeSpan and the batcher will send a new range request.
+	intentResolverRangeRequestSize = 200
 
 	// cleanupIntentsTxnsPerBatch is the number of transactions whose
 	// corresponding intents will be resolved at a time. Intents are batched
@@ -88,6 +99,10 @@ const (
 	// intentResolutionBatchIdle is similar to the above setting but is used when
 	// when no additional traffic hits the batch.
 	defaultIntentResolutionBatchIdle = 5 * time.Millisecond
+
+	// gcTxnRecordTimeout is the timeout for asynchronous txn record removal
+	// during cleanupFinishedTxnIntents.
+	gcTxnRecordTimeout = 20 * time.Second
 )
 
 // Config contains the dependencies to construct an IntentResolver.
@@ -204,8 +219,10 @@ func New(c Config) *IntentResolver {
 		Sender:          c.DB.NonTransactionalSender(),
 	})
 	intentResolutionBatchSize := intentResolverBatchSize
+	intentResolutionRangeBatchSize := intentResolverRangeBatchSize
 	if c.TestingKnobs.MaxIntentResolutionBatchSize > 0 {
 		intentResolutionBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
+		intentResolutionRangeBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 	}
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
 		Name:            "intent_resolver_ir_batcher",
@@ -216,12 +233,9 @@ func New(c Config) *IntentResolver {
 		Sender:          c.DB.NonTransactionalSender(),
 	})
 	ir.irRangeBatcher = requestbatcher.New(requestbatcher.Config{
-		Name:            "intent_resolver_ir_range_batcher",
-		MaxMsgsPerBatch: intentResolutionBatchSize,
-		// NOTE: Allow each request sent in a batch to touch up to twice as
-		// many keys as messages in the batch to avoid pagination if only a
-		// few ResolveIntentRange requests touch multiple intents.
-		MaxKeysPerBatchReq: 2 * intentResolverBatchSize,
+		Name:               "intent_resolver_ir_range_batcher",
+		MaxMsgsPerBatch:    intentResolutionRangeBatchSize,
+		MaxKeysPerBatchReq: intentResolverRangeRequestSize,
 		MaxWait:            c.MaxIntentResolutionBatchWait,
 		MaxIdle:            c.MaxIntentResolutionBatchIdle,
 		Stopper:            c.Stopper,
@@ -744,12 +758,20 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	if pErr := ir.ResolveIntents(ctx, txn.LocksAsLockUpdates(), opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
-	// Run transaction record GC outside of ir.sem.
+	// Run transaction record GC outside of ir.sem. We need a new context, in case
+	// we're still connected to the client's context (which can happen when
+	// allowSyncProcessing is true). Otherwise, we may return to the caller before
+	// gcTxnRecord completes, which may cancel the context and abort the cleanup
+	// either due to a defer cancel() or client disconnection. We give it a timeout
+	// as well, to avoid goroutine leakage.
 	return ir.stopper.RunAsyncTask(
-		ctx,
+		ir.ambientCtx.AnnotateCtx(context.Background()),
 		"storage.IntentResolver: cleanup txn records",
 		func(ctx context.Context) {
-			err := ir.gcTxnRecord(ctx, rangeID, txn)
+			err := contextutil.RunWithTimeout(ctx, "cleanup txn record",
+				gcTxnRecordTimeout, func(ctx context.Context) error {
+					return ir.gcTxnRecord(ctx, rangeID, txn)
+				})
 			if onComplete != nil {
 				onComplete(err)
 			}

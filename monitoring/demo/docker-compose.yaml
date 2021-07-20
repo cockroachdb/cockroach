@@ -1,0 +1,38 @@
+version: "3.9"
+services:
+  grafana:
+    image: grafana/grafana
+    environment:
+      - "GF_AUTH_ANONYMOUS_ENABLED=true"
+      - "GF_AUTH_ANONYMOUS_ORG_ROLE=Admin"
+      - "GF_AUTH_ANONYMOUS_HIDE_VERSION=true"
+    volumes:
+      # Mount provisioning configuration
+      - "./config/grafana/provisioning:/etc/grafana/provisioning"
+      # Mount dashboards
+      - "../grafana-dashboards:/var/lib/grafana/dashboards"
+    ports: [ "3000:3000" ]
+  prometheus:
+    image: prom/prometheus
+    # Mount prometheus configuration
+    volumes: [ "./config/prometheus.yml:/etc/prometheus/prometheus.yml" ]
+    ports: [ "9090:9090" ]
+  roach1:
+    hostname: roach1
+    image: cockroachdb/cockroach
+    command: [ "start", "--insecure", "--accept-sql-without-tls", "--join=roach1,roach2,roach3" ]
+    ports: [ "8080:8080", "26257:26257" ]
+  roach2:
+    hostname: roach2
+    image: cockroachdb/cockroach
+    command: [ "start", "--insecure", "--accept-sql-without-tls", "--join=roach1,roach2,roach3" ]
+  roach3:
+    hostname: roach3
+    image: cockroachdb/cockroach
+    command: [ "start", "--insecure",  "--accept-sql-without-tls", "--join=roach1,roach2,roach3" ]
+  # Initialize the cluster
+  roach-init:
+    image: cockroachdb/cockroach
+    depends_on: [ roach1 ]
+    volumes: [ "./config/roach-init.sh:/cockroach/init.sh" ]
+    command: [ "shell", "/cockroach/init.sh" ]

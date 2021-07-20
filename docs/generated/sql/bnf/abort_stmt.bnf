@@ -1,0 +1,2 @@
+abort_stmt ::=
+	'ABORT' opt_abort_mod

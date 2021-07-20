@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -39,7 +39,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	// internal batch is reset.
 	nRows := coldata.BatchSize() * 2
 	nCols := len(typs)
-	rows := rowenc.MakeIntRows(nRows, nCols)
+	rows := randgen.MakeIntRows(nRows, nCols)
 	input := execinfra.NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
@@ -51,14 +51,11 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 		EvalCtx: &evalCtx,
 	}
 
-	c, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0, input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.Init()
+	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
+	c.Init(ctx)
 	foundRows := 0
 	for {
-		batch := c.Next(ctx)
+		batch := c.Next()
 		require.Nil(t, batch.Selection(), "Columnarizer didn't reset the internal batch")
 		if batch.Length() == 0 {
 			break
@@ -101,25 +98,24 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 			const errMsg = "artificial error"
 			rb := distsqlutils.NewRowBuffer([]*types.T{types.Int}, nil /* rows */, distsqlutils.RowBufferArgs{})
 			rb.Push(nil, &execinfrapb.ProducerMetadata{Err: errors.New(errMsg)})
-			c, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, rb)
-			require.NoError(t, err)
+			c := NewBufferingColumnarizer(testAllocator, flowCtx, 0 /* processorID */, rb)
 
-			c.Init()
+			c.Init(ctx)
 
 			// If the metadata is obtained through this Next call, the Columnarizer still
 			// returns it in DrainMeta.
-			err = colexecerror.CatchVectorizedRuntimeError(func() { c.Next(ctx) })
+			err := colexecerror.CatchVectorizedRuntimeError(func() { c.Next() })
 			require.True(t, testutils.IsError(err, errMsg), "unexpected error %v", err)
 
 			if tc.consumerClosed {
 				// Closing the Columnarizer should call ConsumerClosed on the processor.
-				require.NoError(t, c.Close(ctx))
+				require.NoError(t, c.Close())
 				require.Equal(t, execinfra.ConsumerClosed, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)
 			} else {
 				// Calling DrainMeta from the vectorized execution engine should propagate to
 				// non-vectorized components as calling ConsumerDone and then draining their
 				// metadata.
-				meta := c.DrainMeta(ctx)
+				meta := c.DrainMeta()
 				require.True(t, len(meta) == 0)
 				require.True(t, rb.Done)
 				require.Equal(t, execinfra.DrainRequested, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)
@@ -134,7 +130,7 @@ func BenchmarkColumnarize(b *testing.B) {
 	types := []*types.T{types.Int, types.Int}
 	nRows := 10000
 	nCols := 2
-	rows := rowenc.MakeIntRows(nRows, nCols)
+	rows := randgen.MakeIntRows(nRows, nCols)
 	input := execinfra.NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()
@@ -148,15 +144,12 @@ func BenchmarkColumnarize(b *testing.B) {
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 
-	c, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0, input)
-	if err != nil {
-		b.Fatal(err)
-	}
-	c.Init()
+	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
+	c.Init(ctx)
 	for i := 0; i < b.N; i++ {
 		foundRows := 0
 		for {
-			batch := c.Next(ctx)
+			batch := c.Next()
 			if batch.Length() == 0 {
 				break
 			}

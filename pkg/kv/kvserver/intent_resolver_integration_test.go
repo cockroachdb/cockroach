@@ -11,16 +11,32 @@
 package kvserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"fmt"
+	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func beginTransaction(
@@ -163,4 +179,478 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	if err := <-readCh2; err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Regression test for https://github.com/cockroachdb/cockroach/issues/64092
+// which makes sure that synchronous ranged intent resolution during rollback
+// completes in a reasonable time.
+func TestRollbackSyncRangedIntentResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "timing-sensitive test")
+
+	ctx := context.Background()
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &StoreTestingKnobs{
+				DisableLoadBasedSplitting: true,
+				IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
+					ForceSyncIntentResolution: true,
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	txn := srv.DB().NewTxn(ctx, "test")
+	batch := txn.NewBatch()
+	for i := 0; i < 100000; i++ {
+		batch.Put([]byte(fmt.Sprintf("key%v", i)), []byte("value"))
+	}
+	require.NoError(t, txn.Run(ctx, batch))
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	require.NoError(t, txn.Rollback(ctx))
+	require.NoError(t, ctx.Err())
+}
+
+// Tests that intents and transaction records are cleaned up within a reasonable
+// timeframe in various scenarios.
+func TestReliableIntentCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 65908, "flaky in CI")
+	skip.UnderShort(t) // takes 294s
+	skip.UnderRace(t, "timing-sensitive test")
+	skip.UnderStress(t, "memory-hungry test")
+
+	prefix := roachpb.Key([]byte("key\x00"))
+
+	testutils.RunTrueAndFalse(t, "ForceSyncIntentResolution", func(t *testing.T, forceSync bool) {
+		// abortHeartbeats is used to abort txn heartbeats, returning
+		// TransactionAbortedError. Key is txn anchor key, value is a chan
+		// struct{} that will be closed when the next heartbeat aborts.
+		var abortHeartbeats sync.Map
+
+		abortHeartbeat := func(t *testing.T, txnKey roachpb.Key) <-chan struct{} {
+			abortedC := make(chan struct{})
+			abortHeartbeats.Store(string(txnKey), abortedC)
+			t.Cleanup(func() {
+				abortHeartbeats.Delete(string(txnKey))
+			})
+			return abortedC
+		}
+
+		// blockPuts is used to block Put responses for a given txn. The key is
+		// a txn anchor key, and the value is a chan chan<- struct{} that, when
+		// the Put is ready, will be used to send an unblock channel. The
+		// unblock channel can be closed to unblock the Put.
+		var blockPuts sync.Map
+
+		blockPut := func(t *testing.T, txnKey roachpb.Key) <-chan chan<- struct{} {
+			readyC := make(chan chan<- struct{})
+			blockPuts.Store(string(txnKey), readyC)
+			t.Cleanup(func() {
+				blockPuts.Delete(string(txnKey))
+			})
+			return readyC
+		}
+
+		// blockPutEvals is used to block Put command evaluation in Raft for a
+		// given txn. The key is a txn anchor key, and the value is a chan
+		// chan<- struct{} that, when the Put is ready, will be used to send an
+		// unblock channel. The unblock channel can be closed to unblock the
+		// Put.
+		var blockPutEvals sync.Map
+
+		blockPutEval := func(t *testing.T, txnKey roachpb.Key) <-chan chan<- struct{} {
+			readyC := make(chan chan<- struct{})
+			blockPutEvals.Store(string(txnKey), readyC)
+			t.Cleanup(func() {
+				blockPutEvals.Delete(string(txnKey))
+			})
+			return readyC
+		}
+
+		requestFilter := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+			// If we receive a heartbeat from a txn in abortHeartbeats,
+			// close the aborted channel and return an error response.
+			if _, ok := ba.GetArg(roachpb.HeartbeatTxn); ok && ba.Txn != nil {
+				if abortedC, ok := abortHeartbeats.LoadAndDelete(string(ba.Txn.Key)); ok {
+					close(abortedC.(chan struct{}))
+					return roachpb.NewError(roachpb.NewTransactionAbortedError(
+						roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN))
+				}
+			}
+			return nil
+		}
+
+		evalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
+			// If we receive a Put request from a txn in blockPutEvals, signal
+			// the caller that the Put is ready to block by passing it an
+			// unblock channel, and wait for it to close.
+			if put, ok := args.Req.(*roachpb.PutRequest); ok && args.Hdr.Txn != nil {
+				if bytes.HasPrefix(put.Key, prefix) {
+					if ch, ok := blockPutEvals.LoadAndDelete(string(args.Hdr.Txn.Key)); ok {
+						readyC := ch.(chan chan<- struct{})
+						unblockC := make(chan struct{})
+						readyC <- unblockC
+						close(readyC)
+						<-unblockC
+					}
+				}
+			}
+			return nil
+		}
+
+		responseFilter := func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			// If we receive a Put request from a txn in blockPuts, signal
+			// the caller that the Put is ready to block by passing it an
+			// unblock channel, and wait for it to close.
+			if arg, ok := ba.GetArg(roachpb.Put); ok && ba.Txn != nil {
+				if bytes.HasPrefix(arg.(*roachpb.PutRequest).Key, prefix) {
+					if ch, ok := blockPuts.LoadAndDelete(string(ba.Txn.Key)); ok {
+						readyC := ch.(chan chan<- struct{})
+						unblockC := make(chan struct{})
+						readyC <- unblockC
+						close(readyC)
+						<-unblockC
+					}
+				}
+			}
+			return nil
+		}
+
+		// Set up three-node cluster, which will be shared by subtests.
+		ctx := context.Background()
+		clusterArgs := base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &StoreTestingKnobs{
+						IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
+							ForceSyncIntentResolution: forceSync,
+						},
+						TestingRequestFilter:  requestFilter,
+						TestingResponseFilter: responseFilter,
+						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+							TestingPostEvalFilter: evalFilter,
+						},
+					},
+				},
+			},
+		}
+		tc := serverutils.StartNewTestCluster(t, 3, clusterArgs)
+		defer tc.Stopper().Stop(ctx)
+
+		srv := tc.Server(0)
+		db := srv.DB()
+		store, err := srv.GetStores().(*Stores).GetStore(srv.GetFirstStoreID())
+		require.NoError(t, err)
+
+		// Split off 16 ranges by the first hex digit (4 bits) after prefix:
+		// key\x00\x00 key\x00\x10 key\x00\x20 key\x00\x30 ...
+		for i := 0; i < 16; i++ {
+			require.NoError(t, db.AdminSplit(ctx, append(prefix, byte(i<<4)), hlc.MaxTimestamp))
+		}
+		require.NoError(t, tc.WaitForFullReplication())
+
+		// Set up random key generator which only generates unique keys.
+		genKeySeen := map[string]bool{}
+		genKey := func(singleRange bool) roachpb.Key {
+			key := make([]byte, len(prefix)+4)
+			copy(key, prefix)
+			for {
+				r := rand.Uint32()
+				if singleRange {
+					r = r >> 4 // zero out four first bits, puts key in first range
+				}
+				binary.BigEndian.PutUint32(key[len(prefix):], r)
+				if !genKeySeen[string(key)] {
+					genKeySeen[string(key)] = true
+					return key
+				}
+			}
+		}
+
+		// assertIntentCleanup checks that intents get cleaned up within a
+		// reasonable time.
+		assertIntentCleanup := func(t *testing.T) {
+			t.Helper()
+			var result storage.MVCCScanResult
+			if !assert.Eventually(t, func() bool {
+				result, err = storage.MVCCScan(ctx, store.Engine(), prefix, prefix.PrefixEnd(),
+					hlc.MaxTimestamp, storage.MVCCScanOptions{Inconsistent: true})
+				require.NoError(t, err)
+				return len(result.Intents) == 0
+			}, time.Minute, 200*time.Millisecond, "intent cleanup timed out") {
+				require.Fail(t, "found stale intents", "count=%v first=%v last=%v",
+					len(result.Intents), result.Intents[0], result.Intents[len(result.Intents)-1])
+			}
+		}
+
+		// assertTxnCleanup checks that the txn record is cleaned up within a
+		// reasonable time.
+		assertTxnCleanup := func(t *testing.T, txnKey roachpb.Key, txnID uuid.UUID) {
+			t.Helper()
+			var txnEntry roachpb.Transaction
+			if !assert.Eventually(t, func() bool {
+				key := keys.TransactionKey(txnKey, txnID)
+				ok, err := storage.MVCCGetProto(ctx, store.Engine(), key, hlc.MaxTimestamp, &txnEntry,
+					storage.MVCCGetOptions{})
+				require.NoError(t, err)
+				return !ok
+			}, 10*time.Second, 100*time.Millisecond, "txn record cleanup timed out") {
+				require.Fail(t, "found stale txn record", "%v", txnEntry)
+			}
+		}
+
+		// removeKeys cleans up all entries in the key range.
+		removeKeys := func(t *testing.T) {
+			t.Helper()
+			batch := &kv.Batch{}
+			batch.AddRawRequest(&roachpb.ClearRangeRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    prefix,
+					EndKey: prefix.PrefixEnd(),
+				},
+			})
+			require.NoError(t, db.Run(ctx, batch))
+			genKeySeen = map[string]bool{} // reset random key generator
+		}
+
+		// testTxnSpec specifies a testTxn test.
+		type testTxnSpec struct {
+			numKeys     int    // number of keys per transaction
+			singleRange bool   // if true, put intents in a single range at key\x00\x00
+			finalize    string // commit, rollback, cancel, cancelAsync
+			abort       string // heartbeat, push
+		}
+
+		// testTxnExecute executes a transaction for testTxn. It is a separate function
+		// so that any transaction errors can be retried as appropriate.
+		testTxnExecute := func(t *testing.T, spec testTxnSpec, txn *kv.Txn, txnKey roachpb.Key) error {
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+
+			if spec.finalize == "cancelAsync" && spec.abort != "" {
+				// This would require coordinating the abort, cancel, and put
+				// goroutines. Doesn't seem worth the complexity.
+				require.Fail(t, "Can't combine finalize=cancelAsync and abort")
+			}
+
+			// If requested, spin off txn aborter goroutines, returning errors
+			// (if any) via abortErrC.
+			//
+			// We execute aborts while a Put request is in-flight, by blocking
+			// the put response until the abort completes, as a regression test:
+			// https://github.com/cockroachdb/cockroach/issues/65458
+			abortErrC := make(chan error, 1)
+			switch spec.abort {
+			case "heartbeat":
+				// Waits for a heartbeat and returns an abort error. Blocks put
+				// meanwhile, returning when heartbeat was aborted.
+				abortedC := abortHeartbeat(t, txnKey)
+				readyC := blockPut(t, txnKey)
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "unblock", func(ctx context.Context) {
+					<-abortedC
+					unblockC := <-readyC
+					time.Sleep(100 * time.Millisecond)
+					close(unblockC)
+				}))
+				close(abortErrC) // can't error
+
+			case "push":
+				// Push txn with a high-priority write once put is blocked.
+				readyC := blockPut(t, txnKey)
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "push", func(ctx context.Context) {
+					unblockC := <-readyC
+					defer close(unblockC)
+					defer close(abortErrC)
+
+					now := srv.Clock().NowAsClockTimestamp()
+					pusherProto := roachpb.MakeTransaction(
+						"pusher",
+						nil, // baseKey
+						roachpb.MaxUserPriority,
+						now.ToTimestamp(),
+						srv.Clock().MaxOffset().Nanoseconds(),
+					)
+					pusher := kv.NewTxnFromProto(ctx, db, srv.NodeID(), now, kv.RootTxn, &pusherProto)
+					if err := pusher.Put(ctx, txnKey, []byte("pushit")); err != nil {
+						abortErrC <- err
+						return
+					}
+					if err := pusher.Rollback(ctx); err != nil {
+						abortErrC <- err
+						return
+					}
+					time.Sleep(100 * time.Millisecond)
+				}))
+
+			case "":
+				close(abortErrC)
+
+			default:
+				require.Fail(t, "invalid abort type", "abort=%v", spec.abort)
+			}
+
+			// If requested, cancel the context while the put is being
+			// evaluated in Raft.
+			if spec.finalize == "cancelAsync" {
+				readyC := blockPutEval(t, txnKey)
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "cancel", func(ctx context.Context) {
+					unblockC := <-readyC
+					defer close(unblockC)
+					cancel()
+					time.Sleep(100 * time.Millisecond)
+				}))
+			}
+
+			// Write numKeys KV pairs in batches of batchSize as a single txn.
+			const batchSize = 10000
+			for b := 0; b*batchSize < spec.numKeys; b++ {
+				batch := txn.NewBatch()
+				for i := 0; i < batchSize && b*batchSize+i < spec.numKeys; i++ {
+					key := genKey(spec.singleRange)
+					if b == 0 && i == 0 {
+						copy(key, txnKey) // txnKey must be the first written key
+					}
+					batch.Put(key, []byte("value"))
+				}
+				err := txn.Run(ctx, batch)
+				if ctx.Err() != nil {
+					// If context was canceled (see cancelAsync), we just bail
+					// out and ignore the error (as the client would).
+					break
+				} else if err != nil {
+					return err
+				}
+			}
+
+			// Make sure the abort didn't error.
+			if err := <-abortErrC; err != nil {
+				return err
+			}
+
+			// Finalize the txn according to the spec.
+			switch spec.finalize {
+			case "commit":
+				return txn.Commit(ctx)
+			case "rollback":
+				return txn.Rollback(ctx)
+			case "cancel", "cancelAsync":
+				// Rollback with canceled context, as the SQL connection would.
+				cancel()
+				if err := txn.Rollback(ctx); err != nil && !errors.Is(err, context.Canceled) {
+					return err
+				}
+			default:
+				require.Fail(t, "invalid finalize type", "finalize=%v", spec.finalize)
+			}
+			return nil
+		}
+
+		// testTxn runs an intent cleanup test using a transaction.
+		testTxn := func(t *testing.T, spec testTxnSpec) {
+			t.Cleanup(func() {
+				removeKeys(t)
+			})
+
+			// Execute the transaction and retry any transaction errors (unless
+			// the test expects an error). These errors can be caused by async
+			// processes such as lease transfers, range merges/splits, or
+			// stats jobs).
+			txns := map[uuid.UUID]roachpb.Key{}
+			txn := db.NewTxn(ctx, "test") // reuse *kv.Txn across retries, will be updated
+			for attempt := 1; ; attempt++ {
+				txnKey := genKey(spec.singleRange)
+				txns[txn.ID()] = txnKey // before testTxnExecute, id may change on errors
+
+				err := testTxnExecute(t, spec, txn, txnKey)
+				if err == nil {
+					break
+				} else if spec.abort != "" {
+					require.Error(t, err)
+					require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err, "err: %v", err)
+					require.True(t, err.(*roachpb.TransactionRetryWithProtoRefreshError).PrevTxnAborted())
+					break
+				} else if retryErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); !ok {
+					require.NoError(t, err)
+				} else if attempt >= 3 {
+					require.Fail(t, "too many txn retries", "attempt %v errored: %v", attempt, err)
+				} else {
+					t.Logf("retrying unexpected txn error: %v", err)
+					require.True(t, txn.IsRetryableErrMeantForTxn(*retryErr))
+				}
+			}
+
+			assertIntentCleanup(t)
+			for txnID, txnKey := range txns {
+				// TODO(erikgrinaker): this occasionally fails in CI with
+				// finalize=cancelAsync, but the reason hasn't been found. We're
+				// mostly concerned with intent cleanup, so skip the txn record
+				// assertion in these cases.
+				if spec.finalize == "cancelAsync" {
+					break
+				}
+				assertTxnCleanup(t, txnKey, txnID)
+			}
+		}
+
+		// testNonTxn runs an intent cleanup test without an explicit transaction.
+		type testNonTxnSpec struct {
+			numKeys     int  // number of keys per transaction
+			singleRange bool // if true, put intents in a single range at key\x00\x00
+		}
+		testNonTxn := func(t *testing.T, spec testNonTxnSpec) {
+			t.Cleanup(func() { removeKeys(t) })
+
+			batch := &kv.Batch{}
+			for i := 0; i < spec.numKeys; i++ {
+				batch.Put(genKey(spec.singleRange), []byte("value"))
+			}
+			require.NoError(t, db.Run(ctx, batch))
+
+			assertIntentCleanup(t)
+		}
+
+		// The actual tests are run here, using all combinations of parameters.
+		testutils.RunValues(t, "numKeys", []interface{}{1, 100, 100000}, func(t *testing.T, numKeys interface{}) {
+			testutils.RunTrueAndFalse(t, "singleRange", func(t *testing.T, singleRange bool) {
+				testutils.RunTrueAndFalse(t, "txn", func(t *testing.T, txn bool) {
+					if !txn {
+						testNonTxn(t, testNonTxnSpec{
+							numKeys:     numKeys.(int),
+							singleRange: singleRange,
+						})
+						return
+					}
+					finalize := []interface{}{"commit", "rollback", "cancel", "cancelAsync"}
+					testutils.RunValues(t, "finalize", finalize, func(t *testing.T, finalize interface{}) {
+						if finalize == "cancelAsync" {
+							// cancelAsync can't run together with abort.
+							testTxn(t, testTxnSpec{
+								numKeys:     numKeys.(int),
+								singleRange: singleRange,
+								finalize:    finalize.(string),
+							})
+							return
+						}
+						abort := []interface{}{"no", "push", "heartbeat"}
+						testutils.RunValues(t, "abort", abort, func(t *testing.T, abort interface{}) {
+							if abort.(string) == "no" {
+								abort = "" // "no" just makes the test output better
+							}
+							testTxn(t, testTxnSpec{
+								numKeys:     numKeys.(int),
+								singleRange: singleRange,
+								finalize:    finalize.(string),
+								abort:       abort.(string),
+							})
+						})
+					})
+				})
+			})
+		})
+	})
 }

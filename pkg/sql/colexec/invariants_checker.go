@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,13 +25,14 @@ import (
 // should be planned between other Operators in tests.
 type InvariantsChecker struct {
 	colexecop.OneInputNode
+	colexecop.InitHelper
 	colexecop.NonExplainable
 
-	initStatus     colexecop.OperatorInitStatus
 	metadataSource colexecop.MetadataSource
 }
 
 var _ colexecop.DrainableOperator = &InvariantsChecker{}
+var _ colexecop.ClosableOperator = &InvariantsChecker{}
 
 // NewInvariantsChecker creates a new InvariantsChecker.
 func NewInvariantsChecker(input colexecop.Operator) *InvariantsChecker {
@@ -46,16 +46,18 @@ func NewInvariantsChecker(input colexecop.Operator) *InvariantsChecker {
 }
 
 // Init implements the colexecop.Operator interface.
-func (i *InvariantsChecker) Init() {
-	i.initStatus = colexecop.OperatorInitialized
-	i.Input.Init()
+func (i *InvariantsChecker) Init(ctx context.Context) {
+	if !i.InitHelper.Init(ctx) {
+		return
+	}
+	i.Input.Init(i.Ctx)
 }
 
 // assertInitWasCalled asserts that Init() has been called on the invariants
 // checker and returns a boolean indicating whether the execution should be
 // short-circuited (true means that the caller should just return right away).
 func (i *InvariantsChecker) assertInitWasCalled() bool {
-	if i.initStatus != colexecop.OperatorInitialized {
+	if i.Ctx == nil {
 		if c, ok := i.Input.(*Columnarizer); ok {
 			if c.removedFromFlow {
 				// This is a special case in which we allow for the operator to
@@ -70,19 +72,19 @@ func (i *InvariantsChecker) assertInitWasCalled() bool {
 }
 
 // Next implements the colexecop.Operator interface.
-func (i *InvariantsChecker) Next(ctx context.Context) coldata.Batch {
+func (i *InvariantsChecker) Next() coldata.Batch {
 	if shortCircuit := i.assertInitWasCalled(); shortCircuit {
 		return coldata.ZeroBatch
 	}
-	b := i.Input.Next(ctx)
+	b := i.Input.Next()
 	n := b.Length()
 	if n == 0 {
 		return b
 	}
 	for colIdx := 0; colIdx < b.Width(); colIdx++ {
 		v := b.ColVec(colIdx)
-		if v.CanonicalTypeFamily() == types.BytesFamily {
-			v.Bytes().AssertOffsetsAreNonDecreasing(n)
+		if v.IsBytesLike() {
+			coldata.AssertOffsetsAreNonDecreasing(v, n)
 		}
 	}
 	if sel := b.Selection(); sel != nil {
@@ -99,12 +101,21 @@ func (i *InvariantsChecker) Next(ctx context.Context) coldata.Batch {
 }
 
 // DrainMeta implements the colexecop.MetadataSource interface.
-func (i *InvariantsChecker) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (i *InvariantsChecker) DrainMeta() []execinfrapb.ProducerMetadata {
 	if shortCircuit := i.assertInitWasCalled(); shortCircuit {
 		return nil
 	}
 	if i.metadataSource == nil {
 		return nil
 	}
-	return i.metadataSource.DrainMeta(ctx)
+	return i.metadataSource.DrainMeta()
+}
+
+// Close is part of the colexecop.ClosableOperator interface.
+func (i *InvariantsChecker) Close() error {
+	c, ok := i.Input.(colexecop.Closer)
+	if !ok {
+		return nil
+	}
+	return c.Close()
 }

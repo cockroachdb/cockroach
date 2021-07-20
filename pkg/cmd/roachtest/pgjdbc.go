@@ -35,12 +35,14 @@ func registerPgjdbc(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(
+			ctx, version, c, node[0], nil,
+		); err != nil {
 			t.Fatal(err)
 		}
 
@@ -62,12 +64,13 @@ func registerPgjdbc(r *testRegistry) {
 			t.Fatal(err)
 		}
 
+		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
 		if err := repeatRunE(
 			ctx,
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install default-jre openjdk-11-jdk-headless maven`,
+			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -180,7 +183,7 @@ func registerPgjdbc(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		MinVersion: "v20.1.0",
+		MinVersion: "v20.2.0",
 		Name:       "pgjdbc",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),

@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
@@ -63,7 +64,7 @@ func GenerateRRJar(jar string, bnf []byte) ([]byte, error) {
 }
 
 // GenerateRRNet generates the RR XHTML from a EBNF file.
-func GenerateRRNet(bnf []byte) ([]byte, error) {
+func GenerateRRNet(bnf []byte, railroadAPITimeout time.Duration) ([]byte, error) {
 	rrLock.Lock()
 	defer rrLock.Unlock()
 
@@ -77,7 +78,8 @@ func GenerateRRNet(bnf []byte) ([]byte, error) {
 	v.Add("options", "factoring")
 	v.Add("options", "inline")
 
-	resp, err := httputil.Post(context.TODO(), rrAddr, "application/x-www-form-urlencoded", strings.NewReader(v.Encode()))
+	httpClient := httputil.NewClientWithTimeout(railroadAPITimeout)
+	resp, err := httpClient.Post(context.TODO(), rrAddr, "application/x-www-form-urlencoded", strings.NewReader(v.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -95,10 +97,11 @@ func GenerateRRNet(bnf []byte) ([]byte, error) {
 // GenerateBNF Opens or downloads the .y file at addr and returns at as an EBNF
 // file. Unimplemented branches are removed. Resulting empty nodes and their
 // uses are further removed. Empty nodes are elided.
-func GenerateBNF(addr string) (ebnf []byte, err error) {
+func GenerateBNF(addr string, bnfAPITimeout time.Duration) (ebnf []byte, err error) {
 	var b []byte
 	if strings.HasPrefix(addr, "http") {
-		resp, err := httputil.Get(context.TODO(), addr)
+		httpClient := httputil.NewClientWithTimeout(bnfAPITimeout)
+		resp, err := httpClient.Get(context.TODO(), addr)
 		if err != nil {
 			return nil, err
 		}

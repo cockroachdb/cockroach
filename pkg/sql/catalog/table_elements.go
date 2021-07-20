@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
@@ -136,9 +137,7 @@ type Index interface {
 	IsValidOriginIndex(originColIDs descpb.ColumnIDs) bool
 	IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnIDs) bool
 
-	GetPartitioning() descpb.PartitioningDescriptor
-	FindPartitionByName(name string) descpb.PartitioningDescriptor
-	PartitionNames() []string
+	GetPartitioning() Partitioning
 
 	ExplicitColumnStartIdx() int
 
@@ -148,23 +147,26 @@ type Index interface {
 	NumInterleavedBy() int
 	GetInterleavedBy(interleavedByOrdinal int) descpb.ForeignKeyReference
 
-	NumColumns() int
-	GetColumnID(columnOrdinal int) descpb.ColumnID
-	GetColumnName(columnOrdinal int) string
-	GetColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction
+	NumKeyColumns() int
+	GetKeyColumnID(columnOrdinal int) descpb.ColumnID
+	GetKeyColumnName(columnOrdinal int) string
+	GetKeyColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction
 
-	ForEachColumnID(func(id descpb.ColumnID) error) error
-	ContainsColumnID(colID descpb.ColumnID) bool
+	CollectKeyColumnIDs() TableColSet
+	CollectKeySuffixColumnIDs() TableColSet
+	CollectSecondaryStoredColumnIDs() TableColSet
+	CollectCompositeColumnIDs() TableColSet
+
 	InvertedColumnID() descpb.ColumnID
 	InvertedColumnName() string
 
-	NumStoredColumns() int
+	NumSecondaryStoredColumns() int
 	GetStoredColumnID(storedColumnOrdinal int) descpb.ColumnID
 	GetStoredColumnName(storedColumnOrdinal int) string
 	HasOldStoredColumns() bool
 
-	NumExtraColumns() int
-	GetExtraColumnID(extraColumnOrdinal int) descpb.ColumnID
+	NumKeySuffixColumns() int
+	GetKeySuffixColumnID(extraColumnOrdinal int) descpb.ColumnID
 
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
@@ -272,6 +274,35 @@ type ConstraintToUpdate interface {
 
 	// ConstraintToUpdateDesc returns the underlying protobuf descriptor.
 	ConstraintToUpdateDesc() *descpb.ConstraintToUpdate
+
+	// GetName returns the name of this constraint update mutation.
+	GetName() string
+
+	// IsCheck returns true iff this is an update for a check constraint.
+	IsCheck() bool
+
+	// IsForeignKey returns true iff this is an update for a fk constraint.
+	IsForeignKey() bool
+
+	// IsNotNull returns true iff this is an update for a not-null constraint.
+	IsNotNull() bool
+
+	// IsUniqueWithoutIndex returns true iff this is an update for a unique
+	// without index constraint.
+	IsUniqueWithoutIndex() bool
+
+	// Check returns the underlying check constraint, if there is one.
+	Check() descpb.TableDescriptor_CheckConstraint
+
+	// ForeignKey returns the underlying fk constraint, if there is one.
+	ForeignKey() descpb.ForeignKeyConstraint
+
+	// NotNullColumnID returns the underlying not-null column ID, if there is one.
+	NotNullColumnID() descpb.ColumnID
+
+	// UniqueWithoutIndex returns the underlying unique without index constraint, if
+	// there is one.
+	UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint
 }
 
 // PrimaryKeySwap is an interface around a primary key swap mutation.
@@ -280,6 +311,26 @@ type PrimaryKeySwap interface {
 
 	// PrimaryKeySwapDesc returns the underlying protobuf descriptor.
 	PrimaryKeySwapDesc() *descpb.PrimaryKeySwap
+
+	// NumOldIndexes returns the number of old active indexes to swap out.
+	NumOldIndexes() int
+
+	// ForEachOldIndexIDs iterates through each of the old index IDs.
+	// iterutil.Done is supported.
+	ForEachOldIndexIDs(fn func(id descpb.IndexID) error) error
+
+	// NumNewIndexes returns the number of new active indexes to swap in.
+	NumNewIndexes() int
+
+	// ForEachNewIndexIDs iterates through each of the new index IDs.
+	// iterutil.Done is supported.
+	ForEachNewIndexIDs(fn func(id descpb.IndexID) error) error
+
+	// HasLocalityConfig returns true iff the locality config is swapped also.
+	HasLocalityConfig() bool
+
+	// LocalityConfigSwap returns the locality config swap, if there is one.
+	LocalityConfigSwap() descpb.PrimaryKeySwap_LocalityConfigSwap
 }
 
 // ComputedColumnSwap is an interface around a computed column swap mutation.
@@ -297,6 +348,70 @@ type MaterializedViewRefresh interface {
 
 	// MaterializedViewRefreshDesc returns the underlying protobuf descriptor.
 	MaterializedViewRefreshDesc() *descpb.MaterializedViewRefresh
+
+	// ShouldBackfill returns true iff the query should be backfilled into the
+	// indexes.
+	ShouldBackfill() bool
+
+	// AsOf returns the timestamp at which the query should be run.
+	AsOf() hlc.Timestamp
+
+	// ForEachIndexID iterates through each of the index IDs.
+	// iterutil.Done is supported.
+	ForEachIndexID(func(id descpb.IndexID) error) error
+
+	// TableWithNewIndexes returns a new TableDescriptor based on the old one
+	// but with the refreshed indexes put in.
+	TableWithNewIndexes(tbl TableDescriptor) TableDescriptor
+}
+
+// Partitioning is an interface around an index partitioning.
+type Partitioning interface {
+
+	// PartitioningDesc returns the underlying protobuf descriptor.
+	PartitioningDesc() *descpb.PartitioningDescriptor
+
+	// DeepCopy returns a deep copy of the receiver.
+	DeepCopy() Partitioning
+
+	// FindPartitionByName recursively searches the partitioning for a partition
+	// whose name matches the input and returns it, or nil if no match is found.
+	FindPartitionByName(name string) Partitioning
+
+	// ForEachPartitionName applies fn on each of the partition names in this
+	// partition and recursively in its subpartitions.
+	// Supports iterutil.Done.
+	ForEachPartitionName(fn func(name string) error) error
+
+	// ForEachList applies fn on each list element of the wrapped partitioning.
+	// Supports iterutil.Done.
+	ForEachList(fn func(name string, values [][]byte, subPartitioning Partitioning) error) error
+
+	// ForEachRange applies fn on each range element of the wrapped partitioning.
+	// Supports iterutil.Done.
+	ForEachRange(fn func(name string, from, to []byte) error) error
+
+	// NumColumns is how large of a prefix of the columns in an index are used in
+	// the function mapping column values to partitions. If this is a
+	// subpartition, this is offset to start from the end of the parent
+	// partition's columns. If NumColumns is 0, then there is no partitioning.
+	NumColumns() int
+
+	// NumImplicitColumns specifies the number of columns that implicitly prefix a
+	// given index. This occurs if a user specifies a PARTITION BY which is not a
+	// prefix of the given index, in which case the ColumnIDs are added in front
+	// of the index and this field denotes the number of columns added as a
+	// prefix.
+	// If NumImplicitColumns is 0, no implicit columns are defined for the index.
+	NumImplicitColumns() int
+
+	// NumLists returns the number of list elements in the underlying partitioning
+	// descriptor.
+	NumLists() int
+
+	// NumRanges returns the number of range elements in the underlying
+	// partitioning descriptor.
+	NumRanges() int
 }
 
 func isIndexInSearchSet(desc TableDescriptor, opts IndexOpts, idx Index) bool {
@@ -447,6 +562,32 @@ func FindDeleteOnlyNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bo
 	return findIndex(desc.DeleteOnlyNonPrimaryIndexes(), test)
 }
 
+// FullIndexColumnIDs returns the index column IDs including any extra (implicit or
+// stored (old STORING encoding)) column IDs for non-unique indexes. It also
+// returns the direction with which each column was encoded.
+func FullIndexColumnIDs(idx Index) ([]descpb.ColumnID, []descpb.IndexDescriptor_Direction) {
+	n := idx.NumKeyColumns()
+	if !idx.IsUnique() {
+		n += idx.NumKeySuffixColumns()
+	}
+	ids := make([]descpb.ColumnID, 0, n)
+	dirs := make([]descpb.IndexDescriptor_Direction, 0, n)
+	for i := 0; i < idx.NumKeyColumns(); i++ {
+		ids = append(ids, idx.GetKeyColumnID(i))
+		dirs = append(dirs, idx.GetKeyColumnDirection(i))
+	}
+	// Non-unique indexes have some of the primary-key columns appended to
+	// their key.
+	if !idx.IsUnique() {
+		for i := 0; i < idx.NumKeySuffixColumns(); i++ {
+			// Extra columns are encoded in ascending order.
+			ids = append(ids, idx.GetKeySuffixColumnID(i))
+			dirs = append(dirs, descpb.IndexDescriptor_ASC)
+		}
+	}
+	return ids, dirs
+}
+
 // UserDefinedTypeColsHaveSameVersion returns whether one table descriptor's
 // columns with user defined type metadata have the same versions of metadata
 // as in the other descriptor. Note that this function is only valid on two
@@ -489,4 +630,27 @@ func ColumnTypesWithVirtualCol(columns []Column, virtualCol Column) []*types.T {
 		}
 	}
 	return t
+}
+
+// ColumnNeedsBackfill returns true if adding or dropping (according to
+// the direction) the given column requires backfill.
+func ColumnNeedsBackfill(col Column) bool {
+	if col.IsVirtual() {
+		// Virtual columns are not stored in the primary index, so they do not need
+		// backfill.
+		return false
+	}
+	if col.Dropped() {
+		// In all other cases, DROP requires backfill.
+		return true
+	}
+	// ADD requires backfill for:
+	//  - columns with non-NULL default value
+	//  - computed columns
+	//  - non-nullable columns (note: if a non-nullable column doesn't have a
+	//    default value, the backfill will fail unless the table is empty).
+	if col.ColumnDesc().HasNullDefault() {
+		return false
+	}
+	return col.HasDefault() || !col.IsNullable() || col.IsComputed()
 }

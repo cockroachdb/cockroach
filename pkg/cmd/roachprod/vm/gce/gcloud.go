@@ -273,8 +273,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
-	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20200129",
-		"Image to use to create the vm, ubuntu-2004-focal-v20210119a is a more modern image")
+	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-2004-focal-v20210325",
+		"Image to use to create the vm, "+
+			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images")
 
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
