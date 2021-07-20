@@ -247,11 +247,18 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 		// Make a copy of i for the goroutine.
 		i := i
 		m.Go(func(ctx context.Context) error {
+			// Only prefix stats.json with workload_i_ if we have multiple workloads,
+			// in case other processes relied on previous behavior.
+			var statsPrefix string
+			if len(workloadInstances) > 1 {
+				statsPrefix = fmt.Sprintf("workload_%d.", i)
+			}
 			t.WorkerStatus(fmt.Sprintf("running tpcc idx %d on %s", i, pgURLs[i]))
 			cmd := fmt.Sprintf(
-				"./cockroach workload run tpcc --warehouses=%d --histograms="+t.PerfArtifactsDir()+"/stats.json "+
+				"./cockroach workload run tpcc --warehouses=%d --histograms="+t.PerfArtifactsDir()+"/%sstats.json "+
 					opts.ExtraRunArgs+" --ramp=%s --duration=%s --prometheus-port=%d --pprofport=%d %s %s",
 				opts.Warehouses,
+				statsPrefix,
 				rampDuration,
 				opts.Duration,
 				workloadInstances[i].prometheusPort,
@@ -259,8 +266,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 				workloadInstances[i].extraRunArgs,
 				pgURLs[i],
 			)
-			c.Run(ctx, workloadNode, cmd)
-			return nil
+			return c.RunE(ctx, workloadNode, cmd)
 		})
 	}
 	if opts.Chaos != nil {
