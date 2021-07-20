@@ -197,15 +197,11 @@ const (
 	// was introduced after this version was first introduced. Later code in the
 	// release relies on the job to run the migration but the job relies on
 	// its startup migrations having been run. Versions associated with long
-	// running migrations must follow LongRunningMigrations.
+	// running migrations must follow deletedLongRunningMigrations.
 	replacedTruncatedAndRangeAppliedStateMigration
 	// replacedPostTruncatedAndRangeAppliedStateMigration is like the above
 	// version. See its comment.
 	replacedPostTruncatedAndRangeAppliedStateMigration
-	// LongRunningMigrations introduces the LongRunningMigrations table and jobs.
-	// All versions which have a registered long-running migration must have a
-	// version higher than this version.
-	LongRunningMigrations
 	// TruncatedAndRangeAppliedStateMigration is part of the migration to stop
 	// using the legacy truncated state within KV. After the migration, we'll be
 	// using the unreplicated truncated state and the RangeAppliedState on all
@@ -341,10 +337,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     replacedPostTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 16},
-	},
-	{
-		Key:     LongRunningMigrations,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 20},
 	},
 	{
 		Key:     TruncatedAndRangeAppliedStateMigration,

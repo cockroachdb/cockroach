@@ -20,30 +20,29 @@ func _() {
 	_ = x[ReplicaVersions-9]
 	_ = x[replacedTruncatedAndRangeAppliedStateMigration-10]
 	_ = x[replacedPostTruncatedAndRangeAppliedStateMigration-11]
-	_ = x[LongRunningMigrations-12]
-	_ = x[TruncatedAndRangeAppliedStateMigration-13]
-	_ = x[PostTruncatedAndRangeAppliedStateMigration-14]
-	_ = x[SeparatedIntents-15]
-	_ = x[TracingVerbosityIndependentSemantics-16]
-	_ = x[ClosedTimestampsRaftTransport-17]
-	_ = x[PriorReadSummaries-18]
-	_ = x[NonVotingReplicas-19]
-	_ = x[V21_1-20]
-	_ = x[Start21_1PLUS-21]
-	_ = x[Start21_2-22]
-	_ = x[JoinTokensTable-23]
-	_ = x[AcquisitionTypeInLeaseHistory-24]
-	_ = x[SerializeViewUDTs-25]
-	_ = x[ExpressionIndexes-26]
-	_ = x[DeleteDeprecatedNamespaceTableDescriptorMigration-27]
-	_ = x[FixDescriptors-28]
-	_ = x[SQLStatsTable-29]
-	_ = x[DatabaseRoleSettings-30]
+	_ = x[TruncatedAndRangeAppliedStateMigration-12]
+	_ = x[PostTruncatedAndRangeAppliedStateMigration-13]
+	_ = x[SeparatedIntents-14]
+	_ = x[TracingVerbosityIndependentSemantics-15]
+	_ = x[ClosedTimestampsRaftTransport-16]
+	_ = x[PriorReadSummaries-17]
+	_ = x[NonVotingReplicas-18]
+	_ = x[V21_1-19]
+	_ = x[Start21_1PLUS-20]
+	_ = x[Start21_2-21]
+	_ = x[JoinTokensTable-22]
+	_ = x[AcquisitionTypeInLeaseHistory-23]
+	_ = x[SerializeViewUDTs-24]
+	_ = x[ExpressionIndexes-25]
+	_ = x[DeleteDeprecatedNamespaceTableDescriptorMigration-26]
+	_ = x[FixDescriptors-27]
+	_ = x[SQLStatsTable-28]
+	_ = x[DatabaseRoleSettings-29]
 }
 
-const _Key_name = "Start20_2NodeMembershipStatusMinPasswordLengthAbortSpanBytesCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1CPutInlineReplicaVersionsreplacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationLongRunningMigrationsTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationSeparatedIntentsTracingVerbosityIndependentSemanticsClosedTimestampsRaftTransportPriorReadSummariesNonVotingReplicasV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTableDatabaseRoleSettings"
+const _Key_name = "Start20_2NodeMembershipStatusMinPasswordLengthAbortSpanBytesCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1CPutInlineReplicaVersionsreplacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationSeparatedIntentsTracingVerbosityIndependentSemanticsClosedTimestampsRaftTransportPriorReadSummariesNonVotingReplicasV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTableDatabaseRoleSettings"
 
-var _Key_index = [...]uint16{0, 9, 29, 46, 60, 80, 92, 97, 106, 116, 131, 177, 227, 248, 286, 328, 344, 380, 409, 427, 444, 449, 462, 471, 486, 515, 532, 549, 598, 612, 625, 645}
+var _Key_index = [...]uint16{0, 9, 29, 46, 60, 80, 92, 97, 106, 116, 131, 177, 227, 265, 307, 323, 359, 388, 406, 423, 428, 441, 450, 465, 494, 511, 528, 577, 591, 604, 624}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
