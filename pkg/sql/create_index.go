@@ -676,14 +676,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 	}
 
-	encodingVersion := descpb.SecondaryIndexFamilyFormatVersion
-	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.EmptyArraysInInvertedIndexes) {
-		// descpb.StrictIndexColumnIDGuaranteesVersion is like
-		// descpb.EmptyArraysInInvertedIndexesVersion but allows a stronger level of
-		// descriptor validation checks.
-		encodingVersion = descpb.StrictIndexColumnIDGuaranteesVersion
-	}
-	indexDesc.Version = encodingVersion
+	indexDesc.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 
 	if n.n.PartitionByIndex != nil && n.tableDesc.GetLocalityConfig() != nil {
 		return pgerror.New(

@@ -1377,19 +1377,7 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	indexEncodingVersion := descpb.SecondaryIndexFamilyFormatVersion
-	// We can't use st.Version.IsActive because this method is used during
-	// server setup before the cluster version has been initialized.
-	version := st.Version.ActiveVersionOrEmpty(ctx)
-	if version != (clusterversion.ClusterVersion{}) {
-		if version.IsActive(clusterversion.EmptyArraysInInvertedIndexes) {
-			// descpb.StrictIndexColumnIDGuaranteesVersion is like
-			// descpb.EmptyArraysInInvertedIndexesVersion but allows a stronger level
-			// of descriptor validation checks.
-			indexEncodingVersion = descpb.StrictIndexColumnIDGuaranteesVersion
-		}
-	}
-
+	indexEncodingVersion := descpb.StrictIndexColumnIDGuaranteesVersion
 	isRegionalByRow := n.Locality != nil && n.Locality.LocalityLevel == tree.LocalityLevelRow
 
 	var partitionAllBy *tree.PartitionBy
