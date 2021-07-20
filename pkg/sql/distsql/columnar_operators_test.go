@@ -1091,7 +1091,8 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	for i := range typs {
 		typs[i] = types.Int
 	}
-	for windowFn := range colexecwindow.SupportedWindowFns {
+	for windowFnIdx := 0; windowFnIdx < len(execinfrapb.WindowerSpec_WindowFunc_name); windowFnIdx++ {
+		windowFn := execinfrapb.WindowerSpec_WindowFunc(windowFnIdx)
 		var argTypes []*types.T
 		useRandomTypes := rand.Float64() < randTypesProbability
 		randArgType := types.Int
