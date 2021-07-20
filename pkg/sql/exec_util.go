@@ -421,6 +421,12 @@ var experimentalComputedColumnRewrites = settings.RegisterValidatedStringSetting
 	},
 )
 
+var copyPartitioningWhenDeinterleavingTable = settings.RegisterBoolSetting(
+	`sql.defaults.copy_partitioning_when_deinterleaving_table.enabled`,
+	`default value for enable_copying_partitioning_when_deinterleaving_table session variable`,
+	false,
+).WithPublic()
+
 // settingWorkMemBytes is a cluster setting that determines the maximum amount
 // of RAM that a processor can use.
 var settingWorkMemBytes = settings.RegisterByteSizeSetting(
@@ -2541,9 +2547,15 @@ func (m *sessionDataMutator) SetIntervalStyle(style duration.IntervalStyle) {
 	m.data.DataConversionConfig.IntervalStyle = style
 }
 
-// SetStubCatalogTableEnabled sets default value for stub_catalog_tables.
+// SetStubCatalogTablesEnabled sets default value for stub_catalog_tables.
 func (m *sessionDataMutator) SetStubCatalogTablesEnabled(enabled bool) {
 	m.data.StubCatalogTablesEnabled = enabled
+}
+
+// SetCopyPartitioningWhenDeinterleavingTable sets the value for
+// CopyPartitioningWhenDeinterleavingTable.
+func (m *sessionDataMutator) SetCopyPartitioningWhenDeinterleavingTable(b bool) {
+	m.data.CopyPartitioningWhenDeinterleavingTable = b
 }
 
 func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
