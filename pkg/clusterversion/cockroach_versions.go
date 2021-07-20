@@ -226,9 +226,6 @@ const (
 	// are propagated across RPC boundaries independently of their verbosity setting.
 	// This requires a version gate this violates implicit assumptions in v20.2.
 	TracingVerbosityIndependentSemantics
-	// ImplicitColumnPartitioning introduces implicit column partitioning to
-	// tables.
-	ImplicitColumnPartitioning
 	// MultiRegionFeatures introduces new multi-region features to the
 	// database, such as adding REGIONS to a DATABASE or setting the LOCALITY
 	// on a TABLE.
@@ -374,10 +371,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TracingVerbosityIndependentSemantics,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 28},
-	},
-	{
-		Key:     ImplicitColumnPartitioning,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 32},
 	},
 	{
 		Key:     MultiRegionFeatures,
