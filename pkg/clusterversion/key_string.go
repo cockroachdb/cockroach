@@ -30,23 +30,22 @@ func _() {
 	_ = x[ChangefeedsSupportPrimaryIndexChanges-19]
 	_ = x[PriorReadSummaries-20]
 	_ = x[NonVotingReplicas-21]
-	_ = x[ProtectedTsMetaPrivilegesMigration-22]
-	_ = x[V21_1-23]
-	_ = x[Start21_1PLUS-24]
-	_ = x[Start21_2-25]
-	_ = x[JoinTokensTable-26]
-	_ = x[AcquisitionTypeInLeaseHistory-27]
-	_ = x[SerializeViewUDTs-28]
-	_ = x[ExpressionIndexes-29]
-	_ = x[DeleteDeprecatedNamespaceTableDescriptorMigration-30]
-	_ = x[FixDescriptors-31]
-	_ = x[SQLStatsTable-32]
-	_ = x[DatabaseRoleSettings-33]
+	_ = x[V21_1-22]
+	_ = x[Start21_1PLUS-23]
+	_ = x[Start21_2-24]
+	_ = x[JoinTokensTable-25]
+	_ = x[AcquisitionTypeInLeaseHistory-26]
+	_ = x[SerializeViewUDTs-27]
+	_ = x[ExpressionIndexes-28]
+	_ = x[DeleteDeprecatedNamespaceTableDescriptorMigration-29]
+	_ = x[FixDescriptors-30]
+	_ = x[SQLStatsTable-31]
+	_ = x[DatabaseRoleSettings-32]
 }
 
-const _Key_name = "Start20_2NodeMembershipStatusMinPasswordLengthAbortSpanBytesCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1CPutInlineReplicaVersionsreplacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationLongRunningMigrationsTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationSeparatedIntentsTracingVerbosityIndependentSemanticsMultiRegionFeaturesClosedTimestampsRaftTransportChangefeedsSupportPrimaryIndexChangesPriorReadSummariesNonVotingReplicasProtectedTsMetaPrivilegesMigrationV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTableDatabaseRoleSettings"
+const _Key_name = "Start20_2NodeMembershipStatusMinPasswordLengthAbortSpanBytesCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1CPutInlineReplicaVersionsreplacedTruncatedAndRangeAppliedStateMigrationreplacedPostTruncatedAndRangeAppliedStateMigrationLongRunningMigrationsTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigrationSeparatedIntentsTracingVerbosityIndependentSemanticsMultiRegionFeaturesClosedTimestampsRaftTransportChangefeedsSupportPrimaryIndexChangesPriorReadSummariesNonVotingReplicasV21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsSQLStatsTableDatabaseRoleSettings"
 
-var _Key_index = [...]uint16{0, 9, 29, 46, 60, 80, 92, 97, 106, 116, 131, 177, 227, 248, 286, 328, 344, 380, 399, 428, 465, 483, 500, 534, 539, 552, 561, 576, 605, 622, 639, 688, 702, 715, 735}
+var _Key_index = [...]uint16{0, 9, 29, 46, 60, 80, 92, 97, 106, 116, 131, 177, 227, 248, 286, 328, 344, 380, 399, 428, 465, 483, 500, 505, 518, 527, 542, 571, 588, 605, 654, 668, 681, 701}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
