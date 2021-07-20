@@ -1875,7 +1875,7 @@ func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) st
 	}
 	logFile := fmt.Sprintf(
 		"run_%s_n%s_%s",
-		t.Format(`150405.000`),
+		t.Format(`150405.000000000`),
 		nodes.String()[1:],
 		s,
 	)
