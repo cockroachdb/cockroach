@@ -253,16 +253,18 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.Unlock()
 					outbox, err := colrpc.NewOutbox(
 						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),
-						outboxInput,
+						colexecargs.OpWithMetaInfo{
+							Root:            outboxInput,
+							MetadataSources: outboxMetadataSources,
+							ToClose: []colexecop.Closer{callbackCloser{closeCb: func() error {
+								idToClosed.Lock()
+								idToClosed.mapping[id] = true
+								idToClosed.Unlock()
+								return nil
+							}}},
+						},
 						typs,
 						nil, /* getStats */
-						outboxMetadataSources,
-						[]colexecop.Closer{callbackCloser{closeCb: func() error {
-							idToClosed.Lock()
-							idToClosed.mapping[id] = true
-							idToClosed.Unlock()
-							return nil
-						}}},
 					)
 
 					require.NoError(t, err)
