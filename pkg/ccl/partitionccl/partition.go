@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -358,9 +357,6 @@ func createPartitioning(
 		}
 	}
 	if len(newImplicitCols) > 0 {
-		if err := checkClusterSupportsImplicitPartitioning(evalCtx); err != nil {
-			return nil, newPartitioning, err
-		}
 		// Prepend with new implicit column names.
 		newIdxColumnNames = make([]string, len(newImplicitCols), len(newImplicitCols)+len(newIdxColumnNames))
 		for i, col := range newImplicitCols {
@@ -615,14 +611,4 @@ func selectPartitionExprsByName(
 
 func init() {
 	sql.CreatePartitioningCCL = createPartitioning
-}
-
-func checkClusterSupportsImplicitPartitioning(evalCtx *tree.EvalContext) error {
-	if !evalCtx.Settings.Version.IsActive(evalCtx.Context, clusterversion.MultiRegionFeatures) {
-		return pgerror.Newf(
-			pgcode.ObjectNotInPrerequisiteState,
-			`cannot use implicit column partitioning until the cluster upgrade is finalized`,
-		)
-	}
-	return nil
 }

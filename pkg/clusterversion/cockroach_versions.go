@@ -226,10 +226,6 @@ const (
 	// are propagated across RPC boundaries independently of their verbosity setting.
 	// This requires a version gate this violates implicit assumptions in v20.2.
 	TracingVerbosityIndependentSemantics
-	// MultiRegionFeatures introduces new multi-region features to the
-	// database, such as adding REGIONS to a DATABASE or setting the LOCALITY
-	// on a TABLE.
-	MultiRegionFeatures
 	// ClosedTimestampsRaftTransport enables the Raft transport for closed
 	// timestamps and disables the previous per-node transport.
 	ClosedTimestampsRaftTransport
@@ -365,10 +361,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TracingVerbosityIndependentSemantics,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 28},
-	},
-	{
-		Key:     MultiRegionFeatures,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 34},
 	},
 	{
 		Key:     ClosedTimestampsRaftTransport,
