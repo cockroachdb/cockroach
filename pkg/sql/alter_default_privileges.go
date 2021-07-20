@@ -78,12 +78,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		}
 	}
 
-	users, err := params.p.GetAllRoles(params.ctx)
-	if err != nil {
-		return err
-	}
-
-	if err = validateGrantees(users, targetRoles); err != nil {
+	if err := params.p.validateRoles(params.ctx, targetRoles, false /* isPublicValid */); err != nil {
 		return err
 	}
 
@@ -105,7 +100,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		granteesSQLUsername[i] = user
 	}
 
-	if err = validateGrantees(users, granteesSQLUsername); err != nil {
+	if err := params.p.validateRoles(params.ctx, granteesSQLUsername, true /* isPublicValid */); err != nil {
 		return err
 	}
 
@@ -132,11 +127,11 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		return err
 	}
 
-	if n.dbDesc.DatabaseDesc().GetDefaultPrivileges() == nil {
-		n.dbDesc.DatabaseDesc().DefaultPrivileges = descpb.InitDefaultPrivilegeDescriptor()
+	if n.dbDesc.GetDefaultPrivileges() == nil {
+		n.dbDesc.SetInitialDefaultPrivilegeDescriptor(descpb.InitDefaultPrivilegeDescriptor())
 	}
 
-	defaultPrivs := n.dbDesc.DatabaseDesc().GetDefaultPrivileges()
+	defaultPrivs := n.dbDesc.GetDefaultPrivileges()
 
 	for _, targetRole := range targetRoles {
 		if n.n.IsGrant {

@@ -410,3 +410,11 @@ func (desc *Mutable) SetRegionConfig(cfg *descpb.DatabaseDescriptor_RegionConfig
 func (desc *Mutable) HasPostDeserializationChanges() bool {
 	return desc.changed
 }
+
+// SetInitialDefaultPrivilegeDescriptor sets the initial default privilege descriptor
+// for the database.
+func (desc *Mutable) SetInitialDefaultPrivilegeDescriptor(
+	defaultPrivilegeDescriptor *descpb.DefaultPrivilegeDescriptor,
+) {
+	desc.DefaultPrivileges = defaultPrivilegeDescriptor
+}
