@@ -186,8 +186,6 @@ const (
 	//
 	// Start21_1 demarcates work towards CockroachDB v21.1.
 	Start21_1
-	// VirtualComputedColumns is when virtual computed columns are supported.
-	VirtualComputedColumns
 	// CPutInline is conditional put support for inline values.
 	CPutInline
 	// ReplicaVersions enables the versioning of Replica state.
@@ -349,10 +347,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_1,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     VirtualComputedColumns,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 8},
 	},
 	{
 		Key:     CPutInline,
