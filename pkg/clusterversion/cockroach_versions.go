@@ -229,9 +229,6 @@ const (
 	// ClosedTimestampsRaftTransport enables the Raft transport for closed
 	// timestamps and disables the previous per-node transport.
 	ClosedTimestampsRaftTransport
-	// ChangefeedsSupportPrimaryIndexChanges is used to indicate that all
-	// nodes support detecting and restarting on primary index changes.
-	ChangefeedsSupportPrimaryIndexChanges
 	// PriorReadSummaries introduces support for the use of read summary objects
 	// to ship information about reads on a range through lease changes and
 	// range merges.
@@ -368,10 +365,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ClosedTimestampsRaftTransport,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 36},
-	},
-	{
-		Key:     ChangefeedsSupportPrimaryIndexChanges,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 38},
 	},
 	{
 		Key:     PriorReadSummaries,
