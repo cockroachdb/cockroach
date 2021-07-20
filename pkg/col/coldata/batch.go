@@ -27,7 +27,9 @@ import (
 type Batch interface {
 	// Length returns the number of values in the columns in the batch.
 	Length() int
-	// SetLength sets the number of values in the columns in the batch.
+	// SetLength sets the number of values in the columns in the batch. Note
+	// that if the selection vector will be set or updated on the batch, it must
+	// be set **before** setting the length.
 	SetLength(int)
 	// Capacity returns the maximum number of values that can be stored in the
 	// columns in the batch. Note that it could be a lower bound meaning some
