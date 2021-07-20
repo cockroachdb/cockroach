@@ -62,29 +62,6 @@ type createTableNode struct {
 	sourcePlan planNode
 }
 
-// minimumTypeUsageVersions defines the minimum version needed for a new
-// data type.
-var minimumTypeUsageVersions = map[types.Family]clusterversion.Key{
-	types.GeographyFamily: clusterversion.GeospatialType,
-	types.GeometryFamily:  clusterversion.GeospatialType,
-	types.Box2DFamily:     clusterversion.Box2DType,
-}
-
-// isTypeSupportedInVersion returns whether a given type is supported in the given version.
-func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) (bool, error) {
-	// For these checks, if we have an array, we only want to find whether
-	// we support the array contents.
-	if t.Family() == types.ArrayFamily {
-		t = t.ArrayContents()
-	}
-
-	minVersion, ok := minimumTypeUsageVersions[t.Family()]
-	if !ok {
-		return true, nil
-	}
-	return v.IsActive(minVersion), nil
-}
-
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
 // This is because CREATE TABLE performs multiple KV operations on descriptors
 // and expects to see its own writes.
@@ -1688,15 +1665,6 @@ func NewTableDesc(
 						"VECTOR column types are unsupported",
 					)
 				}
-			}
-			if supported, err := isTypeSupportedInVersion(version, defType); err != nil {
-				return nil, err
-			} else if !supported {
-				return nil, pgerror.Newf(
-					pgcode.FeatureNotSupported,
-					"type %s is not supported until version upgrade is finalized",
-					defType.SQLString(),
-				)
 			}
 			if d.PrimaryKey.Sharded {
 				if !sessionData.HashShardedIndexesEnabled {

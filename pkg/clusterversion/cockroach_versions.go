@@ -163,8 +163,6 @@ const (
 	// the 21.1 release. This is because we now support tenants at the
 	// predecessor binary interacting with a fully upgraded KV cluster.
 	Start20_2
-	// GeospatialType enables the use of Geospatial features.
-	GeospatialType
 	// AlterColumnTypeGeneral enables the use of alter column type for
 	// conversions that require the column data to be rewritten.
 	AlterColumnTypeGeneral
@@ -183,8 +181,6 @@ const (
 	AbortSpanBytes
 	// MaterializedViews enables the use of materialized views.
 	MaterializedViews
-	// Box2DType enables the use of the box2d type.
-	Box2DType
 	// CreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN are introduced.
 	//
 	// It represents adding authn principal management via CREATELOGIN role
@@ -338,10 +334,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 1},
 	},
 	{
-		Key:     GeospatialType,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 2},
-	},
-	{
 		Key:     AlterColumnTypeGeneral,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 5},
 	},
@@ -368,10 +360,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     MaterializedViews,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 16},
-	},
-	{
-		Key:     Box2DType,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 17},
 	},
 	{
 		Key:     CreateLoginPrivilege,
