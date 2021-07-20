@@ -236,9 +236,6 @@ const (
 	// ChangefeedsSupportPrimaryIndexChanges is used to indicate that all
 	// nodes support detecting and restarting on primary index changes.
 	ChangefeedsSupportPrimaryIndexChanges
-	// ForeignKeyRepresentationMigration is used to ensure that all no table
-	// descriptors use the pre-19.2 foreign key migration.
-	ForeignKeyRepresentationMigration
 	// PriorReadSummaries introduces support for the use of read summary objects
 	// to ship information about reads on a range through lease changes and
 	// range merges.
@@ -383,10 +380,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ChangefeedsSupportPrimaryIndexChanges,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 38},
-	},
-	{
-		Key:     ForeignKeyRepresentationMigration,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 42},
 	},
 	{
 		Key:     PriorReadSummaries,

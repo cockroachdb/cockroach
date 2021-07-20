@@ -43,11 +43,6 @@ var migrations = []migration.Migration{
 		postTruncatedStateMigration,
 	),
 	migration.NewTenantMigration(
-		"upgrade old foreign key representation",
-		toCV(clusterversion.ForeignKeyRepresentationMigration),
-		foreignKeyRepresentationUpgrade,
-	),
-	migration.NewTenantMigration(
 		"fix system.protected_ts_meta privileges",
 		toCV(clusterversion.ProtectedTsMetaPrivilegesMigration),
 		protectedTsMetaPrivilegesMigration,
