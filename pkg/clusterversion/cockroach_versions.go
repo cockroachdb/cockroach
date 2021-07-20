@@ -171,8 +171,6 @@ const (
 	// AbortSpanBytes adds a field to MVCCStats
 	// (MVCCStats.AbortSpanBytes) that tracks the size of a range's abort span.
 	AbortSpanBytes
-	// MaterializedViews enables the use of materialized views.
-	MaterializedViews
 	// CreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN are introduced.
 	//
 	// It represents adding authn principal management via CREATELOGIN role
@@ -336,10 +334,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AbortSpanBytes,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 14},
-	},
-	{
-		Key:     MaterializedViews,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 16},
 	},
 	{
 		Key:     CreateLoginPrivilege,
