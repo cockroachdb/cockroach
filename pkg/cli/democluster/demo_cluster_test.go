@@ -163,6 +163,9 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		stopper:              stop.NewStopper(),
 		demoDir:              certsDir,
 		stickyEngineRegistry: server.NewStickyInMemEnginesRegistry(),
+		infoLog:              log.Infof,
+		warnLog:              log.Warningf,
+		shoutLog:             log.Ops.Shoutf,
 	}
 	// Stop the cluster when the test exits, including when it fails.
 	// This also calls the Stop() method on the stopper, and thus

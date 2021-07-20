@@ -31,14 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/docs"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
 )
@@ -259,8 +257,7 @@ func (c *cliState) addHistory(line string) {
 	// persist to disk (if ins's history file is set). err can
 	// be not nil only if it got a IO error while trying to persist.
 	if err := c.ins.AddHistory(line); err != nil {
-		log.Warningf(context.TODO(), "cannot save command-line history: %s", err)
-		log.Info(context.TODO(), "command-line history will not be saved in this session")
+		fmt.Fprintf(c.iCtx.stderr, "warning: cannot save command-line history: %v\n", err)
 		c.ins.SetAutoSaveHistory("", false)
 	}
 }
@@ -531,7 +528,7 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 }
 
 func isEndOfStatement(lastTok int) bool {
-	return lastTok == ';' || lastTok == parser.HELPTOKEN
+	return lastTok == ';' || lastTok == lexbase.HELPTOKEN
 }
 
 // handleDemo handles operations on \demo.
@@ -629,21 +626,15 @@ func (c *cliState) handleDemoNodeCommands(
 
 // handleHelp prints SQL help.
 func (c *cliState) handleHelp(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
-	cmdrest := strings.TrimSpace(strings.Join(cmd, " "))
-	command := strings.ToUpper(cmdrest)
-	if command == "" {
-		fmt.Print(parser.AllHelp)
+	command := strings.TrimSpace(strings.Join(cmd, " "))
+	helpText, _ := c.serverSideParse(command + " ??")
+	if helpText != "" {
+		fmt.Fprintln(c.iCtx.stdout, helpText)
 	} else {
-		if h, ok := parser.HelpMessages[command]; ok {
-			msg := parser.HelpMessage{Command: command, HelpMessageBody: h}
-			msg.Format(c.iCtx.stdout)
-			fmt.Fprintln(c.iCtx.stdout)
-		} else {
-			fmt.Fprintf(c.iCtx.stderr,
-				"no help available for %q.\nTry \\h with no argument to see available help.\n", cmdrest)
-			c.exitErr = errors.New("no help available")
-			return errState
-		}
+		fmt.Fprintf(c.iCtx.stderr,
+			"no help available for %q.\nTry \\h with no argument to see available help.\n", command)
+		c.exitErr = errors.New("no help available")
+		return errState
 	}
 	return nextState
 }
@@ -651,21 +642,14 @@ func (c *cliState) handleHelp(cmd []string, nextState, errState cliStateEnum) cl
 // handleFunctionHelp prints help about built-in functions.
 func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	funcName := strings.TrimSpace(strings.Join(cmd, " "))
-	if funcName == "" {
-		for _, f := range builtins.AllBuiltinNames {
-			fmt.Fprintln(c.iCtx.stdout, f)
-		}
-		fmt.Fprintln(c.iCtx.stdout)
+	helpText, _ := c.serverSideParse(fmt.Sprintf("select %s(??", funcName))
+	if helpText != "" {
+		fmt.Fprintln(c.iCtx.stdout, helpText)
 	} else {
-		helpText, _ := c.serverSideParse(fmt.Sprintf("select %s(??", funcName))
-		if helpText != "" {
-			fmt.Fprintln(c.iCtx.stdout, helpText)
-		} else {
-			fmt.Fprintf(c.iCtx.stderr,
-				"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
-			c.exitErr = errors.New("no help available")
-			return errState
-		}
+		fmt.Fprintf(c.iCtx.stderr,
+			"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
+		c.exitErr = errors.New("no help available")
+		return errState
 	}
 	return nextState
 }
@@ -844,13 +828,13 @@ func (c *cliState) refreshTransactionStatus() {
 
 	// Change the prompt based on the response from the server.
 	switch txnString {
-	case sql.NoTxnStateStr:
+	case sqlfsm.NoTxnStateStr:
 		c.lastKnownTxnStatus = ""
-	case sql.AbortedStateStr:
+	case sqlfsm.AbortedStateStr:
 		c.lastKnownTxnStatus = " ERROR"
-	case sql.CommitWaitStateStr:
+	case sqlfsm.CommitWaitStateStr:
 		c.lastKnownTxnStatus = "  DONE"
-	case sql.OpenStateStr:
+	case sqlfsm.OpenStateStr:
 		// The state AutoRetry is reported by the server as Open, so no need to
 		// handle it here.
 		c.lastKnownTxnStatus = "  OPEN"
@@ -1140,6 +1124,10 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.handleHelp(cmd[1:], loopState, errState)
 
 	case `\hf`:
+		if len(cmd) == 1 {
+			c.concatLines = `SELECT DISTINCT proname AS function FROM pg_proc ORDER BY 1`
+			return cliRunStatement
+		}
 		return c.handleFunctionHelp(cmd[1:], loopState, errState)
 
 	case `\l`:
@@ -1291,7 +1279,7 @@ func (c *cliState) doPrepareStatementLine(
 		return startState
 	}
 
-	lastTok, ok := parser.LastLexicalToken(c.concatLines)
+	lastTok, ok := scanner.LastLexicalToken(c.concatLines)
 	endOfStmt := isEndOfStatement(lastTok)
 	if c.partialStmtsLen == 0 && !ok {
 		// More whitespace, or comments. Still nothing to do. However
@@ -1588,7 +1576,7 @@ func (c *cliState) configurePreShellDefaults(
 			true, /* wideChars */
 			cmdIn, c.iCtx.stdout, c.iCtx.stderr)
 		if errors.Is(c.exitErr, readline.ErrWidecharNotSupported) {
-			log.Warning(context.TODO(), "wide character support disabled")
+			fmt.Fprintln(c.iCtx.stderr, "warning: wide character support disabled")
 			c.ins, c.exitErr = readline.InitFiles("cockroach",
 				false, cmdIn, c.iCtx.stdout, c.iCtx.stderr)
 		}
@@ -1626,18 +1614,17 @@ func (c *cliState) configurePreShellDefaults(
 
 		c.ins.SetCompleter(c)
 		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
-			log.Warningf(context.TODO(), "cannot enable history: %v", err)
+			fmt.Fprintf(c.iCtx.stderr, "warning: cannot enable history: %v\n ", err)
 		} else {
 			homeDir, err := envutil.HomeDir()
 			if err != nil {
-				log.Warningf(context.TODO(), "cannot retrieve user information: %v", err)
-				log.Warning(context.TODO(), "history will not be saved")
+				fmt.Fprintf(c.iCtx.stderr, "warning: cannot retrieve user information: %v\nwarning: history will not be saved\n", err)
 			} else {
 				histFile := filepath.Join(homeDir, cmdHistFile)
 				err = c.ins.LoadHistory(histFile)
 				if err != nil {
-					log.Warningf(context.TODO(), "cannot load the command-line history (file corrupted?): %v", err)
-					log.Warning(context.TODO(), "the history file will be cleared upon first entry")
+					fmt.Fprintf(c.iCtx.stderr, "warning: cannot load the command-line history (file corrupted?): %v\n", err)
+					fmt.Fprintf(c.iCtx.stderr, "note: the history file will be cleared upon first entry\n")
 				}
 				c.ins.SetAutoSaveHistory(histFile, true)
 			}
@@ -1742,6 +1729,13 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 			}
 		}
 		// Is it a help text?
+		//
+		// The string here must match the constant string
+		// parser.specialHelpErrorPrefix. The second string must match
+		// the constant string parser.helpHintPrefix.
+		//
+		// However, we cannot include the 'parser' package here because it
+		// would incur a hughe dependency overhead.
 		if strings.HasPrefix(message, "help token in input") && strings.HasPrefix(hint, "help:") {
 			// Yes: return it.
 			helpText = hint[6:]

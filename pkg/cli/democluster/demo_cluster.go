@@ -39,9 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -73,6 +73,10 @@ type transientCluster struct {
 
 	getAdminClient   func(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error)
 	drainAndShutdown func(ctx context.Context, adminClient serverpb.AdminClient) error
+
+	infoLog  LoggerFn
+	warnLog  LoggerFn
+	shoutLog ShoutLoggerFn
 }
 
 // maxNodeInitTime is the maximum amount of time to wait for nodes to
@@ -82,6 +86,14 @@ const maxNodeInitTime = 30 * time.Second
 // demoOrg is the organization to use to request an evaluation
 // license.
 const demoOrg = "Cockroach Demo"
+
+// LoggerFn is the type of a logger function to use by the
+// demo cluster to report special events.
+type LoggerFn = func(context.Context, string, ...interface{})
+
+// ShoutLoggerFn is the type of a logger function to use by the demo
+// cluster to report special events to both a log and the terminal.
+type ShoutLoggerFn = func(context.Context, logpb.Severity, string, ...interface{})
 
 // NewDemoCluster instantiates a demo cluster. The caller must call
 // the .Close() method to clean up resources even if the
@@ -96,6 +108,9 @@ const demoOrg = "Cockroach Demo"
 func NewDemoCluster(
 	ctx context.Context,
 	demoCtx *Context,
+	infoLog LoggerFn,
+	warnLog LoggerFn,
+	shoutLog ShoutLoggerFn,
 	startStopper func(ctx context.Context) (*stop.Stopper, error),
 	getAdminClient func(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error),
 	drainAndShutdown func(ctx context.Context, s serverpb.AdminClient) error,
@@ -104,6 +119,9 @@ func NewDemoCluster(
 		demoCtx:          demoCtx,
 		getAdminClient:   getAdminClient,
 		drainAndShutdown: drainAndShutdown,
+		infoLog:          infoLog,
+		warnLog:          warnLog,
+		shoutLog:         shoutLog,
 	}
 	// useSockets is true on unix, false on windows.
 	c.useSockets = useUnixSocketsInDemo()
@@ -205,7 +223,7 @@ func (c *transientCluster) Start(
 	// Step 1: create the first node.
 	{
 		phaseCtx := logtags.AddTag(ctx, "phase", 1)
-		log.Infof(phaseCtx, "creating the first node")
+		c.infoLog(phaseCtx, "creating the first node")
 
 		latencyMapWaitChs[0] = make(chan struct{})
 		firstRPCAddrReadyCh, err := c.createAndAddNode(phaseCtx, 0, latencyMapWaitChs[0], timeoutCh)
@@ -220,11 +238,11 @@ func (c *transientCluster) Start(
 	{
 		phaseCtx := logtags.AddTag(ctx, "phase", 2)
 
-		log.Infof(phaseCtx, "starting first node")
+		c.infoLog(phaseCtx, "starting first node")
 		if err := c.startNodeAsync(phaseCtx, 0, errCh, timeoutCh); err != nil {
 			return err
 		}
-		log.Infof(phaseCtx, "waiting for first node RPC address")
+		c.infoLog(phaseCtx, "waiting for first node RPC address")
 		if err := c.waitForRPCAddrReadinessOrError(phaseCtx, 0, errCh, rpcAddrReadyChs, timeoutCh); err != nil {
 			return err
 		}
@@ -233,7 +251,7 @@ func (c *transientCluster) Start(
 	// Step 3: create the other nodes and start them asynchronously.
 	{
 		phaseCtx := logtags.AddTag(ctx, "phase", 3)
-		log.Infof(phaseCtx, "starting other nodes")
+		c.infoLog(phaseCtx, "starting other nodes")
 
 		for i := 1; i < c.demoCtx.NumNodes; i++ {
 			latencyMapWaitChs[i] = make(chan struct{})
@@ -265,7 +283,7 @@ func (c *transientCluster) Start(
 	// or for an error or premature shutdown.
 	{
 		phaseCtx := logtags.AddTag(ctx, "phase", 4)
-		log.Infof(phaseCtx, "waiting for remaining nodes to get their RPC address")
+		c.infoLog(phaseCtx, "waiting for remaining nodes to get their RPC address")
 
 		for i := 0; i < c.demoCtx.NumNodes; i++ {
 			if err := c.waitForRPCAddrReadinessOrError(phaseCtx, i, errCh, rpcAddrReadyChs, timeoutCh); err != nil {
@@ -284,7 +302,7 @@ func (c *transientCluster) Start(
 		if c.demoCtx.SimulateLatency {
 			// Now, all servers have been started enough to know their own RPC serving
 			// addresses, but nothing else. Assemble the artificial latency map.
-			log.Infof(phaseCtx, "initializing latency map")
+			c.infoLog(phaseCtx, "initializing latency map")
 			for i, serv := range c.servers {
 				latencyMap := serv.Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
 				srcLocality, ok := serv.Cfg.Locality.Find("region")
@@ -314,12 +332,12 @@ func (c *transientCluster) Start(
 		phaseCtx := logtags.AddTag(ctx, "phase", 6)
 
 		for i := 0; i < c.demoCtx.NumNodes; i++ {
-			log.Infof(phaseCtx, "letting server %d initialize", i)
+			c.infoLog(phaseCtx, "letting server %d initialize", i)
 			close(latencyMapWaitChs[i])
 			if err := c.waitForNodeIDReadiness(phaseCtx, i, errCh, timeoutCh); err != nil {
 				return err
 			}
-			log.Infof(phaseCtx, "node n%d initialized", c.servers[i].NodeID())
+			c.infoLog(phaseCtx, "node n%d initialized", c.servers[i].NodeID())
 		}
 	}
 
@@ -327,11 +345,11 @@ func (c *transientCluster) Start(
 		phaseCtx := logtags.AddTag(ctx, "phase", 7)
 
 		for i := 0; i < c.demoCtx.NumNodes; i++ {
-			log.Infof(phaseCtx, "waiting for server %d SQL readiness", i)
+			c.infoLog(phaseCtx, "waiting for server %d SQL readiness", i)
 			if err := c.waitForSQLReadiness(phaseCtx, i, errCh, timeoutCh); err != nil {
 				return err
 			}
-			log.Infof(phaseCtx, "node n%d ready", c.servers[i].NodeID())
+			c.infoLog(phaseCtx, "node n%d ready", c.servers[i].NodeID())
 		}
 	}
 
@@ -341,7 +359,7 @@ func (c *transientCluster) Start(
 		// Run the SQL initialization. This takes care of setting up the
 		// initial replication factor for small clusters and creating the
 		// admin user.
-		log.Infof(phaseCtx, "running initial SQL for demo cluster")
+		c.infoLog(phaseCtx, "running initial SQL for demo cluster")
 
 		const demoUsername = "demo"
 		demoPassword := genDemoPassword(demoUsername)
@@ -367,7 +385,7 @@ func (c *transientCluster) Start(
 		// We don't do this in (*server.Server).Start() because we don't want this
 		// overhead and possible interference in tests.
 		if !c.demoCtx.DisableTelemetry {
-			log.Infof(phaseCtx, "starting telemetry")
+			c.infoLog(phaseCtx, "starting telemetry")
 			c.firstServer.StartDiagnostics(phaseCtx)
 		}
 	}
@@ -475,7 +493,7 @@ func (c *transientCluster) startNodeAsync(
 		ctx = logtags.AddTag(ctx, tag, nil)
 		err := serv.Start(ctx)
 		if err != nil {
-			log.Warningf(ctx, "server %d failed to start: %v", idx, err)
+			c.warnLog(ctx, "server %d failed to start: %v", idx, err)
 			select {
 			case errCh <- err:
 
@@ -528,7 +546,7 @@ func (c *transientCluster) waitForNodeIDReadiness(
 ) error {
 	retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond, MaxBackoff: time.Second}
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		log.Infof(ctx, "waiting for server %d to know its node ID", idx)
+		c.infoLog(ctx, "waiting for server %d to know its node ID", idx)
 		select {
 		// Errors or premature shutdown.
 		case <-timeoutCh:
@@ -544,10 +562,10 @@ func (c *transientCluster) waitForNodeIDReadiness(
 
 		default:
 			if c.servers[idx].NodeID() == 0 {
-				log.Infof(ctx, "server %d does not know its node ID yet", idx)
+				c.infoLog(ctx, "server %d does not know its node ID yet", idx)
 				continue
 			} else {
-				log.Infof(ctx, "server %d: n%d", idx, c.servers[idx].NodeID())
+				c.infoLog(ctx, "server %d: n%d", idx, c.servers[idx].NodeID())
 			}
 		}
 		break
@@ -563,7 +581,7 @@ func (c *transientCluster) waitForSQLReadiness(
 	retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond, MaxBackoff: time.Second}
 	for r := retry.StartWithCtx(baseCtx, retryOpts); r.Next(); {
 		ctx := logtags.AddTag(baseCtx, "n", c.servers[idx].NodeID())
-		log.Infof(ctx, "waiting for server %d to become ready", idx)
+		c.infoLog(ctx, "waiting for server %d to become ready", idx)
 		select {
 		// Errors or premature shutdown.
 		case <-timeoutCh:
@@ -578,7 +596,7 @@ func (c *transientCluster) waitForSQLReadiness(
 			return errors.Newf("demo cluster shut down prematurely while waiting for server %d to become ready", idx)
 		default:
 			if err := c.servers[idx].Readiness(ctx); err != nil {
-				log.Infof(ctx, "server %d not yet ready: %v", idx, err)
+				c.infoLog(ctx, "server %d not yet ready: %v", idx, err)
 				continue
 			}
 		}
@@ -664,7 +682,7 @@ func (c *transientCluster) Close(ctx context.Context) {
 		c.stopper.Stop(ctx)
 	}
 	if c.demoDir != "" {
-		if err := clierror.CheckAndMaybeShout(os.RemoveAll(c.demoDir)); err != nil {
+		if err := clierror.CheckAndMaybeLog(os.RemoveAll(c.demoDir), c.shoutLog); err != nil {
 			// There's nothing to do here anymore if err != nil.
 			_ = err
 		}
@@ -883,7 +901,7 @@ func (c *transientCluster) maybeWarnMemSize(ctx context.Context) {
 		requestedMem := (c.demoCtx.CacheSize + c.demoCtx.SQLPoolMemorySize) * int64(c.demoCtx.NumNodes)
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
-			log.Ops.Shoutf(
+			c.shoutLog(
 				ctx, severity.WARNING,
 				`HIGH MEMORY USAGE
 The sum of --max-sql-memory (%s) and --cache (%s) multiplied by the
@@ -944,7 +962,7 @@ func (c *transientCluster) getNetworkURLForServer(
 			return nil, err
 		}
 	}
-	host, port, _ := netutil.SplitHostPort(c.servers[serverIdx].ServingSQLAddr(), "")
+	host, port, _ := addr.SplitHostPort(c.servers[serverIdx].ServingSQLAddr(), "")
 	u.
 		WithNet(pgurl.NetTCP(host, port)).
 		WithDatabase(c.defaultDB)
@@ -1076,16 +1094,16 @@ func (c *transientCluster) runWorkload(
 						// Log an error without exiting the load generator when the workload
 						// function throws an error. A single error during the workload demo
 						// should not stop the demo.
-						log.Warningf(ctx, "error running workload query: %+v", err)
+						c.warnLog(ctx, "error running workload query: %+v", err)
 					}
 					select {
 					case <-c.firstServer.Stopper().ShouldQuiesce():
 						return
 					case <-ctx.Done():
-						log.Warningf(ctx, "workload terminating from context cancellation: %v", ctx.Err())
+						c.warnLog(ctx, "workload terminating from context cancellation: %v", ctx.Err())
 						return
 					case <-c.stopper.ShouldQuiesce():
-						log.Warningf(ctx, "demo cluster shutting down")
+						c.warnLog(ctx, "demo cluster shutting down")
 						return
 					default:
 					}

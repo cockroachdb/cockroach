@@ -347,6 +347,7 @@ go_library(
         "//pkg/sql/sessionphase",
         "//pkg/sql/span",
         "//pkg/sql/sqlerrors",
+        "//pkg/sql/sqlfsm",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/sslocal",

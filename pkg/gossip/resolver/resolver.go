@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,7 +45,7 @@ func NewResolver(address string) (Resolver, error) {
 // SRV returns a slice of addresses from SRV record lookup
 func SRV(ctx context.Context, name string) ([]string, error) {
 	// Ignore port
-	name, _, err := netutil.SplitHostPort(name, base.DefaultPort)
+	name, _, err := addr.SplitHostPort(name, base.DefaultPort)
 	if err != nil {
 		return nil, err
 	}

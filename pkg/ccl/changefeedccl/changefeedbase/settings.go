@@ -9,6 +9,7 @@
 package changefeedbase
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -89,3 +90,41 @@ var ScanRequestLimit = settings.RegisterIntSetting(
 	"number of concurrent scan requests per node issued during a backfill",
 	0,
 )
+
+// SinkThrottleConfig describes throttling configuration for the sink.
+// 0 values for any of the settings disable that setting.
+type SinkThrottleConfig struct {
+	// MessageRate sets approximate messages/s limit.
+	MessageRate float64 `json:",omitempty"`
+	// MessageBurst sets burst budget for messages/s.
+	MessageBurst float64 `json:",omitempty"`
+	// ByteRate sets approximate bytes/second limit.
+	ByteRate float64 `json:",omitempty"`
+	// RateBurst sets burst budget in bytes/s.
+	ByteBurst float64 `json:",omitempty"`
+	// FlushRate sets approximate flushes/s limit.
+	FlushRate float64 `json:",omitempty"`
+	// FlushBurst sets burst budget for flushes/s.
+	FlushBurst float64 `json:",omitempty"`
+}
+
+// NodeSinkThrottleConfig is the node wide throttling configuration for changefeeds.
+var NodeSinkThrottleConfig = func() *settings.StringSetting {
+	s := settings.RegisterValidatedStringSetting(
+		"changefeed.node_throttle_config",
+		"specifies node level throttling configuration for all changefeeeds",
+		"",
+		validateSinkThrottleConfig,
+	)
+	s.SetVisibility(settings.Public)
+	s.SetReportable(true)
+	return s
+}()
+
+func validateSinkThrottleConfig(values *settings.Values, configStr string) error {
+	if configStr == "" {
+		return nil
+	}
+	var config = &SinkThrottleConfig{}
+	return json.Unmarshal([]byte(configStr), config)
+}

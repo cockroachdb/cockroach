@@ -61,17 +61,3 @@ type TokenString struct {
 	TokenID int32
 	Str     string
 }
-
-// LastLexicalToken returns the last lexical token. If the string has no lexical
-// tokens, returns 0 and ok=false.
-func LastLexicalToken(sql string) (lastTok int, ok bool) {
-	s := makeScanner(sql)
-	var lval = &sqlSymType{}
-	for {
-		last := lval.ID()
-		s.Scan(lval)
-		if lval.ID() == 0 {
-			return int(last), last != 0
-		}
-	}
-}

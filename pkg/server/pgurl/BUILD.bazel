@@ -11,7 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/pgurl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/netutil",
+        "//pkg/util/netutil/addr",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
