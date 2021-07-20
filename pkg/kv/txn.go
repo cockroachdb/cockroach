@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -780,39 +781,42 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		}
 	}
 
-	// We don't have a client whose context we can attach to, but we do want to
-	// limit how long this request is going to be around for to avoid leaking a
-	// goroutine (in case of a long-lived network partition). If it gets through
-	// Raft, and the intent resolver has free async task capacity, the actual
-	// cleanup will be independent of this context.
+	// We want to limit how long this request is going to be around for to avoid
+	// leaking a goroutine (in case of a long-lived network partition). If it gets
+	// through Raft, and the intent resolver has free async task capacity, the
+	// actual cleanup will be independent of this context.
 	stopper := txn.db.ctx.Stopper
-	ctx, cancel := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
-	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
-		defer cancel()
-		// A batch with only endTxnReq is not subject to admission control, in
-		// order to reduce contention by releasing locks. In multi-tenant
-		// settings, it will be subject to admission control, and the zero
-		// CreateTime will give it preference within the tenant.
-		var ba roachpb.BatchRequest
-		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
-		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
-			func(ctx context.Context) error {
-				if _, pErr := txn.Send(ctx, ba); pErr != nil {
-					if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
-						statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
-						// A common cause of these async rollbacks failing is when they're
-						// triggered by a ctx canceled while a commit is in-flight (and it's too
-						// late for it to be canceled), and so the rollback finds the txn to be
-						// already committed. We don't spam the logs with those.
-						log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
-					} else {
-						log.Infof(ctx, "async rollback failed: %s", pErr)
+	if err := stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{
+			TaskName:                "aync-rollback",
+			DontInheritCancellation: true,
+			CancelOnQuiesce:         true,
+			ChildSpan:               false,
+		},
+		func(ctx context.Context) {
+			// A batch with only endTxnReq is not subject to admission control, in
+			// order to reduce contention by releasing locks. In multi-tenant
+			// settings, it will be subject to admission control, and the zero
+			// CreateTime will give it preference within the tenant.
+			var ba roachpb.BatchRequest
+			ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+			_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
+				func(ctx context.Context) error {
+					if _, pErr := txn.Send(ctx, ba); pErr != nil {
+						if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
+							statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
+							// A common cause of these async rollbacks failing is when they're
+							// triggered by a ctx canceled while a commit is in-flight (and it's too
+							// late for it to be canceled), and so the rollback finds the txn to be
+							// already committed. We don't spam the logs with those.
+							log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
+						} else {
+							log.Infof(ctx, "async rollback failed: %s", pErr)
+						}
 					}
-				}
-				return nil
-			})
-	}); err != nil {
-		cancel()
+					return nil
+				})
+		}); err != nil {
 		return roachpb.NewError(err)
 	}
 	return nil

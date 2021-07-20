@@ -21,11 +21,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -318,10 +320,13 @@ func TestStopperRunTaskPanic(t *testing.T) {
 			_ = s.RunAsyncTask(ctx, "test", func(ctx context.Context) { explode(ctx) })
 		},
 		func() {
-			_ = s.RunLimitedAsyncTask(
-				context.Background(), "test",
-				quotapool.NewIntPool("test", 1),
-				true, /* wait */
+			_ = s.RunAsyncTaskEx(
+				context.Background(),
+				stop.TaskOpts{
+					TaskName:   "test",
+					Sem:        quotapool.NewIntPool("test", 1),
+					WaitForSem: true,
+				},
 				func(ctx context.Context) { explode(ctx) },
 			)
 		},
@@ -392,6 +397,36 @@ func TestStopperWithCancelConcurrent(t *testing.T) {
 			t.Errorf("should be canceled: %v", err)
 		}
 	}
+}
+
+// Test that WithCancelOnQuiesce is a no-op when the passed-in ctx is already
+// being canceled on quiescence.
+func TestStopperWithCancelNoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := stop.NewStopper()
+	ctx := context.Background()
+	defer s.Stop(ctx)
+
+	ctx1, _ := s.WithCancelOnQuiesce(ctx)
+	// Sanity check.
+	require.NotEqual(t, ctx, ctx1)
+
+	// Create a derived ctx that still inherits the quiescence cancellation.
+	ctx2, _ := context.WithCancel(ctx1)
+	// Check that calling WithCancelOnQuiesce on ctx2 is a no-op.
+	ctx3, _ := s.WithCancelOnQuiesce(ctx2)
+	require.Equal(t, ctx2, ctx3)
+
+	// Test the interaction between WithCancelOnQuiesce and WithoutCancel.
+
+	// ctx4 no longer inherits the quiescence cancellation.
+	ctx4 := contextutil.WithoutCancel(ctx2)
+	// ctx5 is expected to not be a no-op.
+	ctx5, _ := s.WithCancelOnQuiesce(ctx2)
+	require.NotEqual(t, ctx4, ctx5)
+	// ctx6 is once again expected to be a no-op.
+	ctx6, _ := s.WithCancelOnQuiesce(ctx5)
+	require.Equal(t, ctx5, ctx6)
 }
 
 func TestStopperShouldQuiesce(t *testing.T) {
@@ -479,8 +514,14 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 
 	for i := 0; i < numTasks; i++ {
 		wg.Add(1)
-		if err := s.RunLimitedAsyncTask(
-			context.Background(), "test", sem, true /* wait */, f,
+		if err := s.RunAsyncTaskEx(
+			context.Background(),
+			stop.TaskOpts{
+				TaskName:   "test",
+				Sem:        sem,
+				WaitForSem: true,
+			},
+			f,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -497,9 +538,14 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	sem = quotapool.NewIntPool("test", 1)
 	_, err := sem.Acquire(context.Background(), 1)
 	require.NoError(t, err)
-	err = s.RunLimitedAsyncTask(
-		context.Background(), "test", sem, false /* wait */, func(_ context.Context) {
+	err = s.RunAsyncTaskEx(
+		context.Background(),
+		stop.TaskOpts{
+			TaskName:   "test",
+			Sem:        sem,
+			WaitForSem: false,
 		},
+		func(_ context.Context) {},
 	)
 	if !errors.Is(err, stop.ErrThrottled) {
 		t.Fatalf("expected %v; got %v", stop.ErrThrottled, err)
@@ -524,7 +570,13 @@ func TestStopperRunLimitedAsyncTaskCloser(t *testing.T) {
 		time.Sleep(time.Millisecond)
 		s.Stop(ctx)
 	}()
-	err = s.RunLimitedAsyncTask(ctx, "foo", sem, true /* wait */, func(context.Context) {})
+	err = s.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{
+			TaskName:   "foo",
+			Sem:        sem,
+			WaitForSem: true,
+		},
+		func(context.Context) {})
 	require.Equal(t, stop.ErrUnavailable, err)
 	<-s.IsStopped()
 }
@@ -554,7 +606,13 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	// This loop will block when the semaphore is filled.
 	if err := s.RunAsyncTask(ctx, "test", func(ctx context.Context) {
 		for i := 0; i < maxConcurrency*2; i++ {
-			if err := s.RunLimitedAsyncTask(ctx, "test", sem, true, f); err != nil {
+			if err := s.RunAsyncTaskEx(ctx,
+				stop.TaskOpts{
+					TaskName:   "test",
+					Sem:        sem,
+					WaitForSem: true,
+				},
+				f); err != nil {
 				if !errors.Is(err, context.Canceled) {
 					t.Fatal(err)
 				}
@@ -655,3 +713,91 @@ func TestCancelInCloser(t *testing.T) {
 type closerFunc func()
 
 func (cf closerFunc) Close() { cf() }
+
+// Test that task spans are included or not in the parent's recording based on
+// the ChildSpan option.
+func TestStopperRunAsyncTaskTracing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := stop.NewStopper()
+
+	ctx, getRecording, finish := tracing.ContextWithRecordingSpan(
+		context.Background(), tracing.NewTracer(), "parent")
+
+	// Start two child tasks. Only the one with ChildSpan:true is expected to be
+	// present in the parent's recording.
+	require.NoError(t, s.RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName:  "async child",
+		ChildSpan: false,
+	},
+		func(ctx context.Context) {
+			log.Event(ctx, "async 1")
+		},
+	))
+	require.NoError(t, s.RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName:  "async child same trace",
+		ChildSpan: true,
+	},
+		func(ctx context.Context) {
+			log.Event(ctx, "async 2")
+		},
+	))
+
+	s.Stop(ctx)
+	finish()
+	require.NoError(t, tracing.TestingCheckRecordedSpans(getRecording(), `
+		span: parent
+			span: async child same trace
+				event: async 2`))
+}
+
+func TestStopperRunAsyncTaskCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutils.RunTrueAndFalse(t, "inherit cancel", func(t *testing.T, inheritCancel bool) {
+		s := stop.NewStopper()
+		ctx, cancel := context.WithCancel(context.Background())
+		var taskFinished bool
+		ch := make(chan struct{})
+		require.NoError(t, s.RunAsyncTaskEx(ctx, stop.TaskOpts{
+			TaskName:                "test",
+			DontInheritCancellation: !inheritCancel,
+		}, func(ctx context.Context) {
+			<-ch
+			if ctx.Err() != nil {
+				return
+			}
+			taskFinished = true
+		}))
+
+		cancel()
+		close(ch)
+		s.Stop(context.Background())
+		require.Equal(t, !inheritCancel, taskFinished)
+	})
+}
+
+func TestStopperRunAsyncTaskCancelOnQuiesce(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// To cover more surface, we test in conjunction with the
+	// DontInheritCancellation option. We always set that option, and we test with
+	// both a canceled parent and non-canceled one. Because we set
+	// DontInheritCancellation, the parent shouldn't matter.
+	testutils.RunTrueAndFalse(t, "canceled parent", func(t *testing.T, canceledParent bool) {
+		s := stop.NewStopper()
+		ctx := context.Background()
+		if canceledParent {
+			var cancel func()
+			ctx, cancel = context.WithCancel(context.Background())
+			cancel()
+		}
+		require.NoError(t, s.RunAsyncTaskEx(ctx, stop.TaskOpts{
+			TaskName:                "test",
+			CancelOnQuiesce:         true,
+			DontInheritCancellation: true,
+		}, func(ctx context.Context) {
+			<-ctx.Done()
+		}))
+		// We check that the test doesn't time out, meaning that the task was
+		// signaled by the quiescence.
+		s.Stop(context.Background())
+	})
+}
