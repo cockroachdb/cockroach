@@ -2550,7 +2550,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if wps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
 			averageWritesPerSecond += wps
 		}
-		mc, ok := rep.maxClosed(ctx)
+		mc, ok := rep.maxClosed()
 		if ok && (minMaxClosedTS.IsEmpty() || mc.Less(minMaxClosedTS)) {
 			minMaxClosedTS = mc
 		}
