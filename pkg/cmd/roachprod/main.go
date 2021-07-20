@@ -335,6 +335,10 @@ Cloud Clusters
   the cloud provider's documentation for details on the machine types
   available.
 
+  The underlying filesystem can be provided using the --filesystem flag.
+  Use --filesystem=zfs, for zfs, and --filesystem=ext4, for ext4. The default
+  file system is ext4. The filesystem flag only works on gce currently.
+
 Local Clusters
 
   A local cluster stores the per-node data in ${HOME}/local on the machine
@@ -385,6 +389,16 @@ Local Clusters
 
 			// If the local cluster is being created, force the local Provider to be used
 			createVMOpts.VMProviders = []string{local.ProviderName}
+		}
+
+		if createVMOpts.SSDOpts.FileSystem == vm.Zfs {
+			for _, provider := range createVMOpts.VMProviders {
+				if provider != gce.ProviderName {
+					return fmt.Errorf(
+						"creating a node with --filesystem=zfs is currently only supported on gce",
+					)
+				}
+			}
 		}
 
 		fmt.Printf("Creating cluster %s with %d nodes\n", clusterName, numNodes)
@@ -1214,12 +1228,12 @@ the 'zfs rollback' command:
 
 		var fsCmd string
 		switch fs := args[1]; fs {
-		case "zfs":
-			if err := install.Install(c, []string{"zfs"}); err != nil {
+		case vm.Zfs:
+			if err := install.Install(c, []string{vm.Zfs}); err != nil {
 				return err
 			}
 			fsCmd = `sudo zpool create -f data1 -m /mnt/data1 /dev/sdb`
-		case "ext4":
+		case vm.Ext4:
 			fsCmd = `sudo mkfs.ext4 -F /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
 		default:
 			return fmt.Errorf("unknown filesystem %q", fs)
@@ -1871,6 +1885,8 @@ func main() {
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
 	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.UseLocalSSD,
 		"local-ssd", true, "Use local SSD")
+	createCmd.Flags().StringVar(&createVMOpts.SSDOpts.FileSystem,
+		"filesystem", vm.Ext4, "The underlying file system(ext4/zfs). ext4 is used by default.")
 	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.NoExt4Barrier,
 		"local-ssd-no-ext4-barrier", true,
 		`Mount the local SSD with the "-o nobarrier" flag. `+
