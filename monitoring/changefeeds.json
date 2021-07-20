@@ -3,7 +3,7 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": "${DS_PROMETHEUS}",
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -67,7 +67,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(changefeed_emitted_bytes{job=\"crdb\",cluster=~\"cluster\"}[$__rate_interval]))",
+          "expr": "sum(rate(changefeed_emitted_bytes{job=\"crdb\",cluster=~\"cluster\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Emitted Bytes",
@@ -359,13 +359,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(changefeed_flushes{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "sum(rate(changefeed_flushes{job=\"crdb\",cluster=\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "Flushes",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(changefeed_emitted_messages{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "sum(rate(changefeed_emitted_messages{job=\"crdb\",cluster=\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "Messages",
           "refId": "B"

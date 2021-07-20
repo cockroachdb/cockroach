@@ -15,8 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 360,
-  "iteration": 1617889130144,
+  "iteration": 1623960872107,
   "links": [],
   "panels": [
     {
@@ -24,337 +23,18 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-       "datasource": "${DS_PROMETHEUS}",
+      "datasource": null,
       "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
+        "defaults": {},
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 7,
+        "w": 24,
         "x": 0,
         "y": 0
-      },
-      "hiddenSeries": false,
-      "id": 8,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.7",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(sum(capacity_used{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Used",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(sum(capacity_available{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (cluster))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Max",
-          "refId": "B"
-        },
-        {
-          "expr": "sum(sum(capacity_available{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (cluster)) - sum(sum(capacity_used{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (instance))",
-          "interval": "",
-          "legendFormat": "Available",
-          "refId": "C"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Capacity",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "bytes",
-          "label": "Capacity (TiB)",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-       "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "hiddenSeries": false,
-      "id": 6,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.7",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(replicas{cluster=\"$clusterfilter\",job=\"crdb\",instance=~\"$node\"}) by (instance)",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Replicas Per Node",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "label": "Replicas",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 16
-      },
-      "hiddenSeries": false,
-      "id": 4,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.7",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99, rate(sql_service_latency_bucket{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
-          "interval": "",
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Service latency: SQL,99th Percentile",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "ns",
-          "label": "Latency (s)",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": null,
-            "filterable": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 24
       },
       "hiddenSeries": false,
       "id": 2,
@@ -374,7 +54,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.7",
+      "pluginVersion": "",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -384,41 +64,18 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sql_select_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))  + sum(rate(sql_update_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval])) + sum(rate(sql_delete_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))  + \nsum(rate(sql_insert_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
+          "exemplar": true,
+          "expr": "sum(requests_slow_raft{job=\"cockroachdb\",cluster=\"$cluster\"})",
           "interval": "",
-          "legendFormat": "total QPS",
+          "legendFormat": "Slow Raft Proposals",
           "refId": "A"
-        },
-        {
-          "expr": "sum(rate(sql_select_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
-          "interval": "",
-          "legendFormat": "SELECTs",
-          "refId": "B"
-        },
-        {
-          "expr": "sum(rate(sql_insert_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
-          "interval": "",
-          "legendFormat": "INSERTs",
-          "refId": "C"
-        },
-        {
-          "expr": "sum(rate(sql_update_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
-          "interval": "",
-          "legendFormat": "{{cluster}} UPDATEs",
-          "refId": "D"
-        },
-        {
-          "expr": "sum(rate(sql_delete_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
-          "interval": "",
-          "legendFormat": "DELETEs",
-          "refId": "E"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "SQL Queries",
+      "title": "Slow Raft Proposals",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -434,14 +91,305 @@
       },
       "yaxes": [
         {
+          "$$hashKey": "object:141",
           "format": "short",
-          "label": "queries",
+          "label": "proposals",
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
+          "$$hashKey": "object:142",
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "hiddenSeries": false,
+      "id": 4,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(requests_slow_distsender{job=\"cockroachdb\",cluster=\"$cluster\"})",
+          "interval": "",
+          "legendFormat": "Slow DistSender RPCs",
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Slow DistSender RPCs",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:88",
+          "format": "short",
+          "label": "proposals",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:89",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "hiddenSeries": false,
+      "id": 6,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(requests_slow_lease{job=\"cockroachdb\",cluster=\"$cluster\"})",
+          "interval": "",
+          "legendFormat": "Slow Lease Acquisitions",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Slow Lease Acquisitions",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:245",
+          "format": "short",
+          "label": "lease acquisitions",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:246",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "hiddenSeries": false,
+      "id": 8,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(requests_slow_latch{job=\"cockroachdb\",cluster=\"$cluster\"})",
+          "interval": "",
+          "legendFormat": "Slow Latch Acquisitions",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Slow Latch Acquisitions",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:298",
+          "format": "short",
+          "label": "latch acquisitions",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:299",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -456,24 +404,52 @@
       }
     }
   ],
-  "schemaVersion": 26,
+  "schemaVersion": 27,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
-        "allValue": null,
-        "current": {},
-         "datasource": "${DS_PROMETHEUS}",
-        "definition": "sys_uptime{job=\"crdb\"}",
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "description": null,
         "error": null,
         "hide": 0,
-        "includeAll": true,
-        "label": "Cluster Filter",
-        "multi": true,
-        "name": "clusterfilter",
+        "includeAll": false,
+        "label": "datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
         "options": [],
-        "query": "sys_uptime{job=\"crdb\"}",
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "my-cockroachdb-cluster",
+          "value": "my-cockroachdb-cluster"
+        },
+        "datasource": "${DS_PROMETHEUS}",
+        "definition": "sys_uptime{job=\"cockroachdb\"}",
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "cluster",
+        "multi": false,
+        "name": "cluster",
+        "options": [],
+        "query": {
+          "query": "sys_uptime{job=\"cockroachdb\"}",
+          "refId": "Prometheus-cluster-Variable-Query"
+        },
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -485,10 +461,15 @@
         "useTags": false
       },
       {
-        "allValue": null,
-        "current": {},
-         "datasource": "${DS_PROMETHEUS}",
-        "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "${DS_PROMETHEUS}",
+        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
+        "description": null,
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -496,11 +477,14 @@
         "multi": false,
         "name": "node",
         "options": [],
-        "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
+        "query": {
+          "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
+          "refId": "Prometheus-node-Variable-Query"
+        },
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "sort": 1,
+        "sort": 3,
         "tagValuesQuery": "",
         "tags": [],
         "tagsQuery": "",
@@ -516,6 +500,7 @@
           "text": "30s",
           "value": "30s"
         },
+        "description": null,
         "error": null,
         "hide": 0,
         "label": "Rate Interval",
@@ -568,7 +553,6 @@
           }
         ],
         "query": "30s,1m,5m,10m,30m,1h,6h,12h,1d",
-        "queryValue": "",
         "refresh": 2,
         "skipUrlSync": false,
         "type": "interval"
@@ -576,12 +560,13 @@
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "",
-  "title": "CRDB Console: Overview",
-  "uid": "crdb-console",
-  "version": 26
+  "timezone": "utc",
+  "title": "CRDB Console: Slow Requests",
+  "uid": "crdb-console-slow-request",
+  "version": 2
 }
+{"mode":"full","isActive":false}
