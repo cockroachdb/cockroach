@@ -377,43 +377,6 @@ func FindFKReferencedUniqueConstraint(
 	)
 }
 
-// FindFKOriginIndexInTxn finds the first index in the supplied originTable
-// that can satisfy an outgoing foreign key of the supplied column ids.
-// It returns either an index that is active, or an index that was created
-// in the same transaction that is currently running.
-func FindFKOriginIndexInTxn(
-	originTable *Mutable, originColIDs descpb.ColumnIDs,
-) (*descpb.IndexDescriptor, error) {
-	// Search for an index on the origin table that matches our foreign
-	// key columns.
-	if originTable.PrimaryIndex.IsValidOriginIndex(originColIDs) {
-		return &originTable.PrimaryIndex, nil
-	}
-	// If the PK doesn't match, find the index corresponding to the origin column.
-	for i := range originTable.Indexes {
-		idx := &originTable.Indexes[i]
-		if idx.IsValidOriginIndex(originColIDs) {
-			return idx, nil
-		}
-	}
-	currentMutationID := originTable.ClusterVersion.NextMutationID
-	for i := range originTable.Mutations {
-		mut := &originTable.Mutations[i]
-		if idx := mut.GetIndex(); idx != nil &&
-			mut.MutationID == currentMutationID &&
-			mut.Direction == descpb.DescriptorMutation_ADD {
-			if idx.IsValidOriginIndex(originColIDs) {
-				return idx, nil
-			}
-		}
-	}
-	return nil, pgerror.Newf(
-		pgcode.ForeignKeyViolation,
-		"there is no index matching given keys for referenced table %s",
-		originTable.Name,
-	)
-}
-
 // InitTableDescriptor returns a blank TableDescriptor.
 func InitTableDescriptor(
 	id, parentID, parentSchemaID descpb.ID,

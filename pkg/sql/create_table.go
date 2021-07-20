@@ -11,7 +11,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"go/constant"
@@ -946,40 +945,6 @@ func ResolveFK(
 		}
 	}
 
-	// Check if the version is high enough to stop creating origin indexes.
-	if evalCtx.Settings != nil &&
-		!evalCtx.Settings.Version.IsActive(ctx, clusterversion.NoOriginFKIndexes) {
-		// Search for an index on the origin table that matches. If one doesn't exist,
-		// we create one automatically if the table to alter is new or empty. We also
-		// search if an index for the set of columns was created in this transaction.
-		_, err = tabledesc.FindFKOriginIndexInTxn(tbl, originColumnIDs)
-		// If there was no error, we found a suitable index.
-		if err != nil {
-			// No existing suitable index was found.
-			if ts == NonEmptyTable {
-				var colNames bytes.Buffer
-				colNames.WriteString(`("`)
-				for i, id := range originColumnIDs {
-					if i != 0 {
-						colNames.WriteString(`", "`)
-					}
-					col, err := tbl.FindColumnWithID(id)
-					if err != nil {
-						return err
-					}
-					colNames.WriteString(col.GetName())
-				}
-				colNames.WriteString(`")`)
-				return pgerror.Newf(pgcode.ForeignKeyViolation,
-					"foreign key requires an existing index on columns %s", colNames.String())
-			}
-			_, err := addIndexForFK(ctx, tbl, originCols, constraintName, ts)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
 	// Ensure that there is a unique constraint on the referenced side to use.
 	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, targetColIDs)
 	if err != nil {
@@ -1015,57 +980,6 @@ func ResolveFK(
 	}
 
 	return nil
-}
-
-// Adds an index to a table descriptor (that is in the process of being created)
-// that will support using `srcCols` as the referencing (src) side of an FK.
-func addIndexForFK(
-	ctx context.Context,
-	tbl *tabledesc.Mutable,
-	srcCols []catalog.Column,
-	constraintName string,
-	ts TableState,
-) (descpb.IndexID, error) {
-	autoIndexName := tabledesc.GenerateUniqueName(
-		fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
-		func(name string) bool {
-			return tbl.ValidateIndexNameIsUnique(name) != nil
-		},
-	)
-	// No existing index for the referencing columns found, so we add one.
-	idx := descpb.IndexDescriptor{
-		Name:                autoIndexName,
-		KeyColumnNames:      make([]string, len(srcCols)),
-		KeyColumnDirections: make([]descpb.IndexDescriptor_Direction, len(srcCols)),
-	}
-	for i, c := range srcCols {
-		idx.KeyColumnDirections[i] = descpb.IndexDescriptor_ASC
-		idx.KeyColumnNames[i] = c.GetName()
-	}
-
-	if ts == NewTable {
-		if err := tbl.AddSecondaryIndex(idx); err != nil {
-			return 0, err
-		}
-		if err := tbl.AllocateIDs(ctx); err != nil {
-			return 0, err
-		}
-		added := tbl.PublicNonPrimaryIndexes()[len(tbl.PublicNonPrimaryIndexes())-1]
-		return added.GetID(), nil
-	}
-
-	// TODO (lucy): In the EmptyTable case, we add an index mutation, making this
-	// the only case where a foreign key is added to an index being added.
-	// Allowing FKs to be added to other indexes/columns also being added should
-	// be a generalization of this special case.
-	if err := tbl.AddIndexMutation(&idx, descpb.DescriptorMutation_ADD); err != nil {
-		return 0, err
-	}
-	if err := tbl.AllocateIDs(ctx); err != nil {
-		return 0, err
-	}
-	id := tbl.Mutations[len(tbl.Mutations)-1].GetIndex().ID
-	return id, nil
 }
 
 func (p *planner) addInterleave(
