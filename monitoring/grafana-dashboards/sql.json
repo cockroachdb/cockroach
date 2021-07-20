@@ -67,7 +67,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.90,rate(sql_txn_latency_bucket{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.90,rate(sql_txn_latency_bucket{job=\"crdb\",cluster=\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -663,7 +663,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.90, rate(sql_service_latency_bucket{job=\"crdb\",instance=~\"$node\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.90, rate(sql_service_latency_bucket{job=\"crdb\",instance=~\"$node\",cluster=\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -758,7 +758,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, rate(sql_service_latency_bucket{job=\"crdb\",instance=~\"$node\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.99, rate(sql_service_latency_bucket{job=\"crdb\",instance=~\"$node\",cluster=\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -853,7 +853,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sql_distsql_flows_active{jobs=\"crdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(sql_distsql_flows_active{jobs=\"crdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$rate_interval])",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -1045,7 +1045,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sql_failure_count{job=\"crdb\",cluster=~\"$cluster\"}[$__rate_interval]))",
+          "expr": "sum(rate(sql_failure_count{job=\"crdb\",cluster=~\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Errors",
@@ -1258,7 +1258,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sql_bytesin{job=\"crdb\", cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(sql_bytesin{job=\"crdb\", cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "instant": false,
           "interval": "",
           "intervalFactor": 2,
@@ -1266,7 +1266,7 @@
           "refId": "A"
         },
         {
-          "expr": "sum(rate(sql_bytesout{job=\"crdb\", cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(sql_bytesout{job=\"crdb\", cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Bytes Out",

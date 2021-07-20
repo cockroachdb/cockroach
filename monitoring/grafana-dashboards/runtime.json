@@ -451,7 +451,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sys_cpu_user_ns{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(sys_cpu_user_ns{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "instant": false,
           "interval": "",
           "intervalFactor": 2,
@@ -459,7 +459,7 @@
           "refId": "A"
         },
         {
-          "expr": "sum(rate(sys_cpu_sys_ns{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(sys_cpu_sys_ns{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "instant": false,
           "interval": "",
           "intervalFactor": 2,

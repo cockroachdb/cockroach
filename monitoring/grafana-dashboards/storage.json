@@ -67,13 +67,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(timeseries_write_samples{job=\"crdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(timeseries_write_samples{job=\"crdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "Samples",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(timeseries_write_errors{job=\"crdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(timeseries_write_errors{job=\"crdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "",
           "refId": "B"
@@ -358,13 +358,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rocksdb_compactions{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "sum(rate(rocksdb_compactions{job=\"crdb\",cluster=\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "Compactions",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(rocksdb_flushes{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "sum(rate(rocksdb_flushes{job=\"crdb\",cluster=\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "Flushes",
           "refId": "B"
@@ -657,7 +657,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.50,rate(raft_process_commandcommit_latency_bucket{job=\"crdb\", instance=~\"$node\", cluster=~\"$cluster\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.50,rate(raft_process_commandcommit_latency_bucket{job=\"crdb\", instance=~\"$node\", cluster=~\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -752,7 +752,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.99,rate(raft_process_commandcommit_latency_bucket{job=\"crdb\", instance=~\"$node\", cluster=~\"$cluster\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.99,rate(raft_process_commandcommit_latency_bucket{job=\"crdb\", instance=~\"$node\", cluster=~\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -848,7 +848,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.50,rate(raft_process_logcommit_latency_bucket{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.50,rate(raft_process_logcommit_latency_bucket{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -944,7 +944,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.99,rate(raft_process_logcommit_latency_bucket{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.99,rate(raft_process_logcommit_latency_bucket{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",

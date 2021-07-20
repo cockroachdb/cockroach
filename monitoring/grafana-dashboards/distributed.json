@@ -67,7 +67,7 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "histogram_quantile(0.90, rate(txn_durations_bucket{job=\"crdb\",cluster=~\"$cluster\"}[$__rate_interval]))",
+            "expr": "histogram_quantile(0.90, rate(txn_durations_bucket{job=\"crdb\",cluster=~\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "{{instance}}",
             "refId": "A"
@@ -162,7 +162,7 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "histogram_quantile(0.90,rate(liveness_heartbeatlatency_bucket{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "histogram_quantile(0.90,rate(liveness_heartbeatlatency_bucket{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "{{instance}}",
@@ -258,7 +258,7 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "histogram_quantile(0.99,rate(liveness_heartbeatlatency_bucket{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "histogram_quantile(0.99,rate(liveness_heartbeatlatency_bucket{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "{{instance}}",
@@ -354,7 +354,7 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "histogram_quantile(0.99, rate(txn_durations_bucket{job=\"crdb\",cluster=~\"$cluster\"}[$__rate_interval]))",
+            "expr": "histogram_quantile(0.99, rate(txn_durations_bucket{job=\"crdb\",cluster=~\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "{{instance}}",
             "refId": "B"
@@ -449,14 +449,14 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "sum(rate(txn_commits{job=\"crdb\",cluster=~\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(txn_commits{job=\"crdb\",cluster=~\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "commited",
             "refId": "A"
           },
           {
-            "expr": "sum(rate(txn_aborts{job=\"crdb\",cluster=~\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(txn_aborts{job=\"crdb\",cluster=~\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "Aborts",
             "refId": "B"
@@ -551,14 +551,14 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "sum(rate(distsender_rpc_sent_nextreplicaerror{job=\"crdb\", cluster=~\"$cluster\"}[$__rate_interval])",
+            "expr": "sum(rate(distsender_rpc_sent_nextreplicaerror{job=\"crdb\", cluster=~\"$cluster\"}[$rate_interval])",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "errors",
             "refId": "A"
           },
           {
-            "expr": "sum(rate(distsender_errors_notleaseholder{job=\"crdb\",cluster=~\"$cluster\"}[$__rate_interval])",
+            "expr": "sum(rate(distsender_errors_notleaseholder{job=\"crdb\",cluster=~\"$cluster\"}[$rate_interval])",
             "interval": "Not Lease holder Errors",
             "intervalFactor": 2,
             "legendFormat": "Not Lease Holder Errors",
@@ -654,14 +654,14 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "sum(rate(distsender_rpc_sent{job=\"crdb\", cluster=~\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(distsender_rpc_sent{job=\"crdb\", cluster=~\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "RPC",
             "refId": "A"
           },
           {
-            "expr": "sum(rate(distsender_rpc_sent_local{job=\"crdb\",cluster=~\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(distsender_rpc_sent_local{job=\"crdb\",cluster=~\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "",
             "refId": "B"
@@ -756,13 +756,13 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "sum(rate(distsender_batches{job=\"crdb\", cluster=~\"$cluster\"}[$__rate_interval])) by (cluster)",
+            "expr": "sum(rate(distsender_batches{job=\"crdb\", cluster=~\"$cluster\"}[$rate_interval])) by (cluster)",
             "interval": "",
             "legendFormat": "Batch",
             "refId": "A"
           },
           {
-            "expr": "sum(rate(distsender_batches_partial{job=\"crdb\", cluster=~\"$cluster\"}[$__rate_interval])) by (cluster)",
+            "expr": "sum(rate(distsender_batches_partial{job=\"crdb\", cluster=~\"$cluster\"}[$rate_interval])) by (cluster)",
             "interval": "",
             "legendFormat": "Partial batches",
             "refId": "B"

@@ -370,13 +370,13 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "sum(rate(queue_raftlog_pending{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_raftlog_pending{job=\"crdb\",cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "Pending Actions",
             "refId": "A"
           },
           {
-            "expr": "sum(rate(queue_raftlog_process_success{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_raftlog_process_success{job=\"crdb\",cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "Successful Actions",
             "refId": "B"
@@ -681,49 +681,49 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "sum(rate(queue_replicagc_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_replicagc_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "Replica GC",
             "refId": "A"
           },
           {
-            "expr": "sum(rate(queue_split_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_split_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "Split",
             "refId": "B"
           },
           {
-            "expr": "sum(rate(queue_replicate_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_replicate_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "Replicate",
             "refId": "C"
           },
           {
-            "expr": "sum(rate(queue_consistency_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_consistency_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "Consistency",
             "refId": "D"
           },
           {
-            "expr": "sum(rate(queue_raftlog_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_raftlog_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "Raft Log",
             "refId": "E"
           },
           {
-            "expr": "sum(rate(queue_raftsnapshot_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_raftsnapshot_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "Raft Snapshot",
             "refId": "F"
           },
           {
-            "expr": "sum(rate(queue_gc_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_gc_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "GC",
             "refId": "G"
           },
           {
-            "expr": "sum(rate(queue_tsmaintenance_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_tsmaintenance_processingnanos{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "legendFormat": "Time Series Maintenance",
             "refId": "H"
@@ -818,49 +818,49 @@
         "steppedLine": false,
         "targets": [
           {
-            "expr": "sum(rate(queue_replicagc_process_failure{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_replicagc_process_failure{job=\"crdb\",cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "Replica GC",
             "refId": "A"
           },
           {
-            "expr": "sum(rate(queue_replicate_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_replicate_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "Replication",
             "refId": "B"
           },
           {
-            "expr": "sum(rate(queue_split_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_split_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "Split",
             "refId": "C"
           },
           {
-            "expr": "sum(rate(queue_consistency_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_consistency_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "Consistency",
             "refId": "D"
           },
           {
-            "expr": "sum(rate(queue_raftlog_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_raftlog_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "Raft Log",
             "refId": "E"
           },
           {
-            "expr": "sum(rate(queue_raftsnapshot_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_raftsnapshot_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "Raft Snapshot",
             "refId": "F"
           },
           {
-            "expr": "sum(rate(queue_tsmaintenance_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$__rate_interval]))",
+            "expr": "sum(rate(queue_tsmaintenance_process_failure{job=\"crdb\", cluster=\"$cluster\"}[$rate_interval]))",
             "interval": "",
             "intervalFactor": 2,
             "legendFormat": "Time Series Maintenance",

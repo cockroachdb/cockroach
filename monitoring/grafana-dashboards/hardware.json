@@ -67,7 +67,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_net_recv_bytes{job=\"crdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(sys_host_net_recv_bytes{job=\"crdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -162,7 +162,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_net_recv_bytes{job=\"crdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(sys_host_net_recv_bytes{job=\"crdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -257,7 +257,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_disk_iopsinprogress{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
+          "expr": "rate(sys_host_disk_iopsinprogress{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -352,7 +352,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_disk_write_count{job=\"crdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(sys_host_disk_write_count{job=\"crdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -447,7 +447,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_disk_read_count{job=\"crdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(sys_host_disk_read_count{job=\"crdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$rate_interval])",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -543,7 +543,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_disk_write_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
+          "expr": "rate(sys_host_disk_write_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -638,7 +638,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_disk_read_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
+          "expr": "rate(sys_host_disk_read_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
