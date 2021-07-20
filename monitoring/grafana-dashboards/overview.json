@@ -3,7 +3,7 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": "${DS_PROMETHEUS}",
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -15,7 +15,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "iteration": 1623952430144,
+  "id": 360,
+  "iteration": 1617889130144,
   "links": [],
   "panels": [
     {
@@ -23,332 +24,20 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements successfully executed per second across all nodes.",
+       "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {}
+        },
         "overrides": []
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 0
-      },
-      "hiddenSeries": false,
-      "id": 2,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sum(rate(sql_select_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Selects",
-          "refId": "A"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(rate(sql_update_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Updates",
-          "refId": "B"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(rate(sql_insert_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Inserts",
-          "refId": "C"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(rate(sql_delete_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Deletes",
-          "refId": "D"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "SQL Queries",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:77",
-          "format": "short",
-          "label": "queries",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:78",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "description": "Over the last minute, this node executed 99% of queries within this time. This time does not include network latency between the node and client.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 8
-      },
-      "hiddenSeries": false,
-      "id": 4,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "histogram_quantile(0.99, rate(sql_service_latency_bucket{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Service Latency: SQL, 99th Percentile",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:160",
-          "format": "ns",
-          "label": "latency",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:161",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "The number of range replicas stored on this node. Ranges are subsets of your data, which are replicated to ensure survivability.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 16
-      },
-      "hiddenSeries": false,
-      "id": 6,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "replicas{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Replicas per Node",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:216",
-          "format": "short",
-          "label": "replicas",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:217",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "Usage of disk space\n\n**Capacity**: Maximum store size across all nodes. This value may be explicitly set per node using [--store](https://www.cockroachlabs.com/docs/v21.1/cockroach-start.html#store). If a store size has not been set, this metric displays the actual disk capacity.\n\n**Available**: Free disk space available to CockroachDB data across all nodes.\n\n**Used**: Disk space in use by CockroachDB data across all nodes. This excludes the Cockroach binary, operating system, and other system files.\n\n[How are these metrics calculated?](https://www.cockroachlabs.com/docs/v21.1/ui-storage-dashboard.html#capacity-metrics)",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 24
       },
       "hiddenSeries": false,
       "id": 8,
@@ -368,7 +57,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "7.3.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -378,27 +67,24 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "sum(sum(capacity{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}) by (cluster))",
+          "expr": "sum(sum(capacity_used{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (instance))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Used",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(sum(capacity_available{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (cluster))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Max",
           "refId": "B"
         },
         {
-          "exemplar": true,
-          "expr": "sum(sum(capacity_available{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}) by (cluster))",
+          "expr": "sum(sum(capacity_available{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (cluster)) - sum(sum(capacity_used{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (instance))",
           "interval": "",
           "legendFormat": "Available",
           "refId": "C"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(sum(capacity_used{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Used",
-          "refId": "A"
         }
       ],
       "thresholds": [],
@@ -421,16 +107,341 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:272",
           "format": "bytes",
-          "label": "capacity",
+          "label": "Capacity (TiB)",
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:273",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+       "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "hiddenSeries": false,
+      "id": 6,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.3.7",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(replicas{cluster=\"$clusterfilter\",job=\"crdb\",instance=~\"$node\"}) by (instance)",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Replicas Per Node",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Replicas",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "hiddenSeries": false,
+      "id": 4,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.3.7",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(sql_service_latency_bucket{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
+          "interval": "",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Service latency: SQL,99th Percentile",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "ns",
+          "label": "Latency (s)",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": null,
+            "filterable": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "hiddenSeries": false,
+      "id": 2,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.3.7",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(rate(sql_select_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))  + sum(rate(sql_update_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval])) + sum(rate(sql_delete_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))  + \nsum(rate(sql_insert_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
+          "interval": "",
+          "legendFormat": "total QPS",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(sql_select_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
+          "interval": "",
+          "legendFormat": "SELECTs",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(sql_insert_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
+          "interval": "",
+          "legendFormat": "INSERTs",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(sql_update_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
+          "interval": "",
+          "legendFormat": "{{cluster}} UPDATEs",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(rate(sql_delete_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$rate_interval]))",
+          "interval": "",
+          "legendFormat": "DELETEs",
+          "refId": "E"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "SQL Queries",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "queries",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -445,53 +456,24 @@
       }
     }
   ],
-  "refresh": false,
-  "schemaVersion": 27,
+  "schemaVersion": 26,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": false,
-          "text": "Prometheus",
-          "value": "Prometheus"
-        },
-        "description": null,
-        "error": null,
-        "hide": 0,
-        "includeAll": false,
-        "label": "datasource",
-        "multi": false,
-        "name": "DS_PROMETHEUS",
-        "options": [],
-        "query": "prometheus",
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "type": "datasource"
-      },
-      {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "my-cockroachdb-cluster",
-          "value": "my-cockroachdb-cluster"
-        },
-        "datasource": "${DS_PROMETHEUS}",
-        "definition": "sys_uptime{job=\"cockroachdb\"}",
-        "description": null,
+        "current": {},
+         "datasource": "${DS_PROMETHEUS}",
+        "definition": "sys_uptime{job=\"crdb\"}",
         "error": null,
         "hide": 0,
-        "includeAll": false,
-        "label": "Cluster",
-        "multi": false,
-        "name": "cluster",
+        "includeAll": true,
+        "label": "Cluster Filter",
+        "multi": true,
+        "name": "clusterfilter",
         "options": [],
-        "query": {
-          "query": "sys_uptime{job=\"cockroachdb\"}",
-          "refId": "Prometheus-cluster-Variable-Query"
-        },
+        "query": "sys_uptime{job=\"crdb\"}",
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -503,15 +485,10 @@
         "useTags": false
       },
       {
-        "allValue": "",
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": "${DS_PROMETHEUS}",
-        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
-        "description": null,
+        "allValue": null,
+        "current": {},
+         "datasource": "${DS_PROMETHEUS}",
+        "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -519,10 +496,7 @@
         "multi": false,
         "name": "node",
         "options": [],
-        "query": {
-          "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
-          "refId": "Prometheus-node-Variable-Query"
-        },
+        "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -538,11 +512,10 @@
         "auto_count": 30,
         "auto_min": "10s",
         "current": {
-          "selected": true,
+          "selected": false,
           "text": "30s",
           "value": "30s"
         },
-        "description": null,
         "error": null,
         "hide": 0,
         "label": "Rate Interval",
@@ -603,12 +576,12 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "CRDB Console: Overview",
   "uid": "crdb-console",
-  "version": 1
+  "version": 26
 }
