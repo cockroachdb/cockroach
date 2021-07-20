@@ -305,3 +305,11 @@ database_name  schema_name  table_name  grantee   privilege_type
 d              public       t12         admin     ALL
 d              public       t12         root      ALL
 d              public       t12         testuser  CREATE
+
+# Cannot specify PUBLIC as the target role.
+statement error pq: user or role public does not exist
+ALTER DEFAULT PRIVILEGES FOR ROLE public REVOKE SELECT ON TABLES FROM testuser2, testuser3
+
+# Can specify PUBLIC as a grantee.
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM public

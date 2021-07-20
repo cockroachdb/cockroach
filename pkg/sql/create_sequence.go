@@ -101,7 +101,7 @@ func doCreateSequence(
 	}
 
 	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
-		dbDesc.GetID(), dbDesc.DatabaseDesc().GetDefaultPrivileges(),
+		dbDesc.GetID(), dbDesc.GetDefaultPrivileges(),
 		params.SessionData().User(), tree.Sequences, dbDesc.GetPrivileges(),
 	)
 

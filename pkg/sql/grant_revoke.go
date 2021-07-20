@@ -122,21 +122,13 @@ func (n *changePrivilegesNode) ReadingOwnWrites() {}
 func (n *changePrivilegesNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
-	// Check whether grantees exists
-	users, err := p.GetAllRoles(ctx)
-	if err != nil {
-		return err
-	}
 
-	// We're allowed to grant/revoke privileges to/from the "public" role even though
-	// it does not exist: add it to the list of all users and roles.
-	users[security.PublicRoleName()] = true // isRole
-
-	if err = validateGrantees(users, n.grantees); err != nil {
+	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
 		return err
 	}
 
 	var descriptors []catalog.Descriptor
+	var err error
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
@@ -324,12 +316,21 @@ func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privi
 	}
 }
 
-// validateGrantees checks that all the grantees are valid users.
-// users should be returned the result of GetAllRoles.
-func validateGrantees(users map[security.SQLUsername]bool, grantees []security.SQLUsername) error {
-	for i, grantee := range grantees {
+// validateRoles checks that all the roles are valid users.
+// isPublicValid determines whether or not Public is a valid role.
+func (p *planner) validateRoles(
+	ctx context.Context, roles []security.SQLUsername, isPublicValid bool,
+) error {
+	users, err := p.GetAllRoles(ctx)
+	if err != nil {
+		return err
+	}
+	if isPublicValid {
+		users[security.PublicRoleName()] = true // isRole
+	}
+	for i, grantee := range roles {
 		if _, ok := users[grantee]; !ok {
-			sqlName := tree.Name(grantees[i].Normalized())
+			sqlName := tree.Name(roles[i].Normalized())
 			return errors.Errorf("user or role %s does not exist", &sqlName)
 		}
 	}

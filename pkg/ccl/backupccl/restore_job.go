@@ -2408,7 +2408,7 @@ func getRestoringPrivileges(
 
 			// TODO(dt): Make this more configurable.
 			updatedPrivileges = descpb.CreatePrivilegesFromDefaultPrivileges(
-				parentDB.GetID(), parentDB.DatabaseDesc().GetDefaultPrivileges(), user, tree.Tables,
+				parentDB.GetID(), parentDB.GetDefaultPrivileges(), user, tree.Tables,
 				parentDB.GetPrivileges(),
 			)
 		}
