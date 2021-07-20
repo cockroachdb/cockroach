@@ -186,9 +186,6 @@ const (
 	//
 	// Start21_1 demarcates work towards CockroachDB v21.1.
 	Start21_1
-	// UniqueWithoutIndexConstraints is when adding UNIQUE WITHOUT INDEX
-	// constraints is supported.
-	UniqueWithoutIndexConstraints
 	// VirtualComputedColumns is when virtual computed columns are supported.
 	VirtualComputedColumns
 	// CPutInline is conditional put support for inline values.
@@ -349,10 +346,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_1,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     UniqueWithoutIndexConstraints,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 6},
 	},
 	{
 		Key:     VirtualComputedColumns,

@@ -564,11 +564,6 @@ func addUniqueWithoutIndexColumnTableDef(
 	ts TableState,
 	validationBehavior tree.ValidationBehavior,
 ) error {
-	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to use UNIQUE WITHOUT INDEX",
-			clusterversion.UniqueWithoutIndexConstraints)
-	}
 	if !sessionData.EnableUniqueWithoutIndexConstraints {
 		return pgerror.New(pgcode.FeatureNotSupported,
 			"unique constraints without an index are not yet supported",
@@ -603,11 +598,6 @@ func addUniqueWithoutIndexTableDef(
 	validationBehavior tree.ValidationBehavior,
 	semaCtx *tree.SemaContext,
 ) error {
-	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to use UNIQUE WITHOUT INDEX",
-			clusterversion.UniqueWithoutIndexConstraints)
-	}
 	if !sessionData.EnableUniqueWithoutIndexConstraints {
 		return pgerror.New(pgcode.FeatureNotSupported,
 			"unique constraints without an index are not yet supported",
