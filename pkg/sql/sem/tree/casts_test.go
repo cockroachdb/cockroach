@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -198,7 +199,8 @@ func TestTupleCastVolatility(t *testing.T) {
 		from.InternalType.TupleContents = tc.from
 		to := *types.EmptyTuple
 		to.InternalType.TupleContents = tc.to
-		v, ok := LookupCastVolatility(&from, &to)
+		settings := cluster.MakeTestingClusterSettings()
+		v, ok := LookupCastVolatility(&from, &to, &settings.SV)
 		res := "error"
 		if ok {
 			res = v.String()

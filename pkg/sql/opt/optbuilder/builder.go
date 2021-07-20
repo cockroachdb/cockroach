@@ -14,6 +14,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -237,6 +238,11 @@ func (b *Builder) buildStmtAtRoot(stmt tree.Statement, desiredTypes []*types.T) 
 	outScope.expr = b.buildWiths(outScope.expr, b.ctes)
 	b.ctes = prevCTEs
 	return outScope
+}
+
+// SV returns the *settings.Values object.
+func (b *Builder) SV() *settings.Values {
+	return &b.evalCtx.Settings.SV
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL

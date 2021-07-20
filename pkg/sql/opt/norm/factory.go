@@ -11,6 +11,7 @@
 package norm
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -191,6 +192,11 @@ func (f *Factory) CustomFuncs() *CustomFuncs {
 	return &f.funcs
 }
 
+// SV returns the *settings.Values object.
+func (f *Factory) SV() *settings.Values {
+	return &f.evalCtx.Settings.SV
+}
+
 // CopyAndReplace builds this factory's memo by constructing a copy of a subtree
 // that is part of another memo. That memo's metadata is copied to this
 // factory's memo so that tables and columns referenced by the copied memo can
@@ -311,7 +317,7 @@ func (f *Factory) onMaxConstructorStackDepthExceeded() {
 	if util.CrdbTestBuild {
 		panic(err)
 	}
-	errorutil.SendReport(f.evalCtx.Ctx(), &f.evalCtx.Settings.SV, err)
+	errorutil.SendReport(f.evalCtx.Ctx(), f.SV(), err)
 }
 
 // onConstructRelational is called as a final step by each factory method that

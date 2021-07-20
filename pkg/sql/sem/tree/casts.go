@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -354,12 +355,12 @@ func lookupCast(from, to types.Family) *castInfo {
 }
 
 // LookupCastVolatility returns the volatility of a valid cast.
-func LookupCastVolatility(from, to *types.T) (_ Volatility, ok bool) {
+func LookupCastVolatility(from, to *types.T, sv *settings.Values) (_ Volatility, ok bool) {
 	fromFamily := from.Family()
 	toFamily := to.Family()
 	// Special case for casting between arrays.
 	if fromFamily == types.ArrayFamily && toFamily == types.ArrayFamily {
-		return LookupCastVolatility(from.ArrayContents(), to.ArrayContents())
+		return LookupCastVolatility(from.ArrayContents(), to.ArrayContents(), sv)
 	}
 	// Special case for casting between tuples.
 	if fromFamily == types.TupleFamily && toFamily == types.TupleFamily {
@@ -374,7 +375,7 @@ func LookupCastVolatility(from, to *types.T) (_ Volatility, ok bool) {
 		}
 		maxVolatility := VolatilityLeakProof
 		for i := range fromTypes {
-			v, ok := LookupCastVolatility(fromTypes[i], toTypes[i])
+			v, ok := LookupCastVolatility(fromTypes[i], toTypes[i], sv)
 			if !ok {
 				return 0, false
 			}

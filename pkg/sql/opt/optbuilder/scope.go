@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -570,7 +571,7 @@ func (s *scope) setTableAlias(alias tree.Name) {
 
 // See (*scope).findExistingCol.
 func findExistingColInList(
-	expr tree.TypedExpr, cols []scopeColumn, allowSideEffects bool,
+	expr tree.TypedExpr, cols []scopeColumn, allowSideEffects bool, sv *settings.Values,
 ) *scopeColumn {
 	exprStr := symbolicExprStr(expr)
 	for i := range cols {
@@ -583,7 +584,7 @@ func findExistingColInList(
 				return col
 			}
 			var p props.Shared
-			memo.BuildSharedProps(col.scalar, &p)
+			memo.BuildSharedProps(col.scalar, &p, sv)
 			if !p.VolatilitySet.HasVolatile() {
 				return col
 			}
@@ -598,7 +599,7 @@ func findExistingColInList(
 // If a column is found and we are tracking view dependencies, we add the column
 // to the view dependencies since it means this column is being referenced.
 func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *scopeColumn {
-	col := findExistingColInList(expr, s.cols, allowSideEffects)
+	col := findExistingColInList(expr, s.cols, allowSideEffects, s.builder.SV())
 	if col != nil {
 		s.builder.trackReferencedColumnForViews(col)
 	}
@@ -1317,7 +1318,12 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 		},
 	}
 
-	if col := findExistingColInList(&info, s.windows, false /* allowSideEffects */); col != nil {
+	if col := findExistingColInList(
+		&info,
+		s.windows,
+		false, /* allowSideEffects */
+		s.builder.SV(),
+	); col != nil {
 		return col.expr
 	}
 

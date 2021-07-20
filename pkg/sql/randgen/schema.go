@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -441,7 +442,8 @@ func randComputedColumnTableDef(
 		}
 
 	default:
-		volatility, ok := tree.LookupCastVolatility(xTyp, types.String)
+		settings := cluster.MakeClusterSettings()
+		volatility, ok := tree.LookupCastVolatility(xTyp, types.String, &settings.SV)
 		if ok && volatility <= tree.VolatilityImmutable {
 			// We can cast to string; use lower(x::string)
 			newDef.Type = types.String

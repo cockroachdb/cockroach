@@ -194,6 +194,7 @@ func MakeSimpleTableDescriptor(
 		Sequence:           &importSequenceOperators{},
 		SessionData:        &sessiondata.SessionData{},
 		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
+		Settings:           st,
 	}
 	affected := make(map[descpb.ID]*tabledesc.Mutable)
 
