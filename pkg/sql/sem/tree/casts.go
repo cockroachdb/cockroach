@@ -354,6 +354,16 @@ func lookupCast(from, to types.Family) *castInfo {
 	return castsMap[castsMapKey{from: from, to: to}]
 }
 
+// IntervalStyleClusterSettingName is the cluster setting name for enabling IntervalStyle.
+const IntervalStyleClusterSettingName = "sql.intervalstyle.enabled"
+
+// IntervalStyleClusterSetting is the cluster setting for enabling IntervalStyle.
+var IntervalStyleClusterSetting = settings.RegisterBoolSetting(
+	IntervalStyleClusterSettingName,
+	"enables the use of IntervalStyle, preventing interval / string casts from being used as computed columns",
+	false,
+).WithPublic()
+
 // LookupCastVolatility returns the volatility of a valid cast.
 func LookupCastVolatility(from, to *types.T, sv *settings.Values) (_ Volatility, ok bool) {
 	fromFamily := from.Family()
@@ -384,6 +394,23 @@ func LookupCastVolatility(from, to *types.T, sv *settings.Values) (_ Volatility,
 			}
 		}
 		return maxVolatility, true
+	}
+	// Special case for IntervalStyle.
+	switch fromFamily {
+	case types.StringFamily, types.CollatedStringFamily:
+		switch toFamily {
+		case types.IntervalFamily:
+			if IntervalStyleClusterSetting.Get(sv) {
+				return VolatilityStable, true
+			}
+		}
+	case types.IntervalFamily:
+		switch toFamily {
+		case types.StringFamily, types.CollatedStringFamily:
+			if IntervalStyleClusterSetting.Get(sv) {
+				return VolatilityStable, true
+			}
+		}
 	}
 	cast := lookupCast(fromFamily, toFamily)
 	if cast == nil {

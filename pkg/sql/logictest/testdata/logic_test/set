@@ -163,6 +163,9 @@ statement ok
 SET intervalstyle = 'postgres'
 
 statement ok
+SET CLUSTER SETTING sql.intervalstyle.enabled = 'on'
+
+statement ok
 SET intervalstyle = 'iso_8601'
 
 statement ok

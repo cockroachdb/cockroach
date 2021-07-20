@@ -34,6 +34,9 @@ eexpect root@
 end_test
 
 start_test "Check that server times also work if IntervalStyle is different"
+send "set cluster setting sql.intervalstyle.enabled = 'on';\r"
+eexpect "SET CLUSTER SETTING"
+eexpect root@
 # regression test for issue #67618.
 send "set IntervalStyle = 'iso_8601';\r"
 eexpect "SET"

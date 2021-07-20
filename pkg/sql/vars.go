@@ -802,7 +802,7 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-INTERVALSTYLE
 	`intervalstyle`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			style, ok := duration.IntervalStyle_value[strings.ToUpper(s)]
+			styleVal, ok := duration.IntervalStyle_value[strings.ToUpper(s)]
 			if !ok {
 				validIntervalStyles := make([]string, 0, len(duration.IntervalStyle_value))
 				for k := range duration.IntervalStyle_value {
@@ -810,7 +810,20 @@ var varGen = map[string]sessionVar{
 				}
 				return newVarValueError(`IntervalStyle`, s, validIntervalStyles...)
 			}
-			m.SetIntervalStyle(duration.IntervalStyle(style))
+			style := duration.IntervalStyle(styleVal)
+			if style != duration.IntervalStyle_POSTGRES &&
+				!tree.IntervalStyleClusterSetting.Get(&m.settings.SV) {
+				return errors.WithHintf(
+					pgerror.Newf(
+						pgcode.FeatureNotSupported,
+						"setting IntervalStyle is only supported when the CLUSTER SETTING %s is enabled",
+						tree.IntervalStyleClusterSettingName,
+					),
+					`ensure you have no computed columns casting from intervals to strings (or vice versa), then use SET CLUSTER SETTING %s = on`,
+					tree.IntervalStyleClusterSettingName,
+				)
+			}
+			m.SetIntervalStyle(style)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
