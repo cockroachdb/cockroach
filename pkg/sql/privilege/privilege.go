@@ -113,7 +113,7 @@ func (pl List) Less(i, j int) bool {
 }
 
 // names returns a list of privilege names in the same
-// order as 'pl'.
+// order as "pl".
 func (pl List) names() []string {
 	ret := make([]string, len(pl))
 	for i, p := range pl {
@@ -235,4 +235,36 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 	default:
 		panic(errors.AssertionFailedf("unknown object type %s", objectType))
 	}
+}
+
+// PrivilegeListToACL converts a list of privileges to a list of Postgres
+// ACL items.
+// See: https://www.postgresql.org/docs/13/ddl-priv.html#PRIVILEGE-ABBREVS-TABLE
+//     for privileges and their ACL abbreviations.
+func PrivilegeListToACL(privileges List, objectType ObjectType) string {
+	// If ALL is present, explode ALL into the underlying privileges.
+	if privileges.Contains(ALL) {
+		privileges = GetValidPrivilegesForObject(objectType)
+	}
+	chars := make([]string, len(privileges))
+	for _, privilege := range privileges {
+		switch privilege {
+		case CREATE:
+			chars = append(chars, "C")
+		case SELECT:
+			chars = append(chars, "r")
+		case INSERT:
+			chars = append(chars, "a")
+		case DELETE:
+			chars = append(chars, "d")
+		case UPDATE:
+			chars = append(chars, "w")
+		case USAGE:
+			chars = append(chars, "U")
+		case CONNECT:
+			chars = append(chars, "c")
+		}
+	}
+	sort.Strings(chars)
+	return strings.Join(chars, "")
 }
