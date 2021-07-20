@@ -529,11 +529,11 @@ func (o *singleBatchOperator) reset(vecs []coldata.Vec, inputLen int, sel []int)
 	for i, vec := range vecs {
 		o.batch.ReplaceCol(vec, i)
 	}
-	o.batch.SetLength(inputLen)
 	o.batch.SetSelection(sel != nil)
 	if sel != nil {
 		copy(o.batch.Selection(), sel[:inputLen])
 	}
+	o.batch.SetLength(inputLen)
 }
 
 // aggBucket stores the aggregation functions for the corresponding aggregation
