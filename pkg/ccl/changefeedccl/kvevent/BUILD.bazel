@@ -8,10 +8,12 @@ go_library(
         "err_buffer.go",
         "event.go",
         "metrics.go",
+        "throttling_buffer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/cdcutils",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb:with-mocks",

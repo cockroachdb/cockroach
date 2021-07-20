@@ -1231,3 +1231,21 @@ SELECT CASE WHEN _bool THEN _string ELSE _string END FROM t64793;
 4
 5
 NULL
+
+# Regression test for not supporting casts between FLOAT4 and FLOAT8 (which have
+# the same physical representation in the vectorized engine) (#67793).
+statement ok
+CREATE TABLE t67793 (_float4 FLOAT4, _float8 FLOAT8);
+INSERT INTO t67793 VALUES (1, 2), (2, 1);
+
+query RR rowsort
+SELECT t1._float8, t2._float4 FROM t67793 AS t1, t67793 AS t2 WHERE t1._float4 = t2._float8
+----
+1  1
+2  2
+
+query RR rowsort
+SELECT _float4::FLOAT8, _float8::FLOAT4 FROM t67793
+----
+1  2
+2  1

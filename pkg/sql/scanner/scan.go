@@ -1046,6 +1046,21 @@ func (s *Scanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
 	}
 }
 
+// LastLexicalToken returns the last lexical token. If the string has no lexical
+// tokens, returns 0 and ok=false.
+func LastLexicalToken(sql string) (lastTok int, ok bool) {
+	var s Scanner
+	var lval fakeSym
+	s.Init(sql)
+	for {
+		last := lval.ID()
+		s.Scan(&lval)
+		if lval.ID() == 0 {
+			return int(last), last != 0
+		}
+	}
+}
+
 // fakeSym is a simplified symbol type for use by
 // HasMultipleStatements.
 type fakeSym struct {
