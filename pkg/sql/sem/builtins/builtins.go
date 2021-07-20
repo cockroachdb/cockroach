@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -3518,6 +3519,36 @@ may increase either contention or retry errors, or both.`,
 			Info:       "Convert JSONB data to protocol message bytes",
 			Volatility: tree.VolatilityImmutable,
 		}),
+
+	"crdb_internal.key_encode": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categorySystemInfo,
+			NullableArgs: true,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.VariadicType{VarType: types.Any},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				var out []byte
+				for i, arg := range args {
+					var err error
+					out, err = rowenc.EncodeTableKey(out, arg, encoding.Ascending)
+					if err != nil {
+						return nil, pgerror.Newf(
+							pgcode.DatatypeMismatch,
+							"illegal argument %d of type %s",
+							i, arg.ResolvedType(),
+						)
+					}
+				}
+				return tree.NewDBytes(tree.DBytes(out)), nil
+			},
+			Volatility: tree.VolatilityImmutable,
+			Info: "Converts datums into key-encoded bytes. " +
+				"Supports NULLs and all data types which may be used in index keys",
+		},
+	),
 
 	// Enum functions.
 	"enum_first": makeBuiltin(

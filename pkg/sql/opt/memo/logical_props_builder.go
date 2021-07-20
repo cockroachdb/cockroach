@@ -2628,6 +2628,8 @@ func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 			// None of the outer columns of this sub-expression are composite.
 			return false
 		}
+		// TODO(ajwerner): Make my key_encode function not composite sensitive.
+
 		// Check the inputs to the operator. Together, the following conditions are
 		// sufficient to prove that this expression is not sensitive:
 		//  1. None of the inputs are sensitive to composite outer columns.
