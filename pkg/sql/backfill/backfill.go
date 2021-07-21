@@ -246,7 +246,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	txn *kv.Txn,
 	tableDesc catalog.TableDescriptor,
 	sp roachpb.Span,
-	chunkSize int64,
+	chunkSize row.RowLimit,
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
@@ -304,7 +304,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	iv.Cols = append(iv.Cols, tableDesc.PublicColumns()...)
 	iv.Cols = append(iv.Cols, cb.added...)
 	cb.evalCtx.IVarContainer = iv
-	for i := int64(0); i < chunkSize; i++ {
+	for i := int64(0); i < int64(chunkSize); i++ {
 		datums, _, _, err := cb.fetcher.NextRowDecoded(ctx)
 		if err != nil {
 			return roachpb.Key{}, err

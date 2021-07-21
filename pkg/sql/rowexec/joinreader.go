@@ -165,7 +165,7 @@ type joinReader struct {
 	// lookupBatchBytesLimit controls the TargetBytes of lookup requests. If 0, a
 	// default will be used. Regardless of this value, bytes limits aren't always
 	// used.
-	lookupBatchBytesLimit int64
+	lookupBatchBytesLimit row.BytesLimit
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -242,7 +242,7 @@ func newJoinReader(
 		// cases, we use limits.
 		shouldLimitBatches:    !spec.LookupColumnsAreKey && readerType == lookupJoinReaderType,
 		readerType:            readerType,
-		lookupBatchBytesLimit: spec.LookupBatchBytesLimit,
+		lookupBatchBytesLimit: row.BytesLimit(spec.LookupBatchBytesLimit),
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
@@ -699,7 +699,7 @@ func (jr *joinReader) readInput() (
 	}
 
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
-	var bytesLimit int64
+	var bytesLimit row.BytesLimit
 	if !jr.shouldLimitBatches {
 		bytesLimit = row.NoBytesLimit
 	} else {

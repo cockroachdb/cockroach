@@ -652,7 +652,7 @@ func (rf *cFetcher) StartScan(
 	txn *kv.Txn,
 	spans roachpb.Spans,
 	limitBatches bool,
-	limitHint int64,
+	limitHint row.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
@@ -665,13 +665,13 @@ func (rf *cFetcher) StartScan(
 	// If we have a limit hint, we limit the first batch size. Subsequent
 	// batches get larger to avoid making things too slow (e.g. in case we have
 	// a very restrictive filter and actually have to retrieve a lot of rows).
-	firstBatchLimit := limitHint
+	firstBatchLimit := row.KeyLimit(limitHint)
 	if firstBatchLimit != 0 {
 		// The limitHint is a row limit, but each row could be made up
 		// of more than one key. We take the maximum possible keys
 		// per row out of all the table rows we could potentially
 		// scan over.
-		firstBatchLimit = limitHint * int64(rf.maxKeysPerRow)
+		firstBatchLimit = row.KeyLimit(int(limitHint) * rf.maxKeysPerRow)
 		// We need an extra key to make sure we form the last row.
 		firstBatchLimit++
 	}

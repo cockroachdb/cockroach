@@ -51,7 +51,7 @@ type ColBatchScan struct {
 	spans       roachpb.Spans
 	flowCtx     *execinfra.FlowCtx
 	rf          *cFetcher
-	limitHint   int64
+	limitHint   row.RowLimit
 	parallelize bool
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
@@ -181,7 +181,7 @@ func NewColBatchScan(
 		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 
-	limitHint := execinfra.LimitHint(spec.LimitHint, post)
+	limitHint := row.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 	// TODO(ajwerner): The need to construct an immutable here
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just setting the ID and Version in the spec or something like that and

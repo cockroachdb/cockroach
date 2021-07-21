@@ -32,8 +32,8 @@ import (
 // collector wrapper can be plugged in.
 type rowFetcher interface {
 	StartScan(
-		_ context.Context, _ *kv.Txn, _ roachpb.Spans, batchBytesLimit int64,
-		rowLimitHint int64, traceKV bool, forceProductionKVBatchSize bool,
+		_ context.Context, _ *kv.Txn, _ roachpb.Spans, batchBytesLimit row.BytesLimit,
+		rowLimitHint row.RowLimit, traceKV bool, forceProductionKVBatchSize bool,
 	) error
 	StartInconsistentScan(
 		_ context.Context,
@@ -41,8 +41,8 @@ type rowFetcher interface {
 		initialTimestamp hlc.Timestamp,
 		maxTimestampAge time.Duration,
 		spans roachpb.Spans,
-		batchBytesLimit int64,
-		rowLimitHint int64,
+		batchBytesLimit row.BytesLimit,
+		rowLimitHint row.RowLimit,
 		traceKV bool,
 		forceProductionKVBatchSize bool,
 	) error

@@ -108,8 +108,8 @@ func (c *rowFetcherStatCollector) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
-	batchBytesLimit int64,
-	limitHint int64,
+	batchBytesLimit row.BytesLimit,
+	limitHint row.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
@@ -126,8 +126,8 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	initialTimestamp hlc.Timestamp,
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,
-	batchBytesLimit int64,
-	limitHint int64,
+	batchBytesLimit row.BytesLimit,
+	limitHint row.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {

@@ -79,7 +79,7 @@ func newScrubTableReader(
 	}
 
 	tr.tableDesc = spec.BuildTableDescriptor()
-	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
+	tr.limitHint = row.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 
 	if err := tr.Init(
 		tr,

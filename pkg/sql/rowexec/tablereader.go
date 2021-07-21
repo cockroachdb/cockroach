@@ -35,9 +35,9 @@ type tableReader struct {
 	execinfra.ProcessorBase
 
 	spans           roachpb.Spans
-	limitHint       int64
+	limitHint       row.RowLimit
 	parallelize     bool
-	batchBytesLimit int64
+	batchBytesLimit row.BytesLimit
 
 	scanStarted bool
 
@@ -83,12 +83,12 @@ func newTableReader(
 
 	tr := trPool.Get().(*tableReader)
 
-	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
+	tr.limitHint = row.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 	// Parallelize shouldn't be set when there's a limit hint, but double-check
 	// just in case.
 	tr.parallelize = spec.Parallelize && tr.limitHint == 0
 	if !tr.parallelize {
-		tr.batchBytesLimit = spec.BatchBytesLimit
+		tr.batchBytesLimit = row.BytesLimit(spec.BatchBytesLimit)
 		if tr.batchBytesLimit == 0 {
 			tr.batchBytesLimit = row.DefaultBatchBytesLimit
 		}
@@ -198,7 +198,7 @@ func (tr *tableReader) Start(ctx context.Context) {
 
 func (tr *tableReader) startScan(ctx context.Context) error {
 	limitBatches := !tr.parallelize
-	var bytesLimit int64
+	var bytesLimit row.BytesLimit
 	if !limitBatches {
 		bytesLimit = row.NoBytesLimit
 	} else {
