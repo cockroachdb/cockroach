@@ -7,6 +7,11 @@ import (
 	context "context"
 	encoding_binary "encoding/binary"
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+	time "time"
+
 	lock "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	rspb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -23,10 +28,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-	time "time"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1601,7 +1602,9 @@ func (*CheckConsistencyResponse_Result) Descriptor() ([]byte, []int) {
 func (m *CheckConsistencyResponse_Result) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *CheckConsistencyResponse_Result) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *CheckConsistencyResponse_Result) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -4304,7 +4307,9 @@ func (*AdminVerifyProtectedTimestampRequest) Descriptor() ([]byte, []int) {
 func (m *AdminVerifyProtectedTimestampRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AdminVerifyProtectedTimestampRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *AdminVerifyProtectedTimestampRequest) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -4344,7 +4349,9 @@ func (*AdminVerifyProtectedTimestampResponse) Descriptor() ([]byte, []int) {
 func (m *AdminVerifyProtectedTimestampResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AdminVerifyProtectedTimestampResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *AdminVerifyProtectedTimestampResponse) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -4384,7 +4391,9 @@ func (*AdminVerifyProtectedTimestampResponse_FailedRange) Descriptor() ([]byte, 
 func (m *AdminVerifyProtectedTimestampResponse_FailedRange) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AdminVerifyProtectedTimestampResponse_FailedRange) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *AdminVerifyProtectedTimestampResponse_FailedRange) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -8382,7 +8391,9 @@ func NewInternalClient(cc *grpc.ClientConn) InternalClient {
 	return &internalClient{cc}
 }
 
-func (c *internalClient) Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error) {
+func (c *internalClient) Batch(
+	ctx context.Context, in *BatchRequest, opts ...grpc.CallOption,
+) (*BatchResponse, error) {
 	out := new(BatchResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.roachpb.Internal/Batch", in, out, opts...)
 	if err != nil {
@@ -8391,7 +8402,9 @@ func (c *internalClient) Batch(ctx context.Context, in *BatchRequest, opts ...gr
 	return out, nil
 }
 
-func (c *internalClient) RangeLookup(ctx context.Context, in *RangeLookupRequest, opts ...grpc.CallOption) (*RangeLookupResponse, error) {
+func (c *internalClient) RangeLookup(
+	ctx context.Context, in *RangeLookupRequest, opts ...grpc.CallOption,
+) (*RangeLookupResponse, error) {
 	out := new(RangeLookupResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.roachpb.Internal/RangeLookup", in, out, opts...)
 	if err != nil {
@@ -8400,7 +8413,9 @@ func (c *internalClient) RangeLookup(ctx context.Context, in *RangeLookupRequest
 	return out, nil
 }
 
-func (c *internalClient) RangeFeed(ctx context.Context, in *RangeFeedRequest, opts ...grpc.CallOption) (Internal_RangeFeedClient, error) {
+func (c *internalClient) RangeFeed(
+	ctx context.Context, in *RangeFeedRequest, opts ...grpc.CallOption,
+) (Internal_RangeFeedClient, error) {
 	stream, err := c.cc.NewStream(ctx, &_Internal_serviceDesc.Streams[0], "/cockroach.roachpb.Internal/RangeFeed", opts...)
 	if err != nil {
 		return nil, err
@@ -8432,7 +8447,9 @@ func (x *internalRangeFeedClient) Recv() (*RangeFeedEvent, error) {
 	return m, nil
 }
 
-func (c *internalClient) GossipSubscription(ctx context.Context, in *GossipSubscriptionRequest, opts ...grpc.CallOption) (Internal_GossipSubscriptionClient, error) {
+func (c *internalClient) GossipSubscription(
+	ctx context.Context, in *GossipSubscriptionRequest, opts ...grpc.CallOption,
+) (Internal_GossipSubscriptionClient, error) {
 	stream, err := c.cc.NewStream(ctx, &_Internal_serviceDesc.Streams[1], "/cockroach.roachpb.Internal/GossipSubscription", opts...)
 	if err != nil {
 		return nil, err
@@ -8464,7 +8481,9 @@ func (x *internalGossipSubscriptionClient) Recv() (*GossipSubscriptionEvent, err
 	return m, nil
 }
 
-func (c *internalClient) ResetQuorum(ctx context.Context, in *ResetQuorumRequest, opts ...grpc.CallOption) (*ResetQuorumResponse, error) {
+func (c *internalClient) ResetQuorum(
+	ctx context.Context, in *ResetQuorumRequest, opts ...grpc.CallOption,
+) (*ResetQuorumResponse, error) {
 	out := new(ResetQuorumResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.roachpb.Internal/ResetQuorum", in, out, opts...)
 	if err != nil {
@@ -8473,7 +8492,9 @@ func (c *internalClient) ResetQuorum(ctx context.Context, in *ResetQuorumRequest
 	return out, nil
 }
 
-func (c *internalClient) GetSpanConfigs(ctx context.Context, in *GetSpanConfigsRequest, opts ...grpc.CallOption) (*GetSpanConfigsResponse, error) {
+func (c *internalClient) GetSpanConfigs(
+	ctx context.Context, in *GetSpanConfigsRequest, opts ...grpc.CallOption,
+) (*GetSpanConfigsResponse, error) {
 	out := new(GetSpanConfigsResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.roachpb.Internal/GetSpanConfigs", in, out, opts...)
 	if err != nil {
@@ -8482,7 +8503,9 @@ func (c *internalClient) GetSpanConfigs(ctx context.Context, in *GetSpanConfigsR
 	return out, nil
 }
 
-func (c *internalClient) UpdateSpanConfigs(ctx context.Context, in *UpdateSpanConfigsRequest, opts ...grpc.CallOption) (*UpdateSpanConfigsResponse, error) {
+func (c *internalClient) UpdateSpanConfigs(
+	ctx context.Context, in *UpdateSpanConfigsRequest, opts ...grpc.CallOption,
+) (*UpdateSpanConfigsResponse, error) {
 	out := new(UpdateSpanConfigsResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.roachpb.Internal/UpdateSpanConfigs", in, out, opts...)
 	if err != nil {
@@ -8491,7 +8514,9 @@ func (c *internalClient) UpdateSpanConfigs(ctx context.Context, in *UpdateSpanCo
 	return out, nil
 }
 
-func (c *internalClient) Join(ctx context.Context, in *JoinNodeRequest, opts ...grpc.CallOption) (*JoinNodeResponse, error) {
+func (c *internalClient) Join(
+	ctx context.Context, in *JoinNodeRequest, opts ...grpc.CallOption,
+) (*JoinNodeResponse, error) {
 	out := new(JoinNodeResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.roachpb.Internal/Join", in, out, opts...)
 	if err != nil {
@@ -8522,28 +8547,44 @@ type InternalServer interface {
 type UnimplementedInternalServer struct {
 }
 
-func (*UnimplementedInternalServer) Batch(ctx context.Context, req *BatchRequest) (*BatchResponse, error) {
+func (*UnimplementedInternalServer) Batch(
+	ctx context.Context, req *BatchRequest,
+) (*BatchResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Batch not implemented")
 }
-func (*UnimplementedInternalServer) RangeLookup(ctx context.Context, req *RangeLookupRequest) (*RangeLookupResponse, error) {
+func (*UnimplementedInternalServer) RangeLookup(
+	ctx context.Context, req *RangeLookupRequest,
+) (*RangeLookupResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RangeLookup not implemented")
 }
-func (*UnimplementedInternalServer) RangeFeed(req *RangeFeedRequest, srv Internal_RangeFeedServer) error {
+func (*UnimplementedInternalServer) RangeFeed(
+	req *RangeFeedRequest, srv Internal_RangeFeedServer,
+) error {
 	return status.Errorf(codes.Unimplemented, "method RangeFeed not implemented")
 }
-func (*UnimplementedInternalServer) GossipSubscription(req *GossipSubscriptionRequest, srv Internal_GossipSubscriptionServer) error {
+func (*UnimplementedInternalServer) GossipSubscription(
+	req *GossipSubscriptionRequest, srv Internal_GossipSubscriptionServer,
+) error {
 	return status.Errorf(codes.Unimplemented, "method GossipSubscription not implemented")
 }
-func (*UnimplementedInternalServer) ResetQuorum(ctx context.Context, req *ResetQuorumRequest) (*ResetQuorumResponse, error) {
+func (*UnimplementedInternalServer) ResetQuorum(
+	ctx context.Context, req *ResetQuorumRequest,
+) (*ResetQuorumResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetQuorum not implemented")
 }
-func (*UnimplementedInternalServer) GetSpanConfigs(ctx context.Context, req *GetSpanConfigsRequest) (*GetSpanConfigsResponse, error) {
+func (*UnimplementedInternalServer) GetSpanConfigs(
+	ctx context.Context, req *GetSpanConfigsRequest,
+) (*GetSpanConfigsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSpanConfigs not implemented")
 }
-func (*UnimplementedInternalServer) UpdateSpanConfigs(ctx context.Context, req *UpdateSpanConfigsRequest) (*UpdateSpanConfigsResponse, error) {
+func (*UnimplementedInternalServer) UpdateSpanConfigs(
+	ctx context.Context, req *UpdateSpanConfigsRequest,
+) (*UpdateSpanConfigsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateSpanConfigs not implemented")
 }
-func (*UnimplementedInternalServer) Join(ctx context.Context, req *JoinNodeRequest) (*JoinNodeResponse, error) {
+func (*UnimplementedInternalServer) Join(
+	ctx context.Context, req *JoinNodeRequest,
+) (*JoinNodeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Join not implemented")
 }
 
@@ -8551,7 +8592,12 @@ func RegisterInternalServer(s *grpc.Server, srv InternalServer) {
 	s.RegisterService(&_Internal_serviceDesc, srv)
 }
 
-func _Internal_Batch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Internal_Batch_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(BatchRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -8569,7 +8615,12 @@ func _Internal_Batch_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Internal_RangeLookup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Internal_RangeLookup_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(RangeLookupRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -8629,7 +8680,12 @@ func (x *internalGossipSubscriptionServer) Send(m *GossipSubscriptionEvent) erro
 	return x.ServerStream.SendMsg(m)
 }
 
-func _Internal_ResetQuorum_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Internal_ResetQuorum_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(ResetQuorumRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -8647,7 +8703,12 @@ func _Internal_ResetQuorum_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Internal_GetSpanConfigs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Internal_GetSpanConfigs_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(GetSpanConfigsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -8665,7 +8726,12 @@ func _Internal_GetSpanConfigs_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Internal_UpdateSpanConfigs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Internal_UpdateSpanConfigs_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(UpdateSpanConfigsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -8683,7 +8749,12 @@ func _Internal_UpdateSpanConfigs_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Internal_Join_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Internal_Join_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(JoinNodeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -13391,7 +13462,9 @@ func (m *AdminVerifyProtectedTimestampResponse_FailedRange) MarshalTo(dAtA []byt
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *AdminVerifyProtectedTimestampResponse_FailedRange) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *AdminVerifyProtectedTimestampResponse_FailedRange) MarshalToSizedBuffer(
+	dAtA []byte,
+) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -14976,7 +15049,9 @@ func (m *RequestUnion_AdminVerifyProtectedTimestamp) MarshalTo(dAtA []byte) (int
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *RequestUnion_AdminVerifyProtectedTimestamp) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *RequestUnion_AdminVerifyProtectedTimestamp) MarshalToSizedBuffer(
+	dAtA []byte,
+) (int, error) {
 	i := len(dAtA)
 	if m.AdminVerifyProtectedTimestamp != nil {
 		{
@@ -15971,7 +16046,9 @@ func (m *ResponseUnion_AdminVerifyProtectedTimestamp) MarshalTo(dAtA []byte) (in
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *ResponseUnion_AdminVerifyProtectedTimestamp) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *ResponseUnion_AdminVerifyProtectedTimestamp) MarshalToSizedBuffer(
+	dAtA []byte,
+) (int, error) {
 	i := len(dAtA)
 	if m.AdminVerifyProtectedTimestamp != nil {
 		{

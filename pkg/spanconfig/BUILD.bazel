@@ -2,11 +2,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "spanconfig",
-    srcs = ["spanconfig.go"],
+    srcs = [
+        "entry.go",
+        "spanconfig.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv",
         "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
         "//pkg/util/stop",
     ],
 )

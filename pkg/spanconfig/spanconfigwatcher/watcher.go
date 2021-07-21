@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigcatalog"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigdecoder"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,7 +85,13 @@ func (w *Watcher) Watch(
 
 		select {
 		case <-ctx.Done():
-		case updateCh <- spanconfig.Update{Entry: entry, Deleted: deleted}:
+		case updateCh <- spanconfig.Update{
+			Entry: spanconfig.MakeEntry(
+				entry.Span,
+				spanconfigcatalog.NewSpanConfigFromProto(entry.Config),
+			),
+			Deleted: deleted,
+		}:
 		}
 	}
 

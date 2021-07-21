@@ -28,8 +28,10 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig/spanconfigreconciler",
         "//pkg/sql",
         "//pkg/util/log",
+        "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

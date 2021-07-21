@@ -13,7 +13,9 @@ package spanconfig
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -61,8 +63,28 @@ type Update struct {
 	// updated. If deleted is true, the config over that span has been deleted
 	// (those keys no longer exist). If false, the embedded config is what the
 	// keyspan was updated to.
-	Entry roachpb.SpanConfigEntry
+	Entry Entry
 
 	// Deleted is true if the span config entry has been deleted.
 	Deleted bool
+}
+
+// Config is an interface to be shared by {Zone,Span} configs.
+type Config interface {
+	Equal(o interface{}) bool
+
+	// Config is a marker method.
+	Config()
+	GenerateSpanConfig() (roachpb.SpanConfig, error)
+}
+
+// Reconciler is responsible for reconciling zone configs to span configs.
+type Reconciler interface {
+	// GenerateSpanConfigurations generates span configurations for the given
+	// set of IDs. Right now it expects the given IDs to be table IDs.
+	// TODO(arul): Account for non-table IDs as well.
+	GenerateSpanConfigurations(ctx context.Context, txn *kv.Txn, ids descpb.IDs) ([]Entry, error)
+
+	// FullReconcile generates a span configuration for all tables.
+	FullReconcile(ctx context.Context) ([]Entry, error)
 }
