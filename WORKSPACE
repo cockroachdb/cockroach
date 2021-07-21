@@ -167,7 +167,7 @@ c_deps()
 # aforementioned PRs.
 git_repository(
     name = "rules_foreign_cc",
-    commit = "a3b0e5eaa723259458f5c85285f58e46ae7f25a2",
+    commit = "67211f9083234f51ef1d9c21a791ee93bc538143",
     remote = "https://github.com/cockroachdb/rules_foreign_cc",
 )
 
