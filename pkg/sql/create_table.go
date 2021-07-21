@@ -21,9 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -41,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -302,8 +299,10 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User())
-
+	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
+		n.dbDesc.GetID(), n.dbDesc.GetDefaultPrivileges(),
+		params.SessionData().User(), tree.Tables, n.dbDesc.GetPrivileges(),
+	)
 	var desc *tabledesc.Mutable
 	var affected map[descpb.ID]*tabledesc.Mutable
 	// creationTime is initialized to a zero value and populated at read time.
@@ -2818,30 +2817,6 @@ func incTelemetryForNewColumn(def *tree.ColumnTableDef, desc *descpb.ColumnDescr
 			telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique"))
 		}
 	}
-}
-
-// CreateInheritedPrivilegesFromDBDesc creates privileges for a
-// table (or view/sequence) with the appropriate owner (node for system,
-// the restoring user otherwise.)
-func CreateInheritedPrivilegesFromDBDesc(
-	dbDesc catalog.DatabaseDescriptor, user security.SQLUsername,
-) *descpb.PrivilegeDescriptor {
-	// If a new system table is being created (which should only be doable by
-	// an internal user account), make sure it gets the correct privileges.
-	if dbDesc.GetID() == keys.SystemDatabaseID {
-		return descpb.NewDefaultPrivilegeDescriptor(security.NodeUserName())
-	}
-
-	privs := dbDesc.GetPrivileges()
-	tablePrivBits := privilege.GetValidPrivilegesForObject(privilege.Table).ToBitField()
-	for i, u := range privs.Users {
-		// Remove privileges that are valid for databases but not for tables.
-		privs.Users[i].Privileges = u.Privileges & tablePrivBits
-	}
-
-	privs.SetOwner(user)
-
-	return privs
 }
 
 func regionalByRowRegionDefaultExpr(oid oid.Oid, region tree.Name) tree.Expr {

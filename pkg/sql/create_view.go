@@ -160,7 +160,10 @@ func (n *createViewNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
 
-	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User())
+	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
+		n.dbDesc.GetID(), n.dbDesc.GetDefaultPrivileges(),
+		params.SessionData().User(), tree.Tables, n.dbDesc.GetPrivileges(),
+	)
 
 	var newDesc *tabledesc.Mutable
 	applyGlobalMultiRegionZoneConfig := false

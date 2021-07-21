@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 type createSchemaNode struct {
@@ -113,12 +112,9 @@ func CreateUserDefinedSchemaDescriptor(
 		}
 	}
 
-	// Inherit the parent privileges and filter out those which are not valid for
-	// schemas.
-	privs := protoutil.Clone(db.GetPrivileges()).(*descpb.PrivilegeDescriptor)
-	for i := range privs.Users {
-		privs.Users[i].Privileges &= privilege.SchemaPrivileges.ToBitField()
-	}
+	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
+		db.GetID(), db.GetDefaultPrivileges(), user, tree.Schemas, db.GetPrivileges(),
+	)
 
 	if !n.AuthRole.Undefined() {
 		exists, err := RoleExists(ctx, execCfg, txn, n.AuthRole)

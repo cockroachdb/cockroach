@@ -33,3 +33,32 @@ message PrivilegeDescriptor {
   optional uint32 version = 3 [(gogoproto.nullable) = false,
                               (gogoproto.casttype) = "PrivilegeDescVersion"];
 }
+
+// DefaultPrivilegesForRole contains the default privileges for a role.
+// DefaultPrivileges are the set of privileges that an object created by a user
+// should have at creation time.
+// DefaultPrivilegesForRole is further broken down depending on the object type.
+// The object types (AlterDefaultPrivilegesTargetObject) are:
+//   1: Tables
+//   2: Sequences
+//   3: Types
+//   4: Schemas
+// DefaultPrivilegesPerObject are keyed on AlterDefaultPrivilegesTargetObject
+// and it's value is a PrivilegeDescriptor that is only used for
+// the list of UserPrivileges for that object.
+message DefaultPrivilegesForRole {
+  option (gogoproto.equal) = true;
+  optional string user_proto = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  map<uint32, PrivilegeDescriptor> default_privileges_per_object = 2 [(gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject"];
+
+}
+
+// DefaultPrivilegeDescriptor describes the set of default privileges for a
+// given role + object type.
+// The DefaultPrivileges list must be sorted for fast access and user lookups.
+message DefaultPrivilegeDescriptor {
+  option (gogoproto.equal) = true;
+  repeated DefaultPrivilegesForRole default_privileges = 1 [(gogoproto.nullable) = false];
+}

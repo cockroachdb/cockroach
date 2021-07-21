@@ -214,6 +214,12 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate the privilege descriptor.
 	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Database))
 
+	// The DefaultPrivilegeDescriptor may be nil.
+	if desc.GetDefaultPrivileges() != nil {
+		// Validate the default privilege descriptor.
+		vea.Report(desc.GetDefaultPrivileges().Validate())
+	}
+
 	if desc.IsMultiRegion() {
 		desc.validateMultiRegion(vea)
 	}
@@ -403,4 +409,12 @@ func (desc *Mutable) SetRegionConfig(cfg *descpb.DatabaseDescriptor_RegionConfig
 // RunPostDeserializationChanges.
 func (desc *Mutable) HasPostDeserializationChanges() bool {
 	return desc.changed
+}
+
+// SetDefaultPrivilegeDescriptor sets the default privilege descriptor
+// for the database.
+func (desc *Mutable) SetDefaultPrivilegeDescriptor(
+	defaultPrivilegeDescriptor *descpb.DefaultPrivilegeDescriptor,
+) {
+	desc.DefaultPrivileges = defaultPrivilegeDescriptor
 }
