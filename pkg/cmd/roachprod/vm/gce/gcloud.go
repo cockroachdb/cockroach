@@ -427,7 +427,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem)
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
