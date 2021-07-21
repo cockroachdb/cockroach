@@ -51,7 +51,7 @@ func (s *condensableSpanSet) insert(spans ...roachpb.Span) {
 // increase the overall bounds of the span set, but will eliminate duplicated
 // spans and combine overlapping spans.
 //
-// The method has the side effect of sorting the stable write set.
+// The method has the side effect of sorting the set.
 func (s *condensableSpanSet) mergeAndSort() {
 	oldLen := len(s.s)
 	s.s, _ = roachpb.MergeSpans(&s.s)
@@ -80,7 +80,7 @@ func (s *condensableSpanSet) mergeAndSort() {
 func (s *condensableSpanSet) maybeCondense(
 	ctx context.Context, riGen rangeIteratorFactory, maxBytes int64,
 ) bool {
-	if s.bytes < maxBytes {
+	if s.bytes <= maxBytes {
 		return false
 	}
 
@@ -89,7 +89,7 @@ func (s *condensableSpanSet) maybeCondense(
 	// nice property that it sorts the spans by start key, which we rely on
 	// lower in this method.
 	s.mergeAndSort()
-	if s.bytes < maxBytes {
+	if s.bytes <= maxBytes {
 		return false
 	}
 
@@ -173,6 +173,62 @@ func (s *condensableSpanSet) empty() bool {
 
 func (s *condensableSpanSet) clear() {
 	*s = condensableSpanSet{}
+}
+
+// estimateSize returns the size that the spanSet would grow to if spans were
+// added to the set. As a side-effect, the receiver might get its spans merged.
+//
+// The result doesn't take into consideration the effect of condensing the
+// spans, but might take into consideration the effects of merging the spans
+// (which is not a lossy operation): mergeThresholdBytes instructs the
+// simulation to perform merging and de-duping if the size grows over this
+// threshold.
+func (s *condensableSpanSet) estimateSize(spans []roachpb.Span, mergeThresholdBytes int64) int64 {
+	var bytes int64
+	for _, sp := range spans {
+		bytes += spanSize(sp)
+	}
+	{
+		estimate := s.bytes + bytes
+		if estimate <= mergeThresholdBytes {
+			return estimate
+		}
+	}
+
+	// Merge and de-dupe in the hope of saving some space.
+
+	// First, merge the existing spans in-place. Doing it in-place instead of
+	// operating on a copy avoids the risk of quadratic behavior over a series of
+	// estimateSize() calls, where each call has to repeatedly merge a copy in
+	// order to discover that the merge saves enough space to stay under the
+	// threshold.
+	s.mergeAndSort()
+
+	// See if merging s was enough.
+	estimate := s.bytes + bytes
+	if estimate <= mergeThresholdBytes {
+		return estimate
+	}
+
+	// Try harder - merge (a copy of) the existing spans with the new spans.
+	spans = append(spans, s.s...)
+	lenBeforeMerge := len(spans)
+	spans, _ = roachpb.MergeSpans(&spans)
+	if len(spans) == lenBeforeMerge {
+		// Nothing changed -i.e. we failed to merge any spans.
+		return estimate
+	}
+	// Recompute the size.
+	bytes = 0
+	for _, sp := range spans {
+		bytes += spanSize(sp)
+	}
+	return bytes
+}
+
+// bytesSize returns the size of the tracked spans.
+func (s *condensableSpanSet) bytesSize() int64 {
+	return s.bytes
 }
 
 func spanSize(sp roachpb.Span) int64 {

@@ -1047,6 +1047,13 @@ var charts = []sectionDescription{
 					"txn.condensed_intent_spans_gauge",
 				},
 			},
+			{
+				Title:       "Intents condensing - transactions rejected",
+				Downsampler: DescribeAggregator_MAX,
+				Metrics: []string{
+					"txn.condensed_intent_spans_rejected",
+				},
+			},
 		},
 	},
 	{
