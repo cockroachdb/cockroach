@@ -222,6 +222,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData.PreferLookupJoinsForFKs = false
 	notStale()
 
+	// Stale improve disjunction selectivity.
+	evalCtx.SessionData.OptimizerImproveDisjunctionSelectivity = true
+	stale()
+	evalCtx.SessionData.OptimizerImproveDisjunctionSelectivity = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()

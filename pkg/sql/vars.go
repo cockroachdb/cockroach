@@ -654,6 +654,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_improve_disjunction_selectivity`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_improve_disjunction_selectivity`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_improve_disjunction_selectivity", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerImproveDisjunctionSelectivity(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.OptimizerImproveDisjunctionSelectivity)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(optImproveDisjunctionSelectivityEnabled.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`locality_optimized_partitioned_index_scan`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`locality_optimized_partitioned_index_scan`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

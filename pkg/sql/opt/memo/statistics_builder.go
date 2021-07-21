@@ -15,7 +15,6 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -24,16 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-)
-
-// improveDisjunctionSelectivityEnabled indicates whether we should try to
-// improve selectivity calculations for filters with disjunctions by unioning
-// the selectivity of each side of the disjunction. This may lead to more
-// efficient query plans in some cases.
-var improveDisjunctionSelectivityEnabled = settings.RegisterBoolSetting(
-	"sql.optimizer_improve_disjunction_selectivity.enabled",
-	"enables improved selectivity calculations for queries with disjunctions",
-	false,
 )
 
 var statsAnnID = opt.NewTableAnnID()
@@ -2995,7 +2984,7 @@ func (sb *statisticsBuilder) applyFiltersItem(
 				numUnappliedConjuncts++
 			}
 		}
-	case improveDisjunctionSelectivityEnabled.Get(&sb.evalCtx.Settings.SV):
+	case e.Memo().improveDisjunctionSelectivity:
 		if constraintUnion := sb.buildDisjunctionConstraints(filter); len(constraintUnion) > 0 {
 			// The filters are one or more disjunctions and tight constraint sets
 			// could be built for each.
