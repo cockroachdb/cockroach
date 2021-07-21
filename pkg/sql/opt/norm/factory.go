@@ -191,6 +191,11 @@ func (f *Factory) CustomFuncs() *CustomFuncs {
 	return &f.funcs
 }
 
+// EvalContext returns the *tree.EvalContext of the factory.
+func (f *Factory) EvalContext() *tree.EvalContext {
+	return f.evalCtx
+}
+
 // CopyAndReplace builds this factory's memo by constructing a copy of a subtree
 // that is part of another memo. That memo's metadata is copied to this
 // factory's memo so that tables and columns referenced by the copied memo can
