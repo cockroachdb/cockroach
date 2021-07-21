@@ -12,6 +12,7 @@ package main
 import (
 	"bytes"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -20,6 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/errors"
 )
 
 // SourceDir is an enumeration of possible output locations.
@@ -204,6 +207,32 @@ func (w watcher) stageBinaryArtifacts() error {
 			copyContentTo)
 		if err != nil {
 			return err
+		}
+	}
+	for _, bin := range w.info.cmakeTargets {
+		// These targets don't have stable, predictable locations, so
+		// they have to be hardcoded.
+		var ext string
+		if usingCrossWindowsConfig() {
+			ext = "dll"
+		} else if usingCrossDarwinConfig() {
+			ext = "dylib"
+		} else {
+			ext = "so"
+		}
+		switch bin {
+		case "//c-deps:libgeos":
+			for _, relBinPath := range []string{
+				fmt.Sprintf("c-deps/libgeos/lib/libgeos_c.%s", ext),
+				fmt.Sprintf("c-deps/libgeos/lib/libgeos.%s", ext),
+			} {
+				err := w.maybeStageArtifact(binSourceDir, relBinPath, 0666, finalizePhase, copyContentTo)
+				if err != nil {
+					return err
+				}
+			}
+		default:
+			return errors.Newf("Unrecognized cmake target %s", bin)
 		}
 	}
 	return nil
