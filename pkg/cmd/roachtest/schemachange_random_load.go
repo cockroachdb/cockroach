@@ -29,6 +29,7 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 		Name:       "schemachange/random-load",
 		Owner:      OwnerSQLSchema,
 		Cluster:    makeClusterSpec(3),
+		Skip:       "Skipped until 21.2 due to stability issues",
 		MinVersion: "v20.1.0",
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
