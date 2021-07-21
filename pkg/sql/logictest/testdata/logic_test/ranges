@@ -313,7 +313,8 @@ start_key                          start_pretty                   end_key       
 [176]                              /Table/40                      [177]                              /Table/41                      system         migrations                       ·           {1}       1
 [177]                              /Table/41                      [178]                              /Table/42                      system         join_tokens                      ·           {1}       1
 [178]                              /Table/42                      [179]                              /Table/43                      system         statement_statistics             ·           {1}       1
-[179]                              /Table/43                      [189 137]                          /Table/53/1                    system         transaction_statistics           ·           {1}       1
+[179]                              /Table/43                      [180]                              /Table/44                      system         transaction_statistics           ·           {1}       1
+[180]                              /Table/44                      [189 137]                          /Table/53/1                    system         database_role_settings           ·           {1}       1
 [189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1
@@ -375,7 +376,8 @@ start_key                          start_pretty                   end_key       
 [176]                              /Table/40                      [177]                              /Table/41                      system         migrations                       ·           {1}       1
 [177]                              /Table/41                      [178]                              /Table/42                      system         join_tokens                      ·           {1}       1
 [178]                              /Table/42                      [179]                              /Table/43                      system         statement_statistics             ·           {1}       1
-[179]                              /Table/43                      [189 137]                          /Table/53/1                    system         transaction_statistics           ·           {1}       1
+[179]                              /Table/43                      [180]                              /Table/44                      system         transaction_statistics           ·           {1}       1
+[180]                              /Table/44                      [189 137]                          /Table/53/1                    system         database_role_settings           ·           {1}       1
 [189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1

@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "migrations",
     srcs = [
+        "database_role_settings.go",
         "delete_deprecated_namespace_tabledesc.go",
         "fix_descriptor_migration.go",
         "foreign_key_representation_upgrade.go",

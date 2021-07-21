@@ -579,6 +579,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 			[][]string{
 				{"bank"},
 				{"comments"},
+				{"database_role_settings"},
 				{"jobs"},
 				{"locations"},
 				{"role_members"},
