@@ -126,7 +126,9 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 			)
 			// TODO(knz): print the error instead when the error package
 			// knows how to expose redactable strings.
-			log.Infof(ctx,
+			log.VEventf(
+				ctx,
+				1,
 				"skipping snapshot; replica is likely a %s in the process of being added: %s",
 				typ,
 				repDesc,
