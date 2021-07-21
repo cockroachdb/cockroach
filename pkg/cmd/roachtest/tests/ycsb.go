@@ -38,6 +38,12 @@ func registerYCSB(r registry.Registry) {
 	}
 
 	runYCSB := func(ctx context.Context, t test.Test, c cluster.Cluster, wl string, cpus int) {
+		// For now, we only want to run the zfs tests on GCE, since only GCE supports
+		// starting roachprod instances on zfs.
+		if c.Spec().FileSystem == spec.Zfs && c.Spec().Cloud != spec.GCE {
+			t.Skip("YCSB zfs benchmark can only be run on GCE", "")
+		}
+
 		nodes := c.Spec().NodeCount - 1
 
 		conc, ok := concurrencyConfigs[wl][cpus]
@@ -84,6 +90,17 @@ func registerYCSB(r registry.Registry) {
 					runYCSB(ctx, t, c, wl, cpus)
 				},
 			})
+
+			if wl == "A" {
+				r.Add(registry.TestSpec{
+					Name:    fmt.Sprintf("zfs/ycsb/%s/nodes=3/cpu=%d", wl, cpus),
+					Owner:   registry.OwnerStorage,
+					Cluster: r.MakeClusterSpec(4, spec.CPU(cpus), spec.SetFileSystem(spec.Zfs)),
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runYCSB(ctx, t, c, wl, cpus)
+					},
+				})
+			}
 		}
 	}
 }

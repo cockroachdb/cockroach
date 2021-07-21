@@ -156,3 +156,17 @@ func (*preferSSDOption) apply(spec *ClusterSpec) {
 func PreferSSD() Option {
 	return &preferSSDOption{}
 }
+
+type setFileSystem struct {
+	fs fileSystemType
+}
+
+func (s *setFileSystem) apply(spec *ClusterSpec) {
+	spec.FileSystem = s.fs
+}
+
+// SetFileSystem is an Option which can be used to set
+// the underlying file system to be used.
+func SetFileSystem(fs fileSystemType) Option {
+	return &setFileSystem{fs}
+}
