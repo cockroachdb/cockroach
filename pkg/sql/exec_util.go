@@ -1033,6 +1033,9 @@ type ExecutorTestingKnobs struct {
 	// AfterExecCmd is called after successful execution of any command.
 	AfterExecCmd func(ctx context.Context, cmd Command, buf *StmtBuf)
 
+	// BeforeRestart is called before a transaction restarts.
+	BeforeRestart func(ctx context.Context, reason error)
+
 	// DisableAutoCommit, if set, disables the auto-commit functionality of some
 	// SQL statements. That functionality allows some statements to commit
 	// directly when they're executed in an implicit SQL txn, without waiting for
@@ -1939,6 +1942,11 @@ func (st *SessionTracing) TracePlanCheckEnd(ctx context.Context, err error, dist
 	} else {
 		log.VEventfDepth(ctx, 2, 1, "will distribute plan: %v", dist)
 	}
+}
+
+// TraceRetryInformation conditionally emits a trace message for retry information.
+func (st *SessionTracing) TraceRetryInformation(ctx context.Context, retries int, err error) {
+	log.VEventfDepth(ctx, 2, 1, "executing after %d retries, last retry reason: %v", retries, err)
 }
 
 // TraceExecStart conditionally emits a trace message at the moment
