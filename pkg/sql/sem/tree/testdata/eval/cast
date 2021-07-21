@@ -1214,3 +1214,13 @@ eval
 'abc'::string::"char"
 ----
 'a'
+
+eval
+'null'::jsonb::geography
+----
+NULL
+
+eval
+'null'::jsonb::geometry
+----
+NULL
