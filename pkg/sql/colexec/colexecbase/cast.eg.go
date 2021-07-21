@@ -10,9 +10,11 @@
 package colexecbase
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
@@ -25,12 +27,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // Workaround for bazel auto-generated code. goimports does not automatically
@@ -39,7 +45,28 @@ var (
 	_ coldataext.Datum
 	_ duration.Duration
 	_ json.JSON
+	_ = lex.DecodeRawBytesToByteArrayAuto
+	_ = uuid.FromBytes
+	_ = oid.T_name
+	_ = util.TruncateString
 )
+
+func isIdentityCast(fromType, toType *types.T) bool {
+	if fromType.Identical(toType) {
+		return true
+	}
+	if fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily {
+		// Casts between floats are identical because all floats are represented
+		// by float64 physically.
+		return true
+	}
+	if fromType.Family() == types.UuidFamily && toType.Family() == types.BytesFamily {
+		// The cast from UUID to Bytes is an identity because we don't need to
+		// perform any conversion since both are represented in the same way.
+		return true
+	}
+	return false
+}
 
 func GetCastOperator(
 	allocator *colmem.Allocator,
@@ -59,11 +86,7 @@ func GetCastOperator(
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{castOpBase: base}, nil
 	}
-	if toType.Identical(fromType) || (fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily) {
-		// We either have an identity cast or we have a cast between floats (and
-		// all floats are represented by float64 physically, so they are
-		// essentially identical too), so we use a custom identity cast
-		// operator.
+	if isIdentityCast(fromType, toType) {
 		return &castIdentityOp{castOpBase: base}, nil
 	}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
@@ -361,16 +384,73 @@ func GetCastOperator(
 					}
 				}
 			}
+		case types.BytesFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castBytesUuidOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.StringFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringBoolOp{castOpBase: base}, nil
+					}
+				case types.BytesFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringBytesOp{castOpBase: base}, nil
+					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringStringOp{castOpBase: base}, nil
+					}
+				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringUuidOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.JsonFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castJsonbStringOp{castOpBase: base}, nil
+					}
+				}
+			}
 		}
 	}
-	return nil, errors.Errorf("unhandled cast %s -> %s", fromType, toType)
+	return nil, errors.Errorf("unhandled cast %s -> %s", fromType.SQLString(), toType.SQLString())
 }
 
 func IsCastSupported(fromType, toType *types.T) bool {
 	if fromType.Family() == types.UnknownFamily {
 		return true
 	}
-	if toType.Identical(fromType) || (fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily) {
+	if isIdentityCast(fromType, toType) {
 		return true
 	}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
@@ -668,6 +748,63 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					}
 				}
 			}
+		case types.BytesFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.StringFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.BytesFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.JsonFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
 		}
 	}
 	return false
@@ -910,50 +1047,52 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Bool()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Float64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = 0
-						if v {
-							r = 1
-						}
+							r = 0
+							if v {
+								r = 1
+							}
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = 0
-						if v {
-							r = 1
-						}
+							r = 0
+							if v {
+								r = 1
+							}
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -961,38 +1100,46 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = 0
-						if v {
-							r = 1
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = 0
-						if v {
-							r = 1
+							r = 0
+							if v {
+								r = 1
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1024,50 +1171,52 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Bool()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int16()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						r = 0
-						if v {
-							r = 1
-						}
+							r = 0
+							if v {
+								r = 1
+							}
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						r = 0
-						if v {
-							r = 1
-						}
+							r = 0
+							if v {
+								r = 1
+							}
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -1075,38 +1224,46 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						r = 0
-						if v {
-							r = 1
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						r = 0
-						if v {
-							r = 1
+							r = 0
+							if v {
+								r = 1
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1138,50 +1295,52 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Bool()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int32()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						r = 0
-						if v {
-							r = 1
-						}
+							r = 0
+							if v {
+								r = 1
+							}
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						r = 0
-						if v {
-							r = 1
-						}
+							r = 0
+							if v {
+								r = 1
+							}
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -1189,38 +1348,46 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						r = 0
-						if v {
-							r = 1
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						r = 0
-						if v {
-							r = 1
+							r = 0
+							if v {
+								r = 1
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1252,50 +1419,52 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Bool()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						r = 0
-						if v {
-							r = 1
-						}
+							r = 0
+							if v {
+								r = 1
+							}
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						r = 0
-						if v {
-							r = 1
-						}
+							r = 0
+							if v {
+								r = 1
+							}
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -1303,38 +1472,46 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						r = 0
-						if v {
-							r = 1
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						r = 0
-						if v {
-							r = 1
+							r = 0
+							if v {
+								r = 1
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1366,40 +1543,42 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Decimal()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bool()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+							r = v.Sign() != 0
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r bool
-						r = v.Sign() != 0
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
+							r = v.Sign() != 0
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
-						r = v.Sign() != 0
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1407,28 +1586,36 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r bool
-						r = v.Sign() != 0
-						outputCol.Set(tupleIdx, r)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+							r = v.Sign() != 0
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
-						r = v.Sign() != 0
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
+							r = v.Sign() != 0
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -1465,78 +1652,80 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Decimal()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int16()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+
+								shifted := _i >> uint(15)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+								r = int16(_i)
+
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r int16
-
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
-							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-
-							shifted := _i >> uint(15)
-							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(_i)
-
-						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+
+								shifted := _i >> uint(15)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+								r = int16(_i)
+
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
-
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
-							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-
-							shifted := _i >> uint(15)
-							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(_i)
-
-						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1544,66 +1733,74 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int16
-
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+
+								shifted := _i >> uint(15)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+								r = int16(_i)
+
 							}
 
-							shifted := _i >> uint(15)
-							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(_i)
-
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
-
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+
+								shifted := _i >> uint(15)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+								r = int16(_i)
+
 							}
 
-							shifted := _i >> uint(15)
-							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(_i)
-
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1640,78 +1837,80 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Decimal()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int32()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+
+								shifted := _i >> uint(31)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+								r = int32(_i)
+
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r int32
-
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
-							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-
-							shifted := _i >> uint(31)
-							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(_i)
-
-						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+
+								shifted := _i >> uint(31)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+								r = int32(_i)
+
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
-
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
-							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-
-							shifted := _i >> uint(31)
-							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(_i)
-
-						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1719,66 +1918,74 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int32
-
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+
+								shifted := _i >> uint(31)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+								r = int32(_i)
+
 							}
 
-							shifted := _i >> uint(31)
-							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(_i)
-
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
-
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+
+								shifted := _i >> uint(31)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+								r = int32(_i)
+
 							}
 
-							shifted := _i >> uint(31)
-							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(_i)
-
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1815,66 +2022,68 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Decimal()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int64
-
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							}
-							r = int64(_i)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						outputCol.Set(tupleIdx, r)
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+								}
+								r = int64(_i)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							}
-							r = int64(_i)
-						}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+								}
+								r = int64(_i)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -1882,54 +2091,62 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+								}
+								r = int64(_i)
 							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							}
-							r = int64(_i)
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						{
-							tmpDec := &_overloadHelper.TmpDec1
-							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+							{
+								tmpDec := &_overloadHelper.TmpDec1
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								_i, err := tmpDec.Int64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+								}
+								r = int64(_i)
 							}
-							_i, err := tmpDec.Int64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							}
-							r = int64(_i)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1961,56 +2178,58 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Decimal()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Float64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						{
-							f, err := v.Float64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = f
-						}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						outputCol.Set(tupleIdx, r)
+							{
+								f, err := v.Float64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+								}
+								r = f
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						{
-							f, err := v.Float64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = f
-						}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								f, err := v.Float64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+								}
+								r = f
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -2018,44 +2237,52 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						{
-							f, err := v.Float64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = f
-						}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						outputCol.Set(tupleIdx, r)
+							{
+								f, err := v.Float64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+								}
+								r = f
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						{
-							f, err := v.Float64()
-							if err != nil {
-								colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = f
-						}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								f, err := v.Float64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+								}
+								r = f
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -2087,50 +2314,52 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Decimal()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Decimal()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.Set(&v)
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
+							r.Set(&v)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.Set(&v)
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
+							r.Set(&v)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -2138,38 +2367,46 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.Set(&v)
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
+							r.Set(&v)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.Set(&v)
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
+							r.Set(&v)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2201,40 +2438,42 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int32()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+							r = int32(v)
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r int32
-						r = int32(v)
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
+							r = int32(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
-						r = int32(v)
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2242,28 +2481,36 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int32
-						r = int32(v)
-						outputCol.Set(tupleIdx, r)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+							r = int32(v)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
-						r = int32(v)
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
+							r = int32(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -2295,40 +2542,42 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2336,28 +2585,36 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						outputCol.Set(tupleIdx, r)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -2389,44 +2646,46 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bool()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						r = v != 0
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						r = v != 0
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2434,32 +2693,40 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r bool
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						r = v != 0
+							r = v != 0
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						r = v != 0
+							r = v != 0
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -2491,52 +2758,54 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Decimal()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						r.SetInt64(int64(v))
-
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						r.SetInt64(int64(v))
-
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2544,40 +2813,48 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.SetInt64(int64(v))
+							r.SetInt64(int64(v))
 
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.SetInt64(int64(v))
+							r.SetInt64(int64(v))
 
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2609,44 +2886,46 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Float64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						r = float64(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						r = float64(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2654,32 +2933,40 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = float64(v)
+							r = float64(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = float64(v)
+							r = float64(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -2711,52 +2998,54 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int16()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-						}
-						r = int16(v)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-						}
-						r = int16(v)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -2764,40 +3053,48 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int16(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int16(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2829,40 +3126,42 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2870,28 +3169,36 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						outputCol.Set(tupleIdx, r)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -2923,44 +3230,46 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bool()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						r = v != 0
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						r = v != 0
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2968,32 +3277,40 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r bool
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						r = v != 0
+							r = v != 0
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						r = v != 0
+							r = v != 0
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -3025,52 +3342,54 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Decimal()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						r.SetInt64(int64(v))
-
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						r.SetInt64(int64(v))
-
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3078,40 +3397,48 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.SetInt64(int64(v))
+							r.SetInt64(int64(v))
 
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.SetInt64(int64(v))
+							r.SetInt64(int64(v))
 
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3143,44 +3470,46 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int32()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Float64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						r = float64(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						r = float64(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3188,32 +3517,40 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = float64(v)
+							r = float64(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = float64(v)
+							r = float64(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -3245,52 +3582,54 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int16()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-						}
-						r = int16(v)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-						}
-						r = int16(v)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -3298,40 +3637,48 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int16(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int16(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3363,52 +3710,54 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int32()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						shifted := v >> uint(31)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-						}
-						r = int32(v)
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						shifted := v >> uint(31)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-						}
-						r = int32(v)
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -3416,40 +3765,48 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						shifted := v >> uint(31)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int32(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						shifted := v >> uint(31)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int32(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3481,44 +3838,46 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bool()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						r = v != 0
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						r = v != 0
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3526,32 +3885,40 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r bool
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						r = v != 0
+							r = v != 0
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						r = v != 0
+							r = v != 0
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -3583,52 +3950,54 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Decimal()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						r.SetInt64(int64(v))
-
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						r.SetInt64(int64(v))
-
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3636,40 +4005,48 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.SetInt64(int64(v))
+							r.SetInt64(int64(v))
 
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.SetInt64(int64(v))
+							r.SetInt64(int64(v))
 
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3701,44 +4078,46 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Float64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						r = float64(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						r = float64(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3746,32 +4125,40 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = float64(v)
+							r = float64(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = float64(v)
+							r = float64(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -3803,44 +4190,46 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bool()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						r = v != 0
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						r = v != 0
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3848,32 +4237,40 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r bool
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						r = v != 0
+							r = v != 0
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						r = v != 0
+							r = v != 0
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -3905,56 +4302,58 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Decimal()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						if _, err := r.SetFloat64(float64(v)); err != nil {
-							colexecerror.ExpectedError(err)
-						}
+							if _, err := r.SetFloat64(float64(v)); err != nil {
+								colexecerror.ExpectedError(err)
+							}
 
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						if _, err := r.SetFloat64(float64(v)); err != nil {
-							colexecerror.ExpectedError(err)
-						}
+							if _, err := r.SetFloat64(float64(v)); err != nil {
+								colexecerror.ExpectedError(err)
+							}
 
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -3962,44 +4361,52 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						if _, err := r.SetFloat64(float64(v)); err != nil {
-							colexecerror.ExpectedError(err)
+							if _, err := r.SetFloat64(float64(v)); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						if _, err := r.SetFloat64(float64(v)); err != nil {
-							colexecerror.ExpectedError(err)
+							if _, err := r.SetFloat64(float64(v)); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4031,50 +4438,52 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int16()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						r = int16(v)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int16(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						r = int16(v)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int16(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -4082,38 +4491,46 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int16(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int16(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int16(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int16(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4145,50 +4562,52 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int32()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						r = int32(v)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int32(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						r = int32(v)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int32(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -4196,38 +4615,46 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int32(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int32(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int32(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int32(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4259,50 +4686,52 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Float64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						r = int64(v)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int64(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						r = int64(v)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int64(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -4310,38 +4739,46 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int64(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int64(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int64(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4373,52 +4810,54 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int16()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-						}
-						r = int16(v)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-						}
-						r = int16(v)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -4426,40 +4865,48 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int16(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						shifted := v >> uint(15)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int16(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4491,52 +4938,54 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int32()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						shifted := v >> uint(31)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-						}
-						r = int32(v)
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						shifted := v >> uint(31)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-						}
-						r = int32(v)
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -4544,40 +4993,48 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						shifted := v >> uint(31)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int32(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						shifted := v >> uint(31)
-						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						r = int32(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4609,40 +5066,42 @@ func (c *castDateIntOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4650,28 +5109,36 @@ func (c *castDateIntOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						outputCol.Set(tupleIdx, r)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = int64(v)
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -4703,44 +5170,46 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Float64()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						r = float64(v)
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						r = float64(v)
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4748,32 +5217,40 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = float64(v)
+							r = float64(v)
 
-						outputCol.Set(tupleIdx, r)
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						r = float64(v)
+							r = float64(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -4805,52 +5282,54 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Decimal()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						r.SetInt64(int64(v))
-
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						r.SetInt64(int64(v))
-
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4858,40 +5337,872 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.SetInt64(int64(v))
+							r.SetInt64(int64(v))
 
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
 						}
-
-						outputCol.Set(tupleIdx, r)
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
+					{
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						r.SetInt64(int64(v))
+							r.SetInt64(int64(v))
 
-						if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-							colexecerror.ExpectedError(err)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
 						}
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+type castBytesUuidOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castBytesUuidOp{}
+var _ colexecop.ClosableOperator = &castBytesUuidOp{}
+
+func (c *castBytesUuidOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castStringBoolOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringBoolOp{}
+var _ colexecop.ClosableOperator = &castStringBoolOp{}
+
+func (c *castStringBoolOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							var err error
+							r, err = tree.ParseBool(string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							var err error
+							r, err = tree.ParseBool(string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							var err error
+							r, err = tree.ParseBool(string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							var err error
+							r, err = tree.ParseBool(string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castStringBytesOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringBytesOp{}
+var _ colexecop.ClosableOperator = &castStringBytesOp{}
+
+func (c *castStringBytesOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							var err error
+							r, err = lex.DecodeRawBytesToByteArrayAuto(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							var err error
+							r, err = lex.DecodeRawBytesToByteArrayAuto(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							var err error
+							r, err = lex.DecodeRawBytesToByteArrayAuto(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							var err error
+							r, err = lex.DecodeRawBytesToByteArrayAuto(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castStringStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringStringOp{}
+var _ colexecop.ClosableOperator = &castStringStringOp{}
+
+func (c *castStringStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_name {
+								// For Names we don't perform the truncation, and there is no need
+								// to do anything about the Oids since those are stored in the type.
+								r = v
+							} else {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									v = bytes.TrimRight(v, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									// TODO(yuzefovich): figure out whether we can avoid converting
+									// to a string.
+									v = []byte(util.TruncateString(string(v), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									// TODO(yuzefovich): figure out whether we can avoid converting
+									// to a string.
+									v = []byte(util.TruncateString(string(v), 1))
+								}
+								r = v
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_name {
+								// For Names we don't perform the truncation, and there is no need
+								// to do anything about the Oids since those are stored in the type.
+								r = v
+							} else {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									v = bytes.TrimRight(v, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									// TODO(yuzefovich): figure out whether we can avoid converting
+									// to a string.
+									v = []byte(util.TruncateString(string(v), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									// TODO(yuzefovich): figure out whether we can avoid converting
+									// to a string.
+									v = []byte(util.TruncateString(string(v), 1))
+								}
+								r = v
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_name {
+								// For Names we don't perform the truncation, and there is no need
+								// to do anything about the Oids since those are stored in the type.
+								r = v
+							} else {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									v = bytes.TrimRight(v, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									// TODO(yuzefovich): figure out whether we can avoid converting
+									// to a string.
+									v = []byte(util.TruncateString(string(v), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									// TODO(yuzefovich): figure out whether we can avoid converting
+									// to a string.
+									v = []byte(util.TruncateString(string(v), 1))
+								}
+								r = v
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_name {
+								// For Names we don't perform the truncation, and there is no need
+								// to do anything about the Oids since those are stored in the type.
+								r = v
+							} else {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									v = bytes.TrimRight(v, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									// TODO(yuzefovich): figure out whether we can avoid converting
+									// to a string.
+									v = []byte(util.TruncateString(string(v), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									// TODO(yuzefovich): figure out whether we can avoid converting
+									// to a string.
+									v = []byte(util.TruncateString(string(v), 1))
+								}
+								r = v
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castStringUuidOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringUuidOp{}
+var _ colexecop.ClosableOperator = &castStringUuidOp{}
+
+func (c *castStringUuidOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromString(string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromString(string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromString(string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromString(string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+			batch.SetLength(n)
+		},
+	)
+	return batch
+}
+
+type castJsonbStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castJsonbStringOp{}
+var _ colexecop.ClosableOperator = &castJsonbStringOp{}
+
+func (c *castJsonbStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.JSON()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_string := v.String()
+							switch toType.Oid() {
+							case oid.T_char:
+								// "char" is supposed to truncate long values.
+								_string = util.TruncateString(_string, 1)
+							case oid.T_bpchar:
+								// bpchar types truncate trailing whitespace.
+								_string = strings.TrimRight(_string, " ")
+							}
+							r = []byte(_string)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_string := v.String()
+							switch toType.Oid() {
+							case oid.T_char:
+								// "char" is supposed to truncate long values.
+								_string = util.TruncateString(_string, 1)
+							case oid.T_bpchar:
+								// bpchar types truncate trailing whitespace.
+								_string = strings.TrimRight(_string, " ")
+							}
+							r = []byte(_string)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_string := v.String()
+							switch toType.Oid() {
+							case oid.T_char:
+								// "char" is supposed to truncate long values.
+								_string = util.TruncateString(_string, 1)
+							case oid.T_bpchar:
+								// bpchar types truncate trailing whitespace.
+								_string = strings.TrimRight(_string, " ")
+							}
+							r = []byte(_string)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_string := v.String()
+							switch toType.Oid() {
+							case oid.T_char:
+								// "char" is supposed to truncate long values.
+								_string = util.TruncateString(_string, 1)
+							case oid.T_bpchar:
+								// bpchar types truncate trailing whitespace.
+								_string = strings.TrimRight(_string, " ")
+							}
+							r = []byte(_string)
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -4923,57 +6234,57 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bool()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(bool)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(bool)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(bool)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(bool)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -4981,44 +6292,50 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(bool)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(bool)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(bool)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r bool
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(bool)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -5050,57 +6367,57 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int16()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int16
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int16)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int16)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int16)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int16)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -5108,44 +6425,50 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int16
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int16)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int16)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int16)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int16
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int16)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -5177,57 +6500,57 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int32()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int32
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int32)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int32)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int32)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int32)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -5235,44 +6558,50 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int32
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int32)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int32)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int32)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int32
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int32)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -5304,57 +6633,57 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int64)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int64)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -5362,44 +6691,50 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int64)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int64)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -5431,57 +6766,57 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Float64()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(float64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(float64)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(float64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(float64)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -5489,44 +6824,50 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(float64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(float64)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(float64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r float64
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(float64)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -5558,57 +6899,57 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Decimal()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(apd.Decimal)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(apd.Decimal)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(apd.Decimal)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(apd.Decimal)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -5616,44 +6957,50 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(apd.Decimal)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(apd.Decimal)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r apd.Decimal
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(apd.Decimal)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(apd.Decimal)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -5685,57 +7032,57 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int64)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int64)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -5743,44 +7090,50 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int64)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(int64)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r int64
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(int64)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -5812,57 +7165,57 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Timestamp()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r time.Time
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(time.Time)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(time.Time)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r time.Time
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(time.Time)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(time.Time)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -5870,44 +7223,50 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r time.Time
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(time.Time)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(time.Time)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r time.Time
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(time.Time)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(time.Time)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -5939,57 +7298,57 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Interval()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r duration.Duration
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(duration.Duration)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r duration.Duration
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(duration.Duration)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r duration.Duration
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(duration.Duration)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r duration.Duration
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(duration.Duration)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -5997,44 +7356,50 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r duration.Duration
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(duration.Duration)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r duration.Duration
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(duration.Duration)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r duration.Duration
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(duration.Duration)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r duration.Duration
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(duration.Duration)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -6066,55 +7431,55 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -6122,42 +7487,48 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -6189,55 +7560,55 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -6245,42 +7616,48 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -6312,57 +7689,57 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Timestamp()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r time.Time
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(time.Time)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(time.Time)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r time.Time
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(time.Time)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(time.Time)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -6370,44 +7747,50 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r time.Time
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(time.Time)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(time.Time)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r time.Time
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(time.Time)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(time.Time)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -6439,55 +7822,55 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -6495,42 +7878,48 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r []byte
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).([]byte)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).([]byte)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -6562,55 +7951,55 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.JSON()
 			outputNulls := outputVec.Nulls()
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r json.JSON
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(json.JSON)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r json.JSON
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(json.JSON)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r json.JSON
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(json.JSON)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r json.JSON
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(json.JSON)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			} else {
@@ -6618,42 +8007,48 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r json.JSON
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(json.JSON)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r json.JSON
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(json.JSON)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r json.JSON
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = converter(_castedDatum).(json.JSON)
-						}
+							v := inputCol.Get(tupleIdx)
+							var r json.JSON
 
-						outputCol.Set(tupleIdx, r)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(json.JSON)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
 					}
 				}
 			}
@@ -6685,65 +8080,65 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Datum()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r interface{}
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = _castedDatum
-						}
+							v := inputCol.Get(tupleIdx)
+							var r interface{}
 
-						outputCol.Set(tupleIdx, r)
-						// Casting to datum-backed vector might produce a null value on
-						// non-null tuple, so we need to check that case after the cast was
-						// performed.
-						if r == tree.DNull {
-							outputNulls.SetNull(tupleIdx)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = _castedDatum
+							}
+
+							outputCol.Set(tupleIdx, r)
+							// Casting to datum-backed vector might produce a null value on
+							// non-null tuple, so we need to check that case after the cast was
+							// performed.
+							if r == tree.DNull {
+								outputNulls.SetNull(tupleIdx)
+							}
 						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r interface{}
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = _castedDatum
-						}
+							v := inputCol.Get(tupleIdx)
+							var r interface{}
 
-						outputCol.Set(tupleIdx, r)
-						// Casting to datum-backed vector might produce a null value on
-						// non-null tuple, so we need to check that case after the cast was
-						// performed.
-						if r == tree.DNull {
-							outputNulls.SetNull(tupleIdx)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = _castedDatum
+							}
+
+							outputCol.Set(tupleIdx, r)
+							// Casting to datum-backed vector might produce a null value on
+							// non-null tuple, so we need to check that case after the cast was
+							// performed.
+							if r == tree.DNull {
+								outputNulls.SetNull(tupleIdx)
+							}
 						}
 					}
 				}
@@ -6752,53 +8147,59 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r interface{}
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = _castedDatum
-						}
+							v := inputCol.Get(tupleIdx)
+							var r interface{}
 
-						outputCol.Set(tupleIdx, r)
-						// Casting to datum-backed vector might produce a null value on
-						// non-null tuple, so we need to check that case after the cast was
-						// performed.
-						if r == tree.DNull {
-							outputNulls.SetNull(tupleIdx)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = _castedDatum
+							}
+
+							outputCol.Set(tupleIdx, r)
+							// Casting to datum-backed vector might produce a null value on
+							// non-null tuple, so we need to check that case after the cast was
+							// performed.
+							if r == tree.DNull {
+								outputNulls.SetNull(tupleIdx)
+							}
 						}
 					}
 				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r interface{}
-
-						{
-							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+					{
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
 							}
-							r = _castedDatum
-						}
+							v := inputCol.Get(tupleIdx)
+							var r interface{}
 
-						outputCol.Set(tupleIdx, r)
-						// Casting to datum-backed vector might produce a null value on
-						// non-null tuple, so we need to check that case after the cast was
-						// performed.
-						if r == tree.DNull {
-							outputNulls.SetNull(tupleIdx)
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = _castedDatum
+							}
+
+							outputCol.Set(tupleIdx, r)
+							// Casting to datum-backed vector might produce a null value on
+							// non-null tuple, so we need to check that case after the cast was
+							// performed.
+							if r == tree.DNull {
+								outputNulls.SetNull(tupleIdx)
+							}
 						}
 					}
 				}
@@ -6808,6 +8209,11 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 	)
 	return batch
 }
+
+// castTuples casts all non-null tuples from the vector named 'inputCol' to the
+// vector named 'outputCol'.
+// execgen:inline
+const _ = "template_castTuples"
 
 // setNativeToDatumCast performs the cast of the converted datum in
 // scratch[scratchIdx] to toType and sets the result into position outputIdx of
@@ -6832,3 +8238,23 @@ const _ = "inlined_setNativeToDatumCast_true_true"
 // outputCol (or into the output nulls bitmap).
 // execgen:inline
 const _ = "inlined_setNativeToDatumCast_false_true"
+
+// castTuples casts all non-null tuples from the vector named 'inputCol' to the
+// vector named 'outputCol'.
+// execgen:inline
+const _ = "inlined_castTuples_true_true"
+
+// castTuples casts all non-null tuples from the vector named 'inputCol' to the
+// vector named 'outputCol'.
+// execgen:inline
+const _ = "inlined_castTuples_true_false"
+
+// castTuples casts all non-null tuples from the vector named 'inputCol' to the
+// vector named 'outputCol'.
+// execgen:inline
+const _ = "inlined_castTuples_false_true"
+
+// castTuples casts all non-null tuples from the vector named 'inputCol' to the
+// vector named 'outputCol'.
+// execgen:inline
+const _ = "inlined_castTuples_false_false"

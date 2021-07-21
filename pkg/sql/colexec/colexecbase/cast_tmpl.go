@@ -34,12 +34,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // Workaround for bazel auto-generated code. goimports does not automatically
@@ -48,6 +52,10 @@ var (
 	_ coldataext.Datum
 	_ duration.Duration
 	_ json.JSON
+	_ = lex.DecodeRawBytesToByteArrayAuto
+	_ = uuid.FromBytes
+	_ = oid.T_name
+	_ = util.TruncateString
 )
 
 // {{/*
@@ -74,6 +82,23 @@ func _CAST(to, from, fromCol, toType interface{}) {
 
 // */}}
 
+func isIdentityCast(fromType, toType *types.T) bool {
+	if fromType.Identical(toType) {
+		return true
+	}
+	if fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily {
+		// Casts between floats are identical because all floats are represented
+		// by float64 physically.
+		return true
+	}
+	if fromType.Family() == types.UuidFamily && toType.Family() == types.BytesFamily {
+		// The cast from UUID to Bytes is an identity because we don't need to
+		// perform any conversion since both are represented in the same way.
+		return true
+	}
+	return false
+}
+
 func GetCastOperator(
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
@@ -92,11 +117,7 @@ func GetCastOperator(
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{castOpBase: base}, nil
 	}
-	if toType.Identical(fromType) || (fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily) {
-		// We either have an identity cast or we have a cast between floats (and
-		// all floats are represented by float64 physically, so they are
-		// essentially identical too), so we use a custom identity cast
-		// operator.
+	if isIdentityCast(fromType, toType) {
 		return &castIdentityOp{castOpBase: base}, nil
 	}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
@@ -144,14 +165,14 @@ func GetCastOperator(
 			// {{end}}
 		}
 	}
-	return nil, errors.Errorf("unhandled cast %s -> %s", fromType, toType)
+	return nil, errors.Errorf("unhandled cast %s -> %s", fromType.SQLString(), toType.SQLString())
 }
 
 func IsCastSupported(fromType, toType *types.T) bool {
 	if fromType.Family() == types.UnknownFamily {
 		return true
 	}
-	if toType.Identical(fromType) || (fromType.Family() == types.FloatFamily && toType.Family() == types.FloatFamily) {
+	if isIdentityCast(fromType, toType) {
 		return true
 	}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
@@ -427,27 +448,27 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec._FROM_TYPE()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec._TO_TYPE()
 			outputNulls := outputVec.Nulls()
 			// {{if and (eq $fromFamily "DatumVecCanonicalTypeFamily") (not (eq $toFamily "DatumVecCanonicalTypeFamily"))}}
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			// {{end}}
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					_CAST_TUPLES(true, true)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, true, true)
 				} else {
-					_CAST_TUPLES(true, false)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, true, false)
 				}
 			} else {
 				// We need to make sure that there are no left over null values
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					_CAST_TUPLES(false, true)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, false, true)
 				} else {
-					_CAST_TUPLES(false, false)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, false, false)
 				}
 			}
 			// {{/*
@@ -500,44 +521,52 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 
 // {{end}}
 
-// {{/*
-// This code snippet casts all non-null tuples from the vector named 'inputCol'
-// to the vector named 'outputCol'.
-func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
-	// {{define "castTuples" -}}
-	// {{$hasNulls := .HasNulls}}
-	// {{$hasSel := .HasSel}}
-	// {{with .Global}}
-	// {{if $hasSel}}
-	sel = sel[:n]
-	// {{else}}
-	// Remove bounds checks for inputCol[i] and outputCol[i].
-	_ = inputCol.Get(n - 1)
-	// {{if .Sliceable}}
-	_ = outputCol.Get(n - 1)
-	// {{end}}
-	// {{end}}
+// castTuples casts all non-null tuples from the vector named 'inputCol' to the
+// vector named 'outputCol'.
+// execgen:inline
+// execgen:template<hasNulls,hasSel>
+func castTuples(
+	inputCol interface{},
+	inputNulls *coldata.Nulls,
+	outputCol interface{},
+	outputNulls *coldata.Nulls,
+	toType *types.T,
+	n int,
+	sel []int,
+	hasNulls bool,
+	hasSel bool,
+) {
+	if !hasSel {
+		// {{if $fromInfo.Sliceable}}
+		_ = inputCol.Get(n - 1)
+		// {{end}}
+		// {{if .Sliceable}}
+		_ = outputCol.Get(n - 1)
+		// {{end}}
+	}
 	var tupleIdx int
 	for i := 0; i < n; i++ {
-		// {{if $hasSel}}
-		tupleIdx = sel[i]
-		// {{else}}
-		tupleIdx = i
-		// {{end}}
-		// {{if $hasNulls}}
-		if inputNulls.NullAt(tupleIdx) {
+		if hasSel {
+			tupleIdx = sel[i]
+		} else {
+			tupleIdx = i
+		}
+		if hasNulls && inputNulls.NullAt(tupleIdx) {
 			continue
 		}
-		// {{end}}
-		// {{if not $hasSel}}
-		//gcassert:bce
-		// {{end}}
+		if !hasSel {
+			// {{if $fromInfo.Sliceable}}
+			//gcassert:bce
+			// {{end}}
+		}
 		v := inputCol.Get(tupleIdx)
 		var r _TO_GO_TYPE
 		_CAST(r, v, inputCol, toType)
-		// {{if and (.Sliceable) (not $hasSel)}}
-		//gcassert:bce
-		// {{end}}
+		if !hasSel {
+			// {{if .Sliceable}}
+			//gcassert:bce
+			// {{end}}
+		}
 		outputCol.Set(tupleIdx, r)
 		// {{if eq .VecMethod "Datum"}}
 		// Casting to datum-backed vector might produce a null value on
@@ -548,9 +577,4 @@ func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
 		}
 		// {{end}}
 	}
-	// {{end}}
-	// {{end}}
-	// {{/*
 }
-
-// */}}
