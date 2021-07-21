@@ -907,11 +907,33 @@ const (
 	slowSpanMaxFrequency                   = 10 * time.Second
 )
 
+// jobState encapsulates changefeed job state.
 type jobState struct {
-	job                    *jobs.Job
-	lastRunStatusUpdate    time.Time
-	lastFrontierCheckpoint time.Time
-	settings               *cluster.Settings
+	job      *jobs.Job
+	settings *cluster.Settings
+	metrics  *Metrics
+	ts       timeutil.TimeSource
+
+	// The last time we updated job run status.
+	lastRunStatusUpdate time.Time
+	// The last time we updated job progress.
+	lastProgressUpdate time.Time
+	// How long checkpoint (job progress update) expected to take.
+	checkpointDuration time.Duration
+	// Flag set if we skip some updates due to rapid progress update requests.
+	progressUpdatesSkipped bool
+}
+
+func newJobState(
+	j *jobs.Job, st *cluster.Settings, metrics *Metrics, ts timeutil.TimeSource,
+) *jobState {
+	return &jobState{
+		job:                j,
+		settings:           st,
+		metrics:            metrics,
+		ts:                 ts,
+		lastProgressUpdate: ts.Now(),
+	}
 }
 
 func (j *jobState) canCheckpointFrontier() bool {
@@ -919,7 +941,52 @@ func (j *jobState) canCheckpointFrontier() bool {
 	if freq == 0 {
 		return false
 	}
-	return timeutil.Since(j.lastFrontierCheckpoint) > freq
+	return timeutil.Since(j.lastProgressUpdate) > freq
+}
+
+// canCheckpointHighWatermark returns true if we should update job high water mark (i.e. progress).
+// Normally, whenever frontier changes, we update high water mark.
+// However, if the rate of frontier changes is too high, we want to slow down
+// the frequency of job progress updates.  We do this by skipping some updates
+// if the time to update the job progress is greater than the delta between
+// previous and the current progress update time.
+func (j *jobState) canCheckpointHighWatermark(frontierChanged bool) bool {
+	if !(frontierChanged || j.progressUpdatesSkipped) {
+		return false
+	}
+
+	minAdvance := changefeedbase.MinHighWaterMarkCheckpointAdvance.Get(&j.settings.SV)
+	if j.checkpointDuration > 0 &&
+		j.ts.Now().Before(j.lastProgressUpdate.Add(j.checkpointDuration+minAdvance)) {
+		// Updates are too rapid; skip some.
+		j.progressUpdatesSkipped = true
+		return false
+	}
+
+	return true
+}
+
+// checkpointCompleted must be called when job checkpoint completes.
+// checkpointDuration indicates how long the checkpoint took.
+func (j *jobState) checkpointCompleted(ctx context.Context, checkpointDuration time.Duration) {
+	minAdvance := changefeedbase.MinHighWaterMarkCheckpointAdvance.Get(&j.settings.SV)
+	if j.progressUpdatesSkipped {
+		// Log message if we skipped updates for some time.
+		warnThreshold := 2 * minAdvance
+		if warnThreshold < 60*time.Second {
+			warnThreshold = 60 * time.Second
+		}
+		behind := j.ts.Now().Sub(j.lastProgressUpdate)
+		if behind > warnThreshold {
+			log.Warningf(ctx, "high water mark update delayed by %s; mean checkpoint duration %s",
+				behind, j.checkpointDuration)
+		}
+	}
+
+	j.metrics.CheckpointHistNanos.RecordValue(checkpointDuration.Nanoseconds())
+	j.lastProgressUpdate = j.ts.Now()
+	j.checkpointDuration = time.Duration(j.metrics.CheckpointHistNanos.Snapshot().Mean())
+	j.progressUpdatesSkipped = false
 }
 
 var _ execinfra.Processor = &changeFrontier{}
@@ -1031,11 +1098,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 			cf.MoveToDraining(err)
 			return
 		}
-		cf.js = &jobState{
-			job:                    job,
-			lastFrontierCheckpoint: timeutil.Now(),
-			settings:               cf.flowCtx.Cfg.Settings,
-		}
+		cf.js = newJobState(job, cf.flowCtx.Cfg.Settings, cf.metrics, timeutil.DefaultTimeSource{})
 
 		if changefeedbase.FrontierCheckpointFrequency.Get(&cf.flowCtx.Cfg.Settings.SV) == 0 {
 			log.Warning(ctx,
@@ -1219,9 +1282,11 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	// have no distributed state whatsoever. Because of this they also do not
 	// use protected timestamps.
 	if cf.js != nil {
-		if err := cf.maybeCheckpointJob(frontierChanged, isBehind); err != nil {
+		checkpointed, err := cf.maybeCheckpointJob(frontierChanged, isBehind)
+		if err != nil {
 			return err
 		}
+		frontierChanged = frontierChanged && checkpointed
 	}
 
 	if frontierChanged {
@@ -1240,7 +1305,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	return nil
 }
 
-func (cf *changeFrontier) maybeCheckpointJob(frontierChanged, isBehind bool) error {
+func (cf *changeFrontier) maybeCheckpointJob(frontierChanged, isBehind bool) (bool, error) {
 	// Update checkpoint if the frontier has not changed, but it is time to checkpoint.
 	// If the frontier has changed, we want to write an empty checkpoint record indicating
 	// that all spans have reached the frontier.
@@ -1252,18 +1317,18 @@ func (cf *changeFrontier) maybeCheckpointJob(frontierChanged, isBehind bool) err
 		checkpoint.Spans = cf.frontier.getCheckpointSpans(maxBytes)
 	}
 
-	if frontierChanged || updateCheckpoint {
-		cf.js.lastFrontierCheckpoint = timeutil.Now()
+	if updateCheckpoint || cf.js.canCheckpointHighWatermark(frontierChanged) {
 		checkpointStart := timeutil.Now()
 		if err := cf.checkpointJobProgress(
 			cf.frontier.Frontier(), frontierChanged, checkpoint, isBehind,
 		); err != nil {
-			return err
+			return false, err
 		}
-		cf.metrics.CheckpointHistNanos.RecordValue(timeutil.Since(checkpointStart).Nanoseconds())
+		cf.js.checkpointCompleted(cf.Ctx, timeutil.Since(checkpointStart))
+		return true, nil
 	}
 
-	return nil
+	return false, nil
 }
 
 // checkpointJobProgress checkpoints a changefeed-level job information.
@@ -1281,15 +1346,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 	if updateRunStatus {
 		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
 	}
-
-	updateStart := timeutil.Now()
-	defer func() {
-		elapsed := timeutil.Since(updateStart)
-		if elapsed > 5*time.Millisecond {
-			log.Warningf(cf.Ctx, "slow job progress update took %s", elapsed)
-		}
-	}()
-
 	cf.metrics.FrontierUpdates.Inc(1)
 
 	return cf.js.job.Update(cf.Ctx, nil, func(
