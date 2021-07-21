@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -275,4 +276,71 @@ func TestRegistryGCPagination(t *testing.T) {
 	var count int
 	db.QueryRow(t, `SELECT count(1) FROM system.jobs`).Scan(&count)
 	require.Zero(t, count)
+}
+
+func TestBatchJobsCreation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, test := range []struct {
+		name      string
+		batchSize int
+	}{
+		{"small batch", 10},
+		{"medium batch", 500},
+		{"large batch", 1000},
+		{"extra large batch", 10000},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			{
+				args := base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
+					},
+				}
+
+				ctx := context.Background()
+				s, sqlDB, kvDB := serverutils.StartServer(t, args)
+				tdb := sqlutils.MakeSQLRunner(sqlDB)
+				defer s.Stopper().Stop(ctx)
+				r := s.JobRegistry().(*Registry)
+
+				RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+					return FakeResumer{
+						OnResume: func(ctx context.Context) error {
+							return nil
+						},
+					}
+				})
+
+				// Create a batch of job specifications.
+				var jd []*Specification
+				for i := 0; i < test.batchSize; i++ {
+					jr := Record{
+						// TODO (sajjad): To discuss: I guess this job's type should be set in its
+						// payload based on Details. I was hoping that the type will be "IMPORT" in
+						// the jobs table when the job is created, but it occurred to be NULL. Why is that?
+						Details:  jobspb.ImportDetails{},
+						Progress: jobspb.ImportProgress{},
+					}
+					jd = append(jd, &Specification{r.MakeJobID(), jr})
+				}
+				// Create jobs in a batch.
+				var jobs []*Job
+				require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					var err error
+					jobs, err = r.CreateJobsWithTxn(ctx, jd, txn)
+					return err
+				}))
+				require.Equal(t, len(jobs), test.batchSize)
+				// Wait for the jobs to complete.
+				tdb.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW JOBS]",
+					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
+				for _, job := range jobs {
+					tdb.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = '%d'", job.id),
+						[][]string{{"succeeded"}})
+				}
+			}
+		})
+	}
 }
