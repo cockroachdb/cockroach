@@ -485,11 +485,20 @@ func (h *hasher) HashScanLimit(val ScanLimit) {
 	h.HashUint64(uint64(val))
 }
 
-func (h *hasher) HashScanFlags(val ScanFlags) {
+func (h *hasher) HashScanFlags(val *ScanFlags) {
+	if val == nil {
+		return
+	}
 	h.HashBool(val.NoIndexJoin)
 	h.HashBool(val.ForceIndex)
 	h.HashInt(int(val.Direction))
 	h.HashUint64(uint64(val.Index))
+	if !val.ZigzagIndices.Empty() {
+		s := val.ZigzagIndices
+		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+			h.HashInt(i)
+		}
+	}
 }
 
 func (h *hasher) HashJoinFlags(val JoinFlags) {
@@ -895,8 +904,11 @@ func (h *hasher) IsScanLimitEqual(l, r ScanLimit) bool {
 	return l == r
 }
 
-func (h *hasher) IsScanFlagsEqual(l, r ScanFlags) bool {
-	return l == r
+func (h *hasher) IsScanFlagsEqual(l, r *ScanFlags) bool {
+	if l == nil || r == nil {
+		return l == r
+	}
+	return *l == *r
 }
 
 func (h *hasher) IsJoinFlagsEqual(l, r JoinFlags) bool {

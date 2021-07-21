@@ -130,7 +130,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 
 		// Otherwise, try to construct an IndexJoin operator that provides the
 		// columns missing from the index.
-		if scanPrivate.Flags.NoIndexJoin {
+		if scanPrivate.NoIndexJoin() {
 			return
 		}
 

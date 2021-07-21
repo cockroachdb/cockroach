@@ -884,6 +884,7 @@ unreserved_keyword ::=
 	| 'FOLLOWING'
 	| 'FORCE'
 	| 'FORCE_INDEX'
+	| 'FORCE_ZIGZAG'
 	| 'FUNCTION'
 	| 'GENERATED'
 	| 'GEOMETRYM'
@@ -2700,6 +2701,8 @@ materialize_clause ::=
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
+	| 'FORCE_ZIGZAG'
+	| 'FORCE_ZIGZAG' '=' index_name
 
 opt_asc_desc ::=
 	'ASC'

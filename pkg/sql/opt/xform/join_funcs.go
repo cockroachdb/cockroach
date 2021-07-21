@@ -464,7 +464,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		// All code that follows is for case 2 (see function comment).
 
-		if scanPrivate.Flags.NoIndexJoin {
+		if scanPrivate.NoIndexJoin() {
 			return
 		}
 		if joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
@@ -783,7 +783,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		// are not covering, so we must wrap them in an index join.
 		// TODO(rytaft): Avoid adding an index join if possible for Array
 		// inverted joins.
-		if scanPrivate.Flags.NoIndexJoin {
+		if scanPrivate.NoIndexJoin() {
 			return
 		}
 

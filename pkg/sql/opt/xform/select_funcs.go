@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -362,7 +363,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// Otherwise, construct an IndexJoin operator that provides the columns
 		// missing from the index.
-		if scanPrivate.Flags.NoIndexJoin {
+		if scanPrivate.NoIndexJoin() {
 			return
 		}
 
@@ -1080,6 +1081,14 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			zigzagCols := leftCols.Copy()
 			zigzagCols.UnionWith(rightCols)
 
+			if scanPrivate.ZigzagForced() {
+				indices := util.MakeFastIntSet(leftIndex.Ordinal(), rightIndex.Ordinal())
+				forceIndices := scanPrivate.Flags.ZigzagIndices
+				if !forceIndices.SubsetOf(indices) {
+					return
+				}
+			}
+
 			if scanPrivate.Cols.SubsetOf(zigzagCols) {
 				// Case 1 (zigzagged indexes contain all requested columns).
 				zigzagJoin.Cols = scanPrivate.Cols
@@ -1087,7 +1096,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 				return
 			}
 
-			if scanPrivate.Flags.NoIndexJoin {
+			if scanPrivate.NoIndexJoin() {
 				return
 			}
 
@@ -1436,7 +1445,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			return
 		}
 
-		if scanPrivate.Flags.NoIndexJoin {
+		if scanPrivate.NoIndexJoin() {
 			return
 		}
 
