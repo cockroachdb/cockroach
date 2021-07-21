@@ -35,6 +35,11 @@ type ClusterSpec struct {
 	Geo            bool
 	Lifetime       time.Duration
 	ReusePolicy    clusterReusePolicy
+
+	// UseZfs determines whether the zfs file system should be used for
+	// the test. The ext4 file system is used by default, when UseZfs is
+	// false.
+	UseZfs bool
 }
 
 // MakeClusterSpec makes a ClusterSpec.
@@ -176,6 +181,18 @@ func (s *ClusterSpec) Args(extra ...string) ([]string, error) {
 		default:
 			return nil, errors.Errorf("specifying Zones is not yet supported on %s", s.Cloud)
 		}
+	}
+
+	// Make sure that this doesn't show up as a failed roachtest.
+	if s.UseZfs {
+		if localSSD {
+			if s.Cloud != GCE {
+				return nil, errors.Errorf(
+					"zfs file system on local ssd not yet supported on %s", s.Cloud,
+				)
+			}
+		}
+		args = append(args, "--filesystem=zfs")
 	}
 
 	if s.Geo {

@@ -156,3 +156,15 @@ func (*preferSSDOption) apply(spec *ClusterSpec) {
 func PreferSSD() Option {
 	return &preferSSDOption{}
 }
+
+type useZfsOption struct{}
+
+func (*useZfsOption) apply(spec *ClusterSpec) {
+	spec.UseZfs = true
+}
+
+// UseZfs is an Option which can be used to use zfs as the
+// underlying file system instead of ext4.
+func UseZfs() Option {
+	return &useZfsOption{}
+}
