@@ -776,7 +776,7 @@ INSERT INTO t values (1), (10), (100);
 	})
 
 	metrics := func() *jobs.ExecutorMetrics {
-		ex, _, err := jobs.GetScheduledJobExecutor(tree.ScheduledBackupExecutor.InternalName())
+		ex, err := jobs.GetScheduledJobExecutor(tree.ScheduledBackupExecutor.InternalName())
 		require.NoError(t, err)
 		require.NotNil(t, ex.Metrics())
 		return ex.Metrics().(*backupMetrics).ExecutorMetrics
