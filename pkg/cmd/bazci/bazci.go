@@ -122,6 +122,8 @@ type buildInfo struct {
 	testlogsDir string
 	// Expanded list of Go binary targets to be built.
 	goBinaries []string
+	// Expanded list of cmake targets to be built.
+	cmakeTargets []string
 	// Expanded list of Go test targets to be run. Test suites are split up
 	// into their component tests and all put in this list, so this may be
 	// considerably longer than the argument list.
@@ -171,6 +173,8 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 		fullTarget := outputSplit[2]
 
 		switch targetKind {
+		case "cmake":
+			ret.cmakeTargets = append(ret.cmakeTargets, fullTarget)
 		case "go_binary":
 			ret.goBinaries = append(ret.goBinaries, fullTarget)
 		case "go_test":
@@ -236,6 +240,15 @@ func configArgList() []string {
 func usingCrossWindowsConfig() bool {
 	for _, config := range configs {
 		if config == "crosswindows" {
+			return true
+		}
+	}
+	return false
+}
+
+func usingCrossDarwinConfig() bool {
+	for _, config := range configs {
+		if config == "crossmacos" {
 			return true
 		}
 	}
