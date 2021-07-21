@@ -86,6 +86,9 @@ type AsOfSystemTime struct {
 	// to read from - data can be read from a time later than Timestamp.
 	// If false, data is returned at the exact Timestamp specified.
 	BoundedStaleness bool
+	// If this is a bounded staleness read, ensures we only read from the nearest
+	// replica. The query will error if this constraint could not be satisfied.
+	NearestOnly bool
 }
 
 type evalAsOfTimestampOptions struct {
@@ -148,7 +151,7 @@ func EvalAsOfTimestamp(
 	// All non-function expressions must be const and must TypeCheck into a
 	// string.
 	var te TypedExpr
-	if _, ok := asOf.Expr.(*FuncExpr); ok {
+	if asOfFuncExpr, ok := asOf.Expr.(*FuncExpr); ok {
 		switch resolveAsOfFuncType(asOf, semaCtx.SearchPath) {
 		case asOfFuncTypeFollowerRead:
 		case asOfFuncTypeBoundedStaleness:
@@ -156,6 +159,27 @@ func EvalAsOfTimestamp(
 				return AsOfSystemTime{}, newInvalidExprError()
 			}
 			ret.BoundedStaleness = true
+
+			// Determine the value of the "nearest_only" argument.
+			if len(asOfFuncExpr.Exprs) == 2 {
+				nearestOnlyExpr, err := asOfFuncExpr.Exprs[1].TypeCheck(ctx, semaCtx, types.Bool)
+				if err != nil {
+					return AsOfSystemTime{}, err
+				}
+				nearestOnlyEval, err := nearestOnlyExpr.Eval(evalCtx)
+				if err != nil {
+					return AsOfSystemTime{}, err
+				}
+				nearestOnly, ok := nearestOnlyEval.(*DBool)
+				if !ok {
+					return AsOfSystemTime{}, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"%s: expected bool argument for nearest_only",
+						asOfFuncExpr.Func.String(),
+					)
+				}
+				ret.NearestOnly = bool(*nearestOnly)
+			}
 		default:
 			return AsOfSystemTime{}, newInvalidExprError()
 		}
