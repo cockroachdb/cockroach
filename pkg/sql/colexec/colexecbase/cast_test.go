@@ -45,7 +45,7 @@ func TestRandomizedCast(t *testing.T) {
 	getValidSupportedCast := func() (from, to *types.T) {
 		for {
 			from, to = randgen.RandType(rng), randgen.RandType(rng)
-			if _, ok := tree.LookupCastVolatility(from, to); ok {
+			if _, ok := tree.LookupCastVolatility(from, to, nil /* sessiondata */); ok {
 				if colexecbase.IsCastSupported(from, to) {
 					return from, to
 				}
