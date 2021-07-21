@@ -437,6 +437,19 @@ CREATE TABLE system.transaction_statistics (
 		)
 );
 `
+
+	DatabaseRoleSettingsTableSchema = `
+CREATE TABLE system.database_role_settings (
+    database_id  OID NOT NULL,
+    role_name    STRING NOT NULL,
+    settings     STRING[] NOT NULL,
+    PRIMARY KEY (database_id, role_name),
+		FAMILY "primary" (
+			database_id,
+      role_name,
+      settings
+		)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -2054,6 +2067,51 @@ var (
 		NextIndexID: 3,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.TransactionStatisticsTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// DatabaseRoleSettingsTable holds default values for session variables
+	// for each role and database combination. It is analogous to the
+	// pg_db_role_setting table in Postgres. Note that roles do not currently
+	// have stable OIDs associated with them, so this table continues the
+	// convention of keying based on the role name (which is how privileges
+	// work also).
+	DatabaseRoleSettingsTable = makeTable(descpb.TableDescriptor{
+		Name:                    "database_role_settings",
+		ID:                      keys.DatabaseRoleSettingsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "database_id", ID: 1, Type: types.Oid, Nullable: false},
+			{Name: "role_name", ID: 2, Type: types.String, Nullable: false},
+			{Name: "settings", ID: 3, Type: types.StringArray, Nullable: false},
+		},
+		NextColumnID: 4,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:            "primary",
+				ID:              0,
+				ColumnNames:     []string{"database_id", "role_name", "settings"},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+				DefaultColumnID: 3,
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:           tabledesc.PrimaryKeyIndexName,
+			ID:             1,
+			Unique:         true,
+			KeyColumnNames: []string{"database_id", "role_name"},
+			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+				descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
+			},
+			KeyColumnIDs: []descpb.ColumnID{1, 2},
+		},
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.DatabaseRoleSettingsTableID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
