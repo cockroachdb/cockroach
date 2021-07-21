@@ -2,14 +2,14 @@
 - Status: in-progress
 - Start Date: 2021-05-19
 - Authors: Nathan VanBenschoten, Rebecca Taft, Oliver Tan
-- RFC PR: #66020.
-- Cockroach Issue: #25405.
+- RFC PR: #66020
+- Cockroach Issue: #25405
 
 # Summary
 
 Bounded staleness reads are a form of historical read-only queries that use a
 dynamic, system-determined timestamp, subject to a user-provided staleness
-bound, to read from nearby replicas while minimizing data staleness. They
+bound, to read nearby replicas while minimizing data staleness. They
 provide a new way to perform follower reads off local replicas to minimize query
 latency in multi-region clusters.
 
@@ -30,8 +30,12 @@ Bounded staleness queries are limited in use to single-statement read-only
 queries, and only a subset of read-only queries at that. They will be accessed
 similarly to exact bounded staleness reads - through a pair of new functions
 that can be passed to an `AS OF SYSTEM TIME` clause:
-- `SELECT ... FROM ... AS OF SYSTEM TIME with_min_timestamp(TIMESTAMPTZ)`
-- `SELECT ... FROM ... AS OF SYSTEM TIME with_max_staleness(INTERVAL)`
+- `SELECT ... FROM ... AS OF SYSTEM TIME with_min_timestamp(TIMESTAMPTZ[, nearest_only])`
+- `SELECT ... FROM ... AS OF SYSTEM TIME with_max_staleness(INTERVAL[, nearest_only])`
+
+The `nearest_only` is an optional bool that will error if the reads cannot be
+serviced from a nearby replica. "Nearby" is defined to be the closest available
+replica - it does not have to be local to the region.
 
 The approach discussed in this RFC has a prototype in
 https://github.com/cockroachdb/cockroach/pull/62239 which, while not identical
@@ -71,8 +75,8 @@ locally without blocking is used.
 
 Bounded staleness reads will be exposed through a pair of new functions that can
 be passed to an `AS OF SYSTEM TIME` clause:
-- `SELECT ... FROM ... AS OF SYSTEM TIME with_min_timestamp(TIMESTAMPTZ)`
-- `SELECT ... FROM ... AS OF SYSTEM TIME with_max_staleness(INTERVAL)`
+- `SELECT ... FROM ... AS OF SYSTEM TIME with_min_timestamp(TIMESTAMPTZ[, nearest_only])`
+- `SELECT ... FROM ... AS OF SYSTEM TIME with_max_staleness(INTERVAL[, nearest_only])`
 
 `with_min_timestamp(TIMESTAMPTZ)` defines a minimum timestamp to perform the
 bounded staleness read at. The actual timestamp of the read may be equal to or
@@ -87,6 +91,9 @@ but can be at most this stale with respect to the current time. This is useful
 to request a read from nearby followers, if possible, while placing some limit
 on how stale results can be. `with_max_staleness(INTERVAL)` is syntactic sugar
 on top of `with_min_timestamp(now() - INTERVAL)`.
+
+Both functions contain an optional `nearest_only` argument that will error if the
+reads cannot be serviced from a nearby replica.
 
 ## Semantics
 
@@ -165,7 +172,6 @@ served from the closest replica(s) without blocking.
 is_local_and_non_blocking(read) = local_resolved_timestamp(read) >= read.min_timestamp
 ```
 
-This guarantee is subject to a limitation discussed in [Schema Unavailability](#schema-unavailability).
 
 ### Non-Guarantees
 
@@ -452,8 +458,8 @@ read.
 ### SQL Parser
 
 The change will introduce two new SQL builtin functions: 
-- `with_min_timestamp(TIMESTAMPTZ) -> TIMESTAMPTZ
-- `with_max_staleness(INTERVAL) -> TIMESTAMPTZ`
+- `with_min_timestamp(TIMESTAMPTZ[, nearest_only]) -> TIMESTAMPTZ
+- `with_max_staleness(INTERVAL[, nearest_only]) -> TIMESTAMPTZ`
 
 These functions will need special casing in `tree.EvalAsOfTimestamp`.
 
@@ -464,6 +470,9 @@ explicit transaction form of AS OF SYSTEM TIME (`BEGIN AS OF SYSTEM TIME ...`,
 `SET TRANSACTION AS OF SYSTEM TIME`, etc.). These two functions will only be
 permitted in implicit transactions.
 
+Both functions contain an optional `nearest_only` argument that will error if the
+reads cannot be serviced from a nearby replica.
+
 When an implicit transaction is run with one of these two functions, the
 transaction's `min_timestamp_bound` will be computed and retained for planning
 and execution.
@@ -473,7 +482,7 @@ and execution.
 SQL execution is in charge of using the additions to the KV API to execute a
 bounded staleness read. It does so in one of two ways. Either it passes the
 entire statement's batch of KV gets/scans through `(*kv.Txn).NegotiateAndSend`
-all at once along with the `min_timestamp_bound`, or it uses the
+all at once along with the `min_timestamp_bound` and `nearest_only`, or it uses the
 `kv.BoundedStalenessNegotiator` returned from `(*kv.DB).Negotiator` and the
 `min_timestamp_bound` to negotiate a query timestamp ahead of time and then runs
 the statement's batches with this timestamp.
@@ -488,25 +497,44 @@ implementation.
 
 Once we reach step 3, we will add support for multi-scan queries and DistSQL.
 This requires SQL Execution to use the `BoundedStalenessNegotiator` and the
-`min_timestamp_bound` to negotiate the query timestamp ahead of evaluation. The
-query timestamp can then be fixed on the query's `kv.Txn` using
-`(*kv.Txn).SetFixedTimestamp` Since the query timestamp has already been
-negotiated, the BatchRequests passed to `(*kv.Txn).Send` will have an empty
-`min_timestamp_bound` field, but will still have its `ReadConsistency` set to
-`BOUNDED_STALENESS`.
+`min_timestamp_bound` to negotiate the query timestamp ahead of evaluation.
+It will return an error here if `nearest_only` is specified and the read
+cannot be serviced from a nearby replica. The query timestamp can then be
+fixed on the query's `kv.Txn` using `(*kv.Txn).SetFixedTimestamp`. Since
+the query timestamp has already been negotiated, the BatchRequests passed
+to `(*kv.Txn).Send` will have an empty `min_timestamp_bound` field, but
+will still have its `ReadConsistency` set to `BOUNDED_STALENESS`.
 
 #### Table Schemas 
 
-When a bounded staleness read is planned, it will use the most recent table
-descriptors it has available, like any other strongly consistent read. The
-validity window of these descriptors, `[modification_time, present)`, will act
-as additional constraints on the maximum staleness of the query. In practice,
-this means that the `min_timestamp_bound` of a query will be forwarded by the
-modification time of the most recent version of each of the table descriptors
-that it uses.
+When a bounded staleness read is planned, it will also need to attempt
+to use the latest table descriptor available on the closest replicas,
+falling back to the leaseholder if `nearest_only` is not set.
 
-There are downsides to this simple approach, which are discussed in the [Schema
-Unavailability](#schema-unavailability) section.
+We can apply the following pseudo-code for resolving this:
+```python
+max_timestamp = now
+min_timestamp = parse_args()
+while max_timestamp >= min_timestamp:
+    schema = get_schema_at(max_timestamp)
+    cur_min_timestamp = max(min_timestamp, schema.start_time)
+    cur_resolved_timestamp = get_resolved_timestamp(schema)
+    if cur_resolved_timestamp >= cur_min_timestamp:
+        return issue_query_to_follower(cur_min_timestamp)
+    else if min_timestamp == cur_min_timestamp and !nearest_only:
+        return issue_query_to_leaseholder(cur_min_timestamp)
+    else
+        max_timestamp = cur_min_timestamp - 1
+raise Error
+```
+
+We could apply a simpler strategy to resolve schemas by using the
+`max(min_timestamp, latest table descriptor modification time)`
+for the minimum bound on staleness. However, this does lead to
+a period of compromised availability after a schema change. This
+means that during periods of strong read unavailability (e.g. gateway
+partitioned from leaseholder), a schema change can lead to bounded staleness
+unavailability because it places a floor on staleness.
 
 #### Observability into query timestamp
 
@@ -619,21 +647,6 @@ bounded-staleness reads can be used as an availability mechanism.
 In the context of this limitation and the next, "unavailability" means that
 statements will hang until either connectivity is restored or a statement
 timeout is reached.
-
-### Schema Unavailability
-
-The current proposal does not do anything particularly sophisticated around
-schema changes. Instead, it proposes that we forward a bounded staleness read's
-minimum timestamp to the maximum last modification time of all relevant table
-descriptors. While simple, this does lead to a period of compromised
-availability after a schema change. This means that during periods of strong
-read unavailability (e.g. gateway partitioned from leaseholder), a schema change
-can lead to bounded staleness unavailability because it places a floor on
-staleness.
-
-It is open for discussion whether we want to do anything more sophisticated here,
-like introduce a retry loop that steps back across schema versions until it finds
-a version whose implied key spans are all sufficiently resolved.
 
 ## Alternatives
 
