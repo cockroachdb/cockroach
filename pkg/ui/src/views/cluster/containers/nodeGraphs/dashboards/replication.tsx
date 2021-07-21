@@ -48,8 +48,8 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Replicas per Store"
-      tooltip={`The number of replicas on each store.`}
+      title="Replicas per Node"
+      tooltip={`The number of replicas on each node.`}
     >
       <Axis label="replicas">
         {_.map(nodeIDs, (nid) => (
@@ -64,8 +64,8 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Leaseholders per Store"
-      tooltip={`The number of leaseholder replicas on each store. A leaseholder replica is the one that
+      title="Leaseholders per Node"
+      tooltip={`The number of leaseholder replicas on each node. A leaseholder replica is the one that
           receives and coordinates all read and write requests for its range.`}
     >
       <Axis label="leaseholders">
@@ -81,8 +81,8 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Average Queries per Store"
-      tooltip={`Exponentially weighted moving average of the number of KV batch requests processed by leaseholder replicas on each store per second. Tracks roughly the last 30 minutes of requests. Used for load-based rebalancing decisions.`}
+      title="Average Queries per Node"
+      tooltip={`Exponentially weighted moving average of the number of KV batch requests processed by leaseholder replicas on each node per second. Tracks roughly the last 30 minutes of requests. Used for load-based rebalancing decisions.`}
     >
       <Axis label="queries">
         {_.map(nodeIDs, (nid) => (
@@ -97,7 +97,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Logical Bytes per Store"
+      title="Logical Bytes per Node"
       tooltip={<LogicalBytesGraphTooltip />}
     >
       <Axis units={AxisUnits.Bytes} label="logical store size">
