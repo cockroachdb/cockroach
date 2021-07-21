@@ -104,6 +104,12 @@ type Record struct {
 	CreatedBy *CreatedByInfo
 }
 
+// Specification specifies a job, which will be created in a batch with other jobs.
+type Specification struct {
+	jobID  jobspb.JobID
+	record Record
+}
+
 // StartableJob is a job created with a transaction to be started later.
 // See Registry.CreateStartableJob
 type StartableJob struct {
