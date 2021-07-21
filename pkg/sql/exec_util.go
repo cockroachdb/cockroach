@@ -304,6 +304,17 @@ var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
+// improveDisjunctionSelectivityEnabled controls the cluster default for whether
+// we should try to improve selectivity calculations for filters with
+// disjunctions by unioning the selectivity of each side of the disjunction.
+// This may lead to more efficient query plans in some cases.
+var optImproveDisjunctionSelectivityEnabled = settings.RegisterBoolSetting(
+	"sql.defaults.optimizer_improve_disjunction_selectivity.enabled",
+	"default value for optimizer_improve_disjunction_selectivity session setting; "+
+		"enables improved selectivity calculations for queries with disjunctions",
+	false,
+)
+
 // localityOptimizedSearchMode controls the cluster default for the use of
 // locality optimized search. If enabled, the optimizer will try to plan scans
 // and lookup joins in which local nodes (i.e., nodes in the gateway region) are
@@ -2304,6 +2315,10 @@ func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerUseMultiColStats(val bool) {
 	m.data.OptimizerUseMultiColStats = val
+}
+
+func (m *sessionDataMutator) SetOptimizerImproveDisjunctionSelectivity(val bool) {
+	m.data.OptimizerImproveDisjunctionSelectivity = val
 }
 
 func (m *sessionDataMutator) SetLocalityOptimizedSearch(val bool) {

@@ -1870,7 +1870,7 @@ vectorized: true
 # More accurate estimation of the disjunction's selectivity leads to a plan with
 # a union of constrained scans. See #58744.
 statement ok
-SET CLUSTER SETTING sql.optimizer_improve_disjunction_selectivity.enabled = true
+SET optimizer_improve_disjunction_selectivity = true
 
 # Single disjunction.
 query T
@@ -1982,4 +1982,4 @@ vectorized: true
           spans: FULL SCAN
 
 statement ok
-RESET CLUSTER SETTING sql.optimizer_improve_disjunction_selectivity.enabled
+SET optimizer_improve_disjunction_selectivity = false
