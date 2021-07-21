@@ -86,7 +86,7 @@ func segmentizeCoords(a geom.Coord, b geom.Coord, segmentMaxAngle float64) ([]fl
 	// Hence numberOfSegmentsToCreate = 2^(ceil(log2(chordAngleBetweenPoints/segmentMaxLength))).
 	doubleNumberOfSegmentsToCreate := math.Pow(2, math.Ceil(math.Log2(chordAngleBetweenPoints/segmentMaxAngle)))
 	doubleNumPoints := float64(len(a)) * (1 + doubleNumberOfSegmentsToCreate)
-	if err := geosegmentize.CheckSegmentizeTooManyPoints(doubleNumPoints, a, b); err != nil {
+	if err := geosegmentize.CheckSegmentizeValidNumPoints(doubleNumPoints, a, b); err != nil {
 		return nil, err
 	}
 	numberOfSegmentsToCreate := int(doubleNumberOfSegmentsToCreate)
