@@ -50,6 +50,7 @@ go_test(
         "//pkg/geo",
         "//pkg/geo/geoindex",
         "//pkg/geo/geopb",
+        "//pkg/settings/cluster",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",
         "//pkg/sql/opt/norm",
