@@ -323,10 +323,11 @@ like_more_specifiers  CREATE TABLE public.like_more_specifiers (
                       k INT8 NULL,
                       z DECIMAL NULL,
                       blah INT8 NULL,
-                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                      CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                      rowid INT8 NOT VISIBLE NOT NULL,
+                      rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                      CONSTRAINT "primary" PRIMARY KEY (rowid_1 ASC),
                       INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC),
-                      FAMILY "primary" (a, b, c, h, j, k, z, blah, rowid)
+                      FAMILY "primary" (a, b, c, h, j, k, z, blah, rowid, rowid_1)
 )
 
 statement ok
@@ -340,11 +341,41 @@ SHOW CREATE TABLE like_hash
 ----
 like_hash  CREATE TABLE public.like_hash (
            a INT8 NULL,
+           crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL,
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+           INDEX like_hash_base_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
+           FAMILY "primary" (a, crdb_internal_a_shard_4, rowid)
+)
+
+statement ok
+DROP TABLE like_hash; CREATE TABLE like_hash (LIKE like_hash_base INCLUDING ALL)
+
+query TT
+SHOW CREATE TABLE like_hash
+----
+like_hash  CREATE TABLE public.like_hash (
+           a INT8 NULL,
            crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(a AS STRING), '':::STRING)), 4:::INT8)) STORED,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
            INDEX like_hash_base_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
            FAMILY "primary" (a, crdb_internal_a_shard_4, rowid)
+)
+
+statement ok
+CREATE TABLE regression_67196 (pk INT PRIMARY KEY, hidden INT NOT VISIBLE);
+CREATE TABLE regression_67196_like (LIKE regression_67196)
+
+query TT
+SHOW CREATE TABLE regression_67196_like
+----
+regression_67196_like  CREATE TABLE public.regression_67196_like (
+                       pk INT8 NOT NULL,
+                       hidden INT8 NOT VISIBLE NULL,
+                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                       CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                       FAMILY "primary" (pk, hidden, rowid)
 )
 
 statement error unimplemented
