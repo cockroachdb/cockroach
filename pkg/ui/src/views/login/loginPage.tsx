@@ -105,7 +105,7 @@ export class LoginPage extends React.Component<Props> {
       const { location, history } = this.props;
       const params = new URLSearchParams(location.search);
       if (params.has("redirectTo")) {
-        history.push(params.get("redirectTo"));
+        history.push(decodeURIComponent(params.get("redirectTo")));
       } else {
         history.push("/");
       }
