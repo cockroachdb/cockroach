@@ -493,11 +493,13 @@ func registerTPCC(r registry.Registry) {
 			zs = append(zs, s.zones)
 		}
 		const nodesPerRegion = 3
+		const warehousesPerRegion = 20
 
 		multiRegionTests := []struct {
-			desc              string
-			name              string
-			survivalGoal      string
+			desc         string
+			name         string
+			survivalGoal string
+
 			chaosTarget       func(iter int) option.NodeListOption
 			workloadInstances []workloadInstance
 		}{
@@ -601,7 +603,7 @@ func registerTPCC(r registry.Registry) {
 					iter := 0
 					chaosEventCh := make(chan ChaosEvent)
 					runTPCC(ctx, t, c, tpccOptions{
-						Warehouses:     len(regions) * 20,
+						Warehouses:     len(regions) * warehousesPerRegion,
 						Duration:       duration,
 						ExtraSetupArgs: partitionArgs,
 						ExtraRunArgs:   `--method=simple --wait=false --tolerate-errors ` + partitionArgs,
@@ -647,10 +649,15 @@ func registerTPCC(r registry.Registry) {
 								},
 								ch:         chaosEventCh,
 								promClient: promv1.NewAPI(client),
-								// We see a slow trickle of errors after a server has been
-								// force shutdown due to queries before the shutdown not
-								// fully completing.
-								maxErrorsDuringUptime: 10,
+								// We see a slow trickle of errors after a server has been force shutdown due
+								// to queries before the shutdown not fully completing. You can inspect this
+								// by looking at the workload logs and corresponding the errors with the
+								// prometheus graphs.
+								// The errors seen can be be of the form:
+								// * ERROR: inbox communication error: rpc error: code = Canceled
+								//   desc = context canceled (SQLSTATE 58C01)
+								// Setting this allows some errors to occur.
+								maxErrorsDuringUptime: warehousesPerRegion * 5,
 								// "delivery" does not trigger often.
 								allowZeroSuccessDuringUptime: true,
 							}, nil
