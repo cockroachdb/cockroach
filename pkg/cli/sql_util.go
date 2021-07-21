@@ -405,7 +405,7 @@ func (c *sqlConn) getLastQueryStatistics() (
 		err = errors.CombineErrors(err, closeErr)
 	}()
 
-	if len(rows.Columns()) != 4 {
+	if len(rows.Columns()) < 4 {
 		return 0, 0, 0, 0,
 			errors.New("unexpected number of columns in SHOW LAST QUERY STATISTICS")
 	}
