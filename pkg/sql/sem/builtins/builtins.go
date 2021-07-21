@@ -2472,7 +2472,20 @@ nearest replica.`, defaultFollowerReadDuration),
 				return withMinTimestamp(ctx, tree.MustBeDTimestampTZ(args[0]).Time)
 			},
 			PreferredOverload: true,
-			Info:              withMinTimestampInfo,
+			Info:              withMinTimestampInfo(false /* localOnly */),
+			Volatility:        tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"min_timestamp", types.TimestampTZ},
+				{"local_only", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return withMinTimestamp(ctx, tree.MustBeDTimestampTZ(args[0]).Time)
+			},
+			PreferredOverload: true,
+			Info:              withMinTimestampInfo(true /* localOnly */),
 			Volatility:        tree.VolatilityVolatile,
 		},
 	),
@@ -2487,7 +2500,19 @@ nearest replica.`, defaultFollowerReadDuration),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return withMaxStaleness(ctx, tree.MustBeDInterval(args[0]).Duration)
 			},
-			Info:       withMaxStalenessInfo,
+			Info:       withMaxStalenessInfo(false /* localOnly */),
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"max_staleness", types.Interval},
+				{"local_only", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return withMaxStaleness(ctx, tree.MustBeDInterval(args[0]).Duration)
+			},
+			Info:       withMaxStalenessInfo(true /* localOnly */),
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -7621,17 +7646,40 @@ var (
 	}
 )
 
-const withMinTimestampInfo = `When used in the AS OF SYSTEM TIME clause of an single-statement,
+const localOnlyInfo = `
+
+If local_only is set to true, reads that cannot be served locally will error.
+`
+
+func withMinTimestampInfo(localOnly bool) string {
+	var localOnlyText string
+	if localOnly {
+		localOnlyText = localOnlyInfo
+	}
+	return fmt.Sprintf(
+		`When used in the AS OF SYSTEM TIME clause of an single-statement,
 read-only transaction, CockroachDB chooses the newest timestamp before the min_timestamp
-that allows execution of the reads at the closest available replica without blocking.
+that allows execution of the reads at the closest available replica without blocking.%s
 
-Note this function requires an enterprise license on a CCL distribution.`
+Note this function requires an enterprise license on a CCL distribution.`,
+		localOnlyText,
+	)
+}
 
-const withMaxStalenessInfo = `When used in the AS OF SYSTEM TIME clause of an single-statement,
+func withMaxStalenessInfo(localOnly bool) string {
+	var localOnlyText string
+	if localOnly {
+		localOnlyText = localOnlyInfo
+	}
+	return fmt.Sprintf(
+		`When used in the AS OF SYSTEM TIME clause of an single-statement,
 read-only transaction, CockroachDB chooses the newest timestamp within the staleness
-bound that allows execution of the reads at the closest available replica without blocking.
+bound that allows execution of the reads at the closest available replica without blocking.%s
 
-Note this function requires an enterprise license on a CCL distribution.`
+Note this function requires an enterprise license on a CCL distribution.`,
+		localOnlyText,
+	)
+}
 
 func withMinTimestamp(ctx *tree.EvalContext, t time.Time) (tree.Datum, error) {
 	t, err := WithMinTimestamp(ctx, t)

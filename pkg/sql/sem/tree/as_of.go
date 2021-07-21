@@ -86,6 +86,9 @@ type AsOfSystemTime struct {
 	// to read from - data can be read from a time later than Timestamp.
 	// If false, data is returned at the exact Timestamp specified.
 	BoundedStaleness bool
+	// If this is a bounded staleness read, ensures we only read from the local
+	// node. The query will error if this constraint could not be satisfied.
+	LocalOnly bool
 }
 
 type evalAsOfTimestampOptions struct {
@@ -148,7 +151,7 @@ func EvalAsOfTimestamp(
 	// All non-function expressions must be const and must TypeCheck into a
 	// string.
 	var te TypedExpr
-	if _, ok := asOf.Expr.(*FuncExpr); ok {
+	if asOfFuncExpr, ok := asOf.Expr.(*FuncExpr); ok {
 		switch resolveAsOfFuncType(asOf, semaCtx.SearchPath) {
 		case asOfFuncTypeFollowerRead:
 		case asOfFuncTypeBoundedStaleness:
@@ -156,6 +159,27 @@ func EvalAsOfTimestamp(
 				return AsOfSystemTime{}, newInvalidExprError()
 			}
 			ret.BoundedStaleness = true
+
+			// Determine the value of the "local_only" argument.
+			if len(asOfFuncExpr.Exprs) == 2 {
+				localOnlyExpr, err := asOfFuncExpr.Exprs[1].TypeCheck(ctx, semaCtx, types.Bool)
+				if err != nil {
+					return AsOfSystemTime{}, err
+				}
+				localOnlyEval, err := localOnlyExpr.Eval(evalCtx)
+				if err != nil {
+					return AsOfSystemTime{}, err
+				}
+				localOnly, ok := localOnlyEval.(*DBool)
+				if !ok {
+					return AsOfSystemTime{}, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"%s: expected bool argument for local_only",
+						asOfFuncExpr.Func.String(),
+					)
+				}
+				ret.LocalOnly = bool(*localOnly)
+			}
 		default:
 			return AsOfSystemTime{}, newInvalidExprError()
 		}
