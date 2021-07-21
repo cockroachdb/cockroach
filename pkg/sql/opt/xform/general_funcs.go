@@ -314,6 +314,7 @@ func (c *CustomFuncs) findConstantFilterCols(
 			// since the computed expression may differentiate between the
 			// different forms of the same value.
 			colTyp := tab.Column(scanPrivate.Table.ColumnOrdinal(colID)).DatumType()
+			// TODO(ajwerner): Do something more sophisticated here than just this.
 			if colinfo.HasCompositeKeyEncoding(colTyp) {
 				continue
 			}

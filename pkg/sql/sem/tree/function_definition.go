@@ -104,6 +104,11 @@ type FunctionProperties struct {
 	// should take RegClass as the arg type for the sequence name instead of
 	// string, we will add a dependency on all RegClass types used in a view.
 	HasSequenceArguments bool
+
+	// CompositeInsensitive indicates that this function does not care about
+	// differences in "composite" datum arguments. See
+	// memo.CanBeCompositeSensitive.
+	CompositeInsensitive bool
 }
 
 // ShouldDocument returns whether the built-in function should be included in

@@ -3522,9 +3522,10 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.key_encode": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categorySystemInfo,
-			NullableArgs: true,
-			Undocumented: true,
+			Category:             categorySystemInfo,
+			NullableArgs:         true,
+			Undocumented:         true,
+			CompositeInsensitive: true,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Any},

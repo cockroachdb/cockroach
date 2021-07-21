@@ -362,7 +362,7 @@ t  CREATE TABLE public.t (
    z INT8 NOT NULL,
    w INT8 NULL,
    v JSONB NULL,
-   crdb_internal_z_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(z AS STRING), '':::STRING)), 4:::INT8)) STORED,
+   crdb_internal_z_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.key_encode(0:::INT8, z)), 4:::INT8)) STORED,
    CONSTRAINT "primary" PRIMARY KEY (y ASC),
    UNIQUE INDEX i3 (z ASC) STORING (y),
    UNIQUE INDEX t_x_key (x ASC),
@@ -516,8 +516,8 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NULL,
-   crdb_internal_z_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(z AS STRING), '':::STRING)), 5:::INT8)) STORED,
-   crdb_internal_y_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(y AS STRING), '':::STRING)), 10:::INT8)) STORED,
+   crdb_internal_z_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.key_encode(0:::INT8, z)), 5:::INT8)) STORED,
+   crdb_internal_y_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.key_encode(0:::INT8, y)), 10:::INT8)) STORED,
    CONSTRAINT "primary" PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 10,
    UNIQUE INDEX t_x_key (x ASC),
    INDEX i1 (z ASC) USING HASH WITH BUCKET_COUNT = 5,
@@ -578,7 +578,7 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-   crdb_internal_x_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(x AS STRING), '':::STRING)), 5:::INT8)) STORED,
+   crdb_internal_x_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.key_encode(0:::INT8, x)), 5:::INT8)) STORED,
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NULL,
@@ -746,7 +746,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   crdb_internal_x_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(x AS STRING), '':::STRING)), 4:::INT8)) STORED,
+   crdb_internal_x_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.key_encode(0:::INT8, x)), 4:::INT8)) STORED,
    CONSTRAINT "primary" PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 4,
    FAMILY "primary" (x, rowid, crdb_internal_x_shard_4)
 )
@@ -1201,9 +1201,9 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-   crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(x AS STRING), '':::STRING)), 2:::INT8)) STORED,
+   crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.key_encode(0:::INT8, x)), 2:::INT8)) STORED,
    x INT8 NOT NULL,
-   crdb_internal_x_shard_3 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(x AS STRING), '':::STRING)), 3:::INT8)) STORED,
+   crdb_internal_x_shard_3 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.key_encode(0:::INT8, x)), 3:::INT8)) STORED,
    CONSTRAINT "primary" PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 3,
    FAMILY "primary" (crdb_internal_x_shard_2, x, crdb_internal_x_shard_3)
 )
@@ -1219,10 +1219,10 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-   crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(x AS STRING), '':::STRING)), 2:::INT8)) STORED,
+   crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.key_encode(0:::INT8, x)), 2:::INT8)) STORED,
    x INT8 NOT NULL,
    y INT8 NOT NULL,
-   crdb_internal_y_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(y AS STRING), '':::STRING)), 2:::INT8)) STORED,
+   crdb_internal_y_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.key_encode(0:::INT8, y)), 2:::INT8)) STORED,
    CONSTRAINT "primary" PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 2,
    UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 2,
    FAMILY fam_0_x_y_crdb_internal_x_shard_2 (x, y, crdb_internal_x_shard_2, crdb_internal_y_shard_2)

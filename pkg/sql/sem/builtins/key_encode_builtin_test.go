@@ -46,7 +46,9 @@ func TestCrdbInternalKeyEncode(t *testing.T) {
     ts    TIMESTAMP,
     da    DATE,
     inet  INET,
-    vb    VARBIT
+    vb    VARBIT,
+    sa    STRING[],
+    ia    INT[]
 );`)
 	tab := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", "t")
 
@@ -108,7 +110,7 @@ func TestCrdbInternalKeyEncode(t *testing.T) {
 GROUP BY c;`, crossJoinQuery()), [][]string{
 		// This number is somewhat magical but it's the size of the cross join.
 		// We expect all rows to be unique.
-		{"1", "65536"},
+		{"1", "262144"},
 	})
 }
 

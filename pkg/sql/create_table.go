@@ -1716,7 +1716,9 @@ func NewTableDesc(
 					return nil, err
 				}
 				shardCol, _, err := maybeCreateAndAddShardCol(int(buckets), &desc,
-					[]string{string(d.Name)}, true /* isNewTable */)
+					[]string{string(d.Name)}, true, /* isNewTable */
+					evalCtx.Settings.Version.IsActive(ctx, clusterversion.UseKeyEncodeForHashShardedIndexes),
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -2693,24 +2695,85 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 
 // makeShardColumnDesc returns a new column descriptor for a hidden computed shard column
 // based on all the `colNames`.
-func makeShardColumnDesc(colNames []string, buckets int) (*descpb.ColumnDescriptor, error) {
+func makeShardColumnDesc(
+	colNames []string, buckets int, useKeyEncodeInExpr bool,
+) (*descpb.ColumnDescriptor, error) {
 	col := &descpb.ColumnDescriptor{
 		Hidden:   true,
 		Nullable: false,
 		Type:     types.Int4,
 	}
 	col.Name = tabledesc.GetShardColumnName(colNames, int32(buckets))
-	col.ComputeExpr = makeHashShardComputeExpr(colNames, buckets)
+	if useKeyEncodeInExpr {
+		col.ComputeExpr = makeHashShardComputeExpr(colNames, buckets)
+	} else {
+		col.ComputeExpr = makeDeprecatedHashShardComputeExpr(colNames, buckets)
+	}
+
 	return col, nil
 }
 
-// makeHashShardComputeExpr creates the serialized computed expression for a hash shard
+func makeHashShardComputeExpr(colNames []string, buckets int) *string {
+	bucketsDatum := &tree.CastExpr{
+		Expr: tree.NewDInt(tree.DInt(buckets)),
+		Type: types.Int4,
+	}
+	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
+		return tree.ResolvableFunctionReference{
+			FunctionReference: &tree.UnresolvedName{
+				NumParts: 1,
+				Parts:    tree.NameParts{funcName},
+			},
+		}
+	}
+	encodedColumn := func(i int) tree.Expr {
+		return &tree.FuncExpr{
+			Func: unresolvedFunc("crdb_internal.key_encode"),
+			Exprs: tree.Exprs{
+				&tree.ColumnItem{ColumnName: tree.Name(colNames[i])},
+			},
+		}
+	}
+	hashedColumnExpr := func(i int) tree.Expr {
+		return &tree.FuncExpr{
+			Func:  unresolvedFunc("fnv32"),
+			Exprs: tree.Exprs{encodedColumn(i)},
+		}
+	}
+	modBuckets := func(expr tree.Expr) tree.Expr {
+		return &tree.FuncExpr{
+			Func: unresolvedFunc("mod"),
+			Exprs: tree.Exprs{
+				expr,
+				bucketsDatum,
+			},
+		}
+	}
+	// Construct an expression which is the sum of all of the casted and hashed
+	// columns.
+	var expr tree.Expr
+	for i := len(colNames) - 1; i >= 0; i-- {
+		if expr == nil {
+			expr = hashedColumnExpr(i)
+		} else {
+			expr = &tree.BinaryExpr{
+				Left:     modBuckets(hashedColumnExpr(i)),
+				Operator: tree.MakeBinaryOperator(tree.Plus),
+				Right:    modBuckets(expr),
+			}
+		}
+	}
+	res := tree.Serialize(modBuckets(expr))
+	return &res
+}
+
+// makeDeprecatedHashShardComputeExpr creates the serialized computed expression for a hash shard
 // column based on the column names and the number of buckets. The expression will be
 // of the form:
 //
 //    mod(fnv32(colNames[0]::STRING)+fnv32(colNames[1])+...,buckets)
 //
-func makeHashShardComputeExpr(colNames []string, buckets int) *string {
+func makeDeprecatedHashShardComputeExpr(colNames []string, buckets int) *string {
 	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
 		return tree.ResolvableFunctionReference{
 			FunctionReference: &tree.UnresolvedName{

@@ -2628,7 +2628,31 @@ func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 			// None of the outer columns of this sub-expression are composite.
 			return false
 		}
-		// TODO(ajwerner): Make my key_encode function not composite sensitive.
+
+		// Some functions are insensitive to the composite nature of their
+		// arguments. In this case, we want to allow composite variable references
+		// to be treated insensitively but all other exprs should get the usual
+		// treatment.
+		//
+		// This will deal with cases like
+		//
+		//  crdb_internal.key_encode(f4)                          -- not sensitive
+		//  crdb_internal.key_encode(IF(f4::STRING = '-0', 0, 1)) -- sensitive
+		//
+		// TODO(ajwerner,RaduBerinde): Deal with the cases like
+		// `crdb_internal.key_encode(f4+1)`.
+		if funcExpr, ok := e.(*FunctionExpr); ok && funcExpr.Properties.CompositeInsensitive {
+			args := funcExpr.Args
+			for i, n := 0, args.ChildCount(); i < n; i++ {
+				if _, isVariable := args.Child(i).(*VariableExpr); isVariable {
+					continue
+				}
+				if canBeSensitive(args.Child(i)) {
+					return true
+				}
+			}
+			return false
+		}
 
 		// Check the inputs to the operator. Together, the following conditions are
 		// sufficient to prove that this expression is not sensitive:
