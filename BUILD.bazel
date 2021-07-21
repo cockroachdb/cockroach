@@ -12,7 +12,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 #
 # gazelle:prefix github.com/cockroachdb/cockroach
 # gazelle:build_file_name BUILD.bazel
-# gazelle:build_tags bazel,crdb_test,crdb_test_off
+# gazelle:build_tags bazel,crdb_test,crdb_test_off,gss
 
 # Enable protobuf generation.
 #
@@ -36,6 +36,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:resolve proto io/prometheus/client/metrics.proto @com_github_prometheus_client_model//io/prometheus/client:client_proto
 # gazelle:resolve proto go io/prometheus/client/metrics.proto @com_github_prometheus_client_model//go
 # gazelle:resolve go github.com/prometheus/client_model/go @com_github_prometheus_client_model//go
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl @cockroach//pkg/ccl/gssapiccl
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cli_test @cockroach//pkg/cli:cli_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test @cockroach//pkg/sql/colflow:colflow_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test @cockroach//pkg/util/caller:caller_test
@@ -86,6 +87,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude _bazel
 # gazelle:exclude c-deps/krb5
 # gazelle:exclude artifacts
+# gazelle:exclude pkg/ccl/gssapiccl
 # gazelle:exclude vendor
 # gazelle:exclude .vendor.tmp.*
 # gazelle:exclude **/zcgo_flags.go

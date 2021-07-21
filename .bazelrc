@@ -1,6 +1,6 @@
-build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,crdb_test_off
+build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,crdb_test_off,gss
 test --config=test
-build:test --symlink_prefix=_bazel/ --define gotags=bazel,crdb_test --test_env=TZ=
+build:test --symlink_prefix=_bazel/ --define gotags=bazel,crdb_test,gss --test_env=TZ=
 query --ui_event_filters=-DEBUG
 
 try-import %workspace%/.bazelrc.user
