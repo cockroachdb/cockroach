@@ -356,7 +356,7 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 		return nil, false
 	}
 
-	volatility, ok := tree.LookupCastVolatility(input.DataType(), typ)
+	volatility, ok := tree.LookupCastVolatility(input.DataType(), typ, c.f.evalCtx.SessionData)
 	if !ok || !c.CanFoldOperator(volatility) {
 		return nil, false
 	}
