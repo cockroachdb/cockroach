@@ -144,7 +144,7 @@ func GetCastOperator(
 			// {{end}}
 		}
 	}
-	return nil, errors.Errorf("unhandled cast %s -> %s", fromType, toType)
+	return nil, errors.Errorf("unhandled cast %s -> %s", fromType.SQLString(), toType.SQLString())
 }
 
 func IsCastSupported(fromType, toType *types.T) bool {
