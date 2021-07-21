@@ -1345,3 +1345,283 @@ ALTER INDEX tbl7@tbl7_i_idx CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
 
 statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
 ALTER PARTITION "us-east-1" OF INDEX tbl7@tbl7_i_idx CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
+
+# Validate crdb_internal.reset_multi_region_zone_configs_for_table builtin
+subtest reset_multi_region_zone_configs
+
+statement ok
+CREATE TABLE tbl8 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY REGIONAL BY ROW
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@primary
+----
+PARTITION "us-east-1" OF INDEX tbl8@primary  ALTER PARTITION "us-east-1" OF INDEX tbl8@primary CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 90000,
+                                             num_replicas = 3,
+                                             num_voters = 3,
+                                             constraints = '{+region=us-east-1: 1}',
+                                             voter_constraints = '[+region=us-east-1]',
+                                             lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER PARTITION "us-east-1" OF INDEX tbl8@primary CONFIGURE ZONE DISCARD;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@primary
+----
+DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 90000,
+                                 num_replicas = 3,
+                                 num_voters = 3,
+                                 constraints = '{+region=us-east-1: 1}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+statement error missing zone configuration for partition "us-east-1" of tbl8@"primary"
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+let $tbl8_id
+select table_id from crdb_internal.tables where name = 'tbl8'
+
+statement ok
+SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl8_id)
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@primary
+----
+PARTITION "us-east-1" OF INDEX tbl8@primary  ALTER PARTITION "us-east-1" OF INDEX tbl8@primary CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 90000,
+                                             num_replicas = 3,
+                                             num_voters = 3,
+                                             constraints = '{+region=us-east-1: 1}',
+                                             voter_constraints = '[+region=us-east-1]',
+                                             lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
+CREATE TABLE tbl9 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY REGIONAL IN PRIMARY REGION
+
+# Set gc.ttlseconds. Since this isn't a multi-region protected field, the reset
+# should no-op.
+statement ok
+ALTER table tbl9 CONFIGURE ZONE USING gc.ttlseconds = 5
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl9
+----
+TABLE tbl9  ALTER TABLE tbl9 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 5,
+            num_replicas = 3,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+let $tbl9_id
+select table_id from crdb_internal.tables where name = 'tbl9'
+
+statement ok
+SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl9_id)
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl9
+----
+TABLE tbl9  ALTER TABLE tbl9 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 5,
+            num_replicas = 3,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl9 CONFIGURE ZONE USING num_replicas = 5;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl9
+----
+TABLE tbl9  ALTER TABLE tbl9 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 5,
+            num_replicas = 5,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl9_id)
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl9
+----
+TABLE tbl9  ALTER TABLE tbl9 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 5,
+            num_replicas = 3,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+CREATE TABLE tbl10 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY REGIONAL IN "us-east-1"
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER table tbl10 CONFIGURE ZONE DISCARD;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl10
+----
+DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 90000,
+                                 num_replicas = 3,
+                                 num_voters = 3,
+                                 constraints = '{+region=us-east-1: 1}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+statement error zone configuration for table tbl10 contains incorrectly configured field "num_voters"
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+let $tbl10_id
+select table_id from crdb_internal.tables where name = 'tbl10'
+
+statement ok
+SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl10_id)
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl10
+----
+TABLE tbl10  ALTER TABLE tbl10 CONFIGURE ZONE USING
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 90000,
+             num_replicas = 3,
+             num_voters = 3,
+             constraints = '{+region=us-east-1: 1}',
+             voter_constraints = '[+region=us-east-1]',
+             lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl10 CONFIGURE ZONE USING num_replicas = 5;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl10
+----
+TABLE tbl10  ALTER TABLE tbl10 CONFIGURE ZONE USING
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 90000,
+             num_replicas = 5,
+             num_voters = 3,
+             constraints = '{+region=us-east-1: 1}',
+             voter_constraints = '[+region=us-east-1]',
+             lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl10_id)
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl10
+----
+TABLE tbl10  ALTER TABLE tbl10 CONFIGURE ZONE USING
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 90000,
+             num_replicas = 3,
+             num_voters = 3,
+             constraints = '{+region=us-east-1: 1}',
+             voter_constraints = '[+region=us-east-1]',
+             lease_preferences = '[[+region=us-east-1]]'
+
+# Ensure that built-in no-ops on non-multi-region tables.
+statement ok
+CREATE DATABASE not_multi_region;
+USE not_multi_region
+
+statement ok
+CREATE TABLE tbl11 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+)
+
+statement ok
+ALTER table tbl11 CONFIGURE ZONE USING num_replicas=10
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl11
+----
+TABLE tbl11  ALTER TABLE tbl11 CONFIGURE ZONE USING
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 90000,
+             num_replicas = 10,
+             constraints = '[]',
+             lease_preferences = '[]'
+
+let $tbl11_id
+select table_id from crdb_internal.tables where name = 'tbl11'
+
+statement ok
+SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl11_id)
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl11
+----
+TABLE tbl11  ALTER TABLE tbl11 CONFIGURE ZONE USING
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 90000,
+             num_replicas = 10,
+             constraints = '[]',
+             lease_preferences = '[]'
+
+query error pq: crdb_internal\.reset_multi_region_zone_configs_for_table\(\): error resolving referenced table ID 1: relation "\[1\]" does not exist
+SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table(1)
