@@ -1536,7 +1536,6 @@ system              public             630200280_35_3_not_null                  
 system              public             630200280_35_5_not_null                                                              system         public        statement_diagnostics_requests   CHECK            NO             NO
 system              public             primary                                                                              system         public        statement_diagnostics_requests   PRIMARY KEY      NO             NO
 system              public             630200280_42_10_not_null                                                             system         public        statement_statistics             CHECK            NO             NO
-system              public             630200280_42_11_not_null                                                             system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_1_not_null                                                              system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_2_not_null                                                              system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_3_not_null                                                              system         public        statement_statistics             CHECK            NO             NO
@@ -1571,7 +1570,6 @@ system              public             630200280_43_5_not_null                  
 system              public             630200280_43_6_not_null                                                              system         public        transaction_statistics           CHECK            NO             NO
 system              public             630200280_43_7_not_null                                                              system         public        transaction_statistics           CHECK            NO             NO
 system              public             630200280_43_8_not_null                                                              system         public        transaction_statistics           CHECK            NO             NO
-system              public             630200280_43_9_not_null                                                              system         public        transaction_statistics           CHECK            NO             NO
 system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8            system         public        transaction_statistics           CHECK            NO             NO
 system              public             primary                                                                              system         public        transaction_statistics           PRIMARY KEY      NO             NO
 system              public             630200280_14_1_not_null                                                              system         public        ui                               CHECK            NO             NO
@@ -1714,24 +1712,22 @@ system              public             630200280_40_5_not_null                  
 system              public             630200280_41_1_not_null                                                              id IS NOT NULL
 system              public             630200280_41_2_not_null                                                              secret IS NOT NULL
 system              public             630200280_41_3_not_null                                                              expiration IS NOT NULL
-system              public             630200280_42_10_not_null                                                             plan IS NOT NULL
 system              public             630200280_42_1_not_null                                                              aggregated_ts IS NOT NULL
 system              public             630200280_42_2_not_null                                                              fingerprint_id IS NOT NULL
 system              public             630200280_42_3_not_null                                                              plan_hash IS NOT NULL
 system              public             630200280_42_4_not_null                                                              app_name IS NOT NULL
 system              public             630200280_42_5_not_null                                                              node_id IS NOT NULL
-system              public             630200280_42_6_not_null                                                              count IS NOT NULL
-system              public             630200280_42_7_not_null                                                              agg_interval IS NOT NULL
-system              public             630200280_42_8_not_null                                                              metadata IS NOT NULL
-system              public             630200280_42_9_not_null                                                              statistics IS NOT NULL
+system              public             630200280_42_6_not_null                                                              agg_interval IS NOT NULL
+system              public             630200280_42_7_not_null                                                              metadata IS NOT NULL
+system              public             630200280_42_8_not_null                                                              statistics IS NOT NULL
+system              public             630200280_42_9_not_null                                                              plan IS NOT NULL
 system              public             630200280_43_1_not_null                                                              aggregated_ts IS NOT NULL
 system              public             630200280_43_2_not_null                                                              fingerprint_id IS NOT NULL
 system              public             630200280_43_3_not_null                                                              app_name IS NOT NULL
 system              public             630200280_43_4_not_null                                                              node_id IS NOT NULL
-system              public             630200280_43_5_not_null                                                              count IS NOT NULL
-system              public             630200280_43_6_not_null                                                              agg_interval IS NOT NULL
-system              public             630200280_43_7_not_null                                                              metadata IS NOT NULL
-system              public             630200280_43_8_not_null                                                              statistics IS NOT NULL
+system              public             630200280_43_5_not_null                                                              agg_interval IS NOT NULL
+system              public             630200280_43_6_not_null                                                              metadata IS NOT NULL
+system              public             630200280_43_7_not_null                                                              statistics IS NOT NULL
 system              public             630200280_44_1_not_null                                                              database_id IS NOT NULL
 system              public             630200280_44_2_not_null                                                              role_name IS NOT NULL
 system              public             630200280_44_3_not_null                                                              settings IS NOT NULL
@@ -2055,17 +2051,16 @@ system         public        statement_diagnostics_requests   id                
 system         public        statement_diagnostics_requests   requested_at                                                                   5
 system         public        statement_diagnostics_requests   statement_diagnostics_id                                                       4
 system         public        statement_diagnostics_requests   statement_fingerprint                                                          3
-system         public        statement_statistics             agg_interval                                                                   7
+system         public        statement_statistics             agg_interval                                                                   6
 system         public        statement_statistics             aggregated_ts                                                                  1
 system         public        statement_statistics             app_name                                                                       4
-system         public        statement_statistics             count                                                                          6
-system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8  11
+system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8  10
 system         public        statement_statistics             fingerprint_id                                                                 2
-system         public        statement_statistics             metadata                                                                       8
+system         public        statement_statistics             metadata                                                                       7
 system         public        statement_statistics             node_id                                                                        5
-system         public        statement_statistics             plan                                                                           10
+system         public        statement_statistics             plan                                                                           9
 system         public        statement_statistics             plan_hash                                                                      3
-system         public        statement_statistics             statistics                                                                     9
+system         public        statement_statistics             statistics                                                                     8
 system         public        table_statistics                 columnIDs                                                                      4
 system         public        table_statistics                 createdAt                                                                      5
 system         public        table_statistics                 distinctCount                                                                  7
@@ -2095,15 +2090,14 @@ system         public        tenant_usage                     total_write_reques
 system         public        tenants                          active                                                                         2
 system         public        tenants                          id                                                                             1
 system         public        tenants                          info                                                                           3
-system         public        transaction_statistics           agg_interval                                                                   6
+system         public        transaction_statistics           agg_interval                                                                   5
 system         public        transaction_statistics           aggregated_ts                                                                  1
 system         public        transaction_statistics           app_name                                                                       3
-system         public        transaction_statistics           count                                                                          5
-system         public        transaction_statistics           crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8            9
+system         public        transaction_statistics           crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8            8
 system         public        transaction_statistics           fingerprint_id                                                                 2
-system         public        transaction_statistics           metadata                                                                       7
+system         public        transaction_statistics           metadata                                                                       6
 system         public        transaction_statistics           node_id                                                                        4
-system         public        transaction_statistics           statistics                                                                     8
+system         public        transaction_statistics           statistics                                                                     7
 system         public        ui                               key                                                                            1
 system         public        ui                               lastUpdated                                                                    3
 system         public        ui                               value                                                                          2
