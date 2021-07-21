@@ -72,7 +72,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 	// Check operator-specific fields.
 	switch t := e.(type) {
 	case *ScanExpr:
-		if t.Flags.NoIndexJoin && t.Flags.ForceIndex {
+		if t.NoIndexJoin() && t.IndexForced() {
 			panic(errors.AssertionFailedf("NoIndexJoin and ForceIndex set"))
 		}
 		if evalCtx := m.logPropsBuilder.evalCtx; evalCtx != nil && t.Constraint != nil {

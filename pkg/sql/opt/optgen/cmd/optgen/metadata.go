@@ -202,7 +202,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"OrderingChoice":      {fullName: "props.OrderingChoice", passByVal: true},
 		"TupleOrdinal":        {fullName: "memo.TupleOrdinal", passByVal: true},
 		"ScanLimit":           {fullName: "memo.ScanLimit", passByVal: true},
-		"ScanFlags":           {fullName: "memo.ScanFlags", passByVal: true},
+		"ScanFlags":           {fullName: "memo.ScanFlags", isPointer: true},
 		"JoinFlags":           {fullName: "memo.JoinFlags", passByVal: true},
 		"WindowFrame":         {fullName: "memo.WindowFrame", passByVal: true},
 		"FKCascades":          {fullName: "memo.FKCascades", passByVal: true},

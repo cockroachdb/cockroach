@@ -603,7 +603,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	// Scanning an index with a few columns is faster than scanning an index with
 	// many columns. Ideally, we would want to use statistics about the size of
 	// each column. In lieu of that, use the number of columns.
-	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index {
+	if (scan.IndexForced() && !scan.IsIndexForced(scan.Index)) || scan.ZigzagForced() {
 		// If we are forcing an index, any other index has a very high cost. In
 		// practice, this will only happen when this is a primary index scan.
 		return hugeCost

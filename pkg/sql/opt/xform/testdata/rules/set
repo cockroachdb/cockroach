@@ -247,7 +247,7 @@ memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,w:4])
 memo expect-not=GenerateStreamingSetOp
 SELECT * FROM kuvw UNION ALL SELECT * FROM kuvw
 ----
-memo (optimized, ~8KB, required=[presentation: k:13,u:14,v:15,w:16])
+memo (optimized, ~7KB, required=[presentation: k:13,u:14,v:15,w:16])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: k:13,u:14,v:15,w:16]
  │         ├── best: (union-all G2 G3)

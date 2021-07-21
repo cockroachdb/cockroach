@@ -509,17 +509,19 @@ func (b *Builder) buildScan(
 
 	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
 	if indexFlags != nil {
+		private.Flags = &memo.ScanFlags{}
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
 		if indexFlags.Index != "" || indexFlags.IndexID != 0 {
-			idx := -1
 			for i := 0; i < tab.IndexCount(); i++ {
 				if tab.Index(i).Name() == tree.Name(indexFlags.Index) ||
 					tab.Index(i).ID() == cat.StableID(indexFlags.IndexID) {
-					idx = i
+					private.Flags.ForceIndex = true
+					private.Flags.Index = i
+					private.Flags.Direction = indexFlags.Direction
 					break
 				}
 			}
-			if idx == -1 {
+			if !private.Flags.ForceIndex {
 				var err error
 				if indexFlags.Index != "" {
 					err = pgerror.Newf(pgcode.UndefinedObject,
@@ -530,9 +532,22 @@ func (b *Builder) buildScan(
 				}
 				panic(err)
 			}
-			private.Flags.ForceIndex = true
-			private.Flags.Index = idx
-			private.Flags.Direction = indexFlags.Direction
+		}
+		if indexFlags.ZigzagIndices != nil {
+			private.Flags.ForceZigzag = true
+			for _, name := range indexFlags.ZigzagIndices {
+				var found bool
+				for i := 0; i < tab.IndexCount(); i++ {
+					if tab.Index(i).Name() == tree.Name(name) {
+						private.Flags.ZigzagIndices.Add(i)
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic(pgerror.Newf(pgcode.UndefinedObject, "index %q not found", tree.ErrString(&name)))
+				}
+			}
 		}
 	}
 	if locking.isSet() {
@@ -574,7 +589,7 @@ func (b *Builder) buildScan(
 		for i, col := range outScope.cols {
 			dep.ColumnIDToOrd[col.id] = ordinals[i]
 		}
-		if private.Flags.ForceIndex {
+		if private.IndexForced() {
 			dep.SpecificIndex = true
 			dep.Index = private.Flags.Index
 		}

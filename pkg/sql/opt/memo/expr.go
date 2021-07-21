@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -351,14 +352,19 @@ type ScanFlags struct {
 
 	// ForceIndex forces the use of a specific index (specified in Index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
-	ForceIndex bool
-	Direction  tree.Direction
-	Index      int
+	ForceIndex  bool
+	ForceZigzag bool
+	Direction   tree.Direction
+	Index       int
+
+	// ZigzagIndices makes planner to prefer a zigzag with particular indices.
+	// ForceZigzag must also be true.
+	ZigzagIndices util.FastIntSet
 }
 
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {
-	return !sf.NoIndexJoin && !sf.ForceIndex
+	return sf == nil
 }
 
 // JoinFlags stores restrictions on the join execution method, derived from
@@ -678,6 +684,30 @@ func (s *ScanPrivate) SetConstraint(evalCtx *tree.EvalContext, c *constraint.Con
 	} else {
 		s.ExactPrefix = c.ExactPrefix(evalCtx)
 	}
+}
+
+// Some ScanFlags helpers to deal with nil checking.  Attempts were made to
+// implant a pointer to a global "default" ScanFlags but because of reflection
+// usage I couldn't figure out how to make that work seamlessly.
+
+// NoIndexJoin returns true is index joins aren't allowed.
+func (s *ScanPrivate) NoIndexJoin() bool {
+	return s.Flags != nil && s.Flags.NoIndexJoin
+}
+
+// IndexForced returns true if we're forcing use of an index.
+func (s *ScanPrivate) IndexForced() bool {
+	return s.Flags != nil && s.Flags.ForceIndex
+}
+
+// IsIndexForced indicates if a particular index is being forced.
+func (s *ScanPrivate) IsIndexForced(idx int) bool {
+	return s.IndexForced() && s.Flags.Index == idx
+}
+
+// ZigzagForced indicates if a zigzag scan is being forced.
+func (s *ScanPrivate) ZigzagForced() bool {
+	return s.Flags != nil && s.Flags.ForceZigzag
 }
 
 // UsesPartialIndex returns true if the LookupJoinPrivate looks-up via a

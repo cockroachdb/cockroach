@@ -386,7 +386,7 @@ memo (optimized, ~34KB, required=[presentation: pid1:1,cid1:2,gcid1:3,gca1:4,ca1
 memo
 SELECT * FROM abc, stu, xyz, pqr WHERE a = 1
 ----
-memo (optimized, ~24KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~23KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (inner-join G3 G2 G4)
@@ -432,7 +432,7 @@ SELECT *
 FROM stu, abc, xyz, pqr
 WHERE u = a AND a = x AND x = p
 ----
-memo (optimized, ~32KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~31KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+3,+6) (merge-join G3 G2 G5 inner-join,+6,+3) (lookup-join G3 G5 stu@uts,keyCols=[6],outCols=(1-3,6-8,12-14,18-22))
  │    └── [presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (merge-join G2="[ordering: +3]" G3="[ordering: +(6|12|18)]" G5 inner-join,+3,+6)
@@ -1895,7 +1895,7 @@ memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
 memo
 SELECT * FROM abc INNER HASH JOIN xyz ON a=x
 ----
-memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~8KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G2 G3 G4)
@@ -8639,3 +8639,112 @@ left-join (lookup metric_values)
  │    └── fd: (1)-->(2)
  └── filters
       └── name:2 = 'cpu' [outer=(2), constraints=(/2: [/'cpu' - /'cpu']; tight), fd=()-->(2)]
+
+exec-ddl
+CREATE TABLE zigzag (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b), UNIQUE INDEX c_idx(b,c), INDEX ba_idx(b));
+----
+
+# Verify naked hint.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with one index.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with other index.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with both indexes hinted.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify force selection when there's multiple valid choices.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=ba_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@ba_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)

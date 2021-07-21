@@ -220,7 +220,7 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 		}
 
 		// If we are forcing a specific index, ignore all other indexes.
-		if it.scanPrivate.Flags.ForceIndex && ord != it.scanPrivate.Flags.Index {
+		if it.scanPrivate.IndexForced() && !it.scanPrivate.IsIndexForced(ord) {
 			continue
 		}
 

@@ -73,7 +73,7 @@ func ScanPrivateCanProvide(
 		if s.HardLimit.Reverse() {
 			direction = rev
 		}
-	} else if s.Flags.Direction != 0 {
+	} else if s.Flags != nil && s.Flags.Direction != 0 {
 		direction = fwd
 		if s.Flags.Direction == tree.Descending {
 			direction = rev
