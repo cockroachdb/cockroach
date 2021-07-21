@@ -77,10 +77,9 @@ func TestScheduledJobExecutorRegistration(t *testing.T) {
 	instance := newStatusTrackingExecutor()
 	defer registerScopedScheduledJobExecutor(executorName, instance)()
 
-	registered, created, err := GetScheduledJobExecutor(executorName)
+	registered, err := GetScheduledJobExecutor(executorName)
 	require.NoError(t, err)
 	require.Equal(t, instance, registered)
-	require.True(t, created)
 }
 
 func TestJobTerminationNotification(t *testing.T) {
