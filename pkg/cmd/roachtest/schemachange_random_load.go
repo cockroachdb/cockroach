@@ -27,6 +27,7 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 		Name:       "schemachange/random-load",
 		Owner:      OwnerSQLSchema,
 		Cluster:    makeClusterSpec(3),
+		Skip:       "Skipped until 21.2 due to stability issues",
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			maxOps := 5000
@@ -67,6 +68,7 @@ func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
 		Name:       name,
 		Owner:      OwnerSQLSchema,
 		Cluster:    makeClusterSpec(b.Nodes),
+		Skip:       "Skipped until 21.2 due to stability issues",
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runSchemaChangeRandomLoad(ctx, t, c, b.Ops, b.Concurrency)
