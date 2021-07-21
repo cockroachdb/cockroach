@@ -190,7 +190,7 @@ func registerRubyPG(r registry.Registry) {
 				results.failExpectedCount++
 				results.currentFailures = append(results.currentFailures, test)
 			case !expectedFailure:
-				results.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
+				results.results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
 					test, maybeAddGithubLink(issue),
 				)
 			}
