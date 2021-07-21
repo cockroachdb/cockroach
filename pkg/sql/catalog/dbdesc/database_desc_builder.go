@@ -141,6 +141,7 @@ func NewInitial(
 		id,
 		name,
 		descpb.NewDefaultPrivilegeDescriptor(owner),
+		descpb.InitDefaultPrivilegeDescriptor(),
 		options...,
 	)
 }
@@ -148,13 +149,18 @@ func NewInitial(
 // NewInitialWithPrivileges constructs a new Mutable for an initial version
 // from an id and name and custom privileges.
 func NewInitialWithPrivileges(
-	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor, options ...NewInitialOption,
+	id descpb.ID,
+	name string,
+	privileges *descpb.PrivilegeDescriptor,
+	defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
+	options ...NewInitialOption,
 ) *Mutable {
 	ret := descpb.DatabaseDescriptor{
-		Name:       name,
-		ID:         id,
-		Version:    1,
-		Privileges: privileges,
+		Name:              name,
+		ID:                id,
+		Version:           1,
+		Privileges:        privileges,
+		DefaultPrivileges: defaultPrivileges,
 	}
 	for _, option := range options {
 		option(&ret)

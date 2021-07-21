@@ -18,7 +18,7 @@ WHERE message NOT LIKE '%Z/%'
   AND operation != 'dist sender send'
 ----
 batch flow coordinator  CPut /NamespaceTable/30/1/0/0/"t"/4/1 -> 53
-batch flow coordinator  CPut /Table/3/1/53/2/1 -> database:<name:"t" id:53 modification_time:<> version:1 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:2 > state:PUBLIC offline_reason:"" >
+batch flow coordinator  CPut /Table/3/1/53/2/1 -> database:<name:"t" id:53 modification_time:<> version:1 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:2 > state:PUBLIC offline_reason:"" default_privileges:<> >
 batch flow coordinator  CPut /NamespaceTable/30/1/53/0/"public"/4/1 -> 29
 exec stmt               rows affected: 0
 

@@ -345,14 +345,14 @@ func CreateEnumTypeDesc(
 		}
 	}
 
-	// Database privileges and Type privileges do not overlap so there is nothing
-	// to inherit.
-	// However having USAGE on a parent schema of the type
-	// gives USAGE privilege to the type.
-	privs := descpb.NewDefaultPrivilegeDescriptor(params.p.User())
+	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
+		dbDesc.GetID(), dbDesc.GetDefaultPrivileges(),
+		params.p.User(), tree.Types, dbDesc.GetPrivileges(),
+	)
 
+	// TODO(richardjcai): Remove this once we figure out the migration from
+	//   our current "inheritance" model to default privileges.
 	inheritUsagePrivilegeFromSchema(schema, privs)
-	privs.Grant(params.p.User(), privilege.List{privilege.ALL})
 
 	enumKind := descpb.TypeDescriptor_ENUM
 	var regionConfig *descpb.TypeDescriptor_RegionConfig
