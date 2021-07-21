@@ -955,6 +955,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 803027558   26        3         true         true          false           true          false           true        false         false       true       false           1 2 3      0 0 3403232968             0 0 0      2 2 2      NULL      NULL     3
 923576837   41        1         true         true          false           true          false           true        false         false       true       false           1          0                          0          2          NULL      NULL     1
 1062763829  25        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4    0 0 3403232968 3403232968  0 0 0 0    2 2 2 2    NULL      NULL     4
+1183313104  44        2         true         true          false           true          false           true        false         false       true       false           1 2        0 3403232968               0 0        2 2        NULL      NULL     2
 1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6        0 0                        0 0        2 2        NULL      NULL     2
 1322500096  28        1         true         true          false           true          false           true        false         false       true       false           1          0                          0          2          NULL      NULL     1
 1489445036  35        3         false        false         false           false         false           true        false         false       true       false           2 1 3      0 0                        0 0        2 2        NULL      NULL     2
@@ -1021,6 +1022,8 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 1062763829  0                           2
 1062763829  0                           3
 1062763829  0                           4
+1183313104  0                           1
+1183313104  0                           2
 1276104432  0                           1
 1276104432  0                           2
 1322500096  0                           1

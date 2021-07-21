@@ -77,6 +77,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.SQLStatsTable),
 		sqlTransactionStatsTableMigration,
 	),
+	migration.NewTenantMigration(
+		"add the system.database_role_settings table",
+		toCV(clusterversion.DatabaseRoleSettings),
+		databaseRoleSettingsTableMigration,
+	),
 }
 
 func init() {
