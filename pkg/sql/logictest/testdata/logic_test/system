@@ -11,6 +11,7 @@ query TTTTIT
 SHOW TABLES FROM system
 ----
 public  comments                         table  NULL  0  NULL
+public  database_role_settings           table  NULL  0  NULL
 public  descriptor                       table  NULL  0  NULL
 public  eventlog                         table  NULL  0  NULL
 public  jobs                             table  NULL  0  NULL
@@ -79,6 +80,7 @@ SELECT id FROM system.descriptor
 41
 42
 43
+44
 50
 51
 52
@@ -208,6 +210,16 @@ system  public  comments                         root    GRANT
 system  public  comments                         root    INSERT
 system  public  comments                         root    SELECT
 system  public  comments                         root    UPDATE
+system  public  database_role_settings           admin   DELETE
+system  public  database_role_settings           admin   GRANT
+system  public  database_role_settings           admin   INSERT
+system  public  database_role_settings           admin   SELECT
+system  public  database_role_settings           admin   UPDATE
+system  public  database_role_settings           root    DELETE
+system  public  database_role_settings           root    GRANT
+system  public  database_role_settings           root    INSERT
+system  public  database_role_settings           root    SELECT
+system  public  database_role_settings           root    UPDATE
 system  public  descriptor                       admin   GRANT
 system  public  descriptor                       admin   SELECT
 system  public  descriptor                       root    GRANT

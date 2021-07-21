@@ -309,6 +309,9 @@ const (
 	// SQLStatsTable adds the system tables for storing persisted SQL statistics
 	// for statements and transactions.
 	SQLStatsTable
+	// DatabaseRoleSettings adds the system table for storing per-user and
+	// per-role default session settings.
+	DatabaseRoleSettings
 
 	// Step (1): Add new versions here.
 )
@@ -529,6 +532,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SQLStatsTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 116},
+	},
+	{
+		Key:     DatabaseRoleSettings,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 118},
 	},
 	// Step (2): Add new versions here.
 }

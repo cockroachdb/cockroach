@@ -194,6 +194,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.JoinTokensTableID, systemschema.JoinTokensTableSchema, systemschema.JoinTokensTable},
 		{keys.StatementStatisticsTableID, systemschema.StatementStatisticsTableSchema, systemschema.StatementStatisticsTable},
 		{keys.TransactionStatisticsTableID, systemschema.TransactionStatisticsTableSchema, systemschema.TransactionStatisticsTable},
+		{keys.DatabaseRoleSettingsTableID, systemschema.DatabaseRoleSettingsTableSchema, systemschema.DatabaseRoleSettingsTable},
 	} {
 		privs := *test.pkg.GetPrivileges()
 		gen, err := sql.CreateTestTableDescriptor(
