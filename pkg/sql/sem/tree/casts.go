@@ -1023,6 +1023,9 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			if err != nil {
 				return nil, err
 			}
+			if t == nil {
+				return DNull, nil
+			}
 			g, err := geo.ParseGeographyFromGeoJSON([]byte(*t))
 			if err != nil {
 				return nil, err
@@ -1067,6 +1070,9 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			t, err := d.AsText()
 			if err != nil {
 				return nil, err
+			}
+			if t == nil {
+				return DNull, nil
 			}
 			g, err := geo.ParseGeometryFromGeoJSON([]byte(*t))
 			if err != nil {

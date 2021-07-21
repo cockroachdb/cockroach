@@ -1203,3 +1203,13 @@ eval
 '[]'::jsonb::float
 ----
 invalid cast: jsonb -> float
+
+eval
+'null'::jsonb::geography
+----
+NULL
+
+eval
+'null'::jsonb::geometry
+----
+NULL
