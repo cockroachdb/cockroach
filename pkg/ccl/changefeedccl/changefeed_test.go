@@ -3710,6 +3710,7 @@ INSERT INTO foo VALUES (1, 'f');
 // will.
 func TestChangefeedPrimaryKeyChangeWorksWithMultipleTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 67586, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t)
