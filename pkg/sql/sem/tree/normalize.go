@@ -825,7 +825,7 @@ var _ Visitor = &isConstVisitor{}
 
 func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.isConst {
-		if !operatorIsImmutable(expr) || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
+		if !operatorIsImmutable(expr, v.ctx) || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 			v.isConst = false
 			return false, expr
 		}
@@ -833,13 +833,13 @@ func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	return true, expr
 }
 
-func operatorIsImmutable(expr Expr) bool {
+func operatorIsImmutable(expr Expr, evalCtx *EvalContext) bool {
 	switch t := expr.(type) {
 	case *FuncExpr:
 		return t.fnProps.Class == NormalClass && t.fn.Volatility <= VolatilityImmutable
 
 	case *CastExpr:
-		volatility, ok := LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ)
+		volatility, ok := LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ, evalCtx)
 		return ok && volatility <= VolatilityImmutable
 
 	case *UnaryExpr:
@@ -912,7 +912,7 @@ func (v *fastIsConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	// If the parent expression is a variable or non-immutable operator, we know
 	// that it is not constant.
 
-	if !operatorIsImmutable(expr) || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
+	if !operatorIsImmutable(expr, v.ctx) || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 		v.isConst = false
 		return false, expr
 	}

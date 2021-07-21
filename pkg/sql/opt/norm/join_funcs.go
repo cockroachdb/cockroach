@@ -478,8 +478,8 @@ func (c *CustomFuncs) CanExtractJoinEquality(
 
 	// Recursively compute properties for left and right sides.
 	var leftProps, rightProps props.Shared
-	memo.BuildSharedProps(a, &leftProps)
-	memo.BuildSharedProps(b, &rightProps)
+	memo.BuildSharedProps(a, &leftProps, c.f.evalCtx)
+	memo.BuildSharedProps(b, &rightProps, c.f.evalCtx)
 
 	// Disallow cases when one side has a correlated subquery.
 	// TODO(radu): investigate relaxing this.
@@ -520,7 +520,7 @@ func (c *CustomFuncs) ExtractJoinEquality(
 	a, b := eq.Left, eq.Right
 
 	var eqLeftProps props.Shared
-	memo.BuildSharedProps(eq.Left, &eqLeftProps)
+	memo.BuildSharedProps(eq.Left, &eqLeftProps, c.f.evalCtx)
 	if eqLeftProps.OuterCols.SubsetOf(rightCols) {
 		a, b = b, a
 	}
