@@ -20,6 +20,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type FileSystemType string
+
+const (
+	Zfs = "Zfs"
+
+	// Ext4 file system. This is the empty
+	// string, cause we want the default
+	// file system to be Ext4.
+	Ext4 = ""
+)
+
 // ClusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
@@ -35,6 +46,10 @@ type ClusterSpec struct {
 	Geo            bool
 	Lifetime       time.Duration
 	ReusePolicy    clusterReusePolicy
+
+	// FileSystem determines the underlying FileSystem
+	// to be used. The default is ext4.
+	FileSystem FileSystemType
 }
 
 // MakeClusterSpec makes a ClusterSpec.
@@ -176,6 +191,16 @@ func (s *ClusterSpec) Args(extra ...string) ([]string, error) {
 		default:
 			return nil, errors.Errorf("specifying Zones is not yet supported on %s", s.Cloud)
 		}
+	}
+
+	// Make sure that this doesn't show up as a failed roachtest.
+	if s.FileSystem == Zfs {
+		if s.Cloud != GCE {
+			return nil, errors.Errorf(
+				"zfs file system on local ssd not yet supported on %s", s.Cloud,
+			)
+		}
+		args = append(args, "--filesystem=zfs")
 	}
 
 	if s.Geo {
