@@ -107,7 +107,7 @@ func (p *planner) ShowCreateSchedule(
 
 			var rows []tree.Datums
 			for _, sj := range scheduledJobs {
-				ex, _, err := jobs.GetScheduledJobExecutor(sj.ExecutorType())
+				ex, err := jobs.GetScheduledJobExecutor(sj.ExecutorType())
 				if err != nil {
 					return nil, err
 				}
