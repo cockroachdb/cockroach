@@ -968,6 +968,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	default:
 		planner.curPlan.flags.Set(planFlagNotDistributed)
 	}
+
+	ex.sessionTracing.TraceRetryInformation(ctx, ex.extraTxnState.autoRetryCounter, ex.extraTxnState.autoRetryReason)
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
@@ -1635,6 +1637,10 @@ func (ex *connExecutor) recordTransactionStart() (
 		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 		ex.extraTxnState.rowsRead = 0
 		ex.extraTxnState.bytesRead = 0
+
+		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
+			ex.server.cfg.TestingKnobs.BeforeRestart(ex.Ctx(), ex.extraTxnState.autoRetryReason)
+		}
 	}
 	return onTxnFinish, onTxnRestart
 }
