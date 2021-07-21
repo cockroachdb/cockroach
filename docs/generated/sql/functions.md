@@ -888,6 +888,9 @@ SQL statement omitting multi-region related zone configuration fields.
 If the CONFIGURE ZONE statement can be inferred by the database’s or
 table’s zone configuration this will return NULL.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.reset_multi_region_zone_configs"></a><code>crdb_internal.reset_multi_region_zone_configs(id: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Resets the zone configuration for a multi-region table to
+match its original value.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.validate_multi_region_zone_configs"></a><code>crdb_internal.validate_multi_region_zone_configs() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validates all multi-region zone configurations are correctly setup
 for the current database, including all tables, indexes and partitions underneath.
 Returns an error if validation fails. This builtin uses un-leased versions of the

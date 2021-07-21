@@ -854,6 +854,31 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 	)
 }
 
+// ResetMultiRegionZoneConfigsForTable is part of the tree.EvalDatabase interface.
+func (p *planner) ResetMultiRegionZoneConfigsForTable (ctx context.Context, id int64) error {
+	desc, err := p.Descriptors().GetMutableTableVersionByID(ctx, descpb.ID(id), p.txn)
+	if err != nil {
+		return errors.Wrapf(err, "error resolving referenced table ID %d", id)
+	}
+	// If the table is not a multi-region table, there's no work to be done
+	// here.
+	if desc.LocalityConfig == nil {
+		return nil
+	}
+	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.GetParentID(), p.Descriptors())
+	if err != nil {
+		return err
+	}
+	return ApplyZoneConfigForMultiRegionTable(
+		ctx,
+		p.txn,
+		p.ExecCfg(),
+		regionConfig,
+		desc,
+		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+	)
+}
+
 func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	ctx context.Context,
 	dbDesc catalog.DatabaseDescriptor,
