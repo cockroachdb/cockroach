@@ -46,7 +46,7 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 CREATE SCHEMA s;
 CREATE TABLE s.a (a INT PRIMARY KEY);`)
 
-	base := "statement.txt trace.json trace.txt trace-jaeger.json env.sql"
+	base := "statement.txt trace.json trace.txt trace-jaeger.json env.sql running_transactions.txt"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
 
 	// Set a small chunk size to test splitting into chunks. The bundle files are

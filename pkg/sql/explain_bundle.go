@@ -122,6 +122,7 @@ func buildStatementBundle(
 	b.addExplainVec()
 	b.addTrace()
 	b.addEnv(ctx)
+	b.addTransactions(ctx)
 
 	buf, err := b.finalize()
 	if err != nil {
@@ -401,6 +402,39 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		}
 		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].String()), buf.String())
 	}
+}
+
+func (b *stmtBundleBuilder) addTransactions(ctx context.Context) {
+	var buf bytes.Buffer
+
+	query := `
+SELECT s.node_id, s.session_id, s.session_start, s.application_name, s.user_name, s.client_address,
+	s.oldest_query_start, s.alloc_bytes, s.max_alloc_bytes, s.active_queries, s.last_active_query,
+	t.id, t.start, t.txn_string, t.num_stmts, t.num_retries, t.num_auto_retries,
+	q.query_id, q.start, q.query, q.phase
+FROM crdb_internal.cluster_sessions s
+	JOIN crdb_internal.cluster_transactions t ON s.session_id = t.session_id
+	JOIN crdb_internal.cluster_queries q ON q.txn_id = t.id`
+
+	var rows []tree.Datums
+	rows, cols, err := b.ie.QueryBufferedExWithCols(
+		ctx,
+		"addTransactions",
+		nil, /* txn */
+		sessiondata.NoSessionDataOverride,
+		query,
+	)
+	if err != nil {
+		fmt.Fprintf(&buf, "-- error getting transaction information: %v", err)
+	}
+
+	fmt.Fprintln(&buf, cols.String(false, false))
+
+	for _, row := range rows {
+		fmt.Fprintln(&buf, row.String())
+	}
+
+	b.z.AddFile("running_transactions.txt", buf.String())
 }
 
 // finalize generates the zipped bundle and returns it as a buffer.
