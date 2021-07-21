@@ -32,9 +32,6 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	setValues := makeFunctionRegex("_CAST_TUPLES", 2)
-	s = setValues.ReplaceAllString(s, `{{template "castTuples" buildDict "Global" . "HasNulls" $1 "HasSel" $2}}`)
-
 	castRe := makeFunctionRegex("_CAST", 4)
 	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Cast", 4))
 

@@ -262,10 +262,10 @@ func AsDBool(e Expr) (DBool, bool) {
 	return false, false
 }
 
-// makeParseError returns a parse error using the provided string and type. An
+// MakeParseError returns a parse error using the provided string and type. An
 // optional error can be provided, which will be appended to the end of the
 // error string.
-func makeParseError(s string, typ *types.T, err error) error {
+func MakeParseError(s string, typ *types.T, err error) error {
 	if err != nil {
 		return pgerror.Wrapf(err, pgcode.InvalidTextRepresentation,
 			"could not parse %q as type %s", s, typ)
@@ -286,50 +286,64 @@ func isCaseInsensitivePrefix(prefix, s string) bool {
 	return strings.EqualFold(prefix, s[:len(prefix)])
 }
 
-// ParseDBool parses and returns the *DBool Datum value represented by the provided
+// ParseBool parses and returns the boolean value represented by the provided
 // string, or an error if parsing is unsuccessful.
 // See https://github.com/postgres/postgres/blob/90627cf98a8e7d0531789391fd798c9bfcc3bc1a/src/backend/utils/adt/bool.c#L36
-func ParseDBool(s string) (*DBool, error) {
+func ParseBool(s string) (bool, error) {
 	s = strings.TrimSpace(s)
 	if len(s) >= 1 {
 		switch s[0] {
 		case 't', 'T':
 			if isCaseInsensitivePrefix(s, "true") {
-				return DBoolTrue, nil
+				return true, nil
 			}
 		case 'f', 'F':
 			if isCaseInsensitivePrefix(s, "false") {
-				return DBoolFalse, nil
+				return false, nil
 			}
 		case 'y', 'Y':
 			if isCaseInsensitivePrefix(s, "yes") {
-				return DBoolTrue, nil
+				return true, nil
 			}
 		case 'n', 'N':
 			if isCaseInsensitivePrefix(s, "no") {
-				return DBoolFalse, nil
+				return false, nil
 			}
 		case '1':
 			if s == "1" {
-				return DBoolTrue, nil
+				return true, nil
 			}
 		case '0':
 			if s == "0" {
-				return DBoolFalse, nil
+				return false, nil
 			}
 		case 'o', 'O':
 			// Just 'o' is ambiguous between 'on' and 'off'.
 			if len(s) > 1 {
 				if isCaseInsensitivePrefix(s, "on") {
-					return DBoolTrue, nil
+					return true, nil
 				}
 				if isCaseInsensitivePrefix(s, "off") {
-					return DBoolFalse, nil
+					return false, nil
 				}
 			}
 		}
 	}
-	return nil, makeParseError(s, types.Bool, pgerror.New(pgcode.InvalidTextRepresentation, "invalid bool value"))
+	return false, MakeParseError(s, types.Bool, pgerror.New(pgcode.InvalidTextRepresentation, "invalid bool value"))
+}
+
+// ParseDBool parses and returns the *DBool Datum value represented by the provided
+// string, or an error if parsing is unsuccessful.
+// See https://github.com/postgres/postgres/blob/90627cf98a8e7d0531789391fd798c9bfcc3bc1a/src/backend/utils/adt/bool.c#L36
+func ParseDBool(s string) (*DBool, error) {
+	v, err := ParseBool(s)
+	if err != nil {
+		return nil, err
+	}
+	if v {
+		return DBoolTrue, nil
+	}
+	return DBoolFalse, nil
 }
 
 // ParseDByte parses a string representation of hex encoded binary
@@ -340,7 +354,7 @@ func ParseDBool(s string) (*DBool, error) {
 func ParseDByte(s string) (*DBytes, error) {
 	res, err := lex.DecodeRawBytesToByteArrayAuto([]byte(s))
 	if err != nil {
-		return nil, makeParseError(s, types.Bytes, err)
+		return nil, MakeParseError(s, types.Bytes, err)
 	}
 	return NewDBytes(DBytes(res)), nil
 }
@@ -350,7 +364,7 @@ func ParseDByte(s string) (*DBytes, error) {
 func ParseDUuidFromString(s string) (*DUuid, error) {
 	uv, err := uuid.FromString(s)
 	if err != nil {
-		return nil, makeParseError(s, types.Uuid, err)
+		return nil, MakeParseError(s, types.Uuid, err)
 	}
 	return NewDUuid(DUuid{uv}), nil
 }
@@ -360,7 +374,7 @@ func ParseDUuidFromString(s string) (*DUuid, error) {
 func ParseDUuidFromBytes(b []byte) (*DUuid, error) {
 	uv, err := uuid.FromBytes(b)
 	if err != nil {
-		return nil, makeParseError(string(b), types.Uuid, err)
+		return nil, MakeParseError(string(b), types.Uuid, err)
 	}
 	return NewDUuid(DUuid{uv}), nil
 }
@@ -639,7 +653,7 @@ func NewDInt(d DInt) *DInt {
 func ParseDInt(s string) (*DInt, error) {
 	i, err := strconv.ParseInt(s, 0, 64)
 	if err != nil {
-		return nil, makeParseError(s, types.Int, err)
+		return nil, MakeParseError(s, types.Int, err)
 	}
 	return NewDInt(DInt(i)), nil
 }
@@ -785,7 +799,7 @@ func NewDFloat(d DFloat) *DFloat {
 func ParseDFloat(s string) (*DFloat, error) {
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		return nil, makeParseError(s, types.Float, err)
+		return nil, MakeParseError(s, types.Float, err)
 	}
 	return NewDFloat(DFloat(f)), nil
 }
@@ -954,7 +968,7 @@ func (d *DDecimal) SetString(s string) error {
 	//_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
 	_, res, err := ExactCtx.SetString(&d.Decimal, s)
 	if res != 0 || err != nil {
-		return makeParseError(s, types.Decimal, nil)
+		return MakeParseError(s, types.Decimal, nil)
 	}
 	switch d.Form {
 	case apd.NaNSignaling:
@@ -1947,7 +1961,7 @@ func ParseDTime(
 	t, dependsOnContext, err := pgdate.ParseTimeWithoutTimezone(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
-		return nil, false, makeParseError(s, types.Time, nil)
+		return nil, false, MakeParseError(s, types.Time, nil)
 	}
 	return MakeDTime(timeofday.FromTime(t).Round(precision)), dependsOnContext, nil
 }
@@ -2695,14 +2709,14 @@ func parseDInterval(
 
 	// If it's a blank string, exit early.
 	if len(s) == 0 {
-		return nil, makeParseError(s, types.Interval, nil)
+		return nil, MakeParseError(s, types.Interval, nil)
 	}
 	if s[0] == 'P' {
 		// If it has a leading P we're most likely working with an iso8601
 		// interval.
 		dur, err := iso8601ToDuration(s)
 		if err != nil {
-			return nil, makeParseError(s, types.Interval, err)
+			return nil, MakeParseError(s, types.Interval, err)
 		}
 		return &DInterval{Duration: dur}, nil
 	}
@@ -2711,7 +2725,7 @@ func parseDInterval(
 		// interval, as both postgres and golang have letter(s) and iso8601 has been tested.
 		dur, err := sqlStdToDuration(s, itm)
 		if err != nil {
-			return nil, makeParseError(s, types.Interval, err)
+			return nil, MakeParseError(s, types.Interval, err)
 		}
 		return &DInterval{Duration: dur}, nil
 	}
@@ -2720,7 +2734,7 @@ func parseDInterval(
 	// Our postgres syntax parser also supports golang, so just use that for both.
 	dur, err := parseDuration(style, s, itm)
 	if err != nil {
-		return nil, makeParseError(s, types.Interval, err)
+		return nil, MakeParseError(s, types.Interval, err)
 	}
 	return &DInterval{Duration: dur}, nil
 }
