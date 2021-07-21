@@ -194,14 +194,14 @@ func TestTupleCastVolatility(t *testing.T) {
 		},
 	}
 
-	settings := cluster.MakeTestingClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 	evalCtx := MakeTestingEvalContext(st)
 	for _, tc := range testCases {
 		from := *types.EmptyTuple
 		from.InternalType.TupleContents = tc.from
 		to := *types.EmptyTuple
 		to.InternalType.TupleContents = tc.to
-		v, ok := LookupCastVolatility(&from, &to, evalCtx)
+		v, ok := LookupCastVolatility(&from, &to, &evalCtx)
 		res := "error"
 		if ok {
 			res = v.String()
