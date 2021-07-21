@@ -489,7 +489,13 @@ func (h *hasher) HashScanFlags(val ScanFlags) {
 	h.HashBool(val.NoIndexJoin)
 	h.HashBool(val.ForceIndex)
 	h.HashInt(int(val.Direction))
-	h.HashUint64(uint64(val.Index))
+	h.HashInt(val.Index())
+	if val.ZigzagIndices != nil {
+		s := val.ZigzagIndices
+		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+			h.HashInt(i)
+		}
+	}
 }
 
 func (h *hasher) HashJoinFlags(val JoinFlags) {

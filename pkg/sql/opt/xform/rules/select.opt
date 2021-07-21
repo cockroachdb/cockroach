@@ -56,7 +56,7 @@
 # GenerateZigzagJoins creates ZigzagJoin operators for all index pairs (of the
 # Scan table) where the prefix column(s) of both indexes is/are fixed to
 # constant values in the filters. See comments in GenerateZigzagJoin and
-# distsqlrun/zigzagjoiner.go for more details on when a zigzag join can be
+# sql.rowexec.zigzagJoiner for more details on when a zigzag join can be
 # planned.
 #
 # Zigzag joins are prohibited when the source Scan operator has been configured

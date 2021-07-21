@@ -400,7 +400,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if private.Flags.NoIndexJoin {
 				tp.Childf("flags: no-index-join")
 			} else if private.Flags.ForceIndex {
-				idx := md.Table(private.Table).Index(private.Flags.Index)
+				idx := md.Table(private.Table).Index(private.Flags.Index())
 				dir := ""
 				switch private.Flags.Direction {
 				case tree.DefaultDirection:

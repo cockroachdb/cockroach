@@ -499,8 +499,8 @@ func (b *Builder) scanParams(
 ) (exec.ScanParams, opt.ColMap, error) {
 	// Check if we tried to force a specific index but there was no Scan with that
 	// index in the memo.
-	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index {
-		idx := tab.Index(scan.Flags.Index)
+	if scan.Flags.ForceIndex && scan.Flags.Index() != scan.Index {
+		idx := tab.Index(scan.Flags.Index())
 		isInverted := idx.IsInverted()
 		_, isPartial := idx.Predicate()
 
@@ -622,6 +622,10 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	)
 	if err != nil {
 		return execPlan{}, err
+	}
+
+	if scan.Flags.ZigzagIndices != nil {
+		return execPlan{}, fmt.Errorf("could not produce a query plan conforming to the FORCE_ZIGZAG hint")
 	}
 
 	// Save if we planned a full table/index scan on the builder so that the

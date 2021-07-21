@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -349,16 +350,39 @@ type ScanFlags struct {
 	// this table.
 	NoIndexJoin bool
 
-	// ForceIndex forces the use of a specific index (specified in Index).
+	// ForceIndex forces the use of a specific index (specified in index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
 	ForceIndex bool
 	Direction  tree.Direction
-	Index      int
+
+	// index is a uint32 to allow optimal packing of this structure, use Index()
+	// and SetIndex() to get/set this field using cat.IndexOrdinal type.
+	index uint32
+
+	// ZigzagIndices makes planner to prefer a zigzag with particular indices.
+	// There are three possibilities:
+	// 1) nil means no hint, business as usual
+	// 2) empty FastIntSet means we want to force a Zigzag join but any index will
+	//    do
+	// 3) non-empty slice means Zigzag we plan must use the indices provided
+	// For cases 2 and 3 if we can't generate a suitable plan an error will
+	// result.
+	ZigzagIndices *util.FastIntSet
+}
+
+// Index returns the index being forced as a cat.IndexOrdinal.
+func (sf *ScanFlags) Index() cat.IndexOrdinal {
+	return cat.IndexOrdinal(sf.index)
+}
+
+// SetIndex sets the index being forced.
+func (sf *ScanFlags) SetIndex(idx cat.IndexOrdinal) {
+	sf.index = uint32(idx)
 }
 
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {
-	return !sf.NoIndexJoin && !sf.ForceIndex
+	return !sf.NoIndexJoin && !sf.ForceIndex && sf.ZigzagIndices == nil
 }
 
 // JoinFlags stores restrictions on the join execution method, derived from

@@ -8466,3 +8466,91 @@ anti-join (lookup abc_part)
  │    │         └── fd: ()-->(19-22)
  │    └── filters (true)
  └── filters (true)
+
+exec-ddl
+CREATE TABLE zigzag (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b), UNIQUE INDEX c_idx(b,c));
+----
+
+# Verify naked hint.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with one index.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with other index.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with both indexes hinted.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1079,6 +1080,14 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			)
 			zigzagCols := leftCols.Copy()
 			zigzagCols.UnionWith(rightCols)
+
+			if scanPrivate.Flags.ZigzagIndices != nil {
+				indices := util.MakeFastIntSet(leftIndex.Ordinal(), rightIndex.Ordinal())
+				forceIndices := scanPrivate.Flags.ZigzagIndices
+				if !forceIndices.Intersection(indices).Equals(*forceIndices) {
+					return
+				}
+			}
 
 			if scanPrivate.Cols.SubsetOf(zigzagCols) {
 				// Case 1 (zigzagged indexes contain all requested columns).
