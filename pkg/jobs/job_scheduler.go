@@ -354,10 +354,23 @@ func (s *jobScheduler) executeSchedules(
 	return err
 }
 
+// Load all of the registered executors once so that their metrics are
+// registered on this node. This is important since this node may handle the job
+// termination callback of a job created by another node.
+func (s *jobScheduler) initializeExecutors(ctx context.Context) {
+	for executorType := range executorRegistry.factories {
+		if _, err := s.lookupExecutor(executorType); err != nil {
+			log.Errorf(ctx, "error initializing executors %q: %+v", executorType, err)
+		}
+	}
+}
+
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "job-scheduler", func(ctx context.Context) {
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
 		log.Infof(ctx, "waiting %v before scheduled jobs daemon start", initialDelay)
+
+		s.initializeExecutors(ctx)
 
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
 			getWaitPeriod(&s.Settings.SV, s.TestingKnobs)) {
