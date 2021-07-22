@@ -326,6 +326,7 @@ func registerJobsMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:  "jobs/mixed-versions",
 		Owner: registry.OwnerBulkIO,
+		Skip:  "#67587",
 		// Jobs infrastructure was unstable prior to 20.1 in terms of the behavior
 		// of `PAUSE/CANCEL JOB` commands which were best effort and relied on the
 		// job itself to detect the request. These were fixed by introducing new job
