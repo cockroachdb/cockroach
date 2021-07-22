@@ -363,8 +363,8 @@ func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemLi
 	return nil
 }
 
-// replaceExpressionElemsWithVirtualCols replaces each IndexElem in n with a
-// non-nil Expr with an inaccessible virtual column with the same expression. If
+// replaceExpressionElemsWithVirtualCols replaces each non-nil expression in
+// elems with an inaccessible virtual column with the same expression. If
 // isNewTable is true, the column is added directly to desc. Otherwise, the
 // virtual column is added to desc as a mutation column.
 func replaceExpressionElemsWithVirtualCols(
@@ -486,6 +486,9 @@ func replaceExpressionElemsWithVirtualCols(
 			// Set the column name and unset the expression.
 			elem.Column = tree.Name(colName)
 			elem.Expr = nil
+
+			// Increment expression index telemetry.
+			telemetry.Inc(sqltelemetry.ExpressionIndexCounter)
 		}
 	}
 

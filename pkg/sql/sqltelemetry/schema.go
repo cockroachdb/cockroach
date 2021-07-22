@@ -84,6 +84,11 @@ var (
 	// PartitionedInvertedIndexCounter is to be incremented every time a
 	// partitioned inverted index is created.
 	PartitionedInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.partitioned_inverted_index")
+
+	// ExpressionIndexCounter is to be incremented every time an expression
+	// index is created. This includes both regular and inverted expression
+	// indexes.
+	ExpressionIndexCounter = telemetry.GetCounterOnce("sql.schema.expression_index")
 )
 
 var (
