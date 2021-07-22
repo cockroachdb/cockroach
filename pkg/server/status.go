@@ -128,6 +128,12 @@ func propagateGatewayMetadata(ctx context.Context) context.Context {
 // baseStatusServer implements functionality shared by the tenantStatusServer
 // and the full statusServer.
 type baseStatusServer struct {
+	// Embedding the UnimplementedStatusServer lets us easily support
+	// treating the tenantStatusServer as implementing the StatusServer
+	// interface. We'd return an unimplemented error for the methods we
+	// didn't require anyway.
+	serverpb.UnimplementedStatusServer
+
 	log.AmbientContext
 	privilegeChecker   *adminPrivilegeChecker
 	sessionRegistry    *sql.SessionRegistry
@@ -135,6 +141,8 @@ type baseStatusServer struct {
 	flowScheduler      *flowinfra.FlowScheduler
 	st                 *cluster.Settings
 	sqlServer          *SQLServer
+	rpcCtx             *rpc.Context
+	stopper            *stop.Stopper
 }
 
 // getLocalSessions returns a list of local sessions on this node. Note that the
@@ -391,9 +399,7 @@ type statusServer struct {
 	metricSource             metricMarshaler
 	nodeLiveness             *liveness.NodeLiveness
 	storePool                *kvserver.StorePool
-	rpcCtx                   *rpc.Context
 	stores                   *kvserver.Stores
-	stopper                  *stop.Stopper
 	si                       systemInfoOnce
 	stmtDiagnosticsRequester StmtDiagnosticsRequester
 	internalExecutor         *sql.InternalExecutor
@@ -438,6 +444,8 @@ func newStatusServer(
 			contentionRegistry: contentionRegistry,
 			flowScheduler:      flowScheduler,
 			st:                 st,
+			rpcCtx:             rpcCtx,
+			stopper:            stopper,
 		},
 		cfg:              cfg,
 		admin:            adminServer,
@@ -446,9 +454,7 @@ func newStatusServer(
 		metricSource:     metricSource,
 		nodeLiveness:     nodeLiveness,
 		storePool:        storePool,
-		rpcCtx:           rpcCtx,
 		stores:           stores,
-		stopper:          stopper,
 		internalExecutor: internalExecutor,
 	}
 

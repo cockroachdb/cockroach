@@ -55,6 +55,10 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.rpc.Heartbeat/Ping":
 		return nil // no authorization
 
+	case "/cockroach.server.serverpb.Status/Statements":
+		// The Statements endpoint requires only SQL
+		return nil // no authorization
+
 	default:
 		return authErrorf("unknown method %q", fullMethod)
 	}
