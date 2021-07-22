@@ -687,12 +687,12 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 			return nil
 		}
 		leaseholderNodeID = lErr.LeaseHolder.NodeID
+		// Request fixes any issues where we've missed a closed timestamp update or
+		// where we're not connected to receive them from this node in the first
+		// place.
+		r.store.cfg.ClosedTimestamp.Clients.Request(leaseholderNodeID, r.RangeID)
+		return nil
 	} else {
 		return err
 	}
-	// Request fixes any issues where we've missed a closed timestamp update or
-	// where we're not connected to receive them from this node in the first
-	// place.
-	r.store.cfg.ClosedTimestamp.Clients.Request(leaseholderNodeID, r.RangeID)
-	return nil
 }
