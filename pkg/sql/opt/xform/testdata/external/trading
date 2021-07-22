@@ -550,7 +550,7 @@ FROM CardsView WHERE Version > 1584421773604892000.0000000000
 project
  ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null buyprice:10!null sellprice:11!null desiredinventory:13!null actualinventory:14!null version:16!null discount:12!null maxinventory:15!null
  ├── immutable
- ├── stats: [rows=1]
+ ├── stats: [rows=0.0115557548]
  ├── key: (16)
  ├── fd: (1)-->(2-6,10-16), (2,4,5)~~>(1,3,6), (16)-->(1-6,10-15)
  └── inner-join (lookup cards)
@@ -558,23 +558,23 @@ project
       ├── key columns: [9] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=1, distinct(1)=0.0201621393, null(1)=0, distinct(9)=0.0201621393, null(9)=0]
+      ├── stats: [rows=0.0115557548, distinct(1)=2.02732541e-07, null(1)=0, distinct(9)=2.02732541e-07, null(9)=0]
       ├── key: (9)
       ├── fd: ()-->(8), (1)-->(2-6), (2,4,5)~~>(1,3,6), (9)-->(10-16), (16)-->(9-15), (1)==(9), (9)==(1)
       ├── index-join cardsinfo
       │    ├── columns: dealerid:8!null cardid:9!null buyprice:10!null sellprice:11!null discount:12!null desiredinventory:13!null actualinventory:14!null maxinventory:15!null version:16!null
       │    ├── immutable
-      │    ├── stats: [rows=0.0201621426, distinct(8)=0.0201621426, null(8)=0, distinct(9)=0.0201621393, null(9)=0, distinct(10)=0.02016214, null(10)=0, distinct(11)=0.02016214, null(11)=0, distinct(12)=0.02016214, null(12)=0, distinct(13)=0.02016214, null(13)=0, distinct(14)=0.02016214, null(14)=0, distinct(15)=0.02016214, null(15)=0, distinct(16)=0.0201621426, null(16)=0, distinct(8,16)=0.0201621426, null(8,16)=0]
-      │    │   histogram(16)=  0                0                 0.020162           0
-      │    │                 <--- 1584421773604892000.0000000000 ---------- 1584421778604892000
+      │    ├── stats: [rows=2.02732541e-07, distinct(8)=2.02732541e-07, null(8)=0, distinct(9)=2.02732541e-07, null(9)=0, distinct(10)=2.02732541e-07, null(10)=0, distinct(11)=2.02732541e-07, null(11)=0, distinct(12)=2.02732541e-07, null(12)=0, distinct(13)=2.02732541e-07, null(13)=0, distinct(14)=2.02732541e-07, null(14)=0, distinct(15)=2.02732541e-07, null(15)=0, distinct(16)=2.02732541e-07, null(16)=0, distinct(8,16)=2.02732541e-07, null(8,16)=0]
+      │    │   histogram(16)=  0                0                 2.0273e-07           0
+      │    │                 <--- 1584421773604892000.0000000000 ------------ 1584421778604892000
       │    ├── key: (9)
       │    ├── fd: ()-->(8), (9)-->(10-16), (16)-->(9-15)
       │    └── scan cardsinfo@cardsinfoversionindex
       │         ├── columns: dealerid:8!null cardid:9!null version:16!null
       │         ├── constraint: /8/16: (/1/1584421773604892000.0000000000 - /1]
-      │         ├── stats: [rows=0.0201621426, distinct(8)=0.0201621426, null(8)=0, distinct(9)=0.0201621426, null(9)=0, distinct(16)=0.0201621426, null(16)=0, distinct(8,16)=0.0201621426, null(8,16)=0]
-      │         │   histogram(16)=  0                0                 0.020162           0
-      │         │                 <--- 1584421773604892000.0000000000 ---------- 1584421778604892000
+      │         ├── stats: [rows=2.02732541e-07, distinct(8)=2.02732541e-07, null(8)=0, distinct(9)=2.02732541e-07, null(9)=0, distinct(16)=2.02732541e-07, null(16)=0, distinct(8,16)=2.02732541e-07, null(8,16)=0]
+      │         │   histogram(16)=  0                0                 2.0273e-07           0
+      │         │                 <--- 1584421773604892000.0000000000 ------------ 1584421778604892000
       │         ├── key: (9)
       │         └── fd: ()-->(8), (9)-->(16), (16)-->(9)
       └── filters (true)

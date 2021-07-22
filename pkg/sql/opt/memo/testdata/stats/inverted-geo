@@ -165,12 +165,12 @@ project
       │    ├── limit hint: 1.00
       │    ├── sort
       │    │    ├── columns: i:1(int) g:2(geometry)
-      │    │    ├── stats: [rows=7e-07]
+      │    │    ├── stats: [rows=1e-07]
       │    │    ├── ordering: +1
       │    │    ├── limit hint: 0.00
       │    │    └── index-join t
       │    │         ├── columns: i:1(int) g:2(geometry)
-      │    │         ├── stats: [rows=7e-07]
+      │    │         ├── stats: [rows=1e-07]
       │    │         └── inverted-filter
       │    │              ├── columns: rowid:3(int!null)
       │    │              ├── inverted expression: /5
@@ -178,13 +178,13 @@ project
       │    │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │              ├── pre-filterer expression
       │    │              │    └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool]
-      │    │              ├── stats: [rows=7e-07]
+      │    │              ├── stats: [rows=1e-07]
       │    │              ├── key: (3)
       │    │              └── scan t@secondary
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:5(geometry!null)
       │    │                   ├── inverted constraint: /5/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │    │                   ├── stats: [rows=7e-07, distinct(3)=7e-07, null(3)=0, distinct(5)=7e-07, null(5)=0]
+      │    │                   ├── stats: [rows=1e-07, distinct(3)=1e-07, null(3)=0, distinct(5)=1e-07, null(5)=0]
       │    │                   │   histogram(5)=
       │    │                   ├── key: (3)
       │    │                   └── fd: (3)-->(5)
@@ -385,12 +385,12 @@ project
       │    ├── limit hint: 1.00
       │    ├── sort
       │    │    ├── columns: i:1(int) g:2(geometry)
-      │    │    ├── stats: [rows=7e-07]
+      │    │    ├── stats: [rows=1e-07]
       │    │    ├── ordering: +1
       │    │    ├── limit hint: 0.00
       │    │    └── index-join t
       │    │         ├── columns: i:1(int) g:2(geometry)
-      │    │         ├── stats: [rows=7e-07]
+      │    │         ├── stats: [rows=1e-07]
       │    │         └── inverted-filter
       │    │              ├── columns: rowid:3(int!null)
       │    │              ├── inverted expression: /5
@@ -398,13 +398,13 @@ project
       │    │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │              ├── pre-filterer expression
       │    │              │    └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool]
-      │    │              ├── stats: [rows=7e-07]
+      │    │              ├── stats: [rows=1e-07]
       │    │              ├── key: (3)
       │    │              └── scan t@secondary
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:5(geometry!null)
       │    │                   ├── inverted constraint: /5/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │    │                   ├── stats: [rows=7e-07, distinct(3)=7e-07, null(3)=0, distinct(5)=7e-07, null(5)=0]
+      │    │                   ├── stats: [rows=1e-07, distinct(3)=1e-07, null(3)=0, distinct(5)=1e-07, null(5)=0]
       │    │                   │   histogram(5)=
       │    │                   ├── key: (3)
       │    │                   └── fd: (3)-->(5)
