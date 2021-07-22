@@ -54,6 +54,10 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			error: `to import into a table with virtual computed columns, use IMPORT INTO`,
 		},
 		{
+			stmt:  "create table a (i int, index ((i + 1)))",
+			error: `to import into a table with expression indexes, use IMPORT INTO`,
+		},
+		{
 			stmt: `create table a (
 				i int check (i > 0),
 				b int default 1,
