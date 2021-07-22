@@ -1885,6 +1885,9 @@ func NewTableDesc(
 		}
 	}
 
+	// Track the number of expression indexes for telemetry.
+	var expressionIndexCount int32
+
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef, *tree.LikeTableDef:
@@ -1900,7 +1903,7 @@ func NewTableDesc(
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
 			}
-			if err := replaceExpressionElemsWithVirtualCols(
+			isExpressionIndex, err := replaceExpressionElemsWithVirtualCols(
 				ctx,
 				&desc,
 				&n.Table,
@@ -1910,8 +1913,12 @@ func NewTableDesc(
 				semaCtx,
 				evalCtx,
 				sessionData,
-			); err != nil {
+			)
+			if err != nil {
 				return nil, err
+			}
+			if isExpressionIndex {
+				expressionIndexCount++
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
@@ -2024,7 +2031,7 @@ func NewTableDesc(
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
 			}
-			if err := replaceExpressionElemsWithVirtualCols(
+			isExpressionIndex, err := replaceExpressionElemsWithVirtualCols(
 				ctx,
 				&desc,
 				&n.Table,
@@ -2034,8 +2041,12 @@ func NewTableDesc(
 				semaCtx,
 				evalCtx,
 				sessionData,
-			); err != nil {
+			)
+			if err != nil {
 				return nil, err
+			}
+			if isExpressionIndex {
+				expressionIndexCount++
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
@@ -2384,6 +2395,9 @@ func NewTableDesc(
 		return nil
 	}); err != nil {
 		return nil, err
+	}
+	if expressionIndexCount > 0 {
+		telemetry.IncN(sqltelemetry.ExpressionIndexCounter, expressionIndexCount)
 	}
 
 	if regionConfig != nil || n.Locality != nil {

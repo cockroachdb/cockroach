@@ -69,6 +69,11 @@ func Inc(c Counter) {
 	atomic.AddInt32(c, 1)
 }
 
+// IncN increments the counter by n.
+func IncN(c Counter, n int32) {
+	atomic.AddInt32(c, n)
+}
+
 // Read reads the current value of the counter.
 func Read(c Counter) int32 {
 	return atomic.LoadInt32(c)

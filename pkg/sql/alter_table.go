@@ -239,7 +239,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 
-				if err := replaceExpressionElemsWithVirtualCols(
+				isExpressionIndex, err := replaceExpressionElemsWithVirtualCols(
 					params.ctx,
 					n.tableDesc,
 					tableName,
@@ -249,8 +249,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 					params.p.SemaCtx(),
 					params.EvalContext(),
 					params.SessionData(),
-				); err != nil {
+				)
+				if err != nil {
 					return err
+				}
+				if isExpressionIndex {
+					telemetry.Inc(sqltelemetry.ExpressionIndexCounter)
 				}
 
 				// Check if the columns exist on the table.

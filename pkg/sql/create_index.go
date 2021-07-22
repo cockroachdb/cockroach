@@ -174,7 +174,7 @@ func MakeIndexDescriptor(
 
 	// Replace expression index elements with hidden virtual computed columns.
 	// The virtual columns are added as mutation columns to tableDesc.
-	if err := replaceExpressionElemsWithVirtualCols(
+	isExpressionIndex, err := replaceExpressionElemsWithVirtualCols(
 		params.ctx,
 		tableDesc,
 		tn,
@@ -184,7 +184,8 @@ func MakeIndexDescriptor(
 		params.p.SemaCtx(),
 		params.EvalContext(),
 		params.SessionData(),
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -317,6 +318,9 @@ func MakeIndexDescriptor(
 	if indexDesc.IsPartial() {
 		telemetry.Inc(sqltelemetry.PartialIndexCounter)
 	}
+	if isExpressionIndex {
+		telemetry.Inc(sqltelemetry.ExpressionIndexCounter)
+	}
 
 	return &indexDesc, nil
 }
@@ -365,6 +369,7 @@ func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemLi
 
 // replaceExpressionElemsWithVirtualCols replaces each IndexElem in n with a
 // non-nil Expr with an inaccessible virtual column with the same expression. If
+// none of the elems are expressions, isExpressionIndex=false is returned. If
 // isNewTable is true, the column is added directly to desc. Otherwise, the
 // virtual column is added to desc as a mutation column.
 func replaceExpressionElemsWithVirtualCols(
@@ -377,17 +382,19 @@ func replaceExpressionElemsWithVirtualCols(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	sessionData *sessiondata.SessionData,
-) error {
+) (isExpressionIndex bool, _ error) {
 	lastColumnIdx := len(elems) - 1
 	for i := range elems {
 		elem := &elems[i]
 		if elem.Expr != nil {
+			isExpressionIndex = true
+
 			if !sessionData.EnableExpressionIndexes {
-				return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
+				return false, unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
 			}
 
 			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.ExpressionIndexes) {
-				return pgerror.Newf(pgcode.FeatureNotSupported,
+				return false, pgerror.Newf(pgcode.FeatureNotSupported,
 					"version %v must be finalized to use expression indexes",
 					clusterversion.ExpressionIndexes)
 			}
@@ -412,12 +419,12 @@ func replaceExpressionElemsWithVirtualCols(
 				semaCtx,
 			)
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			// The expression type cannot be ambiguous.
 			if typ.IsAmbiguous() {
-				return errors.WithHint(
+				return false, errors.WithHint(
 					pgerror.Newf(
 						pgcode.InvalidTableDefinition,
 						"type of index element %s is ambiguous",
@@ -428,7 +435,7 @@ func replaceExpressionElemsWithVirtualCols(
 			}
 
 			if !isInverted && !colinfo.ColumnTypeIsIndexable(typ) {
-				return pgerror.Newf(
+				return false, pgerror.Newf(
 					pgcode.InvalidTableDefinition,
 					"index element %s of type %s is not indexable",
 					elem.Expr.String(),
@@ -438,7 +445,7 @@ func replaceExpressionElemsWithVirtualCols(
 
 			if isInverted {
 				if i < lastColumnIdx && !colinfo.ColumnTypeIsIndexable(typ) {
-					return errors.WithHint(
+					return false, errors.WithHint(
 						pgerror.Newf(
 							pgcode.InvalidTableDefinition,
 							"index element %s of type %s is not allowed as a prefix column in an inverted index",
@@ -449,7 +456,7 @@ func replaceExpressionElemsWithVirtualCols(
 					)
 				}
 				if i == lastColumnIdx && !colinfo.ColumnTypeIsInvertedIndexable(typ) {
-					return errors.WithHint(
+					return false, errors.WithHint(
 						pgerror.Newf(
 							pgcode.InvalidTableDefinition,
 							"index element %s of type %s is not allowed as the last column in an inverted index",
@@ -489,7 +496,7 @@ func replaceExpressionElemsWithVirtualCols(
 		}
 	}
 
-	return nil
+	return isExpressionIndex, nil
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
