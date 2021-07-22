@@ -103,8 +103,24 @@ func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
 // RowCount and Selectivity are updated. Note that DistinctCounts, NullCounts,
 // and Histograms are not updated.
 func (s *Statistics) UnapplySelectivity(selectivity Selectivity) {
-	s.RowCount /= selectivity.AsFloat()
+	// Make sure that we don't increase the row count to something larger than it
+	// was at the beginning. Selectivity will never exceed 1, so use that fact to
+	// update the RowCount.
+	adjustedSelectivity := s.Selectivity
 	s.Selectivity.Divide(selectivity)
+	adjustedSelectivity.Divide(s.Selectivity)
+	s.RowCount /= adjustedSelectivity.AsFloat()
+}
+
+// LimitSelectivity limits the Selectivity to the given max selectivity.
+// RowCount and Selectivity are updated. Note that DistinctCounts, NullCounts,
+// and Histograms are not updated.
+func (s *Statistics) LimitSelectivity(maxSelectivity Selectivity) {
+	if s.Selectivity.selectivity > maxSelectivity.selectivity {
+		adjustedSelectivity := maxSelectivity
+		adjustedSelectivity.Divide(s.Selectivity)
+		s.ApplySelectivity(adjustedSelectivity)
+	}
 }
 
 // UnionWith unions this Statistics object with another Statistics object. It
