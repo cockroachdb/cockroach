@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -49,7 +48,7 @@ func (s *statusServer) Statements(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			return statementsLocal(ctx, s.gossip.NodeID, s.admin.server.sqlServer)
+			return statementsLocal(ctx, s.gossip.NodeID.Get(), s.admin.server.sqlServer)
 		}
 		status, err := s.dialNode(ctx, requestedNodeID)
 		if err != nil {
@@ -89,7 +88,7 @@ func (s *statusServer) Statements(
 }
 
 func statementsLocal(
-	ctx context.Context, nodeID *base.NodeIDContainer, sqlServer *SQLServer,
+	ctx context.Context, nodeID roachpb.NodeID, sqlServer *SQLServer,
 ) (*serverpb.StatementsResponse, error) {
 	stmtStats, err := sqlServer.pgServer.SQLServer.GetUnscrubbedStmtStats(ctx)
 	if err != nil {
@@ -113,7 +112,7 @@ func statementsLocal(
 	for i, txn := range txnStats {
 		resp.Transactions[i] = serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics{
 			StatsData: txn,
-			NodeID:    nodeID.Get(),
+			NodeID:    nodeID,
 		}
 	}
 
@@ -121,7 +120,7 @@ func statementsLocal(
 		resp.Statements[i] = serverpb.StatementsResponse_CollectedStatementStatistics{
 			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{
 				KeyData: stmt.Key,
-				NodeID:  nodeID.Get(),
+				NodeID:  nodeID,
 			},
 			ID:    stmt.ID,
 			Stats: stmt.Stats,
