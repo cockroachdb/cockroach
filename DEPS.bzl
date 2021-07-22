@@ -600,8 +600,8 @@ def go_deps():
         patches = [
             "@cockroach//build/patches:com_github_cockroachdb_errors.patch",
         ],
-        sum = "h1:41oZ1A4Eju6LviqkGpu5R2M39gHHVAFvOYsQjot1jNc=",
-        version = "v1.8.4",
+        sum = "h1:+nC/m4InLWfTRZJqB9r7KdJpTGxA7kDn5FUzXzd02Qw=",
+        version = "v1.8.5",
     )
     go_repository(
         name = "com_github_cockroachdb_go_test_teamcity",
@@ -1542,8 +1542,8 @@ def go_deps():
         name = "com_github_gogo_googleapis",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/gogo/googleapis",
-        sum = "h1:zgVt4UpGxcqVOw97aRGxT4svlcmdK35fynLNctY32zI=",
-        version = "v1.4.0",
+        sum = "h1:1Yx4Myt7BxzvUr5ldGSbwYiZG6t9wGBZ+8/fX3Wvtq0=",
+        version = "v1.4.1",
     )
     go_repository(
         name = "com_github_gogo_status",
@@ -2050,8 +2050,8 @@ def go_deps():
         name = "com_github_hydrogen18_memlistener",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/hydrogen18/memlistener",
-        sum = "h1:EPRgaDqXpLFUJLXZdGLnBTy1l6CLiNAPnvn2l+kHit0=",
-        version = "v0.0.0-20141126152155-54553eb933fb",
+        sum = "h1:KyZDvZ/GGn+r+Y3DKZ7UOQ/TP4xV6HNkrwiVMB1GnNY=",
+        version = "v0.0.0-20200120041712-dcc25e7acd91",
     )
 
     go_repository(
@@ -4609,8 +4609,8 @@ def go_deps():
         name = "org_golang_x_net",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/net",
-        sum = "h1:wjuX4b5yYQnEQHzd+CBcrcC6OVR2J1CN6mUy0oSxIPo=",
-        version = "v0.0.0-20210525063256-abc453219eb5",
+        sum = "h1:XpT3nA5TvE525Ne3hInMh6+GETgn27Zfm9dxsThnX2Q=",
+        version = "v0.0.0-20210614182718-04defd469f4e",
     )
     go_repository(
         name = "org_golang_x_oauth2",
