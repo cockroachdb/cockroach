@@ -2799,7 +2799,12 @@ Support status: [reserved](#support-status)
 
 
 
-
+StatementsRequest is used by both tenant and node-level
+implementations to serve fan-out requests across multiple nodes or
+instances. When implemented on a node, the `node_id` field refers to
+the cluster nodes by their nodeID. When implemented on a tenant, the
+`node_id` field refers to the instanceIDs that identify individual
+tenant pods.
 
 
 | Field | Type | Label | Description | Support status |
