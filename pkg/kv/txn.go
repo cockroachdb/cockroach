@@ -638,7 +638,7 @@ func (txn *Txn) DelRange(ctx context.Context, begin, end interface{}) error {
 // operation. The order of the results matches the order the operations were
 // added to the batch.
 func (txn *Txn) Run(ctx context.Context, b *Batch) error {
-	if err := b.prepare(); err != nil {
+	if err := b.validate(); err != nil {
 		return err
 	}
 	return sendAndFill(ctx, txn.Send, b)
