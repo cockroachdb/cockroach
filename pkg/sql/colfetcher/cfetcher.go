@@ -1492,11 +1492,11 @@ func (rf *cFetcher) fillNulls() error {
 				} else {
 					indexColValues = append(indexColValues, "?")
 				}
-				return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
-					"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
-					table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
-					strings.Join(table.index.IndexDesc().KeyColumnNames, ","), strings.Join(indexColValues, ",")))
 			}
+			return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
+				"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
+				table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
+				strings.Join(table.index.IndexDesc().KeyColumnNames, ","), strings.Join(indexColValues, ",")))
 		}
 		rf.machine.colvecs[i].Nulls().SetNull(rf.machine.rowIdx)
 	}
