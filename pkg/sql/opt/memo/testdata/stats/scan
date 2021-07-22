@@ -817,13 +817,13 @@ SELECT * FROM hist WHERE f = '2019-10-30 23:00:00'::TIMESTAMPTZ
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz!null) g:7(string)
- ├── stats: [rows=1e-07, distinct(6)=1e-07, null(6)=0]
+ ├── stats: [rows=5e-10, distinct(6)=5e-10, null(6)=0]
  │   histogram(6)=
  ├── fd: ()-->(6)
  └── scan hist@idx_f
       ├── columns: f:6(timestamptz!null) rowid:8(int!null)
       ├── constraint: /6/8: [/'2019-10-30 23:00:00+00:00' - /'2019-10-30 23:00:00+00:00']
-      ├── stats: [rows=1e-07, distinct(6)=1e-07, null(6)=0]
+      ├── stats: [rows=5e-10, distinct(6)=5e-10, null(6)=0]
       │   histogram(6)=
       ├── key: (8)
       └── fd: ()-->(6)
