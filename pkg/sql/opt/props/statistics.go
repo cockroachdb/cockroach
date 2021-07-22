@@ -96,6 +96,16 @@ func (s *Statistics) ApplySelectivity(selectivity float64) {
 	s.Selectivity *= selectivity
 }
 
+// LimitSelectivity limits the Selectivity to the given max selectivity.
+// RowCount and Selectivity are updated. Note that DistinctCounts, NullCounts,
+// and Histograms are not updated.
+func (s *Statistics) LimitSelectivity(maxSelectivity float64) {
+	if s.Selectivity > maxSelectivity {
+		adjustedSelectivity := maxSelectivity / s.Selectivity
+		s.ApplySelectivity(adjustedSelectivity)
+	}
+}
+
 // UnionWith unions this Statistics object with another Statistics object. It
 // updates the RowCount and Selectivity, and represents the result of unioning
 // two relational expressions with the given statistics. Note that
