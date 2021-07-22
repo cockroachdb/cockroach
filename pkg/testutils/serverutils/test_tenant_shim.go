@@ -13,7 +13,10 @@
 
 package serverutils
 
-import "github.com/cockroachdb/cockroach/pkg/base"
+import (
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+)
 
 // TestTenantInterface defines SQL-only tenant functionality that tests need; it
 // is implemented by server.TestTenant.
@@ -50,4 +53,7 @@ type TestTenantInterface interface {
 	// TestingKnobs returns the TestingKnobs in use by the test
 	// tenant.
 	TestingKnobs() *base.TestingKnobs
+
+	// RPCContext returns the *rpc.Context
+	RPCContext() *rpc.Context
 }

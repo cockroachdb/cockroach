@@ -3385,6 +3385,12 @@ func (m *StoresResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_StoresResponse proto.InternalMessageInfo
 
+// StatementsRequest is used by both tenant and node-level
+// implementations to serve fan-out requests across multiple nodes or
+// instances. When implemented on a node, the `node_id` field refers to
+// the cluster nodes by their nodeID. When implemented on a tenant, the
+// `node_id` field refers to the instanceIDs that identify individual
+// tenant pods.
 type StatementsRequest struct {
 	NodeID string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 }
