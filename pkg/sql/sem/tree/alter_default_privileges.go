@@ -11,9 +11,8 @@
 package tree
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/errors"
 )
 
 // AlterDefaultPrivileges represents an ALTER DEFAULT PRIVILEGES statement.
@@ -80,7 +79,7 @@ func (t AlterDefaultPrivilegesTargetObject) String() string {
 	case Schemas:
 		return "schemas"
 	default:
-		panic(fmt.Sprintf("unknown AlterDefaultPrivilegesTargetObject value: %d", t))
+		panic(errors.AssertionFailedf("unknown AlterDefaultPrivilegesTargetObject value: %d", t))
 	}
 }
 
