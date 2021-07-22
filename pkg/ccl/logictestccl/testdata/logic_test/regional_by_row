@@ -2724,6 +2724,57 @@ DATABASE add_regions_in_txn  ALTER DATABASE add_regions_in_txn CONFIGURE ZONE US
                              voter_constraints = '[+region=ca-central-1]',
                              lease_preferences = '[[+region=ca-central-1]]'
 
+statement ok
+CREATE TABLE regional_by_row_like (LIKE regional_by_row)
+
+query TT
+SHOW CREATE TABLE regional_by_row_like
+----
+regional_by_row_like                            CREATE TABLE public.regional_by_row_like (
+                                                pk INT8 NOT NULL,
+                                                i INT8 NULL,
+                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL,
+                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                                FAMILY "primary" (pk, i, crdb_region, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+DROP TABLE regional_by_row_like;
+CREATE TABLE regional_by_row_like (LIKE regional_by_row INCLUDING INDEXES)
+
+query TT
+SHOW CREATE TABLE regional_by_row_like
+----
+regional_by_row_like                            CREATE TABLE public.regional_by_row_like (
+                                                pk INT8 NOT NULL,
+                                                i INT8 NULL,
+                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                                CONSTRAINT "primary" PRIMARY KEY (crdb_region ASC, pk ASC),
+                                                INDEX regional_by_row_i_idx (crdb_region ASC, i ASC),
+                                                FAMILY "primary" (pk, i, crdb_region)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+
+statement ok
+DROP TABLE regional_by_row_like;
+CREATE TABLE regional_by_row_like (LIKE regional_by_row INCLUDING ALL)
+
+query TT
+SHOW CREATE TABLE regional_by_row_like
+----
+regional_by_row_like                            CREATE TABLE public.regional_by_row_like (
+                                                pk INT8 NOT NULL,
+                                                i INT8 NULL,
+                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                                CONSTRAINT "primary" PRIMARY KEY (crdb_region ASC, pk ASC),
+                                                INDEX regional_by_row_i_idx (crdb_region ASC, i ASC),
+                                                FAMILY "primary" (pk, i, crdb_region)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+DROP TABLE regional_by_row_like
+
 query TT
 SHOW CREATE TABLE regional_by_row_as
 ----

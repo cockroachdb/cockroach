@@ -2548,18 +2548,43 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			}
 		}
 
+		// Copy defaults of implicitly created columns if they are needed by indexes.
+		// This is required to ensure the newly created table still works as expected
+		// as these columns are required for certain features to work when used
+		// as an index.
+		shouldCopyColumnDefaultSet := make(map[string]struct{})
+		if opts.Has(tree.LikeTableOptIndexes) {
+			for _, idx := range td.NonDropIndexes() {
+				// Copy the rowid default if it was created implicitly by not specifying
+				// PRIMARY KEY.
+				if idx.Primary() && td.IsPrimaryIndexDefaultRowID() {
+					for i := 0; i < idx.NumKeyColumns(); i++ {
+						shouldCopyColumnDefaultSet[idx.GetKeyColumnName(i)] = struct{}{}
+					}
+				}
+				// Copy any implicitly created columns (e.g. hash-sharded indexes,
+				// REGIONAL BY ROW).
+				for i := 0; i < idx.ExplicitColumnStartIdx(); i++ {
+					for i := 0; i < idx.NumKeyColumns(); i++ {
+						shouldCopyColumnDefaultSet[idx.GetKeyColumnName(i)] = struct{}{}
+					}
+				}
+			}
+		}
+
 		defs := make(tree.TableDefs, 0)
 		// Add all columns. Columns are always added.
 		for i := range td.Columns {
 			c := &td.Columns[i]
-			if c.Hidden || c.Inaccessible {
-				// Hidden and inaccessible columns automatically get added by
+			if c.Inaccessible {
+				// Inaccessible columns automatically get added by
 				// the system; we don't need to add them ourselves here.
 				continue
 			}
 			def := tree.ColumnTableDef{
-				Name: tree.Name(c.Name),
-				Type: c.Type,
+				Name:   tree.Name(c.Name),
+				Type:   c.Type,
+				Hidden: c.Hidden,
 			}
 			if c.Nullable {
 				def.Nullable.Nullability = tree.Null
@@ -2567,7 +2592,8 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				def.Nullable.Nullability = tree.NotNull
 			}
 			if c.DefaultExpr != nil {
-				if opts.Has(tree.LikeTableOptDefaults) {
+				_, shouldCopyColumnDefault := shouldCopyColumnDefaultSet[c.Name]
+				if opts.Has(tree.LikeTableOptDefaults) || shouldCopyColumnDefault {
 					def.DefaultExpr.Expr, err = parser.ParseExpr(*c.DefaultExpr)
 					if err != nil {
 						return nil, err
@@ -2667,10 +2693,6 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				}
 				var def tree.TableDef = &indexDef
 				if idx.IsUnique() {
-					if idx.Primary() && td.IsPrimaryIndexDefaultRowID() {
-						continue
-					}
-
 					def = &tree.UniqueConstraintTableDef{
 						IndexTableDef: indexDef,
 						PrimaryKey:    idx.Primary(),
