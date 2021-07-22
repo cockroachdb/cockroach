@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "buffered_window.go",
         "partitioner.go",
+        "window_aggregator.go",
         "window_functions_util.go",
         ":gen-exec",  # keep
     ],
@@ -18,6 +19,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",  # keep
         "//pkg/sql/colconv",  # keep
+        "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexecutils",  # keep
         "//pkg/sql/colexec/execgen",  # keep
