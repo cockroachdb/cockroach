@@ -4785,3 +4785,58 @@ SELECT sequenceowner, cache_size FROM pg_sequences WHERE sequencename = 'serial'
 ----
 sequenceowner  cache_size
 anyuser        10
+
+# Testing pg_shdepend pinned elements
+query T colnames
+SELECT rolname
+FROM pg_authid WHERE oid IN (
+  SELECT refobjid FROM pg_shdepend WHERE deptype = 'p'
+) ORDER BY rolname
+----
+rolname
+admin
+root
+
+statement ok
+CREATE DATABASE sh_db;
+CREATE TABLE sh_db.sh_table_a(id INT);
+CREATE USER sh_user;
+GRANT SELECT ON sh_db.sh_table_a TO sh_user;
+CREATE ROLE sh_role;
+GRANT SELECT ON sh_db.sh_table_a TO sh_role;
+GRANT CONNECT ON DATABASE sh_db TO sh_role;
+USE sh_db;
+
+# Testing shared dependencies on sh_table_a
+query TTT colnames
+SELECT
+  pg_authid.rolname,
+  pg_shdepend.deptype,
+  pg_database.datname
+FROM pg_authid
+JOIN pg_shdepend ON pg_authid.oid = pg_shdepend.refobjid
+JOIN pg_class ON pg_shdepend.objid = pg_class.oid
+JOIN pg_database ON pg_database.oid = pg_shdepend.dbid
+WHERE pg_class.relname = 'sh_table_a'
+----
+rolname  deptype  datname
+admin    a        sh_db
+root     o        sh_db
+sh_role  a        sh_db
+sh_user  a        sh_db
+
+statement ok
+USE test;
+
+# Testing shared dependencies on sh_db
+query TT colnames
+SELECT
+  pg_authid.rolname,
+  pg_shdepend.deptype
+FROM pg_authid
+JOIN pg_shdepend ON pg_authid.oid = pg_shdepend.refobjid
+JOIN pg_database ON pg_shdepend.objid = pg_database.oid
+WHERE pg_database.datname = 'sh_db'
+----
+rolname  deptype
+sh_role  a

@@ -75,6 +75,15 @@ type RewriteEvTypes string
 
 const evTypeSelect RewriteEvTypes = "1"
 
+//PGShDependType is an enumeration that lists pg_shdepend deptype column values
+type PGShDependType string
+
+const (
+	sharedDependencyOwner PGShDependType = "o"
+	sharedDependencyACL   PGShDependType = "a"
+	sharedDependencyPin   PGShDependType = "p"
+)
+
 var forwardIndexOid = stringOid(indexTypeForwardIndex)
 var invertedIndexOid = stringOid(indexTypeInvertedIndex)
 
@@ -1203,8 +1212,10 @@ var (
 	_ = depTypeAutoExtension
 	_ = depTypePin
 
+	pgAuthIDTableName      = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_authid"))
 	pgConstraintsTableName = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_constraint"))
 	pgClassTableName       = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_class"))
+	pgDatabaseTableName    = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_database"))
 	pgRewriteTableName     = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_rewrite"))
 )
 
@@ -2336,9 +2347,102 @@ var pgCatalogShdependTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 	schema: vtable.PGCatalogShdepend,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		vt := p.getVirtualTabler()
+		h := makeOidHasher()
+
+		pgClassDesc, err := vt.getVirtualTableDesc(&pgClassTableName)
+		if err != nil {
+			return errors.New("could not find pg_catalog.pg_class")
+		}
+		pgClassOid := tableOid(pgClassDesc.GetID())
+
+		pgAuthIDDesc, err := vt.getVirtualTableDesc(&pgAuthIDTableName)
+		if err != nil {
+			return errors.New("could not find pg_catalog.pg_authid")
+		}
+		pgAuthIDOid := tableOid(pgAuthIDDesc.GetID())
+
+		pgDatabaseDesc, err := vt.getVirtualTableDesc(&pgDatabaseTableName)
+		if err != nil {
+			return errors.New("could not find pg_catalog.pg_database")
+		}
+		pgDatabaseOid := tableOid(pgDatabaseDesc.GetID())
+
+		// Populating table descriptor dependencies with roles
+		if err = forEachTableDesc(ctx, p, dbContext, virtualMany,
+			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+				owner := table.GetPrivileges().Owner()
+				for _, u := range table.GetPrivileges().Show(privilege.Table) {
+					depType := sharedDependencyACL
+					if owner.Normalized() == u.User.Normalized() {
+						depType = sharedDependencyOwner
+					}
+					if err := addRow(
+						dbOid(db.GetID()),                // dbid
+						pgClassOid,                       // classid
+						tableOid(table.GetID()),          // objid
+						zeroVal,                          // objsubid
+						pgAuthIDOid,                      // refclassid
+						h.UserOid(u.User),                // refobjid
+						tree.NewDString(string(depType)), // deptype
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		); err != nil {
+			return err
+		}
+
+		pinnedRoles := map[string]security.SQLUsername{
+			security.RootUser:  security.RootUserName(),
+			security.AdminRole: security.AdminRoleName(),
+		}
+
+		// Databases dependencies with roles
+		if err = forEachDatabaseDesc(ctx, p, nil /*all databases*/, false, /* requiresPrivileges */
+			func(db catalog.DatabaseDescriptor) error {
+				for _, u := range db.GetPrivileges().Show(privilege.Database) {
+					if _, ok := pinnedRoles[u.User.Normalized()]; ok {
+						// Pinned roles are not displayed in this table
+						continue
+					}
+					if err := addRow(
+						tree.NewDOid(0),   // dbid
+						pgDatabaseOid,     // classid
+						dbOid(db.GetID()), // objid
+						zeroVal,           // objsubid
+						pgAuthIDOid,       // refclassid
+						h.UserOid(u.User), // refobjid
+						tree.NewDString(string(sharedDependencyACL)), // deptype
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		); err != nil {
+			return err
+		}
+
+		// Pinned roles
+		for _, role := range pinnedRoles {
+			if err := addRow(
+				tree.NewDOid(0), // dbid
+				tree.NewDOid(0), // classid
+				tree.NewDOid(0), // objid
+				zeroVal,         // objsubid
+				pgAuthIDOid,     // refclassid
+				h.UserOid(role), // refobjid
+				tree.NewDString(string(sharedDependencyPin)), // deptype
+			); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogTablesTable = virtualSchemaTable{
