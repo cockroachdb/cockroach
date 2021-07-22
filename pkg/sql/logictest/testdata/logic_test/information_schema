@@ -3640,6 +3640,7 @@ max_identifier_length                                 128
 max_index_keys                                        32
 node_id                                               1
 optimizer                                             on
+optimizer_improve_disjunction_selectivity             off
 optimizer_use_histograms                              on
 optimizer_use_multicol_stats                          on
 override_multi_region_zone_config                     off
