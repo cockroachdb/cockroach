@@ -256,6 +256,12 @@ func (*internalServer) Join(
 	panic("unimplemented")
 }
 
+func (*internalServer) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	panic("unimplemented")
+}
+
 // TestInternalServerAddress verifies that RPCContext uses AdvertiseAddr, not Addr, to
 // determine whether to apply the local server optimization.
 //

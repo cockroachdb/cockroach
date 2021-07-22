@@ -5143,6 +5143,51 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// Used to configure the tenant token bucket. See UpdateTenantResourceLimits.
+	"crdb_internal.update_tenant_resource_limits": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categoryMultiTenancy,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"tenant_id", types.Int},
+				{"available_request_units", types.Float},
+				{"refill_rate", types.Float},
+				{"max_burst_request_units", types.Float},
+				{"as_of", types.Timestamp},
+				{"as_of_consumed_request_units", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				sTenID := int64(tree.MustBeDInt(args[0]))
+				if sTenID <= 0 {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				}
+				availableRU := float64(tree.MustBeDFloat(args[1]))
+				refillRate := float64(tree.MustBeDFloat(args[2]))
+				maxBurstRU := float64(tree.MustBeDFloat(args[3]))
+				asOf := tree.MustBeDTimestamp(args[4]).Time
+				asOfConsumed := float64(tree.MustBeDFloat(args[5]))
+
+				if err := ctx.Tenant.UpdateTenantResourceLimits(
+					ctx.Context,
+					uint64(sTenID),
+					availableRU,
+					refillRate,
+					maxBurstRU,
+					asOf,
+					asOfConsumed,
+				); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info:       "Updates resource limits for the tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.compact_engine_span": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySystemRepair,

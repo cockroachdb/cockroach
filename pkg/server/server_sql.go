@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationcluster"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -257,6 +258,9 @@ type sqlServerArgs struct {
 
 	// Used to query valid regions on the server.
 	regionsServer serverpb.RegionsServer
+
+	// Used for multi-tenant cost control.
+	tenantUsageServer multitenant.TenantUsageServer
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
@@ -563,6 +567,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TestingKnobs:            sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:   compactEngineSpanFunc,
 		TraceCollector:          traceCollector,
+		TenantUsageServer:       cfg.tenantUsageServer,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,

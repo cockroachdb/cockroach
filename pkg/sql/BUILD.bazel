@@ -259,6 +259,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/migration",
+        "//pkg/multitenant",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

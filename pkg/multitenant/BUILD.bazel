@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "multitenant",
+    srcs = [
+        "cost_controller.go",
+        "doc.go",
+        "tenant_usage.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/stop",
+    ],
+)

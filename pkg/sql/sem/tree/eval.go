@@ -3301,8 +3301,8 @@ type SequenceOperators interface {
 }
 
 // TenantOperator is capable of interacting with tenant state, allowing SQL
-// builtin functions to create and destroy tenants. The methods will return
-// errors when run by any tenant other than the system tenant.
+// builtin functions to create, configure, and destroy tenants. The methods will
+// return errors when run by any tenant other than the system tenant.
 type TenantOperator interface {
 	// CreateTenant attempts to install a new tenant in the system. It returns
 	// an error if the tenant already exists. The new tenant is created at the
@@ -3317,6 +3317,18 @@ type TenantOperator interface {
 	// success it also removes the tenant record.
 	// It returns an error if the tenant does not exist.
 	GCTenant(ctx context.Context, tenantID uint64) error
+
+	// UpdateTenantResourceLimits reconfigures the tenant resource limits.
+	// See multitenant.TenantUsageServer for more details on the arguments.
+	UpdateTenantResourceLimits(
+		ctx context.Context,
+		tenantID uint64,
+		availableRU float64,
+		refillRate float64,
+		maxBurstRU float64,
+		asOf time.Time,
+		asOfConsumedRequestUnits float64,
+	) error
 }
 
 // JoinTokenCreator is capable of creating and persisting join tokens, allowing

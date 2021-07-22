@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/assert"
@@ -972,6 +973,10 @@ func (s *opTestInput) Next() coldata.Batch {
 							colexecerror.InternalError(errors.AssertionFailedf("%v", err))
 						}
 						setColVal(vec, outputIdx, j, s.evalCtx)
+					case types.TimestampTZFamily:
+						t := timeutil.Unix(rng.Int63n(2000000000), rng.Int63n(1000000))
+						t.Round(tree.TimeFamilyPrecisionToRoundDuration(vec.Type().Precision()))
+						setColVal(vec, outputIdx, t, s.evalCtx)
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch vec.Type().Family() {
 						case types.CollatedStringFamily:
@@ -988,7 +993,10 @@ func (s *opTestInput) Next() coldata.Batch {
 						case types.TupleFamily:
 							setColVal(vec, outputIdx, stringToDatum("(NULL)", vec.Type(), s.evalCtx), s.evalCtx)
 						default:
-							colexecerror.InternalError(errors.AssertionFailedf("unexpected datum-backed type: %s", vec.Type()))
+							// For other datum-backed types we'll be lazy and
+							// won't set the garbage values. We should already
+							// have good coverage with other types.
+							continue
 						}
 					default:
 						if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
@@ -1277,8 +1285,10 @@ func tupleEquals(expected Tuple, actual Tuple, evalCtx *tree.EvalContext) bool {
 		return false
 	}
 	for i := 0; i < len(actual); i++ {
-		if expected[i] == nil || actual[i] == nil {
-			if expected[i] != nil || actual[i] != nil {
+		expectedIsNull := expected[i] == nil || expected[i] == tree.DNull
+		actualIsNull := actual[i] == nil || actual[i] == tree.DNull
+		if expectedIsNull || actualIsNull {
+			if !expectedIsNull || !actualIsNull {
 				return false
 			}
 		} else {

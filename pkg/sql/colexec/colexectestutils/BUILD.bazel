@@ -32,6 +32,7 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/timeofday",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_pmezard_go_difflib//difflib",

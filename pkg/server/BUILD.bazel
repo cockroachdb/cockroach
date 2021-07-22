@@ -88,6 +88,7 @@ go_library(
         "//pkg/migration",
         "//pkg/migration/migrationcluster",
         "//pkg/migration/migrationmanager",
+        "//pkg/multitenant",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

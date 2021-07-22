@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -961,6 +962,10 @@ type ExecutorConfig struct {
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
 	TraceCollector *collector.TraceCollector
+
+	// TenantUsageServer is used to implement configuration APIs for tenant cost
+	// control.
+	TenantUsageServer multitenant.TenantUsageServer
 }
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.

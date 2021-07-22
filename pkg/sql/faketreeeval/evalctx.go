@@ -13,6 +13,7 @@ package faketreeeval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -387,5 +388,18 @@ func (c *DummyTenantOperator) DestroyTenant(_ context.Context, _ uint64) error {
 
 // GCTenant is part of the tree.TenantOperator interface.
 func (c *DummyTenantOperator) GCTenant(_ context.Context, _ uint64) error {
+	return errors.WithStack(errEvalTenant)
+}
+
+// UpdateTenantResourceLimits is part of the tree.TenantOperator interface.
+func (c *DummyTenantOperator) UpdateTenantResourceLimits(
+	_ context.Context,
+	tenantID uint64,
+	availableRU float64,
+	refillRate float64,
+	maxBurstRU float64,
+	asOf time.Time,
+	asOfConsumedRequestUnits float64,
+) error {
 	return errors.WithStack(errEvalTenant)
 }

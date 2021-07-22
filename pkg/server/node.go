@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -174,6 +175,8 @@ type Node struct {
 	perReplicaServer kvserver.Server
 
 	admissionQ *admission.WorkQueue
+
+	tenantUsage multitenant.TenantUsageServer
 }
 
 var _ roachpb.InternalServer = &Node{}
@@ -294,20 +297,24 @@ func NewNode(
 	stores *kvserver.Stores,
 	execCfg *sql.ExecutorConfig,
 	clusterID *base.ClusterIDContainer,
+	admissionQ *admission.WorkQueue,
+	tenantUsage multitenant.TenantUsageServer,
 ) *Node {
 	var sqlExec *sql.InternalExecutor
 	if execCfg != nil {
 		sqlExec = execCfg.InternalExecutor
 	}
 	n := &Node{
-		storeCfg:   cfg,
-		stopper:    stopper,
-		recorder:   recorder,
-		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:     stores,
-		txnMetrics: txnMetrics,
-		sqlExec:    sqlExec,
-		clusterID:  clusterID,
+		storeCfg:    cfg,
+		stopper:     stopper,
+		recorder:    recorder,
+		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:      stores,
+		txnMetrics:  txnMetrics,
+		sqlExec:     sqlExec,
+		clusterID:   clusterID,
+		admissionQ:  admissionQ,
+		tenantUsage: tenantUsage,
 	}
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -1328,4 +1335,46 @@ func (n *Node) Join(
 		StoreID:       int32(storeID),
 		ActiveVersion: &activeVersion.Version,
 	}, nil
+}
+
+// TokenBucket is part of the roachpb.InternalServer service.
+func (n *Node) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	tenantID, ok := roachpb.TenantFromContext(ctx)
+	if !ok {
+		return nil, errors.New("token bucket request with no tenant")
+	}
+	return n.tenantUsage.TokenBucketRequest(ctx, tenantID, in)
+}
+
+// NewTenantUsageServer is a hook for CCL code which implements the tenant usage
+// server.
+var NewTenantUsageServer = func(db *kv.DB, executor *sql.InternalExecutor) multitenant.TenantUsageServer {
+	return dummyTenantUsageServer{}
+}
+
+// dummyTenantUsageServer is a stub implementation of TenantUsageServer that
+// errors out on all APIs.
+type dummyTenantUsageServer struct{}
+
+// TokenBucketRequest is defined in the TenantUsageServer interface.
+func (dummyTenantUsageServer) TokenBucketRequest(
+	ctx context.Context, tenantID roachpb.TenantID, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	return nil, errors.Errorf("tenant usage requires a CCL binary")
+}
+
+// TokenBucketRequest is defined in the TenantUsageServer interface.
+func (dummyTenantUsageServer) ReconfigureTokenBucket(
+	ctx context.Context,
+	txn *kv.Txn,
+	tenantID roachpb.TenantID,
+	availableRU float64,
+	refillRate float64,
+	maxBurstRU float64,
+	asOf time.Time,
+	asOfConsumedRequestUnits float64,
+) error {
+	return errors.Errorf("tenant resource limits require a CCL binary")
 }
