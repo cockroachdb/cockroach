@@ -1162,7 +1162,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %type <empty> opt_privileges_clause
 %type <bool> distinct_clause
 %type <tree.DistinctOn> distinct_on_clause
-%type <tree.NameList> opt_column_list insert_column_list opt_stats_columns
+%type <tree.NameList> opt_column_list insert_column_list opt_stats_columns query_stats_cols
 %type <tree.OrderBy> sort_clause single_sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
 %type <tree.IndexElemList> index_params create_as_params
@@ -5406,10 +5406,22 @@ show_syntax_stmt:
 | SHOW SYNTAX error // SHOW HELP: SHOW SYNTAX
 
 show_last_query_stats_stmt:
-  SHOW LAST QUERY STATISTICS
+  SHOW LAST QUERY STATISTICS query_stats_cols
   {
    /* SKIP DOC */
-   $$.val = &tree.ShowLastQueryStatistics{}
+   $$.val = &tree.ShowLastQueryStatistics{Columns: $5.nameList()}
+  }
+
+query_stats_cols:
+  RETURNING name_list
+  {
+    $$.val = $2.nameList()
+  }
+| /* EMPTY */
+  {
+    // Note: the form that does not specify the RETURNING clause is deprecated.
+    // Remove it when there are no more clients using it (22.1 or later).
+    $$.val = tree.ShowLastQueryStatisticsDefaultColumns
   }
 
 // %Help: SHOW SAVEPOINT - display current savepoint properties

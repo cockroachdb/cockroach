@@ -1337,7 +1337,7 @@ func (ex *connExecutor) runObserverStatement(
 		ex.runSetTracing(ctx, sqlStmt, res)
 		return nil
 	case *tree.ShowLastQueryStatistics:
-		return ex.runShowLastQueryStatistics(ctx, res)
+		return ex.runShowLastQueryStatistics(ctx, res, sqlStmt)
 	default:
 		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", ast))
 		return nil
@@ -1375,19 +1375,29 @@ func (ex *connExecutor) runShowTransactionState(
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
 }
 
-func (ex *connExecutor) runShowLastQueryStatistics(
-	ctx context.Context, res RestrictedCommandResult,
-) error {
-	res.SetColumns(ctx, colinfo.ShowLastQueryStatisticsColumns)
-
-	phaseTimes := ex.statsCollector.PreviousPhaseTimes()
-	runLat := phaseTimes.GetRunLatency().Seconds()
-	parseLat := phaseTimes.GetParsingLatency().Seconds()
-	planLat := phaseTimes.GetPlanningLatency().Seconds()
+// showQueryStatsFns maps column names as requested by the SQL clients
+// to timing retrieval functions from the execution phase times.
+var showQueryStatsFns = map[tree.Name]func(*sessionphase.Times) time.Duration{
+	"parse_latency": func(phaseTimes *sessionphase.Times) time.Duration { return phaseTimes.GetParsingLatency() },
+	"plan_latency":  func(phaseTimes *sessionphase.Times) time.Duration { return phaseTimes.GetPlanningLatency() },
+	"exec_latency":  func(phaseTimes *sessionphase.Times) time.Duration { return phaseTimes.GetRunLatency() },
 	// Since the last query has already finished, it is safe to retrieve its
 	// total service latency.
-	svcLat := phaseTimes.GetServiceLatencyTotal().Seconds()
-	postCommitJobsLat := phaseTimes.GetPostCommitJobsLatency().Seconds()
+	"service_latency":          func(phaseTimes *sessionphase.Times) time.Duration { return phaseTimes.GetServiceLatencyTotal() },
+	"post_commit_jobs_latency": func(phaseTimes *sessionphase.Times) time.Duration { return phaseTimes.GetPostCommitJobsLatency() },
+}
+
+func (ex *connExecutor) runShowLastQueryStatistics(
+	ctx context.Context, res RestrictedCommandResult, stmt *tree.ShowLastQueryStatistics,
+) error {
+	// Which columns were selected?
+	resColumns := make(colinfo.ResultColumns, len(stmt.Columns))
+	for i, n := range stmt.Columns {
+		resColumns[i] = colinfo.ResultColumn{Name: string(n), Typ: types.String}
+	}
+	res.SetColumns(ctx, resColumns)
+
+	phaseTimes := ex.statsCollector.PreviousPhaseTimes()
 
 	// Now convert the durations to the string representation of intervals.
 	// We do the conversion server-side using a fixed format, so that
@@ -1398,13 +1408,23 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 	// (INTERVAL was the result type in previous versions).
 	// Using a simpler type (e.g. microseconds as an INT) would be simpler
 	// but would be incompatible with previous version clients.
-	strs := make(tree.Datums, 5)
+	strs := make(tree.Datums, len(stmt.Columns))
 	var buf bytes.Buffer
-	for i, d := range []float64{parseLat, planLat, runLat, svcLat, postCommitJobsLat} {
-		ival := tree.NewDInterval(duration.FromFloat64(d), types.DefaultIntervalTypeMetadata)
-		buf.Reset()
-		ival.Duration.FormatWithStyle(&buf, duration.IntervalStyle_POSTGRES)
-		strs[i] = tree.NewDString(buf.String())
+	for i, cname := range stmt.Columns {
+		fn := showQueryStatsFns[cname]
+		if fn == nil {
+			// If no function was defined with this column name, this means
+			// that a client from the future is requesting a column that
+			// does not exist yet in this version. Inform the client that
+			// the column is not supported via a NULL value.
+			strs[i] = tree.DNull
+		} else {
+			d := fn(phaseTimes)
+			ival := tree.NewDInterval(duration.FromFloat64(d.Seconds()), types.DefaultIntervalTypeMetadata)
+			buf.Reset()
+			ival.Duration.FormatWithStyle(&buf, duration.IntervalStyle_POSTGRES)
+			strs[i] = tree.NewDString(buf.String())
+		}
 	}
 
 	return res.AddRow(ctx, strs)
