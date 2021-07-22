@@ -1306,10 +1306,17 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 }
 
 func (cf *changeFrontier) maybeCheckpointJob(frontierChanged, isBehind bool) (bool, error) {
+	// See if we can update highwatermark.
+	// We always update watermark when we reach schema change boundary.
+	// Otherwise, we checkpoint when  frontier changes
+	// (and we can checkpoint), or if it has changed in the past, but we skipped that update.
+	updateHighWater :=
+		cf.frontier.schemaChangeBoundaryReached() || cf.js.canCheckpointHighWatermark(frontierChanged)
+
 	// Update checkpoint if the frontier has not changed, but it is time to checkpoint.
 	// If the frontier has changed, we want to write an empty checkpoint record indicating
 	// that all spans have reached the frontier.
-	updateCheckpoint := !frontierChanged && cf.js.canCheckpointFrontier()
+	updateCheckpoint := !updateHighWater && cf.js.canCheckpointFrontier()
 
 	var checkpoint jobspb.ChangefeedProgress_Checkpoint
 	if updateCheckpoint {
@@ -1317,10 +1324,11 @@ func (cf *changeFrontier) maybeCheckpointJob(frontierChanged, isBehind bool) (bo
 		checkpoint.Spans = cf.frontier.getCheckpointSpans(maxBytes)
 	}
 
-	if updateCheckpoint || cf.js.canCheckpointHighWatermark(frontierChanged) {
+	if updateCheckpoint || updateHighWater {
+		manageProtected := updateHighWater
 		checkpointStart := timeutil.Now()
 		if err := cf.checkpointJobProgress(
-			cf.frontier.Frontier(), frontierChanged, checkpoint, isBehind,
+			cf.frontier.Frontier(), manageProtected, checkpoint, isBehind,
 		); err != nil {
 			return false, err
 		}
