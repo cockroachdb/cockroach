@@ -78,7 +78,23 @@ func StartTenant(
 		nil, // handler
 	)
 
-	pgL, err := ListenAndUpdateAddrs(ctx, &args.Config.SQLAddr, &args.Config.SQLAdvertiseAddr, "sql")
+	// Initialize gRPC server for use on shared port with pg
+	grpcMain := newGRPCServer(args.rpcContext)
+	grpcMain.setMode(modeOperational)
+
+	// TODO(davidh): Do we need to force this to be false?
+	baseCfg.SplitListenSQL = false
+
+	background := baseCfg.AmbientCtx.AnnotateCtx(context.Background())
+
+	// StartListenRPCAndSQL will replace the SQLAddr fields if we choose
+	// to share the SQL and gRPC port so here, since the tenant config
+	// expects to have port set on the SQL param we transfer those to
+	// the base Addr params in order for the RPC to be configured
+	// correctly.
+	baseCfg.Addr = baseCfg.SQLAddr
+	baseCfg.AdvertiseAddr = baseCfg.SQLAdvertiseAddr
+	pgL, startRPCServer, err := StartListenRPCAndSQL(ctx, background, baseCfg, stopper, grpcMain)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -121,14 +137,42 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	s.execCfg.SQLStatusServer = newTenantStatusServer(
+	tenantStatusServer := newTenantStatusServer(
 		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
 		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, s,
+		args.rpcContext, args.stopper,
 	)
+
+	s.execCfg.SQLStatusServer = tenantStatusServer
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
+
+	workersCtx := tenantStatusServer.AnnotateCtx(context.Background())
+
+	// Register and start gRPC service on pod. This is separate from the
+	// gRPC + Gateway services configured below.
+	tenantStatusServer.RegisterService(grpcMain.Server)
+	startRPCServer(workersCtx)
+
+	// Begin configuration of GRPC Gateway
+	gwMux, gwCtx, conn, err := ConfigureGRPCGateway(
+		ctx,
+		workersCtx,
+		args.AmbientCtx,
+		tenantStatusServer.rpcCtx,
+		s.stopper,
+		grpcMain,
+		pgLAddr,
+	)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if err := tenantStatusServer.RegisterGateway(gwCtx, gwMux, conn); err != nil {
+		return nil, "", "", err
+	}
+
 	args.recorder.AddNode(
 		args.registry,
 		roachpb.NodeDescriptor{},
@@ -142,6 +186,7 @@ func StartTenant(
 		mux := http.NewServeMux()
 		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn())
 		mux.Handle("/", debugServer)
+		mux.Handle("/_status/", gwMux)
 		mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 			// Return Bad Request if called with arguments.
 			if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
@@ -184,6 +229,13 @@ func StartTenant(
 	); err != nil {
 		return nil, "", "", err
 	}
+
+	// This is necessary so the grpc server doesn't error out on heartbeat
+	// ping when we make pod-to-pod calls, we pass the InstanceID with the
+	// request to ensure we're dialing the pod we think we are.
+	//
+	// The InstanceID subsystem is not available until `preStart`.
+	args.rpcContext.NodeID.Set(ctx, roachpb.NodeID(s.SQLInstanceID()))
 
 	// Register the server's identifiers so that log events are
 	// decorated with the server's identity. This helps when gathering
