@@ -13,7 +13,6 @@ package xform
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -247,7 +246,7 @@ func (c *CustomFuncs) computedColFilters(
 
 	// Start with set of constant columns, as derived from the list of filter
 	// conditions.
-	constCols := make(map[opt.ColumnID]opt.ScalarExpr)
+	constCols := make(constColsMap)
 	c.findConstantFilterCols(constCols, scanPrivate, requiredFilters)
 	c.findConstantFilterCols(constCols, scanPrivate, optionalFilters)
 	if len(constCols) == 0 {
@@ -270,6 +269,29 @@ func (c *CustomFuncs) computedColFilters(
 	return computedColFilters
 }
 
+// constColsMap maps columns to constant values that we can infer from query
+// filters.
+//
+// Note that for composite types, the constant value is not interchangeable with
+// the column in all contexts. Composite types are types which can have
+// logically equal but not identical values, like the decimals 1.0 and 1.00.
+//
+// For example:
+//   CREATE TABLE t (
+//     d DECIMAL,
+//     c DECIMAL AS (d*10) STORED
+//   );
+//   INSERT INTO t VALUES (1.0), (1.00), (1.000);
+//   SELECT c::STRING FROM t WHERE d=1;
+//   ----
+//     10.0
+//     10.00
+//     10.000
+//
+// We can infer that c has a constant value of 1 but we can't replace it with 1
+// in any expression.
+type constColsMap map[opt.ColumnID]opt.ScalarExpr
+
 // findConstantFilterCols adds to constFilterCols mappings from table column ID
 // to the constant value of that column. It does this by iterating over the
 // given lists of filters and finding expressions that constrain columns to a
@@ -280,9 +302,7 @@ func (c *CustomFuncs) computedColFilters(
 // This would add a mapping from x => 5 and y => 'foo', which constants can
 // then be used to prove that dependent computed columns are also constant.
 func (c *CustomFuncs) findConstantFilterCols(
-	constFilterCols map[opt.ColumnID]opt.ScalarExpr,
-	scanPrivate *memo.ScanPrivate,
-	filters memo.FiltersExpr,
+	constFilterCols constColsMap, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
 ) {
 	tab := c.e.mem.Metadata().Table(scanPrivate.Table)
 	for i := range filters {
@@ -307,16 +327,7 @@ func (c *CustomFuncs) findConstantFilterCols(
 				continue
 			}
 
-			// Skip columns with a data type that uses a composite key encoding.
-			// Each of these data types can have multiple distinct values that
-			// compare equal. For example, 0 == -0 for the FLOAT data type. It's
-			// not safe to treat these as constant inputs to computed columns,
-			// since the computed expression may differentiate between the
-			// different forms of the same value.
 			colTyp := tab.Column(scanPrivate.Table.ColumnOrdinal(colID)).DatumType()
-			if colinfo.HasCompositeKeyEncoding(colTyp) {
-				continue
-			}
 
 			span := cons.Spans.Get(0)
 			if !span.HasSingleKey(c.e.evalCtx) {

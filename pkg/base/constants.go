@@ -28,7 +28,7 @@ const (
 
 	// SlowRequestThreshold is the amount of time to wait before considering a
 	// request to be "slow".
-	SlowRequestThreshold = 60 * time.Second
+	SlowRequestThreshold = 15 * time.Second
 
 	// ChunkRaftCommandThresholdBytes is the threshold in bytes at which
 	// to chunk or otherwise limit commands being sent to Raft.

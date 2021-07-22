@@ -4483,12 +4483,30 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 		},
 		{
 			into:            true,
+			name:            "import-into-csv-expression-index",
+			data:            "1,2\n3,4",
+			create:          "a INT, b INT, INDEX ((a + b))",
+			targetCols:      "a, b",
+			format:          "CSV",
+			expectedResults: [][]string{{"1", "2"}, {"3", "4"}},
+		},
+		{
+			into:            true,
 			name:            "import-into-avro",
 			data:            avroData,
 			create:          "a INT, b INT, c INT AS (a + b) STORED",
 			targetCols:      "a, b",
 			format:          "AVRO",
 			expectedResults: [][]string{{"1", "2", "3"}, {"3", "4", "7"}},
+		},
+		{
+			into:            true,
+			name:            "import-into-avro-expression-index",
+			data:            avroData,
+			create:          "a INT, b INT, INDEX ((a + b))",
+			targetCols:      "a, b",
+			format:          "AVRO",
+			expectedResults: [][]string{{"1", "2"}, {"3", "4"}},
 		},
 		{
 			into:          false,
@@ -4507,6 +4525,14 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 			expectedError: "to import into a table with virtual computed columns, use IMPORT INTO",
 		},
 		{
+			into:          false,
+			name:          "import-table-csv-expression-index",
+			data:          "35,23\n67,10",
+			create:        "a INT, b INT, INDEX ((a + b))",
+			format:        "CSV",
+			expectedError: "to import into a table with expression indexes, use IMPORT INTO",
+		},
+		{
 			into:            false,
 			name:            "import-table-avro",
 			data:            avroData,
@@ -4523,6 +4549,14 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 			expectedError: "to import into a table with virtual computed columns, use IMPORT INTO",
 		},
 		{
+			into:          false,
+			name:          "import-table-avro-expression-index",
+			data:          avroData,
+			create:        "a INT, b INT, INDEX ((a + b))",
+			format:        "AVRO",
+			expectedError: "to import into a table with expression indexes, use IMPORT INTO",
+		},
+		{
 			into:            false,
 			name:            "pgdump",
 			data:            pgdumpData,
@@ -4535,6 +4569,8 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 			defer sqlDB.Exec(t, `DROP TABLE IF EXISTS users`)
 			data = test.data
 			var importStmt string
+			// Enabled expression indexes.
+			sqlDB.Exec(t, `SET experimental_enable_expression_indexes=true`)
 			if test.into {
 				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE users (%s)`, test.create))
 				importStmt = fmt.Sprintf(`IMPORT INTO users (%s) %s DATA (%q)`,
