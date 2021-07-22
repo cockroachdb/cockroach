@@ -52,10 +52,13 @@ message DatabasesResponse {
 message DatabaseDetailsRequest {
   // database is the name of the database we are querying.
   string database = 1;
+  // Setting this flag includes a computationally-expensive stats field
+  // in the response.
+  bool include_stats = 2;
 }
 
-// DatabaseDetailsResponse contains grant information and table names for a
-// database.
+// DatabaseDetailsResponse contains grant information, table names,
+// zone configuration, and size statistics for a database.
 message DatabaseDetailsResponse {
   message Grant {
     // user is the user that this grant applies to.
@@ -63,6 +66,28 @@ message DatabaseDetailsResponse {
 
     // privileges are the abilities this grant gives to the user.
     repeated string privileges = 2;
+  }
+
+  message Stats {
+    // A table which exists in the database, but for which we could not load stats
+    // during this request.
+    message MissingTable {
+      // The name of the table for which we could not load stats.
+      string name = 1;
+      // The error message that resulted when the request for this table failed.
+      string error_message = 2;
+    }
+
+    // A list of tables that exist in the database, but for which stats could
+    // not be loaded due to failures during this request.
+    repeated MissingTable missing_tables = 1;
+
+    // The number of ranges, as determined from a query of range meta keys,
+    // across all tables.
+    int64 range_count = 2;
+    // An approximation of the disk space (in bytes) used for all replicas
+    // of all tables across the cluster.
+    uint64 approximate_disk_bytes = 3;
   }
 
   // grants are the results of SHOW GRANTS for this database.
@@ -81,6 +106,8 @@ message DatabaseDetailsResponse {
   cockroach.config.zonepb.ZoneConfig zone_config = 4 [(gogoproto.nullable) = false];
   // The level at which this object's zone configuration is set.
   ZoneConfigurationLevel zone_config_level = 5;
+  // Size information about the database, present only when explicitly requested.
+  Stats stats = 6;
 }
 
 // TableDetailsRequest is a request for detailed information about a table.
