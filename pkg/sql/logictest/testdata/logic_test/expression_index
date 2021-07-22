@@ -875,3 +875,35 @@ SELECT i, j FROM inv@i_plus_100_j_a WHERE i+100 = 101 AND j->'a' @> '"x"' ORDER 
 1  {"a": "x"}
 1  {"a": ["x", "y", "z"]}
 1  {"a": [1, "x"]}
+
+# Unique expression indexes.
+
+statement ok
+CREATE TABLE uniq (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE INDEX ((a + b))
+)
+
+statement ok
+INSERT INTO uniq VALUES (1, 10, 100), (2, 20, 200)
+
+statement error duplicate key value violates unique constraint \"uniq_idx\"
+CREATE UNIQUE INDEX uniq_idx ON uniq ((a > 0))
+
+statement error duplicate key value violates unique constraint \"uniq_expr_key\"\nDETAIL: Key \(a \+ b\)=\(110\) already exists
+INSERT INTO uniq VALUES (3, 1, 109)
+
+statement ok
+INSERT INTO uniq VALUES (3, 1, 109) ON CONFLICT DO NOTHING
+
+# Expressions as ON CONFLICT targets are not yet allowed.
+# See https://github.com/cockroachdb/cockroach/issues/67893.
+statement error syntax error
+INSERT INTO uniq VALUES (3, 1, 109) ON CONFLICT ((a + b)) DO NOTHING
+
+# Expressions as ON CONFLICT targets are not yet allowed.
+# See https://github.com/cockroachdb/cockroach/issues/67893.
+statement error syntax error
+INSERT INTO uniq VALUES (4, 1, 219) ON CONFLICT ((a + b)) DO UPDATE SET b = 90
