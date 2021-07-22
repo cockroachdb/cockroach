@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -1077,37 +1078,30 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const manyRowsProbability = 0.1
-
 	rng, seed := randutil.NewPseudoRand()
-	nRows := 100
-	if rng.Float64() < manyRowsProbability {
-		nRows = 2 * coldata.BatchSize()
-	}
+
+	const manyRowsProbability = 0.05
+	const fewRows = 10
+	var manyRows = 2*coldata.BatchSize() + rng.Intn(coldata.BatchSize())
+	var usedManyRows bool
+
 	maxCols := 4
-	maxNum := 10
 	maxArgs := 3
 	typs := make([]*types.T, maxCols, maxCols+maxArgs)
 	for i := range typs {
 		typs[i] = types.Int
 	}
-	for windowFnIdx := 0; windowFnIdx < len(execinfrapb.WindowerSpec_WindowFunc_name); windowFnIdx++ {
-		windowFn := execinfrapb.WindowerSpec_WindowFunc(windowFnIdx)
-		var argTypes []*types.T
-		useRandomTypes := rand.Float64() < randTypesProbability
-		randArgType := types.Int
-		if useRandomTypes {
-			randArgType = generateRandomSupportedTypes(rng, 1 /* nCols */)[0]
-		}
-		switch windowFn {
-		case execinfrapb.WindowerSpec_NTILE:
-			argTypes = []*types.T{types.Int}
-		case execinfrapb.WindowerSpec_LAG, execinfrapb.WindowerSpec_LEAD:
-			argTypes = []*types.T{randArgType, types.Int, randArgType}
-		case execinfrapb.WindowerSpec_FIRST_VALUE, execinfrapb.WindowerSpec_LAST_VALUE:
-			argTypes = []*types.T{randArgType}
-		case execinfrapb.WindowerSpec_NTH_VALUE:
-			argTypes = []*types.T{randArgType, types.Int}
+
+	runTests := func(
+		fun execinfrapb.WindowerSpec_Func,
+		funcName string,
+		argTypes []*types.T,
+		orderNonPartitionCols bool,
+	) {
+		nRows := fewRows
+		if !usedManyRows && rng.Float64() < manyRowsProbability {
+			nRows = manyRows
+			usedManyRows = true
 		}
 		for _, partitionBy := range [][]uint32{
 			{},     // No PARTITION BY clause.
@@ -1124,7 +1118,6 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						continue
 					}
 
-					var rows rowenc.EncDatumRows
 					var argsIdxs []uint32
 					inputTypes := make([]*types.T, nCols, nCols+len(argTypes))
 					copy(inputTypes, typs[:nCols])
@@ -1134,21 +1127,18 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						argsIdxs = append(argsIdxs, uint32(nCols+i))
 					}
 
-					if useRandomTypes {
-						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-					} else {
-						rows = randgen.MakeRandIntRowsInRange(rng, nRows, len(inputTypes), maxNum, nullProbability)
+					rows := randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+					for _, row := range rows {
+						for i := 0; i < len(inputTypes); i++ {
+							if rng.Float64() < nullProbability {
+								row[i] = rowenc.EncDatum{Datum: tree.DNull}
+							}
+						}
 					}
 
-					if windowFn == execinfrapb.WindowerSpec_ROW_NUMBER ||
-						windowFn == execinfrapb.WindowerSpec_NTILE ||
-						windowFn == execinfrapb.WindowerSpec_LAG ||
-						windowFn == execinfrapb.WindowerSpec_LEAD ||
-						windowFn == execinfrapb.WindowerSpec_FIRST_VALUE ||
-						windowFn == execinfrapb.WindowerSpec_LAST_VALUE ||
-						windowFn == execinfrapb.WindowerSpec_NTH_VALUE {
-						// The outputs of these window functions are not deterministic if
-						// there are columns that are not present in either PARTITION BY or
+					if orderNonPartitionCols {
+						// The output of this window function is not deterministic if there
+						// are columns that are not present in either PARTITION BY or
 						// ORDER BY clauses, so we require that all non-partitioning columns
 						// are ordering columns.
 						nOrderingCols = len(inputTypes)
@@ -1159,7 +1149,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						PartitionBy: partitionBy,
 						WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 							{
-								Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn},
+								Func:         fun,
 								ArgsIdxs:     argsIdxs,
 								Ordering:     ordering,
 								OutputColIdx: uint32(len(inputTypes)),
@@ -1169,7 +1159,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 					}
 					windowerSpec.WindowFns[0].Frame = generateWindowFrame(t, rng, &ordering, inputTypes)
 
-					_, outputType, err := execinfrapb.GetWindowFunctionInfo(execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn}, argTypes...)
+					_, outputType, err := execinfrapb.GetWindowFunctionInfo(fun, argTypes...)
 					require.NoError(t, err)
 					pspec := &execinfrapb.ProcessorSpec{
 						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
@@ -1189,7 +1179,19 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 							// on.
 							continue
 						}
-						fmt.Printf("window function: %s\n", windowFn.String())
+						fmt.Printf("window function: %s\n", funcName)
+						fmt.Printf("partitionCols: %v\n", partitionBy)
+						fmt.Print("ordering: ")
+						for i := range ordering.Columns {
+							fmt.Printf("%v %v, ", ordering.Columns[i].ColIdx, ordering.Columns[i].Direction)
+						}
+						fmt.Println()
+						fmt.Printf("argIdxs: %v\n", argsIdxs)
+						frame := windowerSpec.WindowFns[0].Frame
+						fmt.Printf("frame mode: %v\n", frame.Mode)
+						fmt.Printf("start bound: %v\n", frame.Bounds.Start)
+						fmt.Printf("end bound: %v\n", *frame.Bounds.End)
+						fmt.Printf("frame exclusion: %v\n", frame.Exclusion)
 						fmt.Printf("seed = %d\n", seed)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
 						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
@@ -1198,6 +1200,59 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 				}
 			}
 		}
+	}
+
+	for windowFnIdx := 0; windowFnIdx < len(execinfrapb.WindowerSpec_WindowFunc_name); windowFnIdx++ {
+		windowFn := execinfrapb.WindowerSpec_WindowFunc(windowFnIdx)
+		var argTypes []*types.T
+		randArgType := types.Int
+		if rand.Float64() < randTypesProbability {
+			randArgType = generateRandomSupportedTypes(rng, 1 /* nCols */)[0]
+		}
+		switch windowFn {
+		case execinfrapb.WindowerSpec_NTILE:
+			argTypes = []*types.T{types.Int}
+		case execinfrapb.WindowerSpec_LAG, execinfrapb.WindowerSpec_LEAD:
+			argTypes = []*types.T{randArgType, types.Int, randArgType}
+		case execinfrapb.WindowerSpec_FIRST_VALUE, execinfrapb.WindowerSpec_LAST_VALUE:
+			argTypes = []*types.T{randArgType}
+		case execinfrapb.WindowerSpec_NTH_VALUE:
+			argTypes = []*types.T{randArgType, types.Int}
+		}
+		orderNonPartitionCols := windowFn == execinfrapb.WindowerSpec_ROW_NUMBER ||
+			windowFn == execinfrapb.WindowerSpec_NTILE ||
+			windowFn == execinfrapb.WindowerSpec_LAG ||
+			windowFn == execinfrapb.WindowerSpec_LEAD ||
+			windowFn == execinfrapb.WindowerSpec_FIRST_VALUE ||
+			windowFn == execinfrapb.WindowerSpec_LAST_VALUE ||
+			windowFn == execinfrapb.WindowerSpec_NTH_VALUE
+		runTests(execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn},
+			windowFn.String(), argTypes, orderNonPartitionCols)
+	}
+
+	for aggFnIdx := 0; aggFnIdx < len(execinfrapb.AggregatorSpec_Func_name); aggFnIdx++ {
+		aggFn := execinfrapb.AggregatorSpec_Func(aggFnIdx)
+		if !colexecagg.IsAggOptimized(aggFn) || aggFn == execinfrapb.AnyNotNull {
+			// any_not_null is an internal function.
+			continue
+		}
+		var argTypes []*types.T
+		switch aggFn {
+		case execinfrapb.CountRows:
+			// count_rows takes no arguments.
+		case execinfrapb.BoolOr, execinfrapb.BoolAnd:
+			argTypes = []*types.T{types.Bool}
+		case execinfrapb.ConcatAgg:
+			argTypes = []*types.T{types.String}
+		default:
+			argTypes = []*types.T{types.Int}
+			if rand.Float64() < randTypesProbability &&
+				(aggFn == execinfrapb.Min || aggFn == execinfrapb.Max) {
+				argTypes[0] = generateRandomSupportedTypes(rng, 1 /* nCols */)[0]
+			}
+		}
+		runTests(execinfrapb.WindowerSpec_Func{AggregateFunc: &aggFn},
+			aggFn.String(), argTypes, true /* orderNonPartitionCols */)
 	}
 }
 
@@ -1331,6 +1386,10 @@ func generateWindowFrame(
 			boundType == execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING
 	}
 
+	if len(ordering.Columns) == 0 {
+		// RANGE and GROUPS modes require at least one ordering column.
+		mode = execinfrapb.WindowerSpec_Frame_ROWS
+	}
 	if mode == execinfrapb.WindowerSpec_Frame_RANGE &&
 		(len(ordering.Columns) != 1 || !types.IsAdditiveType(inputTypes[ordering.Columns[0].ColIdx])) {
 		// RANGE mode with OFFSET PRECEDING or OFFSET FOLLOWING requires there to
