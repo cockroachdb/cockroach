@@ -1247,112 +1247,77 @@ func NewColOperator(
 					typs = typs[:len(typs)+1]
 					typs[len(typs)-1] = types.Bool
 				}
-
 				outputIdx := int(wf.OutputColIdx + tempColOffset)
+
+				windowArgs := &colexecwindow.WindowArgs{
+					EvalCtx:         evalCtx,
+					MemoryLimit:     execinfra.GetWorkMemLimit(flowCtx),
+					QueueCfg:        args.DiskQueueCfg,
+					FdSemaphore:     args.FDSemaphore,
+					Input:           input,
+					InputTypes:      typs,
+					OutputColIdx:    outputIdx,
+					PartitionColIdx: partitionColIdx,
+					PeersColIdx:     peersColIdx,
+				}
+
+				// Note that in some cases, window functions will use an unlimited
+				// memory monitor. In these cases, the window function itself is
+				// responsible for making sure it stays within the memory limit, and
+				// will fall back to disk if necessary.
 				switch windowFn {
 				case execinfrapb.WindowerSpec_ROW_NUMBER:
-					result.Root = colexecwindow.NewRowNumberOperator(streamingAllocator, input, outputIdx, partitionColIdx)
+					windowArgs.MainAllocator = streamingAllocator
+					result.Root = colexecwindow.NewRowNumberOperator(windowArgs)
 				case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
-					result.Root, err = colexecwindow.NewRankOperator(
-						streamingAllocator, input, windowFn, wf.Ordering.Columns,
-						outputIdx, partitionColIdx, peersColIdx,
-					)
+					windowArgs.MainAllocator = streamingAllocator
+					result.Root, err = colexecwindow.NewRankOperator(windowArgs, windowFn, wf.Ordering.Columns)
 				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
-					// We are using an unlimited memory monitor here because
-					// relative rank operators themselves are responsible for
-					// making sure that we stay within the memory limit, and
-					// they will fall back to disk if necessary.
 					opName := opNamePrefix + "relative-rank"
-					unlimitedAllocator, diskAcc := result.getDiskBackedWindowFnFields(
-						ctx, opName, flowCtx, spec.ProcessorID, factory)
+					result.finishBufferedWindowerArgs(
+						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, false /* needsBuffer */)
 					result.Root, err = colexecwindow.NewRelativeRankOperator(
-						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg,
-						args.FDSemaphore, input, typs, windowFn, wf.Ordering.Columns,
-						outputIdx, partitionColIdx, peersColIdx, diskAcc,
-					)
-					// NewRelativeRankOperator sometimes returns a constOp when
-					// there are no ordering columns, so we check that the
-					// returned operator is a Closer.
+						windowArgs, windowFn, wf.Ordering.Columns)
+					// The result may be a constOp when there are no ordering columns, so
+					// we check if the returned operator is a Closer.
 					if c, ok := result.Root.(colexecop.Closer); ok {
 						result.ToClose = append(result.ToClose, c)
 					}
 				case execinfrapb.WindowerSpec_NTILE:
-					// We are using an unlimited memory monitor here because
-					// the ntile operators themselves are responsible for
-					// making sure that we stay within the memory limit, and
-					// they will fall back to disk if necessary.
 					opName := opNamePrefix + "ntile"
-					unlimitedAllocator, diskAcc := result.getDiskBackedWindowFnFields(
-						ctx, opName, flowCtx, spec.ProcessorID, factory)
-					result.Root = colexecwindow.NewNTileOperator(
-						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg,
-						args.FDSemaphore, diskAcc, input, typs, outputIdx, partitionColIdx, argIdxs[0],
-					)
+					result.finishBufferedWindowerArgs(
+						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, false /* needsBuffer */)
+					result.Root = colexecwindow.NewNTileOperator(windowArgs, argIdxs[0])
 				case execinfrapb.WindowerSpec_LAG:
 					opName := opNamePrefix + "lag"
-					unlimitedAllocator, diskAcc := result.getDiskBackedWindowFnFields(
-						ctx, opName, flowCtx, spec.ProcessorID, factory)
-					// Lag operators need an extra allocator.
-					bufferAllocator := colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
-					)
+					result.finishBufferedWindowerArgs(
+						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 					result.Root, err = colexecwindow.NewLagOperator(
-						unlimitedAllocator, bufferAllocator, execinfra.GetWorkMemLimit(flowCtx),
-						args.DiskQueueCfg, args.FDSemaphore, diskAcc, input, typs,
-						outputIdx, partitionColIdx, argIdxs[0], argIdxs[1], argIdxs[2],
-					)
+						windowArgs, argIdxs[0], argIdxs[1], argIdxs[2])
 				case execinfrapb.WindowerSpec_LEAD:
 					opName := opNamePrefix + "lead"
-					unlimitedAllocator, diskAcc := result.getDiskBackedWindowFnFields(
-						ctx, opName, flowCtx, spec.ProcessorID, factory)
-					// Lead operators need an extra allocator.
-					bufferAllocator := colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
-					)
+					result.finishBufferedWindowerArgs(
+						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 					result.Root, err = colexecwindow.NewLeadOperator(
-						unlimitedAllocator, bufferAllocator, execinfra.GetWorkMemLimit(flowCtx),
-						args.DiskQueueCfg, args.FDSemaphore, diskAcc, input, typs,
-						outputIdx, partitionColIdx, argIdxs[0], argIdxs[1], argIdxs[2],
-					)
+						windowArgs, argIdxs[0], argIdxs[1], argIdxs[2])
 				case execinfrapb.WindowerSpec_FIRST_VALUE:
 					opName := opNamePrefix + "first_value"
-					unlimitedAllocator, diskAcc := result.getDiskBackedWindowFnFields(
-						ctx, opName, flowCtx, spec.ProcessorID, factory)
-					// FirstValue operators need an extra allocator.
-					bufferAllocator := colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
-					)
+					result.finishBufferedWindowerArgs(
+						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 					result.Root, err = colexecwindow.NewFirstValueOperator(
-						evalCtx, wf.Frame, &wf.Ordering, unlimitedAllocator, bufferAllocator,
-						execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg, args.FDSemaphore,
-						diskAcc, input, typs, outputIdx, partitionColIdx, peersColIdx, argIdxs,
-					)
+						windowArgs, wf.Frame, &wf.Ordering, argIdxs)
 				case execinfrapb.WindowerSpec_LAST_VALUE:
 					opName := opNamePrefix + "last_value"
-					unlimitedAllocator, diskAcc := result.getDiskBackedWindowFnFields(
-						ctx, opName, flowCtx, spec.ProcessorID, factory)
-					// LastValue operators need an extra allocator.
-					bufferAllocator := colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
-					)
+					result.finishBufferedWindowerArgs(
+						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 					result.Root, err = colexecwindow.NewLastValueOperator(
-						evalCtx, wf.Frame, &wf.Ordering, unlimitedAllocator, bufferAllocator,
-						execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg, args.FDSemaphore,
-						diskAcc, input, typs, outputIdx, partitionColIdx, peersColIdx, argIdxs,
-					)
+						windowArgs, wf.Frame, &wf.Ordering, argIdxs)
 				case execinfrapb.WindowerSpec_NTH_VALUE:
 					opName := opNamePrefix + "nth_value"
-					unlimitedAllocator, diskAcc := result.getDiskBackedWindowFnFields(
-						ctx, opName, flowCtx, spec.ProcessorID, factory)
-					// NthValue operators need an extra allocator.
-					bufferAllocator := colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
-					)
+					result.finishBufferedWindowerArgs(
+						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 					result.Root, err = colexecwindow.NewNthValueOperator(
-						evalCtx, wf.Frame, &wf.Ordering, unlimitedAllocator, bufferAllocator,
-						execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg, args.FDSemaphore,
-						diskAcc, input, typs, outputIdx, partitionColIdx, peersColIdx, argIdxs,
-					)
+						windowArgs, wf.Frame, &wf.Ordering, argIdxs)
 				default:
 					return r, errors.AssertionFailedf("window function %s is not supported", wf.String())
 				}
@@ -1696,20 +1661,22 @@ func (r opResult) updateWithPostProcessResult(ppr postProcessResult) {
 	copy(r.ColumnTypes, ppr.ColumnTypes)
 }
 
-// getDiskBackedWindowFnFields constructs fields common to all disk-backed
-// buffering window operators.
-func (r opResult) getDiskBackedWindowFnFields(
+func (r opResult) finishBufferedWindowerArgs(
 	ctx context.Context,
-	opName string,
 	flowCtx *execinfra.FlowCtx,
+	args *colexecwindow.WindowArgs,
+	opName string,
 	processorID int32,
 	factory coldata.ColumnFactory,
-) (*colmem.Allocator, *mon.BoundAccount) {
-	unlimitedAllocator := colmem.NewAllocator(
-		ctx, r.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, processorID), factory,
-	)
-	diskAcc := r.createDiskAccount(ctx, flowCtx, opName, processorID)
-	return unlimitedAllocator, diskAcc
+	needsBuffer bool,
+) {
+	args.DiskAcc = r.createDiskAccount(ctx, flowCtx, opName, processorID)
+	mainAcc := r.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
+	args.MainAllocator = colmem.NewAllocator(ctx, mainAcc, factory)
+	if needsBuffer {
+		bufferAcc := r.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
+		args.BufferAllocator = colmem.NewAllocator(ctx, bufferAcc, factory)
+	}
 }
 
 // planFilterExpr creates all operators to implement filter expression.

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -44,43 +43,35 @@ import (
 // outputColIdx specifies in which coldata.Vec the operator should put its
 // output (if there is no such column, a new column is appended).
 func NewRelativeRankOperator(
-	unlimitedAllocator *colmem.Allocator,
-	memoryLimit int64,
-	diskQueueCfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	input colexecop.Operator,
-	inputTypes []*types.T,
+	args *WindowArgs,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
-	outputColIdx int,
-	partitionColIdx int,
-	peersColIdx int,
-	diskAcc *mon.BoundAccount,
 ) (colexecop.Operator, error) {
 	if len(orderingCols) == 0 {
 		constValue := float64(0)
 		if windowFn == execinfrapb.WindowerSpec_CUME_DIST {
 			constValue = 1
 		}
-		return colexecbase.NewConstOp(unlimitedAllocator, input, types.Float, constValue, outputColIdx)
+		return colexecbase.NewConstOp(
+			args.MainAllocator, args.Input, types.Float, constValue, args.OutputColIdx)
 	}
 	rrInitFields := relativeRankInitFields{
 		rankInitFields: rankInitFields{
-			OneInputNode:    colexecop.NewOneInputNode(input),
-			allocator:       unlimitedAllocator,
-			outputColIdx:    outputColIdx,
-			partitionColIdx: partitionColIdx,
-			peersColIdx:     peersColIdx,
+			OneInputNode:    colexecop.NewOneInputNode(args.Input),
+			allocator:       args.MainAllocator,
+			outputColIdx:    args.OutputColIdx,
+			partitionColIdx: args.PartitionColIdx,
+			peersColIdx:     args.PeersColIdx,
 		},
-		memoryLimit:  memoryLimit,
-		diskQueueCfg: diskQueueCfg,
-		fdSemaphore:  fdSemaphore,
-		inputTypes:   inputTypes,
-		diskAcc:      diskAcc,
+		memoryLimit:  args.MemoryLimit,
+		diskQueueCfg: args.QueueCfg,
+		fdSemaphore:  args.FdSemaphore,
+		inputTypes:   args.InputTypes,
+		diskAcc:      args.DiskAcc,
 	}
 	switch windowFn {
 	case execinfrapb.WindowerSpec_PERCENT_RANK:
-		if partitionColIdx != tree.NoColumnIdx {
+		if args.PartitionColIdx != tree.NoColumnIdx {
 			return &percentRankWithPartitionOp{
 				relativeRankInitFields: rrInitFields,
 			}, nil
@@ -89,7 +80,7 @@ func NewRelativeRankOperator(
 			relativeRankInitFields: rrInitFields,
 		}, nil
 	case execinfrapb.WindowerSpec_CUME_DIST:
-		if partitionColIdx != tree.NoColumnIdx {
+		if args.PartitionColIdx != tree.NoColumnIdx {
 			return &cumeDistWithPartitionOp{
 				relativeRankInitFields: rrInitFields,
 			}, nil

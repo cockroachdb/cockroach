@@ -22,17 +22,16 @@ import (
 // NewRowNumberOperator creates a new Operator that computes window function
 // ROW_NUMBER. outputColIdx specifies in which coldata.Vec the operator should
 // put its output (if there is no such column, a new column is appended).
-func NewRowNumberOperator(
-	allocator *colmem.Allocator, input colexecop.Operator, outputColIdx int, partitionColIdx int,
-) colexecop.Operator {
-	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
+func NewRowNumberOperator(args *WindowArgs) colexecop.Operator {
+	input := colexecutils.NewVectorTypeEnforcer(
+		args.MainAllocator, args.Input, types.Int, args.OutputColIdx)
 	base := rowNumberBase{
 		OneInputHelper:  colexecop.MakeOneInputHelper(input),
-		allocator:       allocator,
-		outputColIdx:    outputColIdx,
-		partitionColIdx: partitionColIdx,
+		allocator:       args.MainAllocator,
+		outputColIdx:    args.OutputColIdx,
+		partitionColIdx: args.PartitionColIdx,
 	}
-	if partitionColIdx == -1 {
+	if args.PartitionColIdx == -1 {
 		return &rowNumberNoPartitionOp{base}
 	}
 	return &rowNumberWithPartitionOp{base}
