@@ -1152,7 +1152,7 @@ func protectTimestampForImport(
 		tsToProtect := hlc.Timestamp{WallTime: walltime}.Prev()
 		rec := jobsprotectedts.MakeRecord(*importDetails.ProtectedTimestampRecord,
 			jobID, tsToProtect, spansToProtect)
-		err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
+		err := p.ExecCfg().GetProtectedTimestampProvider().Protect(ctx, txn, rec)
 		if err != nil {
 			return err
 		}
@@ -1942,7 +1942,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	format := details.Format
 	ptsID := details.ProtectedTimestampRecord
 	if ptsID != nil && !r.testingKnobs.ignoreProtectedTimestamps {
-		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
+		if err := p.ExecCfg().GetProtectedTimestampProvider().Verify(ctx, *ptsID); err != nil {
 			if errors.Is(err, protectedts.ErrNotExists) {
 				// No reason to return an error which might cause problems if it doesn't
 				// seem to exist.
@@ -2139,7 +2139,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// timestamp. The reconciliation loop ought to pick it up.
 	if ptsID != nil && !r.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+			return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().GetProtectedTimestampProvider())
 		}); err != nil {
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 		}
@@ -2372,7 +2372,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 			return err
 		}
 
-		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
+		return r.releaseProtectedTimestamp(ctx, txn, cfg.GetProtectedTimestampProvider())
 	}); err != nil {
 		return err
 	}

@@ -49,7 +49,8 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	// Now I want to create some artifacts that should get reconciled away and
 	// then make sure that they do and others which should not do not.
 	s0 := tc.Server(0)
-	ptp := s0.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
+	ptp := execCfg.GetProtectedTimestampProvider()
 	runner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 	jr := s0.JobRegistry().(*jobs.Registry)

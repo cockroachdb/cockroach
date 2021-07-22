@@ -590,13 +590,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.rangeFeedFactory,
 		),
 
-		QueryCache:                 querycache.New(cfg.QueryCacheSize),
-		ProtectedTimestampProvider: cfg.protectedtsProvider,
-		ExternalIODirConfig:        cfg.ExternalIODirConfig,
-		HydratedTables:             hydratedTablesCache,
-		GCJobNotifier:              gcJobNotifier,
-		RangeFeedFactory:           cfg.rangeFeedFactory,
+		QueryCache:          querycache.New(cfg.QueryCacheSize),
+		ExternalIODirConfig: cfg.ExternalIODirConfig,
+		HydratedTables:      hydratedTablesCache,
+		GCJobNotifier:       gcJobNotifier,
+		RangeFeedFactory:    cfg.rangeFeedFactory,
 	}
+	execCfg.SetProtectedTimestampProvider(cfg.protectedtsProvider)
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
 		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)
@@ -685,7 +685,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg, ieFactory)
 
-	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
+	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.GetProtectedTimestampProvider()
 
 	for _, m := range pgServer.Metrics() {
 		cfg.registry.AddMetricStruct(m)

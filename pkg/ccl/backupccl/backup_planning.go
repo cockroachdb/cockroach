@@ -1512,7 +1512,7 @@ func protectTimestampForBackup(
 		}
 		rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, jobID,
 			tsToProtect, spans)
-		err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
+		err := p.ExecCfg().GetProtectedTimestampProvider().Protect(ctx, txn, rec)
 		if err != nil {
 			return err
 		}

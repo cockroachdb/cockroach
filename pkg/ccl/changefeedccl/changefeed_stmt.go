@@ -385,7 +385,7 @@ func changefeedPlanHook(
 					return err
 				}
 				if ptr != nil {
-					return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ptr)
+					return p.ExecCfg().GetProtectedTimestampProvider().Protect(ctx, txn, ptr)
 				}
 				return nil
 			}); err != nil {
@@ -400,7 +400,7 @@ func changefeedPlanHook(
 			// Doing this synchronously here rather than asynchronously later provides
 			// a nice UX win in the case that the data isn't actually available.
 			if protectedTimestampID != uuid.Nil {
-				if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, protectedTimestampID); err != nil {
+				if err := p.ExecCfg().GetProtectedTimestampProvider().Verify(ctx, protectedTimestampID); err != nil {
 					if cancelErr := sj.Cancel(ctx); cancelErr != nil {
 						if ctx.Err() == nil {
 							log.Warningf(ctx, "failed to cancel job: %v", cancelErr)
@@ -675,7 +675,7 @@ func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, jobExec interfac
 	exec := jobExec.(sql.JobExecContext)
 	execCfg := exec.ExecCfg()
 	progress := b.job.Progress()
-	b.maybeCleanUpProtectedTimestamp(ctx, execCfg.DB, execCfg.ProtectedTimestampProvider,
+	b.maybeCleanUpProtectedTimestamp(ctx, execCfg.DB, execCfg.GetProtectedTimestampProvider(),
 		progress.GetChangefeed().ProtectedTimestampRecord)
 
 	// If this job has failed (not canceled), increment the counter.
@@ -739,7 +739,7 @@ func (b *changefeedResumer) OnPauseRequest(
 	}
 
 	execCfg := jobExec.(sql.JobExecContext).ExecCfg()
-	pts := execCfg.ProtectedTimestampProvider
+	pts := execCfg.GetProtectedTimestampProvider()
 	return createProtectedTimestampRecord(ctx, execCfg.Codec, pts, txn, b.job.ID(),
 		details.Targets, *resolved, cp)
 }

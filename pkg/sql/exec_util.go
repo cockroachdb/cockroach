@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -84,6 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
@@ -918,7 +920,7 @@ type ExecutorConfig struct {
 	AuthenticationInfoCache *authentication.AuthInfoCache
 
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
-	ProtectedTimestampProvider protectedts.Provider
+	protectedTimestampProvider protectedts.Provider
 
 	// StmtDiagnosticsRecorder deals with recording statement diagnostics.
 	StmtDiagnosticsRecorder *stmtdiagnostics.Registry
@@ -983,6 +985,85 @@ func (cfg *ExecutorConfig) GetFeatureFlagMetrics() *featureflag.DenialMetrics {
 // SV returns the setting values.
 func (cfg *ExecutorConfig) SV() *settings.Values {
 	return &cfg.Settings.SV
+}
+
+type disabledProtectedTimestampProvider struct{}
+
+func (d *disabledProtectedTimestampProvider) Protect(
+	ctx context.Context, txn *kv.Txn, record *ptpb.Record,
+) error {
+	return nil
+}
+
+func (d *disabledProtectedTimestampProvider) GetRecord(
+	ctx context.Context, txn *kv.Txn, u uuid.UUID,
+) (*ptpb.Record, error) {
+	return nil, nil
+}
+
+func (d *disabledProtectedTimestampProvider) MarkVerified(
+	ctx context.Context, txn *kv.Txn, u uuid.UUID,
+) error {
+	return nil
+}
+
+func (d *disabledProtectedTimestampProvider) Release(
+	ctx context.Context, txn *kv.Txn, u uuid.UUID,
+) error {
+	return nil
+}
+
+func (d *disabledProtectedTimestampProvider) GetMetadata(
+	ctx context.Context, txn *kv.Txn,
+) (ptpb.Metadata, error) {
+	return ptpb.Metadata{}, nil
+}
+
+func (d *disabledProtectedTimestampProvider) GetState(
+	ctx context.Context, txn *kv.Txn,
+) (ptpb.State, error) {
+	return ptpb.State{}, nil
+}
+
+func (d *disabledProtectedTimestampProvider) Iterate(
+	_ context.Context, from, to roachpb.Key, it protectedts.Iterator,
+) (asOf hlc.Timestamp) {
+	return hlc.Timestamp{}
+}
+
+func (d *disabledProtectedTimestampProvider) QueryRecord(
+	_ context.Context, id uuid.UUID,
+) (exists bool, asOf hlc.Timestamp) {
+	return false, hlc.Timestamp{}
+}
+
+func (d *disabledProtectedTimestampProvider) Refresh(_ context.Context, asOf hlc.Timestamp) error {
+	return nil
+}
+
+func (d *disabledProtectedTimestampProvider) Verify(ctx context.Context, u uuid.UUID) error {
+	return nil
+}
+
+func (d *disabledProtectedTimestampProvider) Start(
+	ctx context.Context, stopper *stop.Stopper,
+) error {
+	return nil
+}
+
+var _ protectedts.Provider = &disabledProtectedTimestampProvider{}
+
+// SetProtectedTimestampProvider sets the protected timestamp provider on the
+// ExecutorConfig.
+func (cfg *ExecutorConfig) SetProtectedTimestampProvider(ptsp protectedts.Provider) {
+	cfg.protectedTimestampProvider = ptsp
+}
+
+func (cfg *ExecutorConfig) GetProtectedTimestampProvider() protectedts.Provider {
+	if disabled := protectedts.ProtectedTimestampDisabled.Get(&cfg.Settings.SV); disabled {
+		return &disabledProtectedTimestampProvider{}
+	}
+	return cfg.protectedTimestampProvider
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}

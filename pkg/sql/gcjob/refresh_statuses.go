@@ -87,7 +87,7 @@ func updateStatusForGCElements(
 ) (expired, missing bool, timeToNextTrigger time.Time) {
 	defTTL := execCfg.DefaultZoneConfig.GC.TTLSeconds
 	cfg := execCfg.SystemConfig.GetSystemConfig()
-	protectedtsCache := execCfg.ProtectedTimestampProvider
+	protectedtsCache := execCfg.GetProtectedTimestampProvider()
 
 	earliestDeadline := timeutil.Unix(0, int64(math.MaxInt64))
 

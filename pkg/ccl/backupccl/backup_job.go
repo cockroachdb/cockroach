@@ -441,7 +441,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	ptsID := details.ProtectedTimestampRecord
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		resumerSpan.RecordStructured(&types.StringValue{Value: "verifying protected timestamp"})
-		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
+		if err := p.ExecCfg().GetProtectedTimestampProvider().Verify(ctx, *ptsID); err != nil {
 			if errors.Is(err, protectedts.ErrNotExists) {
 				// No reason to return an error which might cause problems if it doesn't
 				// seem to exist.
@@ -527,7 +527,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().GetProtectedTimestampProvider())
 		}); err != nil {
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 		}
@@ -721,7 +721,7 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 	cfg := p.ExecCfg()
 	b.deleteCheckpoint(ctx, cfg, p.User())
 	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return b.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
+		return b.releaseProtectedTimestamp(ctx, txn, cfg.GetProtectedTimestampProvider())
 	})
 }
 

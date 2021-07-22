@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -31,6 +32,12 @@ var ErrNotExists = errors.New("protected timestamp record does not exist")
 // ErrExists returned from Protect when trying to protect a record
 // with an ID which already exists.
 var ErrExists = errors.New("protected timestamp record already exists")
+
+var ProtectedTimestampDisabled = settings.RegisterBoolSetting(
+	"kv.protectedts.disabled",
+	"if set to true, disable the protected timestamp subsystem",
+	false,
+)
 
 // Provider is the central coordinator for the protectedts subsystem.
 // It exists to abstract interaction with subsystem.
