@@ -65,17 +65,13 @@ func (p *planner) alterDefaultPrivileges(
 }
 
 func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
-	var targetRoles []security.SQLUsername
-	if !n.n.ForAllRoles && len(n.n.Roles) == 0 {
+	targetRoles, err := n.n.Roles.ToSQLUsernames()
+	if err != nil {
+		return err
+	}
+
+	if len(targetRoles) == 0 {
 		targetRoles = append(targetRoles, params.p.User())
-	} else {
-		for _, role := range n.n.Roles {
-			user, err := security.MakeSQLUsernameFromUserInput(string(role), security.UsernameValidation)
-			if err != nil {
-				return err
-			}
-			targetRoles = append(targetRoles, user)
-		}
 	}
 
 	if err := params.p.validateRoles(params.ctx, targetRoles, false /* isPublicValid */); err != nil {
