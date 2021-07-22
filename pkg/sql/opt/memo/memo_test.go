@@ -216,6 +216,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData.SafeUpdates = false
 	notStale()
 
+	// Stale intervalStyleEnabled.
+	evalCtx.SessionData.IntervalStyleEnabled = true
+	stale()
+	evalCtx.SessionData.IntervalStyleEnabled = false
+	notStale()
+
 	// Stale prefer lookup joins for FKs.
 	evalCtx.SessionData.PreferLookupJoinsForFKs = true
 	stale()
