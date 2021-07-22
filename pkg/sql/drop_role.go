@@ -77,11 +77,22 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		return err
 	}
 
+	type objectType string
+
+	const (
+		Database         objectType = "database"
+		Table            objectType = "table"
+		Schema           objectType = "schema"
+		Type             objectType = "type"
+		DefaultPrivilege objectType = "default_privilege"
+	)
+
 	// Now check whether the user still has permission or ownership on any
 	// object in the database.
 	type objectAndType struct {
-		ObjectType string
-		ObjectName string
+		ObjectType   objectType
+		ObjectName   string
+		ErrorMessage string
 	}
 
 	// userNames maps users to the objects they own
@@ -117,8 +128,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	defer f.Close()
+	privilegeObjectFormatter := tree.NewFmtCtx(tree.FmtSimple)
+	defer privilegeObjectFormatter.Close()
 
 	// First check all the databases.
 	if err := forEachDatabaseDesc(params.ctx, params.p, nil /*nil prefix = all databases*/, true, /* requiresPrivileges */
@@ -127,17 +138,58 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				userNames[db.GetPrivileges().Owner()] = append(
 					userNames[db.GetPrivileges().Owner()],
 					objectAndType{
-						ObjectType: "database",
+						ObjectType: Database,
 						ObjectName: db.GetName(),
 					})
 			}
 			for _, u := range db.GetPrivileges().Users {
 				if _, ok := userNames[u.User()]; ok {
-					if f.Len() > 0 {
-						f.WriteString(", ")
+					if privilegeObjectFormatter.Len() > 0 {
+						privilegeObjectFormatter.WriteString(", ")
 					}
-					f.FormatName(db.GetName())
+					privilegeObjectFormatter.FormatName(db.GetName())
 					break
+				}
+			}
+			if db.GetDefaultPrivileges() != nil {
+				for _, u := range db.GetDefaultPrivileges().DefaultPrivileges {
+					for object, defaultPrivs := range u.DefaultPrivilegesPerObject {
+						var objectType string
+						switch object {
+						case tree.Tables:
+							objectType = "relations"
+						case tree.Sequences:
+							objectType = "sequences"
+						case tree.Types:
+							objectType = "types"
+						case tree.Schemas:
+							objectType = "schemas"
+						}
+						for _, privs := range defaultPrivs.Users {
+							owner := u.User()
+							grantee := privs.User()
+							if _, ok := userNames[owner]; ok {
+								userNames[owner] = append(userNames[owner],
+									objectAndType{
+										ObjectType: DefaultPrivilege,
+										ErrorMessage: fmt.Sprintf(
+											"owner of default privileges on new %s belonging to role %s",
+											objectType, owner.Normalized(),
+										),
+									})
+							}
+							if _, ok := userNames[grantee]; ok {
+								userNames[grantee] = append(userNames[grantee],
+									objectAndType{
+										ObjectType: DefaultPrivilege,
+										ErrorMessage: fmt.Sprintf(
+											"privileges for default privileges on new %s belonging to role %s",
+											objectType, owner.Normalized(),
+										),
+									})
+							}
+						}
+					}
 				}
 			}
 			return nil
@@ -171,19 +223,19 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			userNames[table.GetPrivileges().Owner()] = append(
 				userNames[table.GetPrivileges().Owner()],
 				objectAndType{
-					ObjectType: "table",
+					ObjectType: Table,
 					ObjectName: tn.String(),
 				})
 		}
 		for _, u := range table.GetPrivileges().Users {
 			if _, ok := userNames[u.User()]; ok {
-				if f.Len() > 0 {
-					f.WriteString(", ")
+				if privilegeObjectFormatter.Len() > 0 {
+					privilegeObjectFormatter.WriteString(", ")
 				}
 				parentName := lCtx.getDatabaseName(table)
 				schemaName := lCtx.getSchemaName(table)
 				tn := tree.MakeTableNameWithSchema(tree.Name(parentName), tree.Name(schemaName), tree.Name(table.GetName()))
-				f.FormatNode(&tn)
+				privilegeObjectFormatter.FormatNode(&tn)
 				break
 			}
 		}
@@ -199,7 +251,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			userNames[schemaDesc.GetPrivileges().Owner()] = append(
 				userNames[schemaDesc.GetPrivileges().Owner()],
 				objectAndType{
-					ObjectType: "schema",
+					ObjectType: Schema,
 					ObjectName: schemaDesc.GetName(),
 				})
 		}
@@ -216,14 +268,14 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			userNames[typDesc.GetPrivileges().Owner()] = append(
 				userNames[typDesc.GetPrivileges().Owner()],
 				objectAndType{
-					ObjectType: "type",
+					ObjectType: Type,
 					ObjectName: tn.String(),
 				})
 		}
 	}
 
 	// Was there any object depending on that user?
-	if f.Len() > 0 {
+	if privilegeObjectFormatter.Len() > 0 {
 		fnl := tree.NewFmtCtx(tree.FmtSimple)
 		defer fnl.Close()
 		for i, name := range names {
@@ -235,7 +287,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		return pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"cannot drop role%s/user%s %s: grants still exist on %s",
 			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))),
-			fnl.String(), f.String(),
+			fnl.String(), privilegeObjectFormatter.String(),
 		)
 	}
 
@@ -243,11 +295,16 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		// Name already normalized above.
 		name := security.MakeSQLUsernameFromPreNormalizedString(names[i])
 		// Did the user own any objects?
-		ownedObjects := userNames[name]
-		if len(ownedObjects) > 0 {
+		dependantObjects := userNames[name]
+		if len(dependantObjects) > 0 {
 			objectsMsg := tree.NewFmtCtx(tree.FmtSimple)
-			for _, obj := range ownedObjects {
-				objectsMsg.WriteString(fmt.Sprintf("\nowner of %s %s", obj.ObjectType, obj.ObjectName))
+			for _, obj := range dependantObjects {
+				switch obj.ObjectType {
+				case Database, Table, Schema, Type:
+					objectsMsg.WriteString(fmt.Sprintf("\nowner of %s %s", obj.ObjectType, obj.ObjectName))
+				case DefaultPrivilege:
+					objectsMsg.WriteString(fmt.Sprintf("\n%s", obj.ErrorMessage))
+				}
 			}
 			objects := objectsMsg.CloseAndGetString()
 			return pgerror.Newf(pgcode.DependentObjectsStillExist,

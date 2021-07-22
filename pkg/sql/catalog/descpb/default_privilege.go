@@ -65,6 +65,16 @@ func (p *DefaultPrivilegeDescriptor) RevokeDefaultPrivileges(
 
 		defaultPrivileges.DefaultPrivilegesPerObject[targetObject] = defaultPrivilegesPerObject
 	}
+
+	// Check if there are any default privileges remaining on the descriptor.
+	// If empty we will remove the map entry.
+	for _, defaultPrivs := range defaultPrivileges.DefaultPrivilegesPerObject {
+		if len(defaultPrivs.Users) != 0 {
+			return
+		}
+	}
+	// There no entries remaining, remove the entry for the role.
+	p.removeUser(role)
 }
 
 // CreatePrivilegesFromDefaultPrivileges creates privileges for a
@@ -173,6 +183,16 @@ func (p *DefaultPrivilegeDescriptor) findOrCreateUser(
 		}
 	}
 	return &p.DefaultPrivileges[idx]
+}
+
+// removeUser looks for a given user in the list and removes it if present.
+func (p *DefaultPrivilegeDescriptor) removeUser(user security.SQLUsername) {
+	idx := p.findUserIndex(user)
+	if idx == -1 {
+		// Not found.
+		return
+	}
+	p.DefaultPrivileges = append(p.DefaultPrivileges[:idx], p.DefaultPrivileges[idx+1:]...)
 }
 
 // Validate returns an assertion error if the default privilege descriptor
