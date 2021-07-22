@@ -532,12 +532,26 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="with_max_staleness"></a><code>with_max_staleness(max_staleness: <a href="interval.html">interval</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>When used in the AS OF SYSTEM TIME clause of an single-statement,
 read-only transaction, CockroachDB chooses the newest timestamp within the staleness
-bound that allows execution of the reads at the closest available replica without blocking.</p>
+bound that allows execution of the reads at the nearest available replica without blocking.</p>
+<p>Note this function requires an enterprise license on a CCL distribution.</p>
+</span></td></tr>
+<tr><td><a name="with_max_staleness"></a><code>with_max_staleness(max_staleness: <a href="interval.html">interval</a>, nearest_only: <a href="bool.html">bool</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>When used in the AS OF SYSTEM TIME clause of an single-statement,
+read-only transaction, CockroachDB chooses the newest timestamp within the staleness
+bound that allows execution of the reads at the nearest available replica without blocking.</p>
+<p>If nearest_only is set to true, reads that cannot be served using the nearest
+available replica will error.</p>
 <p>Note this function requires an enterprise license on a CCL distribution.</p>
 </span></td></tr>
 <tr><td><a name="with_min_timestamp"></a><code>with_min_timestamp(min_timestamp: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>When used in the AS OF SYSTEM TIME clause of an single-statement,
 read-only transaction, CockroachDB chooses the newest timestamp before the min_timestamp
-that allows execution of the reads at the closest available replica without blocking.</p>
+that allows execution of the reads at the nearest available replica without blocking.</p>
+<p>Note this function requires an enterprise license on a CCL distribution.</p>
+</span></td></tr>
+<tr><td><a name="with_min_timestamp"></a><code>with_min_timestamp(min_timestamp: <a href="timestamp.html">timestamptz</a>, nearest_only: <a href="bool.html">bool</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>When used in the AS OF SYSTEM TIME clause of an single-statement,
+read-only transaction, CockroachDB chooses the newest timestamp before the min_timestamp
+that allows execution of the reads at the nearest available replica without blocking.</p>
+<p>If nearest_only is set to true, reads that cannot be served using the nearest
+available replica will error.</p>
 <p>Note this function requires an enterprise license on a CCL distribution.</p>
 </span></td></tr></tbody>
 </table>
@@ -817,6 +831,10 @@ that allows execution of the reads at the closest available replica without bloc
 <tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>, emit_defaults: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.write_file"></a><code>crdb_internal.write_file(data: <a href="bytes.html">bytes</a>, uri: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Write the content passed to a file at the supplied external storage URI</p>
 </span></td></tr>
 <tr><td><a name="json_array_length"></a><code>json_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td></tr>

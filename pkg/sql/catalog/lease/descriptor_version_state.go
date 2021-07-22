@@ -122,7 +122,7 @@ func (s *descriptorVersionState) incRefCount(ctx context.Context) {
 func (s *descriptorVersionState) incRefCountLocked(ctx context.Context) {
 	s.mu.refcount++
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "descriptorVersionState.incRefCount: %s", s.stringLocked())
+		log.VEventf(ctx, 2, "descriptorVersionState.incRefCount: %s", s.stringLocked())
 	}
 }
 

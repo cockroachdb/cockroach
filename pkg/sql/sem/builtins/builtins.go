@@ -2471,9 +2471,20 @@ nearest replica.`, defaultFollowerReadDuration),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return withMinTimestamp(ctx, tree.MustBeDTimestampTZ(args[0]).Time)
 			},
-			PreferredOverload: true,
-			Info:              withMinTimestampInfo,
-			Volatility:        tree.VolatilityVolatile,
+			Info:       withMinTimestampInfo(false /* nearestOnly */),
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"min_timestamp", types.TimestampTZ},
+				{"nearest_only", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return withMinTimestamp(ctx, tree.MustBeDTimestampTZ(args[0]).Time)
+			},
+			Info:       withMinTimestampInfo(true /* nearestOnly */),
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 
@@ -2487,7 +2498,19 @@ nearest replica.`, defaultFollowerReadDuration),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return withMaxStaleness(ctx, tree.MustBeDInterval(args[0]).Duration)
 			},
-			Info:       withMaxStalenessInfo,
+			Info:       withMaxStalenessInfo(false /* nearestOnly */),
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"max_staleness", types.Interval},
+				{"nearest_only", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return withMaxStaleness(ctx, tree.MustBeDInterval(args[0]).Duration)
+			},
+			Info:       withMaxStalenessInfo(true /* nearestOnly */),
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -3517,6 +3540,42 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info:       "Convert JSONB data to protocol message bytes",
 			Volatility: tree.VolatilityImmutable,
+		}),
+
+	"crdb_internal.read_file": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"uri", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				uri := string(tree.MustBeDString(args[0]))
+				content, err := evalCtx.Planner.ExternalReadFile(evalCtx.Ctx(), uri)
+				return tree.NewDBytes(tree.DBytes(content)), err
+			},
+			Info:       "Read the content of the file at the supplied external storage URI",
+			Volatility: tree.VolatilityVolatile,
+		}),
+
+	"crdb_internal.write_file": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"data", types.Bytes},
+				{"uri", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				data := tree.MustBeDBytes(args[0])
+				uri := string(tree.MustBeDString(args[1]))
+				if err := evalCtx.Planner.ExternalWriteFile(evalCtx.Ctx(), uri, []byte(data)); err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(len(data))), nil
+			},
+			Info:       "Write the content passed to a file at the supplied external storage URI",
+			Volatility: tree.VolatilityVolatile,
 		}),
 
 	// Enum functions.
@@ -7621,17 +7680,41 @@ var (
 	}
 )
 
-const withMinTimestampInfo = `When used in the AS OF SYSTEM TIME clause of an single-statement,
+const nearestOnlyInfo = `
+
+If nearest_only is set to true, reads that cannot be served using the nearest
+available replica will error.
+`
+
+func withMinTimestampInfo(nearestOnly bool) string {
+	var nearestOnlyText string
+	if nearestOnly {
+		nearestOnlyText = nearestOnlyInfo
+	}
+	return fmt.Sprintf(
+		`When used in the AS OF SYSTEM TIME clause of an single-statement,
 read-only transaction, CockroachDB chooses the newest timestamp before the min_timestamp
-that allows execution of the reads at the closest available replica without blocking.
+that allows execution of the reads at the nearest available replica without blocking.%s
 
-Note this function requires an enterprise license on a CCL distribution.`
+Note this function requires an enterprise license on a CCL distribution.`,
+		nearestOnlyText,
+	)
+}
 
-const withMaxStalenessInfo = `When used in the AS OF SYSTEM TIME clause of an single-statement,
+func withMaxStalenessInfo(nearestOnly bool) string {
+	var nearestOnlyText string
+	if nearestOnly {
+		nearestOnlyText = nearestOnlyInfo
+	}
+	return fmt.Sprintf(
+		`When used in the AS OF SYSTEM TIME clause of an single-statement,
 read-only transaction, CockroachDB chooses the newest timestamp within the staleness
-bound that allows execution of the reads at the closest available replica without blocking.
+bound that allows execution of the reads at the nearest available replica without blocking.%s
 
-Note this function requires an enterprise license on a CCL distribution.`
+Note this function requires an enterprise license on a CCL distribution.`,
+		nearestOnlyText,
+	)
+}
 
 func withMinTimestamp(ctx *tree.EvalContext, t time.Time) (tree.Datum, error) {
 	t, err := WithMinTimestamp(ctx, t)

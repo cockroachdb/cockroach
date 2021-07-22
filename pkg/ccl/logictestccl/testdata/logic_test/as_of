@@ -120,6 +120,24 @@ SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
 statement ok
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms')
 
+statement error with_max_staleness: expected bool argument for nearest_only
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', 5)
+
+statement error with_min_timestamp: expected bool argument for nearest_only
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp(), 5)
+
+statement ok
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', false)
+
+statement ok
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms', false)
+
+statement ok
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', true)
+
+statement ok
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms', true)
+
 statement error AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
 BEGIN AS OF SYSTEM TIME with_max_staleness('1ms')
 
