@@ -27,7 +27,7 @@ func newCountRowsHashAggAlloc(
 
 // countRowsHashAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col    []int64
 	curAgg int64
 }
@@ -35,7 +35,7 @@ type countRowsHashAgg struct {
 var _ AggregateFunc = &countRowsHashAgg{}
 
 func (a *countRowsHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
 
@@ -101,7 +101,7 @@ func newCountHashAggAlloc(
 
 // countHashAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col    []int64
 	curAgg int64
 }
@@ -109,7 +109,7 @@ type countHashAgg struct {
 var _ AggregateFunc = &countHashAgg{}
 
 func (a *countHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
 

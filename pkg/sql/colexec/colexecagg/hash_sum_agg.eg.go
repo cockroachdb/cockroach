@@ -69,7 +69,7 @@ func newSumHashAggAlloc(
 }
 
 type sumInt16HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
@@ -84,7 +84,7 @@ type sumInt16HashAgg struct {
 var _ AggregateFunc = &sumInt16HashAgg{}
 
 func (a *sumInt16HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
@@ -188,7 +188,7 @@ func (a *sumInt16HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type sumInt32HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
@@ -203,7 +203,7 @@ type sumInt32HashAgg struct {
 var _ AggregateFunc = &sumInt32HashAgg{}
 
 func (a *sumInt32HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
@@ -307,7 +307,7 @@ func (a *sumInt32HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type sumInt64HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
@@ -322,7 +322,7 @@ type sumInt64HashAgg struct {
 var _ AggregateFunc = &sumInt64HashAgg{}
 
 func (a *sumInt64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
@@ -426,7 +426,7 @@ func (a *sumInt64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type sumDecimalHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
@@ -440,7 +440,7 @@ type sumDecimalHashAgg struct {
 var _ AggregateFunc = &sumDecimalHashAgg{}
 
 func (a *sumDecimalHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
@@ -539,7 +539,7 @@ func (a *sumDecimalHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type sumFloat64HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg float64
@@ -553,7 +553,7 @@ type sumFloat64HashAgg struct {
 var _ AggregateFunc = &sumFloat64HashAgg{}
 
 func (a *sumFloat64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Float64()
 }
 
@@ -646,7 +646,7 @@ func (a *sumFloat64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type sumIntervalHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg duration.Duration
@@ -660,7 +660,7 @@ type sumIntervalHashAgg struct {
 var _ AggregateFunc = &sumIntervalHashAgg{}
 
 func (a *sumIntervalHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Interval()
 }
 

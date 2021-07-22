@@ -89,7 +89,7 @@ type anyNotNull_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
 	// {{else}}
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// {{end}}
 	col                         _GOTYPESLICE
 	curAgg                      _GOTYPE
@@ -102,7 +102,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.col = vec.TemplateType()
 }

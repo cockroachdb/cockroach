@@ -38,7 +38,7 @@ type concat_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
 	// {{else}}
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// {{end}}
 	// curAgg holds the running total.
 	curAgg []byte
@@ -53,7 +53,7 @@ func (a *concat_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.col = vec.Bytes()
 }
@@ -64,6 +64,7 @@ func (a *concat_AGGKINDAgg) Compute(
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
+	// {{if not (eq "_AGGKIND" "Window")}}
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
 		// Capture groups to force bounds check to work. See
@@ -101,6 +102,20 @@ func (a *concat_AGGKINDAgg) Compute(
 		}
 	},
 	)
+	// {{else}}
+	// Unnecessary memory accounting can have significant overhead for window
+	// aggregate functions because Compute is called at least once for every row.
+	// For this reason, we do not use PerformOperation here.
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+			_ACCUMULATE_CONCAT(a, nulls, i, true, false)
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+			_ACCUMULATE_CONCAT(a, nulls, i, false, false)
+		}
+	}
+	// {{end}}
 	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))

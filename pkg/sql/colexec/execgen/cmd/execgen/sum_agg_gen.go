@@ -189,6 +189,10 @@ func init() {
 			return genSumAgg(inputFileContents, wr, isSumInt)
 		}
 	}
-	registerAggGenerator(sumAggGenerator(false /* isSumInt */), "sum_agg.eg.go", sumAggTmpl)
-	registerAggGenerator(sumAggGenerator(true /* isSumInt */), "sum_int_agg.eg.go", sumAggTmpl)
+	registerAggGenerator(
+		sumAggGenerator(false /* isSumInt */), "sum_agg.eg.go",
+		sumAggTmpl, true /* genWindowVariant */)
+	registerAggGenerator(
+		sumAggGenerator(true /* isSumInt */), "sum_int_agg.eg.go",
+		sumAggTmpl, true /* genWindowVariant */)
 }

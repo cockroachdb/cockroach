@@ -50,7 +50,7 @@ func newSumIntHashAggAlloc(
 }
 
 type sumIntInt16HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg int64
@@ -64,7 +64,7 @@ type sumIntInt16HashAgg struct {
 var _ AggregateFunc = &sumIntInt16HashAgg{}
 
 func (a *sumIntInt16HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
 
@@ -163,7 +163,7 @@ func (a *sumIntInt16HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type sumIntInt32HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg int64
@@ -177,7 +177,7 @@ type sumIntInt32HashAgg struct {
 var _ AggregateFunc = &sumIntInt32HashAgg{}
 
 func (a *sumIntInt32HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
 
@@ -276,7 +276,7 @@ func (a *sumIntInt32HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type sumIntInt64HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg int64
@@ -290,7 +290,7 @@ type sumIntInt64HashAgg struct {
 var _ AggregateFunc = &sumIntInt64HashAgg{}
 
 func (a *sumIntInt64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
 

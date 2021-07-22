@@ -24,7 +24,7 @@ import (
 )
 
 type defaultHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	fn  tree.AggregateFunc
 	ctx context.Context
 	// inputArgsConverter is managed by the aggregator, and this function can
@@ -41,7 +41,7 @@ type defaultHashAgg struct {
 var _ AggregateFunc = &defaultHashAgg{}
 
 func (a *defaultHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 }
 
 func (a *defaultHashAgg) Compute(
