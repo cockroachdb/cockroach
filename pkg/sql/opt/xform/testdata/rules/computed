@@ -12,14 +12,6 @@ CREATE TABLE t_int (
 ----
 
 exec-ddl
-CREATE TABLE t_float (
-    k_float FLOAT,
-    c_float FLOAT AS (k_float + 1) STORED,
-    INDEX c_float_index (c_float, k_float)
-)
-----
-
-exec-ddl
 CREATE TABLE t_rand (
     k_int INT,
     c_int INT AS ((random()*100)::INT + k_int) STORED,
@@ -43,6 +35,26 @@ CREATE TABLE hashed (
     k STRING,
     hash INT AS (fnv32(k) % 4) STORED CHECK (hash IN (0, 1, 2, 3)),
     INDEX (hash, k)
+)
+----
+
+exec-ddl
+CREATE TABLE composite_types (
+    pk INT PRIMARY KEY,
+
+    i INT,
+    f FLOAT,
+    d DECIMAL,
+
+    cf FLOAT AS (f+1) STORED,
+    cif FLOAT AS (i::FLOAT) VIRTUAL,
+    cd DECIMAL AS (d+1) VIRTUAL,
+    cs STRING AS (d::STRING) STORED,
+
+    INDEX cf_idx (cf),
+    INDEX cif_idx (cif),
+    INDEX cd_idx (cd),
+    INDEX cs_idx (cs)
 )
 ----
 
@@ -127,21 +139,6 @@ select
  └── filters
       └── k_int:1 IS NULL [outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
 
-# Don't constrain the index for a FLOAT column, since the FLOAT data type uses
-# a composite key encoding.
-opt
-SELECT k_float FROM t_float WHERE k_float = 5.0
-----
-select
- ├── columns: k_float:1!null
- ├── fd: ()-->(1)
- ├── scan t_float
- │    ├── columns: k_float:1
- │    └── computed column expressions
- │         └── c_float:2
- │              └── k_float:1 + 1.0
- └── filters
-      └── k_float:1 = 5.0 [outer=(1), constraints=(/1: [/5.0 - /5.0]; tight), fd=()-->(1)]
 
 # Don't constrain the index when the computed column has a volatile function.
 opt
@@ -171,3 +168,102 @@ scan null_col@ab
  ├── columns: a:1!null b:2
  ├── constraint: /1/2/3: [/1/NULL - /1/NULL]
  └── fd: ()-->(1,2)
+
+# We should be able to infer the value of cf, because the expression is not
+# composite-sensitive.
+opt
+SELECT pk FROM composite_types@cf_idx WHERE f=1
+----
+project
+ ├── columns: pk:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: pk:1!null f:3!null
+      ├── key: (1)
+      ├── fd: ()-->(3)
+      ├── index-join composite_types
+      │    ├── columns: pk:1!null f:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3)
+      │    └── scan composite_types@cf_idx
+      │         ├── columns: pk:1!null
+      │         ├── constraint: /5/1: [/2.0 - /2.0]
+      │         ├── flags: force-index=cf_idx
+      │         └── key: (1)
+      └── filters
+           └── f:3 = 1.0 [outer=(3), constraints=(/3: [/1.0 - /1.0]; tight), fd=()-->(3)]
+
+# We should be able to infer the value of cif, because the expression is not
+# composite-sensitive (it does not depend on composite values).
+opt
+SELECT pk FROM composite_types@cif_idx WHERE i=1
+----
+project
+ ├── columns: pk:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: pk:1!null i:2!null
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── index-join composite_types
+      │    ├── columns: pk:1!null i:2
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── scan composite_types@cif_idx
+      │         ├── columns: pk:1!null
+      │         ├── constraint: /6/1: [/1.0 - /1.0]
+      │         ├── flags: force-index=cif_idx
+      │         └── key: (1)
+      └── filters
+           └── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+# We should be able to infer the value of cd, because the expression is not
+# composite-sensitive.
+opt
+SELECT pk FROM composite_types@cd_idx WHERE d=1
+----
+project
+ ├── columns: pk:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: pk:1!null d:4!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(4)
+      ├── index-join composite_types
+      │    ├── columns: pk:1!null d:4
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
+      │    └── scan composite_types@cd_idx
+      │         ├── columns: pk:1!null
+      │         ├── constraint: /7/1: [/2 - /2]
+      │         ├── flags: force-index=cd_idx
+      │         └── key: (1)
+      └── filters
+           └── d:4 = 1 [outer=(4), immutable, constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+
+# We should not be able to infer the value of cs because the expression is
+# composite-sensitive.
+opt
+SELECT pk FROM composite_types@cs_idx WHERE d=1
+----
+project
+ ├── columns: pk:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: pk:1!null d:4!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(4)
+      ├── index-join composite_types
+      │    ├── columns: pk:1!null d:4
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
+      │    └── scan composite_types@cs_idx
+      │         ├── columns: pk:1!null
+      │         ├── flags: force-index=cs_idx
+      │         └── key: (1)
+      └── filters
+           └── d:4 = 1 [outer=(4), immutable, constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
