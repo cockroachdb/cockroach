@@ -448,27 +448,27 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec._FROM_TYPE()
+			inputNulls := inputVec.Nulls()
 			outputCol := outputVec._TO_TYPE()
 			outputNulls := outputVec.Nulls()
 			// {{if and (eq $fromFamily "DatumVecCanonicalTypeFamily") (not (eq $toFamily "DatumVecCanonicalTypeFamily"))}}
 			converter := colconv.GetDatumToPhysicalFn(toType)
 			// {{end}}
 			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					_CAST_TUPLES(true, true)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, true, true)
 				} else {
-					_CAST_TUPLES(true, false)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, true, false)
 				}
 			} else {
 				// We need to make sure that there are no left over null values
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					_CAST_TUPLES(false, true)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, false, true)
 				} else {
-					_CAST_TUPLES(false, false)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, false, false)
 				}
 			}
 			// {{/*
@@ -521,46 +521,52 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 
 // {{end}}
 
-// {{/*
-// This code snippet casts all non-null tuples from the vector named 'inputCol'
-// to the vector named 'outputCol'.
-func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
-	// {{define "castTuples" -}}
-	// {{$hasNulls := .HasNulls}}
-	// {{$hasSel := .HasSel}}
-	// {{$fromInfo := .FromInfo}}
-	// {{with .Global}}
-	// {{if $hasSel}}
-	sel = sel[:n]
-	// {{else}}
-	// {{if $fromInfo.Sliceable}}
-	_ = inputCol.Get(n - 1)
-	// {{end}}
-	// {{if .Sliceable}}
-	_ = outputCol.Get(n - 1)
-	// {{end}}
-	// {{end}}
+// castTuples casts all non-null tuples from the vector named 'inputCol' to the
+// vector named 'outputCol'.
+// execgen:inline
+// execgen:template<hasNulls,hasSel>
+func castTuples(
+	inputCol interface{},
+	inputNulls *coldata.Nulls,
+	outputCol interface{},
+	outputNulls *coldata.Nulls,
+	toType *types.T,
+	n int,
+	sel []int,
+	hasNulls bool,
+	hasSel bool,
+) {
+	if !hasSel {
+		// {{if $fromInfo.Sliceable}}
+		_ = inputCol.Get(n - 1)
+		// {{end}}
+		// {{if .Sliceable}}
+		_ = outputCol.Get(n - 1)
+		// {{end}}
+	}
 	var tupleIdx int
 	for i := 0; i < n; i++ {
-		// {{if $hasSel}}
-		tupleIdx = sel[i]
-		// {{else}}
-		tupleIdx = i
-		// {{end}}
-		// {{if $hasNulls}}
-		if inputNulls.NullAt(tupleIdx) {
+		if hasSel {
+			tupleIdx = sel[i]
+		} else {
+			tupleIdx = i
+		}
+		if hasNulls && inputNulls.NullAt(tupleIdx) {
 			continue
 		}
-		// {{end}}
-		// {{if and ($fromInfo.Sliceable) (not $hasSel)}}
-		//gcassert:bce
-		// {{end}}
+		if !hasSel {
+			// {{if $fromInfo.Sliceable}}
+			//gcassert:bce
+			// {{end}}
+		}
 		v := inputCol.Get(tupleIdx)
 		var r _TO_GO_TYPE
 		_CAST(r, v, inputCol, toType)
-		// {{if and (.Sliceable) (not $hasSel)}}
-		//gcassert:bce
-		// {{end}}
+		if !hasSel {
+			// {{if .Sliceable}}
+			//gcassert:bce
+			// {{end}}
+		}
 		outputCol.Set(tupleIdx, r)
 		// {{if eq .VecMethod "Datum"}}
 		// Casting to datum-backed vector might produce a null value on
@@ -571,9 +577,4 @@ func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
 		}
 		// {{end}}
 	}
-	// {{end}}
-	// {{end}}
-	// {{/*
 }
-
-// */}}
