@@ -146,9 +146,9 @@ type ServerConfig struct {
 	// user-defined types.
 	HydratedTables *hydratedtables.Cache
 
-	// SQLStatsResetter is an interface used to reset SQL stats without the need to
+	// SQLStatsController is an interface used to reset SQL stats without the need to
 	// introduce dependency on the sql package.
-	SQLStatsResetter tree.SQLStatsResetter
+	SQLStatsController tree.SQLStatsController
 
 	// VirtualSchemas hold the virtual table schemas.
 	VirtualSchemas catalog.VirtualSchemas
