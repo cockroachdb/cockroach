@@ -12,8 +12,10 @@ package kv
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -57,6 +59,9 @@ type Batch struct {
 	// approxMutationReqBytes tracks the approximate size of keys and values in
 	// mutations added to this batch via Put, CPut, InitPut, Del, etc.
 	approxMutationReqBytes int
+	// MaxKVBytes is the largest key-value pair we can put in the database. 0 means
+	// no size limit.
+	MaxKVBytes int
 	// Set when AddRawRequest is used, in which case using the "other"
 	// operations renders the batch unusable.
 	raw bool
@@ -374,6 +379,17 @@ func (b *Batch) GetForUpdate(key interface{}) {
 	b.get(key, true /* forUpdate */)
 }
 
+// checkKVSize checks that the key-value pair is within the Batch's KV size limit.
+func (b *Batch) checkKVSize(k roachpb.Key, v roachpb.Value) error {
+	if size := len(k) + len(v.RawBytes); b.MaxKVBytes != 0 && size > b.MaxKVBytes {
+		return fmt.Errorf(
+			"key-value pair has size %v which is greater than max key-value size %v, key: %q",
+			size, b.MaxKVBytes, keys.PrettyPrint(nil /* valDirs */, k),
+		)
+	}
+	return nil
+}
+
 func (b *Batch) put(key, value interface{}, inline bool) {
 	k, err := marshalKey(key)
 	if err != nil {
@@ -382,6 +398,10 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 	}
 	v, err := marshalValue(value)
 	if err != nil {
+		b.initResult(0, 1, notRaw, err)
+		return
+	}
+	if err := b.checkKVSize(k, v); err != nil {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
@@ -491,6 +511,10 @@ func (b *Batch) cputInternal(
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
+	if err := b.checkKVSize(k, v); err != nil {
+		b.initResult(0, 1, notRaw, err)
+		return
+	}
 	if inline {
 		b.appendReqs(roachpb.NewConditionalPutInline(k, v, expValue, allowNotExist))
 	} else {
@@ -516,6 +540,10 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 	}
 	v, err := marshalValue(value)
 	if err != nil {
+		b.initResult(0, 1, notRaw, err)
+		return
+	}
+	if err := b.checkKVSize(k, v); err != nil {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}

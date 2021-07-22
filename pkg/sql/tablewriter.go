@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +24,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
+
+const (
+	// Lower bound for sql.mutations.kv_max_size. Needs to be large enough that we
+	// can still make changes to sql.mutations.kv_max_size via SQL.
+	maxKeyValueSizeFloor = 1 << 10
+	// Upper bound for sql.mutations.kv_max_size.
+	maxKeyValueSizeCeil = 512 << 20
+)
+
+var maxKeyValueSize = settings.RegisterByteSizeSetting(
+	"sql.mutations.kv_max_size",
+	"maximum size of key-value entry that SQL can put in the KV store",
+	maxKeyValueSizeCeil,
+	func(size int64) error {
+		if size < maxKeyValueSizeFloor {
+			return fmt.Errorf(
+				"cannot set sql.mutations.kv_max_size to %v, must be >= %v", size, maxKeyValueSizeFloor,
+			)
+		} else if size > maxKeyValueSizeCeil {
+			return fmt.Errorf(
+				"cannot set sql.mutations.kv_max_size to %v, must be <= %v", size, maxKeyValueSizeCeil,
+			)
+		}
+		return nil
+	},
 )
 
 // expressionCarrier handles visiting sub-expressions.
@@ -141,6 +168,9 @@ func (tb *tableWriterBase) init(
 	tb.txn = txn
 	tb.desc = tableDesc
 	tb.b = txn.NewBatch()
+	if evalCtx != nil {
+		tb.b.MaxKVBytes = int(maxKeyValueSize.Get(&evalCtx.Settings.SV))
+	}
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionBatchSizes
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
 	batchMaxBytes := int(maxBatchBytes.Default())
@@ -170,7 +200,9 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 			return err
 		}
 	}
+	maxKVBytes := tb.b.MaxKVBytes
 	tb.b = tb.txn.NewBatch()
+	tb.b.MaxKVBytes = maxKVBytes
 	tb.lastBatchSize = tb.currentBatchSize
 	tb.currentBatchSize = 0
 	return nil
