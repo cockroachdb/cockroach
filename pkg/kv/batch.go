@@ -88,10 +88,11 @@ func (b *Batch) MustPErr() *roachpb.Error {
 }
 
 func (b *Batch) prepare() error {
-	for _, r := range b.Results {
-		if r.Err != nil {
-			return r.Err
+	if err := b.resultErr(); err != nil {
+		if b.pErr == nil {
+			b.pErr = roachpb.NewError(err)
 		}
+		return err
 	}
 	return nil
 }
@@ -288,9 +289,9 @@ func (b *Batch) fillResults(ctx context.Context) {
 // resultErr walks through the result slice and returns the first error found,
 // if one exists.
 func (b *Batch) resultErr() error {
-	for i := range b.Results {
-		if err := b.Results[i].Err; err != nil {
-			return err
+	for _, r := range b.Results {
+		if r.Err != nil {
+			return r.Err
 		}
 	}
 	return nil
