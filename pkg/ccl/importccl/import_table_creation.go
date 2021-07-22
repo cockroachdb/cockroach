@@ -157,9 +157,16 @@ func MakeSimpleTableDescriptor(
 		switch def := create.Defs[i].(type) {
 		case *tree.CheckConstraintTableDef,
 			*tree.FamilyTableDef,
-			*tree.IndexTableDef,
 			*tree.UniqueConstraintTableDef:
 			// ignore
+		case *tree.IndexTableDef:
+			for i := range def.Columns {
+				if def.Columns[i].Expr != nil {
+					return nil, unimplemented.NewWithIssueDetail(56002, "import.expression-index",
+						"to import into a table with expression indexes, use IMPORT INTO")
+				}
+			}
+
 		case *tree.ColumnTableDef:
 			if def.IsComputed() && def.IsVirtual() {
 				return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
