@@ -151,6 +151,7 @@ describe("<LineGraph>", function () {
       () => calculateYAxisDomain(0, mockData),
       () => calculateXAxisDomain(mockProps.timeInfo),
     );
+    mockOptions.series.push({ scale: "1" });
     instance.u = new uPlot(mockOptions);
     const setDataSpy = sinon.spy(instance.u, "setData");
     // run test
