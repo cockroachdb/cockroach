@@ -109,6 +109,16 @@ func (p *DefaultPrivilegeDescriptor) FindOrCreateUser(
 	return &p.DefaultPrivilegesPerRole[idx]
 }
 
+// RemoveUser looks for a given user in the list and removes it if present.
+func (p *DefaultPrivilegeDescriptor) RemoveUser(role DefaultPrivilegesRole) {
+	idx := p.FindUserIndex(role)
+	if idx == -1 {
+		// Not found.
+		return
+	}
+	p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole[:idx], p.DefaultPrivilegesPerRole[idx+1:]...)
+}
+
 // Validate returns an assertion error if the default privilege descriptor
 // is invalid.
 func (p *DefaultPrivilegeDescriptor) Validate() error {
