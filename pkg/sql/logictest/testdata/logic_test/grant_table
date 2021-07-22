@@ -43,6 +43,7 @@ test           crdb_internal       create_statements                      public
 test           crdb_internal       create_type_statements                 public   SELECT
 test           crdb_internal       cross_db_references                    public   SELECT
 test           crdb_internal       databases                              public   SELECT
+test           crdb_internal       default_privileges                     public   SELECT
 test           crdb_internal       feature_usage                          public   SELECT
 test           crdb_internal       forward_dependencies                   public   SELECT
 test           crdb_internal       gossip_alerts                          public   SELECT
