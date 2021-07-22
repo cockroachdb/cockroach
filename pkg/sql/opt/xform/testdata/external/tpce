@@ -2962,37 +2962,37 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2,6,7,10,19,23,31,47,55), (6)-->(31,47)
  ├── ordering: -2
- ├── inner-join (lookup exchange)
+ ├── inner-join (lookup status_type)
  │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:18!null st_name:19!null tt_id:22!null tt_name:23!null s_symb:28!null s_name:31!null s_ex_id:32!null ex_id:46!null ex_name:47!null
- │    ├── key columns: [32] = [46]
+ │    ├── key columns: [3] = [18]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 50]
  │    ├── key: (1)
  │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (18)-->(19), (3)==(18), (18)==(3), (22)-->(23), (4)==(22), (22)==(4), (28)-->(31,32), (46)-->(47), (32)==(46), (46)==(32), (6)==(28), (28)==(6)
  │    ├── ordering: -2 opt(9) [actual: -2]
- │    ├── inner-join (lookup security)
- │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:18!null st_name:19!null tt_id:22!null tt_name:23!null s_symb:28!null s_name:31!null s_ex_id:32!null
- │    │    ├── key columns: [6] = [28]
+ │    ├── inner-join (lookup trade_type)
+ │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null tt_id:22!null tt_name:23!null s_symb:28!null s_name:31!null s_ex_id:32!null ex_id:46!null ex_name:47!null
+ │    │    ├── key columns: [4] = [22]
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [0 - 50]
  │    │    ├── key: (1)
- │    │    ├── fd: ()-->(9), (18)-->(19), (22)-->(23), (1)-->(2-4,6,7,10,12), (28)-->(31,32), (6)==(28), (28)==(6), (4)==(22), (22)==(4), (3)==(18), (18)==(3)
+ │    │    ├── fd: ()-->(9), (22)-->(23), (1)-->(2-4,6,7,10,12), (28)-->(31,32), (46)-->(47), (32)==(46), (46)==(32), (6)==(28), (28)==(6), (4)==(22), (22)==(4)
  │    │    ├── ordering: -2 opt(9) [actual: -2]
- │    │    ├── inner-join (lookup status_type)
- │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:18!null st_name:19!null tt_id:22!null tt_name:23!null
- │    │    │    ├── key columns: [3] = [18]
+ │    │    ├── inner-join (lookup exchange)
+ │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null s_symb:28!null s_name:31!null s_ex_id:32!null ex_id:46!null ex_name:47!null
+ │    │    │    ├── key columns: [32] = [46]
  │    │    │    ├── lookup columns are key
  │    │    │    ├── cardinality: [0 - 50]
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (18)-->(19), (3)==(18), (18)==(3), (22)-->(23), (4)==(22), (22)==(4)
+ │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (28)-->(31,32), (46)-->(47), (32)==(46), (46)==(32), (6)==(28), (28)==(6)
  │    │    │    ├── ordering: -2 opt(9) [actual: -2]
- │    │    │    ├── inner-join (lookup trade_type)
- │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null tt_id:22!null tt_name:23!null
- │    │    │    │    ├── key columns: [4] = [22]
+ │    │    │    ├── inner-join (lookup security)
+ │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null s_symb:28!null s_name:31!null s_ex_id:32!null
+ │    │    │    │    ├── key columns: [6] = [28]
  │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── cardinality: [0 - 50]
  │    │    │    │    ├── key: (1)
- │    │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (22)-->(23), (4)==(22), (22)==(4)
+ │    │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (28)-->(31,32), (6)==(28), (28)==(6)
  │    │    │    │    ├── ordering: -2 opt(9) [actual: -2]
  │    │    │    │    ├── scan trade@secondary
  │    │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null
@@ -3365,9 +3365,15 @@ project
  │    │    ├── limit hint: 20.00
  │    │    └── inner-join (cross)
  │    │         ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_name:19!null s_symb:24!null s_name:27!null
- │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │    │         ├── key: (1)
  │    │         ├── fd: ()-->(6,24,27), (1)-->(2,4,5,7,9-11), (18)-->(19), (4)==(18), (18)==(4)
+ │    │         ├── scan security
+ │    │         │    ├── columns: s_symb:24!null s_name:27!null
+ │    │         │    ├── constraint: /24: [/'SYMB' - /'SYMB']
+ │    │         │    ├── cardinality: [0 - 1]
+ │    │         │    ├── key: ()
+ │    │         │    └── fd: ()-->(24,27)
  │    │         ├── inner-join (lookup trade_type)
  │    │         │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_name:19!null
  │    │         │    ├── key columns: [4] = [18]
@@ -3380,12 +3386,6 @@ project
  │    │         │    │    ├── key: (1)
  │    │         │    │    └── fd: ()-->(6), (1)-->(2,4,5,7,9-11)
  │    │         │    └── filters (true)
- │    │         ├── scan security
- │    │         │    ├── columns: s_symb:24!null s_name:27!null
- │    │         │    ├── constraint: /24: [/'SYMB' - /'SYMB']
- │    │         │    ├── cardinality: [0 - 1]
- │    │         │    ├── key: ()
- │    │         │    └── fd: ()-->(24,27)
  │    │         └── filters (true)
  │    └── 20
  └── projections

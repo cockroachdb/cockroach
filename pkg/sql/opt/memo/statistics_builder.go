@@ -804,13 +804,17 @@ func (sb *statisticsBuilder) constrainScan(
 
 	// Calculate row count and selectivity
 	// -----------------------------------
-	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
+	maxSelectivity := props.OneSelectivity
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s, &maxSelectivity))
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns.
+	// Adjust the selectivity so we don't double-count the histogram columns, but
+	// make sure it does not exceed the maximum possible value based on the
+	// histograms.
 	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
+	s.LimitSelectivity(maxSelectivity)
 }
 
 func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *props.ColumnStatistic {
@@ -991,12 +995,16 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 	// -----------------------------------
 	inputStats := &invFilter.Input.Relational().Stats
 	s.RowCount = inputStats.RowCount
-	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, invFilter, s))
+	maxSelectivity := props.OneSelectivity
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, invFilter, s, &maxSelectivity))
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, invFilter, s))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps.NotNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns.
+	// Adjust the selectivity so we don't double-count the histogram columns, but
+	// make sure it does not exceed the maximum possible value based on the
+	// histograms.
 	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, invFilter, s))
+	s.LimitSelectivity(maxSelectivity)
 
 	sb.finalizeFromCardinality(relProps)
 }
@@ -1154,10 +1162,11 @@ func (sb *statisticsBuilder) buildJoin(
 		s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
 	}
 
+	maxSelectivity := props.OneSelectivity
 	if join.Op() == opt.InvertedJoinOp || hasInvertedJoinCond(h.filters) {
 		s.ApplySelectivity(sb.selectivityFromInvertedJoinCondition(join, s))
 	}
-	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, join, s))
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, join, s, &maxSelectivity))
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(
 		constrainedCols.Intersection(leftCols), join, s,
 	))
@@ -1167,8 +1176,11 @@ func (sb *statisticsBuilder) buildJoin(
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps.NotNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns.
+	// Adjust the selectivity so we don't double-count the histogram columns, but
+	// make sure it does not exceed the maximum possible value based on the
+	// histograms.
 	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, join, s))
+	s.LimitSelectivity(maxSelectivity)
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
@@ -2854,14 +2866,18 @@ func (sb *statisticsBuilder) filterRelExpr(
 
 	// Calculate row count and selectivity
 	// -----------------------------------
-	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, e, s))
+	maxSelectivity := props.OneSelectivity
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, e, s, &maxSelectivity))
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, e, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns.
+	// Adjust the selectivity so we don't double-count the histogram columns, but
+	// make sure it does not exceed the maximum possible value based on the
+	// histograms.
 	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, e, s))
+	s.LimitSelectivity(maxSelectivity)
 
 	// Update distinct and null counts based on equivalencies; this should
 	// happen after selectivityFromMultiColDistinctCounts and
@@ -3090,12 +3106,16 @@ func (sb *statisticsBuilder) constrainExpr(
 
 	// Calculate row count and selectivity
 	// -----------------------------------
-	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, e, s))
+	maxSelectivity := props.OneSelectivity
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, e, s, &maxSelectivity))
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
 
-	// Adjust the selectivity so we don't double-count the histogram columns.
+	// Adjust the selectivity so we don't double-count the histogram columns, but
+	// make sure it does not exceed the maximum possible value based on the
+	// histograms.
 	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, e, s))
+	s.LimitSelectivity(maxSelectivity)
 }
 
 // applyIndexConstraint is used to update the distinct counts and histograms
@@ -3728,7 +3748,7 @@ func (sb *statisticsBuilder) selectivityFromDistinctCount(
 // For histograms, the selectivity of a constrained column is calculated as
 // (# values in histogram after filter) / (# values in histogram before filter).
 func (sb *statisticsBuilder) selectivityFromHistograms(
-	cols opt.ColSet, e RelExpr, s *props.Statistics,
+	cols opt.ColSet, e RelExpr, s *props.Statistics, maxSelectivity *props.Selectivity,
 ) (selectivity props.Selectivity) {
 	selectivity = props.OneSelectivity
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
@@ -3750,9 +3770,15 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 		// Calculate the selectivity of the predicate.
 		nonNullSelectivity := props.MakeSelectivityFromFraction(newCount, oldCount)
 		nullSelectivity := props.MakeSelectivityFromFraction(colStat.NullCount, inputColStat.NullCount)
-		selectivity.Multiply(sb.predicateSelectivity(
+		predicateSelectivity := sb.predicateSelectivity(
 			nonNullSelectivity, nullSelectivity, inputColStat.NullCount, inputStats.RowCount,
-		))
+		)
+
+		// The maximum possible selectivity of the entire filter is the minimum
+		// selectivity of all individual predicates.
+		*maxSelectivity = props.MinSelectivity(*maxSelectivity, predicateSelectivity)
+
+		selectivity.Multiply(predicateSelectivity)
 	}
 
 	return selectivity
