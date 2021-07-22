@@ -698,7 +698,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg,
 	)
 
-	distSQLServer.ServerConfig.SQLStatsResetter = pgServer.SQLServer
+	distSQLServer.ServerConfig.SQLStatsController = pgServer.SQLServer.GetSQLStatsController()
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set

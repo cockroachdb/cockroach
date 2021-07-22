@@ -114,7 +114,8 @@ func (t *tenantStatusServer) ListContentionEvents(
 func (t *tenantStatusServer) ResetSQLStats(
 	ctx context.Context, _ *serverpb.ResetSQLStatsRequest,
 ) (*serverpb.ResetSQLStatsResponse, error) {
-	t.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
+	controller := t.sqlServer.pgServer.SQLServer.GetSQLStatsController()
+	controller.ResetLocalSQLStats(ctx)
 	return &serverpb.ResetSQLStatsResponse{}, nil
 }
 
