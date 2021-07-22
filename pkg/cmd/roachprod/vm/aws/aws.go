@@ -862,12 +862,14 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	if !opts.SSDOpts.UseLocalSSD {
 		if len(p.opts.EBSVolumes) == 0 && p.opts.DefaultEBSVolume.Disk.VolumeType == "" {
 			p.opts.DefaultEBSVolume.Disk.VolumeType = defaultEBSVolumeType
+			p.opts.DefaultEBSVolume.Disk.DeleteOnTermination = true
 		}
 
 		if p.opts.DefaultEBSVolume.Disk.VolumeType != "" {
 			// Add default volume to the list of volumes we'll setup.
 			v := p.opts.EBSVolumes.newVolume()
 			v.Disk = p.opts.DefaultEBSVolume.Disk
+			v.Disk.DeleteOnTermination = true
 			p.opts.EBSVolumes = append(p.opts.EBSVolumes, v)
 		}
 	}
