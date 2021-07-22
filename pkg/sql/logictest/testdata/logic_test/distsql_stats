@@ -823,6 +823,44 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 2            0           0                    1
 3            0           0                    1
 
+statement ok
+SET experimental_enable_expression_indexes=true
+
+# Test that inaccessible columns that represent expression indexes have
+# histograms collected for them.
+statement ok
+CREATE TABLE expression (
+  a INT,
+  b INT,
+  j JSON,
+  INDEX a_plus_b ((a + b)),
+  INVERTED INDEX j_a ((j->'a'))
+);
+INSERT INTO expression VALUES (1, 1, '{"a": "b"}'), (2, 10, '{"c": "d"}'), (3, 1, '{"e": "f"}');
+
+statement ok
+CREATE STATISTICS s FROM expression
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE expression]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names                row_count  null_count  has_histogram
+s                {a}                         3          0           true
+s                {b}                         3          0           true
+s                {crdb_internal_idx_expr_1}  3          3           false
+s                {crdb_internal_idx_expr}    3          3           true
+s                {j}                         3          0           false
+s                {rowid}                     3          0           true
+
 # Test that non-index columns have histograms collected for them, with
 # up to 2 buckets.
 statement ok

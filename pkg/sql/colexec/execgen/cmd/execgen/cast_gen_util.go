@@ -80,34 +80,19 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Date, types.Int, getIntToIntCastFunc(64 /* fromWidth */, anyWidth)},
 	{types.Date, types.Float, intToFloat},
 	{types.Date, types.Decimal, intToDecimal},
+
+	{types.Bytes, types.Uuid, bytesToUUID},
+
+	{types.String, types.Bool, stringToBool},
+	{types.String, types.Bytes, stringToBytes},
+	{types.String, types.String, stringToString},
+	{types.String, types.Uuid, stringToUUID},
+
+	{types.Jsonb, types.String, jsonToString},
 }
 
 type supportedNativeCastInfo struct {
 	from *types.T
-	to   *types.T
-	cast castFunc
-}
-
-// datumCastInfos contains supported "datum-backed -> to" mappings where to type
-// is supported natively. This mapping has to be on the actual types and not the
-// canonical type families.
-//
-// The information in this struct must be structured in such a manner that all
-// supported casts:
-// 1.  to the same type family are contiguous
-// 2.  for "to" type family, anyWidth "to" width is the last one.
-//
-// If this structure is broken, then the generated code will not compile because
-// either
-// 1. there will be duplicate entries in the switch statements (when
-//    "continuity" requirement is broken)
-// 2. the 'default' case appears before other in the switch statements (when
-//    anyWidth is not the last one).
-var datumCastInfos = []supportedDatumCastInfo{
-	{types.Bool, datumToBool},
-}
-
-type supportedDatumCastInfo struct {
 	to   *types.T
 	cast castFunc
 }
@@ -280,17 +265,116 @@ func floatToInt(intWidth, floatWidth int32) func(string, string, string, string)
 	}
 }
 
-func datumToBool(to, from, fromCol, _ string) string {
+func bytesToUUID(to, from, _, _ string) string {
 	convStr := `
+		_uuid, err := uuid.FromBytes(%[2]s)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = _uuid.GetBytes()
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func stringToBool(to, from, _, _ string) string {
+	convStr := `
+		var err error
+		%[1]s, err = tree.ParseBool(string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func stringToBytes(to, from, _, _ string) string {
+	convStr := `
+		var err error
+		%[1]s, err = lex.DecodeRawBytesToByteArrayAuto(%[2]s)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func stringToString(to, from, _, toType string) string {
+	convStr := `
+		if %[3]s.Oid() == oid.T_name {
+			// For Names we don't perform the truncation, and there is no need
+			// to do anything about the Oids since those are stored in the type.
+			%[1]s = %[2]s
+		} else {
+			// bpchar types truncate trailing whitespace.
+			if %[3]s.Oid() == oid.T_bpchar {
+				%[2]s = bytes.TrimRight(%[2]s, " ")
+			}
+			// If the string type specifies a limit we truncate to that limit:
+			//   'hello'::CHAR(2) -> 'he'
+			// This is true of all the string type variants.
+			if %[3]s.Width() > 0 {
+				// TODO(yuzefovich): figure out whether we can avoid converting
+				// to a string.
+				%[2]s = []byte(util.TruncateString(string(%[2]s), int(%[3]s.Width())))
+			}
+			if %[3]s.Oid() == oid.T_char {
+				// "char" is supposed to truncate long values.
+				// TODO(yuzefovich): figure out whether we can avoid converting
+				// to a string.
+				%[2]s = []byte(util.TruncateString(string(%[2]s), 1))
+			}
+			%[1]s = %[2]s
+		}
+	`
+	return fmt.Sprintf(convStr, to, from, toType)
+}
+
+func stringToUUID(to, from, _, _ string) string {
+	convStr := `
+		_uuid, err := uuid.FromString(string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = _uuid.GetBytes()
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func jsonToString(to, from, _, toType string) string {
+	convStr := `
+		_string := %[2]s.String()
+		switch %[3]s.Oid() {
+		case oid.T_char:
+			// "char" is supposed to truncate long values.
+			_string = util.TruncateString(_string, 1)
+		case oid.T_bpchar:
+			// bpchar types truncate trailing whitespace.
+			_string = strings.TrimRight(_string, " ")
+		}
+		%[1]s = []byte(_string)
+	`
+	return fmt.Sprintf(convStr, to, from, toType)
+}
+
+// getDatumToNativeCastFunc returns a castFunc for casting datum-backed value
+// to a value of the specified physical representation (i.e. to natively
+// supported type). The returned castFunc assumes that there is a converter
+// function named "converter" in scope.
+func getDatumToNativeCastFunc(
+	nonDatumPhysicalRepresentation string,
+) func(string, string, string, string) string {
+	return func(to, from, fromCol, toType string) string {
+		convStr := `
 		{
-			_castedDatum, err := %[2]s.(*coldataext.Datum).Cast(%[3]s, types.Bool)
+			_castedDatum, err := %[2]s.(*coldataext.Datum).Cast(%[3]s, %[4]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
-			%[1]s = _castedDatum == tree.DBoolTrue
+			%[1]s = converter(_castedDatum).(%[5]s)
 		}
 	`
-	return fmt.Sprintf(convStr, to, from, fromCol)
+		return fmt.Sprintf(convStr, to, from, fromCol, toType, nonDatumPhysicalRepresentation)
+	}
 }
 
 func datumToDatum(to, from, fromCol, toType string) string {
@@ -407,6 +491,10 @@ func (i castFromWidthTmplInfo) TypeName() string {
 	return getTypeName(i.fromType)
 }
 
+func (i castFromWidthTmplInfo) Sliceable() bool {
+	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(i.fromType.Family()))
+}
+
 func (i castToWidthTmplInfo) TypeName() string {
 	return getTypeName(i.toType)
 }
@@ -425,6 +513,10 @@ func (i castDatumTmplInfo) VecMethod() string {
 
 func (i castDatumTmplInfo) TypeName() string {
 	return datumVecTypeName
+}
+
+func (i castDatumTmplInfo) Sliceable() bool {
+	return false
 }
 
 func (i castDatumToWidthTmplInfo) TypeName() string {
@@ -455,11 +547,13 @@ func (i castBetweenDatumsTmplInfo) Sliceable() bool {
 var (
 	_ = castFromWidthTmplInfo.VecMethod
 	_ = castFromWidthTmplInfo.TypeName
+	_ = castFromWidthTmplInfo.Sliceable
 	_ = castToWidthTmplInfo.TypeName
 	_ = castToWidthTmplInfo.Cast
 	_ = castToWidthTmplInfo.Sliceable
 	_ = castDatumTmplInfo.VecMethod
 	_ = castDatumTmplInfo.TypeName
+	_ = castDatumTmplInfo.Sliceable
 	_ = castDatumToWidthTmplInfo.TypeName
 	_ = castDatumToWidthTmplInfo.Cast
 	_ = castDatumToWidthTmplInfo.Sliceable
@@ -582,11 +676,11 @@ func getCastFromTmplInfos() castTmplInfo {
 	// Single iteration of this loop finds the boundaries of the same "to" type
 	// family from the datum-backed type and processes all casts for "to" type
 	// family.
-	for toFamilyStartIdx < len(datumCastInfos) {
-		castInfo := datumCastInfos[toFamilyStartIdx]
+	nativeTypes := typeconv.TypesSupportedNatively
+	for toFamilyStartIdx < len(nativeTypes) {
 		toFamilyEndIdx := toFamilyStartIdx + 1
-		for toFamilyEndIdx < len(datumCastInfos) {
-			if castInfo.to.Family() != datumCastInfos[toFamilyEndIdx].to.Family() {
+		for toFamilyEndIdx < len(nativeTypes) {
+			if nativeTypes[toFamilyStartIdx].Family() != nativeTypes[toFamilyEndIdx].Family() {
 				break
 			}
 			toFamilyEndIdx++
@@ -594,19 +688,21 @@ func getCastFromTmplInfos() castTmplInfo {
 
 		castDatumTmplInfos = append(castDatumTmplInfos, castDatumTmplInfo{})
 		datumTmplInfo := &castDatumTmplInfos[len(castDatumTmplInfos)-1]
-		datumTmplInfo.TypeFamily = toTypeFamily(castInfo.to)
+		datumTmplInfo.TypeFamily = toTypeFamily(nativeTypes[toFamilyStartIdx])
 
 		// We now have fixed "to family", so we can populate the "meat" of the
 		// datum cast tmpl info.
-		for castInfoIdx := toFamilyStartIdx; castInfoIdx < toFamilyEndIdx; castInfoIdx++ {
-			castInfo = datumCastInfos[castInfoIdx]
-
+		for toTypeIdx := toFamilyStartIdx; toTypeIdx < toFamilyEndIdx; toTypeIdx++ {
+			toType := nativeTypes[toTypeIdx]
+			width := getWidth(toType)
+			canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family())
+			physicalRepresentation := toPhysicalRepresentation(canonicalTypeFamily, width)
 			datumTmplInfo.Widths = append(datumTmplInfo.Widths, castDatumToWidthTmplInfo{
-				toType:    castInfo.to,
-				Width:     getWidth(castInfo.to),
-				VecMethod: toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(castInfo.to.Family()), getWidth(castInfo.to)),
-				GoType:    toPhysicalRepresentation(typeconv.TypeFamilyToCanonicalTypeFamily(castInfo.to.Family()), getWidth(castInfo.to)),
-				CastFn:    castInfo.cast,
+				toType:    toType,
+				Width:     width,
+				VecMethod: toVecMethod(canonicalTypeFamily, width),
+				GoType:    physicalRepresentation,
+				CastFn:    getDatumToNativeCastFunc(physicalRepresentation),
 			})
 		}
 

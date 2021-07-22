@@ -102,6 +102,7 @@
 /pkg/ccl/kvccl/              @cockroachdb/kv-noreview
 /pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 /pkg/ccl/multiregionccl/     @cockroachdb/sql-queries-noreview
+/pkg/ccl/multitenantccl/     @cockroachdb/unowned
 /pkg/ccl/oidcccl/            @cockroachdb/sql-queries
 /pkg/ccl/partitionccl/       @cockroachdb/sql-schema
 /pkg/ccl/serverccl/          @cockroachdb/server-prs
@@ -175,6 +176,7 @@
 /pkg/jobs/                   @cockroachdb/sql-schema
 /pkg/keys/                   @cockroachdb/kv
 /pkg/migration/              @cockroachdb/kv
+/pkg/multitenant             @cockroachdb/unowned
 /pkg/release/                @cockroachdb/dev-inf
 /pkg/roachpb/                @cockroachdb/kv
 /pkg/rpc/                    @cockroachdb/server-prs
