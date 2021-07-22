@@ -14,144 +14,96 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-	"github.com/marusama/semaphore"
 )
 
 // NewLagOperator creates a new Operator that computes window
 // function lag. outputColIdx specifies in which coldata.Vec the operator
 // should put its output (if there is no such column, a new column is appended).
 func NewLagOperator(
-	unlimitedAllocator *colmem.Allocator,
-	bufferAllocator *colmem.Allocator,
-	memoryLimit int64,
-	diskQueueCfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	diskAcc *mon.BoundAccount,
-	input colexecop.Operator,
-	inputTypes []*types.T,
-	outputColIdx int,
-	partitionColIdx int,
-	argIdx int,
-	offsetIdx int,
-	defaultIdx int,
+	args *WindowArgs, argIdx int, offsetIdx int, defaultIdx int,
 ) (colexecop.Operator, error) {
 	// Allow the direct-access buffer 10% of the available memory. The rest will
 	// be given to the bufferedWindowOp queue. While it is somewhat more important
 	// for the direct-access buffer tuples to be kept in-memory, it only has to
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
-	bufferMemLimit := int64(float64(memoryLimit) * 0.10)
+	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
 	buffer := colexecutils.NewSpillingBuffer(
-		bufferAllocator, bufferMemLimit, diskQueueCfg, fdSemaphore, inputTypes, diskAcc, argIdx)
+		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
+		args.FdSemaphore, args.InputTypes, args.DiskAcc, argIdx)
 	base := lagBase{
 		partitionSeekerBase: partitionSeekerBase{
 			buffer:          buffer,
-			partitionColIdx: partitionColIdx,
+			partitionColIdx: args.PartitionColIdx,
 		},
-		outputColIdx: outputColIdx,
+		outputColIdx: args.OutputColIdx,
 		argIdx:       argIdx,
 		offsetIdx:    offsetIdx,
 		defaultIdx:   defaultIdx,
 	}
-	argType := inputTypes[argIdx]
+	argType := args.InputTypes[argIdx]
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
 	case types.BoolFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(
-				&lagBoolWindow{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagBoolWindow{lagBase: base}, argType), nil
 		}
 	case types.BytesFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(
-				&lagBytesWindow{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagBytesWindow{lagBase: base}, argType), nil
 		}
 	case types.DecimalFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(
-				&lagDecimalWindow{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagDecimalWindow{lagBase: base}, argType), nil
 		}
 	case types.IntFamily:
 		switch argType.Width() {
 		case 16:
-			return newBufferedWindowOperator(
-				&lagInt16Window{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagInt16Window{lagBase: base}, argType), nil
 		case 32:
-			return newBufferedWindowOperator(
-				&lagInt32Window{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagInt32Window{lagBase: base}, argType), nil
 		case -1:
 		default:
-			return newBufferedWindowOperator(
-				&lagInt64Window{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagInt64Window{lagBase: base}, argType), nil
 		}
 	case types.FloatFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(
-				&lagFloat64Window{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagFloat64Window{lagBase: base}, argType), nil
 		}
 	case types.TimestampTZFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(
-				&lagTimestampWindow{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagTimestampWindow{lagBase: base}, argType), nil
 		}
 	case types.IntervalFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(
-				&lagIntervalWindow{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagIntervalWindow{lagBase: base}, argType), nil
 		}
 	case types.JsonFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(
-				&lagJSONWindow{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagJSONWindow{lagBase: base}, argType), nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
 		case -1:
 		default:
-			return newBufferedWindowOperator(
-				&lagDatumWindow{lagBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &lagDatumWindow{lagBase: base}, argType), nil
 		}
 	}
 	return nil, errors.Errorf("unsupported lag window operator type %s", argType.Name())

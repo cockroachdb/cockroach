@@ -852,53 +852,43 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			})
 		}
 
+		args := &WindowArgs{
+			EvalCtx:         &evalCtx,
+			MainAllocator:   mainAllocator,
+			BufferAllocator: bufferAllocator,
+			MemoryLimit:     memLimit,
+			QueueCfg:        queueCfg,
+			FdSemaphore:     colexecop.NewTestingSemaphore(fdLimit),
+			DiskAcc:         testDiskAcc,
+			Input:           source,
+			InputTypes:      sourceTypes,
+			OutputColIdx:    outputIdx,
+			PartitionColIdx: partitionCol,
+			PeersColIdx:     peersCol,
+		}
+
 		switch windowFn {
 		case execinfrapb.WindowerSpec_ROW_NUMBER:
-			op = NewRowNumberOperator(mainAllocator, source, outputIdx, partitionCol)
+			op = NewRowNumberOperator(args)
 		case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
-			op, err = NewRankOperator(
-				mainAllocator, source, windowFn, orderingCols, outputIdx, partitionCol, peersCol,
-			)
+			op, err = NewRankOperator(args, windowFn, orderingCols)
 		case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
-			op, err = NewRelativeRankOperator(
-				mainAllocator, memLimit, queueCfg, colexecop.NewTestingSemaphore(fdLimit), source,
-				sourceTypes, windowFn, orderingCols, outputIdx, partitionColIdx, peersColIdx, testDiskAcc,
-			)
+			op, err = NewRelativeRankOperator(args, windowFn, orderingCols)
 		case execinfrapb.WindowerSpec_NTILE:
-			op = NewNTileOperator(mainAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionCol, arg1ColIdx,
-			)
+			op = NewNTileOperator(args, arg1ColIdx)
 		case execinfrapb.WindowerSpec_LAG:
-			op, err = NewLagOperator(
-				mainAllocator, bufferAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionCol, arg1ColIdx, arg2ColIdx, arg3ColIdx,
-			)
+			op, err = NewLagOperator(args, arg1ColIdx, arg2ColIdx, arg3ColIdx)
 		case execinfrapb.WindowerSpec_LEAD:
-			op, err = NewLeadOperator(
-				mainAllocator, bufferAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionCol, arg1ColIdx, arg2ColIdx, arg3ColIdx,
-			)
+			op, err = NewLeadOperator(args, arg1ColIdx, arg2ColIdx, arg3ColIdx)
 		case execinfrapb.WindowerSpec_FIRST_VALUE:
-			op, err = NewFirstValueOperator(
-				&evalCtx, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
-				mainAllocator, bufferAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionColIdx, peersColIdx, []int{arg1ColIdx})
+			op, err = NewFirstValueOperator(args, NormalizeWindowFrame(nil),
+				&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx})
 		case execinfrapb.WindowerSpec_LAST_VALUE:
-			op, err = NewLastValueOperator(
-				&evalCtx, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
-				mainAllocator, bufferAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionColIdx, peersColIdx, []int{arg1ColIdx})
+			op, err = NewLastValueOperator(args, NormalizeWindowFrame(nil),
+				&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx})
 		case execinfrapb.WindowerSpec_NTH_VALUE:
-			op, err = NewFirstValueOperator(
-				&evalCtx, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
-				mainAllocator, bufferAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionColIdx, peersColIdx, []int{arg1ColIdx, arg2ColIdx})
+			op, err = NewNthValueOperator(args, NormalizeWindowFrame(nil),
+				&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx, arg2ColIdx})
 		}
 		require.NoError(b, err)
 		return op

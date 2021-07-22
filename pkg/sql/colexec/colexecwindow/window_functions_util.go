@@ -15,16 +15,37 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
 )
+
+// WindowArgs extracts common arguments to window operators.
+type WindowArgs struct {
+	EvalCtx         *tree.EvalContext
+	MainAllocator   *colmem.Allocator
+	BufferAllocator *colmem.Allocator
+	MemoryLimit     int64
+	QueueCfg        colcontainer.DiskQueueCfg
+	FdSemaphore     semaphore.Semaphore
+	DiskAcc         *mon.BoundAccount
+	Input           colexecop.Operator
+	InputTypes      []*types.T
+	OutputColIdx    int
+	PartitionColIdx int
+	PeersColIdx     int
+}
 
 // windowFnMaxNumArgs is a mapping from the window function to the maximum
 // number of arguments it takes.
