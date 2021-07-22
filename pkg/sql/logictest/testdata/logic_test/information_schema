@@ -610,8 +610,41 @@ pg_catalog          pg_shdescription
 pg_catalog          pg_shmem_allocations
 pg_catalog          pg_shseclabel
 pg_catalog          pg_stat_activity
+pg_catalog          pg_stat_all_indexes
+pg_catalog          pg_stat_all_tables
+pg_catalog          pg_stat_archiver
+pg_catalog          pg_stat_bgwriter
 pg_catalog          pg_stat_database
 pg_catalog          pg_stat_database_conflicts
+pg_catalog          pg_stat_gssapi
+pg_catalog          pg_stat_progress_analyze
+pg_catalog          pg_stat_progress_basebackup
+pg_catalog          pg_stat_progress_cluster
+pg_catalog          pg_stat_progress_create_index
+pg_catalog          pg_stat_progress_vacuum
+pg_catalog          pg_stat_replication
+pg_catalog          pg_stat_slru
+pg_catalog          pg_stat_ssl
+pg_catalog          pg_stat_subscription
+pg_catalog          pg_stat_sys_indexes
+pg_catalog          pg_stat_sys_tables
+pg_catalog          pg_stat_user_functions
+pg_catalog          pg_stat_user_indexes
+pg_catalog          pg_stat_user_tables
+pg_catalog          pg_stat_wal_receiver
+pg_catalog          pg_stat_xact_all_tables
+pg_catalog          pg_stat_xact_sys_tables
+pg_catalog          pg_stat_xact_user_functions
+pg_catalog          pg_stat_xact_user_tables
+pg_catalog          pg_statio_all_indexes
+pg_catalog          pg_statio_all_sequences
+pg_catalog          pg_statio_all_tables
+pg_catalog          pg_statio_sys_indexes
+pg_catalog          pg_statio_sys_sequences
+pg_catalog          pg_statio_sys_tables
+pg_catalog          pg_statio_user_indexes
+pg_catalog          pg_statio_user_sequences
+pg_catalog          pg_statio_user_tables
 pg_catalog          pg_statistic_ext
 pg_catalog          pg_subscription
 pg_catalog          pg_subscription_rel
@@ -883,8 +916,41 @@ pg_shdescription
 pg_shmem_allocations
 pg_shseclabel
 pg_stat_activity
+pg_stat_all_indexes
+pg_stat_all_tables
+pg_stat_archiver
+pg_stat_bgwriter
 pg_stat_database
 pg_stat_database_conflicts
+pg_stat_gssapi
+pg_stat_progress_analyze
+pg_stat_progress_basebackup
+pg_stat_progress_cluster
+pg_stat_progress_create_index
+pg_stat_progress_vacuum
+pg_stat_replication
+pg_stat_slru
+pg_stat_ssl
+pg_stat_subscription
+pg_stat_sys_indexes
+pg_stat_sys_tables
+pg_stat_user_functions
+pg_stat_user_indexes
+pg_stat_user_tables
+pg_stat_wal_receiver
+pg_stat_xact_all_tables
+pg_stat_xact_sys_tables
+pg_stat_xact_user_functions
+pg_stat_xact_user_tables
+pg_statio_all_indexes
+pg_statio_all_sequences
+pg_statio_all_tables
+pg_statio_sys_indexes
+pg_statio_sys_sequences
+pg_statio_sys_tables
+pg_statio_user_indexes
+pg_statio_user_sequences
+pg_statio_user_tables
 pg_statistic_ext
 pg_subscription
 pg_subscription_rel
@@ -1191,8 +1257,41 @@ system         pg_catalog          pg_shdescription                       SYSTEM
 system         pg_catalog          pg_shmem_allocations                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_shseclabel                          SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_stat_activity                       SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_all_indexes                    SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_all_tables                     SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_archiver                       SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_bgwriter                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_stat_database                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_stat_database_conflicts             SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_gssapi                         SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_progress_analyze               SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_progress_basebackup            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_progress_cluster               SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_progress_create_index          SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_progress_vacuum                SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_replication                    SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_slru                           SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_ssl                            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_subscription                   SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_sys_indexes                    SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_sys_tables                     SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_user_functions                 SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_user_indexes                   SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_user_tables                    SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_wal_receiver                   SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_xact_all_tables                SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_xact_sys_tables                SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_xact_user_functions            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_xact_user_tables               SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_statio_all_indexes                  SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_statio_all_sequences                SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_statio_all_tables                   SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_statio_sys_indexes                  SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_statio_sys_sequences                SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_statio_sys_tables                   SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_statio_user_indexes                 SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_statio_user_sequences               SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_statio_user_tables                  SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_statistic_ext                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_subscription                        SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_subscription_rel                    SYSTEM VIEW  NO                  1
@@ -2658,8 +2757,41 @@ NULL     public   system         pg_catalog          pg_shdescription           
 NULL     public   system         pg_catalog          pg_shmem_allocations                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shseclabel                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_stat_activity                       SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_all_indexes                    SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_all_tables                     SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_archiver                       SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_bgwriter                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_stat_database                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_stat_database_conflicts             SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_gssapi                         SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_progress_analyze               SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_progress_basebackup            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_progress_cluster               SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_progress_create_index          SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_progress_vacuum                SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_replication                    SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_slru                           SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_ssl                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_subscription                   SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_sys_indexes                    SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_sys_tables                     SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_user_functions                 SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_user_indexes                   SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_user_tables                    SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_wal_receiver                   SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_xact_all_tables                SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_xact_sys_tables                SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_xact_user_functions            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_xact_user_tables               SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_all_indexes                  SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_all_sequences                SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_all_tables                   SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_sys_indexes                  SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_sys_sequences                SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_sys_tables                   SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_user_indexes                 SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_user_sequences               SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_user_tables                  SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_statistic_ext                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription_rel                    SELECT          NULL          YES
@@ -3190,8 +3322,41 @@ NULL     public   system         pg_catalog          pg_shdescription           
 NULL     public   system         pg_catalog          pg_shmem_allocations                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shseclabel                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_stat_activity                       SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_all_indexes                    SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_all_tables                     SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_archiver                       SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_bgwriter                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_stat_database                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_stat_database_conflicts             SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_gssapi                         SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_progress_analyze               SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_progress_basebackup            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_progress_cluster               SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_progress_create_index          SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_progress_vacuum                SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_replication                    SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_slru                           SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_ssl                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_subscription                   SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_sys_indexes                    SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_sys_tables                     SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_user_functions                 SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_user_indexes                   SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_user_tables                    SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_wal_receiver                   SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_xact_all_tables                SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_xact_sys_tables                SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_xact_user_functions            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_xact_user_tables               SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_all_indexes                  SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_all_sequences                SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_all_tables                   SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_sys_indexes                  SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_sys_sequences                SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_sys_tables                   SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_user_indexes                 SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_user_sequences               SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_statio_user_tables                  SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_statistic_ext                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription_rel                    SELECT          NULL          YES
