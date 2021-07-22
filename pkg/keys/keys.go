@@ -399,6 +399,11 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 	return MakeRangeKey(key, LocalRangeDescriptorSuffix, nil)
 }
 
+// DummyRangeKey returns a range-local key that is never written to.
+func DummyRangeKey(rangeStart roachpb.RKey) roachpb.Key {
+	return MakeRangeKey(rangeStart, LocalDummyRangeKeySuffix, nil /* detail */)
+}
+
 // TransactionKey returns a transaction key based on the provided
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
