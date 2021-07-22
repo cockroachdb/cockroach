@@ -37,7 +37,7 @@ type default_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
 	// {{else}}
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// {{end}}
 	fn  tree.AggregateFunc
 	ctx context.Context
@@ -58,7 +58,7 @@ func (a *default_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 }
 

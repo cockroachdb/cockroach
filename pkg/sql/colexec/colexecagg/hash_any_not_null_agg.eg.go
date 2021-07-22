@@ -107,7 +107,7 @@ func newAnyNotNullHashAggAlloc(
 // anyNotNullBoolHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullBoolHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         coldata.Bools
 	curAgg                      bool
 	foundNonNullForCurrentGroup bool
@@ -116,7 +116,7 @@ type anyNotNullBoolHashAgg struct {
 var _ AggregateFunc = &anyNotNullBoolHashAgg{}
 
 func (a *anyNotNullBoolHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bool()
 }
 
@@ -220,7 +220,7 @@ func (a *anyNotNullBoolHashAggAlloc) newAggFunc() AggregateFunc {
 // anyNotNullBytesHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullBytesHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         *coldata.Bytes
 	curAgg                      []byte
 	foundNonNullForCurrentGroup bool
@@ -229,7 +229,7 @@ type anyNotNullBytesHashAgg struct {
 var _ AggregateFunc = &anyNotNullBytesHashAgg{}
 
 func (a *anyNotNullBytesHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bytes()
 }
 
@@ -337,7 +337,7 @@ func (a *anyNotNullBytesHashAggAlloc) newAggFunc() AggregateFunc {
 // anyNotNullDecimalHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullDecimalHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         coldata.Decimals
 	curAgg                      apd.Decimal
 	foundNonNullForCurrentGroup bool
@@ -346,7 +346,7 @@ type anyNotNullDecimalHashAgg struct {
 var _ AggregateFunc = &anyNotNullDecimalHashAgg{}
 
 func (a *anyNotNullDecimalHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
@@ -450,7 +450,7 @@ func (a *anyNotNullDecimalHashAggAlloc) newAggFunc() AggregateFunc {
 // anyNotNullInt16HashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullInt16HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         coldata.Int16s
 	curAgg                      int16
 	foundNonNullForCurrentGroup bool
@@ -459,7 +459,7 @@ type anyNotNullInt16HashAgg struct {
 var _ AggregateFunc = &anyNotNullInt16HashAgg{}
 
 func (a *anyNotNullInt16HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int16()
 }
 
@@ -563,7 +563,7 @@ func (a *anyNotNullInt16HashAggAlloc) newAggFunc() AggregateFunc {
 // anyNotNullInt32HashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullInt32HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         coldata.Int32s
 	curAgg                      int32
 	foundNonNullForCurrentGroup bool
@@ -572,7 +572,7 @@ type anyNotNullInt32HashAgg struct {
 var _ AggregateFunc = &anyNotNullInt32HashAgg{}
 
 func (a *anyNotNullInt32HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int32()
 }
 
@@ -676,7 +676,7 @@ func (a *anyNotNullInt32HashAggAlloc) newAggFunc() AggregateFunc {
 // anyNotNullInt64HashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullInt64HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         coldata.Int64s
 	curAgg                      int64
 	foundNonNullForCurrentGroup bool
@@ -685,7 +685,7 @@ type anyNotNullInt64HashAgg struct {
 var _ AggregateFunc = &anyNotNullInt64HashAgg{}
 
 func (a *anyNotNullInt64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
 
@@ -789,7 +789,7 @@ func (a *anyNotNullInt64HashAggAlloc) newAggFunc() AggregateFunc {
 // anyNotNullFloat64HashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullFloat64HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         coldata.Float64s
 	curAgg                      float64
 	foundNonNullForCurrentGroup bool
@@ -798,7 +798,7 @@ type anyNotNullFloat64HashAgg struct {
 var _ AggregateFunc = &anyNotNullFloat64HashAgg{}
 
 func (a *anyNotNullFloat64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Float64()
 }
 
@@ -902,7 +902,7 @@ func (a *anyNotNullFloat64HashAggAlloc) newAggFunc() AggregateFunc {
 // anyNotNullTimestampHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullTimestampHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         coldata.Times
 	curAgg                      time.Time
 	foundNonNullForCurrentGroup bool
@@ -911,7 +911,7 @@ type anyNotNullTimestampHashAgg struct {
 var _ AggregateFunc = &anyNotNullTimestampHashAgg{}
 
 func (a *anyNotNullTimestampHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Timestamp()
 }
 
@@ -1015,7 +1015,7 @@ func (a *anyNotNullTimestampHashAggAlloc) newAggFunc() AggregateFunc {
 // anyNotNullIntervalHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullIntervalHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         coldata.Durations
 	curAgg                      duration.Duration
 	foundNonNullForCurrentGroup bool
@@ -1024,7 +1024,7 @@ type anyNotNullIntervalHashAgg struct {
 var _ AggregateFunc = &anyNotNullIntervalHashAgg{}
 
 func (a *anyNotNullIntervalHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Interval()
 }
 
@@ -1128,7 +1128,7 @@ func (a *anyNotNullIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 // anyNotNullJSONHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullJSONHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         *coldata.JSONs
 	curAgg                      json.JSON
 	foundNonNullForCurrentGroup bool
@@ -1137,7 +1137,7 @@ type anyNotNullJSONHashAgg struct {
 var _ AggregateFunc = &anyNotNullJSONHashAgg{}
 
 func (a *anyNotNullJSONHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.JSON()
 }
 
@@ -1276,7 +1276,7 @@ func (a *anyNotNullJSONHashAggAlloc) newAggFunc() AggregateFunc {
 // anyNotNullDatumHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullDatumHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col                         coldata.DatumVec
 	curAgg                      interface{}
 	foundNonNullForCurrentGroup bool
@@ -1285,7 +1285,7 @@ type anyNotNullDatumHashAgg struct {
 var _ AggregateFunc = &anyNotNullDatumHashAgg{}
 
 func (a *anyNotNullDatumHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Datum()
 }
 

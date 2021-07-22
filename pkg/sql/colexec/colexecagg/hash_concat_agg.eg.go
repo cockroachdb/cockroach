@@ -24,7 +24,7 @@ func newConcatHashAggAlloc(allocator *colmem.Allocator, allocSize int64) aggrega
 }
 
 type concatHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curAgg holds the running total.
 	curAgg []byte
 	// col points to the output vector we are updating.
@@ -35,7 +35,7 @@ type concatHashAgg struct {
 }
 
 func (a *concatHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bytes()
 }
 

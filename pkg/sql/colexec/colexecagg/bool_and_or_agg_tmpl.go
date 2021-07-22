@@ -58,7 +58,7 @@ type bool_OP_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
 	// {{else}}
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// {{end}}
 	col    []bool
 	curAgg bool
@@ -73,7 +73,7 @@ func (a *bool_OP_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.col = vec.Bool()
 }
@@ -84,6 +84,7 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
+	// {{if not (eq "_AGGKIND" "Window")}}
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
 		// Capture groups and col to force bounds check to work. See
@@ -123,6 +124,21 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
 		}
 	},
 	)
+	// {{else}}
+	// Unnecessary memory accounting can have significant overhead for window
+	// aggregate functions because Compute is called at least once for every row.
+	// For this reason, we do not use PerformOperation here.
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+			_ACCUMULATE_BOOLEAN(a, nulls, i, true, false)
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+			_ACCUMULATE_BOOLEAN(a, nulls, i, false, false)
+		}
+	}
+	// {{end}}
 	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
