@@ -26,7 +26,50 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestAdminAPIDatabaseDetails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(context.Background())
+
+	db := tc.ServerConn(0)
+
+	_, err := db.Exec("CREATE DATABASE test")
+	require.NoError(t, err)
+
+	_, err = db.Exec("CREATE TABLE test.foo (id INT PRIMARY KEY, val STRING)")
+	require.NoError(t, err)
+
+	for i := 0; i < 10; i++ {
+		_, err := db.Exec("INSERT INTO test.foo VALUES($1, $2)", i, "test")
+		require.NoError(t, err)
+	}
+
+	s := tc.Server(0)
+
+	var resp serverpb.DatabaseDetailsResponse
+	require.NoError(t, serverutils.GetJSONProto(s, "/_admin/v1/databases/test", &resp))
+	assert.Nil(t, resp.Stats, "No Stats unless we ask for them explicitly.")
+
+	testutils.SucceedsSoon(t, func() error {
+		var resp serverpb.DatabaseDetailsResponse
+		require.NoError(t, serverutils.GetJSONProto(s, "/_admin/v1/databases/test?include_stats=true", &resp))
+
+		assert.Equal(t, int64(1), resp.Stats.RangeCount, "RangeCount")
+
+		// TODO(todd): Find a way to produce a non-zero value here that doesn't require writing a million rows.
+		// Giving the test nodes on-disk stores (StoreSpec{inMemory: false, Path: "..."}) didn't work and was slow.
+		// Having a number would be nice here for completeness, but the real RangeCount above gives us enough
+		// confidence in the implementation in the meantime.
+		assert.Equal(t, uint64(0), resp.Stats.ApproximateDiskBytes, "ApproximateDiskBytes")
+
+		return nil
+	})
+}
 
 func TestAdminAPITableStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()

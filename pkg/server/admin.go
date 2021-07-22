@@ -494,7 +494,89 @@ func (s *adminServer) databaseDetailsHelper(
 	if err != nil {
 		return nil, err
 	}
+
+	if req.IncludeStats {
+		tableSpans, err := s.getDatabaseTableSpans(ctx, userName, req.Database, resp.TableNames)
+		if err != nil {
+			return nil, err
+		}
+		resp.Stats, err = s.getDatabaseStats(ctx, tableSpans)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &resp, nil
+}
+
+func (s *adminServer) getDatabaseTableSpans(
+	ctx context.Context, userName security.SQLUsername, dbName string, tableNames []string,
+) (map[string]roachpb.Span, error) {
+	tableSpans := make(map[string]roachpb.Span, len(tableNames))
+
+	for _, tableName := range tableNames {
+		fullyQualifiedTableName, err := getFullyQualifiedTableName(dbName, tableName)
+		if err != nil {
+			return nil, err
+		}
+		tableID, err := s.queryTableID(ctx, userName, dbName, fullyQualifiedTableName)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		tableSpans[tableName] = generateTableSpan(tableID)
+	}
+	return tableSpans, nil
+}
+
+func (s *adminServer) getDatabaseStats(
+	ctx context.Context, tableSpans map[string]roachpb.Span,
+) (*serverpb.DatabaseDetailsResponse_Stats, error) {
+	var stats serverpb.DatabaseDetailsResponse_Stats
+
+	type tableStatsResponse struct {
+		name string
+		resp *serverpb.TableStatsResponse
+		err  error
+	}
+
+	responses := make(chan tableStatsResponse, len(tableSpans))
+
+	for tableName, tableSpan := range tableSpans {
+		if err := s.server.stopper.RunAsyncTask(
+			ctx, "server.adminServer: requesting table stats",
+			func(ctx context.Context) {
+				statsResponse, err := s.statsForSpan(ctx, tableSpan)
+
+				responses <- tableStatsResponse{
+					name: tableName,
+					resp: statsResponse,
+					err:  err,
+				}
+			}); err != nil {
+			return nil, err
+		}
+	}
+
+	for i := 0; i < len(tableSpans); i++ {
+		select {
+		case response := <-responses:
+			if response.err != nil {
+				stats.MissingTables = append(
+					stats.MissingTables,
+					&serverpb.DatabaseDetailsResponse_Stats_MissingTable{
+						Name:         response.name,
+						ErrorMessage: response.err.Error(),
+					})
+			} else {
+				stats.RangeCount += response.resp.RangeCount
+				stats.ApproximateDiskBytes += response.resp.ApproximateDiskBytes
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	return &stats, nil
 }
 
 // getFullyQualifiedTableName, given a database name and a tableName that either
