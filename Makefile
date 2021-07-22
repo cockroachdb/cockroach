@@ -849,6 +849,13 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecagg/ordered_min_max_agg.eg.go \
   pkg/sql/colexec/colexecagg/ordered_sum_agg.eg.go \
   pkg/sql/colexec/colexecagg/ordered_sum_int_agg.eg.go \
+  pkg/sql/colexec/colexecagg/window_avg_agg.eg.go \
+  pkg/sql/colexec/colexecagg/window_bool_and_or_agg.eg.go \
+  pkg/sql/colexec/colexecagg/window_concat_agg.eg.go \
+  pkg/sql/colexec/colexecagg/window_count_agg.eg.go \
+  pkg/sql/colexec/colexecagg/window_min_max_agg.eg.go \
+  pkg/sql/colexec/colexecagg/window_sum_agg.eg.go \
+  pkg/sql/colexec/colexecagg/window_sum_int_agg.eg.go \
   pkg/sql/colexec/colexecbase/cast.eg.go \
   pkg/sql/colexec/colexecbase/const.eg.go \
   pkg/sql/colexec/colexecbase/distinct.eg.go \

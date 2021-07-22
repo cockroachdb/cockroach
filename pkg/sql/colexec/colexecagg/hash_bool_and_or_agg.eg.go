@@ -30,7 +30,7 @@ func newBoolAndHashAggAlloc(
 }
 
 type boolAndHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
@@ -41,7 +41,7 @@ type boolAndHashAgg struct {
 var _ AggregateFunc = &boolAndHashAgg{}
 
 func (a *boolAndHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bool()
 }
 
@@ -131,7 +131,7 @@ func newBoolOrHashAggAlloc(
 }
 
 type boolOrHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
@@ -142,7 +142,7 @@ type boolOrHashAgg struct {
 var _ AggregateFunc = &boolOrHashAgg{}
 
 func (a *boolOrHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bool()
 }
 
