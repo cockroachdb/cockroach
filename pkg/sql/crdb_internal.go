@@ -4857,7 +4857,7 @@ CREATE TABLE crdb_internal.default_privileges (
 				if descriptor.GetDefaultPrivileges() == nil {
 					return nil
 				}
-				for _, defaultPrivs := range descriptor.GetDefaultPrivileges().DefaultPrivileges {
+				for _, defaultPrivs := range descriptor.GetDefaultPrivileges().DefaultPrivilegesPerRole {
 					for objectType, privs := range defaultPrivs.DefaultPrivilegesPerObject {
 						privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 						for _, userPrivs := range privs.Users {
@@ -4865,6 +4865,8 @@ CREATE TABLE crdb_internal.default_privileges (
 							for _, priv := range privList {
 								if err := addRow(
 									tree.NewDString(descriptor.GetName()),
+									// When the schema_name is NULL, that means the default
+									// privileges are defined at the database level.
 									tree.DNull, /* schema is currently always nil. See: #67376 */
 									tree.NewDString(defaultPrivs.UserProto.Decode().Normalized()),
 									tree.NewDString(objectType.String()),
@@ -4879,6 +4881,5 @@ CREATE TABLE crdb_internal.default_privileges (
 				}
 				return nil
 			})
-		return nil
 	},
 }

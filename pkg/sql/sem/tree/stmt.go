@@ -1507,6 +1507,15 @@ func (*ShowSequences) StatementType() StatementType { return TypeDML }
 func (*ShowSequences) StatementTag() string { return "SHOW SCHEMAS" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowDefaultPrivileges) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowDefaultPrivileges) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowDefaultPrivileges) StatementTag() string { return "SHOW DEFAULT PRIVILEGES" }
+
+// StatementReturnType implements the Statement interface.
 func (*Split) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1718,6 +1727,7 @@ func (n *ShowUsers) String() string                      { return AsString(n) }
 func (n *ShowVar) String() string                        { return AsString(n) }
 func (n *ShowZoneConfig) String() string                 { return AsString(n) }
 func (n *ShowFingerprints) String() string               { return AsString(n) }
+func (n *ShowDefaultPrivileges) String() string          { return AsString(n) }
 func (n *Split) String() string                          { return AsString(n) }
 func (n *StreamIngestion) String() string                { return AsString(n) }
 func (n *Unsplit) String() string                        { return AsString(n) }
