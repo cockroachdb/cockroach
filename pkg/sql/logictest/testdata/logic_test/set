@@ -163,6 +163,9 @@ statement ok
 SET intervalstyle = 'postgres'
 
 statement ok
+SET intervalstyle_enabled = true
+
+statement ok
 SET intervalstyle = 'iso_8601'
 
 statement ok

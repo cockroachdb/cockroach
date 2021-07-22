@@ -385,6 +385,24 @@ func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Vol
 		}
 		return maxVolatility, true
 	}
+
+	// Special case for IntervalStyle.
+	switch fromFamily {
+	case types.StringFamily, types.CollatedStringFamily:
+		switch toFamily {
+		case types.IntervalFamily:
+			if sd != nil && sd.IntervalStyleEnabled {
+				return VolatilityStable, true
+			}
+		}
+	case types.IntervalFamily:
+		switch toFamily {
+		case types.StringFamily, types.CollatedStringFamily:
+			if sd != nil && sd.IntervalStyleEnabled {
+				return VolatilityStable, true
+			}
+		}
+	}
 	cast := lookupCast(fromFamily, toFamily)
 	if cast == nil {
 		return 0, false
