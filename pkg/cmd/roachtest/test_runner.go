@@ -928,8 +928,13 @@ func (r *testRunner) maybePostGithubIssue(
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
 		ReproductionCommand: fmt.Sprintf(
-			`# From https://go.crdb.dev/p/roachstress, perhaps edited lightly.
-caffeinate ./roachstress.sh %s
+			`## Simple repro (linux-only):
+  $ make cockroachshort bin/worklaod bin/roachprod bin/roachtest
+  $ PATH=$PWD/bin:$PATH roachtest run %[1]s --local
+
+## Proper repro probably needs more roachtest flags, or running
+## the programs remotely on GCE. For more details, refer to
+## pkg/cmd/roachtest/README.md.
 `, t.Name()),
 	}
 	if err := issues.Post(
