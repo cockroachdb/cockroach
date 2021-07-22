@@ -4,6 +4,7 @@ go_library(
     name = "sslocal",
     srcs = [
         "sql_stats.go",
+        "sql_stats_controller.go",
         "sslocal_provider.go",
         "sslocal_sink.go",
         "sslocal_stats_collector.go",
@@ -12,8 +13,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb:with-mocks",
+        "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/ssmemstorage",
