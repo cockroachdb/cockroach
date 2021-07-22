@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	fmt "fmt"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -61,6 +62,12 @@ type systemBackupConfiguration struct {
 	// to support the restore (e.g. users that can run the restore, cluster settings
 	// that control how the restore runs, etc...).
 	restoreBeforeData bool
+	// restoreInOrder indicates that this system table should be restored in a
+	// particular order relative to other system tables. Restore will sort all
+	// system tables based on this value, and restore them in that order. All
+	// tables with the same value can be restored in any order among themselves.
+	// The default value is `0`.
+	restoreInOrder int32
 	// migrationFunc performs the necessary migrations on the system table data in
 	// the crdb_temp staging table before it is loaded into the actual system
 	// table.
@@ -239,6 +246,10 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		restoreBeforeData: true,
 	},
 	systemschema.SettingsTable.GetName(): {
+		// The settings table should be restored after all other system tables have
+		// been restored. This is because we do not want to overwrite the clusters'
+		// settings before all other user and system data has been restored.
+		restoreInOrder:               math.MaxInt32,
 		shouldIncludeInClusterBackup: optInToClusterBackup,
 		customRestoreFunc:            settingsRestoreFunc,
 	},
