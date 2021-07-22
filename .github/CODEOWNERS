@@ -22,6 +22,7 @@
 /build/                      @cockroachdb/dev-inf
 
 /docs/RFCS/                  @cockroachdb/rfc-prs
+/docs/generated/redact_safe.md @cockroachdb/security
 
 /Makefile                    @cockroachdb/dev-inf
 
