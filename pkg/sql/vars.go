@@ -802,7 +802,7 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-INTERVALSTYLE
 	`intervalstyle`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			style, ok := duration.IntervalStyle_value[strings.ToUpper(s)]
+			styleVal, ok := duration.IntervalStyle_value[strings.ToUpper(s)]
 			if !ok {
 				validIntervalStyles := make([]string, 0, len(duration.IntervalStyle_value))
 				for k := range duration.IntervalStyle_value {
@@ -810,7 +810,24 @@ var varGen = map[string]sessionVar{
 				}
 				return newVarValueError(`IntervalStyle`, s, validIntervalStyles...)
 			}
-			m.SetIntervalStyle(duration.IntervalStyle(style))
+			style := duration.IntervalStyle(styleVal)
+			if style != duration.IntervalStyle_POSTGRES &&
+				!m.data.IntervalStyleEnabled {
+				return errors.WithDetailf(
+					errors.WithHintf(
+						pgerror.Newf(
+							pgcode.FeatureNotSupported,
+							"setting IntervalStyle is not enabled",
+						),
+						"You can enable IntervalStyle customization for all sessions with the cluster setting sql.defaults.intervalstyle_enabled, or per session using SET intervalstyle_enabled = true.",
+					),
+					// TODO(#67887): add docs link to look up more information to.
+					// TODO(#67887): add substitute builtins and add comment about using them.
+					// TODO(#67887): finalize list of places this stable change affects.
+					"Setting IntervalStyle changes the volatility of string::interval or interval::string casts from immutable to stable. No computed columns and check constraints can use these casts.",
+				)
+			}
+			m.SetIntervalStyle(style)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
@@ -818,6 +835,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return strings.ToLower(duration.IntervalStyle_name[int32(intervalStyle.Get(sv))])
+		},
+	},
+	`intervalstyle_enabled`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.IntervalStyleEnabled)
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("intervalstyle_enabled"),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`intervalstyle_enabled`, s)
+			if err != nil {
+				return err
+			}
+			m.SetIntervalStyleEnabled(b)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(intervalStyleEnabled.Get(sv))
 		},
 	},
 
