@@ -44,16 +44,7 @@ var unimplementedEquivalencies = map[oid.Oid]oid.Oid{
 	oid.T_pg_lsn:       oid.T_text,
 }
 
-var emptyStruct = struct{}{}
-
 var postgresExclusions = []*excludePattern{
-	{
-		pattern: regexp.MustCompile(`^pg_stat.+$`),
-		except: map[string]struct{}{
-			"pg_stat_database":           emptyStruct,
-			"pg_stat_database_conflicts": emptyStruct,
-		},
-	},
 	{
 		pattern: regexp.MustCompile(`^_pg_.+$`),
 		except:  make(map[string]struct{}),
