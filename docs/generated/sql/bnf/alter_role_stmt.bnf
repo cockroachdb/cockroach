@@ -7,3 +7,9 @@ alter_role_stmt ::=
 	| 'ALTER' 'ROLE' 'IF' 'EXISTS' name 
 	| 'ALTER' 'USER' 'IF' 'EXISTS' name opt_with role_options
 	| 'ALTER' 'USER' 'IF' 'EXISTS' name 
+	| 'ALTER' 'ROLE' name opt_in_database set_or_reset_clause
+	| 'ALTER' 'USER' name opt_in_database set_or_reset_clause
+	| 'ALTER' 'ROLE' 'IF' 'EXISTS' name opt_in_database set_or_reset_clause
+	| 'ALTER' 'USER' 'IF' 'EXISTS' name opt_in_database set_or_reset_clause
+	| 'ALTER' 'ROLE_ALL' 'ALL' opt_in_database set_or_reset_clause
+	| 'ALTER' 'USER_ALL' 'ALL' opt_in_database set_or_reset_clause

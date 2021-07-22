@@ -521,7 +521,7 @@ vectorized: true
         │ group by: username
         │
         └── • sort
-            │ order: +role
+            │ order: +"role"
             │
             └── • hash join (left outer)
                 │ equality: (username) = (member)

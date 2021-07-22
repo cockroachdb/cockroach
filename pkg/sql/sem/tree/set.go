@@ -21,12 +21,17 @@ package tree
 
 // SetVar represents a SET or RESET statement.
 type SetVar struct {
-	Name   string
-	Values Exprs
+	Name     string
+	Values   Exprs
+	ResetAll bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *SetVar) Format(ctx *FmtCtx) {
+	if node.ResetAll {
+		ctx.WriteString("RESET ALL")
+		return
+	}
 	ctx.WriteString("SET ")
 	if node.Name == "" {
 		ctx.WriteString("ROW (")

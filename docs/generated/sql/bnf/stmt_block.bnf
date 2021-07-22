@@ -384,6 +384,10 @@ alter_ddl_stmt ::=
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user string_or_placeholder opt_role_options
 	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder opt_role_options
+	| 'ALTER' role_or_group_or_user string_or_placeholder opt_in_database set_or_reset_clause
+	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder opt_in_database set_or_reset_clause
+	| 'ALTER' 'ROLE_ALL' 'ALL' opt_in_database set_or_reset_clause
+	| 'ALTER' 'USER_ALL' 'ALL' opt_in_database set_or_reset_clause
 
 opt_backup_targets ::=
 	targets
@@ -1324,6 +1328,15 @@ opt_role_options ::=
 	opt_with role_options
 	| 
 
+opt_in_database ::=
+	'IN' 'DATABASE' database_name
+	| 
+
+set_or_reset_clause ::=
+	'SET' set_rest
+	| 'RESET_ALL' 'ALL'
+	| 'RESET' session_var
+
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
@@ -1536,7 +1549,7 @@ opt_for_locking_clause ::=
 	| 
 
 set_rest_more ::=
-	generic_set
+	set_rest
 
 to_or_eq ::=
 	'='
@@ -1804,6 +1817,9 @@ abbreviated_revoke_stmt ::=
 
 role_options ::=
 	( role_option ) ( ( role_option ) )*
+
+set_rest ::=
+	generic_set
 
 backup_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
@@ -2088,9 +2104,6 @@ offset_clause ::=
 	'OFFSET' a_expr
 	| 'OFFSET' select_fetch_first_value row_or_rows
 
-generic_set ::=
-	var_name to_or_eq var_list
-
 extra_var_value ::=
 	'ON'
 	| cockroachdb_extra_reserved_keyword
@@ -2304,6 +2317,9 @@ role_option ::=
 	| password_clause
 	| valid_until_clause
 
+generic_set ::=
+	var_name to_or_eq var_list
+
 d_expr ::=
 	'ICONST'
 	| 'FCONST'
@@ -2513,9 +2529,6 @@ all_or_distinct ::=
 for_locking_item ::=
 	for_locking_strength opt_locked_rels opt_nowait_or_skip
 
-var_list ::=
-	( var_value ) ( ( ',' var_value ) )*
-
 opt_ordinality ::=
 	'WITH' 'ORDINALITY'
 	| 
@@ -2654,6 +2667,9 @@ password_clause ::=
 valid_until_clause ::=
 	'VALID' 'UNTIL' string_or_placeholder
 	| 'VALID' 'UNTIL' 'NULL'
+
+var_list ::=
+	( var_value ) ( ( ',' var_value ) )*
 
 typed_literal ::=
 	func_name_no_crdb_extra 'SCONST'

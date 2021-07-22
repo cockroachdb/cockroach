@@ -1771,33 +1771,6 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 	}
 }
 
-// AlterRole represents an ALTER ROLE statement.
-type AlterRole struct {
-	Name      Expr
-	IfExists  bool
-	IsRole    bool
-	KVOptions KVOptions
-}
-
-// Format implements the NodeFormatter interface.
-func (node *AlterRole) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER")
-	if node.IsRole {
-		ctx.WriteString(" ROLE ")
-	} else {
-		ctx.WriteString(" USER ")
-	}
-	if node.IfExists {
-		ctx.WriteString("IF EXISTS ")
-	}
-	ctx.FormatNode(node.Name)
-
-	if len(node.KVOptions) > 0 {
-		ctx.WriteString(" WITH")
-		node.KVOptions.formatAsRoleOptions(ctx)
-	}
-}
-
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
 	Name         TableName
