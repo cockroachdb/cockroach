@@ -293,6 +293,21 @@ CREATE TABLE crdb_internal.databases (
    survival_goal STRING NULL,
    create_statement STRING NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.default_privileges (
+   database_name STRING NOT NULL,
+   schema_name STRING NULL,
+   "role" STRING NOT NULL,
+   object_type STRING NOT NULL,
+   grantee STRING NOT NULL,
+   privilege_type STRING NOT NULL
+)  CREATE TABLE crdb_internal.default_privileges (
+   database_name STRING NOT NULL,
+   schema_name STRING NULL,
+   "role" STRING NOT NULL,
+   object_type STRING NOT NULL,
+   grantee STRING NOT NULL,
+   privilege_type STRING NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.feature_usage (
    feature_name STRING NOT NULL,
    usage_count INT8 NOT NULL

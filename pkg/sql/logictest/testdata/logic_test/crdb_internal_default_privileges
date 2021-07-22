@@ -26,21 +26,17 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO foo, bar;
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO foo, bar;
 
 query TTTTTT colnames,rowsort
-SELECT * FROM crdb_internal.default_privileges
+SELECT * FROM crdb_internal.default_privileges WHERE grantee='foo' OR grantee='bar'
 ----
 database_name  schema_name  role  object_type  grantee  privilege_type
 test           NULL         root  sequences    bar      ALL
 test           NULL         root  sequences    foo      ALL
-test           NULL         root  sequences    public   SELECT
 test           NULL         root  types        bar      ALL
 test           NULL         root  types        foo      ALL
-test           NULL         root  types        public   USAGE
 test           NULL         root  schemas      bar      ALL
 test           NULL         root  schemas      foo      ALL
-test           NULL         root  schemas      public   USAGE
 test           NULL         root  tables       bar      ALL
 test           NULL         root  tables       foo      ALL
-test           NULL         root  tables       public   SELECT
 
 statement ok
 GRANT foo, bar TO root;
@@ -52,17 +48,17 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SCHEMAS TO foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SEQUENCES TO foo, bar;
 
 query TTTTTT colnames,rowsort
-SELECT * FROM crdb_internal.default_privileges
+SELECT * FROM crdb_internal.default_privileges WHERE role='foo' OR role='bar'
 ----
 database_name  schema_name  role  object_type  grantee  privilege_type
-test           NULL         bar   schemas      bar      ALL
-test           NULL         bar   schemas      foo      ALL
 test           NULL         bar   tables       bar      ALL
 test           NULL         bar   tables       foo      ALL
 test           NULL         bar   sequences    bar      ALL
 test           NULL         bar   sequences    foo      ALL
 test           NULL         bar   types        bar      ALL
 test           NULL         bar   types        foo      ALL
+test           NULL         bar   schemas      bar      ALL
+test           NULL         bar   schemas      foo      ALL
 test           NULL         foo   sequences    bar      ALL
 test           NULL         foo   sequences    foo      ALL
 test           NULL         foo   types        bar      ALL
@@ -71,18 +67,6 @@ test           NULL         foo   schemas      bar      ALL
 test           NULL         foo   schemas      foo      ALL
 test           NULL         foo   tables       bar      ALL
 test           NULL         foo   tables       foo      ALL
-test           NULL         root  tables       bar      ALL
-test           NULL         root  tables       foo      ALL
-test           NULL         root  tables       public   SELECT
-test           NULL         root  sequences    bar      ALL
-test           NULL         root  sequences    foo      ALL
-test           NULL         root  sequences    public   SELECT
-test           NULL         root  types        bar      ALL
-test           NULL         root  types        foo      ALL
-test           NULL         root  types        public   USAGE
-test           NULL         root  schemas      bar      ALL
-test           NULL         root  schemas      foo      ALL
-test           NULL         root  schemas      public   USAGE
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TABLES FROM foo, bar;

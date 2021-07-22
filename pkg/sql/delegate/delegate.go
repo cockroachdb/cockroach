@@ -139,6 +139,9 @@ func TryDelegate(
 	case *tree.ShowFullTableScans:
 		return d.delegateShowFullTableScans()
 
+	case *tree.ShowDefaultPrivileges:
+		return d.delegateShowDefaultPrivileges(t)
+
 	case *tree.ShowLastQueryStatistics:
 		return nil, unimplemented.New(
 			"show last query statistics",
