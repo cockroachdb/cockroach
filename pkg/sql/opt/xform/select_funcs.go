@@ -390,8 +390,9 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 // ID into a constant value, by evaluating it with respect to a set of other
 // columns that are constant. If the computed column is constant, enter it into
 // the constCols map and return false. Otherwise, return false.
+//
 func (c *CustomFuncs) tryFoldComputedCol(
-	tabMeta *opt.TableMeta, computedColID opt.ColumnID, constCols map[opt.ColumnID]opt.ScalarExpr,
+	tabMeta *opt.TableMeta, computedColID opt.ColumnID, constCols constColsMap,
 ) bool {
 	// Check whether computed column has already been folded.
 	if _, ok := constCols[computedColID]; ok {
@@ -423,6 +424,11 @@ func (c *CustomFuncs) tryFoldComputedCol(
 	}
 
 	computedCol := tabMeta.ComputedCols[computedColID]
+	if memo.CanBeCompositeSensitive(c.e.mem.Metadata(), computedCol) {
+		// The computed column expression can return different values for logically
+		// equal outer columns (e.g. d::STRING where d is a DECIMAL).
+		return false
+	}
 	replaced := replace(computedCol).(opt.ScalarExpr)
 
 	// If the computed column is constant, enter it into the constCols map.
