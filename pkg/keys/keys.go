@@ -399,6 +399,11 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 	return MakeRangeKey(key, LocalRangeDescriptorSuffix, nil)
 }
 
+// ReservedRangeKey returns a range-local key that is never written to.
+func ReservedRangeKey(rangeStart roachpb.RKey) roachpb.Key {
+	return MakeRangeKey(rangeStart, LocalReservedRangeKeySuffix, nil /* detail */)
+}
+
 // TransactionKey returns a transaction key based on the provided
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.

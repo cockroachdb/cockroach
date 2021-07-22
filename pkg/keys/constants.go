@@ -142,6 +142,10 @@ var (
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
+	// LocalReservedRangeKeySuffix is the suffix for keys that are never written
+	// to. They're useful for reading, though, for example as a way to force a
+	// lease acquisition.
+	LocalReservedRangeKeySuffix = roachpb.RKey("rsvd")
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	LocalTransactionSuffix = roachpb.RKey("txn-")

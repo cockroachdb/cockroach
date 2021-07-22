@@ -11,10 +11,12 @@
 package kvserver
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -350,6 +352,11 @@ type StoreTestingKnobs struct {
 	// LeaseRenewalDurationOverride replaces the timer duration for proactively
 	// renewing expiration based leases.
 	LeaseRenewalDurationOverride time.Duration
+
+	// EnsureClosedTimestampStartedFilter is called whenever
+	// r.ensureClosedTimestampStarted() finds an invalid lease and is about to
+	// trigger a lease acquisition.
+	EnsureClosedTimestampStartedFilter func(ctx context.Context, r *Replica, invalidLease kvserverpb.LeaseStatus)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

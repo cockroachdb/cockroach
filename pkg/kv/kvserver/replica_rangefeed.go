@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -661,38 +662,59 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 }
 
 // ensureClosedTimestampStarted does its best to make sure that this node is
-// receiving closed timestamp updated for this replica's range. Note that this
+// receiving closed timestamp updates for this replica's range. Note that this
 // forces a valid lease to exist on the range and so can be reasonably expensive
 // if there is not already a valid lease.
 func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Error {
-	// Make sure there's a leaseholder. If there's no leaseholder, there's no
+	// Make sure there's a valid lease. If there's no lease, nobody's sending
 	// closed timestamp updates.
-	var leaseholderNodeID roachpb.NodeID
-	_, err := r.redirectOnOrAcquireLease(ctx)
-	if err == nil {
-		if !r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
-			// We have the lease. Request is essentially a wrapper for calling EmitMLAI
-			// on a remote node, so cut out the middleman.
-			r.EmitMLAI()
+	lease := r.CurrentLeaseStatus(ctx)
+
+	if !lease.IsValid() {
+		// Do a dummy (consistent) read on a range-local key, in order to ensure a
+		// lease. We're employing higher-level machinery here (the DistSender);
+		// there's no better way to ensure that someone (potentially another
+		// replica) takes a lease. In particular, r.redirectOnOrAcquireLease()
+		// doesn't work because, if the current lease is invalid and the current
+		// replica is not a leader, the current replica will not take a lease.
+		//
+		// Note that the reserved key we're reading is never written to, so we don't
+		// need to worry about it being locked.
+
+		if fn := r.store.TestingKnobs().EnsureClosedTimestampStartedFilter; fn != nil {
+			fn(ctx, r, lease)
 		}
-		return nil
-	} else if lErr, ok := err.GetDetail().(*roachpb.NotLeaseHolderError); ok {
-		if lErr.LeaseHolder == nil {
-			// It's possible for redirectOnOrAcquireLease to return
-			// NotLeaseHolderErrors with LeaseHolder unset, but these should be
-			// transient conditions. If this method is being called by RangeFeed to
-			// nudge a stuck closedts, then essentially all we can do here is nothing
-			// and assume that redirectOnOrAcquireLease will do something different
-			// the next time it's called.
-			return nil
+
+		log.VEventf(ctx, 2, "ensuring lease for rangefeed range. current lease invalid: %s", lease.Lease)
+		reservedKey := keys.ReservedRangeKey(r.Desc().StartKey)
+		err := contextutil.RunWithTimeout(ctx, "read forcing lease acquisition", 5*time.Second,
+			func(ctx context.Context) error {
+				_, err := r.store.DB().Get(ctx, reservedKey)
+				return err
+			})
+		if err != nil {
+			return roachpb.NewError(err)
 		}
-		leaseholderNodeID = lErr.LeaseHolder.NodeID
-		// Request fixes any issues where we've missed a closed timestamp update or
-		// where we're not connected to receive them from this node in the first
-		// place.
-		r.store.cfg.ClosedTimestamp.Clients.Request(leaseholderNodeID, r.RangeID)
-		return nil
-	} else {
-		return err
 	}
+
+	if r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
+		// In the "new closed timestamps subsystem", there's nothing more to do.
+		// Once there's a leaseholder, that node will connect to us and inform us of
+		// updates.
+		return nil
+	}
+
+	lease = r.CurrentLeaseStatus(ctx)
+	if lease.OwnedBy(r.StoreID()) {
+		// We have the lease. Request is essentially a wrapper for calling EmitMLAI
+		// on a remote node, so cut out the middleman.
+		r.EmitMLAI()
+		return nil
+	}
+	leaseholderNodeID := lease.Lease.Replica.NodeID
+	// Request fixes any issues where we've missed a closed timestamp update or
+	// where we're not connected to receive them from this node in the first
+	// place.
+	r.store.cfg.ClosedTimestamp.Clients.Request(leaseholderNodeID, r.RangeID)
+	return nil
 }
