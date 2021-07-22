@@ -351,7 +351,7 @@ dist sender send  r40: sending batch 1 EndTxn to (n1,s1):1
 
 # make a table with some big strings in it.
 statement ok
-CREATE TABLE blobs (i INT PRIMARY KEY, j STRING)
+CREATE TABLE blobs (i INT PRIMARY KEY, j STRING, FAMILY (i, j))
 
 # make a table with some big (1mb) strings in it.
 statement ok
