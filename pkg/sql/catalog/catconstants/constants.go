@@ -90,6 +90,7 @@ const (
 	CrdbInternalLostTableDescriptors
 	CrdbInternalClusterInflightTracesTable
 	CrdbInternalRegionsTable
+	CrdbInternalDefaultPrivilegesTable
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
