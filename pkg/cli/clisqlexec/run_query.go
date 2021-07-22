@@ -215,18 +215,25 @@ func (sqlExecCtx *Context) maybeShowTimes(
 	}
 
 	// If discrete server/network timings are available, also print them.
-	hasStats, parseLat, planLat, execLat, serviceLat, jobsLat, containsJobLat, err := conn.GetLastQueryStatistics()
+	detailedStats, err := conn.GetLastQueryStatistics()
 	if err != nil {
 		fmt.Fprintln(w, stats.String())
 		fmt.Fprintf(ew, "\nwarning: %v", err)
 		return
 	}
-	if !hasStats {
+	if !detailedStats.Enabled {
 		fmt.Fprintln(w, stats.String())
 		return
 	}
 
 	fmt.Fprint(&stats, " total")
+
+	containsJobLat := detailedStats.PostCommitJobs.Valid
+	parseLat := detailedStats.Parse.Value
+	serviceLat := detailedStats.Service.Value
+	planLat := detailedStats.Plan.Value
+	execLat := detailedStats.Exec.Value
+	jobsLat := detailedStats.PostCommitJobs.Value
 
 	networkLat := clientSideQueryLatency - (serviceLat + jobsLat)
 	// serviceLat can be greater than clientSideQueryLatency for some extremely quick
