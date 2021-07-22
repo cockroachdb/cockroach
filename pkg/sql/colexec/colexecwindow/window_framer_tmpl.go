@@ -83,6 +83,12 @@ type windowFramer interface {
 	// no such row exists, frameNthIdx returns -1.
 	frameNthIdx(n int) int
 
+	// frameIntervals returns a series of intervals that describes the set of all
+	// rows that are part of the frame for the current row. Note that there are at
+	// most three intervals - this case can occur when EXCLUDE TIES is used.
+	// frameIntervals is used to compute aggregate functions over a window.
+	frameIntervals() []windowInterval
+
 	// close should always be called upon closing of the parent operator. It
 	// releases all references to enable garbage collection.
 	close()
@@ -182,6 +188,10 @@ type windowFramerBase struct {
 	datumAlloc *rowenc.DatumAlloc
 
 	exclusion execinfrapb.WindowerSpec_Frame_Exclusion
+
+	// intervals is a small (at most length 3) slice that is used during
+	// aggregation computation.
+	intervals []windowInterval
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -220,6 +230,16 @@ func (b *windowFramerBase) frameNthIdx(n int) (idx int) {
 		return -1
 	}
 	return idx
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (b *windowFramerBase) frameIntervals() []windowInterval {
+	b.intervals = b.intervals[:0]
+	b.intervals = append(b.intervals, windowInterval{start: b.startIdx, end: b.endIdx})
+	return b.intervals
 }
 
 // getColsToStore appends to the given slice of column indices whatever columns
@@ -572,7 +592,9 @@ func (f *_OP_STRING) next(ctx context.Context) {
 	// {{if .StartOffsetFollowing}}
 	// {{if .RowsMode}}
 	f.startIdx = f.currentRow + f.startOffset
-	if f.startIdx > f.partitionSize {
+	if f.startIdx > f.partitionSize || f.startOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.startIdx = f.partitionSize
 	}
 	// {{else if .GroupsMode}}
@@ -619,7 +641,9 @@ func (f *_OP_STRING) next(ctx context.Context) {
 	// {{if .EndOffsetFollowing}}
 	// {{if .RowsMode}}
 	f.endIdx = f.currentRow + f.endOffset + 1
-	if f.endIdx > f.partitionSize {
+	if f.endIdx > f.partitionSize || f.endOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
 	// {{else if .GroupsMode}}
@@ -681,6 +705,28 @@ func (f *_OP_STRING) frameLastIdx() (idx int) {
 func (f *_OP_STRING) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *_OP_STRING) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 // {{end}}
