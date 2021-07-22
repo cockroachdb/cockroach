@@ -93,6 +93,20 @@ func (d *Mutable) RevokeDefaultPrivileges(
 
 		defaultPrivilegesPerObject[targetObject] = defaultPrivileges
 	}
+
+	// If ForAllRoles was specified, we do not have to remove any users.
+	if role.ForAllRoles {
+		return
+	}
+	// Check if there are any default privileges remaining on the descriptor.
+	// If empty we will remove the map entry.
+	for _, defaultPrivs := range defaultPrivilegesPerObject {
+		if len(defaultPrivs.Users) != 0 {
+			return
+		}
+	}
+	// There no entries remaining, remove the entry for the role.
+	d.defaultPrivilegeDescriptor.RemoveUser(role)
 }
 
 // CreatePrivilegesFromDefaultPrivileges implements the
