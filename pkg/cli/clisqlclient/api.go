@@ -43,23 +43,7 @@ type Conn interface {
 	// GetLastQueryStatistics returns the detailed latency stats for the
 	// last executed query, if supported by the server and enabled by
 	// configuration.
-	// The first returned value is false if the feature is not supported
-	// by the server, is disabled by configuration or an error is returned.
-	// An error is returned if one was encountered when attempting
-	// to retrieve the stats from the server.
-	//
-	// The providesJobLat return value indicates whether jobsLat returns
-	// a meaningful value. This is set to false for some pre-21.1
-	// CockroachDB versions.
-	//
-	// TODO(knz): This collection of return values would be best
-	// returned as a struct implementing some standardized interface.
-	GetLastQueryStatistics() (
-		hasStats bool,
-		parseLat, planLat, execLat, serviceLat, jobsLat time.Duration,
-		providesJobLat bool,
-		err error,
-	)
+	GetLastQueryStatistics() (result QueryStats, err error)
 
 	// SetURL changes the URL field in the connection object, so that the
 	// next connection (re-)establishment will use the new URL.
@@ -143,6 +127,32 @@ type Rows interface {
 	//
 	// TODO(mjibson): clean this up after 1.8 is released.
 	NextResultSet() (bool, error)
+}
+
+// QueryStatsDuration represents a duration value retrieved by
+// GetLastQueryStatistics.
+type QueryStatsDuration struct {
+	// Value is the duration statistic.
+	Value time.Duration
+	// Valid is false if the server does not know how to compute this
+	// duration.
+	Valid bool
+}
+
+// QueryStats is the result package for GetLastQueryStatistics.
+type QueryStats struct {
+	// Parse is the parsing time.
+	Parse QueryStatsDuration
+	// Plan is the planning time.
+	Plan QueryStatsDuration
+	// Exec is the execution time.
+	Exec QueryStatsDuration
+	// Service is the total server-side latency.
+	Service QueryStatsDuration
+	// PostCommitJobs is the post-commit job execution latency.
+	PostCommitJobs QueryStatsDuration
+	// Enabled is false if statistics retrieval was disabled.
+	Enabled bool
 }
 
 // TxBoundConn is the type of a connection object
