@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -2423,6 +2424,12 @@ func getRestoringPrivileges(
 	return updatedPrivileges, nil
 }
 
+type systemTableNameWithConfig struct {
+	systemTableName  string
+	stagingTableName string
+	config           systemBackupConfiguration
+}
+
 // restoreSystemTables atomically replaces the contents of the system tables
 // with the data from the restored system tables.
 func (r *restoreResumer) restoreSystemTables(
@@ -2438,8 +2445,9 @@ func (r *restoreResumer) restoreSystemTables(
 	}
 
 	// Iterate through all the tables that we're restoring, and if it was restored
-	// to the temporary system DB then copy it's data over to the real system
-	// table.
+	// to the temporary system DB then populate the metadata required to restore
+	// to the real system table.
+	systemTablesToRestore := make([]systemTableNameWithConfig, 0)
 	for _, table := range tables {
 		if table.GetParentID() != tempSystemDBID {
 			continue
@@ -2452,21 +2460,36 @@ func (r *restoreResumer) restoreSystemTables(
 			log.Warningf(ctx, "no configuration specified for table %s... skipping restoration",
 				systemTableName)
 		}
+		systemTablesToRestore = append(systemTablesToRestore, systemTableNameWithConfig{
+			systemTableName:  systemTableName,
+			stagingTableName: stagingTableName,
+			config:           config,
+		})
+	}
 
-		if config.migrationFunc != nil {
-			if details.SystemTablesMigrated[systemTableName] {
+	// Sort the system tables to be restored based on the order specified in the
+	// configuration.
+	sort.SliceStable(systemTablesToRestore, func(i, j int) bool {
+		return systemTablesToRestore[i].config.restoreInOrder < systemTablesToRestore[j].config.restoreInOrder
+	})
+
+	// Copy the data from the temporary system DB to the real system table.
+	for _, systemTable := range systemTablesToRestore {
+		if systemTable.config.migrationFunc != nil {
+			if details.SystemTablesMigrated[systemTable.systemTableName] {
 				continue
 			}
 
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				if err := config.migrationFunc(ctx, r.execCfg, txn, stagingTableName); err != nil {
+				if err := systemTable.config.migrationFunc(ctx, r.execCfg, txn,
+					systemTable.stagingTableName); err != nil {
 					return err
 				}
 
 				// Keep track of which system tables we've migrated so that future job
 				// restarts don't try to import data over our migrated data. This would
 				// fail since the restored data would shadow the migrated keys.
-				details.SystemTablesMigrated[systemTableName] = true
+				details.SystemTablesMigrated[systemTable.systemTableName] = true
 				return r.job.SetDetails(ctx, txn, details)
 			}); err != nil {
 				return err
@@ -2477,15 +2500,15 @@ func (r *restoreResumer) restoreSystemTables(
 			txn.SetDebugName("system-restore-txn")
 
 			restoreFunc := defaultSystemTableRestoreFunc
-			if config.customRestoreFunc != nil {
-				restoreFunc = config.customRestoreFunc
-				log.Eventf(ctx, "using custom restore function for table %s", systemTableName)
+			if systemTable.config.customRestoreFunc != nil {
+				restoreFunc = systemTable.config.customRestoreFunc
+				log.Eventf(ctx, "using custom restore function for table %s", systemTable.systemTableName)
 			}
 
-			log.Eventf(ctx, "restoring system table %s", systemTableName)
-			err := restoreFunc(ctx, r.execCfg, txn, systemTableName, stagingTableName)
+			log.Eventf(ctx, "restoring system table %s", systemTable.systemTableName)
+			err := restoreFunc(ctx, r.execCfg, txn, systemTable.systemTableName, systemTable.stagingTableName)
 			if err != nil {
-				return errors.Wrapf(err, "restoring system table %s", systemTableName)
+				return errors.Wrapf(err, "restoring system table %s", systemTable.systemTableName)
 			}
 			return nil
 		}); err != nil {
@@ -2493,7 +2516,7 @@ func (r *restoreResumer) restoreSystemTables(
 		}
 
 		if fn := r.testingKnobs.duringSystemTableRestoration; fn != nil {
-			if err := fn(systemTableName); err != nil {
+			if err := fn(systemTable.systemTableName); err != nil {
 				return err
 			}
 		}
