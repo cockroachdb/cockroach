@@ -1018,6 +1018,19 @@ func (ctx *Context) GRPCDialNode(
 	return ctx.grpcDialNodeInternal(target, remoteNodeID, class)
 }
 
+// GRPCDialPod wraps GRPCDialNode and treats the `remoteInstanceID`
+// argument as a `NodeID` which it converts. This works because the
+// tenant gRPC server is initialized using the `InstanceID` so it
+// accepts our connection as matching the ID we're dialing.
+//
+// Since GRPCDialNode accepts a separate `target` and `NodeID` it
+// requires no further modification to work between pods.
+func (ctx *Context) GRPCDialPod(
+	target string, remoteInstanceID base.SQLInstanceID, class ConnectionClass,
+) *Connection {
+	return ctx.GRPCDialNode(target, roachpb.NodeID(remoteInstanceID), class)
+}
+
 func (ctx *Context) grpcDialNodeInternal(
 	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) *Connection {

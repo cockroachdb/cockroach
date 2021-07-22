@@ -881,7 +881,9 @@ func (s *SQLServer) preStart(
 	if err := maybeCheckTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
 		return err
 	}
-	s.initInstanceID(ctx)
+	if err := s.initInstanceID(ctx); err != nil {
+		return err
+	}
 	s.connManager = connManager
 	s.pgL = pgL
 	s.execCfg.GCJobNotifier.Start(ctx)
