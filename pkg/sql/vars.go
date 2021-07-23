@@ -716,7 +716,7 @@ var varGen = map[string]sessionVar{
 			mode, ok := sessiondata.SerialNormalizationModeFromString(s)
 			if !ok {
 				return newVarValueError(`serial_normalization`, s,
-					"rowid", "virtual_sequence", "sql_sequence")
+					"rowid", "virtual_sequence", "sql_sequence", "sql_sequence_cached")
 			}
 			m.SetSerialNormalizationMode(mode)
 			return nil
