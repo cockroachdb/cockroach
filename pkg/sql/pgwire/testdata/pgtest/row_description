@@ -180,11 +180,11 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-# 80 = ASCII 'P' for Portal
+# 'P' for Portal
 send
 Parse {"Name": "s", "Query": "SELECT b, 1 FROM tab3"}
 Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
-Describe {"ObjectType": 80, "Name": "p"}
+Describe {"ObjectType": "P", "Name": "p"}
 Execute {"Portal": "p"}
 Sync
 ----
@@ -239,11 +239,11 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-# 80 = ASCII 'P' for Portal
+# 'P' for Portal
 send
 Parse {"Name": "s2", "Query": "SELECT b FROM tab4"}
 Bind {"DestinationPortal": "p2", "PreparedStatement": "s2"}
-Describe {"ObjectType": 80, "Name": "p2"}
+Describe {"ObjectType": "P", "Name": "p2"}
 Execute {"Portal": "p2"}
 Sync
 ----
@@ -327,11 +327,11 @@ ReadyForQuery
 # Ensure that after alter column type, the TableAttributeNumber stays consistent.
 # TableAttributeNumber of column b should stay as 2.
 
-# 80 = ASCII 'P' for Portal
+# 'P' for Portal
 send
 Parse {"Name": "s3", "Query": "SELECT b FROM tab3"}
 Bind {"DestinationPortal": "p3", "PreparedStatement": "s3"}
-Describe {"ObjectType": 80, "Name": "p3"}
+Describe {"ObjectType": "P", "Name": "p3"}
 Execute {"Portal": "p3"}
 Sync
 ----

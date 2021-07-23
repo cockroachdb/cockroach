@@ -90,10 +90,10 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Prepare a query and type hint a user defined type. Then bind this prepared
-# statement with a user defined type argument ([104, 105] = 'hi').
+# statement with a user defined type argument.
 send crdb_only
 Parse {"Name": "s1", "Query": "INSERT INTO tb VALUES ($1)", "ParameterOIDs": [100052]}
-Bind {"DestinationPortal": "p", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [[104, 105]]}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"hi"}]}
 Execute {"Portal": "p"}
 Sync
 ----
@@ -122,7 +122,7 @@ ReadyForQuery
 # Prepare a query and use the binary format (ParameterFormatCodes = [1])
 send
 Parse {"Name": "s2", "Query": "INSERT INTO tb VALUES ($1)"}
-Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [1], "Parameters": [[104, 105]]}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [1], "Parameters": [{"text":"hi"}]}
 Execute {"Portal": "p2"}
 Sync
 ----
@@ -181,7 +181,7 @@ ReadyForQuery
 # The "Parameters" field is the byte array representation of the binary string above.
 send crdb_only
 Parse {"Name": "s4", "Query": "INSERT INTO tba VALUES ($1)"}
-Bind {"DestinationPortal": "p4", "PreparedStatement": "s4", "ParameterFormatCodes": [1], "Parameters": [[0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 134, 212, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 2, 104, 105]]}
+Bind {"DestinationPortal": "p4", "PreparedStatement": "s4", "ParameterFormatCodes": [1], "Parameters": [{"binary":"0000000100000000000186d40000000100000001000000026869"}]}
 Execute {"Portal": "p4"}
 Sync
 ----
