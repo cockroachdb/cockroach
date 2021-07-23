@@ -193,13 +193,13 @@ ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
 
 	b.Reset()
 	if err := runQueryAndFormatResults(conn, &b,
-		clisqlclient.MakeQuery(`SHOW TABLES FROM test_utf;`)); err != nil {
+		clisqlclient.MakeQuery(`SELECT table_name FROM [SHOW TABLES FROM test_utf];`)); err != nil {
 		t.Fatal(err)
 	}
 	expected := `
-  schema_name | table_name | type  | owner | estimated_row_count | locality
---------------+------------+-------+-------+---------------------+-----------
-  public      | żółw       | table | root  |                NULL | NULL
+  table_name
+--------------
+  żółw
 (1 row)
 `
 	if a, e := b.String(), expected[1:]; a != e {
@@ -208,14 +208,14 @@ ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
 	b.Reset()
 
 	if err := runQueryAndFormatResults(conn, &b,
-		clisqlclient.MakeQuery(`SHOW CONSTRAINTS FROM test_utf.żółw;`)); err != nil {
+		clisqlclient.MakeQuery(`SELECT table_name, constraint_name FROM [SHOW CONSTRAINTS FROM test_utf.żółw] ORDER BY 1,2;`)); err != nil {
 		t.Fatal(err)
 	}
 	expected = `
-  table_name | constraint_name | constraint_type |       details        | validated
--------------+-----------------+-----------------+----------------------+------------
-  żółw       | primary         | PRIMARY KEY     | PRIMARY KEY (id ASC) |   true
-  żółw       | żó              | UNIQUE          | UNIQUE (value ASC)   |   true
+  table_name | constraint_name
+-------------+------------------
+  żółw       | primary
+  żółw       | żó
 (2 rows)
 `
 	if a, e := b.String(), expected[1:]; a != e {
