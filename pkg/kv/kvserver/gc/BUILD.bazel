@@ -20,6 +20,7 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/bufalloc",
+        "//pkg/util/contextutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
