@@ -826,6 +826,9 @@ func readPostgresStmt(
 			return unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
 		}
 		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
+	case *tree.CreateType:
+		return errors.New("IMPORT PGDUMP does not support user defined types; please" +
+			" remove all CREATE TYPE statements and their usages from the dump file")
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
 			return stmt
