@@ -13,6 +13,7 @@ package tree
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -133,7 +134,12 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 						wfr.err = err
 						return false
 					}
-					return valueAt.Compare(evalCtx, value) <= 0
+					cmp, err := compareForWindow(evalCtx, valueAt, value)
+					if err != nil {
+						wfr.err = err
+						return false
+					}
+					return cmp <= 0
 				}), wfr.err
 			}
 			// We use binary search on [0, wfr.RowIdx) interval to find the first row
@@ -148,7 +154,12 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 					wfr.err = err
 					return false
 				}
-				return valueAt.Compare(evalCtx, value) >= 0
+				cmp, err := compareForWindow(evalCtx, valueAt, value)
+				if err != nil {
+					wfr.err = err
+					return false
+				}
+				return cmp >= 0
 			}), wfr.err
 		case CurrentRow:
 			// Spec: in RANGE mode CURRENT ROW means that the frame starts with the current row's first peer.
@@ -170,7 +181,12 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 						wfr.err = err
 						return false
 					}
-					return valueAt.Compare(evalCtx, value) <= 0
+					cmp, err := compareForWindow(evalCtx, valueAt, value)
+					if err != nil {
+						wfr.err = err
+						return false
+					}
+					return cmp <= 0
 				}), wfr.err
 			}
 			// We use binary search on [0, wfr.PartitionSize()) interval to find the
@@ -184,7 +200,12 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 					wfr.err = err
 					return false
 				}
-				return valueAt.Compare(evalCtx, value) >= 0
+				cmp, err := compareForWindow(evalCtx, valueAt, value)
+				if err != nil {
+					wfr.err = err
+					return false
+				}
+				return cmp >= 0
 			}), wfr.err
 		default:
 			return 0, errors.AssertionFailedf(
@@ -303,7 +324,12 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 						wfr.err = err
 						return false
 					}
-					return valueAt.Compare(evalCtx, value) < 0
+					cmp, err := compareForWindow(evalCtx, valueAt, value)
+					if err != nil {
+						wfr.err = err
+						return false
+					}
+					return cmp < 0
 				}), wfr.err
 			}
 			// We use binary search on [0, wfr.PartitionSize()) interval to find
@@ -320,7 +346,12 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 					wfr.err = err
 					return false
 				}
-				return valueAt.Compare(evalCtx, value) > 0
+				cmp, err := compareForWindow(evalCtx, valueAt, value)
+				if err != nil {
+					wfr.err = err
+					return false
+				}
+				return cmp > 0
 			}), wfr.err
 		case CurrentRow:
 			// Spec: in RANGE mode CURRENT ROW means that the frame end with the current row's last peer.
@@ -342,7 +373,12 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 						wfr.err = err
 						return false
 					}
-					return valueAt.Compare(evalCtx, value) < 0
+					cmp, err := compareForWindow(evalCtx, valueAt, value)
+					if err != nil {
+						wfr.err = err
+						return false
+					}
+					return cmp < 0
 				}), wfr.err
 			}
 			// We use binary search on [0, wfr.PartitionSize()) interval to find
@@ -356,7 +392,12 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 					wfr.err = err
 					return false
 				}
-				return valueAt.Compare(evalCtx, value) > 0
+				cmp, err := compareForWindow(evalCtx, valueAt, value)
+				if err != nil {
+					wfr.err = err
+					return false
+				}
+				return cmp > 0
 			}), wfr.err
 		case UnboundedFollowing:
 			return wfr.unboundedFollowing(), nil
@@ -633,6 +674,25 @@ func (wfr *WindowFrameRun) IsRowSkipped(ctx context.Context, idx int) (bool, err
 	}
 	// If a row is excluded from the window frame, it is skipped.
 	return wfr.isRowExcluded(idx)
+}
+
+// compareForWindow wraps the Datum Compare method so that casts can be
+// performed up front. This allows us to return an expected error in the event
+// of an invalid comparison, rather than panicking.
+func compareForWindow(evalCtx *EvalContext, left, right Datum) (int, error) {
+	if types.IsDateTimeType(left.ResolvedType()) && left.ResolvedType() != types.Interval {
+		// Datetime values (other than Intervals) are converted to timestamps for
+		// comparison. Note that the right side never needs to be casted.
+		ts, err := timeFromDatumForComparison(evalCtx, left)
+		if err != nil {
+			return 0, err
+		}
+		left, err = MakeDTimestampTZ(ts, time.Microsecond)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return left.Compare(evalCtx, right), nil
 }
 
 // WindowFunc performs a computation on each row using data from a provided *WindowFrameRun.

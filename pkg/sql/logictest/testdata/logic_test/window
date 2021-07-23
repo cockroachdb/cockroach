@@ -3947,3 +3947,17 @@ FROM (VALUES (NULL::INT), (NULL::INT), (1)) v(x);
 1
 1
 NULL
+
+# Regression test for panic during comparison for RANGE mode with
+# OFFSET PRECEDING or OFFSET FOLLOWING (#67975).
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x DATE);
+INSERT INTO t VALUES ('5874897-01-01'::DATE), ('1999-01-08'::DATE);
+SET vectorize=off;
+
+query error timestamp "5874897-01-01T00:00:00Z" exceeds supported timestamp bounds
+SELECT first_value(x) OVER (ORDER BY x RANGE BETWEEN CURRENT ROW AND '0 YEAR'::INTERVAL FOLLOWING) FROM t;
+
+statement ok
+RESET vectorize;
