@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Autom4te's default caching behavior breaks the Bazel sandbox sometimes. This
+# shim script just invokes the actual `autom4te` script disabling caching.
+/usr/bin/autom4te --no-cache "$@"
