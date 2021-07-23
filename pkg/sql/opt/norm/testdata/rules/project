@@ -950,7 +950,6 @@ SELECT (SELECT x FROM (VALUES (1), (2)) f(x)) FROM (VALUES (2), (3))
 project
  ├── columns: x:3
  ├── cardinality: [2 - 2]
- ├── fd: ()-->(3)
  ├── values
  │    ├── cardinality: [2 - 2]
  │    ├── ()

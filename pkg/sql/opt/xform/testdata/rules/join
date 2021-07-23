@@ -4832,7 +4832,6 @@ SELECT count(*), (SELECT count(*) FROM q) FROM (
 with &1 (q)
  ├── columns: count:31!null count:43
  ├── immutable
- ├── fd: ()-->(43)
  ├── select
  │    ├── columns: nyc_census_blocks.gid:1!null nyc_census_blocks.blkid:2 nyc_census_blocks.popn_total:3 nyc_census_blocks.popn_white:4 nyc_census_blocks.popn_black:5 nyc_census_blocks.popn_nativ:6 nyc_census_blocks.popn_asian:7 nyc_census_blocks.popn_other:8 nyc_census_blocks.boroname:9!null nyc_census_blocks.geom:10
  │    ├── key: (1)
@@ -4846,7 +4845,6 @@ with &1 (q)
  └── project
       ├── columns: count:43 count_rows:31!null
       ├── immutable
-      ├── fd: ()-->(43)
       ├── group-by
       │    ├── columns: n.boroname:25 count_rows:31!null
       │    ├── grouping columns: n.boroname:25

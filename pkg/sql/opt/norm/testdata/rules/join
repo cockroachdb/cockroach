@@ -1433,7 +1433,6 @@ SELECT (SELECT i_name FROM item LIMIT 1)
 ----
 project
  ├── columns: i_name:57
- ├── fd: ()-->(57)
  ├── inner-join (hash)
  │    ├── columns: h_data:9!null ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21!null true_agg:48
  │    ├── fd: (12-15)-->(21,48), (9)==(21), (21)==(9)
