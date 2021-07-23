@@ -365,65 +365,6 @@ func TestSpanEntries(t *testing.T) {
 		spanEntries(mkspan('3', 'P')))
 }
 
-func TestUpdatedEntries(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	key := func(c byte) roachpb.Key {
-		return roachpb.Key{c}
-	}
-	mkspan := func(start, end byte) roachpb.Span {
-		return roachpb.Span{Key: key(start), EndKey: key(end)}
-	}
-
-	spAZ := mkspan('A', 'Z')
-	f, err := MakeFrontier(spAZ)
-	require.NoError(t, err)
-
-	var wall int64 = 0
-	advance := func(s roachpb.Span, newWall int64) {
-		wall = newWall
-		_, err := f.Forward(s, hlc.Timestamp{WallTime: wall})
-		require.NoError(t, err)
-	}
-
-	updatedEntries := func(cutoff int64) string {
-		var buf strings.Builder
-		f.UpdatedEntries(hlc.Timestamp{WallTime: cutoff}, func(s roachpb.Span, ts hlc.Timestamp) OpResult {
-			if buf.Len() != 0 {
-				buf.WriteString(` `)
-			}
-			fmt.Fprintf(&buf, `%s@%d`, s, ts.WallTime)
-			return ContinueMatch
-		})
-		return buf.String()
-	}
-
-	// If we haven't configured frontier to keep track of updates, we expect to see
-	// all spans as updated.
-	require.Equal(t, ``, updatedEntries(0))
-	require.Equal(t, ``, updatedEntries(1))
-	advance(mkspan('C', 'E'), 2)
-	require.Equal(t, ``, updatedEntries(1))
-
-	f.TrackUpdateTimestamp(func() hlc.Timestamp { return hlc.Timestamp{WallTime: wall} })
-
-	advance(mkspan('C', 'E'), 3)
-	require.Equal(t, `{C-E}@3`, updatedEntries(0))
-	require.Equal(t, `{C-E}@3`, updatedEntries(2))
-	advance(mkspan('D', 'E'), 4)
-	require.Equal(t, `{C-D}@3 {D-E}@4`, updatedEntries(3))
-
-	// Nothing was updated after t=4
-	require.Equal(t, ``, updatedEntries(4))
-
-	advance(mkspan('C', 'E'), 5)
-	require.Equal(t, `{C-E}@5`, updatedEntries(4))
-
-	advance(spAZ, 5)
-	require.Equal(t, `{A-Z}@5`, updatedEntries(4))
-	require.Equal(t, ``, updatedEntries(5))
-}
-
 // symbols that can make up spans.
 var spanSymbols = []byte("@$0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 

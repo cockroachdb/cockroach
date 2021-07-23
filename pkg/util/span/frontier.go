@@ -25,11 +25,10 @@ import (
 // frontierEntry represents a timestamped span. It is used as the nodes in both
 // the interval tree and heap needed to keep the Frontier.
 type frontierEntry struct {
-	id       int64
-	keys     interval.Range
-	span     roachpb.Span
-	ts       hlc.Timestamp
-	updateTS hlc.Timestamp
+	id   int64
+	keys interval.Range
+	span roachpb.Span
+	ts   hlc.Timestamp
 	// The index of the item in the frontierHeap, maintained by the
 	// heap.Interface methods.
 	index int
@@ -104,10 +103,6 @@ type Frontier struct {
 	minHeap frontierHeap
 
 	idAlloc int64
-
-	// getUpdateTimestamp, if not nil, returns the hlc timestamp when
-	// updating frontier.
-	getUpdateTimestamp func() hlc.Timestamp
 }
 
 // makeSpan copies intervals start/end points and returns a span.
@@ -139,11 +134,6 @@ func MakeFrontier(spans ...roachpb.Span) (*Frontier, error) {
 	}
 	f.tree.AdjustRanges()
 	return f, nil
-}
-
-// TrackUpdateTimestamp asks frontier to keep track of span update timestamp.
-func (f *Frontier) TrackUpdateTimestamp(now func() hlc.Timestamp) {
-	f.getUpdateTimestamp = now
 }
 
 // Frontier returns the minimum timestamp being tracked.
@@ -234,20 +224,14 @@ func (f *Frontier) insert(span roachpb.Span, insertTS hlc.Timestamp) error {
 	// Set of frontier entries to add and remove.
 	var toAdd, toRemove []*frontierEntry
 
-	var updateTS hlc.Timestamp
-	if f.getUpdateTimestamp != nil {
-		updateTS = f.getUpdateTimestamp()
-	}
-
 	// addEntry adds frontier entry to the toAdd list.
 	addEntry := func(r interval.Range, ts hlc.Timestamp) {
 		sp := makeSpan(r)
 		toAdd = append(toAdd, &frontierEntry{
-			id:       f.idAlloc,
-			span:     sp,
-			keys:     sp.AsRange(),
-			ts:       ts,
-			updateTS: updateTS,
+			id:   f.idAlloc,
+			span: sp,
+			keys: sp.AsRange(),
+			ts:   ts,
 		})
 		f.idAlloc++
 	}
@@ -304,7 +288,6 @@ func (f *Frontier) insert(span roachpb.Span, insertTS hlc.Timestamp) error {
 
 		// Fast case: we already recorded higher timestamp for this overlap
 		if insertTS.Less(overlap.ts) {
-			overlap.updateTS = updateTS
 			todoRange.Start = overlap.keys.End
 			return ContinueMatch.asBool()
 		}
@@ -395,19 +378,6 @@ func (f *Frontier) Entries(fn Operation) {
 	f.tree.Do(func(i interval.Interface) bool {
 		spe := i.(*frontierEntry)
 		return fn(spe.span, spe.ts).asBool()
-	})
-}
-
-// UpdatedEntries is similar to Entries, but invokes provided fn only if
-// the span update timestamp is newer than cutoff.
-// This function requires TrackUpdateTimestamps to be called on this Frontier.
-func (f *Frontier) UpdatedEntries(cutoff hlc.Timestamp, fn Operation) {
-	f.tree.Do(func(i interval.Interface) bool {
-		e := i.(*frontierEntry)
-		if cutoff.Less(e.updateTS) {
-			return fn(e.span, e.ts).asBool()
-		}
-		return ContinueMatch.asBool()
 	})
 }
 
