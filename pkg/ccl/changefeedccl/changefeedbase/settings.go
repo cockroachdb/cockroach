@@ -133,9 +133,9 @@ func validateSinkThrottleConfig(values *settings.Values, configStr string) error
 // changefeed high water mark must advance for it to be eligible for checkpointing.
 var MinHighWaterMarkCheckpointAdvance = settings.RegisterDurationSetting(
 	"changefeed.min_highwater_advance",
-	`minimum amount of time the changefeed high water mark must advance 
-for it to be eligible for checkpointing; Default of 0 will checkpoint every time frontier advances,
-as long as the rate of checkpointing keeps up with the rate of frontier changes`,
+	"minimum amount of time the changefeed high water mark must advance "+
+		"for it to be eligible for checkpointing; Default of 0 will checkpoint every time frontier "+
+		"advances, as long as the rate of checkpointing keeps up with the rate of frontier changes",
 	0,
 	settings.NonNegativeDuration,
 )
