@@ -20,11 +20,11 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-# 80 = ASCII 'P' for Portal
+# 'P' for Portal
 send
 Parse {"Name": "s1", "Query": "DEALLOCATE ALL"}
 Bind {"DestinationPortal": "p1", "PreparedStatement": "s1"}
-Describe {"ObjectType": 80, "Name": "p1"}
+Describe {"ObjectType": "P", "Name": "p1"}
 Execute {"Portal": "p1"}
 Sync
 ----

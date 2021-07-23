@@ -17,12 +17,12 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 # 84 = ASCII 'T'
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s7", "Query": "SELECT $1::REGCLASS::INT8"}
-Describe {"ObjectType": 83, "Name": "s7"}
+Describe {"ObjectType": "S", "Name": "s7"}
 Sync
 ----
 
@@ -56,7 +56,7 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Bind {"DestinationPortal": "p7", "PreparedStatement": "s7", "ParameterFormatCodes": [0], "Parameters": [[84]]}
+Bind {"DestinationPortal": "p7", "PreparedStatement": "s7", "ParameterFormatCodes": [0], "Parameters": [{"text":"T"}]}
 Execute {"Portal": "p7"}
 Sync
 ----
