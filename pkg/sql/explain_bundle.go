@@ -375,6 +375,8 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		}
 		first = false
 	}
+	// Add enclosing database. We assume that there are no cross-db queries, which
+	// may not always be true, but it should be a rare case.
 	for i := range sequences {
 		blankLine()
 		if err := c.PrintCreateSequence(&buf, &sequences[i]); err != nil {
@@ -604,8 +606,9 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer) error {
 		variable, ok1 := r[0].(*tree.DString)
 		value, ok2 := r[1].(*tree.DString)
 		description, ok3 := r[2].(*tree.DString)
+		desc := strings.ReplaceAll(string(*description), "\n", " ")
 		if ok1 && ok2 && ok3 {
-			fmt.Fprintf(w, "--   %s = %s  (%s)\n", *variable, *value, *description)
+			fmt.Fprintf(w, "--   %s = %s  (%s)\n", *variable, *value, desc)
 		}
 	}
 	return nil
@@ -665,6 +668,10 @@ func (c *stmtEnvCollector) PrintTableStats(
 	}
 
 	stats = strings.Replace(stats, "'", "''", -1)
+	// Don't display the catalog during the `ALTER TABLE` since the schema file
+	// doesn't specify the catalog for its create table statements.
+	tn.ExplicitCatalog = false
 	fmt.Fprintf(w, "ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
+	tn.ExplicitCatalog = true
 	return nil
 }
