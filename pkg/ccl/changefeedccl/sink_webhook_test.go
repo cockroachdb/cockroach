@@ -36,7 +36,20 @@ func getGenericWebhookSinkOptions() map[string]string {
 	return opts
 }
 
-func setupWebhookSinkWithDetails(details jobspb.ChangefeedDetails, parallelism int) (Sink, error) {
+// repeatStatusCode returns an array of status codes that the mock
+// webhook sink should return for subsequent requests to ensure that an error
+// is reached even with the default retry behavior.
+func repeatStatusCode(code int, count int) []int {
+	arr := make([]int, count)
+	for i := 0; i < count; i++ {
+		arr[i] = code
+	}
+	return arr
+}
+
+func setupWebhookSinkWithDetails(
+	ctx context.Context, details jobspb.ChangefeedDetails, parallelism int,
+) (Sink, error) {
 	u, err := url.Parse(details.SinkURI)
 	if err != nil {
 		return nil, err
@@ -59,7 +72,7 @@ func setupWebhookSinkWithDetails(details jobspb.ChangefeedDetails, parallelism i
 		InitialBackoff: 5 * time.Millisecond,
 	}
 
-	sinkSrc, err := makeWebhookSink(context.Background(), sinkURL{URL: u}, details.Opts, parallelism, memMon.MakeBoundAccount(), shortRetryCfg)
+	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, details.Opts, parallelism, memMon.MakeBoundAccount(), shortRetryCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +145,7 @@ func TestWebhookSink(t *testing.T) {
 			Opts:    opts,
 		}
 
-		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism)
 		require.NoError(t, err)
 
 		// sink with client accepting server cert should pass
@@ -141,32 +154,24 @@ func TestWebhookSink(t *testing.T) {
 		params.Del(changefeedbase.SinkParamCACert)
 		sinkDestHost.RawQuery = params.Encode()
 		details.SinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
-		sinkSrcNoCert, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrcNoCert, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism)
 		require.NoError(t, err)
 
 		// now sink's client accepts no custom certs, should reject the server's cert and fail
 		require.NoError(t, sinkSrcNoCert.EmitRow(context.Background(), nil, []byte("[1001]"),
 			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
 
-		err = sinkSrcNoCert.Flush(context.Background())
-		require.EqualError(t, err, fmt.Sprintf(`Post "%s": x509: certificate signed by unknown authority`, sinkDest.URL()))
+		require.EqualError(t, sinkSrcNoCert.Flush(context.Background()),
+			fmt.Sprintf(`Post "%s": x509: certificate signed by unknown authority`, sinkDest.URL()))
 
 		params.Set(changefeedbase.SinkParamSkipTLSVerify, "true")
 		sinkDestHost.RawQuery = params.Encode()
 		details.SinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
-		sinkSrcInsecure, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrcInsecure, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism)
 		require.NoError(t, err)
 
 		// client should allow unrecognized certs and pass
 		testSendAndReceiveRows(t, sinkSrcInsecure, sinkDest)
-
-		// sink should throw an error if a non-2XX status code is returned
-		sinkDest.SetStatusCodes([]int{http.StatusBadGateway})
-		require.NoError(t, sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"),
-			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
-
-		err = sinkSrc.Flush(context.Background())
-		require.EqualError(t, err, "502 Bad Gateway: ")
 
 		// sink should throw an error if server is unreachable
 		sinkDest.Close()
@@ -218,33 +223,31 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 			Opts:    opts,
 		}
 
-		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism)
 		require.NoError(t, err)
 
 		testSendAndReceiveRows(t, sinkSrc, sinkDest)
 
 		// no credentials should result in a 401
 		delete(opts, changefeedbase.OptWebhookAuthHeader)
-		sinkSrcNoCreds, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrcNoCreds, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism)
 		require.NoError(t, err)
 		require.NoError(t, sinkSrcNoCreds.EmitRow(context.Background(), nil, []byte("[1001]"),
 			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
 
-		err = sinkSrcNoCreds.Flush(context.Background())
-		require.EqualError(t, err, "401 Unauthorized: ")
+		require.EqualError(t, sinkSrcNoCreds.Flush(context.Background()), "401 Unauthorized: ")
 
 		// wrong credentials should result in a 401 as well
 		var wrongAuthHeader string
 		cdctest.EncodeBase64ToString([]byte(fmt.Sprintf("%s:%s", username, "wrong-password")), &wrongAuthHeader)
 		opts[changefeedbase.OptWebhookAuthHeader] = fmt.Sprintf("Basic %s", wrongAuthHeader)
-		sinkSrcWrongCreds, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrcWrongCreds, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism)
 		require.NoError(t, err)
 
 		require.NoError(t, sinkSrcWrongCreds.EmitRow(context.Background(), nil, []byte("[1001]"),
 			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
 
-		err = sinkSrcWrongCreds.Flush(context.Background())
-		require.EqualError(t, err, "401 Unauthorized: ")
+		require.EqualError(t, sinkSrcWrongCreds.Flush(context.Background()), "401 Unauthorized: ")
 
 		require.NoError(t, sinkSrc.Close())
 		require.NoError(t, sinkSrcNoCreds.Close())
@@ -285,7 +288,7 @@ func TestWebhookSinkRetriesRequests(t *testing.T) {
 			Opts:    opts,
 		}
 
-		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism)
 		require.NoError(t, err)
 
 		testSendAndReceiveRows(t, sinkSrc, sinkDest)
@@ -319,14 +322,13 @@ func TestWebhookSinkRetriesRequests(t *testing.T) {
 			Opts:    opts,
 		}
 
-		sinkSrc, err := setupWebhookSinkWithDetails(details, parallelism)
+		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism)
 		require.NoError(t, err)
 
 		require.NoError(t, sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"),
 			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
 
-		err = sinkSrc.Flush(context.Background())
-		require.EqualError(t, err, "500 Internal Server Error: ")
+		require.EqualError(t, sinkSrc.Flush(context.Background()), "500 Internal Server Error: ")
 
 		// ensure that failures are retried the default maximum number of times
 		// before returning error
@@ -340,5 +342,53 @@ func TestWebhookSinkRetriesRequests(t *testing.T) {
 	for i := 1; i <= 16; i *= 2 {
 		retryThenSuccessFn(i)
 		retryThenFailureFn(i)
+	}
+}
+
+func TestWebhookSinkShutsDownOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	webhookSinkTestfn := func(parallelism int) {
+		ctx := context.Background()
+		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+		require.NoError(t, err)
+		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		require.NoError(t, err)
+
+		opts := getGenericWebhookSinkOptions()
+
+		// retry and fail, then return OK
+		sinkDest.SetStatusCodes(repeatStatusCode(http.StatusInternalServerError,
+			defaultRetryConfig().MaxRetries+1))
+		sinkDestHost, err := url.Parse(sinkDest.URL())
+		require.NoError(t, err)
+
+		params := sinkDestHost.Query()
+		params.Set(changefeedbase.SinkParamCACert, certEncoded)
+		sinkDestHost.RawQuery = params.Encode()
+
+		details := jobspb.ChangefeedDetails{
+			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
+			Opts:    opts,
+		}
+
+		sinkSrc, err := setupWebhookSinkWithDetails(ctx, details, parallelism)
+		require.NoError(t, err)
+
+		require.NoError(t, sinkSrc.EmitRow(ctx, nil, []byte("[1001]"),
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
+		// error should be propagated immediately in the next call
+		require.EqualError(t, sinkSrc.Flush(ctx), "500 Internal Server Error: ")
+
+		// check that no messages have been delivered
+		require.Equal(t, "", sinkDest.Pop())
+
+		sinkDest.Close()
+		require.NoError(t, sinkSrc.Close())
+	}
+
+	// run tests with parallelism from 1-16 (1,2,4,8,16)
+	for i := 1; i <= 16; i *= 2 {
+		webhookSinkTestfn(i)
 	}
 }
