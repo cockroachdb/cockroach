@@ -12,11 +12,14 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -190,6 +193,9 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	if err := p.removeDbComment(ctx, n.dbDesc.GetID()); err != nil {
 		return err
 	}
+	if err := p.removeDbRoleSettings(ctx, n.dbDesc.GetID()); err != nil {
+		return err
+	}
 
 	// Log Drop Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
@@ -312,6 +318,25 @@ func (p *planner) removeDbComment(ctx context.Context, dbID descpb.ID) error {
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 		keys.DatabaseCommentType,
+		dbID)
+
+	return err
+}
+
+func (p *planner) removeDbRoleSettings(ctx context.Context, dbID descpb.ID) error {
+	// TODO(rafi): Remove this condition in 21.2.
+	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
+		return nil
+	}
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+		ctx,
+		"delete-db-role-settings",
+		p.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		fmt.Sprintf(
+			`DELETE FROM %s WHERE database_id = $1`,
+			authentication.DatabaseRoleSettingsTableName,
+		),
 		dbID)
 
 	return err

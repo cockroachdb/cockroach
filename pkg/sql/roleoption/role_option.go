@@ -55,6 +55,7 @@ const (
 	NOCANCELQUERY
 	MODIFYCLUSTERSETTING
 	NOMODIFYCLUSTERSETTING
+	DEFAULTSETTINGS
 )
 
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
@@ -108,6 +109,7 @@ var ByName = map[string]Option{
 	"NOCANCELQUERY":          NOCANCELQUERY,
 	"MODIFYCLUSTERSETTING":   MODIFYCLUSTERSETTING,
 	"NOMODIFYCLUSTERSETTING": NOMODIFYCLUSTERSETTING,
+	"DEFAULTSETTINGS":        DEFAULTSETTINGS,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -142,11 +144,12 @@ func (rol List) GetSQLStmts(op string) (map[string]func() (bool, string, error),
 			op,
 			strings.ToLower(ro.Option.String()),
 		)
-		// Skip PASSWORD option.
+		// Skip PASSWORD and DEFAULTSETTINGS options.
 		// Since PASSWORD still resides in system.users, we handle setting PASSWORD
 		// outside of this set stmt.
+		// DEFAULTSETTINGS is stored in system.database_role_settings.
 		// TODO(richardjcai): migrate password to system.role_options
-		if ro.Option == PASSWORD {
+		if ro.Option == PASSWORD || ro.Option == DEFAULTSETTINGS {
 			continue
 		}
 
