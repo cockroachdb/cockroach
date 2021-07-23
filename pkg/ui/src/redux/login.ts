@@ -130,17 +130,15 @@ function shouldRedirect(location: Location) {
 }
 
 export function getLoginPage(location: Location) {
-  const query = !shouldRedirect(location)
+  const redirectTo = !shouldRedirect(location)
     ? undefined
-    : {
-        redirectTo: createPath({
-          pathname: location.pathname,
-          search: location.search,
-        }),
-      };
+    : createPath({
+        pathname: location.pathname,
+        search: location.search,
+      });
   return {
     pathname: LOGIN_PAGE,
-    query: query,
+    search: `?redirectTo=${encodeURIComponent(redirectTo)}`,
   };
 }
 
