@@ -34,9 +34,9 @@ type TLSSettings interface {
 }
 
 var ocspMode = settings.RegisterEnumSetting("security.ocsp.mode",
-	`use OCSP to check whether TLS certificates are revoked. If the OCSP
-server is unreachable, in strict mode all certificates will be rejected
-and in lax mode all certificates will be accepted.`,
+	"use OCSP to check whether TLS certificates are revoked. If the OCSP "+
+		"server is unreachable, in strict mode all certificates will be rejected "+
+		"and in lax mode all certificates will be accepted.",
 	"off", map[int64]string{ocspOff: "off", ocspLax: "lax", ocspStrict: "strict"}).WithPublic()
 
 // TODO(bdarnell): 3 seconds is the same as base.NetworkTimeout, but

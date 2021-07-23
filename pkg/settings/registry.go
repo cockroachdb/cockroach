@@ -114,7 +114,19 @@ func register(key, desc string, s extendedSetting) {
 		panic(fmt.Sprintf("setting missing description: %s", key))
 	}
 	if r, _ := utf8.DecodeRuneInString(desc); unicode.IsUpper(r) {
-		panic(fmt.Sprintf("setting descriptions should start with a lowercase letter: %q", desc))
+		panic(fmt.Sprintf(
+			"setting descriptions should start with a lowercase letter: %q, %q", key, desc,
+		))
+	}
+	for _, c := range desc {
+		if c == unicode.ReplacementChar {
+			panic(fmt.Sprintf("setting descriptions must be valid UTF-8: %q, %q", key, desc))
+		}
+		if unicode.IsControl(c) {
+			panic(fmt.Sprintf(
+				"setting descriptions cannot contain control character %q: %q, %q", c, key, desc,
+			))
+		}
 	}
 	s.setDescription(desc)
 	registry[key] = s
