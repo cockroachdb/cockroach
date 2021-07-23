@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
@@ -32,7 +33,8 @@ import (
 
 func TestTryJoinGeoIndex(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.NewTestingEvalContext(nil /* st */)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 
 	tc := testcat.New()
 
@@ -312,7 +314,8 @@ func TestTryJoinGeoIndex(t *testing.T) {
 
 func TestTryFilterGeoIndex(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.NewTestingEvalContext(nil /* st */)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 
 	tc := testcat.New()
 	if _, err := tc.ExecuteDDL(

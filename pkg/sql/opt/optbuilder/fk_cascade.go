@@ -178,7 +178,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 			return nil, false
 		}
 		var p props.Shared
-		memo.BuildSharedProps(&sel.Filters, &p)
+		memo.BuildSharedProps(&sel.Filters, &p, mutationInputScope.builder.evalCtx)
 		if p.VolatilitySet.HasVolatile() {
 			return nil, false
 		}

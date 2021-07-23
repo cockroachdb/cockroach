@@ -441,7 +441,7 @@ func randComputedColumnTableDef(
 		}
 
 	default:
-		volatility, ok := tree.LookupCastVolatility(xTyp, types.String)
+		volatility, ok := tree.LookupCastVolatility(xTyp, types.String, nil /* sessionData */)
 		if ok && volatility <= tree.VolatilityImmutable {
 			// We can cast to string; use lower(x::string)
 			newDef.Type = types.String

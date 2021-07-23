@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -1107,9 +1108,84 @@ var pgCatalogDefaultACLTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.6/catalog-pg-default-acl.html`,
 	schema: vtable.PGCatalogDefaultACL,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		if dbContext.GetDefaultPrivileges() == nil {
+			return nil
+		}
+		for _, defaultPrivs := range dbContext.GetDefaultPrivileges().DefaultPrivileges {
+			// Need to consider the case of USAGE for Public as well.
+			for objectType, privs := range defaultPrivs.DefaultPrivilegesPerObject {
+				// Type of object this entry is for:
+				// r = relation (table, view), S = sequence, f = function, T = type, n = schema.
+				var c string
+				switch objectType {
+				case tree.Tables:
+					c = "r"
+				case tree.Sequences:
+					c = "S"
+				case tree.Types:
+					c = "T"
+				case tree.Schemas:
+					c = "n"
+				}
+				privilegeObjectType := targetObjectToPrivilegeObject[objectType]
+				arr := tree.NewDArray(types.String)
+				for _, userPrivs := range privs.Users {
+					var user string
+					if userPrivs.UserProto.Decode().IsPublicRole() {
+						// Postgres represents Public in defacl as an empty string.
+						user = ""
+					} else {
+						user = userPrivs.UserProto.Decode().Normalized()
+					}
+
+					privileges := privilege.ListFromBitField(
+						userPrivs.Privileges, privilegeObjectType,
+					)
+					defaclItem := fmt.Sprintf(`%s=%s/%s`,
+						user,
+						privileges.ListToACL(
+							privilegeObjectType,
+						),
+						// TODO(richardjcai): CockroachDB currently does not track grantors
+						//    See: https://github.com/cockroachdb/cockroach/issues/67442.
+						"", /* grantor */
+					)
+
+					if len(defaclItem) != 0 {
+						if err := arr.Append(
+							tree.NewDString(defaclItem)); err != nil {
+							return err
+						}
+					}
+				}
+
+				if len(arr.Array) == 0 {
+					continue
+				}
+
+				// TODO(richardjcai): Update this logic once default privileges on
+				//    schemas are supported.
+				//    See: https://github.com/cockroachdb/cockroach/issues/67376.
+				schemaName := ""
+				rowOid := h.DBSchemaRoleOid(
+					dbContext.GetID(),
+					schemaName,
+					defaultPrivs.UserProto.Decode().Normalized(),
+				)
+				if err := addRow(
+					rowOid, // row identifier oid
+					h.UserOid(defaultPrivs.UserProto.Decode()), // defaclrole oid
+					oidZero,            // defaclnamespace oid
+					tree.NewDString(c), // defaclobjtype char
+					arr,                // defaclacl aclitem[]
+				); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 var (
@@ -3389,6 +3465,7 @@ const (
 	operatorTypeTag
 	enumEntryTypeTag
 	rewriteTypeTag
+	dbSchemaRoleTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -3556,6 +3633,18 @@ func (h oidHasher) rewriteOid(source descpb.ID, depended descpb.ID) *tree.DOid {
 	h.writeTypeTag(rewriteTypeTag)
 	h.writeUInt32(uint32(source))
 	h.writeUInt32(uint32(depended))
+	return h.getOid()
+}
+
+// DBSchemaRoleOid creates an OID based on the combination of a db/schema/role.
+// This is used to generate a unique row identifier for pg_default_acl.
+func (h oidHasher) DBSchemaRoleOid(
+	dbID descpb.ID, scName string, normalizedRole string,
+) *tree.DOid {
+	h.writeTypeTag(dbSchemaRoleTypeTag)
+	h.writeDB(dbID)
+	h.writeSchema(scName)
+	h.writeStr(normalizedRole)
 	return h.getOid()
 }
 
