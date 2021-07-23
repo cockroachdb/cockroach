@@ -1,6 +1,6 @@
 initial-keys tenant=system
 ----
-75 keys:
+77 keys:
  /System/"desc-idgen"
  /Table/3/1/1/2/1
  /Table/3/1/3/2/1
@@ -35,6 +35,7 @@ initial-keys tenant=system
  /Table/3/1/41/2/1
  /Table/3/1/42/2/1
  /Table/3/1/43/2/1
+ /Table/3/1/44/2/1
  /Table/5/1/0/2/1
  /Table/5/1/1/2/1
  /Table/5/1/16/2/1
@@ -45,6 +46,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/0/0/"system"/4/1
  /NamespaceTable/30/1/1/0/"public"/4/1
  /NamespaceTable/30/1/1/29/"comments"/4/1
+ /NamespaceTable/30/1/1/29/"database_role_settings"/4/1
  /NamespaceTable/30/1/1/29/"descriptor"/4/1
  /NamespaceTable/30/1/1/29/"eventlog"/4/1
  /NamespaceTable/30/1/1/29/"jobs"/4/1
@@ -76,7 +78,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"users"/4/1
  /NamespaceTable/30/1/1/29/"web_sessions"/4/1
  /NamespaceTable/30/1/1/29/"zones"/4/1
-33 splits:
+34 splits:
  /Table/11
  /Table/12
  /Table/13
@@ -110,10 +112,11 @@ initial-keys tenant=system
  /Table/41
  /Table/42
  /Table/43
+ /Table/44
 
 initial-keys tenant=5
 ----
-66 keys:
+68 keys:
  /Tenant/5/Table/3/1/1/2/1
  /Tenant/5/Table/3/1/3/2/1
  /Tenant/5/Table/3/1/4/2/1
@@ -146,10 +149,12 @@ initial-keys tenant=5
  /Tenant/5/Table/3/1/41/2/1
  /Tenant/5/Table/3/1/42/2/1
  /Tenant/5/Table/3/1/43/2/1
+ /Tenant/5/Table/3/1/44/2/1
  /Tenant/5/Table/7/1/0/0
  /Tenant/5/NamespaceTable/30/1/0/0/"system"/4/1
  /Tenant/5/NamespaceTable/30/1/1/0/"public"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"comments"/4/1
+ /Tenant/5/NamespaceTable/30/1/1/29/"database_role_settings"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"descriptor"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"descriptor_id_seq"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"eventlog"/4/1
@@ -185,7 +190,7 @@ initial-keys tenant=5
 
 initial-keys tenant=999
 ----
-66 keys:
+68 keys:
  /Tenant/999/Table/3/1/1/2/1
  /Tenant/999/Table/3/1/3/2/1
  /Tenant/999/Table/3/1/4/2/1
@@ -218,10 +223,12 @@ initial-keys tenant=999
  /Tenant/999/Table/3/1/41/2/1
  /Tenant/999/Table/3/1/42/2/1
  /Tenant/999/Table/3/1/43/2/1
+ /Tenant/999/Table/3/1/44/2/1
  /Tenant/999/Table/7/1/0/0
  /Tenant/999/NamespaceTable/30/1/0/0/"system"/4/1
  /Tenant/999/NamespaceTable/30/1/1/0/"public"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"comments"/4/1
+ /Tenant/999/NamespaceTable/30/1/1/29/"database_role_settings"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"descriptor"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"descriptor_id_seq"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"eventlog"/4/1
