@@ -1,20 +1,48 @@
+load("//pkg/util/log/eventpb:PROTOS.bzl", _EVENTPB_PROTO_LOCATIONS = "EVENTPB_PROTO_LOCATIONS")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+exports_files([
+    "cluster_events.proto",
+    "ddl_events.proto",
+    "events.proto",
+    "health_events.proto",
+    "job_events.proto",
+    "misc_sql_events.proto",
+    "privilege_events.proto",
+    "role_events.proto",
+    "session_events.proto",
+    "sql_audit_events.proto",
+    "zone_events.proto",
+])
+
+go_binary(
+    name = "gen",
+    srcs = ["gen.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/exit",
+        "//pkg/util/log/logpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_gostdlib//go/format",
+    ],
+)
 
 go_library(
     name = "eventpb",
     srcs = [
         "doc.go",
-        "eventlog_channels_generated.go",
         "events.go",
-        "json_encode_generated.go",
+        ":gen-eventlog-channels-generated-go",  # keep
+        ":gen-json-encode-generated-go",  # keep
     ],
     embed = [":eventpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/jsonbytes",
+        "//pkg/util/jsonbytes",  # keep
         "//pkg/util/log/logpb",
         "@com_github_cockroachdb_redact//:redact",
     ],
@@ -61,4 +89,56 @@ go_proto_library(
     proto = ":eventpb_proto",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto"],
+)
+
+genrule(
+    name = "gen-eventlog-channels-generated-go",
+    srcs = [
+        "//pkg/util/log/eventpb:cluster_events.proto",
+        "//pkg/util/log/eventpb:ddl_events.proto",
+        "//pkg/util/log/eventpb:events.proto",
+        "//pkg/util/log/eventpb:health_events.proto",
+        "//pkg/util/log/eventpb:job_events.proto",
+        "//pkg/util/log/eventpb:misc_sql_events.proto",
+        "//pkg/util/log/eventpb:privilege_events.proto",
+        "//pkg/util/log/eventpb:role_events.proto",
+        "//pkg/util/log/eventpb:session_events.proto",
+        "//pkg/util/log/eventpb:sql_audit_events.proto",
+        "//pkg/util/log/eventpb:zone_events.proto",
+    ],
+    outs = ["eventlog_channels_generated.go"],
+    cmd = """
+    $(location //pkg/util/log/eventpb:gen) eventlog_channels_go \
+        {} \
+        >$(location eventlog_channels_generated.go)
+    """.format(_EVENTPB_PROTO_LOCATIONS),
+    exec_tools = [
+        "//pkg/util/log/eventpb:gen",
+    ],
+)
+
+genrule(
+    name = "gen-json-encode-generated-go",
+    srcs = [
+        "//pkg/util/log/eventpb:cluster_events.proto",
+        "//pkg/util/log/eventpb:ddl_events.proto",
+        "//pkg/util/log/eventpb:events.proto",
+        "//pkg/util/log/eventpb:health_events.proto",
+        "//pkg/util/log/eventpb:job_events.proto",
+        "//pkg/util/log/eventpb:misc_sql_events.proto",
+        "//pkg/util/log/eventpb:privilege_events.proto",
+        "//pkg/util/log/eventpb:role_events.proto",
+        "//pkg/util/log/eventpb:session_events.proto",
+        "//pkg/util/log/eventpb:sql_audit_events.proto",
+        "//pkg/util/log/eventpb:zone_events.proto",
+    ],
+    outs = ["json_encode_generated.go"],
+    cmd = """
+    $(location //pkg/util/log/eventpb:gen) json_encode_go \
+        {} \
+        >$(location json_encode_generated.go)
+    """.format(_EVENTPB_PROTO_LOCATIONS),
+    exec_tools = [
+        "//pkg/util/log/eventpb:gen",
+    ],
 )
