@@ -51,6 +51,7 @@ go_library(
         "start_jemalloc.go",
         "start_unix.go",
         "start_windows.go",
+        "statement_bundle.go",
         "statement_diag.go",
         "swappable_fs.go",
         "testutils.go",
