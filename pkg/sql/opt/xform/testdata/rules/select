@@ -8868,7 +8868,7 @@ SELECT u, v FROM a@{NO_INDEX_JOIN} WHERE u = 1 OR v = 1
 ----
 project
  ├── columns: u:2 v:3
- ├── lax-key: (2,3)
+ ├── lax-key: (3)
  ├── fd: (3)~~>(2)
  └── distinct-on
       ├── columns: k:1!null u:2 v:3

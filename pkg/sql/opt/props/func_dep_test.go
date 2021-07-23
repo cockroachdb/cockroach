@@ -629,7 +629,7 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	foo.AddLaxKey(c(4), all)
 	verifyFD(t, foo, "key(1); (1)-->(2-4), (2,3)~~>(1,4), (4)~~>(1-3)")
 	foo.ProjectCols(c(2, 3, 4))
-	verifyFD(t, foo, "lax-key(2-4); (2,3)~~>(4), (4)~~>(2,3)")
+	verifyFD(t, foo, "lax-key(4); (2,3)~~>(4), (4)~~>(2,3)")
 	foo.MakeNotNull(c(2, 3, 4))
 	verifyFD(t, foo, "key(4); (2,3)-->(4), (4)-->(2,3)")
 
@@ -649,6 +649,9 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	abde := makeAbcdeFD(t)
 	abde.ProjectCols(c(1, 3, 4, 5))
 	verifyFD(t, abde, "key(1); (1)-->(3-5)")
+	abde = makeAbcdeFD(t)
+	abde.ProjectCols(c(2, 3, 4))
+	verifyFD(t, abde, "lax-key(2,3); (2,3)~~>(4)")
 
 	// Try removing columns that are only dependants (i.e. never determinants).
 	//   CREATE TABLE mnpq (m INT, n INT, p INT, q INT, PRIMARY KEY (m, n))
@@ -691,7 +694,7 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	var bcden props.FuncDepSet
 	bcden.CopyFrom(makeJoinFD(t))
 	bcden.ProjectCols(c(2, 3, 4, 5, 11, 12, 13))
-	verifyFD(t, &bcden, "lax-key(2-5,11-13); (2,3)~~>(4,5)")
+	verifyFD(t, &bcden, "lax-key(2,3,11); (2,3)~~>(4,5), (2,3,11)~~>(4,5,12,13)")
 	testColsAreStrictKey(t, &bcden, c(2, 3, 4, 5, 11, 12, 13), false)
 	testColsAreLaxKey(t, &bcden, c(2, 3, 4, 5, 11, 12, 13), true)
 
@@ -723,7 +726,7 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	abcde.AddEquivalency(2, 4)
 	verifyFD(t, abcde, "key(1); (1)-->(2-5), (2,3)~~>(1,4,5), (2)==(4), (4)==(2)")
 	abcde.ProjectCols(c(3, 4, 5))
-	verifyFD(t, abcde, "lax-key(3-5); (3,4)~~>(5)")
+	verifyFD(t, abcde, "lax-key(3,4); (3,4)~~>(5)")
 
 	// Equivalent substitution results in (4,5)~~>(4,5), which is eliminated.
 	//   SELECT d, e FROM abcde WHERE b=d AND c=e
@@ -748,14 +751,11 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	abcde.AddLaxKey(c(3, 4), c(1, 2, 3, 4, 5))
 	verifyFD(t, abcde, "key(1); (1)-->(2-5), (2)~~>(1,3-5), (3,4)~~>(1,2,5)")
 	abcde.ProjectCols(c(2, 3, 4, 5))
-	verifyFD(t, abcde, "lax-key(2-5); (2)~~>(3-5), (3,4)~~>(2,5)")
+	verifyFD(t, abcde, "lax-key(3,4); (2)~~>(3-5), (3,4)~~>(2,5)")
 	// 2 on its own is not necessarily a lax key: even if it determines the other
 	// columns, any of them can still be NULL.
 	testColsAreLaxKey(t, abcde, c(2), false)
-	testColsAreLaxKey(t, abcde, c(3, 4), false)
-
-	copy := &props.FuncDepSet{}
-	copy.CopyFrom(abcde)
+	testColsAreLaxKey(t, abcde, c(3, 4), true)
 
 	// Verify that lax keys convert to strong keys.
 	abcde.MakeNotNull(c(2, 3, 4, 5))

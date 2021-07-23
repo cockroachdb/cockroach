@@ -628,19 +628,7 @@ func (f *FuncDepSet) ConstantCols() opt.ColSet {
 // so, then the column is redundant. This algorithm has decent running time, but
 // will not necessarily find the candidate key with the fewest columns.
 func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
-	var removed opt.ColSet
-	cols = cols.Copy()
-	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
-		cols.Remove(i)
-		removed.Add(i)
-		if !f.inClosureOf(removed, cols, true /* strict */) {
-			// The column is not functionally determined by the other columns, so
-			// retain it in the set.
-			cols.Add(i)
-		}
-		removed.Remove(i)
-	}
-	return cols
+	return f.reduceCols(cols, true /* strict */)
 }
 
 // InClosureOf returns true if the given columns are functionally determined by
@@ -987,7 +975,8 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 			f.setKey(cols, strictKey)
 			f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 		} else if f.ColsAreLaxKey(cols) {
-			f.setKey(cols, laxKey)
+			newLaxKey := f.reduceCols(cols, false /* strict */)
+			f.setKey(newLaxKey, laxKey)
 			f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 		} else {
 			f.clearKey()
@@ -1695,6 +1684,33 @@ func (f *FuncDepSet) colsAreKey(cols opt.ColSet, typ keyType) bool {
 	default:
 		return false
 	}
+}
+
+// reduceCols removes redundant columns from the given set. Redundant columns
+// can be functionally determined from the remaining columns. If strict is true
+// and the columns contain a strict key for the relation, then the reduced
+// columns will form a candidate strict key for the relation. If strict is false
+// and the columns contain a lax key for the relation, then the reduced columns
+// will form a candidate lax key for the relation.
+//
+// The reduction algorithm removes one column at a time (in an arbitrary order),
+// and then tests to see if the closure still includes the removed column. If
+// so, then the column is redundant. This algorithm has decent running time, but
+// will not necessarily find the candidate key with the fewest columns.
+func (f *FuncDepSet) reduceCols(cols opt.ColSet, strict bool) opt.ColSet {
+	var removed opt.ColSet
+	cols = cols.Copy()
+	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
+		cols.Remove(i)
+		removed.Add(i)
+		// The column is not functionally determined by the other columns, so
+		// retain it in the set.
+		if !f.inClosureOf(removed, cols, strict) {
+			cols.Add(i)
+		}
+		removed.Remove(i)
+	}
+	return cols
 }
 
 // inClosureOf computes the strict or lax closure of the "in" column set, and

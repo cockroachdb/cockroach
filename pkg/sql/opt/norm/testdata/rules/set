@@ -886,7 +886,7 @@ union
            ├── fd: ()-->(7)
            ├── scan t2
            │    ├── columns: a:7!null t2.d:10
-           │    ├── lax-key: (7,10)
+           │    ├── lax-key: (10)
            │    └── fd: (10)~~>(7)
            └── filters
                 └── a:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]

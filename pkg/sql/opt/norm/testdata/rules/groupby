@@ -3428,7 +3428,7 @@ scalar-group-by
  ├── fd: ()-->(7)
  ├── scan nullablecols
  │    ├── columns: c1:1 c2:2
- │    ├── lax-key: (1,2)
+ │    ├── lax-key: (1)
  │    └── fd: (1)~~>(2)
  └── aggregations
       └── regression-count [as=regr_count:7, outer=(1,2)]

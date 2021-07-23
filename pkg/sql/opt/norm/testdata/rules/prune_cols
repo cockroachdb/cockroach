@@ -4012,7 +4012,7 @@ delete uniq_fk_parent
       │         │    └── fd: ()-->(15,16)
       │         ├── scan uniq_fk_child
       │         │    ├── columns: uniq_fk_child.b:18 uniq_fk_child.c:19
-      │         │    ├── lax-key: (18,19)
+      │         │    ├── lax-key: (19)
       │         │    └── fd: (19)~~>(18)
       │         └── filters
       │              ├── b:15 = uniq_fk_child.b:18 [outer=(15,18), constraints=(/15: (/NULL - ]; /18: (/NULL - ]), fd=(15)==(18), (18)==(15)]
@@ -4329,7 +4329,7 @@ UPDATE returning_test SET d = a + d RETURNING a, d
 project
  ├── columns: a:1 d:4
  ├── volatile, mutations
- ├── lax-key: (1,4)
+ ├── lax-key: (1)
  ├── fd: (1)~~>(4)
  └── update returning_test
       ├── columns: a:1 d:4 rowid:8!null
@@ -4385,7 +4385,7 @@ UPDATE returning_test SET (b, a) = (a, a + b) RETURNING a, b, c
 project
  ├── columns: a:1 b:2 c:3
  ├── volatile, mutations
- ├── lax-key: (1-3)
+ ├── lax-key: (2)
  ├── fd: (2)~~>(1,3)
  └── update returning_test
       ├── columns: a:1 b:2 c:3 rowid:8!null
@@ -4533,11 +4533,11 @@ with &2
       ├── fd: (11)~~>(12)
       ├── project
       │    ├── columns: a:11 b:12
-      │    ├── lax-key: (11,12)
+      │    ├── lax-key: (11)
       │    ├── fd: (11)~~>(12)
       │    ├── scan returning_test
       │    │    ├── columns: returning_test.a:1 returning_test.b:2
-      │    │    ├── lax-key: (1,2)
+      │    │    ├── lax-key: (1)
       │    │    └── fd: (1)~~>(2)
       │    └── projections
       │         ├── returning_test.a:1 [as=a:11, outer=(1)]
