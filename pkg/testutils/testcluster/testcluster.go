@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
@@ -1106,4 +1107,46 @@ func (testClusterFactoryImpl) NewTestCluster(
 	t testing.TB, numNodes int, args base.TestClusterArgs,
 ) serverutils.TestClusterInterface {
 	return NewTestCluster(t, numNodes, args)
+}
+
+// GetRaftLeader returns the replica that is the current raft leader for the
+// specified key.
+func (tc *TestCluster) GetRaftLeader(t testing.TB, key roachpb.RKey) *kvserver.Replica {
+	t.Helper()
+	var raftLeaderRepl *kvserver.Replica
+	testutils.SucceedsSoon(t, func() error {
+		var latestTerm uint64
+		for i := range tc.Servers {
+			err := tc.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
+				repl := store.LookupReplica(key)
+				if repl == nil {
+					// Replica does not exist on this store or there is no raft
+					// status yet.
+					return nil
+				}
+				raftStatus := repl.RaftStatus()
+				if raftStatus == nil {
+					return errors.Errorf("raft group is not initialized for replica with key %s", key)
+				}
+				if raftStatus.Term > latestTerm || (raftLeaderRepl == nil && raftStatus.Term == latestTerm) {
+					// If we find any newer term, it means any previous election is
+					// invalid.
+					raftLeaderRepl = nil
+					latestTerm = raftStatus.Term
+					if raftStatus.RaftState == raft.StateLeader {
+						raftLeaderRepl = repl
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if latestTerm == 0 || raftLeaderRepl == nil {
+			return errors.Errorf("could not find a raft leader for key %s", key)
+		}
+		return nil
+	})
+	return raftLeaderRepl
 }
