@@ -13,6 +13,7 @@ package invertedidx_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -23,7 +24,8 @@ import (
 
 func TestTryJoinJsonOrArrayIndex(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.NewTestingEvalContext(nil /* st */)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 
 	tc := testcat.New()
 
@@ -216,7 +218,8 @@ func TestTryJoinJsonOrArrayIndex(t *testing.T) {
 
 func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.NewTestingEvalContext(nil /* st */)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 
 	tc := testcat.New()
 	if _, err := tc.ExecuteDDL(

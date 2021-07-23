@@ -139,6 +139,7 @@ type Memo struct {
 	safeUpdates             bool
 	preferLookupJoinsForFKs bool
 	saveTablesPrefix        string
+	intervalStyleEnabled    bool
 
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
@@ -177,6 +178,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 		safeUpdates:             evalCtx.SessionData.SafeUpdates,
 		preferLookupJoinsForFKs: evalCtx.SessionData.PreferLookupJoinsForFKs,
 		saveTablesPrefix:        evalCtx.SessionData.SaveTablesPrefix,
+		intervalStyleEnabled:    evalCtx.SessionData.IntervalStyleEnabled,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -284,7 +286,8 @@ func (m *Memo) IsStale(
 		m.localityOptimizedSearch != evalCtx.SessionData.LocalityOptimizedSearch ||
 		m.safeUpdates != evalCtx.SessionData.SafeUpdates ||
 		m.preferLookupJoinsForFKs != evalCtx.SessionData.PreferLookupJoinsForFKs ||
-		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix {
+		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix ||
+		m.intervalStyleEnabled != evalCtx.SessionData.IntervalStyleEnabled {
 		return true, nil
 	}
 

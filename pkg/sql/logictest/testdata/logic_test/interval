@@ -395,6 +395,15 @@ SELECT i / 2 FROM ( VALUES
 
 subtest interval_session
 
+statement error setting IntervalStyle is not enabled
+SET intervalstyle = 'iso_8601'
+
+statement error setting IntervalStyle is not enabled
+SET intervalstyle = 'sql_standard'
+
+statement ok
+SET intervalstyle_enabled = 'on'
+
 statement ok
 create table intervals ( pk INT PRIMARY KEY, i INTERVAL )
 

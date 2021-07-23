@@ -517,6 +517,15 @@ var intervalStyle = settings.RegisterEnumSetting(
 	}(),
 ).WithPublic()
 
+// intervalStyleEnabled controls intervals representation.
+// TODO(#sql-experience): remove session setting in v21.1 and have this
+// always enabled.
+var intervalStyleEnabled = settings.RegisterBoolSetting(
+	"sql.defaults.intervalstyle.enabled",
+	"default value for enable_intervalstyle session setting",
+	false,
+).WithPublic()
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -2550,6 +2559,11 @@ func (m *sessionDataMutator) initSequenceCache() {
 // SetIntervalStyle sets the IntervalStyle for the given session.
 func (m *sessionDataMutator) SetIntervalStyle(style duration.IntervalStyle) {
 	m.data.DataConversionConfig.IntervalStyle = style
+}
+
+// SetIntervalStyleEnabled sets the IntervalStyleEnabled for the given session.
+func (m *sessionDataMutator) SetIntervalStyleEnabled(enabled bool) {
+	m.data.IntervalStyleEnabled = enabled
 }
 
 // SetStubCatalogTablesEnabled sets default value for stub_catalog_tables.

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -354,12 +355,12 @@ func lookupCast(from, to types.Family) *castInfo {
 }
 
 // LookupCastVolatility returns the volatility of a valid cast.
-func LookupCastVolatility(from, to *types.T) (_ Volatility, ok bool) {
+func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Volatility, ok bool) {
 	fromFamily := from.Family()
 	toFamily := to.Family()
 	// Special case for casting between arrays.
 	if fromFamily == types.ArrayFamily && toFamily == types.ArrayFamily {
-		return LookupCastVolatility(from.ArrayContents(), to.ArrayContents())
+		return LookupCastVolatility(from.ArrayContents(), to.ArrayContents(), sd)
 	}
 	// Special case for casting between tuples.
 	if fromFamily == types.TupleFamily && toFamily == types.TupleFamily {
@@ -374,7 +375,7 @@ func LookupCastVolatility(from, to *types.T) (_ Volatility, ok bool) {
 		}
 		maxVolatility := VolatilityLeakProof
 		for i := range fromTypes {
-			v, ok := LookupCastVolatility(fromTypes[i], toTypes[i])
+			v, ok := LookupCastVolatility(fromTypes[i], toTypes[i], sd)
 			if !ok {
 				return 0, false
 			}
@@ -383,6 +384,24 @@ func LookupCastVolatility(from, to *types.T) (_ Volatility, ok bool) {
 			}
 		}
 		return maxVolatility, true
+	}
+
+	// Special case for IntervalStyle.
+	switch fromFamily {
+	case types.StringFamily, types.CollatedStringFamily:
+		switch toFamily {
+		case types.IntervalFamily:
+			if sd != nil && sd.IntervalStyleEnabled {
+				return VolatilityStable, true
+			}
+		}
+	case types.IntervalFamily:
+		switch toFamily {
+		case types.StringFamily, types.CollatedStringFamily:
+			if sd != nil && sd.IntervalStyleEnabled {
+				return VolatilityStable, true
+			}
+		}
 	}
 	cast := lookupCast(fromFamily, toFamily)
 	if cast == nil {

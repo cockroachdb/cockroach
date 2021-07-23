@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -24,7 +25,8 @@ import (
 )
 
 func TestProject(t *testing.T) {
-	evalCtx := tree.NewTestingEvalContext(nil /* st */)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 	var f norm.Factory
 	f.Init(evalCtx, testcat.New())
 	md := f.Metadata()
