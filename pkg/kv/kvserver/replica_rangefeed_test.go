@@ -1048,7 +1048,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 						nudgeSeen = true
 						return nil
 					}
-					if ba.IsLeaseRequest() {
+					if ba.IsLeaseRequest() && nudgeSeen {
 						return nil
 					}
 					log.Infof(ctx, "test rejecting request: %s", ba)
