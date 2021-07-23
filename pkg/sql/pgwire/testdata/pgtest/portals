@@ -30,11 +30,10 @@ ReadyForQuery
 
 # Verify that closing a bound portal prevents execution.
 
-# 80 = ASCII 'P'
 send
 Parse {"Name": "s", "Query": "SELECT 1"}
 Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
-Close {"ObjectType": 80, "Name": "p"}
+Close {"ObjectType": "P", "Name": "p"}
 Execute {"Portal": "p"}
 Sync
 ----
@@ -54,12 +53,11 @@ ReadyForQuery
 # Close, Execute causes the execute to return an error, but it instead
 # returns the portal result. This happens in both Postgres and Cockroach.
 
-# 83 = ASCII 'S'
 # After closing, re-parse with the same name to make sure the execute
 # happens on the old statement.
 send
 Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
-Close {"ObjectType": 83, "Name": "s"}
+Close {"ObjectType": "S", "Name": "s"}
 Parse {"Name": "s", "Query": "SELECT 2"}
 Execute {"Portal": "p"}
 Sync
@@ -89,7 +87,7 @@ ReadyForQuery
 
 send
 Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
-Close {"ObjectType": 83, "Name": "s"}
+Close {"ObjectType": "S", "Name": "s"}
 Parse {"Name": "s", "Query": "SELECT 3"}
 Execute {"Portal": "p"}
 Sync
@@ -313,9 +311,9 @@ ReadyForQuery
 {"Type":"PortalSuspended"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
-# Close the empty portal then try to execute it. 80 = 'P'
+# Close the empty portal then try to execute it.
 send
-Close {"ObjectType": 80}
+Close {"ObjectType": "P"}
 Execute
 Sync
 ----
@@ -489,13 +487,12 @@ ReadyForQuery
 
 ## No transaction; small limit
 
-# 83 = ASCII 'S' for Statement
-# 49 = ASCII '1'
+# 'S' for Statement
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s1", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
-Describe {"ObjectType": 83, "Name": "s1"}
-Bind {"PreparedStatement": "s1", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Describe {"ObjectType": "S", "Name": "s1"}
+Bind {"PreparedStatement": "s1", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 1}
 Sync
 ----
@@ -514,13 +511,13 @@ ReadyForQuery
 
 ## No transaction; exact limit
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s2", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
-Describe {"ObjectType": 83, "Name": "s2"}
-Bind {"PreparedStatement": "s2", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Describe {"ObjectType": "S", "Name": "s2"}
+Bind {"PreparedStatement": "s2", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 2}
 Sync
 ----
@@ -540,13 +537,13 @@ ReadyForQuery
 
 ## No transaction; larger limit
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s3", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
-Describe {"ObjectType": 83, "Name": "s3"}
-Bind {"PreparedStatement": "s3", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Describe {"ObjectType": "S", "Name": "s3"}
+Bind {"PreparedStatement": "s3", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 3}
 Sync
 ----
@@ -576,13 +573,13 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s4", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
-Describe {"ObjectType": 83, "Name": "s4"}
-Bind {"PreparedStatement": "s4", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Describe {"ObjectType": "S", "Name": "s4"}
+Bind {"PreparedStatement": "s4", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 1}
 Sync
 ----
@@ -621,13 +618,13 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s5", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
-Describe {"ObjectType": 83, "Name": "s5"}
-Bind {"PreparedStatement": "s5", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Describe {"ObjectType": "S", "Name": "s5"}
+Bind {"PreparedStatement": "s5", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 2}
 Sync
 ----
@@ -667,13 +664,13 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s6", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
-Describe {"ObjectType": 83, "Name": "s6"}
-Bind {"PreparedStatement": "s6", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Describe {"ObjectType": "S", "Name": "s6"}
+Bind {"PreparedStatement": "s6", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 3}
 Sync
 ----
@@ -713,13 +710,13 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s7", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
-Describe {"ObjectType": 83, "Name": "s7"}
-Bind {"PreparedStatement": "s7", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Describe {"ObjectType": "S", "Name": "s7"}
+Bind {"PreparedStatement": "s7", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 1}
 Sync
 ----
@@ -763,13 +760,13 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s8", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
-Describe {"ObjectType": 83, "Name": "s8"}
-Bind {"PreparedStatement": "s8", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Describe {"ObjectType": "S", "Name": "s8"}
+Bind {"PreparedStatement": "s8", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 2}
 Sync
 ----
@@ -814,13 +811,13 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s9", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
-Describe {"ObjectType": 83, "Name": "s9"}
-Bind {"PreparedStatement": "s9", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Describe {"ObjectType": "S", "Name": "s9"}
+Bind {"PreparedStatement": "s9", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 3}
 Sync
 ----
@@ -865,13 +862,13 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s10", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
-Describe {"ObjectType": 83, "Name": "s10"}
-Bind {"PreparedStatement": "s10", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Describe {"ObjectType": "S", "Name": "s10"}
+Bind {"PreparedStatement": "s10", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 1}
 Sync
 ----
