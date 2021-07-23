@@ -1057,8 +1057,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 			},
 		},
 	}
-	tci, _, _ := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, cargs, "cttest", "kv")
+	tci := serverutils.StartNewTestCluster(t, 2, cargs)
 	tc := tci.(*testcluster.TestCluster)
 	defer tc.Stopper().Stop(ctx)
 
@@ -1069,9 +1068,8 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	// Drop the target closedts duration. This was set to testingTargetDuration
-	// above, but this is higher then it needs to be now that cluster and schema
-	// setup is complete.
+	// Drop the target closedts duration in order to speed up the rangefeed
+	// "nudging" once the range loses its lease.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'`)
 
 	n1 := tc.Server(0)
