@@ -104,6 +104,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterType(ctx, n)
 	case *tree.AlterRole:
 		return p.AlterRole(ctx, n)
+	case *tree.AlterRoleSet:
+		return p.AlterRoleSet(ctx, n)
 	case *tree.AlterSequence:
 		return p.AlterSequence(ctx, n)
 	case *tree.CommentOnColumn:
@@ -233,6 +235,7 @@ func init() {
 		&tree.AlterType{},
 		&tree.AlterSequence{},
 		&tree.AlterRole{},
+		&tree.AlterRoleSet{},
 		&tree.CommentOnColumn{},
 		&tree.CommentOnDatabase{},
 		&tree.CommentOnIndex{},
