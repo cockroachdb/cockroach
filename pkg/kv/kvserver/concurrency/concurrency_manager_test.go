@@ -53,7 +53,7 @@ import (
 // The input files use the following DSL:
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [uncertainty-limit=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>]
+// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [max-lock-wait-queue-length=<int>]
 //   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 // sequence     req=<req-name> [eval-kind=<pess|opt|pess-after-opt]
 // finish       req=<req-name>
@@ -154,6 +154,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				waitPolicy := scanWaitPolicy(t, d, false /* required */)
 
+				var maxLockWaitQueueLength int
+				if d.HasArg("max-lock-wait-queue-length") {
+					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
+				}
+
 				// Each roachpb.Request is provided on an indented line.
 				reqs, reqUnions := scanRequests(t, d, c)
 				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
@@ -162,11 +167,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					Txn:       txn,
 					Timestamp: ts,
 					// TODO(nvanbenschoten): test Priority
-					ReadConsistency: readConsistency,
-					WaitPolicy:      waitPolicy,
-					Requests:        reqUnions,
-					LatchSpans:      latchSpans,
-					LockSpans:       lockSpans,
+					ReadConsistency:        readConsistency,
+					WaitPolicy:             waitPolicy,
+					MaxLockWaitQueueLength: maxLockWaitQueueLength,
+					Requests:               reqUnions,
+					LatchSpans:             latchSpans,
+					LockSpans:              lockSpans,
 				}
 				return ""
 
