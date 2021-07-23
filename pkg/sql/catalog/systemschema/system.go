@@ -1798,9 +1798,7 @@ var (
 		NextMutationID: 1,
 	})
 
-	// MigrationsTable is the descriptor for the migrations table. It stores facts
-	// about the completion state of long-running migrations. It is used to
-	// prevent migrations from running again after they have been completed.
+	// JoinTokensTable is the descriptor for the join tokens table.
 	JoinTokensTable = makeTable(descpb.TableDescriptor{
 		Name:                    "join_tokens",
 		ID:                      keys.JoinTokensTableID,
