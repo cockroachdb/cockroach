@@ -1014,7 +1014,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	var scratchRangeID int64 // accessed atomically
 	// nudgeSeen will be set if a request filter sees the signature of the
 	// rangefeed nudger, as proof that the expected mechanism kicked in.
-	var nudgeSeen bool
+	var nudgeSeen int64 // accessed atomically
 	// At some point, the test will require full control over the requests
 	// evaluating on the scratch range.
 	var rejectExtraneousRequests int64 // accessed atomically
@@ -1045,10 +1045,11 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 						return nil
 					}
 					if ba.IsSingleLeaseInfoRequest() {
-						nudgeSeen = true
+						atomic.StoreInt64(&nudgeSeen, 1)
 						return nil
 					}
-					if ba.IsLeaseRequest() {
+					nudged := atomic.LoadInt64(&nudgeSeen)
+					if ba.IsLeaseRequest() && (nudged == 1) {
 						return nil
 					}
 					log.Infof(ctx, "test rejecting request: %s", ba)
@@ -1142,7 +1143,8 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	log.Infof(ctx, "test waiting for another checkpoint")
 	ts2 := n1.Clock().Now()
 	waitForCheckpoint(ts2)
-	require.True(t, nudgeSeen)
+	nudged := atomic.LoadInt64(&nudgeSeen)
+	require.Equal(t, int64(1), nudged)
 
 	// Check that n2 renewed its lease, like the test intended.
 	li, _, err := tc.FindRangeLeaseEx(ctx, desc, &n2Target)
