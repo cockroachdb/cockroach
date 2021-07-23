@@ -194,6 +194,12 @@ func (ba *BatchRequest) IsSingleTransferLeaseRequest() bool {
 	return ba.isSingleRequestWithMethod(TransferLease)
 }
 
+// IsSingleLeaseInfoRequest returns true iff the batch contains a single
+// request, and that request is a LeaseInfoRequest.
+func (ba *BatchRequest) IsSingleLeaseInfoRequest() bool {
+	return ba.isSingleRequestWithMethod(LeaseInfo)
+}
+
 // IsSinglePushTxnRequest returns true iff the batch contains a single
 // request, and that request is a PushTxn.
 func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
