@@ -1,0 +1,16 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, b INT)
+
+# EXPLAIN (SHAPE) hides span information and estimated row counts.
+
+query T
+EXPLAIN (SHAPE) SELECT b FROM a WHERE a = 5
+----
+distribution: local
+vectorized: true
+·
+• scan
+	table: a@primary
+	spans: 1 span
