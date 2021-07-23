@@ -60,6 +60,9 @@ type SemaContext struct {
 	// name of a table given its ID.
 	TableNameResolver QualifiedNameResolver
 
+	// IntervalStyleEnabled determines whether IntervalStyle is enabled.
+	IntervalStyleEnabled bool
+
 	Properties SemaProperties
 }
 
@@ -418,12 +421,20 @@ func (expr *CaseExpr) TypeCheck(
 // is false, it also checks that the cast has VolatilityImmutable.
 //
 // On success, any relevant telemetry counters are incremented.
-func resolveCast(context string, castFrom, castTo *types.T, allowStable bool) error {
+func resolveCast(
+	context string, castFrom, castTo *types.T, allowStable bool, intervalStyleEnabled bool,
+) error {
 	toFamily := castTo.Family()
 	fromFamily := castFrom.Family()
 	switch {
 	case toFamily == types.ArrayFamily && fromFamily == types.ArrayFamily:
-		err := resolveCast(context, castFrom.ArrayContents(), castTo.ArrayContents(), allowStable)
+		err := resolveCast(
+			context,
+			castFrom.ArrayContents(),
+			castTo.ArrayContents(),
+			allowStable,
+			intervalStyleEnabled,
+		)
 		if err != nil {
 			return err
 		}
@@ -440,7 +451,7 @@ func resolveCast(context string, castFrom, castTo *types.T, allowStable bool) er
 		return nil
 
 	default:
-		cast := lookupCast(fromFamily, toFamily)
+		cast := lookupCast(fromFamily, toFamily, intervalStyleEnabled)
 		if cast == nil {
 			return pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, castTo)
 		}
@@ -520,7 +531,7 @@ func (expr *CastExpr) TypeCheck(
 		allowStable = false
 		context = semaCtx.Properties.required.context
 	}
-	err = resolveCast(context, castFrom, exprType, allowStable)
+	err = resolveCast(context, castFrom, exprType, allowStable, semaCtx != nil && semaCtx.IntervalStyleEnabled)
 	if err != nil {
 		return nil, err
 	}
