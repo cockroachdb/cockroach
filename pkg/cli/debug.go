@@ -1427,6 +1427,9 @@ func init() {
 	debugDoctorCmd.AddCommand(doctorExamineCmd, doctorRecreateCmd, doctorExamineFallbackClusterCmd, doctorExamineFallbackZipDirCmd)
 	DebugCmd.AddCommand(debugDoctorCmd)
 
+	debugDetectiveCmd.AddCommand(detectiveRecreateCmd)
+	DebugCmd.AddCommand(debugDetectiveCmd)
+
 	DebugCmd.AddCommand(debugJobTraceFromClusterCmd)
 
 	f := debugSyncBenchCmd.Flags()
