@@ -393,6 +393,7 @@ func runSchemaChangeWithOperations(
 
 	wg.Wait() // for schema change to complete.
 
+	fmt.Println(sqltestutils.CheckTableKeyCount(ctx, kvDB, keyMultiple, maxValue+numInserts))
 	// Verify the number of keys left behind in the table to validate schema
 	// change operations. This is wrapped in SucceedsSoon to handle cases where
 	// dropped indexes are expected to be GC'ed immediately after the schema
@@ -527,7 +528,8 @@ func TestRaceWithBackfill(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+SET experimental_enable_hash_sharded_indexes=true;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'), n DATE DEFAULT now());
 CREATE UNIQUE INDEX vidx ON t.test (v);
 `); err != nil {
 		t.Fatal(err)
@@ -603,6 +605,18 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"CREATE INDEX bar ON t.test(k) STORING (v)",
 		maxValue,
 		4,
+		initBackfillNotification(),
+		true,
+	)
+
+	// Add index.
+	runSchemaChangeWithOperations(
+		t,
+		sqlDB,
+		kvDB,
+		"CREATE INDEX zoop ON t.test(n ASC) USING HASH WITH BUCKET_COUNT = 32",
+		maxValue,
+		5,
 		initBackfillNotification(),
 		true,
 	)
