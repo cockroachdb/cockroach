@@ -148,6 +148,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/protoreflect",
         "//pkg/sql/row",
+        "//pkg/sql/rowenc",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/startupmigrations",
