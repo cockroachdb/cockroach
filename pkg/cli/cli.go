@@ -272,7 +272,7 @@ func isWorkloadCmd(cmd *cobra.Command) bool {
 
 // isDemoCmd returns true iff cmd is a sub-command of `demo`.
 func isDemoCmd(cmd *cobra.Command) bool {
-	return hasParentCmd(cmd, demoCmd)
+	return hasParentCmd(cmd, demoCmd) || hasParentCmd(cmd, debugDetectiveCmd)
 }
 
 // hasParentCmd returns true iff cmd is a sub-command of refParent.
