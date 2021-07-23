@@ -61,5 +61,6 @@ RUN rm -rf /tmp/* /var/lib/apt/lists/*
 RUN ln -s /usr/bin/bazel-4.0.0 /usr/bin/bazel
 
 COPY entrypoint.sh /usr/bin
+COPY autom4te /usr/local/sbin
 ENTRYPOINT ["/usr/bin/entrypoint.sh"]
 CMD ["/usr/bin/bash"]

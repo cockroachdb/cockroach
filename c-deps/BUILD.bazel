@@ -124,6 +124,9 @@ configure_make(
     name = "libkrb5",
     autoreconf = True,
     autoreconf_directory = "src",
+    autoreconf_env_vars = {
+        "AUTOM4TE": "autom4te",
+    },
     configure_command = "src/configure",
     configure_in_place = True,
     configure_options = [
