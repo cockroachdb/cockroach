@@ -202,6 +202,8 @@ type RunOptions struct {
 	// process in one go. This number should be lower than intent resolver default to
 	// prevent further splitting in resolver.
 	MaxTxnsPerIntentCleanupBatch int64
+	// IntentCleanupBatchTimeout is the timeout for processing a batch of intents. 0 to disable.
+	IntentCleanupBatchTimeout time.Duration
 }
 
 // CleanupIntentsFunc synchronously resolves the supplied intents
@@ -252,6 +254,7 @@ func Run(
 			maxIntentsPerIntentCleanupBatch:        options.MaxIntentsPerIntentCleanupBatch,
 			maxIntentKeyBytesPerIntentCleanupBatch: options.MaxIntentKeyBytesPerIntentCleanupBatch,
 			maxTxnsPerIntentCleanupBatch:           options.MaxTxnsPerIntentCleanupBatch,
+			batchTimeout:                           options.IntentCleanupBatchTimeout,
 		}, cleanupIntentsFn, &info)
 	if err != nil {
 		return Info{}, err
@@ -439,6 +442,7 @@ type intentBatcherOptions struct {
 	maxIntentsPerIntentCleanupBatch        int64
 	maxIntentKeyBytesPerIntentCleanupBatch int64
 	maxTxnsPerIntentCleanupBatch           int64
+	batchTimeout                           time.Duration
 }
 
 // newIntentBatcher initializes an intentBatcher. Batcher will take ownership of
@@ -504,11 +508,11 @@ func (b *intentBatcher) maybeFlushPendingIntents(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	// FIXME(erikgrinaker): We should have a timeout for suboperations here now
-	// that the overall GC timeout has been increased, to make sure we'll make
-	// progress even with range unavailability. That's probably best done once
-	// batching is implemented, so we'll wait for that:
-	// https://github.com/cockroachdb/cockroach/pull/65847
+	if b.options.batchTimeout > 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, b.options.batchTimeout)
+		defer cancel()
+	}
 	err := b.cleanupIntentsFn(ctx, b.pendingIntents)
 	if err == nil {
 		// IntentTxns and PushTxn will be equal here, since
