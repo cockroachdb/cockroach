@@ -88,6 +88,12 @@ var NoFKs = fkHandler{resolver: fkResolver{
 	tableNameToDesc: make(map[string]*tabledesc.Mutable),
 }}
 
+func makeSemaCtxWithoutTypeResolver(semaCtx *tree.SemaContext) *tree.SemaContext {
+	semaCtxCopy := *semaCtx
+	semaCtxCopy.TypeResolver = nil
+	return &semaCtxCopy
+}
+
 // MakeSimpleTableDescriptor creates a Mutable from a CreateTable parse
 // node without the full machinery. Many parts of the syntax are unsupported
 // (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
