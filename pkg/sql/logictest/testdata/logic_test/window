@@ -3932,3 +3932,18 @@ SELECT k, first_value(k) OVER (ORDER BY v GROUPS BETWEEN 0 PRECEDING AND 2 PRECE
 9   NULL
 10  NULL
 11  NULL
+
+# Regression test for incorrectly choosing NULL values as the minimum when
+# EXCLUDE clause is non-default (#68024).
+query I rowsort
+SELECT min(x)
+OVER
+(
+  ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  EXCLUDE CURRENT ROW
+)
+FROM (VALUES (NULL::INT), (NULL::INT), (1)) v(x);
+----
+1
+1
+NULL
