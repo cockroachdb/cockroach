@@ -1,13 +1,12 @@
 # This test verifies that we're correctly typing placeholder arguments
 # in prepared statements.
 
-# 83 = ASCII 'S' for Statement
-# 50 = ASCII '2'
+# 'S' for Statement
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s1", "Query": "select n::int4 from generate_series(0,$1::int4) n"}
-Describe {"ObjectType": 83, "Name": "s1"}
-Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [[50]]}
+Describe {"ObjectType": "S", "Name": "s1"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"2"}]}
 Execute {"Portal": "p1"}
 Sync
 ----
@@ -26,13 +25,12 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
-# 83 = ASCII 'S' for Statement
-# 50 = ASCII '2'
+# 'S' for Statement
 # ParameterFormatCodes = [0] for text format
 send
 Parse {"Name": "s3", "Query": "select n::int4, lower($1) from generate_series(0,$1::int) as n"}
-Describe {"ObjectType": 83, "Name": "s3"}
-Bind {"DestinationPortal": "p3", "PreparedStatement": "s3", "ParameterFormatCodes": [0], "Parameters": [[50]]}
+Describe {"ObjectType": "S", "Name": "s3"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "s3", "ParameterFormatCodes": [0], "Parameters": [{"text":"2"}]}
 Execute {"Portal": "p3"}
 Sync
 ----
@@ -69,10 +67,10 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 send
 Parse {"Name": "s4", "Query": "UPDATE tab1 SET c = array(select unnest(c::text[]) except select unnest ($2::text[]) union select unnest($3::text[])), b = $1 WHERE a = $4"}
-Describe {"ObjectType": 83, "Name": "s4"}
+Describe {"ObjectType": "S", "Name": "s4"}
 Sync
 ----
 
@@ -85,10 +83,10 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 send
 Parse {"Name": "s5", "Query": "SELECT $2 > 0"}
-Describe {"ObjectType": 83, "Name": "s5"}
+Describe {"ObjectType": "S", "Name": "s5"}
 Sync
 ----
 
@@ -100,10 +98,10 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
-# 83 = ASCII 'S' for Statement
+# 'S' for Statement
 send
 Parse {"Name": "s6", "Query": "SELECT 3 + CASE (4) WHEN 4 THEN $1 END"}
-Describe {"ObjectType": 83, "Name": "s6"}
+Describe {"ObjectType": "S", "Name": "s6"}
 Sync
 ----
 
