@@ -1691,14 +1691,14 @@ project
  │    │    ├── columns: c.k:1!null b.k:8!null array:22 canary:25!null
  │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  │    │    ├── key: (8)
- │    │    ├── fd: ()-->(22,25), (1)==(8), (8)==(1)
+ │    │    ├── fd: ()-->(25), (8)-->(22), (1)==(8), (8)==(1)
  │    │    ├── scan a [as=c]
  │    │    │    ├── columns: c.k:1!null
  │    │    │    └── key: (1)
  │    │    ├── project
  │    │    │    ├── columns: canary:25!null array:22 b.k:8!null
  │    │    │    ├── key: (8)
- │    │    │    ├── fd: ()-->(22,25)
+ │    │    │    ├── fd: ()-->(25), (8)-->(22)
  │    │    │    ├── scan a [as=b]
  │    │    │    │    ├── columns: b.k:8!null
  │    │    │    │    └── key: (8)
@@ -1796,7 +1796,6 @@ SELECT ARRAY(SELECT k FROM a) FROM a
 ----
 project
  ├── columns: array:15
- ├── fd: ()-->(15)
  ├── scan a
  └── projections
       └── array-flatten [as=array:15, subquery]
