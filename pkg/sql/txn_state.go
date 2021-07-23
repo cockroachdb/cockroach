@@ -164,9 +164,11 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	var txnCtx context.Context
 	var sp *tracing.Span
-	if alreadyRecording || ts.testingForceRealTracingSpans {
+	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
+	if alreadyRecording || ts.testingForceRealTracingSpans || duration > 0 {
 		// WithForceRealSpan is used to support the use of session tracing,
-		// which will start recording on this span.
+		// which will start recording on this span. Similarly, it enables the
+		// tracing of the txns that exceed the duration threshold.
 		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer, tracing.WithForceRealSpan())
 	} else {
 		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer)
@@ -175,7 +177,6 @@ func (ts *txnState) resetForNewSQLTxn(
 		sp.SetTag("implicit", "true")
 	}
 
-	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
 	if !alreadyRecording && (duration > 0) {
 		sp.SetVerbose(true)
 		ts.recordingThreshold = duration
