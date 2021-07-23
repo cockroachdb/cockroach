@@ -24,6 +24,11 @@ type Flags struct {
 	// query (e.g. spans). Used internally for the plan visible in the UI.
 	// If HideValues is true, then Verbose must be false.
 	HideValues bool
+	// If OnlyShape is true, we hide fields that could be different between 2
+	// plans that otherwise have exactly the same shape, like estimated row count.
+	// This is used for EXPLAIN(SHAPE), which is used for the statement-bundle
+	// debug tool.
+	OnlyShape bool
 
 	// Redaction control (for testing purposes).
 	Redact RedactFlags
@@ -68,6 +73,11 @@ func MakeFlags(options *tree.ExplainOptions) Flags {
 	if options.Flags[tree.ExplainFlagTypes] {
 		f.Verbose = true
 		f.ShowTypes = true
+	}
+	if options.Flags[tree.ExplainFlagShape] {
+		f.HideValues = true
+		f.OnlyShape = true
+		f.Redact = RedactAll
 	}
 	return f
 }
