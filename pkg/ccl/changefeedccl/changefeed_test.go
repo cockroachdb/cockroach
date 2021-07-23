@@ -4011,7 +4011,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 	rnd, _ := randutil.NewPseudoRand()
 
-	var maxCheckopointSize int64
+	var maxCheckpointSize int64
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
@@ -4055,7 +4055,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		changefeedbase.FrontierCheckpointFrequency.Override(
 			context.Background(), &f.Server().ClusterSettings().SV, 10*time.Millisecond)
 		changefeedbase.FrontierCheckpointMaxBytes.Override(
-			context.Background(), &f.Server().ClusterSettings().SV, maxCheckopointSize)
+			context.Background(), &f.Server().ClusterSettings().SV, maxCheckpointSize)
 
 		registry := f.Server().JobRegistry().(*jobs.Registry)
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms'`)
@@ -4138,7 +4138,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 	// TODO(ssd): Tenant testing disabled because of use of DB()
 	for _, sz := range []int64{100 << 20, 100} {
-		maxCheckopointSize = sz
+		maxCheckpointSize = sz
 		t.Run(fmt.Sprintf("enterprise-limit=%s", humanize.Bytes(uint64(sz))), enterpriseTest(testFn, feedTestNoTenants))
 		t.Run(fmt.Sprintf("cloudstorage-limit=%s", humanize.Bytes(uint64(sz))), cloudStorageTest(testFn, feedTestNoTenants))
 		t.Run(fmt.Sprintf("kafka-limit=%s", humanize.Bytes(uint64(sz))), kafkaTest(testFn, feedTestNoTenants))
@@ -4195,4 +4195,36 @@ func TestCheckpointFrequency(t *testing.T) {
 	js.checkpointCompleted(ctx, 42*time.Second)
 	require.Equal(t, completionTime, js.lastProgressUpdate)
 	require.False(t, js.progressUpdatesSkipped)
+}
+
+func TestChangefeedOrderingWithErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated`)
+		webhookFoo := foo.(*webhookFeed)
+		// retry, then fail, then restart changefeed and successfully send messages
+		webhookFoo.mockSink.SetStatusCodes(append(repeatStatusCode(
+			http.StatusInternalServerError,
+			defaultRetryConfig().MaxRetries+1),
+			[]int{http.StatusOK, http.StatusOK, http.StatusOK}...))
+		defer closeFeed(t, foo)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (1, 'b')`)
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		assertPayloadsPerKeyOrderedStripTs(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "b"}}`,
+			`foo: [1]->{"after": null}`,
+		})
+	}
+
+	// only used for webhook sink for now since it's the only testfeed where
+	// we can control the ordering of errors
+	t.Run(`webhook`, webhookTest(testFn))
 }
