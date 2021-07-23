@@ -2602,55 +2602,69 @@ func deriveWithUses(r opt.Expr) props.WithUsesMap {
 // An example of a composite-sensitive expression is `d::string`, where d is a
 // DECIMAL.
 //
+// A formal definition:
+//   Let (c1,c2,...) be the outer columns of the scalar expression. Let
+//   f(x1,x2,..) be the result of the scalar expression for the given outer
+//   column values. The expression is composite insensitive if, for any two
+//   sets of values (x1,x2,...) and (y1,y2,...)
+//      (x1=y1 AND x2=y2 AND ...) => f(x1,x2,...) = f(y1,y2,...)
+//
+//   Note that this doesn't mean that the final results are always *identical*
+//   just that they are logically equal.
+//
 // This property is used to determine when a scalar expression can be copied,
 // with outer column variable references changed to refer to other columns that
 // are known to be equal to the original columns.
 func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
-	outerCols := getOuterCols(e)
-	var compositeOuterCols opt.ColSet
-	outerCols.ForEach(func(col opt.ColumnID) {
-		if colinfo.HasCompositeKeyEncoding(md.ColumnMeta(col).Type) {
-			compositeOuterCols.Add(col)
-		}
-	})
-	if compositeOuterCols.Empty() {
-		// Fast path: none of the outer columns are composite.
-		return false
-	}
-
-	var canBeSensitive func(e opt.Expr) bool
-	canBeSensitive = func(e opt.Expr) bool {
+	// check is a recursive function which returns the following:
+	//  - isCompositeInsensitive as defined above.
+	//  - isCompositeIndependent is a stronger property, which says that for equal
+	//    outer column values, the expression results are always *identical* (not
+	//    just logically equal).
+	//
+	// A composite-insensitive expression with a non-composite result type is by
+	// definition also composite-independent.
+	//
+	// Any purely scalar expression which depends only on non-composite outer
+	// columns is composite-independent.
+	var check func(e opt.Expr) (isCompositeInsensitive, isCompositeIdentical bool)
+	check = func(e opt.Expr) (isCompositeInsensitive, isCompositeIdentical bool) {
 		if _, ok := e.(RelExpr); ok {
 			// Not a purely scalar expression.
-			return true
+			return false, false
 		}
-		if !getOuterCols(e).Intersects(compositeOuterCols) {
-			// None of the outer columns of this sub-expression are composite.
-			return false
+		if v, ok := e.(*VariableExpr); ok {
+			// Outer column references are our base case. They are always
+			// composite-insensitive. If they are not of composite type, they are also
+			// composite-identical.
+			return true, !colinfo.HasCompositeKeyEncoding(v.Typ)
 		}
-		// Check the inputs to the operator. Together, the following conditions are
-		// sufficient to prove that this expression is not sensitive:
-		//  1. None of the inputs are sensitive to composite outer columns.
-		//     Otherwise, the operator can receive different inputs for logically
-		//     equal outer values and thus produce different outputs.
-		//  2. The operator is marked as being always insensitive, or none of the
-		//     input data types are composite.
-		checkTypes := !opt.IsCompositeInsensitiveOp(e)
+
+		allChildrenCompositeIdentical := true
 		for i, n := 0, e.ChildCount(); i < n; i++ {
-			if canBeSensitive(e.Child(i)) {
-				// Condition 1 not satisfied.
-				return true
+			childCompositeInsensitive, childCompositeIdentical := check(e.Child(i))
+			if !childCompositeInsensitive {
+				// One of our inputs is composite-sensitive; all bets are off.
+				return false, false
 			}
-			if checkTypes {
-				// Note that the canBeSensitive() call above always returns true for
-				// relational expressions, so we are sure that the child is scalar.
-				if child := e.Child(i).(opt.ScalarExpr); colinfo.HasCompositeKeyEncoding(child.DataType()) {
-					// Condition 2 not satisfied.
-					return true
-				}
-			}
+			allChildrenCompositeIdentical = allChildrenCompositeIdentical && childCompositeIdentical
 		}
-		return false
+
+		if allChildrenCompositeIdentical {
+			// It doesn't matter what this operator does - its inputs are always
+			// identical so the output will be the same.
+			return true, true
+		}
+
+		if opt.IsCompositeInsensitiveOp(e) {
+			// The operator is known to be composite-insensitive. If its result is a
+			// non-composite type, it is also composite-identical.
+			return true, !colinfo.HasCompositeKeyEncoding(e.(opt.ScalarExpr).DataType())
+		}
+
+		return false, false
 	}
-	return canBeSensitive(e)
+
+	isCompositeInsensitive, _ := check(e)
+	return !isCompositeInsensitive
 }
