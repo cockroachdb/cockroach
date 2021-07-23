@@ -493,3 +493,11 @@ SET backslash_quote = 'off';
 
 statement error invalid value for parameter "backslash_quote"
 SET backslash_quote = '123';
+
+# Regression test for not being able to set sql.trace.txn.enable_threshold
+# cluster setting to non-zero value (#68005).
+statement ok
+SET cluster setting sql.trace.txn.enable_threshold='1s'
+
+statement ok
+SET cluster setting sql.trace.txn.enable_threshold='0s'
