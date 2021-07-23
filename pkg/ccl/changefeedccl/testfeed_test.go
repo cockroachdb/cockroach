@@ -1104,7 +1104,11 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 	}
 
 	tg := newTeeGroup()
-	feedCh := make(chan *sarama.ProducerMessage)
+	// feedCh must have some buffer to hold the messages.
+	// basically, sarama is fully async, so we have to be async as well; otherwise, tests deadlock.
+	// Fixed sized buffer is probably okay at this point, but we should probably
+	// have  a proper fix.
+	feedCh := make(chan *sarama.ProducerMessage, 1024)
 	wrapSink := func(s Sink) Sink {
 		return &fakeKafkaSink{
 			Sink:   s,
