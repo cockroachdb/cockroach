@@ -39,6 +39,12 @@ const (
 	gcQueueTimerDuration = 1 * time.Second
 	// gcQueueTimeout is the timeout for a single GC run.
 	gcQueueTimeout = 10 * time.Minute
+	// gcQueueIntentBatchTimeout is the timeout for resolving a single batch of
+	// intents. It is used to ensure progress in the face of unavailable ranges
+	// (since intent resolution may touch other ranges), but can prevent progress
+	// for ranged intent resolution if it exceeds the timeout.
+	gcQueueIntentBatchTimeout = 2 * time.Minute
+
 	// gcQueueIntentCooldownDuration is the duration to wait between GC attempts
 	// of the same range when triggered solely by intents. This is to prevent
 	// continually spinning on intents that belong to active transactions, which
@@ -519,6 +525,7 @@ func (gcq *gcQueue) process(
 			MaxIntentsPerIntentCleanupBatch:        maxIntentsPerCleanupBatch,
 			MaxIntentKeyBytesPerIntentCleanupBatch: maxIntentKeyBytesPerCleanupBatch,
 			MaxTxnsPerIntentCleanupBatch:           intentresolver.MaxTxnsPerIntentCleanupBatch,
+			IntentCleanupBatchTimeout:              gcQueueIntentBatchTimeout,
 		},
 		*zone.GC,
 		&replicaGCer{repl: repl},
