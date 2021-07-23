@@ -204,7 +204,8 @@ query TTTTIT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
 ----
 schema_name  table_name                       type   owner  estimated_row_count  locality
-public       namespace                        table  NULL   0                    NULL
+public       descriptor                       table  NULL   0                    NULL
+public       database_role_settings           table  NULL   0                    NULL
 public       transaction_statistics           table  NULL   0                    NULL
 public       statement_statistics             table  NULL   0                    NULL
 public       join_tokens                      table  NULL   0                    NULL
@@ -217,6 +218,7 @@ public       statement_bundle_chunks          table  NULL   0                   
 public       role_options                     table  NULL   0                    NULL
 public       protected_ts_records             table  NULL   0                    NULL
 public       protected_ts_meta                table  NULL   0                    NULL
+public       namespace                        table  NULL   0                    NULL
 public       reports_meta                     table  NULL   0                    NULL
 public       replication_stats                table  NULL   0                    NULL
 public       replication_critical_localities  table  NULL   0                    NULL
@@ -235,13 +237,13 @@ public       tenants                          table  NULL   0                   
 public       settings                         table  NULL   0                    NULL
 public       zones                            table  NULL   0                    NULL
 public       users                            table  NULL   0                    NULL
-public       descriptor                       table  NULL   0                    NULL
 
 query TTTTITT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 schema_name  table_name                       type   owner  estimated_row_count  locality  comment
-public       namespace                        table  NULL   0                    NULL      ·
+public       descriptor                       table  NULL   0                    NULL      ·
+public       database_role_settings           table  NULL   0                    NULL      ·
 public       transaction_statistics           table  NULL   0                    NULL      ·
 public       statement_statistics             table  NULL   0                    NULL      ·
 public       join_tokens                      table  NULL   0                    NULL      ·
@@ -254,6 +256,7 @@ public       statement_bundle_chunks          table  NULL   0                   
 public       role_options                     table  NULL   0                    NULL      ·
 public       protected_ts_records             table  NULL   0                    NULL      ·
 public       protected_ts_meta                table  NULL   0                    NULL      ·
+public       namespace                        table  NULL   0                    NULL      ·
 public       reports_meta                     table  NULL   0                    NULL      ·
 public       replication_stats                table  NULL   0                    NULL      ·
 public       replication_critical_localities  table  NULL   0                    NULL      ·
@@ -272,7 +275,6 @@ public       tenants                          table  NULL   0                   
 public       settings                         table  NULL   0                    NULL      ·
 public       zones                            table  NULL   0                    NULL      ·
 public       users                            table  NULL   0                    NULL      ·
-public       descriptor                       table  NULL   0                    NULL      ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries

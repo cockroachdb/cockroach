@@ -352,6 +352,7 @@ go_library(
         "//pkg/sql/sqlfsm",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqlstats/sslocal",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/sqlutil",

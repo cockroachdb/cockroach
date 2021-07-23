@@ -273,8 +273,8 @@ func isTemporarySchema(name string) bool {
 // But doing so turned problematic and the tests pass only by also
 // disabling caching of system.eventlog, system.rangelog, and
 // system.users. For now we're sticking to disabling caching of
-// all system descriptors except role_members, role_options, and users
-// (i.e., the ones used during authn/authz flows).
+// all system descriptors except role_members, role_options, users, and
+// database_role_settings (i.e., the ones used during authn/authz flows).
 // TODO (lucy): Reevaluate the above. We have many more system tables now and
 // should be able to lease most of them.
 var (
@@ -284,6 +284,7 @@ var (
 		systemschema.UsersTable.GetName(),
 		systemschema.JobsTable.GetName(),
 		systemschema.EventLogTable.GetName(),
+		systemschema.DatabaseRoleSettingsTable.GetName(),
 	}
 	allowedCachedSystemTableNameRE = regexp.MustCompile(fmt.Sprintf(
 		"^%s$", strings.Join(allowedCachedSystemTables, "|"),
