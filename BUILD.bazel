@@ -114,6 +114,8 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/schemachanger/scop/mutation_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/validation_visitor_generated.go
 # gazelle:exclude pkg/util/log/channel/channel_generated.go
+# gazelle:exclude pkg/util/log/eventpb/eventlog_channels_generated.go
+# gazelle:exclude pkg/util/log/eventpb/json_encode_generated.go
 # gazelle:exclude pkg/util/log/log_channels_generated.go
 # gazelle:exclude pkg/util/log/severity/severity_generated.go
 # gazelle:exclude pkg/util/timeutil/lowercase_timezones_generated.go

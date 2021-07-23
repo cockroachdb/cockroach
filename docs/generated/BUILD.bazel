@@ -1,3 +1,5 @@
+load("//pkg/util/log/eventpb:PROTOS.bzl", _EVENTPB_PROTO_LOCATIONS = "EVENTPB_PROTO_LOCATIONS")
+
 genrule(
     name = "gen-logging-md",
     srcs = [
@@ -11,4 +13,51 @@ genrule(
     exec_tools = [
         "//pkg/util/log/gen",
     ],
+)
+
+genrule(
+    name = "gen-logsinks-md",
+    srcs = [
+        "//pkg/util/log/logconfig:config.go",
+    ],
+    outs = ["logsinks.md"],
+    cmd = """
+    $(location //pkg/util/log/logconfig:gen) < $(location //pkg/util/log/logconfig:config.go) > $(location logsinks.md)
+    """,
+    exec_tools = [
+        "//pkg/util/log/logconfig:gen",
+    ],
+)
+
+genrule(
+    name = "gen-eventlog-md",
+    srcs = [
+        "//pkg/util/log/eventpb:cluster_events.proto",
+        "//pkg/util/log/eventpb:ddl_events.proto",
+        "//pkg/util/log/eventpb:events.proto",
+        "//pkg/util/log/eventpb:health_events.proto",
+        "//pkg/util/log/eventpb:job_events.proto",
+        "//pkg/util/log/eventpb:misc_sql_events.proto",
+        "//pkg/util/log/eventpb:privilege_events.proto",
+        "//pkg/util/log/eventpb:role_events.proto",
+        "//pkg/util/log/eventpb:session_events.proto",
+        "//pkg/util/log/eventpb:sql_audit_events.proto",
+        "//pkg/util/log/eventpb:zone_events.proto",
+    ],
+    outs = ["eventlog.md"],
+    cmd = """
+    $(location //pkg/util/log/eventpb:gen) eventlog.md \
+        {} \
+        >$(location eventlog.md)
+    """.format(_EVENTPB_PROTO_LOCATIONS),
+    exec_tools = [
+        "//pkg/util/log/eventpb:gen",
+    ],
+)
+
+genrule(
+    name = "gen-logformats-md",
+    outs = ["logformats.md"],
+    cmd = "$(location //pkg/cmd/docgen) logformats $(location logformats.md)",
+    exec_tools = ["//pkg/cmd/docgen"],
 )
