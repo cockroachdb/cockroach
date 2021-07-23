@@ -732,6 +732,7 @@ func init() {
 		doctorExamineClusterCmd,
 		doctorExamineFallbackClusterCmd,
 		doctorRecreateClusterCmd,
+		statementBundleRecreateCmd,
 		lsNodesCmd,
 		statusNodeCmd,
 	}
@@ -793,6 +794,7 @@ func init() {
 			sqlShellCmd,
 			genSettingsListCmd,
 			demoCmd,
+			statementBundleRecreateCmd,
 			debugListFilesCmd,
 			debugJobTraceFromClusterCmd,
 		},

@@ -25,6 +25,7 @@ go_library(
         "decode.go",
         "demo.go",
         "demo_telemetry.go",
+        "detective.go",
         "doctor.go",
         "error.go",
         "examples.go",
