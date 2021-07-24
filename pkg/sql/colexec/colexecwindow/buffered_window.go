@@ -15,6 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -54,6 +55,7 @@ func newBufferedWindowOperator(
 			outputTypes:  outputTypes,
 			diskAcc:      diskAcc,
 			outputColIdx: outputColIdx,
+			outputColTyp: outputColType,
 		},
 		windower: windower,
 	}
@@ -155,6 +157,7 @@ type windowInitFields struct {
 	outputTypes  []*types.T
 	diskAcc      *mon.BoundAccount
 	outputColIdx int
+	outputColTyp *types.T
 }
 
 // bufferedWindowOp extracts common fields for the various window operators
@@ -295,6 +298,14 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 				var output coldata.Batch
 				if output, err = b.bufferQueue.Dequeue(b.Ctx); err != nil {
 					colexecerror.InternalError(err)
+				}
+				// The spilling queue sets 'maxSetLength' to the length of the batch for
+				// bytes-like types, so we have to reset it so that `Set` can be used.
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(b.outputColTyp.Family()) {
+				case types.BytesFamily:
+					output.ColVec(b.outputColIdx).Bytes().Truncate(b.processingIdx)
+				case types.JsonFamily:
+					output.ColVec(b.outputColIdx).JSON().Truncate(b.processingIdx)
 				}
 				// Set all the window output values that remain unset, then emit this
 				// batch. Note that because the beginning of the next partition will

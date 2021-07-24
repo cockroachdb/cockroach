@@ -300,9 +300,8 @@ func (w *nthValueBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 			continue
 		}
 		col := vec.Bytes()
-		// We have to use CopySlice here because the column already has a length of
-		// n elements, and Set cannot set values before the last one.
-		outputCol.CopySlice(col, i, idx, idx+1)
+		val := col.Get(idx)
+		outputCol.Set(i, val)
 	}
 }
 
@@ -739,9 +738,8 @@ func (w *nthValueJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 			continue
 		}
 		col := vec.JSON()
-		// We have to use CopySlice here because the column already has a length of
-		// n elements, and Set cannot set values before the last one.
-		outputCol.CopySlice(col, i, idx, idx+1)
+		val := col.Get(idx)
+		outputCol.Set(i, val)
 	}
 }
 

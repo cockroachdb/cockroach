@@ -187,17 +187,11 @@ func (w *_OP_NAME_TYPEWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 			continue
 		}
 		col := vec.TemplateType()
-		// {{if .IsBytesLike}}
-		// We have to use CopySlice here because the column already has a length of
-		// n elements, and Set cannot set values before the last one.
-		outputCol.CopySlice(col, i, idx, idx+1)
-		// {{else}}
 		val := col.Get(idx)
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		outputCol.Set(i, val)
-		// {{end}}
 	}
 }
 
