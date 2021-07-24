@@ -304,6 +304,24 @@ message WriteIntentError {
   // which were discovered under old leases to the lock table.
   optional int64 lease_sequence = 3 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "LeaseSequence"];
+  enum Reason {
+    // The reason for the WriteIntentError is unspecified. This will
+    // always be the case for errors returned from MVCC.
+    REASON_UNSPECIFIED = 0;
+    // The request used an Error wait policy because it did not want to
+    // wait on locks and it encountered a conflicting lock.
+    REASON_WAIT_POLICY = 1;
+    // The request used a Block wait policy and specified a lock timeout
+    // which expired while waiting for a conflicting lock.
+    REASON_LOCK_TIMEOUT = 2;
+    // The request attempted to wait in a lock wait-queue whose length was
+    // already equal to or exceeding the configured maximum.
+    REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED = 3;
+  }
+  // The reason for the error. Applies to WriteIntentErrors that are
+  // returned from the concurrency manager (the second use described
+  // above).
+  optional Reason reason = 4 [(gogoproto.nullable) = false];
 }
 
 // A WriteTooOldError indicates that a write encountered a versioned
