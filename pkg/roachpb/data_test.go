@@ -1317,6 +1317,45 @@ func TestSpanValid(t *testing.T) {
 	}
 }
 
+// TestSpansMemUsage tests that we correctly account for the memory used by a
+// Spans slice.
+func TestSpansMemUsage(t *testing.T) {
+	type testSpan struct {
+		start, end string
+	}
+
+	testData := []struct {
+		spans    []testSpan
+		expected int64
+	}{
+		{[]testSpan{}, SpansOverhead},
+		{[]testSpan{{"", ""}}, SpansOverhead + SpanOverhead},
+		{[]testSpan{{"a", ""}}, SpansOverhead + SpanOverhead + 8},
+		{[]testSpan{{"", "a"}}, SpansOverhead + SpanOverhead + 8},
+		{[]testSpan{{"a", "b"}}, SpansOverhead + SpanOverhead + 16},
+		{[]testSpan{{"abcdefgh", "b"}}, SpansOverhead + SpanOverhead + 16},
+		{[]testSpan{{"abcdefghi", "b"}}, SpansOverhead + SpanOverhead + 24},
+		{[]testSpan{{"a", "b"}, {"c", "d"}}, SpansOverhead + 2*SpanOverhead + 32},
+	}
+	for i, test := range testData {
+		s := make(Spans, len(test.spans))
+		for j := range s {
+			s[j].Key = []byte(test.spans[j].start)
+			s[j].EndKey = []byte(test.spans[j].end)
+		}
+		for j := 0; j <= len(s); j++ {
+			// Test that we account for all memory used even when we reduce the length
+			// below the capacity.
+			reduced := s[:j]
+
+			if actual := reduced.MemUsage(); test.expected != actual {
+				t.Errorf("%d.%d: expected spans %v (sliced from %v) to return %d for MemUsage, instead got %d",
+					i, j, reduced, test.spans, test.expected, actual)
+			}
+		}
+	}
+}
+
 // TestRSpanContains verifies methods to check whether a key
 // or key range is contained within the span.
 func TestRSpanContains(t *testing.T) {
