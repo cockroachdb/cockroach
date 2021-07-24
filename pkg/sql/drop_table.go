@@ -506,6 +506,12 @@ func (p *planner) markTableMutationJobsSuccessful(
 ) error {
 	for _, mj := range tableDesc.MutationJobs {
 		jobID := jobspb.JobID(mj.JobID)
+		if record, exists := p.ExtendedEvalContext().SchemaChangeJobCache[tableDesc.ID]; exists {
+			if record.JobID == jobID {
+				delete(p.ExtendedEvalContext().SchemaChangeJobCache, tableDesc.ID)
+				continue
+			}
+		}
 		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
 		if err != nil {
 			if jobs.HasJobNotFoundError(err) {
@@ -534,7 +540,6 @@ func (p *planner) markTableMutationJobsSuccessful(
 			}); err != nil {
 			return errors.Wrap(err, "updating mutation job for dropped table")
 		}
-		delete(p.ExtendedEvalContext().SchemaChangeJobCache, tableDesc.ID)
 	}
 	return nil
 }
