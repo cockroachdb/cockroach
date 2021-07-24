@@ -605,6 +605,156 @@ k  a   b    c    comp
 3  10  100  foo  20
 4  40  400  BAR  50
 
+# Backfill an expression index when a new table is created in the same
+# transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE bf (a INT, b INT)
+
+statement ok
+INSERT INTO bf VALUES (1, 10), (6, 60)
+
+statement ok
+CREATE INDEX a_plus_b ON bf ((a + b))
+
+statement ok
+COMMIT
+
+query II colnames,rowsort
+SELECT * FROM bf@a_plus_b WHERE a + b = 66
+----
+a  b
+6  60
+
+statement ok
+DROP TABLE bf
+
+# Cannot create an expression index that references a column added in the same
+# transaction. This is a limitation of virtual computed columns.
+
+statement ok
+CREATE TABLE bf (a INT)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE bf ADD COLUMN b INT DEFAULT 10
+
+statement error pgcode 0A000 index element expression referencing columns \("b"\) added in the current transaction
+CREATE INDEX a_plus_b ON bf ((a + b))
+
+statement ok
+ABORT
+
+statement ok
+DROP TABLE bf
+
+# Backfill a expression index with a user defined type.
+
+statement ok
+CREATE TYPE enum AS ENUM ('Foo', 'BAR', 'baz')
+
+statement ok
+CREATE TABLE bf (a enum)
+
+statement ok
+INSERT INTO bf VALUES ('Foo'), ('BAR'), ('baz')
+
+statement ok
+CREATE INDEX lower_a ON bf (lower(a::STRING))
+
+query T rowsort
+SELECT a FROM bf@lower_a WHERE lower(a::STRING) IN ('foo', 'bar', 'baz')
+----
+Foo
+BAR
+baz
+
+statement ok
+DROP TABLE bf
+
+# Backfill a expression index with a user defined type when a new table is
+# created in the same transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE bf (a enum)
+
+statement ok
+INSERT INTO bf VALUES ('Foo'), ('BAR'), ('baz')
+
+statement ok
+CREATE INDEX lower_a ON bf (lower(a::STRING))
+
+statement ok
+COMMIT
+
+query T rowsort
+SELECT a FROM bf@lower_a WHERE lower(a::STRING) IN ('foo', 'bar', 'baz')
+----
+Foo
+BAR
+baz
+
+statement ok
+DROP TABLE bf
+
+# Add a primary key to a table with a expression index.
+
+statement ok
+CREATE TABLE bf (k INT NOT NULL, a INT, INDEX a_plus_10 ((a + 10)))
+
+statement ok
+INSERT INTO bf VALUES (1, 1), (6, 6)
+
+statement ok
+ALTER TABLE bf ADD PRIMARY KEY (k)
+
+query II rowsort
+SELECT * FROM bf@a_plus_10 WHERE a + 10 IN (11, 16)
+----
+1  1
+6  6
+
+statement ok
+DROP TABLE bf
+
+# Truncate "removes" all entries from an expression index (technically a new
+# table is created). The expression index is preserved correctly in the new
+# table.
+
+statement ok
+CREATE TABLE l (
+    a INT PRIMARY KEY,
+    b INT,
+    INDEX a_plus_b ((a + b))
+)
+
+statement ok
+INSERT INTO l VALUES (1, 1), (6, 6)
+
+statement ok
+TRUNCATE l
+
+query II rowsort
+SELECT * FROM l@a_plus_b
+----
+
+statement ok
+INSERT INTO l VALUES (1, 1), (7, 7)
+
+query II rowsort
+SELECT * FROM l@a_plus_b
+----
+1  1
+7  7
+
 # Querying inverted expression indexes.
 
 statement ok
