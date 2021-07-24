@@ -223,12 +223,14 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 				continue
 			}
 			// {{end}}
-			// {{if .IsBytesLike}}
-			leadLagCol.CopySlice(defaultCol, i, i, i+1)
-			// {{else}}
-			val := defaultCol.Get(i)
-			leadLagCol.Set(i, val)
+			// {{if .Sliceable}}
+			//gcassert:bce
 			// {{end}}
+			val := defaultCol.Get(i)
+			// {{if .Sliceable}}
+			//gcassert:bce
+			// {{end}}
+			leadLagCol.Set(i, val)
 			continue
 		}
 		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -237,17 +239,11 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 			continue
 		}
 		col := vec.TemplateType()
-		// {{if .IsBytesLike}}
-		// We have to use CopySlice here because the column already has a length of
-		// n elements, and Set cannot set values before the last one.
-		leadLagCol.CopySlice(col, i, idx, idx+1)
-		// {{else}}
 		val := col.Get(idx)
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		leadLagCol.Set(i, val)
-		// {{end}}
 	}
 	// {{end}}
 	// {{/*

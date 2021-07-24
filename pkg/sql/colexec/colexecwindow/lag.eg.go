@@ -351,7 +351,8 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 						leadLagNulls.SetNull(i)
 						continue
 					}
-					leadLagCol.CopySlice(defaultCol, i, i, i+1)
+					val := defaultCol.Get(i)
+					leadLagCol.Set(i, val)
 					continue
 				}
 				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -360,9 +361,8 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 					continue
 				}
 				col := vec.Bytes()
-				// We have to use CopySlice here because the column already has a length of
-				// n elements, and Set cannot set values before the last one.
-				leadLagCol.CopySlice(col, i, idx, idx+1)
+				val := col.Get(idx)
+				leadLagCol.Set(i, val)
 			}
 			return
 		}
@@ -377,7 +377,8 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			w.idx++
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
-				leadLagCol.CopySlice(defaultCol, i, i, i+1)
+				val := defaultCol.Get(i)
+				leadLagCol.Set(i, val)
 				continue
 			}
 			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -386,9 +387,8 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				continue
 			}
 			col := vec.Bytes()
-			// We have to use CopySlice here because the column already has a length of
-			// n elements, and Set cannot set values before the last one.
-			leadLagCol.CopySlice(col, i, idx, idx+1)
+			val := col.Get(idx)
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -402,7 +402,8 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 					leadLagNulls.SetNull(i)
 					continue
 				}
-				leadLagCol.CopySlice(defaultCol, i, i, i+1)
+				val := defaultCol.Get(i)
+				leadLagCol.Set(i, val)
 				continue
 			}
 			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -411,9 +412,8 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				continue
 			}
 			col := vec.Bytes()
-			// We have to use CopySlice here because the column already has a length of
-			// n elements, and Set cannot set values before the last one.
-			leadLagCol.CopySlice(col, i, idx, idx+1)
+			val := col.Get(idx)
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -422,7 +422,8 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 		w.idx++
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
-			leadLagCol.CopySlice(defaultCol, i, i, i+1)
+			val := defaultCol.Get(i)
+			leadLagCol.Set(i, val)
 			continue
 		}
 		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -431,9 +432,8 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			continue
 		}
 		col := vec.Bytes()
-		// We have to use CopySlice here because the column already has a length of
-		// n elements, and Set cannot set values before the last one.
-		leadLagCol.CopySlice(col, i, idx, idx+1)
+		val := col.Get(idx)
+		leadLagCol.Set(i, val)
 	}
 }
 
@@ -1403,7 +1403,8 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 						leadLagNulls.SetNull(i)
 						continue
 					}
-					leadLagCol.CopySlice(defaultCol, i, i, i+1)
+					val := defaultCol.Get(i)
+					leadLagCol.Set(i, val)
 					continue
 				}
 				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -1412,9 +1413,8 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 					continue
 				}
 				col := vec.JSON()
-				// We have to use CopySlice here because the column already has a length of
-				// n elements, and Set cannot set values before the last one.
-				leadLagCol.CopySlice(col, i, idx, idx+1)
+				val := col.Get(idx)
+				leadLagCol.Set(i, val)
 			}
 			return
 		}
@@ -1429,7 +1429,8 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 			w.idx++
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
-				leadLagCol.CopySlice(defaultCol, i, i, i+1)
+				val := defaultCol.Get(i)
+				leadLagCol.Set(i, val)
 				continue
 			}
 			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -1438,9 +1439,8 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 				continue
 			}
 			col := vec.JSON()
-			// We have to use CopySlice here because the column already has a length of
-			// n elements, and Set cannot set values before the last one.
-			leadLagCol.CopySlice(col, i, idx, idx+1)
+			val := col.Get(idx)
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1454,7 +1454,8 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 					leadLagNulls.SetNull(i)
 					continue
 				}
-				leadLagCol.CopySlice(defaultCol, i, i, i+1)
+				val := defaultCol.Get(i)
+				leadLagCol.Set(i, val)
 				continue
 			}
 			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -1463,9 +1464,8 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 				continue
 			}
 			col := vec.JSON()
-			// We have to use CopySlice here because the column already has a length of
-			// n elements, and Set cannot set values before the last one.
-			leadLagCol.CopySlice(col, i, idx, idx+1)
+			val := col.Get(idx)
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1474,7 +1474,8 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 		w.idx++
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
-			leadLagCol.CopySlice(defaultCol, i, i, i+1)
+			val := defaultCol.Get(i)
+			leadLagCol.Set(i, val)
 			continue
 		}
 		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -1483,9 +1484,8 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 			continue
 		}
 		col := vec.JSON()
-		// We have to use CopySlice here because the column already has a length of
-		// n elements, and Set cannot set values before the last one.
-		leadLagCol.CopySlice(col, i, idx, idx+1)
+		val := col.Get(idx)
+		leadLagCol.Set(i, val)
 	}
 }
 
