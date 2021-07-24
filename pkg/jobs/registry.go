@@ -377,11 +377,12 @@ func (r *Registry) newJob(record Record, jobID jobspb.JobID) *Job {
 // column's value will be large due to large statement size. Are there any
 // implications that can result in exceeding limits such as columns size limits?
 func (r *Registry) CreateJobsWithTxn(
-	ctx context.Context, jobRecords []*Specification, txn *kv.Txn,
+	ctx context.Context, jobSpecs []*Specification, txn *kv.Txn,
 ) ([]*Job, error) {
-	if len(jobRecords) == 0 {
+	if len(jobSpecs) == 0 {
 		return nil, errors.Errorf("no jobs to create.")
 	}
+	log.Infof(ctx, "creating %d jobs in a batch", len(jobSpecs))
 
 	s, err := r.sqlInstance.Session(ctx)
 	if err != nil {
@@ -402,7 +403,7 @@ VALUES`)
 	argIdx := 0
 	var args []interface{}
 	var jobs []*Job
-	for i, jr := range jobRecords {
+	for i, jr := range jobSpecs {
 		j := r.newJob(jr.record, jr.jobID)
 		j.sessionID = sessionID
 		j.mu.progress.ModifiedMicros = modifiedMicros
@@ -425,7 +426,7 @@ VALUES`)
 		jobs = append(jobs, j)
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "[SR] executing batch insert with statement: %s", sb.String())
+		log.Infof(ctx, "executing batch insert with statement: %s", sb.String())
 	}
 	if _, err = r.ex.Exec(ctx, "job-rows-batch-insert", txn, sb.String(), args...,
 	); err != nil {

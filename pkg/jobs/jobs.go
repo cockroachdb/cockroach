@@ -82,6 +82,44 @@ type Specification struct {
 	record Record
 }
 
+// ID returns the job ID that will be used to create the job with this specification.
+func (s *Specification) ID() jobspb.JobID {
+	return s.jobID
+}
+
+// NewSpecification creates a tuple of job ID and job Record.
+func NewSpecification(jobID jobspb.JobID, record Record) *Specification {
+	return &Specification{
+		jobID:  jobID,
+		record: record,
+	}
+}
+
+// Details returns the Details structure in job's Record.
+func (s *Specification) Details() jobspb.Details {
+	return s.record.Details
+}
+
+// SetDetails sets Details in job's Record.
+func (s *Specification) SetDetails(details jobspb.Details) {
+	s.record.Details = details
+}
+
+// SetDescription sets the description in job's Record, which is returned from the updateFn.
+func (s *Specification) SetDescription(ctx context.Context, updateFn DescriptionUpdateFn) error {
+	newDesc, err := updateFn(ctx, s.record.Description)
+	if err != nil {
+		return err
+	}
+	s.record.Description = newDesc
+	return nil
+}
+
+// SetNonCancelable sets the NonCancelable status in job's record, which is returned from updateFn.
+func (s *Specification) SetNonCancelable(ctx context.Context, updateFn NonCancelableUpdateFn) {
+	s.record.NonCancelable = updateFn(ctx, s.record.NonCancelable)
+}
+
 // StartableJob is a job created with a transaction to be started later.
 // See Registry.CreateStartableJob
 type StartableJob struct {
@@ -285,37 +323,6 @@ func (j *Job) RunningStatus(
 		}
 		md.Progress.RunningStatus = string(runningStatus)
 		ju.UpdateProgress(md.Progress)
-		return nil
-	})
-}
-
-// SetDescription updates the description of a created job.
-func (j *Job) SetDescription(ctx context.Context, txn *kv.Txn, updateFn DescriptionUpdateFn) error {
-	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		prev := md.Payload.Description
-		desc, err := updateFn(ctx, prev)
-		if err != nil {
-			return err
-		}
-		if prev != desc {
-			md.Payload.Description = desc
-			ju.UpdatePayload(md.Payload)
-		}
-		return nil
-	})
-}
-
-// SetNonCancelable updates the NonCancelable field of a created job.
-func (j *Job) SetNonCancelable(
-	ctx context.Context, txn *kv.Txn, updateFn NonCancelableUpdateFn,
-) error {
-	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		prev := md.Payload.Noncancelable
-		newStatus := updateFn(ctx, prev)
-		if prev != newStatus {
-			md.Payload.Noncancelable = newStatus
-			ju.UpdatePayload(md.Payload)
-		}
 		return nil
 	})
 }

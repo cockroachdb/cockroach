@@ -93,7 +93,7 @@ type extendedEvalContext struct {
 	Jobs *jobsCollection
 
 	// SchemaChangeJobCache refers to schemaChangeJobsCache in extraTxnState.
-	SchemaChangeJobCache map[descpb.ID]*jobs.Job
+	SchemaChangeJobCache map[descpb.ID]*jobs.Specification
 
 	statsStorage sqlstats.Storage
 

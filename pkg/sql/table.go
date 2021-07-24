@@ -114,19 +114,19 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			tableDesc.ClusterVersion.GetName(),
 		)
 	}
-	var job *jobs.Job
-	if cachedJob, ok := p.extendedEvalCtx.SchemaChangeJobCache[tableDesc.ID]; ok {
-		job = cachedJob
+	var spec *jobs.Specification
+	if cachedSpec, ok := p.extendedEvalCtx.SchemaChangeJobCache[tableDesc.ID]; ok {
+		spec = cachedSpec
 	}
 
 	if p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterSCJobsCacheLookup != nil {
-		p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterSCJobsCacheLookup(job)
+		p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterSCJobsCacheLookup(spec)
 	}
 
 	var spanList []jobspb.ResumeSpanList
-	jobExists := job != nil
-	if jobExists {
-		spanList = job.Details().(jobspb.SchemaChangeDetails).ResumeSpanList
+	specExists := spec != nil
+	if specExists {
+		spanList = spec.Details().(jobspb.SchemaChangeDetails).ResumeSpanList
 	}
 	span := tableDesc.PrimaryIndexSpan(p.ExecCfg().Codec)
 	for i := len(tableDesc.ClusterVersion.Mutations) + len(spanList); i < len(tableDesc.Mutations); i++ {
@@ -137,7 +137,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		)
 	}
 
-	if !jobExists {
+	if !specExists {
 		// Queue a new job.
 		jobRecord := jobs.Record{
 			Description:   jobDesc,
@@ -153,65 +153,57 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
-		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
-		if err != nil {
-			return err
-		}
-		p.extendedEvalCtx.SchemaChangeJobCache[tableDesc.ID] = newJob
+		newSpec := jobs.NewSpecification(p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID(), jobRecord)
+		p.extendedEvalCtx.SchemaChangeJobCache[tableDesc.ID] = newSpec
 		// Only add a MutationJob if there's an associated mutation.
 		// TODO (lucy): get rid of this when we get rid of MutationJobs.
 		if mutationID != descpb.InvalidMutationID {
 			tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
-				MutationID: mutationID, JobID: int64(newJob.ID())})
+				MutationID: mutationID, JobID: int64(newSpec.ID())})
 		}
-		log.Infof(ctx, "queued new schema change job %d for table %d, mutation %d",
-			newJob.ID(), tableDesc.ID, mutationID)
-	} else {
-		// Update the existing job.
-		oldDetails := job.Details().(jobspb.SchemaChangeDetails)
-		newDetails := jobspb.SchemaChangeDetails{
-			DescID:          tableDesc.ID,
-			TableMutationID: oldDetails.TableMutationID,
-			ResumeSpanList:  spanList,
-			// The version distinction for database jobs doesn't matter for jobs on
-			// tables.
-			FormatVersion: jobspb.DatabaseJobFormatVersion,
-		}
-		if oldDetails.TableMutationID != descpb.InvalidMutationID {
-			// The previous queued schema change job was associated with a mutation,
-			// which must have the same mutation ID as this schema change, so just
-			// check for consistency.
-			if mutationID != descpb.InvalidMutationID && mutationID != oldDetails.TableMutationID {
-				return errors.AssertionFailedf(
-					"attempted to update job for mutation %d, but job already exists with mutation %d",
-					mutationID, oldDetails.TableMutationID)
-			}
-		} else {
-			// The previous queued schema change job didn't have a mutation.
-			if mutationID != descpb.InvalidMutationID {
-				newDetails.TableMutationID = mutationID
-				// Also add a MutationJob on the table descriptor.
-				// TODO (lucy): get rid of this when we get rid of MutationJobs.
-				tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
-					MutationID: mutationID, JobID: int64(job.ID())})
-			}
-		}
-		if err := job.SetDetails(ctx, p.txn, newDetails); err != nil {
-			return err
-		}
-		if jobDesc != "" {
-			if err := job.SetDescription(
-				ctx, p.txn,
-				func(ctx context.Context, description string) (string, error) {
-					return strings.Join([]string{description, jobDesc}, ";"), nil
-				},
-			); err != nil {
-				return err
-			}
-		}
-		log.Infof(ctx, "job %d: updated with schema change for table %d, mutation %d",
-			job.ID(), tableDesc.ID, mutationID)
+		log.Infof(ctx, "created new schema-change specification for job %d for table %d, mutation %d",
+			newSpec.ID(), tableDesc.ID, mutationID)
+		return nil
 	}
+
+	// Update the existing job.
+	oldDetails := spec.Details().(jobspb.SchemaChangeDetails)
+	newDetails := jobspb.SchemaChangeDetails{
+		DescID:          tableDesc.ID,
+		TableMutationID: oldDetails.TableMutationID,
+		ResumeSpanList:  spanList,
+		// The version distinction for database jobs doesn't matter for jobs on
+		// tables.
+		FormatVersion: jobspb.DatabaseJobFormatVersion,
+	}
+	if oldDetails.TableMutationID != descpb.InvalidMutationID {
+		// The previous queued schema change job was associated with a mutation,
+		// which must have the same mutation ID as this schema change, so just
+		// check for consistency.
+		if mutationID != descpb.InvalidMutationID && mutationID != oldDetails.TableMutationID {
+			return errors.AssertionFailedf(
+				"attempted to update job for mutation %d, but job already exists with mutation %d",
+				mutationID, oldDetails.TableMutationID)
+		}
+	} else {
+		// The previous queued schema change job didn't have a mutation.
+		if mutationID != descpb.InvalidMutationID {
+			newDetails.TableMutationID = mutationID
+			// Also add a MutationJob on the table descriptor.
+			// TODO (lucy): get rid of this when we get rid of MutationJobs.
+			tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
+				MutationID: mutationID, JobID: int64(spec.ID())})
+		}
+	}
+
+	spec.SetDetails(newDetails)
+	if err := spec.SetDescription(ctx, func(ctx context.Context, description string) (string, error) {
+		return strings.Join([]string{description, jobDesc}, ";"), nil
+	}); err != nil {
+		return err
+	}
+	log.Infof(ctx, "job %d: updated with schema change for table %d, mutation %d",
+		spec.ID(), tableDesc.ID, mutationID)
 	return nil
 }
 

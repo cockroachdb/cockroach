@@ -1070,7 +1070,7 @@ type ExecutorTestingKnobs struct {
 
 	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
 	// a given table id.
-	RunAfterSCJobsCacheLookup func(*jobs.Job)
+	RunAfterSCJobsCacheLookup func(specification *jobs.Specification)
 
 	// TestingSaveFlows, if set, will be called with the given stmt. The resulting
 	// function will be called with the physical plan of that statement's main

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -794,6 +795,16 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, ast tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
+	//TODO(sajjad): To discuss:
+	// 1. I am not sure if I am returning the error correctly.
+	// 2. Is this the right place to create jobs? I have placed it outside of the
+	//    the following code block because the jobs were being created outside of
+	//    it in the previous code.
+	// 3. If I have add any ex.phaseTimes, which one should it be? Do I have to
+	//    create a new one?
+	if err := ex.createJobs(ctx); err != nil {
+		return ex.makeErrEvent(err, ast)
+	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
 	err := ex.commitSQLTransactionInternal(ctx, ast)
 	if err != nil {
@@ -801,6 +812,27 @@ func (ex *connExecutor) commitSQLTransaction(
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndTransactionCommit, timeutil.Now())
 	return eventTxnFinishCommitted{}, nil
+}
+
+// createJobs creates the jobs for which the transaction added job specifications
+// in the schemaChangeJobsCache.
+func (ex *connExecutor) createJobs(ctx context.Context) error {
+	if len(ex.extraTxnState.schemaChangeJobsCache) == 0 {
+		return nil
+	}
+	var specList []*jobs.Specification
+	//TODO(sajjad): To discuss: Does the order of jobs creation matter?
+	for _, spec := range ex.extraTxnState.schemaChangeJobsCache {
+		specList = append(specList, spec)
+	}
+	jobsList, err := ex.server.cfg.JobRegistry.CreateJobsWithTxn(ctx, specList, ex.planner.extendedEvalCtx.Txn)
+	if err != nil {
+		return err
+	}
+	for _, job := range jobsList {
+		*ex.planner.extendedEvalCtx.Jobs = append(*ex.planner.extendedEvalCtx.Jobs, job.ID())
+	}
+	return nil
 }
 
 func (ex *connExecutor) commitSQLTransactionInternal(

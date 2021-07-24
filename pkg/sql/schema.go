@@ -57,17 +57,17 @@ func (p *planner) writeSchemaDesc(ctx context.Context, desc *schemadesc.Mutable)
 func (p *planner) writeSchemaDescChange(
 	ctx context.Context, desc *schemadesc.Mutable, jobDesc string,
 ) error {
-	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[desc.ID]
-	if jobExists {
+	spec, specExists := p.extendedEvalCtx.SchemaChangeJobCache[desc.ID]
+	if specExists {
 		// Update it.
-		if err := job.SetDescription(ctx, p.txn,
+		if err := spec.SetDescription(ctx,
 			func(ctx context.Context, desc string) (string, error) {
 				return desc + "; " + jobDesc, nil
 			},
 		); err != nil {
 			return err
 		}
-		log.Infof(ctx, "job %d: updated with for change on schema %d", job.ID(), desc.ID)
+		log.Infof(ctx, "job %d: updated job's specification for change on schema %d", spec.ID(), desc.ID)
 	} else {
 		// Or, create a new job.
 		jobRecord := jobs.Record{
@@ -83,11 +83,11 @@ func (p *planner) writeSchemaDescChange(
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,
 		}
-		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
-		if err != nil {
-			return err
-		}
-		log.Infof(ctx, "queued new schema change job %d for schema %d", newJob.ID(), desc.ID)
+		newSpec := jobs.NewSpecification(p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID(), jobRecord)
+		//TODO(sajjad): To discuss: Previous code didn't cache the new job. I think
+		// the newSpec should be cached.
+		p.extendedEvalCtx.SchemaChangeJobCache[desc.ID] = newSpec
+		log.Infof(ctx, "cached specification of new schema change job %d for schema %d", newSpec.ID(), desc.ID)
 	}
 
 	return p.writeSchemaDesc(ctx, desc)

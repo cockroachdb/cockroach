@@ -289,7 +289,7 @@ func TestBatchJobsCreation(t *testing.T) {
 		{"small batch", 10},
 		{"medium batch", 500},
 		{"large batch", 1000},
-		{"extra large batch", 10000},
+		{"extra large batch", 5000},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			{
@@ -317,9 +317,6 @@ func TestBatchJobsCreation(t *testing.T) {
 				var jd []*Specification
 				for i := 0; i < test.batchSize; i++ {
 					jr := Record{
-						// TODO (sajjad): To discuss: I guess this job's type should be set in its
-						// payload based on Details. I was hoping that the type will be "IMPORT" in
-						// the jobs table when the job is created, but it occurred to be NULL. Why is that?
 						Details:  jobspb.ImportDetails{},
 						Progress: jobspb.ImportProgress{},
 					}
@@ -340,6 +337,10 @@ func TestBatchJobsCreation(t *testing.T) {
 					tdb.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = '%d'", job.id),
 						[][]string{{"succeeded"}})
 				}
+				// TODO(sajjad): To discuss: What should we expect the values of job_type
+				// and description? I was expecting that the type will be "IMPORT" in
+				// the jobs table when the job is created, but it occurred to be NULL. Is
+				// that expected? Similarly, description is NULL.
 			}
 		})
 	}
