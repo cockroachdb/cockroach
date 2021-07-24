@@ -123,6 +123,12 @@ func (w *slidingWindowFunc) Compute(
 			if err != nil {
 				return nil, err
 			}
+			if args[0] == tree.DNull {
+				// Null value can neither be minimum nor maximum over a window frame
+				// with non-null values, so we're not adding them to the sliding window.
+				// The case of a window frame with no non-null values is handled below.
+				continue
+			}
 			if res == nil {
 				res = args[0]
 			} else {
