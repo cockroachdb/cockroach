@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -128,6 +129,9 @@ func TestSavepoints(t *testing.T) {
 				if td.HasArg("nowait") {
 					b.Header.WaitPolicy = lock.WaitPolicy_Error
 				}
+				if td.HasArg("lock-timeout") {
+					b.Header.LockTimeout = 1 * time.Nanosecond
+				}
 				if err := txn.Run(ctx, b); err != nil {
 					fmt.Fprintf(&buf, "(%T) %v\n", err, err)
 				}
@@ -162,6 +166,9 @@ func TestSavepoints(t *testing.T) {
 				}
 				if td.HasArg("nowait") {
 					b.Header.WaitPolicy = lock.WaitPolicy_Error
+				}
+				if td.HasArg("lock-timeout") {
+					b.Header.LockTimeout = 1 * time.Nanosecond
 				}
 				if err := txn.Run(ctx, b); err != nil {
 					fmt.Fprintf(&buf, "(%T) %v\n", err, err)
