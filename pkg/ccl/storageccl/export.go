@@ -30,30 +30,42 @@ import (
 	"github.com/gogo/protobuf/types"
 )
 
+// SSTTargetSizeSetting is the cluster setting name for the
+// ExportRequestTargetFileSize setting.
+const SSTTargetSizeSetting = "kv.bulk_sst.target_size"
+
 // ExportRequestTargetFileSize controls the target file size for SSTs created
 // during backups.
 var ExportRequestTargetFileSize = settings.RegisterByteSizeSetting(
-	"kv.bulk_sst.target_size",
-	"target size for SSTs emitted from export requests",
+	SSTTargetSizeSetting,
+	fmt.Sprintf("target size for SSTs emitted from export requests; "+
+		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",
+		SSTTargetSizeSetting, MaxExportOverageSetting,
+	),
 	64<<20, /* 64 MiB */
-)
+).WithPublic()
+
+// MaxExportOverageSetting is the cluster setting name for the
+// ExportRequestMaxAllowedFileSizeOverage setting.
+const MaxExportOverageSetting = "kv.bulk_sst.max_allowed_overage"
 
 // ExportRequestMaxAllowedFileSizeOverage controls the maximum size in excess of
 // the target file size which an exported SST may be. If this value is positive
 // and an SST would exceed this size (due to large rows or large numbers of
 // versions), then the export will fail.
 var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
-	"kv.bulk_sst.max_allowed_overage",
-	"if positive, allowed size in excess of target size for SSTs from export requests",
+	MaxExportOverageSetting,
+	fmt.Sprintf("if positive, allowed size in excess of target size for SSTs from export requests; "+
+		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",
+		SSTTargetSizeSetting, MaxExportOverageSetting,
+	),
 	64<<20, /* 64 MiB */
-)
+).WithPublic()
 
 const maxUploadRetries = 5
 
 func init() {
 	batcheval.RegisterReadOnlyCommand(roachpb.Export, declareKeysExport, evalExport)
-	ExportRequestTargetFileSize.SetVisibility(settings.Reserved)
-	ExportRequestMaxAllowedFileSizeOverage.SetVisibility(settings.Reserved)
 }
 
 func declareKeysExport(
@@ -171,6 +183,10 @@ func evalExport(
 		summary, resume, err := reader.ExportMVCCToSst(ctx, start, args.EndKey, args.StartTime,
 			h.Timestamp, exportAllRevisions, targetSize, maxSize, useTBI, destFile)
 		if err != nil {
+			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
+				err = errors.WithHintf(err,
+					"consider increasing cluster setting %q", MaxExportOverageSetting)
+			}
 			return result.Result{}, err
 		}
 		data := destFile.Data()
