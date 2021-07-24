@@ -103,26 +103,18 @@ func findTransitioningMembers(desc *typedesc.Mutable) ([][]byte, bool) {
 func (p *planner) writeTypeSchemaChange(
 	ctx context.Context, typeDesc *typedesc.Mutable, jobDesc string,
 ) error {
-	// Check if there is an active job for this type, otherwise create one.
-	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[typeDesc.ID]
+	// Check if there is a cached specification for this type, otherwise create one.
+	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[typeDesc.ID]
 	transitioningMembers, beingDropped := findTransitioningMembers(typeDesc)
-	if jobExists {
+	if recordExists {
 		// Update it.
 		newDetails := jobspb.TypeSchemaChangeDetails{
 			TypeID:               typeDesc.ID,
 			TransitioningMembers: transitioningMembers,
 		}
-		if err := job.SetDetails(ctx, p.txn, newDetails); err != nil {
-			return err
-		}
-		if err := job.SetDescription(ctx, p.txn,
-			func(ctx context.Context, description string) (string, error) {
-				return description + "; " + jobDesc, nil
-			},
-		); err != nil {
-			return err
-		}
-		if err := job.SetNonCancelable(ctx, p.txn,
+		record.Details = newDetails
+		record.AppendDescription(jobDesc)
+		record.SetNonCancelable(ctx,
 			func(ctx context.Context, nonCancelable bool) bool {
 				// If the job is already cancelable, then it should stay as such
 				// regardless of if a member is being dropped or not in the current
@@ -133,13 +125,12 @@ func (p *planner) writeTypeSchemaChange(
 				// Type change jobs are non-cancelable unless an enum member is being
 				// dropped.
 				return !beingDropped
-			}); err != nil {
-			return err
-		}
-		log.Infof(ctx, "job %d: updated with type change for type %d", job.ID(), typeDesc.ID)
+			})
+		log.Infof(ctx, "job %d: updated with type change for type %d", record.JobID, typeDesc.ID)
 	} else {
 		// Or, create a new job.
-		jobRecord := jobs.Record{
+		newRecord := jobs.Record{
+			JobID:         p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID(),
 			Description:   jobDesc,
 			Username:      p.User(),
 			DescriptorIDs: descpb.IDs{typeDesc.ID},
@@ -152,12 +143,8 @@ func (p *planner) writeTypeSchemaChange(
 			// a transition that drops an enum member.
 			NonCancelable: !beingDropped,
 		}
-		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
-		if err != nil {
-			return err
-		}
-		p.extendedEvalCtx.SchemaChangeJobCache[typeDesc.ID] = newJob
-		log.Infof(ctx, "queued new type change job %d for type %d", newJob.ID(), typeDesc.ID)
+		p.extendedEvalCtx.SchemaChangeJobRecords[typeDesc.ID] = &newRecord
+		log.Infof(ctx, "queued new type change job %d for type %d", newRecord.JobID, typeDesc.ID)
 	}
 
 	return p.writeTypeDesc(ctx, typeDesc)
