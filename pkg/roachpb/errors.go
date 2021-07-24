@@ -871,6 +871,19 @@ func (e *WriteIntentError) message(_ *Error) string {
 			buf.WriteString(end[i].Key.String())
 		}
 	}
+
+	switch e.Reason {
+	case WriteIntentError_REASON_UNSPECIFIED:
+		// Nothing to say.
+	case WriteIntentError_REASON_WAIT_POLICY:
+		buf.WriteString(" [reason=wait_policy]")
+	case WriteIntentError_REASON_LOCK_TIMEOUT:
+		buf.WriteString(" [reason=lock_timeout]")
+	case WriteIntentError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED:
+		buf.WriteString(" [reason=lock_wait_queue_max_length_exceeded]")
+	default:
+		// Could panic, better to silently ignore in case new reasons are added.
+	}
 	return buf.String()
 }
 

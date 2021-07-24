@@ -360,6 +360,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			Priority:        ba.UserPriority,
 			ReadConsistency: ba.ReadConsistency,
 			WaitPolicy:      ba.WaitPolicy,
+			LockTimeout:     ba.LockTimeout,
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans, // nil if g != nil
 			LockSpans:       lockSpans,  // nil if g != nil

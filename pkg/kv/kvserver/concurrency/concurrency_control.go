@@ -15,6 +15,7 @@ package concurrency
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -370,6 +371,11 @@ type Request struct {
 	// behave if it encounters conflicting locks held by other active
 	// transactions.
 	WaitPolicy lock.WaitPolicy
+
+	// The maximum amount of time that the batch request will wait while
+	// attempting to acquire a lock on a key or while blocking on an
+	// existing lock in order to perform a non-locking read on a key.
+	LockTimeout time.Duration
 
 	// The maximum length of a lock wait-queue that the request is willing
 	// to enter and wait in. Used to provide a release valve and ensure some

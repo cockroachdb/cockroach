@@ -227,6 +227,8 @@ type StoreTestingKnobs struct {
 	// DontPushOnWriteIntentError will propagate a write intent error immediately
 	// instead of utilizing the intent resolver to try to push the corresponding
 	// transaction.
+	// TODO(nvanbenschoten): can we replace this knob with usage of the Error
+	// WaitPolicy on BatchRequests?
 	DontPushOnWriteIntentError bool
 	// DontRetryPushTxnFailures will propagate a push txn failure immediately
 	// instead of utilizing the txn wait queue to wait for the transaction to
