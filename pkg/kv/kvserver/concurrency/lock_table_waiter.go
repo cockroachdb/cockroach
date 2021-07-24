@@ -106,6 +106,8 @@ type lockTableWaiterImpl struct {
 	// When set, called just before each ContentionEvent is emitted.
 	// Is allowed to mutate the event.
 	onContentionEvent func(ev *roachpb.ContentionEvent)
+	// When set, called just before each push timer event is processed.
+	onPushTimer func()
 }
 
 // IntentResolver is an interface used by lockTableWaiterImpl to push
@@ -138,6 +140,8 @@ func (w *lockTableWaiterImpl) WaitOn(
 	var timer *timeutil.Timer
 	var timerC <-chan time.Time
 	var timerWaitingState waitingState
+	// Used to enforce lock timeouts.
+	var lockDeadline time.Time
 
 	h := contentionEventHelper{
 		sp:      tracing.SpanFromContext(ctx),
@@ -170,7 +174,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 					if state.held {
 						err = w.pushLockTxn(ctx, req, state)
 					} else {
-						err = newWriteIntentErr(req, state)
+						err = newWriteIntentErr(req, state, reasonWaitPolicy)
 					}
 					if err != nil {
 						return err
@@ -213,9 +217,14 @@ func (w *lockTableWaiterImpl) WaitOn(
 					deadlockPush = false
 				}
 
-				// If the request doesn't want to perform a push for either
-				// reason, continue waiting.
-				if !livenessPush && !deadlockPush {
+				// For requests that have a lock timeout, push after the timeout to
+				// determine whether the lock is abandoned or whether its holder is
+				// still active.
+				timeoutPush := req.LockTimeout != 0
+
+				// If the request doesn't want to perform a delayed push for any
+				// reason, continue waiting without a timer.
+				if !livenessPush && !deadlockPush && !timeoutPush {
 					continue
 				}
 
@@ -230,6 +239,17 @@ func (w *lockTableWaiterImpl) WaitOn(
 				}
 				if deadlockPush {
 					delay = minDuration(delay, LockTableDeadlockDetectionPushDelay.Get(&w.st.SV))
+				}
+				if timeoutPush {
+					// Only reset the lock timeout deadline if this is the first time
+					// seeing this lock. Specifically, reset the deadline if this is a
+					// new key or if this is a new transaction for the same key.
+					oldState := timerWaitingState // empty on first pass
+					newLock := !oldState.key.Equal(state.key) || oldState.txn.ID != state.txn.ID
+					if newLock {
+						lockDeadline = w.clock.PhysicalTime().Add(req.LockTimeout)
+					}
+					delay = minDuration(delay, w.timeUntilDeadline(lockDeadline))
 				}
 
 				// However, if the pushee has the minimum priority or if the
@@ -272,6 +292,13 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// this completes, the request should stop waiting on this
 				// lockTableGuard, as it will no longer observe lock-table state
 				// transitions.
+				if req.LockTimeout != 0 {
+					return doWithTimeoutAndFallback(
+						ctx, req.LockTimeout,
+						func(ctx context.Context) *Error { return w.pushLockTxn(ctx, req, state) },
+						func(ctx context.Context) *Error { return w.pushLockTxnAfterTimeout(ctx, req, state) },
+					)
+				}
 				return w.pushLockTxn(ctx, req, state)
 
 			case waitSelf:
@@ -284,7 +311,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// The request attempted to wait in a lock wait-queue whose length was
 				// already equal to or exceeding the request's configured maximum. As a
 				// result, the request was rejected.
-				return newWriteIntentErr(req, state)
+				return newWriteIntentErr(req, state, reasonWaitQueueMaxLengthExceeded)
 
 			case doneWaiting:
 				// The request has waited for all conflicting locks to be released
@@ -320,40 +347,80 @@ func (w *lockTableWaiterImpl) WaitOn(
 			if timer != nil {
 				timer.Read = true
 			}
+			if w.onPushTimer != nil {
+				w.onPushTimer()
+			}
 
-			// If the request is conflicting with a held lock then it pushes its
-			// holder synchronously - there is no way it will be able to proceed
-			// until the lock's transaction undergoes a state transition (either
-			// completing or being pushed) and then updates the lock's state
-			// through intent resolution. The request has a dependency on the
-			// entire conflicting transaction.
-			//
-			// However, if the request is conflicting with another request (a
-			// reservation holder) then it pushes the reservation holder
-			// asynchronously while continuing to listen to state transition in
-			// the lockTable. This allows the request to cancel its push if the
-			// conflicting reservation exits the lock wait-queue without leaving
-			// behind a lock. In this case, the request has a dependency on the
-			// conflicting request but not necessarily the entire conflicting
-			// transaction.
-			if timerWaitingState.held {
-				err = w.pushLockTxn(ctx, req, timerWaitingState)
-			} else {
-				// It would be more natural to launch an async task for the push
-				// and continue listening on this goroutine for lockTable state
-				// transitions, but doing so is harder to test against. Instead,
-				// we launch an async task to listen to lockTable state and
-				// synchronously push. If the watcher goroutine detects a
-				// lockTable change, it cancels the context on the push.
+			// push with the option to wait on the conflict if active.
+			pushWait := func(ctx context.Context) *Error {
+				// If the request is conflicting with a held lock then it pushes its
+				// holder synchronously - there is no way it will be able to proceed
+				// until the lock's transaction undergoes a state transition (either
+				// completing or being pushed) and then updates the lock's state
+				// through intent resolution. The request has a dependency on the
+				// entire conflicting transaction.
+				//
+				// However, if the request is conflicting with another request (a
+				// reservation holder) then it pushes the reservation holder
+				// asynchronously while continuing to listen to state transition in
+				// the lockTable. This allows the request to cancel its push if the
+				// conflicting reservation exits the lock wait-queue without leaving
+				// behind a lock. In this case, the request has a dependency on the
+				// conflicting request but not necessarily the entire conflicting
+				// transaction.
+				if timerWaitingState.held {
+					return w.pushLockTxn(ctx, req, timerWaitingState)
+				}
+
+				// It would be more natural to launch an async task for the push and
+				// continue listening on this goroutine for lockTable state transitions,
+				// but doing so is harder to test against. Instead, we launch an async
+				// task to listen to lockTable state and synchronously push. If the
+				// watcher goroutine detects a lockTable change, it cancels the context
+				// on the push.
 				pushCtx, pushCancel := context.WithCancel(ctx)
-				go w.watchForNotifications(pushCtx, pushCancel, newStateC)
-				err = w.pushRequestTxn(pushCtx, req, timerWaitingState)
+				defer pushCancel()
+				go watchForNotifications(pushCtx, pushCancel, newStateC)
+				err := w.pushRequestTxn(pushCtx, req, timerWaitingState)
 				if errors.Is(pushCtx.Err(), context.Canceled) {
 					// Ignore the context canceled error. If this was for the
 					// parent context then we'll notice on the next select.
+					//
+					// NOTE: we look at pushCtx.Err() and not err to avoid the
+					// potential for bugs if context cancellation is not
+					// propagated correctly on some error paths.
 					err = nil
 				}
-				pushCancel()
+				return err
+			}
+
+			// push without the option to wait on the conflict if active.
+			pushNoWait := func(ctx context.Context) *Error {
+				// Resolve the conflict without waiting. If the conflict is a lock
+				// then push the lock holder's transaction using a PUSH_TOUCH to
+				// determine whether the lock is abandoned or whether its holder is
+				// still active. If the conflict is a reservation holder, raise an
+				// error immediately, we know the reservation holder is active.
+				if timerWaitingState.held {
+					return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState)
+				}
+				return newWriteIntentErr(req, timerWaitingState, reasonLockTimeout)
+			}
+
+			// We push with or without the option to wait on the conflict,
+			// depending on the state of the lock timeout, if one exists.
+			if !lockDeadline.IsZero() {
+				untilDeadline := w.timeUntilDeadline(lockDeadline)
+				if untilDeadline == 0 {
+					// Deadline already exceeded.
+					err = pushNoWait(ctx)
+				} else {
+					// Deadline not yet exceeded.
+					err = doWithTimeoutAndFallback(ctx, untilDeadline, pushWait, pushNoWait)
+				}
+			} else {
+				// No deadline.
+				err = pushWait(ctx)
 			}
 			if err != nil {
 				return err
@@ -376,27 +443,43 @@ func (w *lockTableWaiterImpl) WaitOnLock(
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	return w.pushLockTxn(ctx, req, waitingState{
+	state := waitingState{
 		kind:        waitFor,
 		txn:         &intent.Txn,
 		key:         intent.Key,
 		held:        true,
 		guardAccess: sa,
-	})
+	}
+	if req.LockTimeout != 0 {
+		return doWithTimeoutAndFallback(
+			ctx, req.LockTimeout,
+			func(ctx context.Context) *Error { return w.pushLockTxn(ctx, req, state) },
+			func(ctx context.Context) *Error { return w.pushLockTxnAfterTimeout(ctx, req, state) },
+		)
+	}
+	return w.pushLockTxn(ctx, req, state)
 }
 
 // pushLockTxn pushes the holder of the provided lock.
 //
-// The method blocks until the lock holder transaction experiences a state
-// transition such that it no longer conflicts with the pusher's request. The
-// method then synchronously updates the lock to trigger a state transition in
-// the lockTable that will free up the request to proceed. If the method returns
-// successfully then the caller can expect to have an updated waitingState.
+// If a Block wait policy is set on the request, method blocks until the lock
+// holder transaction experiences a state transition such that it no longer
+// conflicts with the pusher's request. The method then synchronously updates
+// the lock to trigger a state transition in the lockTable that will free up the
+// request to proceed. If the method returns successfully then the caller can
+// expect to have an updated waitingState.
+//
+// If an Error wait policy is set on the request, the method checks if the lock
+// holder transaction is abandoned. If so, the method synchronously updates the
+// lock to trigger a state transition in the lockTable that will free up the
+// request to proceed. If the method returns successfully then the caller can
+// expect to have an updated waitingState. Otherwise, the method returns with a
+// WriteIntentError and without blocking on the lock holder transaction.
 func (w *lockTableWaiterImpl) pushLockTxn(
 	ctx context.Context, req Request, ws waitingState,
 ) *Error {
 	if w.disableTxnPushing {
-		return newWriteIntentErr(req, ws)
+		return newWriteIntentErr(req, ws, reasonWaitPolicy)
 	}
 
 	// Construct the request header and determine which form of push to use.
@@ -438,7 +521,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// If pushing with an Error WaitPolicy and the push fails, then the lock
 		// holder is still active. Transform the error into a WriteIntentError.
 		if _, ok := err.GetDetail().(*roachpb.TransactionPushError); ok && req.WaitPolicy == lock.WaitPolicy_Error {
-			err = newWriteIntentErr(req, ws)
+			err = newWriteIntentErr(req, ws, reasonWaitPolicy)
 		}
 		return err
 	}
@@ -484,6 +567,22 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: ws.key})
 	opts := intentresolver.ResolveOptions{Poison: true}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
+}
+
+// pushLockTxnAfterTimeout is like pushLockTxn, but it sets the Error wait
+// policy on its request so that the request will not block on the lock holder
+// if it is still active. It is meant to be used after a lock timeout has been
+// elapsed, and returns a WriteIntentErrors with a LOCK_TIMEOUT reason if the
+// lock holder is not abandoned.
+func (w *lockTableWaiterImpl) pushLockTxnAfterTimeout(
+	ctx context.Context, req Request, ws waitingState,
+) *Error {
+	req.WaitPolicy = lock.WaitPolicy_Error
+	err := w.pushLockTxn(ctx, req, ws)
+	if _, ok := err.GetDetail().(*roachpb.WriteIntentError); ok {
+		err = newWriteIntentErr(req, ws, reasonLockTimeout)
+	}
+	return err
 }
 
 // pushRequestTxn pushes the owner of the provided request.
@@ -631,6 +730,21 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 	return h
 }
 
+// timeUntilDeadline computes the duration until the specified deadline is
+// reached. If the deadline has already been reached, the method returns 0. As
+// an optimization and as a convenience for tests, if the deadline is within a
+// threshold such that it does not make sense to begin an expensive operation
+// that is limited by the deadline, the method considers the deadline to have
+// already been reached.
+func (w *lockTableWaiterImpl) timeUntilDeadline(deadline time.Time) time.Duration {
+	dur := deadline.Sub(w.clock.PhysicalTime())
+	const soon = 250 * time.Microsecond
+	if dur <= soon {
+		return 0
+	}
+	return dur
+}
+
 // ResolveDeferredIntents implements the lockTableWaiter interface.
 func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 	ctx context.Context, deferredResolution []roachpb.LockUpdate,
@@ -643,12 +757,46 @@ func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 	return w.ir.ResolveIntents(ctx, deferredResolution, opts)
 }
 
+// doWithTimeoutAndFallback runs the withTimeout function with the specified
+// timeout. If the function completes before hitting the timeout, its result
+// is returned. Otherwise, the afterTimeout function is run without a timeout
+// and its result is returned.
+//
+// The function is called in a few locations to run a blocking push with a
+// timeout and then to fall back to a non-blocking push if that timeout is
+// reached. This pattern is used because on a timeout, we don't know whether a
+// blocking PUSH_TIMESTAMP / PUSH_ABORT push actually got to the point of
+// proving that the pushee was active and began waiting in its txnwait.Queue.
+// The push may have timed out before this point due to a slow network, slow
+// CPU, or for some other reason. But just like with WaitPolicy_Error, we don't
+// want to throw a WriteIntentError on abandoned locks. So on timeout, we issue
+// a PUSH_TOUCH request (like we do for WaitPolicy_Error) that is not subject to
+// the lock_timeout to check with certainty whether the conflict is active or
+// not, but without blocking if it happens to be active.
+func doWithTimeoutAndFallback(
+	ctx context.Context,
+	timeout time.Duration,
+	withTimeout, afterTimeout func(ctx context.Context) *Error,
+) *Error {
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, timeout) // nolint:context
+	defer timeoutCancel()
+	err := withTimeout(timeoutCtx)
+	if !errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+		// If the context deadline was not exceeded, return the result.
+		//
+		// NOTE: we look at timeoutCtx.Err() and not err to avoid the
+		// potential for bugs if context cancellation is not propagated
+		// correctly on some error paths.
+		return err
+	}
+	// Otherwise, run the fallback function without a timeout.
+	return afterTimeout(ctx)
+}
+
 // watchForNotifications selects on the provided channel and watches for any
 // updates. If the channel is ever notified, it calls the provided context
-// cancelation function and exits.
-func (w *lockTableWaiterImpl) watchForNotifications(
-	ctx context.Context, cancel func(), newStateC chan struct{},
-) {
+// cancellation function and exits.
+func watchForNotifications(ctx context.Context, cancel func(), newStateC chan struct{}) {
 	select {
 	case <-newStateC:
 		// Re-signal the channel.
@@ -787,9 +935,18 @@ func (h *contentionEventHelper) emitAndInit(s waitingState) {
 	}
 }
 
-func newWriteIntentErr(req Request, ws waitingState) *Error {
+const (
+	reasonWaitPolicy                 = roachpb.WriteIntentError_REASON_WAIT_POLICY
+	reasonLockTimeout                = roachpb.WriteIntentError_REASON_LOCK_TIMEOUT
+	reasonWaitQueueMaxLengthExceeded = roachpb.WriteIntentError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED
+)
+
+func newWriteIntentErr(
+	req Request, ws waitingState, reason roachpb.WriteIntentError_Reason,
+) *Error {
 	err := roachpb.NewError(&roachpb.WriteIntentError{
 		Intents: []roachpb.Intent{roachpb.MakeIntent(ws.txn, ws.key)},
+		Reason:  reason,
 	})
 	// TODO(nvanbenschoten): setting an error index can assist the KV client in
 	// understanding which request hit an error. This is not necessary, but can

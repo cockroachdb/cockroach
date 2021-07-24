@@ -810,7 +810,10 @@ func TestLint(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(filter, func(s string) {
+		if err := stream.ForEach(stream.Sequence(
+			filter,
+			stream.GrepNot(`nolint:context`),
+		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'contextutil.RunWithTimeout' instead", s)
 		}); err != nil {
 			t.Error(err)

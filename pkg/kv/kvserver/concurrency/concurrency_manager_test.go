@@ -53,7 +53,7 @@ import (
 // The input files use the following DSL:
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [uncertainty-limit=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [max-lock-wait-queue-length=<int>]
+// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>]
 //   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 // sequence     req=<req-name> [eval-kind=<pess|opt|pess-after-opt]
 // finish       req=<req-name>
@@ -154,6 +154,15 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				waitPolicy := scanWaitPolicy(t, d, false /* required */)
 
+				var lockTimeout time.Duration
+				if d.HasArg("lock-timeout") {
+					// A lock timeout of 1ns will be considered immediately expired
+					// without a delay by the lockTableWaiter, ensuring that the lock
+					// timeout logic deterministically fires.
+					// See (*lockTableWaiterImpl).timeUntilDeadline.
+					lockTimeout = 1 * time.Nanosecond
+				}
+
 				var maxLockWaitQueueLength int
 				if d.HasArg("max-lock-wait-queue-length") {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
@@ -169,6 +178,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					// TODO(nvanbenschoten): test Priority
 					ReadConsistency:        readConsistency,
 					WaitPolicy:             waitPolicy,
+					LockTimeout:            lockTimeout,
 					MaxLockWaitQueueLength: maxLockWaitQueueLength,
 					Requests:               reqUnions,
 					LatchSpans:             latchSpans,

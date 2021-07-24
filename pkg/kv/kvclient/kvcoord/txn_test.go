@@ -803,7 +803,9 @@ func TestTxnWaitPolicies(t *testing.T) {
 		// Priority does not matter.
 		err := <-errorC
 		require.NotNil(t, err)
-		require.IsType(t, &roachpb.WriteIntentError{}, err)
+		wiErr := new(roachpb.WriteIntentError)
+		require.True(t, errors.As(err, &wiErr))
+		require.Equal(t, roachpb.WriteIntentError_REASON_WAIT_POLICY, wiErr.Reason)
 
 		// Let blocked requests proceed.
 		require.NoError(t, txn.Commit(ctx))
@@ -811,6 +813,27 @@ func TestTxnWaitPolicies(t *testing.T) {
 			require.NoError(t, <-blockC)
 		}
 	})
+}
+
+func TestTxnLockTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s := createTestDB(t)
+	defer s.Stop()
+
+	key := []byte("b")
+	txn := s.DB.NewTxn(ctx, "test txn")
+	require.NoError(t, txn.Put(ctx, key, "new value"))
+
+	var b kv.Batch
+	b.Header.LockTimeout = 25 * time.Millisecond
+	b.Get(key)
+	err := s.DB.Run(ctx, &b)
+	require.NotNil(t, err)
+	wiErr := new(roachpb.WriteIntentError)
+	require.True(t, errors.As(err, &wiErr))
+	require.Equal(t, roachpb.WriteIntentError_REASON_LOCK_TIMEOUT, wiErr.Reason)
 }
 
 // TestTxnReturnsWriteTooOldErrorOnConflictingDeleteRange tests that if two
