@@ -368,70 +368,92 @@ func (r *Registry) newJob(record Record, jobID jobspb.JobID) *Job {
 	return job
 }
 
-// CreateJobsWithTxn creates jobs in a batch by including all the given job records
-// in a single insert to the jobs table.
-// There must be at least one job to create, otherwise the function returns an error.
-// If an error occurs while preparing the insert statement, no job is created.
-//TODO(sajjad): To discuss: What batch size do we expect? Should we limit the
-// batch size? Large batch sizes can have side effects, e.g., description
-// column's value will be large due to large statement size. Are there any
-// implications that can result in exceeding limits such as columns size limits?
+// CreateJobsWithTxn creates jobs in fixed-size batches. There must be at least
+// one job to create, otherwise the function returns an error.
+// If an error occurs while preparing the insert statement, no further jobs
+// are created and the error is returned. The function returns the list of
+// created jobs.
 func (r *Registry) CreateJobsWithTxn(
-	ctx context.Context, jobRecords []*Specification, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, records []*Record,
 ) ([]*Job, error) {
-	if len(jobRecords) == 0 {
+	if len(records) == 0 {
 		return nil, errors.Errorf("no jobs to create.")
 	}
 
+	// maxBatchSize limits the number of jobs created in one batch.
+	// Batch size 100 was picked arbitrarily.
+	const maxBatchSize = 100
+	const columnValues = " ($%d, $%d, $%d, $%d, $%d, $%d)"
+	const insertStmt = `
+INSERT INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id)
+VALUES`
+
+	log.Infof(ctx, "creating %d jobs in batches of %d", len(records), maxBatchSize)
 	s, err := r.sqlInstance.Session(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting live session")
 	}
 	sessionID := s.ID()
-	start := timeutil.Now()
-	if txn != nil {
-		start = txn.ReadTimestamp().GoTime()
-	}
-	modifiedMicros := timeutil.ToUnixMicros(start)
 
-	var sb strings.Builder
-	sb.WriteString(`
-INSERT INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id)
-VALUES`)
+	// Jobs to return.
+	var retJobs []*Job
+	// To create INSERT statement.
+	var stmtSB strings.Builder
+	numBatches := len(records) / maxBatchSize
+	for iBatch := 0; iBatch <= numBatches; iBatch++ {
+		start := timeutil.Now()
+		if txn != nil {
+			start = txn.ReadTimestamp().GoTime()
+		}
+		modifiedMicros := timeutil.ToUnixMicros(start)
 
-	argIdx := 0
-	var args []interface{}
-	var jobs []*Job
-	for i, jr := range jobRecords {
-		j := r.newJob(jr.record, jr.jobID)
-		j.sessionID = sessionID
-		j.mu.progress.ModifiedMicros = modifiedMicros
-		payloadBytes, err := protoutil.Marshal(&j.mu.payload)
-		if err != nil {
-			return nil, err
+		argIdx := 0
+		var args []interface{}
+		for i := 0; i < maxBatchSize; i++ {
+			iRecord := i + iBatch*maxBatchSize
+			if iRecord == len(records) {
+				break
+			}
+			// Prepare the statement in the first and last batches only, reuse in
+			// the middle batches.
+			if iBatch == 0 || iBatch == numBatches {
+				// First record in the batch.
+				if i == 0 {
+					stmtSB.Reset()
+					stmtSB.WriteString(insertStmt)
+				} else {
+					stmtSB.WriteString(", ")
+				}
+				// The number of arguments must match the number of columns in the insert stmt.
+				stmtSB.WriteString(fmt.Sprintf(columnValues, argIdx+1, argIdx+2, argIdx+3, argIdx+4, argIdx+5, argIdx+6))
+			}
+			record := records[iRecord]
+			job := r.newJob(*record, record.JobID)
+			job.sessionID = sessionID
+			job.mu.progress.ModifiedMicros = modifiedMicros
+			payloadBytes, err := protoutil.Marshal(&job.mu.payload)
+			if err != nil {
+				return nil, err
+			}
+			progressBytes, err := protoutil.Marshal(&job.mu.progress)
+			if err != nil {
+				return nil, err
+			}
+			args = append(args, record.JobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID())
+			argIdx += 6 // We have six columns to insert.
+			retJobs = append(retJobs, job)
 		}
-		progressBytes, err := protoutil.Marshal(&j.mu.progress)
-		if err != nil {
-			return nil, err
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.Infof(ctx, "executing batch insert with statement: %s", stmtSB.String())
 		}
-		if i > 0 {
-			sb.WriteString(", ")
+		if haveJobs := len(args) > 0; haveJobs {
+			if _, err = r.ex.Exec(ctx, "job-rows-batch-insert", txn, stmtSB.String(), args...,
+			); err != nil {
+				return nil, err
+			}
 		}
-		// The number of arguments must match the number of columns in the insert stmt.
-		sb.WriteString(fmt.Sprintf(" ($%d, $%d, $%d, $%d, $%d, $%d)",
-			argIdx+1, argIdx+2, argIdx+3, argIdx+4, argIdx+5, argIdx+6))
-		args = append(args, jr.jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID())
-		argIdx += 6 // We have six columns to insert.
-		jobs = append(jobs, j)
 	}
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "[SR] executing batch insert with statement: %s", sb.String())
-	}
-	if _, err = r.ex.Exec(ctx, "job-rows-batch-insert", txn, sb.String(), args...,
-	); err != nil {
-		return nil, err
-	}
-	return jobs, nil
+	return retJobs, nil
 }
 
 // CreateJobWithTxn creates a job to be started later with StartJob. It stores
