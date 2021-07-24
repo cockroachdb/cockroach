@@ -410,6 +410,24 @@ func (b *Bytes) Reset() {
 	b.maxSetLength = 0
 }
 
+// Truncate truncates the underlying bytes to the given length. This allows Set
+// to be called at or beyond the given length. If the length of the bytes is
+// already less than or equal to the given length, Truncate is a no-op.
+func (b *Bytes) Truncate(length int) {
+	if b.isWindow {
+		panic("Truncate is called on a window into Bytes")
+	}
+	if length < 0 {
+		panic(fmt.Sprintf("length out of range: %d", length))
+	}
+	if length > b.Len() {
+		// This is a no-op.
+		return
+	}
+	b.data = b.data[:b.offsets[length]]
+	b.maxSetLength = length
+}
+
 // String is used for debugging purposes.
 func (b *Bytes) String() string {
 	var builder strings.Builder

@@ -438,6 +438,20 @@ func TestBytes(t *testing.T) {
 		other = b2.Window(0, 4)
 		other.AssertOffsetsAreNonDecreasing(4)
 	})
+
+	t.Run("Truncate", func(t *testing.T) {
+		b := NewBytes(8)
+		b.Set(4, []byte("foo"))
+		require.Equal(t, 5, b.maxSetLength)
+		require.Panics(t, func() { b.Set(1, []byte("bar")) })
+		b.Truncate(1)
+		require.Equal(t, 1, b.maxSetLength)
+		require.NotPanics(t, func() { b.Set(1, []byte("baz")) })
+		require.Equal(t, 2, b.maxSetLength)
+		b.Truncate(0)
+		require.Equal(t, 0, b.maxSetLength)
+		require.NotPanics(t, func() { b.Set(4, []byte("deadbeef")) })
+	})
 }
 
 func TestProportionalSize(t *testing.T) {
