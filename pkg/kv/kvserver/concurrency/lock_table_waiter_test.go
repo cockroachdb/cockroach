@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -411,6 +412,8 @@ func notifyUntilDone(t *testing.T, g *mockLockTableGuard) func() {
 	return func() { <-done }
 }
 
+// TestLockTableWaiterWithErrorWaitPolicy tests the lockTableWaiter's behavior
+// under different waiting states with an Error wait policy.
 func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -470,66 +473,83 @@ func testErrorWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPush
 	ctx := context.Background()
 	keyA := roachpb.Key("keyA")
 	testutils.RunTrueAndFalse(t, "lockHeld", func(t *testing.T, lockHeld bool) {
-		w, ir, g := setupLockTableWaiterTest()
-		defer w.stopper.Stop(ctx)
-		pusheeTxn := makeTxnProto("pushee")
+		testutils.RunTrueAndFalse(t, "pusheeActive", func(t *testing.T, pusheeActive bool) {
+			if !lockHeld && !pusheeActive {
+				skip.IgnoreLint(t, "incompatible params")
+			}
 
-		req := makeReq()
-		g.state = waitingState{
-			kind:        k,
-			txn:         &pusheeTxn.TxnMeta,
-			key:         keyA,
-			held:        lockHeld,
-			guardAccess: spanset.SpanReadOnly,
-		}
-		g.notify()
+			w, ir, g := setupLockTableWaiterTest()
+			defer w.stopper.Stop(ctx)
+			pusheeTxn := makeTxnProto("pushee")
 
-		// If the lock is not held or expPushTS is empty, expect an error
-		// immediately. The one exception to this is waitElsewhere, which
-		// expects no error.
-		if !lockHeld || expPushTS == dontExpectPush {
+			req := makeReq()
+			g.state = waitingState{
+				kind:        k,
+				txn:         &pusheeTxn.TxnMeta,
+				key:         keyA,
+				held:        lockHeld,
+				guardAccess: spanset.SpanReadOnly,
+			}
+			g.notify()
+
+			// If the lock is not held or expPushTS is empty, expect an error
+			// immediately. The one exception to this is waitElsewhere, which
+			// expects no error.
+			if !lockHeld || expPushTS == dontExpectPush {
+				err := w.WaitOn(ctx, req, g)
+				if k == waitElsewhere {
+					require.Nil(t, err)
+				} else {
+					require.NotNil(t, err)
+					require.Regexp(t, "conflicting intents", err)
+				}
+				return
+			}
+
+			ir.pushTxn = func(
+				_ context.Context,
+				pusheeArg *enginepb.TxnMeta,
+				h roachpb.Header,
+				pushType roachpb.PushTxnType,
+			) (*roachpb.Transaction, *Error) {
+				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
+				require.Equal(t, req.Txn, h.Txn)
+				require.Equal(t, expPushTS, h.Timestamp)
+				require.Equal(t, roachpb.PUSH_TOUCH, pushType)
+
+				resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.PENDING}
+				if pusheeActive {
+					return nil, roachpb.NewError(&roachpb.TransactionPushError{
+						PusheeTxn: *resp,
+					})
+				}
+
+				// Next, we'll try to resolve the lock now that we know the
+				// holder is ABORTED.
+				w.lt.(*mockLockTable).txnFinalizedFn = func(txn *roachpb.Transaction) {
+					require.Equal(t, pusheeTxn.ID, txn.ID)
+					require.Equal(t, roachpb.ABORTED, txn.Status)
+				}
+				ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
+					require.Equal(t, keyA, intent.Key)
+					require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
+					require.Equal(t, roachpb.ABORTED, intent.Status)
+					g.state = waitingState{kind: doneWaiting}
+					g.notify()
+					return nil
+				}
+				resp.Status = roachpb.ABORTED
+				return resp, nil
+			}
+
 			err := w.WaitOn(ctx, req, g)
-			if k == waitElsewhere {
-				require.Nil(t, err)
-			} else {
+			if pusheeActive {
 				require.NotNil(t, err)
 				require.Regexp(t, "conflicting intents", err)
+			} else {
+				require.Nil(t, err)
 			}
-			return
-		}
-
-		ir.pushTxn = func(
-			_ context.Context,
-			pusheeArg *enginepb.TxnMeta,
-			h roachpb.Header,
-			pushType roachpb.PushTxnType,
-		) (*roachpb.Transaction, *Error) {
-			require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
-			require.Equal(t, req.Txn, h.Txn)
-			require.Equal(t, expPushTS, h.Timestamp)
-			require.Equal(t, roachpb.PUSH_TOUCH, pushType)
-
-			resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.ABORTED}
-
-			// Next, we'll try to resolve the lock now that we know the
-			// holder is ABORTED.
-			w.lt.(*mockLockTable).txnFinalizedFn = func(txn *roachpb.Transaction) {
-				require.Equal(t, pusheeTxn.ID, txn.ID)
-				require.Equal(t, roachpb.ABORTED, txn.Status)
-			}
-			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
-				require.Equal(t, keyA, intent.Key)
-				require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
-				require.Equal(t, roachpb.ABORTED, intent.Status)
-				g.state = waitingState{kind: doneWaiting}
-				g.notify()
-				return nil
-			}
-			return resp, nil
-		}
-
-		err := w.WaitOn(ctx, req, g)
-		require.Nil(t, err)
+		})
 	})
 }
 
