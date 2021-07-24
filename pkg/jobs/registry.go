@@ -347,13 +347,20 @@ func (r *Registry) Run(
 }
 
 // newJob creates a new Job.
-func (r *Registry) newJob(record Record, jobID jobspb.JobID) *Job {
+func (r *Registry) newJob(record Record) *Job {
 	job := &Job{
-		id:        jobID,
+		id:        record.JobID,
 		registry:  r,
 		createdBy: record.CreatedBy,
 	}
-	job.mu.payload = jobspb.Payload{
+	job.mu.payload = r.makePayload(&record)
+	job.mu.progress = r.makeProgress(&record)
+	return job
+}
+
+// makePayload creates a Payload structure based on the given Record.
+func (r *Registry) makePayload(record *Record) jobspb.Payload {
+	return jobspb.Payload{
 		Description:   record.Description,
 		Statement:     record.Statements,
 		UsernameProto: record.Username.EncodeProto(),
@@ -361,77 +368,137 @@ func (r *Registry) newJob(record Record, jobID jobspb.JobID) *Job {
 		Details:       jobspb.WrapPayloadDetails(record.Details),
 		Noncancelable: record.NonCancelable,
 	}
-	job.mu.progress = jobspb.Progress{
+}
+
+// makeProgress creates a Progress structure based on the given Record.
+func (r *Registry) makeProgress(record *Record) jobspb.Progress {
+	return jobspb.Progress{
 		Details:       jobspb.WrapProgressDetails(record.Progress),
 		RunningStatus: string(record.RunningStatus),
 	}
-	return job
 }
 
-// CreateJobsWithTxn creates jobs in a batch by including all the given job records
-// in a single insert to the jobs table.
-// There must be at least one job to create, otherwise the function returns an error.
-// If an error occurs while preparing the insert statement, no job is created.
-//TODO(sajjad): To discuss: What batch size do we expect? Should we limit the
-// batch size? Large batch sizes can have side effects, e.g., description
-// column's value will be large due to large statement size. Are there any
-// implications that can result in exceeding limits such as columns size limits?
+// CreateJobsWithTxn creates jobs in fixed-size batches. There must be at least
+// one job to create, otherwise the function returns an error. The function
+// returns the IDs of the jobs created.
 func (r *Registry) CreateJobsWithTxn(
-	ctx context.Context, jobRecords []*Specification, txn *kv.Txn,
-) ([]*Job, error) {
-	if len(jobRecords) == 0 {
-		return nil, errors.Errorf("no jobs to create.")
+	ctx context.Context, txn *kv.Txn, records []*Record,
+) ([]jobspb.JobID, error) {
+	created := make([]jobspb.JobID, 0, len(records))
+	for toCreate := records; len(toCreate) > 0; {
+		const maxBatchSize = 100
+		batchSize := len(toCreate)
+		if batchSize > maxBatchSize {
+			batchSize = maxBatchSize
+		}
+		createdInBatch, err := r.createJobsInBatchWithTxn(ctx, txn, toCreate[:batchSize])
+		if err != nil {
+			return nil, err
+		}
+		created = append(created, createdInBatch...)
+		toCreate = toCreate[batchSize:]
 	}
+	return created, nil
+}
 
+// createJobsInBatchWithTxn creates a batch of jobs from given records in a
+// transaction.
+func (r *Registry) createJobsInBatchWithTxn(
+	ctx context.Context, txn *kv.Txn, records []*Record,
+) ([]jobspb.JobID, error) {
 	s, err := r.sqlInstance.Session(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting live session")
 	}
-	sessionID := s.ID()
 	start := timeutil.Now()
 	if txn != nil {
 		start = txn.ReadTimestamp().GoTime()
 	}
 	modifiedMicros := timeutil.ToUnixMicros(start)
-
-	var sb strings.Builder
-	sb.WriteString(`
-INSERT INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id)
-VALUES`)
-
-	argIdx := 0
-	var args []interface{}
-	var jobs []*Job
-	for i, jr := range jobRecords {
-		j := r.newJob(jr.record, jr.jobID)
-		j.sessionID = sessionID
-		j.mu.progress.ModifiedMicros = modifiedMicros
-		payloadBytes, err := protoutil.Marshal(&j.mu.payload)
-		if err != nil {
-			return nil, err
-		}
-		progressBytes, err := protoutil.Marshal(&j.mu.progress)
-		if err != nil {
-			return nil, err
-		}
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		// The number of arguments must match the number of columns in the insert stmt.
-		sb.WriteString(fmt.Sprintf(" ($%d, $%d, $%d, $%d, $%d, $%d)",
-			argIdx+1, argIdx+2, argIdx+3, argIdx+4, argIdx+5, argIdx+6))
-		args = append(args, jr.jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID())
-		argIdx += 6 // We have six columns to insert.
-		jobs = append(jobs, j)
+	stmt, args, jobIDs, err := r.batchJobInsertStmt(s.ID(), records, modifiedMicros)
+	if err != nil {
+		return nil, err
 	}
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "[SR] executing batch insert with statement: %s", sb.String())
-	}
-	if _, err = r.ex.Exec(ctx, "job-rows-batch-insert", txn, sb.String(), args...,
+	if _, err = r.ex.Exec(
+		ctx, "job-rows-batch-insert", txn, stmt, args...,
 	); err != nil {
 		return nil, err
 	}
-	return jobs, nil
+	return jobIDs, nil
+}
+
+// batchJobInsertStmt creates an INSERT statement and its corresponding arguments
+// for batched jobs creation.
+func (r *Registry) batchJobInsertStmt(
+	sessionID sqlliveness.SessionID, records []*Record, modifiedMicros int64,
+) (string, []interface{}, []jobspb.JobID, error) {
+	instanceID := r.ID()
+	const numColumns = 6
+	columns := [numColumns]string{`id`, `status`, `payload`, `progress`, `claim_session_id`, `claim_instance_id`}
+	marshalPanic := func(m protoutil.Message) []byte {
+		data, err := protoutil.Marshal(m)
+		if err != nil {
+			panic(err)
+		}
+		return data
+	}
+	valueFns := map[string]func(*Record) interface{}{
+		`id`:                func(rec *Record) interface{} { return rec.JobID },
+		`status`:            func(rec *Record) interface{} { return StatusRunning },
+		`claim_session_id`:  func(rec *Record) interface{} { return sessionID.UnsafeBytes() },
+		`claim_instance_id`: func(rec *Record) interface{} { return instanceID },
+		`payload`: func(rec *Record) interface{} {
+			payload := r.makePayload(rec)
+			return marshalPanic(&payload)
+		},
+		`progress`: func(rec *Record) interface{} {
+			progress := r.makeProgress(rec)
+			progress.ModifiedMicros = modifiedMicros
+			return marshalPanic(&progress)
+		},
+	}
+	appendValues := func(rec *Record, vals *[]interface{}) (err error) {
+		defer func() {
+			switch ret := recover(); ret.(type) {
+			case nil:
+			case error:
+				err = errors.CombineErrors(err, errors.Wrapf(ret.(error), "encoding job %d", rec.JobID))
+			default:
+				panic(ret)
+			}
+		}()
+		for _, c := range columns {
+			*vals = append(*vals, valueFns[c](rec))
+		}
+		return nil
+	}
+	args := make([]interface{}, 0, len(records)*numColumns)
+	jobIDs := make([]jobspb.JobID, 0, len(records))
+	var buf strings.Builder
+	buf.WriteString(`INSERT INTO system.jobs (`)
+	buf.WriteString(strings.Join(columns[:numColumns], ", "))
+	buf.WriteString(`) VALUES `)
+	argIdx := 1
+	for i, rec := range records {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString("(")
+		for j := range columns {
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString("$")
+			buf.WriteString(strconv.Itoa(argIdx))
+			argIdx++
+		}
+		buf.WriteString(")")
+		if err := appendValues(rec, &args); err != nil {
+			return "", nil, nil, err
+		}
+		jobIDs = append(jobIDs, rec.JobID)
+	}
+	return buf.String(), args, jobIDs, nil
 }
 
 // CreateJobWithTxn creates a job to be started later with StartJob. It stores
@@ -440,7 +507,10 @@ VALUES`)
 func (r *Registry) CreateJobWithTxn(
 	ctx context.Context, record Record, jobID jobspb.JobID, txn *kv.Txn,
 ) (*Job, error) {
-	j := r.newJob(record, jobID)
+	// TODO(sajjad): Clean up the interface - remove jobID from the params as
+	// Record now has JobID field.
+	record.JobID = jobID
+	j := r.newJob(record)
 
 	s, err := r.sqlInstance.Session(ctx)
 	if err != nil {
@@ -475,7 +545,10 @@ VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBy
 func (r *Registry) CreateAdoptableJobWithTxn(
 	ctx context.Context, record Record, jobID jobspb.JobID, txn *kv.Txn,
 ) (*Job, error) {
-	j := r.newJob(record, jobID)
+	// TODO(sajjad): Clean up the interface - remove jobID from the params as
+	// Record now has JobID field.
+	record.JobID = jobID
+	j := r.newJob(record)
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
 		// Note: although the following uses ReadTimestamp and
 		// ReadTimestamp can diverge from the value of now() throughout a

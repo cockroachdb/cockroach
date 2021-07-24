@@ -787,7 +787,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.descCollection = descs.MakeCollection(
 		s.cfg.LeaseManager, s.cfg.Settings, sd, s.cfg.HydratedTables, s.cfg.VirtualSchemas)
 	ex.extraTxnState.txnRewindPos = -1
-	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Job)
+	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Record)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
@@ -1089,10 +1089,11 @@ type connExecutor struct {
 		// that staged them commits.
 		jobs jobsCollection
 
-		// schemaChangeJobsCache is a map of descriptor IDs to Jobs.
+		// schemaChangeJobsCache is a map of descriptor IDs to job Records.
 		// Used in createOrUpdateSchemaChangeJob so we can check if a job has been
-		// queued up for the given ID.
-		schemaChangeJobsCache map[descpb.ID]*jobs.Job
+		// queued up for the given ID. The cache remains valid only for the current
+		// transaction and it is cleared after the transaction is committed.
+		schemaChangeJobsCache map[descpb.ID]*jobs.Record
 
 		// autoRetryCounter keeps track of the which iteration of a transaction
 		// auto-retry we're currently in. It's 0 whenever the transaction state is not

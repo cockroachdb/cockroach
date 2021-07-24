@@ -48,9 +48,9 @@ exp,benchmark
 38,DropView/drop_2_views
 53,DropView/drop_3_views
 18,Grant/grant_all_on_1_table
-21,Grant/grant_all_on_2_tables
-24,Grant/grant_all_on_3_tables
-21-22,GrantRole/grant_1_role
+20,Grant/grant_all_on_2_tables
+22,Grant/grant_all_on_3_tables
+21,GrantRole/grant_1_role
 24,GrantRole/grant_2_roles
 2,ORMQueries/activerecord_type_introspection_query
 2,ORMQueries/django_table_introspection_1_table

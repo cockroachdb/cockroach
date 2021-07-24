@@ -606,8 +606,8 @@ func TestJobsCache(t *testing.T) {
 	ctx := context.Background()
 
 	foundInCache := false
-	runAfterSCJobsCacheLookup := func(job *jobs.Job) {
-		if job != nil {
+	runAfterSCJobsCacheLookup := func(record *jobs.Record) {
+		if record != nil {
 			foundInCache = true
 		}
 	}
