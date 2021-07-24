@@ -57,20 +57,15 @@ func (p *planner) writeSchemaDesc(ctx context.Context, desc *schemadesc.Mutable)
 func (p *planner) writeSchemaDescChange(
 	ctx context.Context, desc *schemadesc.Mutable, jobDesc string,
 ) error {
-	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[desc.ID]
-	if jobExists {
+	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[desc.ID]
+	if recordExists {
 		// Update it.
-		if err := job.SetDescription(ctx, p.txn,
-			func(ctx context.Context, desc string) (string, error) {
-				return desc + "; " + jobDesc, nil
-			},
-		); err != nil {
-			return err
-		}
-		log.Infof(ctx, "job %d: updated with for change on schema %d", job.ID(), desc.ID)
+		record.AppendDescription(jobDesc)
+		log.Infof(ctx, "job %d: updated job's specification for change on schema %d", record.JobID, desc.ID)
 	} else {
 		// Or, create a new job.
 		jobRecord := jobs.Record{
+			JobID:         p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID(),
 			Description:   jobDesc,
 			Username:      p.User(),
 			DescriptorIDs: descpb.IDs{desc.ID},
@@ -83,11 +78,8 @@ func (p *planner) writeSchemaDescChange(
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,
 		}
-		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
-		if err != nil {
-			return err
-		}
-		log.Infof(ctx, "queued new schema change job %d for schema %d", newJob.ID(), desc.ID)
+		p.extendedEvalCtx.SchemaChangeJobRecords[desc.ID] = &jobRecord
+		log.Infof(ctx, "queued new schema change job %d for schema %d", jobRecord.JobID, desc.ID)
 	}
 
 	return p.writeSchemaDesc(ctx, desc)

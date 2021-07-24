@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -287,12 +288,17 @@ func TestBatchJobsCreation(t *testing.T) {
 		batchSize int
 	}{
 		{"small batch", 10},
-		{"medium batch", 500},
-		{"large batch", 1000},
-		{"extra large batch", 10000},
+		{"medium batch", 501},
+		{"large batch", 1001},
+		{"extra large batch", 5001},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			{
+				if test.batchSize > 10 {
+					skip.UnderStress(t, "skipping stress test for batch size ", test.batchSize)
+					skip.UnderRace(t, "skipping test for batch size ", test.batchSize)
+				}
+
 				args := base.TestServerArgs{
 					Knobs: base.TestingKnobs{
 						JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
@@ -314,30 +320,27 @@ func TestBatchJobsCreation(t *testing.T) {
 				})
 
 				// Create a batch of job specifications.
-				var jd []*Specification
+				var records []*Record
 				for i := 0; i < test.batchSize; i++ {
-					jr := Record{
-						// TODO (sajjad): To discuss: I guess this job's type should be set in its
-						// payload based on Details. I was hoping that the type will be "IMPORT" in
-						// the jobs table when the job is created, but it occurred to be NULL. Why is that?
+					records = append(records, &Record{
+						JobID:    r.MakeJobID(),
 						Details:  jobspb.ImportDetails{},
 						Progress: jobspb.ImportProgress{},
-					}
-					jd = append(jd, &Specification{r.MakeJobID(), jr})
+					})
 				}
 				// Create jobs in a batch.
-				var jobs []*Job
+				var jobIDs []jobspb.JobID
 				require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					var err error
-					jobs, err = r.CreateJobsWithTxn(ctx, jd, txn)
+					jobIDs, err = r.CreateJobsWithTxn(ctx, txn, records)
 					return err
 				}))
-				require.Equal(t, len(jobs), test.batchSize)
+				require.Equal(t, len(jobIDs), test.batchSize)
 				// Wait for the jobs to complete.
 				tdb.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW JOBS]",
 					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
-				for _, job := range jobs {
-					tdb.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = '%d'", job.id),
+				for _, id := range jobIDs {
+					tdb.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = '%d'", id),
 						[][]string{{"succeeded"}})
 				}
 			}
