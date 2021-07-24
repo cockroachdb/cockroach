@@ -807,7 +807,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(sd)
 	ex.extraTxnState.txnRewindPos = -1
-	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Job)
+	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
@@ -1099,10 +1099,11 @@ type connExecutor struct {
 		// that staged them commits.
 		jobs jobsCollection
 
-		// schemaChangeJobsCache is a map of descriptor IDs to Jobs.
+		// schemaChangeJobRecords is a map of descriptor IDs to job Records.
 		// Used in createOrUpdateSchemaChangeJob so we can check if a job has been
-		// queued up for the given ID.
-		schemaChangeJobsCache map[descpb.ID]*jobs.Job
+		// queued up for the given ID. The cache remains valid only for the current
+		// transaction and it is cleared after the transaction is committed.
+		schemaChangeJobRecords map[descpb.ID]*jobs.Record
 
 		// autoRetryCounter keeps track of the which iteration of a transaction
 		// auto-retry we're currently in. It's 0 whenever the transaction state is not
@@ -1417,8 +1418,8 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 		mode: ex.sessionData.NewSchemaChangerMode,
 	}
 
-	for k := range ex.extraTxnState.schemaChangeJobsCache {
-		delete(ex.extraTxnState.schemaChangeJobsCache, k)
+	for k := range ex.extraTxnState.schemaChangeJobRecords {
+		delete(ex.extraTxnState.schemaChangeJobRecords, k)
 	}
 
 	ex.extraTxnState.descCollection.ReleaseAll(ctx)
@@ -2328,21 +2329,21 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SQLStatsController: ex.server.sqlStatsController,
 			CompactEngineSpan:  ex.server.cfg.CompactEngineSpanFunc,
 		},
-		SessionMutator:       ex.dataMutator,
-		VirtualSchemas:       ex.server.cfg.VirtualSchemas,
-		Tracing:              &ex.sessionTracing,
-		NodesStatusServer:    ex.server.cfg.NodesStatusServer,
-		RegionsServer:        ex.server.cfg.RegionsServer,
-		SQLStatusServer:      ex.server.cfg.SQLStatusServer,
-		MemMetrics:           &ex.memMetrics,
-		Descs:                &ex.extraTxnState.descCollection,
-		ExecCfg:              ex.server.cfg,
-		DistSQLPlanner:       ex.server.cfg.DistSQLPlanner,
-		TxnModesSetter:       ex,
-		Jobs:                 &ex.extraTxnState.jobs,
-		SchemaChangeJobCache: ex.extraTxnState.schemaChangeJobsCache,
-		statsStorage:         ex.server.sqlStats,
-		indexUsageStats:      ex.indexUsageStats,
+		SessionMutator:         ex.dataMutator,
+		VirtualSchemas:         ex.server.cfg.VirtualSchemas,
+		Tracing:                &ex.sessionTracing,
+		NodesStatusServer:      ex.server.cfg.NodesStatusServer,
+		RegionsServer:          ex.server.cfg.RegionsServer,
+		SQLStatusServer:        ex.server.cfg.SQLStatusServer,
+		MemMetrics:             &ex.memMetrics,
+		Descs:                  &ex.extraTxnState.descCollection,
+		ExecCfg:                ex.server.cfg,
+		DistSQLPlanner:         ex.server.cfg.DistSQLPlanner,
+		TxnModesSetter:         ex,
+		Jobs:                   &ex.extraTxnState.jobs,
+		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
+		statsStorage:           ex.server.sqlStats,
+		indexUsageStats:        ex.indexUsageStats,
 	}
 }
 
