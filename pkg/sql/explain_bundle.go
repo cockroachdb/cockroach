@@ -665,6 +665,11 @@ func (c *stmtEnvCollector) PrintTableStats(
 	}
 
 	stats = strings.Replace(stats, "'", "''", -1)
+	// Don't display the catalog during the `ALTER TABLE` since the schema file
+	// doesn't specify the catalog for its create table statements.
+	explicitCatalog := tn.ExplicitCatalog
+	tn.ExplicitCatalog = false
 	fmt.Fprintf(w, "ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
+	tn.ExplicitCatalog = explicitCatalog
 	return nil
 }
