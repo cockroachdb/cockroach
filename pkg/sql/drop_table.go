@@ -501,15 +501,32 @@ func (p *planner) initiateDropTable(
 // schema change jobs that couldn't be successfully reverted and ended up in
 // a failed state. Such jobs could have already been GCed from the jobs
 // table by the time this code runs.
+//
+// This function is called while dropping a table or truncate. Therefore, we
+// have to stop the ongoing mutation jobs on the table. If the job is in the
+// cache that was created during this transaction, we can simply remove the
+// job from the cache because the job is not started yet. If the mutation job
+// was started in another transaction, we mark the job as succeeded or failed
+// to stop the job.
 func (p *planner) markTableMutationJobsSuccessful(
 	ctx context.Context, tableDesc *tabledesc.Mutable,
 ) error {
 	for _, mj := range tableDesc.MutationJobs {
-		jobID := jobspb.JobID(mj.JobID)
-		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
+		mutationID := jobspb.JobID(mj.JobID)
+		// Jobs are only added in the cache during the transaction and are created
+		// in a batch only when the transaction commits. So, if a job's record exists
+		// in the cache, we can simply delete that record from cache because the
+		// job is not created yet.
+		if record, exists := p.ExtendedEvalContext().SchemaChangeJobCache[tableDesc.ID]; exists {
+			if record.JobID == mutationID {
+				delete(p.ExtendedEvalContext().SchemaChangeJobCache, tableDesc.ID)
+				continue
+			}
+		}
+		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, mutationID, p.txn)
 		if err != nil {
 			if jobs.HasJobNotFoundError(err) {
-				log.Warningf(ctx, "mutation job %d not found", jobID)
+				log.Warningf(ctx, "mutation job %d not found", mutationID)
 				continue
 			}
 			return err
@@ -519,7 +536,7 @@ func (p *planner) markTableMutationJobsSuccessful(
 				status := md.Status
 				switch status {
 				case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, jobs.StatusRevertFailed:
-					log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
+					log.Warningf(ctx, "mutation job %d in unexpected state %s", mutationID, status)
 					return nil
 				case jobs.StatusRunning, jobs.StatusPending:
 					status = jobs.StatusSucceeded
@@ -528,13 +545,12 @@ func (p *planner) markTableMutationJobsSuccessful(
 					// they're eligible to ever succeed, so mark them as failed.
 					status = jobs.StatusFailed
 				}
-				log.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
+				log.Infof(ctx, "marking mutation job %d for dropped table as %s", mutationID, status)
 				ju.UpdateStatus(status)
 				return nil
 			}); err != nil {
 			return errors.Wrap(err, "updating mutation job for dropped table")
 		}
-		delete(p.ExtendedEvalContext().SchemaChangeJobCache, tableDesc.ID)
 	}
 	return nil
 }

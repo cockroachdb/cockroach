@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -803,9 +804,31 @@ func (ex *connExecutor) commitSQLTransaction(
 	return eventTxnFinishCommitted{}, nil
 }
 
+// createJobs creates jobs for the records cached in schemaChangeJobsCache
+// during this transaction.
+func (ex *connExecutor) createJobs(ctx context.Context) error {
+	if len(ex.extraTxnState.schemaChangeJobsCache) == 0 {
+		return nil
+	}
+	var records []*jobs.Record
+	for _, record := range ex.extraTxnState.schemaChangeJobsCache {
+		records = append(records, record)
+	}
+	jobIDs, err := ex.server.cfg.JobRegistry.CreateJobsWithTxn(ctx, ex.planner.extendedEvalCtx.Txn, records)
+	if err != nil {
+		return err
+	}
+	*ex.planner.extendedEvalCtx.Jobs = append(*ex.planner.extendedEvalCtx.Jobs, jobIDs...)
+	return nil
+}
+
 func (ex *connExecutor) commitSQLTransactionInternal(
 	ctx context.Context, ast tree.Statement,
 ) error {
+	if err := ex.createJobs(ctx); err != nil {
+		return err
+	}
+
 	if ex.extraTxnState.schemaChangerState.mode != sessiondata.UseNewSchemaChangerOff {
 		if err := ex.runPreCommitStages(ctx); err != nil {
 			return err
