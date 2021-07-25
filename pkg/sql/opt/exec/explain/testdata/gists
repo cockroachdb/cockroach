@@ -1,0 +1,497 @@
+
+exec-ddl
+CREATE TABLE foo (a INT PRIMARY KEY, b INT[], c STRING, INVERTED INDEX b_inverted_index(b), UNIQUE INDEX c_idx(c))
+----
+
+exec-ddl
+CREATE TABLE bar (ba INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+----
+
+exec-ddl
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
+----
+
+# ConstructScan/ConstructSerializingProject
+gist-explain-roundtrip
+SELECT * from foo
+----
+hash: 9489487498677608528
+plan-gist: AgFqAgAHAAAGBgA=
+• scan
+  missing stats
+  table: foo@primary
+  spans: FULL SCAN
+• scan
+  table: foo@primary
+  spans: FULL SCAN
+
+# ConstructFilter
+gist-explain-roundtrip
+SELECT * from foo WHERE a = 1
+----
+hash: 9232698808283701206
+plan-gist: AgFqAgAHAgAGBgA=
+• scan
+  missing stats
+  table: foo@primary
+  spans: 1 span
+• scan
+  table: foo@primary
+  spans: 0 spans
+
+# ConstructInvertedFilter/ConstructIndexJoin
+gist-explain-roundtrip
+SELECT * from foo WHERE b @> ARRAY[1]
+----
+hash: 16201508141227046250
+plan-gist: AgFqBAABAAITagIGBgA=
+• index join
+│ table: foo@primary
+│
+└── • scan
+      missing stats
+      table: foo@b_inverted_index
+      spans: 1 span
+• index join
+│ table: foo@primary
+│
+└── • scan
+      table: foo@b_inverted_index
+      spans: 1 span
+
+# ConstructSimpleProjectOp
+gist-explain-roundtrip
+select a,b from foo@c_idx where c = 'bar'
+----
+hash: 1205672026933967497
+plan-gist: AgFqBgAFAgATagIFBAYEAA==
+• index join
+│ table: foo@primary
+│
+└── • scan
+      missing stats
+      table: foo@c_idx
+      spans: 1 span
+• index join
+│ table: foo@primary
+│
+└── • scan
+      table: foo@c_idx
+      spans: 0 spans
+
+# ConstructRender
+gist-explain-roundtrip
+select a + 1 from foo
+----
+hash: 2389675096184913893
+plan-gist: AgFqBgABAAAHAAYCAA==
+• render
+│
+└── • scan
+      missing stats
+      table: foo@c_idx
+      spans: FULL SCAN
+• render
+│
+└── • scan
+      table: foo@c_idx
+      spans: FULL SCAN
+
+# ConstructApplyJoin
+gist-explain-roundtrip
+SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
+----
+hash: 12229645142276466433
+plan-gist: AgFuAgAHAAAIBAAGBgA=
+• apply join (semi)
+│ pred: column1 = a
+│
+└── • scan
+      missing stats
+      table: abc@primary
+      spans: FULL SCAN
+• apply join (semi)
+│
+└── • scan
+      table: abc@primary
+      spans: FULL SCAN
+
+# ConstructHashJoin
+gist-explain-roundtrip
+SELECT * FROM foo INNER HASH JOIN bar ON a = ba
+----
+hash: 581674594156450507
+plan-gist: AgFqAgAHAAABbAIAAQAACQACAgEBBggA
+• hash join
+│ equality: (a) = (ba)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: foo@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: bar@primary
+      spans: FULL SCAN
+• hash join
+│ equality: (a) = (ba)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     table: foo@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      table: bar@primary
+      spans: FULL SCAN
+
+# ConstructMergeJoin
+gist-explain-roundtrip
+SELECT * FROM foo JOIN bar ON a = ba
+----
+hash: 5599847003088118789
+plan-gist: AgFqAgAHAAABbAIAAQAACgAAAAEBBggA
+• merge join
+│ equality: (a) = (ba)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: foo@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: bar@primary
+      spans: FULL SCAN
+• merge join
+│
+├── • scan
+│     table: foo@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      table: bar@primary
+      spans: FULL SCAN
+
+# ConstructGroupBy
+gist-explain-roundtrip
+SELECT c, count(*) FROM foo, bar WHERE a = 1 GROUP BY c
+----
+hash: 13843774794200274452
+plan-gist: AgFsAgAAAAABagIABQIACQAAAAABBQILAAAGBAA=
+• group
+│
+└── • cross join
+    │
+    ├── • scan
+    │     missing stats
+    │     table: bar@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: foo@primary
+          spans: 1 span
+• group
+│
+└── • cross join
+    │
+    ├── • scan
+    │     table: bar@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          table: foo@primary
+          spans: 0 spans
+
+# ConstructScalarGroupBy
+gist-explain-roundtrip
+SELECT sum(a),max(c) FROM foo
+----
+hash: 14019041554553312077
+plan-gist: AgFqBgAFAAAMBgQA
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: foo@c_idx
+      spans: FULL SCAN
+• group (scalar)
+│
+└── • scan
+      table: foo@c_idx
+      spans: FULL SCAN
+
+# ConstructInsert
+gist-explain-roundtrip
+INSERT INTO foo VALUES (1,ARRAY[1,2],'str')
+----
+hash: 7858461319896258412
+plan-gist: Ah9qAQA=
+• insert fast path
+  into: foo(a, b, c)
+  auto commit
+  size: 3 columns, 1 row
+• insert fast path
+  into: foo()
+  auto commit
+
+# ConstructDistinct
+gist-explain-roundtrip
+SELECT DISTINCT ON (b,c) b,c from abc
+----
+hash: 7154331578550141841
+plan-gist: AgFuAgAGAAANAAYEAA==
+• distinct
+│ distinct on: b, c
+│
+└── • scan
+      missing stats
+      table: abc@primary
+      spans: FULL SCAN
+• distinct
+│ distinct on
+│
+└── • scan
+      table: abc@primary
+      spans: FULL SCAN
+
+# ConstructHashSetOpOp
+gist-explain-roundtrip
+SELECT * FROM abc INTERSECT ALL SELECT * FROM abc
+----
+hash: 14180266622096736640
+plan-gist: AgFuAgAHAAABbgIABwAADwEABgYA
+• intersect all
+│
+├── • scan
+│     missing stats
+│     table: abc@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: abc@primary
+      spans: FULL SCAN
+• union all
+│
+├── • scan
+│     table: abc@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      table: abc@primary
+      spans: FULL SCAN
+
+# ConstructStreamingSetOpOp
+gist-explain-roundtrip
+SELECT * FROM abc UNION SELECT * FROM abc ORDER BY b,a
+----
+hash: 8701093766435411078
+plan-gist: AgFuAgAHAAARAW4CAAcAABEQDQAGBgA=
+• distinct
+│ distinct on: a
+│
+└── • union all
+    │
+    ├── • sort
+    │   │ order: +b,+a
+    │   │
+    │   └── • scan
+    │         missing stats
+    │         table: abc@primary
+    │         spans: FULL SCAN
+    │
+    └── • sort
+        │ order: +b,+a
+        │
+        └── • scan
+              missing stats
+              table: abc@primary
+              spans: FULL SCAN
+• distinct
+│ distinct on
+│
+└── • union all
+    │
+    ├── • sort
+    │   │ order
+    │   │
+    │   └── • scan
+    │         table: abc@primary
+    │         spans: FULL SCAN
+    │
+    └── • sort
+        │ order
+        │
+        └── • scan
+              table: abc@primary
+              spans: FULL SCAN
+
+# ConstructUnionAllOp
+gist-explain-roundtrip
+SELECT * FROM abc UNION ALL SELECT * FROM abc
+----
+hash: 6308280373918303600
+plan-gist: AgFuAgAHAAABbgIABwAAEAYGAA==
+• union all
+│
+├── • scan
+│     missing stats
+│     table: abc@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: abc@primary
+      spans: FULL SCAN
+• union all
+│
+├── • scan
+│     table: abc@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      table: abc@primary
+      spans: FULL SCAN
+
+# ConstructOrdinality
+gist-explain-roundtrip
+SELECT * FROM abc WITH ORDINALITY
+----
+hash: 5149511237402522706
+plan-gist: AgFuAgAHAAASBggA
+• ordinality
+│
+└── • scan
+      missing stats
+      table: abc@primary
+      spans: FULL SCAN
+• ordinality
+│
+└── • scan
+      table: abc@primary
+      spans: FULL SCAN
+
+# ConstructLookupJoin
+gist-explain-roundtrip
+SELECT * FROM foo INNER LOOKUP JOIN bar ON a = ba
+----
+hash: 481304706963354016
+plan-gist: AgFqAgAHAAAUAGwCAgEABggA
+• lookup join
+│ table: bar@primary
+│ equality: (a) = (ba)
+│ equality cols are key
+│
+└── • scan
+      missing stats
+      table: foo@primary
+      spans: FULL SCAN
+• lookup join
+│ table: bar@primary
+│ equality: (a) = (ba)
+│ equality cols are key
+│
+└── • scan
+      table: foo@primary
+      spans: FULL SCAN
+
+# ConstructInvertedJoin
+# ConstructZigzagJoin
+
+#	limitOp
+#	max1RowOp
+#	projectSetOp
+#	windowOp
+#	explainOptOp
+#	explainOp
+#	showTraceOp
+#	insertOp
+#	insertFastPathOp
+#	updateOp
+#	upsertOp
+#	deleteOp
+#	deleteRangeOp
+#	createTableOp
+#	createTableAsOp
+#	createViewOp
+#	sequenceSelectOp
+#	saveTableOp
+#	errorIfRowsOp
+#	opaqueOp
+#	alterTableSplitOp
+#	alterTableUnsplitOp
+#	alterTableUnsplitAllOp
+#	alterTableRelocateOp
+#	bufferOp
+#	scanBufferOp
+#	recursiveCTEOp
+#	controlJobsOp
+#	controlSchedulesOp
+#	cancelQueriesOp
+#	cancelSessionsOp
+#	createStatisticsOp
+#	exportOp
+
+# ConstructValues
+gist-explain-roundtrip
+SELECT 1
+----
+hash: 8435090442833167832
+plan-gist: AgIABgIA
+• values
+  size: 1 column, 1 row
+• norows
+
+
+# subquery
+gist-explain-roundtrip
+SELECT * FROM foo WHERE a = (SELECT ba from bar WHERE ba = 1)
+----
+hash: 13558644132802767819
+plan-gist: AgFqAgAHAAABbAIAAQIAAwYGAA==
+• root
+│
+├── • filter
+│   │ filter: a = @S1
+│   │
+│   └── • scan
+│         missing stats
+│         table: foo@primary
+│         spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT ba FROM bar WHERE ba = 1)
+    │ exec mode: one row
+    │
+    └── • scan
+          missing stats
+          table: bar@primary
+          spans: 1 span
+• root
+│
+├── • filter
+│   │
+│   └── • scan
+│         table: bar@primary
+│         spans: 0 spans
+│
+└── • subquery
+    │ id: @S1
+    │ exec mode: exists
+    │
+    └── • scan
+          table: foo@primary
+          spans: FULL SCAN
