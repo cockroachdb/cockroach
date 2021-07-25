@@ -83,7 +83,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -933,7 +932,7 @@ type ExecutorConfig struct {
 
 // StartConfigReconciliationJobHook is used to create and start the zone config
 // reconciliation job, if none exist.
-type StartConfigReconciliationJobHook func(ctx context.Context, stopper *stop.Stopper)
+type StartConfigReconciliationJobHook func(ctx context.Context)
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.
 type VersionUpgradeHook func(

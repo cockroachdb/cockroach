@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigwatcher
+package spanconfigkvwatcher
 
 import (
 	"context"
@@ -18,35 +18,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigdecoder"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-// New instantiates a span configuration watcher (watching over
-// system.span_configurations).
-func New(db *kv.DB, clock *hlc.Clock, rangeFeedFactory *rangefeed.Factory) *Watcher {
-	return &Watcher{
+// New instantiates a KVWatcher that watches span configuration updates on
+//syste.span_configurations.
+func New(db *kv.DB, clock *hlc.Clock, rangeFeedFactory *rangefeed.Factory) *KVWatcher {
+	return &KVWatcher{
 		db:               db,
 		clock:            clock,
 		rangeFeedFactory: rangeFeedFactory,
 	}
 }
 
-// Watcher is used to watch for span configuration changes using a rangefeed.
-type Watcher struct {
+// KVWatcher is used to watch for span configuration changes using a rangefeed
+// over system.span_configurations.
+type KVWatcher struct {
 	db               *kv.DB
 	clock            *hlc.Clock
 	rangeFeedFactory *rangefeed.Factory
 }
 
-var _ spanconfig.Watcher = &Watcher{}
+var _ spanconfig.KVWatcher = &KVWatcher{}
 
-// Watch will kick off the span config watcher. It establishes a rangefeed over
-// the span configurations table, and sends forth updates to it through the
-// returned channel.
-func (w *Watcher) Watch(
+// WatchForKVUpdates will kick off the span config watcher. It establishes a
+// rangefeed over the span configurations table, and sends forth updates to it
+// through the returned channel.
+func (w *KVWatcher) WatchForKVUpdates(
 	ctx context.Context, stopper *stop.Stopper,
 ) (<-chan spanconfig.Update, error) {
 	updateCh := make(chan spanconfig.Update)
@@ -55,7 +55,7 @@ func (w *Watcher) Watch(
 		Key:    spanConfigTableStart,
 		EndKey: spanConfigTableStart.PrefixEnd(),
 	}
-	rowDecoder := spanconfigdecoder.New()
+	rowDecoder := NewSpanConfigDecoder()
 
 	handleUpdate := func(
 		ctx context.Context, ev *roachpb.RangeFeedValue,

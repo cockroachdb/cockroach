@@ -17,12 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-// Accessor mediates access to the cluster's span configs applicable for a given
+// KVAccessor mediates access to KV span configurations pertaining to a given
 // tenant.
-//
-// TODO(zcfgs-pod): Should the manager be the only non-test type implementing
-// this interface, for clarity?
-type Accessor interface {
+type KVAccessor interface {
 	// GetSpanConfigEntriesFor retrieves the span configurations over the
 	// requested span.
 	GetSpanConfigEntriesFor(ctx context.Context, span roachpb.Span) ([]roachpb.SpanConfigEntry, error)
@@ -32,30 +29,26 @@ type Accessor interface {
 	UpdateSpanConfigEntries(ctx context.Context, update []roachpb.SpanConfigEntry, delete []roachpb.Span) error
 }
 
+// KVWatcher emits KV span configuration updates.
+type KVWatcher interface {
+	WatchForKVUpdates(ctx context.Context, stopper *stop.Stopper) (<-chan Update, error)
+}
+
+// SQLWatcher emits SQL span configuration updates.
+type SQLWatcher interface {
+	WatchForSQLUpdates(ctx context.Context) (<-chan Update, error)
+}
+
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation process. The reconciliation process reconciles a tenant's span
 // configs with the cluster's.
 type ReconciliationDependencies interface {
-	// Accessor mediates access to the subset of the cluster's span configs
-	// applicable to a given tenant.
-	Accessor
-
-	// TODO(zcfgs-pod): We'll also needs access to a tenant's system.descriptor,
-	// or ideally a Watcher emitting relevant Updates from a tenant's
-	// system.{descriptor,zones}. That suggests we'll want two Watcher
-	// implementations:
-	// - Something per-store, watching over system.span_configurations.
-	// - Something watching over a tenant's system.{descriptor,zones}, emitting
-	//   updates for the reconciliation process.
-}
-
-// Watcher emits observed updates to span configs.
-type Watcher interface {
-	Watch(ctx context.Context, stopper *stop.Stopper) (<-chan Update, error)
+	KVAccessor
+	SQLWatcher
 }
 
 // Update captures what span has seen a config change. It's the unit of what a
-// Watcher emits.
+// {SQL,KV}Watcher emits.
 type Update struct {
 	// Entry captures the keyspan and the corresponding config that has been
 	// updated. If deleted is true, the config over that span has been deleted

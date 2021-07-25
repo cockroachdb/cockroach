@@ -16,11 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -40,37 +41,53 @@ var _ jobs.Resumer = (*resumer)(nil)
 // Resume implements the jobs.Resumer interface.
 func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
+	rc := execCtx.ConfigReconciliationJobDeps()
 
-	// TODO(zcfgs-pod): Listen in on rangefeeds over system.{descriptor,zones}
-	// and construct the right update, instead of this placeholder write over
-	// the same keyspan over and over again.
-	// TODO(zcfgs-pod): How do we test this?
-	nameSpaceTableStart := execCtx.ExecCfg().Codec.TablePrefix(keys.NamespaceTableID)
-	nameSpaceTableSpan := roachpb.Span{
-		Key:    nameSpaceTableStart,
-		EndKey: nameSpaceTableStart.PrefixEnd(),
+	var updateCh <-chan spanconfig.Update
+
+	maxAttempts := 100
+	err := retry.WithMaxAttempts(
+		ctx,
+		retry.Options{
+			InitialBackoff: 10 * time.Second,
+			MaxBackoff:     5 * time.Minute,
+			Multiplier:     2,
+		},
+		maxAttempts,
+		func() error {
+			var err error
+			updateCh, err = rc.WatchForSQLUpdates(ctx)
+			if err != nil {
+				log.Errorf(ctx, "error initializing sql watcher: %v", err)
+			}
+			return err
+		})
+	if err != nil {
+		// TODO(zcfg-pod): How do we want to deal with this scenario? Can we bounce
+		// the job to another pod so that `Resume` starts all over again?
+		log.Errorf(ctx, "could not initialize watcher after %d attempts", maxAttempts)
 	}
 
 	for {
-		var update []roachpb.SpanConfigEntry
-		var delete []roachpb.Span
-		update = append(update, roachpb.SpanConfigEntry{
-			Span:   nameSpaceTableSpan,
-			Config: roachpb.SpanConfig{},
-		})
-
-		// NB: We cannot return from this method, as that would put the job in
-		// an un-revertable, non-running state.
-		rc := execCtx.ConfigReconciliationJobDeps()
-		if err := rc.UpdateSpanConfigEntries(ctx, update, delete); err != nil {
-			log.Errorf(ctx, "config reconciliation error: %v", err)
-		}
-
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-			time.Sleep(1 * time.Second)
+		case update := <-updateCh:
+			// TODO(zcfg-pod): add the ability to batch updates here instead of
+			// sending them one by one.
+			var toUpdate []roachpb.SpanConfigEntry
+			var toDelete []roachpb.Span
+			if update.Deleted {
+				toDelete = append(toDelete, update.Entry.Span)
+			} else {
+				toUpdate = append(toUpdate, roachpb.SpanConfigEntry{
+					Span:   update.Entry.Span,
+					Config: update.Entry.Config,
+				})
+			}
+			if err := rc.UpdateSpanConfigEntries(ctx, toUpdate, toDelete); err != nil {
+				log.Errorf(ctx, "config reconciliation error: %v", err)
+			}
 		}
 	}
 }

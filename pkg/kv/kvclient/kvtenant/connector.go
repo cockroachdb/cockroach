@@ -60,11 +60,11 @@ type Connector interface {
 	// gossip network.
 	config.SystemConfigProvider
 
-	// Accessor mediates access to the subset of the cluster's span configs
+	// KVAccessor mediates access to the subset of the cluster's span configs
 	// applicable to secondary tenants. Attempts to set span configurations are
 	// subject to admission control by KV (e.g. is the tenant attempting to
 	// configure a number of spans greater than what they're allowed to?).
-	spanconfig.Accessor
+	spanconfig.KVAccessor
 }
 
 // ConnectorConfig encompasses the configuration required to create a Connector.

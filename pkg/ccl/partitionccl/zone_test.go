@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -24,11 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidIndexPartitionSetShowZones(t *testing.T) {
@@ -349,5 +355,273 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestGetHydratedZoneConfigForTable ensures that GetHydratedZoneConfigForTable
+// correctly hydrates zone/subzone configurations. It constructs an inheritance
+// hierarchy that includes secondary indexes/partitions and alters zone
+// configurations of different objects in the inheritance hierarchy before
+// making assertions.
+//
+// It's worth calling out that this test doesn't test SubzoneSpans -- it only
+// ensures that Subzones are hydrated correctly. This is because the
+// SubzoneSpans <-> Subzone mapping is already tested above and it's cumbersome
+// to hardcode the span keys in this test.
+func TestGetHydratedZoneConfigForTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numServers = 3
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numServers; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "region", Value: fmt.Sprintf("region_%d", i+1)}},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgsPerNode: serverArgs,
+	})
+
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := tc.ServerConn(0)
+
+	// Setup the test with:
+	//      db (ID 52)
+	//    / 	 \
+	//   t1 (ID 53)
+	//    |      \
+	//   idx     t2 (ID 54) ------ partition
+	//           |
+	//          idx2
+	// 	         |
+	// 		    partition
+	_, err := sqlDB.Exec("CREATE DATABASE db")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("CREATE TABLE db.t1(i INT)")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("CREATE INDEX idx1 ON db.t1(i)")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`CREATE TABLE db.t2(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+PARTITION pi0 VALUES IN (1), 
+PARTITION pi1 VALUES IN (DEFAULT))`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`CREATE INDEX idx2 ON db.t2(j) PARTITION BY LIST (j) (
+PARTITION pj0 VALUES IN (10),
+PARTITION pj1 VALUES IN (DEFAULT))`)
+	require.NoError(t, err)
+
+	type expectation struct {
+		id   descpb.ID
+		zone zonepb.ZoneConfig
+	}
+
+	defaultZoneConfig := zonepb.DefaultZoneConfig()
+	// We don't test subzone spans in the expectations here.
+	testCases := []struct {
+		setup        []string
+		expectations []expectation
+	}{
+		{
+			// Setting the zone configuration on the database should cascade down
+			// to both the tables.
+			setup: []string{
+				"ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 10",
+			},
+			expectations: []expectation{
+				{
+					id: 53,
+					zone: zonepb.ZoneConfig{
+						RangeMinBytes:               defaultZoneConfig.RangeMinBytes,
+						RangeMaxBytes:               defaultZoneConfig.RangeMaxBytes,
+						NumReplicas:                 proto.Int32(10),
+						GC:                          defaultZoneConfig.GC,
+						NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+					},
+				},
+				{
+					id: 54,
+					zone: zonepb.ZoneConfig{
+						RangeMinBytes:               defaultZoneConfig.RangeMinBytes,
+						RangeMaxBytes:               defaultZoneConfig.RangeMaxBytes,
+						NumReplicas:                 proto.Int32(10),
+						GC:                          defaultZoneConfig.GC,
+						NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+					},
+				},
+			},
+		},
+		{
+			// Next, set the zone configuration on the index of t1 such that t1 acts
+			// as a placeholder.
+			setup: []string{
+				"ALTER INDEX db.t1@idx1 CONFIGURE ZONE USING gc.ttlseconds=200",
+			},
+			expectations: []expectation{
+				{
+					id: 53,
+					zone: zonepb.ZoneConfig{
+						RangeMinBytes:               defaultZoneConfig.RangeMinBytes,
+						RangeMaxBytes:               defaultZoneConfig.RangeMaxBytes,
+						NumReplicas:                 proto.Int32(10),
+						GC:                          defaultZoneConfig.GC,
+						NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+						Subzones: []zonepb.Subzone{
+							{
+								IndexID: 2,
+								Config: zonepb.ZoneConfig{
+									RangeMinBytes: defaultZoneConfig.RangeMinBytes,
+									RangeMaxBytes: defaultZoneConfig.RangeMaxBytes,
+									NumReplicas:   proto.Int32(10),
+									GC: &zonepb.GCPolicy{
+										TTLSeconds: 200,
+									},
+									NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+								},
+							},
+						},
+					},
+				},
+				{
+					id: 54,
+					zone: zonepb.ZoneConfig{
+						RangeMinBytes:               defaultZoneConfig.RangeMinBytes,
+						RangeMaxBytes:               defaultZoneConfig.RangeMaxBytes,
+						NumReplicas:                 proto.Int32(10),
+						GC:                          defaultZoneConfig.GC,
+						NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+					},
+				},
+			},
+		},
+		{
+			// Next, set the zone configuration on t2, t2@idx2, and both the
+			// partitions of t2 and t2@idx2.
+			setup: []string{
+				"ALTER TABLE db.t2 CONFIGURE ZONE USING num_replicas = 12",
+				"ALTER PARTITION pi0 OF TABLE db.t2 CONFIGURE ZONE USING num_voters= 6",
+				"ALTER PARTITION pi1 OF TABLE db.t2 CONFIGURE ZONE USING num_voters=9",
+				"ALTER INDEX db.t2@idx2 CONFIGURE ZONE USING gc.ttlseconds=4200",
+				"ALTER PARTITION pj0 OF INDEX db.t2@idx2 CONFIGURE ZONE USING CONSTRAINTS='[+region=region_1]'",
+				"ALTER PARTITION pj1 OF INDEX db.t2@idx2 CONFIGURE ZONE USING CONSTRAINTS='[+region=region_2]'",
+			},
+			expectations: []expectation{
+				{
+					id: 54,
+					zone: zonepb.ZoneConfig{
+						RangeMinBytes:               defaultZoneConfig.RangeMinBytes,
+						RangeMaxBytes:               defaultZoneConfig.RangeMaxBytes,
+						NumReplicas:                 proto.Int32(12),
+						GC:                          defaultZoneConfig.GC,
+						NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+						Subzones: []zonepb.Subzone{
+							{
+								IndexID:       1,
+								PartitionName: "pi0",
+								Config: zonepb.ZoneConfig{
+									RangeMinBytes:               defaultZoneConfig.RangeMinBytes,
+									RangeMaxBytes:               defaultZoneConfig.RangeMaxBytes,
+									NumReplicas:                 proto.Int32(12),
+									NumVoters:                   proto.Int32(6),
+									GC:                          defaultZoneConfig.GC,
+									NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+								},
+							},
+							{
+								IndexID:       1,
+								PartitionName: "pi1",
+								Config: zonepb.ZoneConfig{
+									RangeMinBytes:               defaultZoneConfig.RangeMinBytes,
+									RangeMaxBytes:               defaultZoneConfig.RangeMaxBytes,
+									NumReplicas:                 proto.Int32(12),
+									NumVoters:                   proto.Int32(9),
+									GC:                          defaultZoneConfig.GC,
+									NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+								},
+							},
+							{
+								IndexID:       2,
+								PartitionName: "", // On the entire secondary index.
+								Config: zonepb.ZoneConfig{
+									RangeMinBytes:               defaultZoneConfig.RangeMinBytes,
+									RangeMaxBytes:               defaultZoneConfig.RangeMaxBytes,
+									NumReplicas:                 proto.Int32(12),
+									GC:                          &zonepb.GCPolicy{TTLSeconds: 4200},
+									NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+								},
+							},
+							{
+								IndexID:       2,
+								PartitionName: "pj0",
+								Config: zonepb.ZoneConfig{
+									RangeMinBytes:               defaultZoneConfig.RangeMinBytes,
+									RangeMaxBytes:               defaultZoneConfig.RangeMaxBytes,
+									NumReplicas:                 proto.Int32(12),
+									GC:                          &zonepb.GCPolicy{TTLSeconds: 4200},
+									NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+									Constraints: []zonepb.ConstraintsConjunction{
+										{
+											Constraints: []zonepb.Constraint{
+												{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_1"},
+											},
+										},
+									},
+								},
+							},
+							{
+								IndexID:       2,
+								PartitionName: "pj1",
+								Config: zonepb.ZoneConfig{
+									RangeMinBytes:               defaultZoneConfig.RangeMinBytes,
+									RangeMaxBytes:               defaultZoneConfig.RangeMaxBytes,
+									NumReplicas:                 proto.Int32(12),
+									GC:                          &zonepb.GCPolicy{TTLSeconds: 4200},
+									NullVoterConstraintsIsEmpty: defaultZoneConfig.NullVoterConstraintsIsEmpty,
+									Constraints: []zonepb.ConstraintsConjunction{
+										{
+											Constraints: []zonepb.Constraint{
+												{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_2"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		for _, stmt := range testCase.setup {
+			_, err := sqlDB.Exec(stmt)
+			require.NoError(t, err)
+		}
+
+		for _, expectation := range testCase.expectations {
+			err := tc.Server(0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				zone, err := sql.GetHydratedZoneConfigForTable(ctx, txn, keys.SystemSQLCodec, expectation.id)
+				if err != nil {
+					return err
+				}
+				if err := zone.EnsureFullyHydrated(); err != nil {
+					return err
+				}
+				// This test doesn't test subzone spans.
+				zone.SubzoneSpans = nil
+				if !zone.Equal(expectation.zone) {
+					return errors.Newf(
+						"expected %v zone config for id %d, but found %v",
+						expectation.zone, expectation.id, zone,
+					)
+				}
+				return nil
+			})
+			require.NoError(t, err)
+		}
 	}
 }
