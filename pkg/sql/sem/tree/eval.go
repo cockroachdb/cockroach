@@ -127,6 +127,41 @@ type unaryOpOverload []overloadImpl
 
 // UnaryOps contains the unary operations indexed by operation type.
 var UnaryOps = unaryOpFixups(map[UnaryOperatorSymbol]unaryOpOverload{
+	UnaryPlus: {
+		&UnaryOp{
+			Typ:        types.Int,
+			ReturnType: types.Int,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				return d, nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&UnaryOp{
+			Typ:        types.Float,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				return d, nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&UnaryOp{
+			Typ:        types.Decimal,
+			ReturnType: types.Decimal,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				return d, nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+		&UnaryOp{
+			Typ:        types.Interval,
+			ReturnType: types.Interval,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				return d, nil
+			},
+			Volatility: VolatilityImmutable,
+		},
+	},
+
 	UnaryMinus: {
 		&UnaryOp{
 			Typ:        types.Int,
