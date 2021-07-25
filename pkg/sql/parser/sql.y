@@ -136,14 +136,23 @@ func processUnaryQualOpInternal(
     // operator, so adjust accordingly.
     switch op.Symbol {
     case tree.Plus:
-      return expr, 0
+      return &tree.UnaryExpr{
+        Operator: tree.MakeUnaryOperator(tree.UnaryPlus),
+        Expr: expr,
+      }, 0
     case tree.Minus:
-      return unaryNegation(expr), 0
+      return &tree.UnaryExpr{
+        Operator: tree.MakeUnaryOperator(tree.UnaryMinus),
+        Expr: expr,
+      }, 0
     }
   case tree.ComparisonOperator:
     switch op.Symbol {
     case tree.RegMatch:
-      return &tree.UnaryExpr{Operator: tree.MakeUnaryOperator(tree.UnaryComplement), Expr: expr}, 0
+      return &tree.UnaryExpr{
+        Operator: tree.MakeUnaryOperator(tree.UnaryComplement),
+        Expr: expr,
+      }, 0
     }
   }
   sqllex.Error(fmt.Sprintf("unknown unary operator %s", op))
