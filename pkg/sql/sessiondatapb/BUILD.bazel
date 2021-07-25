@@ -19,6 +19,7 @@ proto_library(
     deps = [
         "//pkg/util/duration:duration_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:duration_proto",
     ],
 )
 

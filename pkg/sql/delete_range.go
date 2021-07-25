@@ -93,6 +93,8 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		}
 	}
 
+	// Configure the fetcher, which is only used to decode the returned keys from
+	// the DeleteRange, and is never used to actually fetch kvs.
 	allTables := make([]row.FetcherTableArgs, len(d.interleavedDesc)+1)
 	allTables[0] = row.FetcherTableArgs{
 		Desc:  d.desc,
@@ -110,11 +112,9 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		params.ctx,
 		params.ExecCfg().Codec,
 		false, /* reverse */
-		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
-		// strength here. Consider hooking this in to the same knob that will
-		// control whether we perform locking implicitly during DELETEs.
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
+		0,     /* lockTimeout */
 		false, /* isCheck */
 		params.p.alloc,
 		nil, /* memMonitor */
@@ -122,6 +122,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	); err != nil {
 		return err
 	}
+
 	ctx := params.ctx
 	log.VEvent(ctx, 2, "fast delete: skipping scan")
 	spans := make([]roachpb.Span, len(d.spans))
@@ -133,10 +134,11 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		// hits the key limit).
 		for len(spans) != 0 {
 			b := params.p.txn.NewBatch()
-			d.deleteSpans(params, b, spans)
 			b.Header.MaxSpanRequestKeys = row.TableTruncateChunkSize
+			b.Header.LockTimeout = params.SessionData().LockTimeout
+			d.deleteSpans(params, b, spans)
 			if err := params.p.txn.Run(ctx, b); err != nil {
-				return err
+				return row.ConvertBatchError(ctx, d.desc, b)
 			}
 
 			spans = spans[:0]
@@ -154,9 +156,10 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		// the optimizer only enables autoCommit if the maximum possible number of
 		// keys to delete in this command are low, so we're made safe.
 		b := params.p.txn.NewBatch()
+		b.Header.LockTimeout = params.SessionData().LockTimeout
 		d.deleteSpans(params, b, spans)
 		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
-			return err
+			return row.ConvertBatchError(ctx, d.desc, b)
 		}
 		if resumeSpans, err := d.processResults(b.Results, nil /* resumeSpans */); err != nil {
 			return err

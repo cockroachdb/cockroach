@@ -14,6 +14,7 @@ option go_package = "sessiondatapb";
 
 import "util/duration/duration.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
 
 // SessionData contains session parameters that are easily serializable and are
 // required to be propagated to the remote nodes for the correct execution of
@@ -63,6 +64,11 @@ message SessionData {
   // IntervalStyleEnabled allows the setting of IntervalStyle to different
   // values.
   bool interval_style_enabled = 13;
+  // LockTimeout is the maximum amount of time that a query will wait while
+  // attempting to acquire a lock on a key or while blocking on an existing
+  // lock in order to perform a non-locking read on a key.
+  google.protobuf.Duration lock_timeout = 14 [(gogoproto.nullable) = false,
+                                              (gogoproto.stdduration) = true];
 }
 
 // DataConversionConfig contains the parameters that influence the output
