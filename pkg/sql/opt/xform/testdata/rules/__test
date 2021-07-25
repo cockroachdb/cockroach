@@ -1,0 +1,19 @@
+import file=1230/sb1/schema-opt.sql
+#import file=1230/sb1/stats-ts3esm.public.product_instance_auth_requests-opt.sql
+#import file=1230/sb1/stats-ts3esm.public.product_instance-opt.sql
+
+exploretrace
+SELECT
+  p.product_instance_id
+FROM
+  product_instance_auth_requests@prod_inst_auth_requests_auth_expiry_date_idxp_5 AS p
+  JOIN product_instances AS pi ON p.product_instance_id = pi.id
+WHERE
+  pi.mode = 'PREPAID'
+  AND pi.satellite_id IS NOT NULL
+  AND p.auth_expiry_date < '2021-11-7'
+  AND p.auth_expiry_date > '2021-09-15'
+  AND p.is_active = 1
+LIMIT
+  1000
+----
