@@ -462,3 +462,11 @@ SET standard_conforming_strings='true'
 
 statement ok
 SET standard_conforming_strings='on'
+
+# Regression test for not being able to set sql.trace.txn.enable_threshold
+# cluster setting to non-zero value (#68005).
+statement ok
+SET cluster setting sql.trace.txn.enable_threshold='1s'
+
+statement ok
+SET cluster setting sql.trace.txn.enable_threshold='0s'
