@@ -49,6 +49,7 @@ go_test(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security",
@@ -81,6 +82,7 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
+        "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

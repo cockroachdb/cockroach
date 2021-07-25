@@ -91,7 +91,7 @@ var _ rangecache.RangeDescriptorDB = (*Connector)(nil)
 // network.
 var _ config.SystemConfigProvider = (*Connector)(nil)
 
-var _ spanconfig.Accessor = (*Connector)(nil)
+var _ spanconfig.KVAccessor = (*Connector)(nil)
 
 // NewConnector creates a new Connector.
 // NOTE: Calling Start will set cfg.RPCContext.ClusterID.
@@ -439,7 +439,7 @@ func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.Internal
 	}
 }
 
-// GetSpanConfigEntriesFor implements the spanconfig.Accessor interface.
+// GetSpanConfigEntriesFor implements the spanconfig.KVAccessor interface.
 func (c *Connector) GetSpanConfigEntriesFor(
 	ctx context.Context, span roachpb.Span,
 ) ([]roachpb.SpanConfigEntry, error) {
@@ -459,7 +459,7 @@ func (c *Connector) GetSpanConfigEntriesFor(
 	return nil, ctx.Err()
 }
 
-// UpdateSpanConfigEntries implements the spanconfig.Accessor
+// UpdateSpanConfigEntries implements the spanconfig.KVAccessor
 // interface.
 func (c *Connector) UpdateSpanConfigEntries(
 	ctx context.Context, update []roachpb.SpanConfigEntry, delete []roachpb.Span,

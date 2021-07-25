@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigdecoder_test
+package spanconfigkvwatcher_test
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigdecoder"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvwatcher"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -26,17 +26,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDecoder verifies that we can decode rows stored in the
+// TestSpanConfigDecoder verifies that we can decode rows stored in the
 // system.span_configurations table.
-func TestDecoder(t *testing.T) {
+func TestSpanConfigDecoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SpanConfigManager: &spanconfigmanager.TestingKnobs{
-					DisableJobCreation: true,
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
 				},
 			},
 		},
@@ -69,7 +69,7 @@ func TestDecoder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(rows), len(entries))
 
-	dec := spanconfigdecoder.New()
+	dec := spanconfigkvwatcher.NewSpanConfigDecoder()
 	for i, row := range rows {
 		kv := roachpb.KeyValue{
 			Key:   row.Key,

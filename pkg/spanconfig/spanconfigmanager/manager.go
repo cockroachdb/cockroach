@@ -28,12 +28,14 @@ import (
 // Manager is responsible for ensuring that only one (and only one) span config
 // reconciliation job is ever created.
 type Manager struct {
-	db    *kv.DB
-	jr    *jobs.Registry
-	ie    sqlutil.InternalExecutor
-	knobs *TestingKnobs
+	db      *kv.DB
+	jr      *jobs.Registry
+	ie      sqlutil.InternalExecutor
+	knobs   *spanconfig.TestingKnobs
+	stopper *stop.Stopper
 
-	spanconfig.Accessor
+	spanconfig.KVAccessor
+	spanconfig.SQLWatcher
 }
 
 var _ spanconfig.ReconciliationDependencies = &Manager{}
@@ -43,26 +45,30 @@ func New(
 	db *kv.DB,
 	jr *jobs.Registry,
 	ie sqlutil.InternalExecutor,
-	accessor spanconfig.Accessor,
-	knobs *TestingKnobs,
+	accessor spanconfig.KVAccessor,
+	sqlWatcher spanconfig.SQLWatcher,
+	stopper *stop.Stopper,
+	knobs *spanconfig.TestingKnobs,
 ) *Manager {
 	if knobs == nil {
-		knobs = &TestingKnobs{}
+		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &Manager{
-		db:       db,
-		jr:       jr,
-		ie:       ie,
-		knobs:    knobs,
-		Accessor: accessor,
+		db:         db,
+		jr:         jr,
+		ie:         ie,
+		knobs:      knobs,
+		stopper:    stopper,
+		KVAccessor: accessor,
+		SQLWatcher: sqlWatcher,
 	}
 }
 
 // StartJobIfNoneExist will create and start the span config reconciliation job
 // iff it hadn't been created already.
-func (m *Manager) StartJobIfNoneExist(ctx context.Context, stopper *stop.Stopper) {
-	_ = stopper.RunAsyncTask(ctx, "create-and-start-reconciliation-job", func(ctx context.Context) {
-		if m.knobs.DisableJobCreation {
+func (m *Manager) StartJobIfNoneExist(ctx context.Context) {
+	_ = m.stopper.RunAsyncTask(ctx, "create-and-start-reconciliation-job", func(ctx context.Context) {
+		if m.knobs.ManagerDisableJobCreation {
 			return
 		}
 		if err := m.createAndStartJobIfNoneExist(ctx); err != nil {
@@ -107,7 +113,7 @@ func (m *Manager) createAndStartJobIfNoneExist(ctx context.Context) error {
 		return nil
 	}
 
-	if fn := m.knobs.CreatedJobInterceptor; fn != nil {
+	if fn := m.knobs.ManagerCreatedJobInterceptor; fn != nil {
 		fn(startableJob.Job)
 	}
 	return startableJob.Start(ctx)
