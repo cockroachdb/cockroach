@@ -814,3 +814,7 @@ func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Desc
 	bdg := catalogkv.NewOneLevelUncachedDescGetter(p.Txn(), p.ExecCfg().Codec)
 	return catalog.ValidateSelfAndCrossReferences(ctx, bdg, descriptor)
 }
+
+func (p *planner) OptPlanningCtx() *optPlanningCtx {
+	return &p.optPlanningCtx
+}
