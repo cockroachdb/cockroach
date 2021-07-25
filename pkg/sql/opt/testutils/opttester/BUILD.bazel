@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/exec",
         "//pkg/sql/opt/exec/execbuilder",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
