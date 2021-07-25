@@ -30,7 +30,6 @@ var _ exec.ExplainFactory = &Factory{}
 // factory method and provides access to the corresponding exec.Node (produced
 // by the wrapped factory).
 type Node struct {
-	f        *Factory
 	op       execOperator
 	args     interface{}
 	columns  colinfo.ResultColumns
@@ -80,7 +79,7 @@ func (n *Node) Annotate(id exec.ExplainAnnotationID, value interface{}) {
 	n.annotations[id] = value
 }
 
-func (f *Factory) newNode(
+func newNode(
 	op execOperator, args interface{}, ordering exec.OutputOrdering, children ...*Node,
 ) (*Node, error) {
 	inputNodeCols := make([]colinfo.ResultColumns, len(children))
@@ -92,7 +91,6 @@ func (f *Factory) newNode(
 		return nil, err
 	}
 	return &Node{
-		f:        f,
 		op:       op,
 		args:     args,
 		columns:  columns,
@@ -109,6 +107,7 @@ type Plan struct {
 	Cascades    []exec.Cascade
 	Checks      []*Node
 	WrappedPlan exec.Plan
+	Gist        PlanGist
 }
 
 var _ exec.Plan = &Plan{}
