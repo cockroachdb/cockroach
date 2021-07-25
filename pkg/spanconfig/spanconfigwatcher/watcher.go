@@ -84,7 +84,13 @@ func (w *Watcher) Watch(
 
 		select {
 		case <-ctx.Done():
-		case updateCh <- spanconfig.Update{Entry: entry, Deleted: deleted}:
+		case updateCh <- spanconfig.Update{
+			Entry: roachpb.SpanConfigEntry{
+				Span:   entry.Span,
+				Config: entry.Config,
+			},
+			Deleted: deleted,
+		}:
 		}
 	}
 

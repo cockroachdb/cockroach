@@ -15,6 +15,7 @@ package descs
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -280,6 +282,29 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
 	return tc.kv.getAllDatabaseDescriptors(ctx, txn)
+}
+
+func (tc *Collection) GetAllDescriptorsInDatabase(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID,
+) ([]catalog.Descriptor, error) {
+	descs, err := tc.GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	// Ensure the given ID does indeed belong to a database.
+	found, _, err := tc.getDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{})
+	if err != nil {
+		return nil, err
+	} else if !found {
+		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+	}
+	var ret []catalog.Descriptor
+	for _, desc := range descs {
+		if desc.GetParentID() == dbID {
+			ret = append(ret, desc)
+		}
+	}
+	return ret, nil
 }
 
 // GetSchemasForDatabase returns the schemas for a given database

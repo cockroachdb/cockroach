@@ -40,13 +40,9 @@ type ReconciliationDependencies interface {
 	// applicable to a given tenant.
 	Accessor
 
-	// TODO(zcfgs-pod): We'll also needs access to a tenant's system.descriptor,
-	// or ideally a Watcher emitting relevant Updates from a tenant's
-	// system.{descriptor,zones}. That suggests we'll want two Watcher
-	// implementations:
-	// - Something per-store, watching over system.span_configurations.
-	// - Something watching over a tenant's system.{descriptor,zones}, emitting
-	//   updates for the reconciliation process.
+	// SQLWatcher maintains a rangefeed over system.{descriptor, zones} and emits
+	// updates.
+	SQLWatcher
 }
 
 // Watcher emits observed updates to span configs.
@@ -65,4 +61,10 @@ type Update struct {
 
 	// Deleted is true if the span config entry has been deleted.
 	Deleted bool
+}
+
+// SQLWatcher is responsible for reacting to sql changes that imply span
+// configuration updates.
+type SQLWatcher interface {
+	Watch(ctx context.Context) (<-chan Update, error)
 }

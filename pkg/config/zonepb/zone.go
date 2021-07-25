@@ -1094,6 +1094,75 @@ func (z *ZoneConfig) LeasePreference(i int) cat.ConstraintSet {
 	return &z.LeasePreferences[i]
 }
 
+func (z *ZoneConfig) ToSpanConfig() (roachpb.SpanConfig, error) {
+	var sc roachpb.SpanConfig
+	// Copy over the values.
+	sc.RangeMinBytes = *z.RangeMinBytes
+	sc.RangeMaxBytes = *z.RangeMaxBytes
+	sc.GCTTL = z.GC.TTLSeconds
+
+	// GlobalReads is false by default.
+	sc.GlobalReads = false
+	if z.GlobalReads != nil {
+		sc.GlobalReads = *z.GlobalReads
+	}
+	sc.NumReplicas = *z.NumReplicas
+
+	// NumVoters = NumReplicas if NumVoters is unset.
+	sc.NumVoters = *z.NumReplicas
+	if z.NumVoters != nil {
+		sc.NumVoters = *z.NumVoters
+	}
+
+	translateConstraints := func(src []Constraint, dest []roachpb.Constraint) error {
+		for i, c := range src {
+			switch c.Type {
+			case Constraint_REQUIRED:
+				dest[i].Type = roachpb.Constraint_REQUIRED
+			case Constraint_PROHIBITED:
+				dest[i].Type = roachpb.Constraint_PROHIBITED
+			default:
+				return errors.AssertionFailedf("unknown constraint type: %v", c.Type)
+			}
+			dest[i].Key = c.Key
+			dest[i].Value = c.Value
+		}
+		return nil
+	}
+
+	translateConstraintsConjunction := func(src []ConstraintsConjunction, dest []roachpb.ConstraintsConjunction) error {
+		for i, constraint := range src {
+			dest[i].NumReplicas = constraint.NumReplicas
+			dest[i].Constraints = make([]roachpb.Constraint, len(constraint.Constraints))
+			if err := translateConstraints(constraint.Constraints, dest[i].Constraints); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	sc.Constraints = make([]roachpb.ConstraintsConjunction, len(z.Constraints))
+	if err := translateConstraintsConjunction(z.Constraints, sc.Constraints); err != nil {
+		return roachpb.SpanConfig{}, err
+	}
+	sc.VoterConstraints = make([]roachpb.ConstraintsConjunction, len(z.VoterConstraints))
+	if err := translateConstraintsConjunction(z.VoterConstraints, sc.VoterConstraints); err != nil {
+		return roachpb.SpanConfig{}, err
+	}
+
+	sc.LeasePreferences = make([]roachpb.LeasePreference, len(z.LeasePreferences))
+	for i, leasePreference := range z.LeasePreferences {
+		sc.LeasePreferences[i].Constraints = make([]roachpb.Constraint, len(leasePreference.Constraints))
+		if err := translateConstraints(
+			leasePreference.Constraints,
+			sc.LeasePreferences[i].Constraints,
+		); err != nil {
+			return roachpb.SpanConfig{}, err
+		}
+	}
+	return sc, nil
+}
+
 // ConstraintCount is part of the cat.LeasePreference interface.
 func (l *LeasePreference) ConstraintCount() int {
 	return len(l.Constraints)

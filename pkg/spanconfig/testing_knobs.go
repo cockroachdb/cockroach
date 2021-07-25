@@ -8,18 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigmanager
+package spanconfig
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
-)
+import "github.com/cockroachdb/cockroach/pkg/base"
 
-// TestingKnobs provide fine-grained control over the span config manager for
-// testing.
+// TestingKnobs provide fine-grained control over the various span config components
+// for testing.
 type TestingKnobs struct {
-	DisableJobCreation    bool
-	CreatedJobInterceptor func(*jobs.Job)
+	ManagerDisableJobCreation bool
+	// ManagerCreatedJobInterceptor expects a *jobs.Job to be passed into it. It
+	// takes an interface here to resolve a circular dependency.
+	ManagerCreatedJobInterceptor func(interface{})
+	SQLWatcherDisableInitialScan bool
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.

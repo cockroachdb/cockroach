@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/testsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -36,8 +38,8 @@ func TestManagerJobCreation(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SpanConfigManager: &spanconfigmanager.TestingKnobs{
-					DisableJobCreation: true, // disable the automatic job creation
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // disable the automatic job creation
 				},
 			},
 		},
@@ -51,8 +53,11 @@ func TestManagerJobCreation(t *testing.T) {
 		ts.JobRegistry().(*jobs.Registry),
 		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Node().(*server.Node),
-		&spanconfigmanager.TestingKnobs{
-			CreatedJobInterceptor: func(job *jobs.Job) {
+		testsqlwatcher.New(),
+		tc.Stopper(),
+		&spanconfig.TestingKnobs{
+			ManagerCreatedJobInterceptor: func(jobI interface{}) {
+				job := jobI.(*jobs.Job)
 				if atomic.AddInt32(&createdCount, 1) > 1 {
 					t.Errorf("expected single reconciliation job to be created")
 				}
@@ -63,9 +68,9 @@ func TestManagerJobCreation(t *testing.T) {
 	)
 
 	// Queue up concurrent attempts to create and start the reconciliation job.
-	manager.StartJobIfNoneExist(ctx, tc.Stopper())
-	manager.StartJobIfNoneExist(ctx, tc.Stopper())
-	manager.StartJobIfNoneExist(ctx, tc.Stopper())
+	manager.StartJobIfNoneExist(ctx)
+	manager.StartJobIfNoneExist(ctx)
+	manager.StartJobIfNoneExist(ctx)
 
 	testutils.SucceedsSoon(t, func() error {
 		if createdCount == 0 {

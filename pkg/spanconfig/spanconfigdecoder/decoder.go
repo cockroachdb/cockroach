@@ -58,7 +58,9 @@ func (rd *Decoder) Decode(kv roachpb.KeyValue) (entry roachpb.SpanConfigEntry, _
 		}
 		if !matches {
 			return roachpb.SpanConfigEntry{},
-				errors.AssertionFailedf("system.span_configurations descriptor does not match key: %v", kv.Key)
+				errors.AssertionFailedf(
+					"system.span_configurations descriptor does not match key: %v", kv.Key,
+				)
 		}
 		if err := startKeyRow[0].EnsureDecoded(types[0], &rd.alloc); err != nil {
 			return roachpb.SpanConfigEntry{}, err

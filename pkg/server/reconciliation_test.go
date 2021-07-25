@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,8 +45,8 @@ func TestUpdateSpanConfigSeenByAllStores(t *testing.T) {
 			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 				StoreSpecs: storeSpecs,
 				Knobs: base.TestingKnobs{
-					SpanConfigManager: &spanconfigmanager.TestingKnobs{
-						DisableJobCreation: true,
+					SpanConfig: &spanconfig.TestingKnobs{
+						ManagerDisableJobCreation: true,
 					},
 
 					Store: &kvserver.StoreTestingKnobs{

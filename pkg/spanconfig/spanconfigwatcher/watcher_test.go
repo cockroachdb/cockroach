@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,8 +36,8 @@ func TestWatcher(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SpanConfigManager: &spanconfigmanager.TestingKnobs{
-					DisableJobCreation: true,
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableSpanConfigWatcher: true,

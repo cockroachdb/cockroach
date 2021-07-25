@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "testreconciler",
+    srcs = ["test_reconciler.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/testreconciler",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/spanconfig"],
+)
+
+go_library(
+    name = "testsqlwatcher",
+    srcs = ["test_reconciler.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/testsqlwatcher",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/spanconfig"],
+)
