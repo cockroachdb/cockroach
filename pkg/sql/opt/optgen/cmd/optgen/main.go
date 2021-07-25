@@ -98,7 +98,7 @@ func (g *optgen) run(args ...string) bool {
 	case "ops":
 	case "rulenames":
 
-	case "execfactory", "execexplain":
+	case "execfactory", "execexplain", "execplangist":
 		runValidate = false
 
 	default:
@@ -189,6 +189,10 @@ func (g *optgen) run(args ...string) bool {
 	case "execexplain":
 		var gen execExplainGen
 		err = g.generate(compiled, gen.generate)
+
+	case "execplangist":
+		var gen execPlanGistGen
+		err = g.generate(compiled, gen.generate)
 	}
 
 	if err != nil {
@@ -260,12 +264,16 @@ func (g *optgen) usage() {
 	fmt.Fprintf(g.stdErr, "\toptgen [flags] command sources...\n\n")
 
 	fmt.Fprintf(g.stdErr, "The commands are:\n\n")
-	fmt.Fprintf(g.stdErr, "\tcompile    generate the optgen compiled format\n")
-	fmt.Fprintf(g.stdErr, "\texplorer   generate expression tree exploration rules\n")
-	fmt.Fprintf(g.stdErr, "\texprs      generate expression definitions and functions\n")
-	fmt.Fprintf(g.stdErr, "\tfactory    generate expression tree creation and normalization functions\n")
-	fmt.Fprintf(g.stdErr, "\tops        generate operator definitions and functions\n")
-	fmt.Fprintf(g.stdErr, "\trulenames  generate enumeration of rule names\n")
+	fmt.Fprintf(g.stdErr, "\tcompile      generate the optgen compiled format\n")
+	fmt.Fprintf(g.stdErr, "\texplorer     generate expression tree exploration rules\n")
+	fmt.Fprintf(g.stdErr, "\texprs        generate expression definitions and functions\n")
+	fmt.Fprintf(g.stdErr, "\tfactory      generate expression tree creation and normalization functions\n")
+	fmt.Fprintf(g.stdErr, "\tops          generate operator definitions and functions\n")
+	fmt.Fprintf(g.stdErr, "\trulenames    generate enumeration of rule names\n")
+	fmt.Fprintf(g.stdErr, "\texecfactory  generate exec.Factory interface\n")
+	fmt.Fprintf(g.stdErr, "\texecexplain  generate explain factory\n")
+	fmt.Fprintf(g.stdErr, "\texecplangist generate plan gist factory\n")
+
 	fmt.Fprintf(g.stdErr, "\n")
 
 	fmt.Fprintf(g.stdErr, "The sources can be file names and/or filepath.Glob patterns.\n")

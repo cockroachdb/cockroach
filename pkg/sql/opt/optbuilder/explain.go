@@ -55,6 +55,9 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 			telemetry.Inc(sqltelemetry.ExplainDDLStages)
 		}
 
+	case tree.ExplainGist:
+		telemetry.Inc(sqltelemetry.ExplainGist)
+
 	default:
 		panic(errors.Errorf("EXPLAIN mode %s not supported", explain.Mode))
 	}

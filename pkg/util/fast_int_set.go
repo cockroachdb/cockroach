@@ -14,6 +14,8 @@
 package util
 
 import (
+	"encoding/binary"
+	"io"
 	"math/bits"
 
 	"golang.org/x/tools/container/intsets"
@@ -346,4 +348,67 @@ func (s *FastIntSet) Shift(delta int) FastIntSet {
 		result.Add(i + delta)
 	})
 	return result
+}
+
+// Encode the set to a Writer using binary.varint byte encoding.  A zero
+// precedes a small int containing s.small.    A non-zero first value is a
+// length and each bit encoded separately follows.
+func (s *FastIntSet) Encode(wr io.Writer) error {
+	writeUint := func(u uint64) error {
+		var buf [binary.MaxVarintLen64]byte
+		n := binary.PutUvarint(buf[:], u)
+		_, err := wr.Write(buf[:n])
+		return err
+	}
+
+	if s.large == nil {
+		err := writeUint(0)
+		if err != nil {
+			return err
+		}
+		err = writeUint(s.small)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := writeUint(uint64(s.Len()))
+		if err != nil {
+			return err
+		}
+		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+			err := writeUint(uint64(i))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Decode does the opposite of Encode.  Upon success the contents of s
+// are overwritten.
+func (s *FastIntSet) Decode(br io.ByteReader) error {
+	val, err := binary.ReadUvarint(br)
+	if err != nil {
+		return err
+	}
+	if val == 0 {
+		val, err = binary.ReadUvarint(br)
+		if err != nil {
+			return err
+		}
+		s.small = val
+	} else {
+		// Only mutate receiver if we read everything successfully.
+		temp := FastIntSet{}
+		for i, l := 0, int(val); i < l; i++ {
+			val, err = binary.ReadUvarint(br)
+			if err != nil {
+				return err
+			}
+			temp.Add(int(val))
+		}
+		*s = temp
+	}
+	return nil
 }
