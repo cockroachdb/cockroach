@@ -566,6 +566,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var containsMutation bool
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
+		// Always record a gist.
+		gistFactory := explain.NewPlanGistFactory(f)
+		f = gistFactory
 		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
@@ -578,6 +581,16 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
 		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
+		planTop.instrumentation.planGist = gistFactory.PlanGist()
+
+		// Test that all queries we compile roundtrip w/o err.
+		// TODO: REMOVE THIS BEFORE MERGING,
+		gist := planTop.instrumentation.planGist.String()
+		decodeFactory := explain.NewPlanGistFactory(exec.StubFactory{})
+		_, err = decodeFactory.DecodePlanGist(gist, &opc.catalog)
+		if err != nil {
+			return err
+		}
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
