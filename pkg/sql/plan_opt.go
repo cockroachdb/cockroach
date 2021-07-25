@@ -564,9 +564,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var containsLargeFullTableScan bool
 	var containsLargeFullIndexScan bool
 	var containsMutation bool
+	gf := explain.NewPlanGistFactory(f)
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
-		// No instrumentation.
-		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld := execbuilder.New(gf, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -580,7 +580,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsMutation = bld.ContainsMutation
 	} else {
 		// Create an explain factory and record the explain.Plan.
-		explainFactory := explain.NewFactory(f)
+		explainFactory := explain.NewFactory(gf)
 		bld := execbuilder.New(
 			explainFactory, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit,
 		)
@@ -599,6 +599,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
+	planTop.instrumentation.planGist = gf.PlanGist()
 
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()
@@ -633,4 +634,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 		planTop.catalog = &opc.catalog
 	}
 	return nil
+}
+
+// DecodeGist Avoid an import cycle by keeping the cat out of the tree, RFC: is
+// there a better way?
+func (p *planner) DecodeGist(gist string) ([]string, error) {
+	return explain.DecodePlanGistToRows(gist, &p.optPlanningCtx.catalog)
 }
