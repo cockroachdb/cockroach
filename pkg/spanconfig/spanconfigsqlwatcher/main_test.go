@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigwatcher_test
+package spanconfigsqlwatcher_test
 
 import (
 	"os"

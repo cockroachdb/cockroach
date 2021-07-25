@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigwatcher_test
+package spanconfigkvwatcher_test
 
 import (
 	"context"
@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigwatcher"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvwatcher"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -36,8 +36,8 @@ func TestWatcher(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SpanConfigManager: &spanconfigmanager.TestingKnobs{
-					DisableJobCreation: true,
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableSpanConfigWatcher: true,
@@ -81,8 +81,8 @@ func TestWatcher(t *testing.T) {
 
 	// initialWatcher is set up to watch the table before any updates are made
 	// to it. It should observe all changes, in order, including the deletions.
-	initialWatcher := spanconfigwatcher.New(ts.DB(), ts.Clock(), ts.RangeFeedFactory().(*rangefeed.Factory))
-	initialUpdateCh, err := initialWatcher.Watch(ctx, tc.Stopper())
+	initialWatcher := spanconfigkvwatcher.New(ts.DB(), ts.Clock(), ts.RangeFeedFactory().(*rangefeed.Factory))
+	initialUpdateCh, err := initialWatcher.WatchForKVUpdates(ctx, tc.Stopper())
 	require.NoError(t, err)
 
 	for _, op := range ops {
@@ -111,8 +111,8 @@ func TestWatcher(t *testing.T) {
 
 	// finalWatcher is set up to watch the table after the deletes have
 	// occurred. It should only observe the final state of the table.
-	finalWatcher := spanconfigwatcher.New(ts.DB(), ts.Clock(), ts.RangeFeedFactory().(*rangefeed.Factory))
-	finalUpdateCh, err := finalWatcher.Watch(ctx, tc.Stopper())
+	finalWatcher := spanconfigkvwatcher.New(ts.DB(), ts.Clock(), ts.RangeFeedFactory().(*rangefeed.Factory))
+	finalUpdateCh, err := finalWatcher.WatchForKVUpdates(ctx, tc.Stopper())
 	require.NoError(t, err)
 
 	select {

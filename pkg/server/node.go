@@ -1324,9 +1324,9 @@ func (n *Node) Join(
 	}, nil
 }
 
-var _ spanconfig.Accessor = &Node{}
+var _ spanconfig.KVAccessor = &Node{}
 
-// GetSpanConfigEntriesFor implements the spanconfig.Accessor interface. It's a
+// GetSpanConfigEntriesFor implements the spanconfig.KVAccessor interface. It's a
 // convenience wrapper around the RPC implementation.
 func (n *Node) GetSpanConfigEntriesFor(
 	ctx context.Context, span roachpb.Span,
@@ -1338,7 +1338,7 @@ func (n *Node) GetSpanConfigEntriesFor(
 	return resp.SpanConfigs, nil
 }
 
-// UpdateSpanConfigEntries implements the spanconfig.Accessor
+// UpdateSpanConfigEntries implements the spanconfig.KVAccessor
 // interface. It's a convenience wrapper around the RPC implementation.
 func (n *Node) UpdateSpanConfigEntries(
 	ctx context.Context, update []roachpb.SpanConfigEntry, delete []roachpb.Span,
