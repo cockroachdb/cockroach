@@ -137,6 +137,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 		// control whether we perform locking implicitly during DELETEs.
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
+		td.lockTimeout,
 		false, /* isCheck */
 		td.alloc,
 		// TODO(bulkio): this might need a memory monitor for the slow case of truncate.
@@ -273,6 +274,7 @@ func (td *tableDeleter) deleteIndexScan(
 		// control whether we perform locking implicitly during DELETEs.
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
+		td.lockTimeout,
 		false, /* isCheck */
 		td.alloc,
 		// TODO(bulkio): this might need a memory monitor.
