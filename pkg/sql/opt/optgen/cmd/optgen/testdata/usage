@@ -21,6 +21,9 @@ The commands are:
 	factory    generate expression tree creation and normalization functions
 	ops        generate operator definitions and functions
 	rulenames  generate enumeration of rule names
+	execplan  generate enumeration of rule names
+	execfactory  generate enumeration of rule names
+	execplangist  generate plan gist factory
 
 The sources can be file names and/or filepath.Glob patterns.
 
@@ -53,6 +56,9 @@ The commands are:
 	factory    generate expression tree creation and normalization functions
 	ops        generate operator definitions and functions
 	rulenames  generate enumeration of rule names
+	execplan  generate enumeration of rule names
+	execfactory  generate enumeration of rule names
+	execplangist  generate plan gist factory
 
 The sources can be file names and/or filepath.Glob patterns.
 
@@ -86,6 +92,9 @@ The commands are:
 	factory    generate expression tree creation and normalization functions
 	ops        generate operator definitions and functions
 	rulenames  generate enumeration of rule names
+	execplan  generate enumeration of rule names
+	execfactory  generate enumeration of rule names
+	execplangist  generate plan gist factory
 
 The sources can be file names and/or filepath.Glob patterns.
 

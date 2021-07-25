@@ -561,6 +561,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var isDDL bool
 	var containsFullTableScan bool
 	var containsFullIndexScan bool
+	// Currently we record a plan gist on every query, TODO: measure!
+	// Do we need to do this even for explain?
+	gistFactory := explain.NewPlanGistFactory(f)
+	f = gistFactory
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
 		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
@@ -590,6 +594,11 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
+	planTop.instrumentation.planGist = gistFactory.PlanGist()
+	// TODO: remove scapel
+	gist := planTop.instrumentation.planGist.String()
+	decodeFactory := explain.NewPlanGistFactory(exec.StubFactory{})
+	decodeFactory.DecodePlanGist(gist, &opc.catalog)
 
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()
