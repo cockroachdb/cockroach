@@ -564,6 +564,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var containsLargeFullTableScan bool
 	var containsLargeFullIndexScan bool
 	var containsMutation bool
+	// Always record a gist, for normal queries we always want it and for explain
+	// queries we need to be able to handle EXPLAIN (GIST).
+	gistFactory := explain.NewPlanGistFactory(f)
+	f = gistFactory
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
 		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
@@ -599,6 +603,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
+
+	planTop.instrumentation.planGist = gistFactory.PlanGist()
 
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()

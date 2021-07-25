@@ -1,0 +1,371 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package explain
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/binary"
+	"hash/fnv"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/errors"
+)
+
+// PlanGist is a compact representation of a logical plan meant to be used as
+// a key and log for different plans used to implement a particular query. A
+// gist doesn't change for the following:
+//
+// - literal constant values
+// - alias names
+// - grouping column names
+// - constraint values
+// - estimated rows stats
+//
+// The notion is that the gist is the rough shape of the plan that represents
+// the way the plan operators are put together and what tables and indexes they
+// use.
+//
+
+// PlanGist starts out with just the []bytes and the string rep and hash are
+// lazily calculated. The rationale is that we can lazily create those AFTER
+// query execution and returning results to the client if possible. The
+// justification for this is that the gist contains index and table ids and the
+// String contains names.
+type PlanGist struct {
+	bytes []byte
+	str   string
+	hash  uint64
+}
+
+// String returns the gist bytes as a base64 encoded string.
+func (fp *PlanGist) String() string {
+	if len(fp.str) == 0 {
+		fp.str = base64.StdEncoding.EncodeToString(fp.bytes)
+		h := fnv.New64()
+		h.Write([]byte(fp.str))
+		fp.hash = h.Sum64()
+	}
+
+	return fp.str
+}
+
+// Hash returns a 64 bit hash of the gist. Note that this is symbolically stable
+// across table/index ids, i.e. indexes from two different databases with
+// different ids but the same name will have the same hash.
+func (fp *PlanGist) Hash() uint64 {
+	_ = fp.String()
+	return fp.hash
+}
+
+// version tracks major changes to how we encode plans or to the operator set.
+// It isn't necessary to increment it when adding a single operator but if we
+// remove an operator or change the operator set or decide to use a more
+// efficient encoding version should be incremented.
+var version = 1
+
+// PlanGistFactory is an exec.Factory that produces a gist by eaves
+// dropping on the exec builder phase of compilation.
+type PlanGistFactory struct {
+	wrappedFactory exec.Factory
+	buffer         bytes.Buffer
+	nodeStack      []*Node
+	catalog        cat.Catalog
+}
+
+var _ exec.Factory = &PlanGistFactory{}
+
+// NewPlanGistFactory creates a new PlanGistFactory.
+func NewPlanGistFactory(wrappedFactory exec.Factory) *PlanGistFactory {
+	f := new(PlanGistFactory)
+	f.wrappedFactory = wrappedFactory
+	f.encodeInt(version)
+	return f
+}
+
+// ConstructPlan delegates to the wrapped factory.
+func (f *PlanGistFactory) ConstructPlan(
+	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
+) (exec.Plan, error) {
+	plan, err := f.wrappedFactory.ConstructPlan(root, subqueries, cascades, checks)
+	return plan, err
+}
+
+// PlanGist returns a pointer to a PlanGist.
+func (f *PlanGistFactory) PlanGist() *PlanGist {
+	// This just returns a slice into the buffer, should we do a new right sized
+	// allocation?
+	return &PlanGist{bytes: f.buffer.Bytes()}
+}
+
+// DecodePlanGist constructs an explain.Node tree from a gist.
+// FIXME: why do we need a factory to decode?
+func (f *PlanGistFactory) DecodePlanGist(s string, cat cat.Catalog) (*Plan, error) {
+	f.catalog = cat
+	bytes, err := base64.StdEncoding.DecodeString(s)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Clear out buffer which will have version in it from NewPlanGistFactory.
+	f.buffer.Reset()
+	f.buffer.Write(bytes)
+	plan := &Plan{}
+
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate internal errors without having to add
+			// error checks everywhere throughout the code. This is only possible
+			// because the code does not update shared state and does not manipulate
+			// locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
+				panic(r)
+			}
+		}
+	}()
+
+	ver := f.decodeInt()
+	if ver != version {
+		return nil, errors.Errorf("unsupported old plan gist version %d", ver)
+	}
+
+	for {
+		op := f.decodeOp()
+		if op == unknownOp {
+			break
+		}
+		switch op {
+		case errorIfRowsOp:
+			plan.Checks = append(plan.Checks, f.popChild())
+		}
+	}
+
+	plan.Root = f.popChild()
+
+	for _, n := range f.nodeStack {
+		subquery := exec.Subquery{
+			Root: n,
+		}
+		plan.Subqueries = append(plan.Subqueries, subquery)
+	}
+
+	return plan, nil
+}
+
+func (f *PlanGistFactory) decodeOp() execOperator {
+	val, err := f.buffer.ReadByte()
+	if err != nil || val == 0 {
+		return unknownOp
+	}
+	n, err := f.decodeOperatorBody(execOperator(val))
+	if err != nil {
+		panic(err)
+	}
+	f.nodeStack = append(f.nodeStack, n)
+
+	return n.op
+}
+
+func (f *PlanGistFactory) popChild() *Node {
+	l := len(f.nodeStack)
+	n := f.nodeStack[l-1]
+	f.nodeStack = f.nodeStack[:l-1]
+
+	return n
+}
+
+func (f *PlanGistFactory) encodeOperator(op execOperator) {
+	f.encodeByte(byte(op))
+}
+
+func (f *PlanGistFactory) encodeInt(i int) {
+	var buf [binary.MaxVarintLen64]byte
+	n := binary.PutVarint(buf[:], int64(i))
+	_, err := f.buffer.Write(buf[:n])
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (f *PlanGistFactory) decodeInt() int {
+	val, err := binary.ReadVarint(&f.buffer)
+	if err != nil {
+		panic(err)
+	}
+
+	return int(val)
+}
+
+func (f *PlanGistFactory) encodeID(id cat.StableID) {
+	f.encodeInt(int(id))
+}
+
+func (f *PlanGistFactory) decodeID() cat.StableID {
+	return cat.StableID(f.decodeInt())
+}
+
+func (f *PlanGistFactory) decodeTable() cat.Table {
+	id := f.decodeID()
+	ds, _, err := f.catalog.ResolveDataSourceByID(context.TODO(), cat.Flags{}, id)
+	if err != nil {
+		panic(err)
+	}
+
+	return ds.(cat.Table)
+}
+
+func (f *PlanGistFactory) decodeIndex(tbl cat.Table) cat.Index {
+	id := f.decodeID()
+	for i, n := 0, tbl.IndexCount(); i < n; i++ {
+		if tbl.Index(i).ID() == id {
+			return tbl.Index(i)
+		}
+	}
+	panic(errors.AssertionFailedf("no index matching id %d", id))
+}
+
+// TODO: implement this and figure out how to test...
+func (f *PlanGistFactory) decodeSchema() cat.Schema {
+	id := f.decodeID()
+	_ = id
+	return nil
+}
+
+func (f *PlanGistFactory) encodeNodeColumnOrdinals(vals []exec.NodeColumnOrdinal) {
+	f.encodeInt(len(vals))
+}
+
+func (f *PlanGistFactory) decodeNodeColumnOrdinals() []exec.NodeColumnOrdinal {
+	l := f.decodeInt()
+	vals := make([]exec.NodeColumnOrdinal, l)
+	return vals
+}
+
+func (f *PlanGistFactory) encodeResultColumns(vals colinfo.ResultColumns) {
+	f.encodeInt(len(vals))
+}
+
+func (f *PlanGistFactory) decodeResultColumns() colinfo.ResultColumns {
+	numCols := f.decodeInt()
+	return make(colinfo.ResultColumns, numCols)
+}
+
+func (f *PlanGistFactory) encodeByte(b byte) {
+	err := f.buffer.WriteByte(b)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (f *PlanGistFactory) decodeByte() byte {
+	val, err := f.buffer.ReadByte()
+	if err != nil {
+		panic(err)
+	}
+	return val
+}
+
+func (f *PlanGistFactory) decodeJoinType() descpb.JoinType {
+	val := f.decodeByte()
+	return descpb.JoinType(val)
+}
+
+func (f *PlanGistFactory) encodeBool(b bool) {
+	if b {
+		f.encodeByte(1)
+	} else {
+		f.encodeByte(0)
+	}
+}
+
+func (f *PlanGistFactory) decodeBool() bool {
+	val := f.decodeByte()
+	return val != 0
+}
+
+// TODO: enable this or remove it...
+func (f *PlanGistFactory) encodeColumnOrdering(cols colinfo.ColumnOrdering) {
+}
+
+func (f *PlanGistFactory) decodeColumnOrdering() colinfo.ColumnOrdering {
+	return nil
+}
+
+func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
+	err := params.NeededCols.Encode(&f.buffer)
+	if err != nil {
+		panic(err)
+	}
+
+	if params.IndexConstraint != nil {
+		f.encodeInt(params.IndexConstraint.Spans.Count())
+	} else {
+		f.encodeInt(0)
+	}
+
+	if params.InvertedConstraint != nil {
+		f.encodeInt(params.InvertedConstraint.Len())
+	} else {
+		f.encodeInt(0)
+	}
+
+	f.encodeInt(int(params.HardLimit))
+}
+
+func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
+	neededCols := util.FastIntSet{}
+	err := neededCols.Decode(&f.buffer)
+	if err != nil {
+		panic(err)
+	}
+
+	var idxConstraint *constraint.Constraint
+	l := f.decodeInt()
+	if l > 0 {
+		idxConstraint = new(constraint.Constraint)
+		idxConstraint.Spans.Alloc(int(l))
+		var sp constraint.Span
+		idxConstraint.Spans.Append(&sp)
+	}
+
+	var invertedConstraint inverted.Spans
+	l = f.decodeInt()
+	if l > 0 {
+		invertedConstraint = make([]inverted.Span, l)
+	}
+
+	hardLimit := f.decodeInt()
+
+	return exec.ScanParams{NeededCols: neededCols, IndexConstraint: idxConstraint, InvertedConstraint: invertedConstraint, HardLimit: int64(hardLimit)}
+}
+
+func (f *PlanGistFactory) encodeRows(rows [][]tree.TypedExpr) {
+	f.encodeInt(len(rows))
+}
+
+func (f *PlanGistFactory) decodeRows() [][]tree.TypedExpr {
+	numRows := f.decodeInt()
+	return make([][]tree.TypedExpr, numRows)
+}
