@@ -13,6 +13,8 @@
 package util
 
 import (
+	"encoding/binary"
+	"io"
 	"math/bits"
 
 	"golang.org/x/tools/container/intsets"
@@ -345,4 +347,23 @@ func (s *FastIntSet) Shift(delta int) FastIntSet {
 		result.Add(i + delta)
 	})
 	return result
+}
+
+func (s *FastIntSet) Encode(wr io.Writer) (int, error) {
+	if s.large == nil {
+		var buf [binary.MaxVarintLen64]byte
+		n := binary.PutUvarint(buf[:], s.small)
+		return wr.Write(buf[:n])
+	} else {
+		panic("todo")
+	}
+}
+
+func (s *FastIntSet) Decode(br io.ByteReader) error {
+	val, err := binary.ReadUvarint(br)
+	if err != nil {
+		return err
+	}
+	s.small = val
+	return nil
 }

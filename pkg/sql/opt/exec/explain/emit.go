@@ -943,7 +943,11 @@ func printColumnList(inputCols colinfo.ResultColumns, cols []exec.NodeColumnOrdi
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(inputCols[col].Name)
+		if len(inputCols[col].Name) > 0 {
+			buf.WriteString(inputCols[col].Name)
+		} else {
+			buf.WriteString("_")
+		}
 	}
 	return buf.String()
 }

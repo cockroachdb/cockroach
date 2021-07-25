@@ -902,7 +902,8 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/rule_name.og.go \
 	pkg/sql/opt/rule_name_string.go \
 	pkg/sql/opt/exec/factory.og.go \
-	pkg/sql/opt/exec/explain/explain_factory.og.go
+	pkg/sql/opt/exec/explain/explain_factory.og.go \
+	pkg/sql/opt/exec/explain/fingerprint_factory.og.go \
 
 test-targets := \
 	check test testshort testslow testrace testraceslow testbuild \
@@ -1660,6 +1661,9 @@ pkg/sql/opt/exec/factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 
 pkg/sql/opt/exec/explain/explain_factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 	optgen -out $@ execexplain $(optgen-exec-defs)
+
+pkg/sql/opt/exec/explain/fingerprint_factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
+	optgen -out $@ execfingerprint $(optgen-exec-defs)
 
 .PHONY: clean-c-deps
 clean-c-deps:

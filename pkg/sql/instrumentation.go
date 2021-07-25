@@ -111,6 +111,8 @@ type instrumentationHelper struct {
 
 	// regions used only on EXPLAIN ANALYZE to be displayed as top-level stat.
 	regions []string
+
+	planFingerprint explain.Fingerprint
 }
 
 // outputMode indicates how the statement output needs to be populated (for

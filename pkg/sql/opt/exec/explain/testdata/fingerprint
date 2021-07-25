@@ -1,0 +1,965 @@
+import file=tpce_schema
+----
+
+fingerprint-explain-roundtrip
+WITH
+update_last_trade AS (
+    UPDATE last_trade
+       SET lt_vol = lt_vol + 10,
+           lt_price = 100.00:::FLOAT8::DECIMAL,
+           lt_dts = '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP
+     WHERE lt_s_symb = 'ROACH'
+    RETURNING NULL
+),
+request_list AS (
+    SELECT tr_t_id, tr_bid_price::FLOAT8, tr_tt_id, tr_qty
+      FROM trade_request
+     WHERE tr_s_symb = 'ROACH'
+       AND (
+             (tr_tt_id = 'TMB'::VARCHAR(3) AND tr_bid_price >= 100.00:::FLOAT8::DECIMAL) OR
+             (tr_tt_id = 'TMS'::VARCHAR(3) AND tr_bid_price <= 100.00:::FLOAT8::DECIMAL) OR
+             (tr_tt_id = 'TLS'::VARCHAR(3) AND tr_bid_price >= 100.00:::FLOAT8::DECIMAL)
+           )
+),
+delete_trade_request AS (
+    DELETE FROM trade_request
+    WHERE tr_t_id IN (SELECT tr_t_id FROM request_list)
+    RETURNING NULL
+),
+insert_trade_history AS (
+    INSERT INTO trade_history (th_t_id, th_st_id, th_dts)
+    (SELECT tr_t_id, 'SBMT', '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP FROM request_list)
+    RETURNING NULL
+),
+update_trade_submitted AS (
+       UPDATE trade
+          SET t_st_id = 'SBMT', t_dts = '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP
+        WHERE t_id IN (SELECT tr_t_id FROM request_list)
+    RETURNING NULL
+)
+SELECT * FROM request_list;
+----
+AgGaAQJ/AAADBxQHFAUQAgQGCAoSABAgmgEAAAcCLwGKAQL/AQAAAwcILwGKAQL/AQAAMAUCAgMHEgUOAgQGCAoMACKKAQAHAi8wBwYFBgQCAC8eiAEAAYYBAgEAADAFAgAJCQIAAgABASkBpgECAQAAMAUCBAkJAgACAAEAKQcCLwGGAQL//wcAADAFAgIDByYHMAUwCgwOEBIUFhgaHB4gIiQmLiwoKgACBAYILyCGAQAAAaYBAgEAADAFAiAJCQIAAgABACkHAi8wBggCAAQG
+• root
+│
+├── • scan buffer
+│     label: buffer 3 (request_list)
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: UPDATE last_trade SET lt_vol = lt_vol + 10, lt_price = 100.0::DECIMAL, lt_dts = '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP WHERE lt_s_symb = 'ROACH' RETURNING NULL
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 2 (update_last_trade)
+│       │
+│       └── • render
+│           │
+│           └── • update
+│               │ table: last_trade
+│               │ set: lt_dts, lt_price, lt_vol
+│               │
+│               └── • render
+│                   │
+│                   └── • render
+│                       │
+│                       └── • filter
+│                           │ filter: lt_s_symb = _
+│                           │
+│                           └── • scan
+│                                 missing stats
+│                                 table: last_trade@primary
+│                                 spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S2
+│   │ original sql: SELECT tr_t_id, tr_bid_price::FLOAT8, tr_tt_id, tr_qty FROM trade_request WHERE (tr_s_symb = 'ROACH') AND ((((tr_tt_id = 'TMB'::VARCHAR(3)) AND (tr_bid_price >= 100.0::DECIMAL)) OR ((tr_tt_id = 'TMS'::VARCHAR(3)) AND (tr_bid_price <= 100.0::DECIMAL))) OR ((tr_tt_id = 'TLS'::VARCHAR(3)) AND (tr_bid_price >= 100.0::DECIMAL)))
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 3 (request_list)
+│       │
+│       └── • render
+│           │
+│           └── • filter
+│               │ filter: (tr_s_symb = _) AND ((((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price >= _::DECIMAL)) OR ((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price <= _::DECIMAL))) OR ((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price >= _::DECIMAL)))
+│               │
+│               └── • scan
+│                     missing stats
+│                     table: trade_request@primary
+│                     spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S3
+│   │ original sql: (SELECT tr_t_id FROM request_list)
+│   │ exec mode: any rows
+│   │
+│   └── • scan buffer
+│         label: buffer 3 (request_list)
+│
+├── • subquery
+│   │ id: @S4
+│   │ original sql: DELETE FROM trade_request WHERE tr_t_id IN (SELECT tr_t_id FROM request_list) RETURNING NULL
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 4 (delete_trade_request)
+│       │
+│       └── • render
+│           │
+│           └── • delete
+│               │ from: trade_request
+│               │
+│               └── • render
+│                   │
+│                   └── • filter
+│                       │ filter: tr_t_id = ANY @S3
+│                       │
+│                       └── • scan
+│                             missing stats
+│                             table: trade_request@primary
+│                             spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S5
+│   │ original sql: INSERT INTO trade_history(th_t_id, th_st_id, th_dts) (SELECT tr_t_id, 'SBMT', '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP FROM request_list) RETURNING NULL
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 6 (insert_trade_history)
+│       │
+│       └── • render
+│           │
+│           └── • insert
+│               │ into: trade_history(th_t_id, th_dts, th_st_id)
+│               │
+│               └── • buffer
+│                   │ label: buffer 5
+│                   │
+│                   └── • render
+│                       │
+│                       └── • scan buffer
+│                             label: buffer 3 (request_list)
+│
+├── • subquery
+│   │ id: @S6
+│   │ original sql: (SELECT tr_t_id FROM request_list)
+│   │ exec mode: any rows
+│   │
+│   └── • scan buffer
+│         label: buffer 3 (request_list)
+│
+├── • subquery
+│   │ id: @S7
+│   │ original sql: UPDATE trade SET t_st_id = 'SBMT', t_dts = '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP WHERE t_id IN (SELECT tr_t_id FROM request_list) RETURNING NULL
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 8 (update_trade_submitted)
+│       │
+│       └── • render
+│           │
+│           └── • update
+│               │ table: trade
+│               │ set: t_dts, t_st_id
+│               │
+│               └── • buffer
+│                   │ label: buffer 7
+│                   │
+│                   └── • render
+│                       │
+│                       └── • render
+│                           │
+│                           └── • filter
+│                               │ filter: t_id = ANY @S6
+│                               │
+│                               └── • scan
+│                                     missing stats
+│                                     table: trade@primary
+│                                     spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right anti)
+│           │ equality: (t_id) = (tr_t_id)
+│           │ left cols are key
+│           │ right cols are key
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: trade@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 5
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right anti)
+│           │ equality: (st_id) = (?column?)
+│           │ left cols are key
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: status_type@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 5
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right anti)
+            │ equality: (st_id) = (t_st_id_new)
+            │ left cols are key
+            │
+            ├── • scan
+            │     missing stats
+            │     table: status_type@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 7
+• root
+│
+├── • scan buffer
+│     label
+│
+├── • subquery
+│   │ id: @S1
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • update
+│               │ table: last_trade
+│               │ set
+│               │
+│               └── • render
+│                   │
+│                   └── • render
+│                       │
+│                       └── • filter
+│                           │
+│                           └── • scan
+│                                 table: last_trade@primary
+│                                 spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S2
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • filter
+│               │
+│               └── • scan
+│                     table: trade_request@primary
+│                     spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S3
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • delete
+│               │ from: trade_request
+│               │
+│               └── • render
+│                   │
+│                   └── • filter
+│                       │
+│                       └── • scan buffer
+│                             label
+│
+├── • subquery
+│   │ id: @S4
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • scan buffer
+│                 label
+│
+├── • subquery
+│   │ id: @S5
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • error if rows
+│               │
+│               └── • hash join (right anti)
+│                   │ equality: (st_id) = (_)
+│                   │ left cols are key
+│                   │
+│                   ├── • scan
+│                   │     table: status_type@primary
+│                   │     spans: FULL SCAN
+│                   │
+│                   └── • scan buffer
+│                         label
+│
+├── • subquery
+│   │ id: @S6
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • render
+│               │
+│               └── • filter
+│                   │
+│                   └── • scan buffer
+│                         label
+│
+└── • subquery
+    │ id: @S7
+    │ exec mode: exists
+    │
+    └── • buffer
+        │ label
+        │
+        └── • render
+            │
+            └── • error if rows
+                │
+                └── • hash join (right anti)
+                    │ equality: (st_id) = (_)
+                    │ left cols are key
+                    │
+                    ├── • scan
+                    │     table: status_type@primary
+                    │     spans: FULL SCAN
+                    │
+                    └── • scan buffer
+                          label
+
+fingerprint-explain-roundtrip
+SELECT c_id,
+       c_st_id,
+       c_l_name,
+       c_f_name,
+       c_m_name,
+       c_gndr,
+       c_tier,
+       c_dob,
+       c_ad_id,
+       c_ctry_1,
+       c_area_1,
+       c_local_1,
+       c_ext_1,
+       c_ctry_2,
+       c_area_2,
+       c_local_2,
+       c_ext_2,
+       c_ctry_3,
+       c_area_3,
+       c_local_3,
+       c_ext_3,
+       c_email_1,
+       c_email_2
+  FROM customer
+ WHERE c_id = 0
+----
+AgFsAv///x8AAAMFLgAEBggKDA4QEhQWGBocHiAiJCYoKiwuBi4AAgQGCAoMDhASFBYYGhweICIkJigqLA==
+• filter
+│ filter: c_id = _
+│
+└── • scan
+      missing stats
+      table: customer@primary
+      spans: FULL SCAN
+• filter
+│
+└── • scan
+      table: customer@primary
+      spans: FULL SCAN
+
+fingerprint-explain-roundtrip
+SELECT b_name, sum(tr_qty * tr_bid_price)::FLOAT8
+FROM sector, industry, company, security, trade_request, broker
+WHERE tr_b_id = b_id
+  AND s_symb = tr_s_symb
+  AND co_id = s_co_id
+  AND in_id = co_in_id
+  AND sc_id = in_sc_id
+  AND b_name = ANY ARRAY[
+                     'Broker1', 'Broker2', 'Broker3', 'Broker4', 'Broker5',
+                     'Broker6', 'Broker7', 'Broker8', 'Broker9', 'Broker10',
+                     'Broker11', 'Broker12', 'Broker13', 'Broker14', 'Broker15',
+                     'Broker16', 'Broker17', 'Broker18', 'Broker19', 'Broker20',
+                     'Broker21', 'Broker22', 'Broker23', 'Broker24', 'Broker25',
+                     'Broker26', 'Broker27', 'Broker28', 'Broker29', 'Broker30'
+                   ]
+  AND sc_name = 'Energy'
+GROUP BY b_name
+ORDER BY 2 DESC
+----
+AgGgAQIPAAABmAECHwAAAY4BAv8PAAABogEC//8PAAABigEC/wEAAAF8An8AAAkAAAAAAAkAAAAAAAkAAAAAAAkAAAAAAAkAAAAAAAMHBAsCAgAHBBEGBAIA
+• sort
+│ order: -sum
+│
+└── • render
+    │
+    └── • group
+        │ group by: b_name
+        │
+        └── • render
+            │
+            └── • filter
+                │ filter: ((((((tr_b_id = b_id) AND (s_symb = tr_s_symb)) AND (co_id = s_co_id)) AND (in_id = co_in_id)) AND (sc_id = in_sc_id)) AND (b_name = ANY _)) AND (sc_name = _)
+                │
+                └── • cross join
+                    │
+                    ├── • scan
+                    │     missing stats
+                    │     table: sector@primary
+                    │     spans: FULL SCAN
+                    │
+                    └── • cross join
+                        │
+                        ├── • scan
+                        │     missing stats
+                        │     table: industry@primary
+                        │     spans: FULL SCAN
+                        │
+                        └── • cross join
+                            │
+                            ├── • scan
+                            │     missing stats
+                            │     table: company@primary
+                            │     spans: FULL SCAN
+                            │
+                            └── • cross join
+                                │
+                                ├── • scan
+                                │     missing stats
+                                │     table: security@primary
+                                │     spans: FULL SCAN
+                                │
+                                └── • cross join
+                                    │
+                                    ├── • scan
+                                    │     missing stats
+                                    │     table: trade_request@primary
+                                    │     spans: FULL SCAN
+                                    │
+                                    └── • scan
+                                          missing stats
+                                          table: broker@primary
+                                          spans: FULL SCAN
+• sort
+│ order
+│
+└── • render
+    │
+    └── • group
+        │ group by: _
+        │
+        └── • render
+            │
+            └── • filter
+                │
+                └── • cross join
+                    │
+                    ├── • scan
+                    │     table: sector@primary
+                    │     spans: FULL SCAN
+                    │
+                    └── • cross join
+                        │
+                        ├── • scan
+                        │     table: industry@primary
+                        │     spans: FULL SCAN
+                        │
+                        └── • cross join
+                            │
+                            ├── • scan
+                            │     table: company@primary
+                            │     spans: FULL SCAN
+                            │
+                            └── • cross join
+                                │
+                                ├── • scan
+                                │     table: security@primary
+                                │     spans: FULL SCAN
+                                │
+                                └── • cross join
+                                    │
+                                    ├── • scan
+                                    │     table: trade_request@primary
+                                    │     spans: FULL SCAN
+                                    │
+                                    └── • scan
+                                          table: broker@primary
+                                          spans: FULL SCAN
+
+fingerprint-explain-roundtrip
+SELECT ca_id,
+          ca_bal::FLOAT8,
+          IFNULL((sum(hs_qty * lt_price)), 0)::FLOAT8
+     FROM customer_account
+LEFT JOIN holding_summary ON hs_ca_id  = ca_id
+LEFT JOIN last_trade      ON lt_s_symb = hs_s_symb
+    WHERE ca_c_id = 0
+ GROUP BY ca_id, ca_bal
+ ORDER BY 3 ASC
+    LIMIT 10;
+----
+AgFuAv8BAAABdgIfAAAJAQIAAgABAAGaAQJ/AAAJAQISAgAAAQMHBgsEAgQABwYRFwYGBAAC
+• limit
+│ count: _
+│
+└── • sort
+    │ order: +"coalesce"
+    │
+    └── • render
+        │
+        └── • group
+            │ group by: ca_id, ca_bal
+            │
+            └── • render
+                │
+                └── • filter
+                    │ filter: ca_c_id = _
+                    │
+                    └── • hash join (left outer)
+                        │ equality: (hs_s_symb) = (lt_s_symb)
+                        │ right cols are key
+                        │
+                        ├── • hash join (left outer)
+                        │   │ equality: (ca_id) = (hs_ca_id)
+                        │   │ left cols are key
+                        │   │
+                        │   ├── • scan
+                        │   │     missing stats
+                        │   │     table: customer_account@primary
+                        │   │     spans: FULL SCAN
+                        │   │
+                        │   └── • scan
+                        │         missing stats
+                        │         table: holding_summary@primary
+                        │         spans: FULL SCAN
+                        │
+                        └── • scan
+                              missing stats
+                              table: last_trade@primary
+                              spans: FULL SCAN
+• limit
+│
+└── • sort
+    │ order
+    │
+    └── • render
+        │
+        └── • group
+            │ group by: _, _
+            │
+            └── • render
+                │
+                └── • filter
+                    │
+                    └── • hash join (left outer)
+                        │ equality: (hs_s_symb) = (lt_s_symb)
+                        │ right cols are key
+                        │
+                        ├── • hash join (left outer)
+                        │   │ equality: (ca_id) = (hs_ca_id)
+                        │   │ left cols are key
+                        │   │
+                        │   ├── • scan
+                        │   │     table: customer_account@primary
+                        │   │     spans: FULL SCAN
+                        │   │
+                        │   └── • scan
+                        │         table: holding_summary@primary
+                        │         spans: FULL SCAN
+                        │
+                        └── • scan
+                              table: last_trade@primary
+                              spans: FULL SCAN
+
+fingerprint-explain-roundtrip
+WITH
+update_last_trade AS (
+    UPDATE last_trade
+       SET lt_vol = lt_vol + 10,
+           lt_price = 100.00:::FLOAT8::DECIMAL,
+           lt_dts = '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP
+     WHERE lt_s_symb = 'ROACH'
+    RETURNING NULL
+),
+request_list AS (
+    SELECT tr_t_id, tr_bid_price::FLOAT8, tr_tt_id, tr_qty
+      FROM trade_request
+     WHERE tr_s_symb = 'ROACH'
+       AND (
+             (tr_tt_id = 'TMB'::VARCHAR(3) AND tr_bid_price >= 100.00:::FLOAT8::DECIMAL) OR
+             (tr_tt_id = 'TMS'::VARCHAR(3) AND tr_bid_price <= 100.00:::FLOAT8::DECIMAL) OR
+             (tr_tt_id = 'TLS'::VARCHAR(3) AND tr_bid_price >= 100.00:::FLOAT8::DECIMAL)
+           )
+),
+delete_trade_request AS (
+    DELETE FROM trade_request
+    WHERE tr_t_id IN (SELECT tr_t_id FROM request_list)
+    RETURNING NULL
+),
+insert_trade_history AS (
+    INSERT INTO trade_history (th_t_id, th_st_id, th_dts)
+    (SELECT tr_t_id, 'SBMT', '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP FROM request_list)
+    RETURNING NULL
+),
+update_trade_submitted AS (
+       UPDATE trade
+          SET t_st_id = 'SBMT', t_dts = '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP
+        WHERE t_id IN (SELECT tr_t_id FROM request_list)
+    RETURNING NULL
+)
+SELECT * FROM request_list;
+----
+AgGaAQJ/AAADBxQHFAUQAgQGCAoSABAgmgEAAAcCLwGKAQL/AQAAAwcILwGKAQL/AQAAMAUCAgMHEgUOAgQGCAoMACKKAQAHAi8wBwYFBgQCAC8eiAEAAYYBAgEAADAFAgAJCQIAAgABASkBpgECAQAAMAUCBAkJAgACAAEAKQcCLwGGAQL//wcAADAFAgIDByYHMAUwCgwOEBIUFhgaHB4gIiQmLiwoKgACBAYILyCGAQAAAaYBAgEAADAFAiAJCQIAAgABACkHAi8wBggCAAQG
+• root
+│
+├── • scan buffer
+│     label: buffer 3 (request_list)
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: UPDATE last_trade SET lt_vol = lt_vol + 10, lt_price = 100.0::DECIMAL, lt_dts = '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP WHERE lt_s_symb = 'ROACH' RETURNING NULL
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 2 (update_last_trade)
+│       │
+│       └── • render
+│           │
+│           └── • update
+│               │ table: last_trade
+│               │ set: lt_dts, lt_price, lt_vol
+│               │
+│               └── • render
+│                   │
+│                   └── • render
+│                       │
+│                       └── • filter
+│                           │ filter: lt_s_symb = _
+│                           │
+│                           └── • scan
+│                                 missing stats
+│                                 table: last_trade@primary
+│                                 spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S2
+│   │ original sql: SELECT tr_t_id, tr_bid_price::FLOAT8, tr_tt_id, tr_qty FROM trade_request WHERE (tr_s_symb = 'ROACH') AND ((((tr_tt_id = 'TMB'::VARCHAR(3)) AND (tr_bid_price >= 100.0::DECIMAL)) OR ((tr_tt_id = 'TMS'::VARCHAR(3)) AND (tr_bid_price <= 100.0::DECIMAL))) OR ((tr_tt_id = 'TLS'::VARCHAR(3)) AND (tr_bid_price >= 100.0::DECIMAL)))
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 3 (request_list)
+│       │
+│       └── • render
+│           │
+│           └── • filter
+│               │ filter: (tr_s_symb = _) AND ((((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price >= _::DECIMAL)) OR ((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price <= _::DECIMAL))) OR ((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price >= _::DECIMAL)))
+│               │
+│               └── • scan
+│                     missing stats
+│                     table: trade_request@primary
+│                     spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S3
+│   │ original sql: (SELECT tr_t_id FROM request_list)
+│   │ exec mode: any rows
+│   │
+│   └── • scan buffer
+│         label: buffer 3 (request_list)
+│
+├── • subquery
+│   │ id: @S4
+│   │ original sql: DELETE FROM trade_request WHERE tr_t_id IN (SELECT tr_t_id FROM request_list) RETURNING NULL
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 4 (delete_trade_request)
+│       │
+│       └── • render
+│           │
+│           └── • delete
+│               │ from: trade_request
+│               │
+│               └── • render
+│                   │
+│                   └── • filter
+│                       │ filter: tr_t_id = ANY @S3
+│                       │
+│                       └── • scan
+│                             missing stats
+│                             table: trade_request@primary
+│                             spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S5
+│   │ original sql: INSERT INTO trade_history(th_t_id, th_st_id, th_dts) (SELECT tr_t_id, 'SBMT', '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP FROM request_list) RETURNING NULL
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 6 (insert_trade_history)
+│       │
+│       └── • render
+│           │
+│           └── • insert
+│               │ into: trade_history(th_t_id, th_dts, th_st_id)
+│               │
+│               └── • buffer
+│                   │ label: buffer 5
+│                   │
+│                   └── • render
+│                       │
+│                       └── • scan buffer
+│                             label: buffer 3 (request_list)
+│
+├── • subquery
+│   │ id: @S6
+│   │ original sql: (SELECT tr_t_id FROM request_list)
+│   │ exec mode: any rows
+│   │
+│   └── • scan buffer
+│         label: buffer 3 (request_list)
+│
+├── • subquery
+│   │ id: @S7
+│   │ original sql: UPDATE trade SET t_st_id = 'SBMT', t_dts = '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP WHERE t_id IN (SELECT tr_t_id FROM request_list) RETURNING NULL
+│   │ exec mode: all rows
+│   │
+│   └── • buffer
+│       │ label: buffer 8 (update_trade_submitted)
+│       │
+│       └── • render
+│           │
+│           └── • update
+│               │ table: trade
+│               │ set: t_dts, t_st_id
+│               │
+│               └── • buffer
+│                   │ label: buffer 7
+│                   │
+│                   └── • render
+│                       │
+│                       └── • render
+│                           │
+│                           └── • filter
+│                               │ filter: t_id = ANY @S6
+│                               │
+│                               └── • scan
+│                                     missing stats
+│                                     table: trade@primary
+│                                     spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right anti)
+│           │ equality: (t_id) = (tr_t_id)
+│           │ left cols are key
+│           │ right cols are key
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: trade@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 5
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right anti)
+│           │ equality: (st_id) = (?column?)
+│           │ left cols are key
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: status_type@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 5
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right anti)
+            │ equality: (st_id) = (t_st_id_new)
+            │ left cols are key
+            │
+            ├── • scan
+            │     missing stats
+            │     table: status_type@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 7
+• root
+│
+├── • scan buffer
+│     label
+│
+├── • subquery
+│   │ id: @S1
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • update
+│               │ table: last_trade
+│               │ set
+│               │
+│               └── • render
+│                   │
+│                   └── • render
+│                       │
+│                       └── • filter
+│                           │
+│                           └── • scan
+│                                 table: last_trade@primary
+│                                 spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S2
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • filter
+│               │
+│               └── • scan
+│                     table: trade_request@primary
+│                     spans: FULL SCAN
+│
+├── • subquery
+│   │ id: @S3
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • delete
+│               │ from: trade_request
+│               │
+│               └── • render
+│                   │
+│                   └── • filter
+│                       │
+│                       └── • scan buffer
+│                             label
+│
+├── • subquery
+│   │ id: @S4
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • scan buffer
+│                 label
+│
+├── • subquery
+│   │ id: @S5
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • error if rows
+│               │
+│               └── • hash join (right anti)
+│                   │ equality: (st_id) = (_)
+│                   │ left cols are key
+│                   │
+│                   ├── • scan
+│                   │     table: status_type@primary
+│                   │     spans: FULL SCAN
+│                   │
+│                   └── • scan buffer
+│                         label
+│
+├── • subquery
+│   │ id: @S6
+│   │ exec mode: exists
+│   │
+│   └── • buffer
+│       │ label
+│       │
+│       └── • render
+│           │
+│           └── • render
+│               │
+│               └── • filter
+│                   │
+│                   └── • scan buffer
+│                         label
+│
+└── • subquery
+    │ id: @S7
+    │ exec mode: exists
+    │
+    └── • buffer
+        │ label
+        │
+        └── • render
+            │
+            └── • error if rows
+                │
+                └── • hash join (right anti)
+                    │ equality: (st_id) = (_)
+                    │ left cols are key
+                    │
+                    ├── • scan
+                    │     table: status_type@primary
+                    │     spans: FULL SCAN
+                    │
+                    └── • scan buffer
+                          label

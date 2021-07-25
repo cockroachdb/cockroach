@@ -118,6 +118,10 @@ func getResultColumns(
 
 	case scanBufferOp:
 		a := args.(*scanBufferArgs)
+		// TODO: instead of nil check can we put in a fake value?
+		if a.Ref == nil {
+			return nil, nil
+		}
 		return a.Ref.Columns(), nil
 
 	case insertOp:
@@ -212,6 +216,9 @@ func projectCols(
 ) colinfo.ResultColumns {
 	columns := make(colinfo.ResultColumns, len(ordinals))
 	for i, ord := range ordinals {
+		if int(ord) >= len(input) {
+			continue
+		}
 		columns[i] = input[ord]
 		if colNames != nil {
 			columns[i].Name = colNames[i]

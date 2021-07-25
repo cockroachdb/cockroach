@@ -98,7 +98,7 @@ func (g *optgen) run(args ...string) bool {
 	case "ops":
 	case "rulenames":
 
-	case "execfactory", "execexplain":
+	case "execfactory", "execexplain", "execfingerprint":
 		runValidate = false
 
 	default:
@@ -189,6 +189,10 @@ func (g *optgen) run(args ...string) bool {
 	case "execexplain":
 		var gen execExplainGen
 		err = g.generate(compiled, gen.generate)
+
+	case "execfingerprint":
+		var gen execFingerprintGen
+		err = g.generate(compiled, gen.generate)
 	}
 
 	if err != nil {
@@ -266,6 +270,10 @@ func (g *optgen) usage() {
 	fmt.Fprintf(g.stdErr, "\tfactory    generate expression tree creation and normalization functions\n")
 	fmt.Fprintf(g.stdErr, "\tops        generate operator definitions and functions\n")
 	fmt.Fprintf(g.stdErr, "\trulenames  generate enumeration of rule names\n")
+	fmt.Fprintf(g.stdErr, "\texecplan  generate enumeration of rule names\n")
+	fmt.Fprintf(g.stdErr, "\texecfactory  generate enumeration of rule names\n")
+	fmt.Fprintf(g.stdErr, "\texecfingerprint  generate enumeration of rule names\n")
+
 	fmt.Fprintf(g.stdErr, "\n")
 
 	fmt.Fprintf(g.stdErr, "The sources can be file names and/or filepath.Glob patterns.\n")
