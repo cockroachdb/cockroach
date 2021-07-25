@@ -901,7 +901,17 @@ var varGen = map[string]sessionVar{
 	},
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-LOC-TIMEOUT
-	`lock_timeout`: makeCompatIntVar(`lock_timeout`, 0),
+	`lock_timeout`: {
+		GetStringVal: makeTimeoutVarGetter(`lock_timeout`),
+		Set:          lockTimeoutVarSet,
+		Get: func(evalCtx *extendedEvalContext) string {
+			ms := evalCtx.SessionData.LockTimeout.Nanoseconds() / int64(time.Millisecond)
+			return strconv.FormatInt(ms, 10)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return clusterLockTimeout.String(sv)
+		},
+	},
 
 	// See https://www.postgresql.org/docs/13/runtime-config-compatible.html
 	// CockroachDB only supports safe_encoding for now. If `client_encoding` is updated to
@@ -1609,6 +1619,9 @@ func makeCompatIntVar(varName string, displayValue int, extraAllowed ...int) ses
 	varObj.GetStringVal = makeIntGetStringValFn(varName)
 	return varObj
 }
+
+// Silence unused warning. This may be useful in the future, so keep it around.
+var _ = makeCompatIntVar
 
 func makeCompatStringVar(varName, displayValue string, extraAllowed ...string) sessionVar {
 	allowedVals := append(extraAllowed, strings.ToLower(displayValue))

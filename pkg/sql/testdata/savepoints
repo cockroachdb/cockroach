@@ -245,6 +245,68 @@ DROP TABLE t
 
 subtest end
 
+subtest rollback_after_lock_timeout
+
+sql
+CREATE TABLE t(x INT PRIMARY KEY)
+----
+1: CREATE TABLE t(x INT PRIMARY KEY) -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+sql conn=conflict
+BEGIN
+INSERT INTO t VALUES (1)
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #.  (none)
+2: INSERT INTO t VALUES (1) -- 1 row
+-- Open        -> Open        ##  (none)
+
+sql
+SET lock_timeout = '1ms'
+BEGIN
+SAVEPOINT foo
+SELECT * FROM t WHERE x = 1 FOR UPDATE
+ROLLBACK TO SAVEPOINT foo
+SELECT * FROM t WHERE x = 2 FOR UPDATE
+COMMIT
+SET lock_timeout = 0
+----
+1: SET lock_timeout = '1ms' -- 0 rows
+-- NoTxn       -> NoTxn       #.......  (none)
+2: BEGIN -- 0 rows
+-- NoTxn       -> Open        ##......  (none)
+3: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ###.....  foo
+4: SELECT * FROM t WHERE x = 1 FOR UPDATE -- pq: canceling statement due to lock timeout on row (x)=(1) in t@primary
+-- Open        -> Aborted     XXXXXXXX  foo
+5: ROLLBACK TO SAVEPOINT foo -- 0 rows
+-- Aborted     -> Open        ###.....  foo
+6: SELECT * FROM t WHERE x = 2 FOR UPDATE -- 0 rows
+-- Open        -> Open        ###..#..  foo
+7: COMMIT -- 0 rows
+-- Open        -> NoTxn       ###..##.  (none)
+8: SET lock_timeout = 0 -- 0 rows
+-- NoTxn       -> NoTxn       ###..###  (none)
+
+# NB: the txn on the "conflict" connection is aborted by the test harness even
+# before the ROLLBACK is issued, so the ROLLBACK isn't technically necessary,
+# but we do need to run something on this connection to trigger test harness to
+# roll back the txn.
+sql conn=conflict
+ROLLBACK
+----
+1: ROLLBACK -- pq: there is no transaction in progress
+-- NoTxn       -> NoTxn       #  (none)
+
+sql
+DROP TABLE t
+----
+1: DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+subtest end
+
 subtest rollback_after_ddl
 
 subtest rollback_after_ddl/release_normal_savepoint

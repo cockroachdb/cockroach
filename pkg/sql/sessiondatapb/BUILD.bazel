@@ -20,6 +20,7 @@ proto_library(
         "//pkg/util/duration:duration_proto",
         "//pkg/util/timeutil/pgdate:pgdate_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:duration_proto",
     ],
 )
 

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -220,8 +219,7 @@ func NewColBatchScan(
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	fetcher.estimatedRowCount = estimatedRowCount
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, execinfra.GetWorkMemLimit(flowCtx),
-		fetcher, table, columnIdxMap, neededColumns, spec, spec.HasSystemColumns,
+		flowCtx, allocator, fetcher, table, columnIdxMap, neededColumns, spec, spec.HasSystemColumns,
 	); err != nil {
 		return nil, err
 	}
@@ -248,9 +246,8 @@ func NewColBatchScan(
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
 func initCRowFetcher(
-	codec keys.SQLCodec,
+	flowCtx *execinfra.FlowCtx,
 	allocator *colmem.Allocator,
-	memoryLimit int64,
 	fetcher *cFetcher,
 	desc catalog.TableDescriptor,
 	colIdxMap catalog.TableColMap,
@@ -277,7 +274,14 @@ func initCRowFetcher(
 	tableArgs.InitCols(desc, spec.Visibility, withSystemColumns, virtualColumn)
 
 	if err := fetcher.Init(
-		codec, allocator, memoryLimit, spec.Reverse, spec.LockingStrength, spec.LockingWaitPolicy, tableArgs,
+		flowCtx.Codec(),
+		allocator,
+		execinfra.GetWorkMemLimit(flowCtx),
+		spec.Reverse,
+		spec.LockingStrength,
+		spec.LockingWaitPolicy,
+		flowCtx.EvalCtx.SessionData.LockTimeout,
+		tableArgs,
 	); err != nil {
 		return nil, false, err
 	}

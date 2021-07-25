@@ -384,6 +384,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 			reverse,
 			descpb.ScanLockingStrength_FOR_NONE,
 			descpb.ScanLockingWaitPolicy_BLOCK,
+			0,
 			false,
 			&alloc,
 			mm.Monitor(),
