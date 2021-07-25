@@ -340,5 +340,5 @@ type ExecutionStats struct {
 }
 
 // BuildPlanForExplainFn builds an execution plan against the given
-// ExplainFactory.
-type BuildPlanForExplainFn func(ef ExplainFactory) (Plan, error)
+// base factory.
+type BuildPlanForExplainFn func(f Factory) (Plan, error)

@@ -891,7 +891,8 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/rule_name.og.go \
 	pkg/sql/opt/rule_name_string.go \
 	pkg/sql/opt/exec/factory.og.go \
-	pkg/sql/opt/exec/explain/explain_factory.og.go
+	pkg/sql/opt/exec/explain/explain_factory.og.go \
+	pkg/sql/opt/exec/explain/plan_gist_factory.og.go \
 
 # removed-files is a list of files that used to exist in the
 # repository that need to be explicitly cleaned up to prevent build
@@ -1653,6 +1654,9 @@ pkg/sql/opt/exec/factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 
 pkg/sql/opt/exec/explain/explain_factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 	optgen -out $@ execexplain $(optgen-exec-defs)
+
+pkg/sql/opt/exec/explain/plan_gist_factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
+	optgen -out $@ execplangist $(optgen-exec-defs)
 
 .PHONY: clean-c-deps
 clean-c-deps:

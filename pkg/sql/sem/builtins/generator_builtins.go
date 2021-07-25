@@ -423,6 +423,65 @@ The output can be used to recreate a database.'
 			tree.VolatilityVolatile,
 		),
 	),
+	"crdb_internal.decode_plan_gist": makeBuiltin(
+		tree.FunctionProperties{
+			Class: tree.GeneratorClass,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"gist", types.String},
+			},
+			decodePlanGistGeneratorType,
+			makeDecodePlanGistGenerator,
+			`Returns rows of output similar to EXPLAIN from a gist created by EXPLAIN (GIST)
+`,
+			tree.VolatilityVolatile,
+		),
+	),
+}
+
+var decodePlanGistGeneratorType = types.String
+
+type gistPlanGenerator struct {
+	gist  string
+	index int
+	rows  []string
+	p     tree.EvalPlanner
+}
+
+var _ tree.ValueGenerator = &gistPlanGenerator{}
+
+func (g *gistPlanGenerator) ResolvedType() *types.T {
+	return types.String
+}
+
+func (g *gistPlanGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	rows, err := g.p.DecodeGist(g.gist)
+	if err != nil {
+		return err
+	}
+	g.rows = rows
+	g.index = -1
+	return nil
+}
+
+func (g *gistPlanGenerator) Next(context.Context) (bool, error) {
+	g.index++
+	return g.index < len(g.rows), nil
+}
+
+func (g *gistPlanGenerator) Close(context.Context) {}
+
+// Values implements the tree.ValueGenerator interface.
+func (g *gistPlanGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{tree.NewDString(g.rows[g.index])}, nil
+}
+
+func makeDecodePlanGistGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	gist := string(tree.MustBeDString(args[0]))
+	return &gistPlanGenerator{gist: gist, p: ctx.Planner}, nil
 }
 
 func makeGeneratorOverload(
