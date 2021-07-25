@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -561,6 +562,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var isDDL bool
 	var containsFullTableScan bool
 	var containsFullIndexScan bool
+	// Currently we record a plan fingerprint on every query, TODO: measure!
+	gistFactory := explain.NewPlanGistFactory(f)
+	f = gistFactory
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
 		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
@@ -590,6 +594,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
+	planTop.instrumentation.planGist = gistFactory.PlanGist()
+	// TODO: remove debugging scapel
+	opc.log(context.TODO(), fmt.Sprintf("plan-gist:%s", planTop.instrumentation.planGist.String()))
 
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()
