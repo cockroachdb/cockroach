@@ -6817,6 +6817,11 @@ func TestImportInTenant(t *testing.T) {
 
 	t11.Exec(t, importStmt, userfileURI)
 	t11.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"11", "22"}, {"33", "44"}, {"55", "66"}})
+
+	const createStmt = "CREATE TABLE bar (k INT PRIMARY KEY, v INT)"
+	const importIntoStmt = "IMPORT INTO bar CSV DATA ($1)"
+	t10.Exec(t, createStmt)
+	t10.Exec(t, importIntoStmt, userfileURI)
 }
 
 func putUserfile(
