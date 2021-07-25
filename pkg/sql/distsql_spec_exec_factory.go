@@ -806,8 +806,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// We cannot create the explained plan in the same PlanInfrastructure with the
 	// "outer" plan. Create a separate factory.
 	newFactory := newDistSQLSpecExecFactory(e.planner, e.planningMode)
-	explainFactory := explain.NewFactory(newFactory)
-	plan, err := buildFn(explainFactory)
+	plan, err := buildFn(newFactory)
 	// Release the resources acquired during the physical planning right away.
 	newFactory.(*distSQLSpecExecFactory).planCtx.getCleanupFunc()()
 	if err != nil {
