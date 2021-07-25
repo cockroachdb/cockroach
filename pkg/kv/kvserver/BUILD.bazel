@@ -142,6 +142,7 @@ go_library(
         "//pkg/kv/kvserver/tscache",
         "//pkg/kv/kvserver/txnrecovery",
         "//pkg/kv/kvserver/txnwait",
+        "//pkg/multitenant",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
