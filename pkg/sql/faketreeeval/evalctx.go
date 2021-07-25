@@ -232,6 +232,11 @@ func (*DummyEvalPlanner) ExternalWriteFile(ctx context.Context, uri string, cont
 	return errors.WithStack(errEvalPlanner)
 }
 
+// DecodeGist is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) DecodeGist(gist string) ([]string, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 var _ tree.EvalPlanner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
