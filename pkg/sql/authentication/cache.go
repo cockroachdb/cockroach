@@ -36,8 +36,8 @@ var CacheEnabledSettingName = "server.authentication_cache.enabled"
 // AuthInfoCache and associated logic is enabled.
 var CacheEnabled = settings.RegisterBoolSetting(
 	CacheEnabledSettingName,
-	`enables a cache used during authentication to avoid lookups to system tables
-when retrieving per-user authentication-related information`,
+	"enables a cache used during authentication to avoid lookups to system tables "+
+		"when retrieving per-user authentication-related information",
 	true,
 ).WithPublic()
 
