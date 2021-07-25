@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -66,7 +65,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -819,7 +817,6 @@ func importPlanHook(
 					}
 				}
 			}
-			tableDescs = []*tabledesc.Mutable{found}
 			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
 		} else {
 			seqVals := make(map[descpb.ID]int64)
@@ -942,12 +939,11 @@ func importPlanHook(
 			telemetry.Count("import.into")
 		}
 
-		// Here we create the job and protected timestamp records in a side
-		// transaction and then kick off the job. This is awful. Rather we should be
-		// disallowing this statement in an explicit transaction and then we should
-		// create the job in the user's transaction here and then in a post-commit
-		// hook we should kick of the StartableJob which we attached to the
-		// connExecutor somehow.
+		// Here we create the job in a side transaction and then kick off the job.
+		// This is awful. Rather we should be disallowing this statement in an
+		// explicit transaction and then we should create the job in the user's
+		// transaction here and then in a post-commit hook we should kick of the
+		// StartableJob which we attached to the connExecutor somehow.
 
 		importDetails := jobspb.ImportDetails{
 			URIs:              files,
@@ -960,18 +956,6 @@ func importPlanHook(
 			ParseBundleSchema: importStmt.Bundle,
 		}
 
-		// Prepare the protected timestamp record.
-		var spansToProtect []roachpb.Span
-		codec := p.(sql.PlanHookState).ExecCfg().Codec
-		for i := range tableDetails {
-			if td := &tableDetails[i]; !td.IsNew {
-				spansToProtect = append(spansToProtect, tableDescs[i].TableSpan(codec))
-			}
-		}
-		if len(spansToProtect) > 0 {
-			protectedtsID := uuid.MakeV4()
-			importDetails.ProtectedTimestampRecord = &protectedtsID
-		}
 		jr := jobs.Record{
 			Description: jobDesc,
 			Username:    p.User(),
@@ -986,11 +970,6 @@ func importPlanHook(
 			_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
 				ctx, jr, jobID, p.ExtendedEvalContext().Txn)
 			if err != nil {
-				return err
-			}
-
-			if err = protectTimestampForImport(ctx, p, p.ExtendedEvalContext().Txn, jobID, spansToProtect,
-				walltime, importDetails); err != nil {
 				return err
 			}
 
@@ -1017,10 +996,6 @@ func importPlanHook(
 			}()
 			jobID := p.ExecCfg().JobRegistry.MakeJobID()
 			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
-				return err
-			}
-
-			if err := protectTimestampForImport(ctx, p, plannerTxn, jobID, spansToProtect, walltime, importDetails); err != nil {
 				return err
 			}
 
@@ -1137,38 +1112,14 @@ func parseAvroOptions(
 	return nil
 }
 
-func protectTimestampForImport(
-	ctx context.Context,
-	p sql.PlanHookState,
-	txn *kv.Txn,
-	jobID jobspb.JobID,
-	spansToProtect []roachpb.Span,
-	walltime int64,
-	importDetails jobspb.ImportDetails,
-) error {
-	if len(spansToProtect) > 0 {
-		// NB: We protect the timestamp preceding the import statement timestamp
-		// because that's the timestamp to which we want to revert.
-		tsToProtect := hlc.Timestamp{WallTime: walltime}.Prev()
-		rec := jobsprotectedts.MakeRecord(*importDetails.ProtectedTimestampRecord,
-			jobID, tsToProtect, spansToProtect)
-		err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type importResumer struct {
 	job      *jobs.Job
 	settings *cluster.Settings
 	res      backupccl.RowCount
 
 	testingKnobs struct {
-		afterImport               func(summary backupccl.RowCount) error
-		alwaysFlushJobProgress    bool
-		ignoreProtectedTimestamps bool
+		afterImport            func(summary backupccl.RowCount) error
+		alwaysFlushJobProgress bool
 	}
 }
 
@@ -1940,18 +1891,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	files := details.URIs
 	format := details.Format
-	ptsID := details.ProtectedTimestampRecord
-	if ptsID != nil && !r.testingKnobs.ignoreProtectedTimestamps {
-		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
-			if errors.Is(err, protectedts.ErrNotExists) {
-				// No reason to return an error which might cause problems if it doesn't
-				// seem to exist.
-				log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
-			} else {
-				return err
-			}
-		}
-	}
 
 	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	if details.Tables != nil {
@@ -2134,15 +2073,18 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if err := r.publishTables(ctx, p.ExecCfg()); err != nil {
 		return err
 	}
-	// TODO(ajwerner): Should this actually return the error? At this point we've
-	// successfully finished the import but failed to drop the protected
-	// timestamp. The reconciliation loop ought to pick it up.
-	if ptsID != nil && !r.testingKnobs.ignoreProtectedTimestamps {
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
-		}); err != nil {
-			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
-		}
+
+	// As of 21.2 we do not write a protected timestamp record during IMPORT INTO.
+	// In case of a mixed version cluster with 21.1 and 21.2 nodes, it is possible
+	// that the job was planned on an older node and then resumed on a 21.2 node.
+	// Thus, we still need to clear the timestamp record that was written when the
+	// IMPORT INTO was planned on the older node.
+	//
+	// TODO(adityamaru): Remove in 22.1.
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+	}); err != nil {
+		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
 
 	emitImportJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
@@ -2371,7 +2313,8 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 		if err != nil {
 			return err
 		}
-
+		// TODO(adityamaru): Remove in 22.1 since we do not write PTS records during
+		// IMPORT INTO from 21.2+.
 		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
 	}); err != nil {
 		return err

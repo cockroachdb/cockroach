@@ -670,7 +670,6 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 
 			resumer := raw.(*importResumer)
-			resumer.testingKnobs.ignoreProtectedTimestamps = true
 			resumer.testingKnobs.alwaysFlushJobProgress = true
 			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
 				importSummary = summary
@@ -777,7 +776,6 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 			resumer := raw.(*importResumer)
 			resumer.testingKnobs.alwaysFlushJobProgress = true
-			resumer.testingKnobs.ignoreProtectedTimestamps = true
 			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
 				importSummary = summary
 				return nil
