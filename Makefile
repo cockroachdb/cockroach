@@ -375,7 +375,6 @@ pkg/ui/yarn.cluster-ui.installed: pkg/ui/cluster-ui/package.json pkg/ui/cluster-
 	$(NODE_RUN) -C pkg/ui/cluster-ui yarn install --offline
 	# This ensures that any update to the protobuf will be picked up by cluster-ui.
 	$(NODE_RUN) -C pkg/ui/cluster-ui yarn upgrade file:pkg/ui/src/js
-	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
 	touch $@
 
 .SECONDARY: pkg/ui/yarn.protobuf.installed
@@ -1345,6 +1344,15 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 	@if $(NODE_RUN) -C pkg/ui yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
 	$(NODE_RUN) -C pkg/ui/cluster-ui yarn --cwd pkg/ui/cluster-ui lint
 
+CLUSTER_UI_JS := pkg/ui/cluster-ui/dist/main.js
+
+.SECONDARY: $(CLUSTER_UI_JS)
+
+# The grep -v " " is to exclude a couple of font files that have spaces in their filenames, which
+# Make is unable to deal with as far as I can tell.
+$(CLUSTER_UI_JS): pkg/ui/yarn.installed $(shell find pkg/ui/cluster-ui/src -type f | grep -v " ")
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
+
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
 UI_CCL_DLLS := pkg/ui/dist/protos.ccl.dll.js pkg/ui/dist/vendor.oss.dll.js
@@ -1368,10 +1376,10 @@ UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 # [1]: http://savannah.gnu.org/bugs/?19108
 .SECONDARY: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS)
 
-pkg/ui/dist/%.oss.dll.js pkg/ui/%.oss.manifest.json: pkg/ui/webpack.%.js pkg/ui/yarn.installed $(UI_PROTOS_OSS)
+pkg/ui/dist/%.oss.dll.js pkg/ui/%.oss.manifest.json: pkg/ui/webpack.%.js pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(CLUSTER_UI_JS)
 	$(NODE_RUN) -C pkg/ui $(WEBPACK) -p --config webpack.$*.js --env.dist=oss
 
-pkg/ui/dist/%.ccl.dll.js pkg/ui/%.ccl.manifest.json: pkg/ui/webpack.%.js pkg/ui/yarn.installed $(UI_PROTOS_CCL)
+pkg/ui/dist/%.ccl.dll.js pkg/ui/%.ccl.manifest.json: pkg/ui/webpack.%.js pkg/ui/yarn.installed $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
 	$(NODE_RUN) -C pkg/ui $(WEBPACK) -p --config webpack.$*.js --env.dist=ccl
 
 .PHONY: ui-test
@@ -1395,7 +1403,6 @@ pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/st
 	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
 	  ln -s ../dist/$$dll pkg/ui/dist$*/$${dll/@(.ccl|.oss)}; \
 	done
-	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
 	$(NODE_RUN) -C pkg/ui $(WEBPACK) --config webpack.app.js --env.dist=$*
 	go-bindata -pkg dist$* -o $@ -prefix pkg/ui/dist$* pkg/ui/dist$*/...
 	echo 'func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }' >> $@
