@@ -3225,6 +3225,9 @@ type EvalPlanner interface {
 
 	// ExternalWriteFile writes the content to an external file URI.
 	ExternalWriteFile(ctx context.Context, uri string, content []byte) error
+
+	// DecodeGist exposes gist functionality to the builtin functions.
+	DecodeGist(gist string) ([]string, error)
 }
 
 // CompactEngineSpanFunc is used to compact an engine key span at the given
