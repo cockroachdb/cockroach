@@ -118,6 +118,10 @@ func getResultColumns(
 
 	case scanBufferOp:
 		a := args.(*scanBufferArgs)
+		// TODO: instead of nil check can we put in a fake value?
+		if a.Ref == nil {
+			return nil, nil
+		}
 		return a.Ref.Columns(), nil
 
 	case insertOp:
@@ -144,7 +148,10 @@ func getResultColumns(
 		return tableColumns(a.Table, a.ReturnCols), nil
 
 	case opaqueOp:
-		return args.(*opaqueArgs).Metadata.Columns(), nil
+		if args.(*opaqueArgs).Metadata != nil {
+			return args.(*opaqueArgs).Metadata.Columns(), nil
+		}
+		return nil, nil
 
 	case alterTableSplitOp:
 		return colinfo.AlterTableSplitColumns, nil
@@ -212,6 +219,9 @@ func projectCols(
 ) colinfo.ResultColumns {
 	columns := make(colinfo.ResultColumns, len(ordinals))
 	for i, ord := range ordinals {
+		if int(ord) >= len(input) {
+			continue
+		}
 		columns[i] = input[ord]
 		if colNames != nil {
 			columns[i].Name = colNames[i]
@@ -224,8 +234,10 @@ func groupByColumns(
 	inputCols colinfo.ResultColumns, groupCols []exec.NodeColumnOrdinal, aggregations []exec.AggInfo,
 ) colinfo.ResultColumns {
 	columns := make(colinfo.ResultColumns, 0, len(groupCols)+len(aggregations))
-	for _, col := range groupCols {
-		columns = append(columns, inputCols[col])
+	if inputCols != nil {
+		for _, col := range groupCols {
+			columns = append(columns, inputCols[col])
+		}
 	}
 	for _, agg := range aggregations {
 		columns = append(columns, colinfo.ResultColumn{
