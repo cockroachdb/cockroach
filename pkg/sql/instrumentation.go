@@ -111,6 +111,10 @@ type instrumentationHelper struct {
 
 	// regions used only on EXPLAIN ANALYZE to be displayed as top-level stat.
 	regions []string
+
+	// planGist is a compressed version of plan that can be converted (lossily)
+	// back into a logical plan or be used to get a plan hash.
+	planGist *explain.PlanGist
 }
 
 // outputMode indicates how the statement output needs to be populated (for

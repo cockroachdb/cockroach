@@ -1,0 +1,98 @@
+exec-ddl
+CREATE TABLE foo (a INT PRIMARY KEY, b INT[], c STRING, INVERTED INDEX b_inverted_index(b), UNIQUE INDEX c_idx(c))
+----
+
+# ConstructScan
+gist-explain-roundtrip
+SELECT * from foo
+----
+hash: 7806214564769475034
+plan-gist: AgFqAgAAAAAGAA==
+• scan
+  missing stats
+  table: foo@primary
+  spans: FULL SCAN
+• scan
+  table: foo@primary
+  spans: FULL SCAN
+
+# ConstructFilter
+gist-explain-roundtrip
+SELECT * from foo WHERE a = 1
+----
+hash: 9499785238261889872
+plan-gist: AgFqAgAAAgAGAA==
+• scan
+  missing stats
+  table: foo@primary
+  spans: 1 span
+• scan
+  table: foo@primary
+  spans: 0 spans
+
+# ConstructInvertedFilter
+gist-explain-roundtrip
+SELECT * from foo WHERE b @> ARRAY[1]
+----
+hash: 2801581660140530926
+plan-gist: AgFqBAAAAAITagAGAA==
+• index join
+│ table: foo@primary
+│
+└── • scan
+      missing stats
+      table: foo@b_inverted_index
+      spans: 1 span
+• index join
+│ table: foo@primary
+│
+└── • scan
+      table: foo@b_inverted_index
+      spans: 1 span
+
+# ConstructSimpleProjectOp
+gist-explain-roundtrip
+select a,b from foo@c_idx where c = 'bar'
+----
+hash: 1503618631894230423
+plan-gist: AgFqBgAAAgATagAFAAYA
+• index join
+│ table: foo@primary
+│
+└── • scan
+      missing stats
+      table: foo@c_idx
+      spans: 1 span
+• index join
+│ table: foo@primary
+│
+└── • scan
+      table: foo@c_idx
+      spans: 0 spans
+
+# ConstructSerializingProject
+
+
+# ConstructInsert
+gist-explain-roundtrip
+INSERT INTO foo VALUES (1,ARRAY[1,2],'str')
+----
+hash: 7858368960919488680
+plan-gist: Ah9qAQ==
+• insert fast path
+  into: foo(a, b, c)
+  auto commit
+  size: 3 columns, 1 row
+• insert fast path
+  into: foo()
+  auto commit
+
+# ConstructRender/ConstructValues
+gist-explain-roundtrip
+SELECT 1
+----
+hash: 8435099238926193420
+plan-gist: AgIABgA=
+• values
+  size: 1 column, 1 row
+• norows
