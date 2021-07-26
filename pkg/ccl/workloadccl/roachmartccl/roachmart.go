@@ -56,7 +56,7 @@ const (
 		fulfilled BOOL,
 		PRIMARY KEY (user_zone, user_email, id),
 		FOREIGN KEY (user_zone, user_email) REFERENCES users
-	) INTERLEAVE IN PARENT users (user_zone, user_email)`
+	)`
 
 	defaultUsers  = 10000
 	defaultOrders = 100000

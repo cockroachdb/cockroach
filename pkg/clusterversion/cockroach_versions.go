@@ -269,7 +269,12 @@ const (
 	// SQLInstancesTable adds the system table for storing SQL instance information
 	// per tenant.
 	SQLInstancesTable
-
+	// InterleavedCreationBlockedMigration interleaved table creation is completely
+	// blocked on this version.
+	InterleavedCreationBlockedMigration
+	// InterleavedTablesRemovedMigration interleaved tables no longer exist in
+	// this version.
+	InterleavedTablesRemovedMigration
 	// Step (1): Add new versions here.
 )
 
@@ -433,6 +438,15 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SQLInstancesTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 122},
+	},
+	{
+		Key:     InterleavedCreationBlockedMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
+	},
+
+	{
+		Key:     InterleavedTablesRemovedMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 126},
 	},
 
 	// Step (2): Add new versions here.

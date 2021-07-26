@@ -81,11 +81,6 @@ func RandCreateTables(
 	tables := make([]tree.Statement, num)
 	for i := 0; i < num; i++ {
 		var interleave *tree.CreateTable
-		// 50% chance of interleaving past the first table. Interleaving doesn't
-		// make anything harder to do for tests - so prefer to do it a lot.
-		if i > 0 && rng.Intn(2) == 0 {
-			interleave = tables[rng.Intn(i)].(*tree.CreateTable)
-		}
 		t := RandCreateTableWithInterleave(rng, prefix, i+1, interleave, nil)
 		tables[i] = t
 	}

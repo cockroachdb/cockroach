@@ -100,13 +100,6 @@ func TestJoinReader(t *testing.T) {
 		0,
 		sqlutils.ToRowFn(aFn))
 
-	sqlutils.CreateTableInterleaved(t, sqlDB, "t3",
-		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), INDEX bs (b,s)",
-		"t3parent(a)",
-		99,
-		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
-	tdInterleaved := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t3")
-
 	testCases := []struct {
 		description string
 		indexIdx    uint32
@@ -843,7 +836,7 @@ func TestJoinReader(t *testing.T) {
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
-	for i, td := range []catalog.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
+	for i, td := range []catalog.TableDescriptor{tdSecondary, tdFamily} {
 		for _, c := range testCases {
 			for _, reqOrdering := range []bool{true, false} {
 				// Small and large batches exercise different paths of interest for
