@@ -51,7 +51,7 @@ module.exports = (env, argv) => {
     entry: ["./src/index.tsx"],
     output: {
       filename: "bundle.js",
-      path: path.resolve(__dirname, `dist${env.dist}`),
+      path: path.resolve(__dirname, "../..", `dist${env.dist}`),
     },
 
     mode: argv.mode || "production",
@@ -67,7 +67,11 @@ module.exports = (env, argv) => {
       // Relative paths would trigger the resolution behavior used by Node.js
       // for "node_modules", i.e., checking for a "node_modules" directory in
       // the current directory *or any parent directory*.
-      modules: [...localRoots, "node_modules"],
+      modules: [
+        ...localRoots,
+        path.resolve(__dirname, "node_modules"),
+        path.resolve("../..", "node_modules"),
+      ],
       alias: {
         oss: path.resolve(__dirname),
         "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
