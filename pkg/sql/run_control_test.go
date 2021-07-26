@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -241,6 +242,7 @@ GRANT admin TO has_admin2;
 
 func TestCancelQueryPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 63547, "https://cockroachlabs.slack.com/archives/C016CAD2HQ8/p1627290710022700")
 	defer log.Scope(t).Close(t)
 
 	// getQueryIDs retrieves the IDs of any currently running queries for the
