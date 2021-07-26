@@ -31,36 +31,21 @@ func TestValidateRegionConfig(t *testing.T) {
 	}{
 		{
 			err: "expected a valid multi-region enum ID",
-			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
-					"region_a",
-					"region_b",
-				},
+			regionConfig: multiregion.MakeRegionConfig(descpb.RegionNames{
+				"region_a",
 				"region_b",
-				descpb.SurvivalGoal_ZONE_FAILURE,
-				descpb.InvalidID,
-			),
+			}, "region_b", descpb.SurvivalGoal_ZONE_FAILURE, descpb.InvalidID, descpb.DataPlacement_DEFAULT),
 		},
 		{
 			err: "3 regions are required for surviving a region failure",
-			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
-					"region_a",
-					"region_b",
-				},
+			regionConfig: multiregion.MakeRegionConfig(descpb.RegionNames{
+				"region_a",
 				"region_b",
-				descpb.SurvivalGoal_REGION_FAILURE,
-				validRegionEnumID,
-			),
+			}, "region_b", descpb.SurvivalGoal_REGION_FAILURE, validRegionEnumID, descpb.DataPlacement_DEFAULT),
 		},
 		{
-			err: "expected > 0 number of regions in the region config",
-			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{},
-				"region_b",
-				descpb.SurvivalGoal_REGION_FAILURE,
-				validRegionEnumID,
-			),
+			err:          "expected > 0 number of regions in the region config",
+			regionConfig: multiregion.MakeRegionConfig(descpb.RegionNames{}, "region_b", descpb.SurvivalGoal_REGION_FAILURE, validRegionEnumID, descpb.DataPlacement_DEFAULT),
 		},
 	}
 
