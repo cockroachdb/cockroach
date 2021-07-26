@@ -6,15 +6,16 @@ package serverpb
 import (
 	context "context"
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+
 	clusterversion "github.com/cockroachdb/cockroach/pkg/clusterversion"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	io "io"
-	math "math"
-	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -43,7 +44,9 @@ func (*ValidateTargetClusterVersionRequest) Descriptor() ([]byte, []int) {
 func (m *ValidateTargetClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ValidateTargetClusterVersionRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ValidateTargetClusterVersionRequest) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -77,7 +80,9 @@ func (*ValidateTargetClusterVersionResponse) Descriptor() ([]byte, []int) {
 func (m *ValidateTargetClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ValidateTargetClusterVersionResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ValidateTargetClusterVersionResponse) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
@@ -386,7 +391,9 @@ func NewMigrationClient(cc *grpc.ClientConn) MigrationClient {
 	return &migrationClient{cc}
 }
 
-func (c *migrationClient) ValidateTargetClusterVersion(ctx context.Context, in *ValidateTargetClusterVersionRequest, opts ...grpc.CallOption) (*ValidateTargetClusterVersionResponse, error) {
+func (c *migrationClient) ValidateTargetClusterVersion(
+	ctx context.Context, in *ValidateTargetClusterVersionRequest, opts ...grpc.CallOption,
+) (*ValidateTargetClusterVersionResponse, error) {
 	out := new(ValidateTargetClusterVersionResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Migration/ValidateTargetClusterVersion", in, out, opts...)
 	if err != nil {
@@ -395,7 +402,9 @@ func (c *migrationClient) ValidateTargetClusterVersion(ctx context.Context, in *
 	return out, nil
 }
 
-func (c *migrationClient) BumpClusterVersion(ctx context.Context, in *BumpClusterVersionRequest, opts ...grpc.CallOption) (*BumpClusterVersionResponse, error) {
+func (c *migrationClient) BumpClusterVersion(
+	ctx context.Context, in *BumpClusterVersionRequest, opts ...grpc.CallOption,
+) (*BumpClusterVersionResponse, error) {
 	out := new(BumpClusterVersionResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Migration/BumpClusterVersion", in, out, opts...)
 	if err != nil {
@@ -404,7 +413,9 @@ func (c *migrationClient) BumpClusterVersion(ctx context.Context, in *BumpCluste
 	return out, nil
 }
 
-func (c *migrationClient) SyncAllEngines(ctx context.Context, in *SyncAllEnginesRequest, opts ...grpc.CallOption) (*SyncAllEnginesResponse, error) {
+func (c *migrationClient) SyncAllEngines(
+	ctx context.Context, in *SyncAllEnginesRequest, opts ...grpc.CallOption,
+) (*SyncAllEnginesResponse, error) {
 	out := new(SyncAllEnginesResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Migration/SyncAllEngines", in, out, opts...)
 	if err != nil {
@@ -413,7 +424,9 @@ func (c *migrationClient) SyncAllEngines(ctx context.Context, in *SyncAllEngines
 	return out, nil
 }
 
-func (c *migrationClient) PurgeOutdatedReplicas(ctx context.Context, in *PurgeOutdatedReplicasRequest, opts ...grpc.CallOption) (*PurgeOutdatedReplicasResponse, error) {
+func (c *migrationClient) PurgeOutdatedReplicas(
+	ctx context.Context, in *PurgeOutdatedReplicasRequest, opts ...grpc.CallOption,
+) (*PurgeOutdatedReplicasResponse, error) {
 	out := new(PurgeOutdatedReplicasResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Migration/PurgeOutdatedReplicas", in, out, opts...)
 	if err != nil {
@@ -450,16 +463,24 @@ type MigrationServer interface {
 type UnimplementedMigrationServer struct {
 }
 
-func (*UnimplementedMigrationServer) ValidateTargetClusterVersion(ctx context.Context, req *ValidateTargetClusterVersionRequest) (*ValidateTargetClusterVersionResponse, error) {
+func (*UnimplementedMigrationServer) ValidateTargetClusterVersion(
+	ctx context.Context, req *ValidateTargetClusterVersionRequest,
+) (*ValidateTargetClusterVersionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ValidateTargetClusterVersion not implemented")
 }
-func (*UnimplementedMigrationServer) BumpClusterVersion(ctx context.Context, req *BumpClusterVersionRequest) (*BumpClusterVersionResponse, error) {
+func (*UnimplementedMigrationServer) BumpClusterVersion(
+	ctx context.Context, req *BumpClusterVersionRequest,
+) (*BumpClusterVersionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BumpClusterVersion not implemented")
 }
-func (*UnimplementedMigrationServer) SyncAllEngines(ctx context.Context, req *SyncAllEnginesRequest) (*SyncAllEnginesResponse, error) {
+func (*UnimplementedMigrationServer) SyncAllEngines(
+	ctx context.Context, req *SyncAllEnginesRequest,
+) (*SyncAllEnginesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncAllEngines not implemented")
 }
-func (*UnimplementedMigrationServer) PurgeOutdatedReplicas(ctx context.Context, req *PurgeOutdatedReplicasRequest) (*PurgeOutdatedReplicasResponse, error) {
+func (*UnimplementedMigrationServer) PurgeOutdatedReplicas(
+	ctx context.Context, req *PurgeOutdatedReplicasRequest,
+) (*PurgeOutdatedReplicasResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PurgeOutdatedReplicas not implemented")
 }
 
@@ -467,7 +488,12 @@ func RegisterMigrationServer(s *grpc.Server, srv MigrationServer) {
 	s.RegisterService(&_Migration_serviceDesc, srv)
 }
 
-func _Migration_ValidateTargetClusterVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Migration_ValidateTargetClusterVersion_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(ValidateTargetClusterVersionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -485,7 +511,12 @@ func _Migration_ValidateTargetClusterVersion_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Migration_BumpClusterVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Migration_BumpClusterVersion_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(BumpClusterVersionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -503,7 +534,12 @@ func _Migration_BumpClusterVersion_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Migration_SyncAllEngines_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Migration_SyncAllEngines_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(SyncAllEnginesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -521,7 +557,12 @@ func _Migration_SyncAllEngines_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Migration_PurgeOutdatedReplicas_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Migration_PurgeOutdatedReplicas_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(PurgeOutdatedReplicasRequest)
 	if err := dec(in); err != nil {
 		return nil, err
