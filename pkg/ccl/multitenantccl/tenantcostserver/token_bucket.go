@@ -48,6 +48,19 @@ func (s *instance) TokenBucketRequest(
 
 		*result = state.Bucket.Request(in, timeutil.Now())
 
+		if err := updateTenantUsageState(ctx, s.executor, txn, tenantID, state); err != nil {
+			return err
+		}
+
+		// Report current consumption.
+		m := s.metrics.getTenantMetrics(tenantID)
+		m.totalRU.Update(state.Consumption.RU)
+		m.totalReadRequests.Update(int64(state.Consumption.ReadRequests))
+		m.totalReadBytes.Update(int64(state.Consumption.ReadBytes))
+		m.totalWriteRequests.Update(int64(state.Consumption.WriteRequests))
+		m.totalWriteBytes.Update(int64(state.Consumption.WriteBytes))
+		m.totalSQLPodsCPUSeconds.Update(state.Consumption.SQLPodCPUSeconds)
+
 		return updateTenantUsageState(ctx, s.executor, txn, tenantID, state)
 	}); err != nil {
 		return nil, err
