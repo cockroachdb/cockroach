@@ -272,6 +272,12 @@ const (
 	// Can return new retryable rangefeed errors without crashing the client
 	NewRetryableRangefeedErrors
 
+	// PreventNewInterleavedTables interleaved table creation is completely
+	// blocked on this version.
+	PreventNewInterleavedTables
+	// EnsureNoInterleavedTables interleaved tables no longer exist in
+	// this version.
+	EnsureNoInterleavedTables
 	// Step (1): Add new versions here.
 )
 
@@ -439,6 +445,14 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     NewRetryableRangefeedErrors,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
+	},
+	{
+		Key:     PreventNewInterleavedTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 126},
+	},
+	{
+		Key:     EnsureNoInterleavedTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 128},
 	},
 
 	// Step (2): Add new versions here.
