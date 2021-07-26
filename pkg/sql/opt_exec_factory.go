@@ -134,7 +134,7 @@ func (ef *execFactory) ConstructScan(
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
 		}
-		ef.planner.extendedEvalCtx.indexUsageStatsWriter.RecordRead(ctx, idxUsageKey)
+		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(ctx, idxUsageKey)
 	}
 
 	return scan, nil
@@ -679,7 +679,7 @@ func (ef *execFactory) ConstructLookupJoin(
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
 		}
-		ef.planner.extendedEvalCtx.indexUsageStatsWriter.RecordRead(ctx, idxUsageKey)
+		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(ctx, idxUsageKey)
 	}
 
 	n := &lookupJoinNode{
@@ -809,7 +809,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
 		}
-		ef.planner.extendedEvalCtx.indexUsageStatsWriter.RecordRead(ctx, idxUsageKey)
+		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(ctx, idxUsageKey)
 	}
 
 	n := &invertedJoinNode{
@@ -873,7 +873,7 @@ func (ef *execFactory) constructScanForZigzag(
 			TableID: roachpb.TableID(tableDesc.GetID()),
 			IndexID: roachpb.IndexID(index.GetID()),
 		}
-		ef.planner.extendedEvalCtx.indexUsageStatsWriter.RecordRead(ctx, idxUsageKey)
+		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(ctx, idxUsageKey)
 	}
 
 	scan.index = index

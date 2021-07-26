@@ -641,7 +641,9 @@ func addSSTablePreApply(
 	return copied
 }
 
-func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult result.LocalResult) {
+func (r *Replica) handleReadWriteLocalEvalResult(
+	ctx context.Context, lResult result.LocalResult, raftMuHeld bool,
+) {
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
 	// that all fields were handled).
@@ -707,7 +709,19 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 		lResult.MaybeAddToSplitQueue = false
 	}
 
+	// The following three triggers require the raftMu to be held. If a
+	// trigger is present, acquire the mutex if it is not held already.
+	maybeAcquireRaftMu := func() func() {
+		if raftMuHeld {
+			return func() {}
+		}
+		raftMuHeld = true
+		r.raftMu.Lock()
+		return r.raftMu.Unlock
+	}
+
 	if lResult.MaybeGossipSystemConfig {
+		defer maybeAcquireRaftMu()()
 		if err := r.MaybeGossipSystemConfigRaftMuLocked(ctx); err != nil {
 			log.Errorf(ctx, "%v", err)
 		}
@@ -715,6 +729,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	}
 
 	if lResult.MaybeGossipSystemConfigIfHaveFailure {
+		defer maybeAcquireRaftMu()()
 		if err := r.MaybeGossipSystemConfigIfHaveFailureRaftMuLocked(ctx); err != nil {
 			log.Errorf(ctx, "%v", err)
 		}
@@ -722,6 +737,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	}
 
 	if lResult.MaybeGossipNodeLiveness != nil {
+		defer maybeAcquireRaftMu()()
 		if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, *lResult.MaybeGossipNodeLiveness); err != nil {
 			log.Errorf(ctx, "%v", err)
 		}

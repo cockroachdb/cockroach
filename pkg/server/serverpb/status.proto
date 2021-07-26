@@ -17,6 +17,7 @@ import "gossip/gossip.proto";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
+import "roachpb/index_usage_stats.proto";
 import "roachpb/metadata.proto";
 import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
@@ -1105,6 +1106,18 @@ message ResetSQLStatsRequest {
 message ResetSQLStatsResponse {
 }
 
+// Request object for issuing IndexUsageStatistics request.
+message IndexUsageStatisticsRequest {
+  // node_id is the ID of the node where the stats data shall be retrieved from.
+  // If this is left empty, the cluster-wide aggregated result will be returned.
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+// Response object returned by IndexUsageStatistics.
+message IndexUsageStatisticsResponse {
+  repeated cockroach.sql.CollectedIndexUsageStatistics statistics = 1 [(gogoproto.nullable) = false];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -1421,6 +1434,12 @@ service Status {
     option (google.api.http) = {
       post: "/_status/resetsqlstats"
       body: "*"
+    };
+  }
+
+  rpc IndexUsageStatistics(IndexUsageStatisticsRequest) returns (IndexUsageStatisticsResponse) {
+    option (google.api.http) = {
+      get: "/_status/indexusagestatistics"
     };
   }
 }

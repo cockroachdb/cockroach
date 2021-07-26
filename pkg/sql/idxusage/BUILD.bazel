@@ -19,13 +19,13 @@ go_library(
     name = "idxusage",
     srcs = [
         "cluster_settings.go",
-        "index_usage_stats.go",
         "local_idx_usage_stats.go",
         "test_utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/idxusage",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/settings/cluster",
