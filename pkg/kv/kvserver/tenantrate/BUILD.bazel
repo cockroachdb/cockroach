@@ -13,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/multitenant",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/util/metric",
@@ -35,6 +36,7 @@ go_test(
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/testutils",
+        "//pkg/testutils/metrictestutils",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "//pkg/util/tenantcostmodel",
