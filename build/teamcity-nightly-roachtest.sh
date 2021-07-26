@@ -97,7 +97,9 @@ case "${CLOUD}" in
     PARALLELISM=3
     CPUQUOTA=384
     if [ -z "${TESTS}" ]; then
-      TESTS="kv(0|95)|ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/(nodes=3/ops=2000/conc=1)|backup/(KMS/n3cpu4)"
+      # NB: anchor ycsb to beginning of line to avoid matching `zfs/ycsb/*` which
+      # isn't supported on AWS at time of writing.
+      TESTS="kv(0|95)|^ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/(nodes=3/ops=2000/conc=1)|backup/(KMS/n3cpu4)"
     fi
     ;;
   *)
