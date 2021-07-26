@@ -356,7 +356,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	// https://github.com/cockroachdb/pebble/issues/1143
 	//
 	// TODO(bilal): Remove this line when the above issue is addressed.
-	opts.Experimental.ReadSamplingMultiplier = -1
+	// opts.Experimental.ReadSamplingMultiplier = -1
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
