@@ -313,6 +313,14 @@ const (
 	// per-role default session settings.
 	DatabaseRoleSettings
 
+	// InterleavedCreationBlockedMigration interleaved table creation is completely
+	// blocked on this version.
+	InterleavedCreationBlockedMigration
+
+	// InterleavedTablesRemovedMigration interleaved tables no longer exist in
+	// this version.
+	InterleavedTablesRemovedMigration
+
 	// Step (1): Add new versions here.
 )
 
@@ -537,6 +545,17 @@ var versionsSingleton = keyedVersions{
 		Key:     DatabaseRoleSettings,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 118},
 	},
+
+	{
+		Key:     InterleavedCreationBlockedMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 120},
+	},
+
+	{
+		Key:     InterleavedTablesRemovedMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 122},
+	},
+
 	// Step (2): Add new versions here.
 }
 

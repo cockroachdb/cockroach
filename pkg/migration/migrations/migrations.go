@@ -82,6 +82,16 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.DatabaseRoleSettings),
 		databaseRoleSettingsTableMigration,
 	),
+	migration.NewTenantMigration(
+		"validates no interleaved tables or indexes exist",
+		toCV(clusterversion.InterleavedCreationBlockedMigration),
+		interleavedTableMigration,
+	),
+	migration.NewTenantMigration(
+		"validates no interleaved and all entire cluster is at InterleavedCreationBlockedMigration",
+		toCV(clusterversion.InterleavedTablesRemovedMigration),
+		interleavedTablesRemovedMigration,
+	),
 }
 
 func init() {
