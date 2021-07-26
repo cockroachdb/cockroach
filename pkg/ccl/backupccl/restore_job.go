@@ -1246,6 +1246,7 @@ func createImportingDescriptors(
 									desc.RegionConfig.PrimaryRegion,
 									desc.RegionConfig.SurvivalGoal,
 									desc.RegionConfig.RegionEnumID,
+									desc.RegionConfig.Placement,
 								)
 								if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
 									ctx,

@@ -38,6 +38,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_a",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
@@ -77,6 +78,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_a",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(4),
@@ -123,6 +125,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
@@ -175,6 +178,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
@@ -228,6 +232,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(6),
@@ -287,6 +292,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
@@ -376,6 +382,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				GlobalReads:               proto.Bool(true),
@@ -400,6 +407,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				GlobalReads:               proto.Bool(true),
@@ -424,6 +432,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -444,6 +453,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -466,6 +476,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -488,6 +499,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -510,6 +522,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: nil, // Set at the database level.
@@ -551,6 +564,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas: nil, // Set at the database level.
@@ -572,6 +586,92 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 						},
 					},
 				},
+			},
+		},
+		{
+			desc: "4-region regional by table with restricted placement on primary region",
+			localityConfig: descpb.TableDescriptor_LocalityConfig{
+				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
+					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
+						Region: nil,
+					},
+				},
+			},
+			regionConfig: multiregion.MakeRegionConfig(
+				descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				descpb.InvalidID,
+				descpb.DataPlacement_RESTRICTED,
+			),
+			expected: zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(3),
+				NumVoters:   proto.Int32(3),
+				LeasePreferences: []zonepb.LeasePreference{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+				},
+				InheritedConstraints:        false,
+				NullVoterConstraintsIsEmpty: true,
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+				},
+				Constraints: []zonepb.ConstraintsConjunction{},
+			},
+		},
+		{
+			desc: "4-region regional by table with restricted placement on non-primary region",
+			localityConfig: descpb.TableDescriptor_LocalityConfig{
+				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
+					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
+						Region: protoRegionName("region_c"),
+					},
+				},
+			},
+			regionConfig: multiregion.MakeRegionConfig(
+				descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				descpb.InvalidID,
+				descpb.DataPlacement_RESTRICTED,
+			),
+			expected: zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(3), // Set at the database level.
+				NumVoters:   proto.Int32(3),
+				LeasePreferences: []zonepb.LeasePreference{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
+						},
+					},
+				},
+				InheritedConstraints:        false,
+				NullVoterConstraintsIsEmpty: true,
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
+						},
+					},
+				},
+				Constraints: []zonepb.ConstraintsConjunction{},
 			},
 		},
 	}
@@ -606,6 +706,7 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas:                 nil, // Set at the database level.
@@ -641,6 +742,7 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 			expected: zonepb.ZoneConfig{
 				NumReplicas:                 nil, // Set at the database level.
@@ -655,6 +757,43 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 						},
 					},
 				},
+				LeasePreferences: []zonepb.LeasePreference{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+				},
+			},
+		},
+		{
+			desc:   "4-region table with restricted placement",
+			region: "region_a",
+			regionConfig: multiregion.MakeRegionConfig(
+				descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				descpb.InvalidID,
+				descpb.DataPlacement_RESTRICTED,
+			),
+			expected: zonepb.ZoneConfig{
+				NumReplicas:                 proto.Int32(3),
+				NumVoters:                   proto.Int32(3),
+				InheritedConstraints:        false,
+				NullVoterConstraintsIsEmpty: true,
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{
+						Constraints: []zonepb.Constraint{
+							{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+				},
+				Constraints: []zonepb.ConstraintsConjunction{},
 				LeasePreferences: []zonepb.LeasePreference{
 					{
 						Constraints: []zonepb.Constraint{

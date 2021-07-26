@@ -98,6 +98,9 @@ func initializeMultiRegionMetadata(
 		primaryRegion,
 		survivalGoal,
 		regionEnumID,
+		// Using default placement for now until this gets stitched together with
+		// the proper SQL statements.
+		descpb.DataPlacement_DEFAULT,
 	)
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
 		return nil, err
