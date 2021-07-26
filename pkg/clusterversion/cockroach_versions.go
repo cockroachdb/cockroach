@@ -285,7 +285,12 @@ const (
 	// RecordsBasedRegistry replaces the existing monolithic protobuf-based
 	// encryption-at-rest file registry with the new incremental records-based registry.
 	RecordsBasedRegistry
-
+	// PreventNewInterleavedTables interleaved table creation is completely
+	// blocked on this version.
+	PreventNewInterleavedTables
+	// EnsureNoInterleavedTables interleaved tables no longer exist in
+	// this version.
+	EnsureNoInterleavedTables
 	// Step (1): Add new versions here.
 )
 
@@ -473,6 +478,14 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     RecordsBasedRegistry,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 134},
+	},
+	{
+		Key:     PreventNewInterleavedTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 136},
+	},
+	{
+		Key:     EnsureNoInterleavedTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 138},
 	},
 
 	// Step (2): Add new versions here.

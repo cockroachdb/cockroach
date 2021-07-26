@@ -4554,7 +4554,7 @@ CREATE TABLE crdb_internal.interleaved (
 				if !table.IsInterleaved() {
 					return nil
 				}
-				indexes := table.NonDropIndexes()
+				indexes := table.AllIndexes()
 				for _, index := range indexes {
 					if index.NumInterleaveAncestors() == 0 {
 						continue

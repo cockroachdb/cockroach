@@ -19,7 +19,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -59,22 +61,46 @@ func TestRestoreOldVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const (
-		testdataBase    = "testdata/restore_old_versions"
-		exportDirs      = testdataBase + "/exports"
-		fkRevDirs       = testdataBase + "/fk-rev-history"
-		clusterDirs     = testdataBase + "/cluster"
-		exceptionalDirs = testdataBase + "/exceptional"
-		privilegeDirs   = testdataBase + "/privileges"
+		testdataBase                = "testdata/restore_old_versions"
+		exportDirsWithoutInterleave = testdataBase + "/exports-without-interleaved"
+		exportDirs                  = testdataBase + "/exports"
+		fkRevDirs                   = testdataBase + "/fk-rev-history"
+		clusterDirs                 = testdataBase + "/cluster"
+		exceptionalDirs             = testdataBase + "/exceptional"
+		privilegeDirs               = testdataBase + "/privileges"
+		interleavedDirs             = testdataBase + "/interleaved"
 	)
 
+	t.Run("interleaved", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(interleavedDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			interleavedDirs, err := filepath.Abs(filepath.Join(interleavedDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restoreInterleavedTest(interleavedDirs))
+		}
+	})
+
 	t.Run("table-restore", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(exportDirs)
+		dirs, err := ioutil.ReadDir(exportDirsWithoutInterleave)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(exportDirsWithoutInterleave, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restoreOldVersionTest(exportDir))
+		}
+	})
+
+	t.Run("table-restore-with-interleave", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(exportDirsWithoutInterleave)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())
 			exportDir, err := filepath.Abs(filepath.Join(exportDirs, dir.Name()))
 			require.NoError(t, err)
-			t.Run(dir.Name(), restoreOldVersionTest(exportDir))
+			t.Run(dir.Name(), restoreOldVersionTestWithInterleave(exportDir))
 		}
 	})
 
@@ -169,6 +195,87 @@ ORDER BY object_type, object_name`, [][]string{
 			t.Run(dir.Name(), restoreV201ZoneconfigPrivilegeTest(exportDir))
 		}
 	})
+}
+
+func restoreInterleavedTest(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		params := base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: 1,
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PreventNewInterleavedTables - 1),
+				},
+			},
+		}
+		const numAccounts = 1000
+		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
+		require.NoError(t, err)
+		sqlDB.Exec(t, `CREATE DATABASE test`)
+		var unused string
+		var importedRows int
+		sqlDB.QueryRow(t, `RESTORE test.* FROM $1`, LocalFoo).Scan(
+			&unused, &unused, &unused, &importedRows, &unused, &unused,
+		)
+		// No rows in the imported table.
+		const totalRows = 4
+		if importedRows != totalRows {
+			t.Fatalf("expected %d rows, got %d", totalRows, importedRows)
+		}
+		// Validate an empty result set is generated.
+		orderResults := [][]string{
+			{"1", "1", "20.00000"},
+			{"2", "2", "30.00000"},
+		}
+		customerResults := [][]string{
+			{"1", "BOB"},
+			{"2", "BILL"},
+		}
+		sqlDB.CheckQueryResults(t, `SELECT * FROM test.orders`, orderResults)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM test.customers`, customerResults)
+		// Result of show tables.
+		showTableResult := [][]string{
+			{"test.public.orders",
+				"CREATE TABLE public.orders (\n\tcustomer INT8 NOT NULL,\n\tid INT8 NOT NULL,\n\ttotal DECIMAL(20,5) NULL,\n\tCONSTRAINT \"primary\" PRIMARY KEY (customer ASC, id ASC),\n\tCONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES public.customers(id),\n\tFAMILY \"primary\" (customer, id, total)\n) INTERLEAVE IN PARENT public.customers (customer)"},
+		}
+		sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE test.orders", showTableResult)
+		// We should still have interleaved tables.
+		interleavedResult := [][]string{
+			{"test", "public", "orders", "primary", "test", "public", "customers"}}
+		sqlDB.ExecSucceedsSoon(t, "SET DATABASE = test")
+		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.interleaved", interleavedResult)
+		// Next move to a version that blocks restores.
+		sqlDB.ExecSucceedsSoon(t,
+			"SET CLUSTER SETTING version = $1",
+			clusterversion.ByKey(clusterversion.PreventNewInterleavedTables).String())
+		// Clean up the old database.
+		sqlDB.ExecSucceedsSoon(t, "SET DATABASE = defaultdb")
+		sqlDB.ExecSucceedsSoon(t, "set sql_safe_updates=false")
+		sqlDB.ExecSucceedsSoon(t, "DROP DATABASE TEST")
+		// Restore should now fail.
+		sqlDB.ExpectErr(t,
+			"pq: restoring interleaved tables is no longer allowed. table customers was found to be interleaved",
+			`RESTORE test.* FROM $1`, LocalFoo)
+	}
+}
+
+func restoreOldVersionTestWithInterleave(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		params := base.TestServerArgs{}
+		const numAccounts = 1000
+		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
+		require.NoError(t, err)
+		sqlDB.Exec(t, `CREATE DATABASE test`)
+		// Restore should now fail.
+		sqlDB.ExpectErr(t,
+			"pq: restoring interleaved tables is no longer allowed. table t3 was found to be interleaved",
+			`RESTORE test.* FROM $1`, LocalFoo)
+	}
 }
 
 func restoreOldVersionTest(exportDir string) func(t *testing.T) {
