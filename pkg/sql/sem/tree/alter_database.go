@@ -99,3 +99,18 @@ func (node *AlterDatabaseSurvivalGoal) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ")
 	node.SurvivalGoal.Format(ctx)
 }
+
+type AlterDatabasePlacement struct {
+	Name      Name
+	Placement DataPlacement
+}
+
+var _ Statement = &AlterDatabasePlacement{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabasePlacement) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.Name)
+	ctx.WriteString(" SET ")
+	node.Placement.Format(ctx)
+}
