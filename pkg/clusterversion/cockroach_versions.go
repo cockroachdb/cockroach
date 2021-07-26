@@ -282,7 +282,12 @@ const (
 	PostSeparatedIntentsMigration
 	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
 	RetryJobsWithExponentialBackoff
-
+	// PreventNewInterleavedTables interleaved table creation is completely
+	// blocked on this version.
+	PreventNewInterleavedTables
+	// EnsureNoInterleavedTables interleaved tables no longer exist in
+	// this version.
+	EnsureNoInterleavedTables
 	// Step (1): Add new versions here.
 )
 
@@ -466,6 +471,14 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     RetryJobsWithExponentialBackoff,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 132},
+	},
+	{
+		Key:     PreventNewInterleavedTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 134},
+	},
+	{
+		Key:     EnsureNoInterleavedTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 136},
 	},
 
 	// Step (2): Add new versions here.
