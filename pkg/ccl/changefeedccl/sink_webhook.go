@@ -71,13 +71,13 @@ func encodePayloadWebhook(value []byte) ([]byte, error) {
 }
 
 type webhookSink struct {
-	ctx         context.Context
+	workerCtx   context.Context
 	url         sinkURL
 	authHeader  string
 	parallelism int
 	client      *httputil.Client
 	workerGroup ctxgroup.Group
-	cancelFunc  func()
+	exitWorkers func()
 	eventsChans []chan []byte
 	inflight    *inflightTracker
 	retryCfg    retry.Options
@@ -135,9 +135,9 @@ func makeWebhookSink(
 	ctx, cancel := context.WithCancel(ctx)
 
 	sink := &webhookSink{
-		ctx:         ctx,
+		workerCtx:   ctx,
 		authHeader:  opts[changefeedbase.OptWebhookAuthHeader],
-		cancelFunc:  cancel,
+		exitWorkers: cancel,
 		parallelism: parallelism,
 		retryCfg:    retryOptions,
 	}
@@ -229,7 +229,7 @@ func defaultWorkerCount() int {
 
 func (s *webhookSink) setupWorkers() {
 	s.eventsChans = make([]chan []byte, s.parallelism)
-	s.workerGroup = ctxgroup.WithContext(s.ctx)
+	s.workerGroup = ctxgroup.WithContext(s.workerCtx)
 	for i := 0; i < s.parallelism; i++ {
 		s.eventsChans[i] = make(chan []byte)
 		j := i
@@ -240,19 +240,21 @@ func (s *webhookSink) setupWorkers() {
 	}
 }
 
-// TODO (ryan min): Address potential ordering issue where errored message can
-// be followed by successful messages. Solution is to immediately stop sending
-// messages upon receiving a single error.
 func (s *webhookSink) workerLoop(workerCh chan []byte) {
 	for {
 		select {
-		case <-s.ctx.Done():
+		case <-s.workerCtx.Done():
 			return
 		case msg := <-workerCh:
-			err := s.sendMessageWithRetries(s.ctx, msg)
+			err := s.sendMessageWithRetries(s.workerCtx, msg)
 			s.inflight.maybeSetError(err)
 			// reduce inflight count by one and reduce memory counter
-			s.inflight.FinishRequest(s.ctx, int64(len(msg)))
+			s.inflight.FinishRequest(s.workerCtx, int64(len(msg)))
+			// shut down all other workers immediately if error encountered
+			if err != nil {
+				s.exitWorkers()
+				return
+			}
 		}
 	}
 }
@@ -347,6 +349,17 @@ func (i *inflightTracker) maybeSetError(err error) {
 	}
 }
 
+// hasError checks if inflightTracker has an error on the buffer and returns
+// error if exists.
+func (i *inflightTracker) hasError() error {
+	var err error
+	select {
+	case err = <-i.errChan:
+	default:
+	}
+	return err
+}
+
 // StartRequest enqueues one inflight message to be flushed.
 func (i *inflightTracker) StartRequest(ctx context.Context, bytes int64) error {
 	i.flushMu.Lock()
@@ -398,15 +411,23 @@ func (s *webhookSink) EmitRow(
 		return err
 	}
 
+	// check if error has been encountered and exit if needed
+	err = s.inflight.hasError()
+	if err != nil {
+		return err
+	}
+
 	err = s.inflight.StartRequest(ctx, int64(len(j)))
 	if err != nil {
 		return err
 	}
 
 	select {
+	// check the webhook sink context in case workers have been terminated
+	case <-s.workerCtx.Done():
+		return s.workerCtx.Err()
 	case <-ctx.Done():
 		return ctx.Err()
-	// Errors resulting from sending the message will be expressed in Flush.
 	case s.eventsChans[s.workerIndex(key)] <- j:
 	}
 	return nil
@@ -420,6 +441,16 @@ func (s *webhookSink) EmitResolvedTimestamp(
 		return err
 	}
 
+	select {
+	// check the webhook sink context in case workers have been terminated
+	case <-s.workerCtx.Done():
+		return s.workerCtx.Err()
+	// non-blocking check for error, restart changefeed if encountered
+	case <-s.inflight.errChan:
+		return err
+	default:
+	}
+
 	err = s.inflight.StartRequest(ctx, int64(len(j)))
 	if err != nil {
 		return err
@@ -431,7 +462,7 @@ func (s *webhookSink) EmitResolvedTimestamp(
 	err = s.sendMessageWithRetries(ctx, j)
 	s.inflight.maybeSetError(err)
 	s.inflight.FinishRequest(ctx, int64(len(j)))
-	return nil
+	return err
 }
 
 func (s *webhookSink) Flush(ctx context.Context) error {
@@ -439,10 +470,10 @@ func (s *webhookSink) Flush(ctx context.Context) error {
 }
 
 func (s *webhookSink) Close() error {
-	s.cancelFunc()
+	s.exitWorkers()
 	// ignore errors here since we're closing the sink anyway
 	_ = s.workerGroup.Wait()
-	s.inflight.Close(s.ctx)
+	s.inflight.Close(s.workerCtx)
 	for _, eventsChan := range s.eventsChans {
 		close(eventsChan)
 	}

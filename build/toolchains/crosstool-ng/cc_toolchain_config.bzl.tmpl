@@ -1,63 +1,43 @@
 load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "ACTION_NAMES")
 load("@bazel_tools//tools/cpp:cc_toolchain_config_lib.bzl",
+     "action_config",
      "feature",
      "flag_group",
      "flag_set",
-     "tool_path")
+     "tool")
 
 all_compile_actions = [
     ACTION_NAMES.c_compile,
     ACTION_NAMES.cpp_compile,
-    ACTION_NAMES.linkstamp_compile,
-    ACTION_NAMES.assemble,
-    ACTION_NAMES.preprocess_assemble,
-    ACTION_NAMES.cpp_header_parsing,
-    ACTION_NAMES.cpp_module_compile,
-    ACTION_NAMES.cpp_module_codegen,
-    ACTION_NAMES.clif_match,
-    ACTION_NAMES.lto_backend,
 ]
 
 all_link_actions = [
     ACTION_NAMES.cpp_link_executable,
-    ACTION_NAMES.cpp_link_dynamic_library,
-    ACTION_NAMES.cpp_link_nodeps_dynamic_library,
+]
+
+all_archive_actions = [
+    ACTION_NAMES.cpp_link_static_library,
 ]
 
 def _impl(ctx):
-    tool_paths = [
-        tool_path(
-            name = "gcc",
-            path = "bin/%{target}-gcc",
+    action_configs = [
+        action_config(
+            action_name = ACTION_NAMES.c_compile,
+            tools = [tool(path="bin/%{target}-gcc")],
         ),
-        tool_path(
-            name = "ld",
-            path = "bin/%{target}-ld",
+        action_config(
+            action_name = ACTION_NAMES.cpp_compile,
+            tools = [tool(path="bin/%{target}-g++")],
         ),
-        tool_path(
-            name = "cpp",
-            path = "bin/%{target}-g++",
+        action_config(
+            action_name = ACTION_NAMES.cpp_link_executable,
+            tools = [tool(path="bin/%{target}-g++")],
         ),
-        tool_path(
-            name = "gcov",
-            path = "bin/%{target}-gcov",
+        action_config(
+            action_name = ACTION_NAMES.cpp_link_static_library,
+            tools = [tool(path="bin/%{target}-ar")],
         ),
-        tool_path(
-            name = "nm",
-            path = "bin/%{target}-nm",
-        ),
-        tool_path(
-            name = "objdump",
-            path = "bin/%{target}-objdump",
-        ),
-        tool_path(
-            name = "strip",
-            path = "bin/%{target}-strip",
-        ),
-        tool_path(
-            name = "ar",
-            path = "bin/%{target}-ar",
-        ),
+
     ]
 
     opt_feature = feature(
@@ -94,6 +74,38 @@ def _impl(ctx):
 
     supports_pic_feature = feature(name = "supports_pic", enabled = True)
     supports_dynamic_linker_feature = feature(name = "supports_dynamic_linker", enabled = False)
+
+    default_archiver_flags = feature(
+        name = "archiver_flags",
+        enabled = True,
+        flag_sets = [
+            flag_set(
+                actions = all_archive_actions,
+                flag_groups = [
+                    flag_group(flags = ["rcsD"]),
+                    flag_group(
+                        flags = ["%{output_execpath}"],
+                        expand_if_available = "output_execpath",
+                    ),
+                ],
+            ),
+            flag_set(
+                actions = all_archive_actions,
+                flag_groups = [
+                    flag_group(
+                        iterate_over = "libraries_to_link",
+                        flag_groups = [
+                            flag_group(
+                                flags = ["%{libraries_to_link.name}"],
+                            ),
+                        ],
+                        expand_if_available = "libraries_to_link",
+                    ),
+                ],
+            ),
+        ],
+    )
+
 
     default_compile_flags = feature(
         name = "default_compile_flags",
@@ -137,6 +149,7 @@ def _impl(ctx):
         supports_dynamic_linker_feature,
         default_compile_flags,
         default_linker_flags,
+        default_archiver_flags,
     ]
 
     return cc_common.create_cc_toolchain_config_info(
@@ -150,7 +163,7 @@ def _impl(ctx):
         compiler = "clang",
         abi_version = "clang-10.0.0",
         abi_libc_version = "%{target}",
-        tool_paths = tool_paths,
+        action_configs = action_configs,
         cxx_builtin_include_directories = [
             "%sysroot%/usr/include",
             "%{repo_path}/%{target}/include/c++/6.5.0",

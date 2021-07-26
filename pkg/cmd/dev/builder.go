@@ -11,8 +11,8 @@
 package main
 
 import (
+	"context"
 	"log"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -38,15 +38,15 @@ func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 
 func (d *dev) builder(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
-
 	volume := mustGetFlagString(cmd, volumeFlag)
-	if !isTesting {
-		if _, err := exec.LookPath("docker"); err != nil {
-			return errors.New("Could not find docker in PATH")
-		}
+	args, err := d.getDockerRunArgs(ctx, volume, true)
+	if err != nil {
+		return err
 	}
+	return d.exec.CommandContextNoRecord(ctx, "docker", args...)
+}
 
-	// Ensure the volume to use exists.
+func (d *dev) ensureDockerVolume(ctx context.Context, volume string) error {
 	_, err := d.exec.CommandContextSilent(ctx, "docker", "volume", "inspect", volume)
 	if err != nil {
 		log.Printf("Creating volume %s with Docker...", volume)
@@ -55,19 +55,38 @@ func (d *dev) builder(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
+	return nil
+}
 
-	var args []string
-	args = append(args, "run", "--rm", "-it")
+func (d *dev) getDockerRunArgs(
+	ctx context.Context, volume string, tty bool,
+) (args []string, err error) {
+	err = ensureBinaryInPath("docker")
+	if err != nil {
+		return
+	}
+	err = d.ensureDockerVolume(ctx, volume)
+	if err != nil {
+		return
+	}
+
+	args = append(args, "run", "--rm")
+	if tty {
+		args = append(args, "-it")
+	} else {
+		args = append(args, "-i")
+	}
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
-		return err
+		return
 	}
 	args = append(args, "-v", workspace+":/cockroach:ro")
 	args = append(args, "--workdir=/cockroach")
 	// Create the artifacts directory.
 	artifacts := filepath.Join(workspace, "artifacts")
-	if err = d.os.MkdirAll(artifacts); err != nil {
-		return err
+	err = d.os.MkdirAll(artifacts)
+	if err != nil {
+		return
 	}
 	args = append(args, "-v", artifacts+":/artifacts")
 	// The `delegated` switch ensures that the container's view of the cache
@@ -77,7 +96,7 @@ func (d *dev) builder(cmd *cobra.Command, _ []string) error {
 	// Read the Docker image from build/teamcity-bazel-support.sh.
 	buf, err := d.os.ReadFile(filepath.Join(workspace, "build/teamcity-bazel-support.sh"))
 	if err != nil {
-		return err
+		return
 	}
 	var bazelImage string
 	for _, line := range strings.Split(buf, "\n") {
@@ -86,9 +105,9 @@ func (d *dev) builder(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	if bazelImage == "" {
-		return errors.New("Could not find BAZEL_IMAGE in build/teamcity-bazel-support.sh")
+		err = errors.New("Could not find BAZEL_IMAGE in build/teamcity-bazel-support.sh")
+		return
 	}
 	args = append(args, bazelImage)
-
-	return d.exec.CommandContextNoRecord(ctx, "docker", args...)
+	return
 }

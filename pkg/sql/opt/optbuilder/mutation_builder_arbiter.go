@@ -544,7 +544,7 @@ func (h *arbiterPredicateHelper) partialUniqueConstraintPredicate(
 
 // arbiterFilters returns a scalar expression representing the arbiter
 // predicate. If the arbiter predicate contains non-immutable operators,
-// ok=true is returned.
+// ok=false is returned.
 func (h *arbiterPredicateHelper) arbiterFilters() (_ memo.FiltersExpr, ok bool) {
 	// The filters have been initialized if they are non-nil or
 	// invalidArbiterPredicate has been set to true.

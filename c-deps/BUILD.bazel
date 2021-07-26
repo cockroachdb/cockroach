@@ -66,39 +66,47 @@ cmake(
     visibility = ["//visibility:public"],
 )
 
-# TODO(ricky): Still broken on Windows.
 # Define the targets for libgeos.
 cmake(
     name = "libgeos",
-    cache_entries = {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_FLAGS": "-fPIC",
-        "CMAKE_CXX_FLAGS": "-fPIC",
-    },
-    # As of this writing (2021-05-05), foreign_cc
-    # only knows about windows, darwin and linux.
-    cmake_options = select({
-        "@io_bazel_rules_go//go/platform:windows": ["-GNinja"],
-        "//conditions:default": ["-GUnix Makefiles"],
+    cache_entries = select({
+        "@io_bazel_rules_go//go/platform:windows": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Windows",
+        },
+        "@io_bazel_rules_go//go/platform:darwin": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Darwin",
+        },
+        "//conditions:default": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+        },
     }),
+    cmake_options = ["-GUnix Makefiles"],
     lib_source = "@geos//:all",
     make_commands = [
         "mkdir -p libgeos/lib",
         "make --no-print-directory geos_c",
     ] + select({
         "@io_bazel_rules_go//go/platform:darwin": [
-            "cp -L $BUILD_TMPDIR/lib/libgeos.dylib libgeos/lib",
-            "cp -L $BUILD_TMPDIR/lib/libgeos_c.dylib libgeos/lib",
+            "cp -L lib/libgeos.dylib libgeos/lib",
+            "cp -L lib/libgeos_c.dylib libgeos/lib",
             # TODO(#bazel): install_name_tool is also required here for release.
         ],
         "@io_bazel_rules_go//go/platform:windows": [
             # NOTE: Windows ends up in bin/ on the BUILD_TMPDIR.
-            "cp -L $BUILD_TMPDIR/bin/libgeos.dll libgeos/lib",
-            "cp -L $BUILD_TMPDIR/bin/libgeos_c.dll libgeos/lib",
+            "cp -L bin/libgeos.dll libgeos/lib",
+            "cp -L bin/libgeos_c.dll libgeos/lib",
         ],
         "//conditions:default": [
-            "cp -L $BUILD_TMPDIR/lib/libgeos.so libgeos/lib",
-            "cp -L $BUILD_TMPDIR/lib/libgeos_c.so libgeos/lib",
+            "cp -L lib/libgeos.so libgeos/lib",
+            "cp -L lib/libgeos_c.so libgeos/lib",
             # TODO(#bazel): patchelf is also required here for release.
         ],
     }),

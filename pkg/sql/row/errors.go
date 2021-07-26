@@ -243,7 +243,11 @@ func DecodeRowInfo(
 	names := make([]string, len(cols))
 	values := make([]string, len(cols))
 	for i := range cols {
-		names[i] = cols[i].GetName()
+		if cols[i].IsExpressionIndexColumn() {
+			names[i] = cols[i].GetComputeExpr()
+		} else {
+			names[i] = cols[i].GetName()
+		}
 		if datums[i] == tree.DNull {
 			continue
 		}
