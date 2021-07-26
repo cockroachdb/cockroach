@@ -2270,6 +2270,12 @@ message TokenBucketRequest {
   // Consumption that occurred since this node's last request.
   Consumption consumption_since_last_request = 1 [(gogoproto.nullable) = false];
 
+  // ID of the SQL pod instance from where the request originates.
+  uint32 instance_id = 2 [(gogoproto.customname) = "InstanceID"];
+  // Lease of the SQL pod instance from where the request originates; this
+  // uniquely identifies the instance, in light of ID reuse.
+  bytes instance_lease = 3;
+
   // TODO(radu): add remaining fields.
 }
 
