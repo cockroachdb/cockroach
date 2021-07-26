@@ -164,19 +164,22 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		}
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.unlinkReplicaByRangeIDLocked(rep.RangeID)
-	if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
-		// We already checked that our replica was present in replicasByKey
-		// above. Nothing should have been able to change that.
-		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, placeholder)
-	}
-	if rep2 := s.getOverlappingKeyRangeLocked(desc); rep2 != nil {
-		log.Fatalf(ctx, "corrupted replicasByKey map: %s and %s overlapped", rep, rep2)
-	}
-	delete(s.mu.replicaPlaceholders, rep.RangeID)
-	// TODO(peter): Could release s.mu.Lock() here.
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock() // must unlock before s.scanner.RemoveReplica(), to avoid deadlock
+
+		s.unlinkReplicaByRangeIDLocked(rep.RangeID)
+		if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
+			// We already checked that our replica was present in replicasByKey
+			// above. Nothing should have been able to change that.
+			log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, placeholder)
+		}
+		if rep2 := s.getOverlappingKeyRangeLocked(desc); rep2 != nil {
+			log.Fatalf(ctx, "corrupted replicasByKey map: %s and %s overlapped", rep, rep2)
+		}
+		delete(s.mu.replicaPlaceholders, rep.RangeID)
+	}()
+
 	s.maybeGossipOnCapacityChange(ctx, rangeRemoveEvent)
 	s.scanner.RemoveReplica(rep)
 	return nil
