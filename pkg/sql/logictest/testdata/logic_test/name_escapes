@@ -11,11 +11,9 @@ DROP USER alice;
 CREATE TABLE unused2(x INT, INDEX woo ON " (x ASC),
   FAMILY "nonotagain (x)); -- welp!
 DROP USER queenofhearts;
-CREATE TABLE unused3(x INT, y INT, FAMILY woo " (x, y),
-  CONSTRAINT "getmeoutofhere PRIMARY KEY (x ASC)); -- saveme!
 DROP USER madhatter;
 CREATE TABLE unused4(x INT, CONSTRAINT woo " PRIMARY KEY (x)
-) INTERLEAVE IN PARENT "woo; DROP USER humpty;" (x);
+);
 
 query TT
 SHOW CREATE TABLE ";--notbetter"
@@ -37,7 +35,7 @@ DROP USER queenofhearts;
 CREATE TABLE unused3(x INT, y INT, FAMILY woo " (x, y, "welp INT); -- concerning much
 DROP USER dumpty;
 CREATE TABLE unused (x ")
-) INTERLEAVE IN PARENT public."woo; DROP USER humpty;" (x)
+)
 
 # Check that view creates handle strange things properly.
 statement ok
