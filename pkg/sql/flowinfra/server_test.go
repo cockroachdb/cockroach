@@ -106,11 +106,10 @@ func TestServer(t *testing.T) {
 		}
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
-	metas = ignoreLeafTxnState(metas)
-	metas = ignoreMetricsMeta(metas)
-	metas = ignoreTraceData(metas)
-	if len(metas) != 0 {
-		t.Errorf("unexpected metadata: %v", metas)
+	for _, m := range metas {
+		if m.LeafTxnFinalState == nil && m.Metrics == nil && m.TraceData == nil {
+			t.Errorf("unexpected metadata: %v", metas)
+		}
 	}
 	str := rows.String(rowenc.TwoIntCols)
 	expected := "[[1 10] [2 20] [3 30]]"

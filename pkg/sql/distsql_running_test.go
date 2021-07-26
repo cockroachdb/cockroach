@@ -13,7 +13,10 @@ package sql
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,9 +36,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -447,4 +453,224 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 		}
 	}
 	require.Equal(t, numNodes, numLeafTxnFinalMeta)
+}
+
+// TestCancelFlowsCoordinator performs sanity-checking of cancelFlowsCoordinator
+// and that it can be safely used concurrently.
+func TestCancelFlowsCoordinator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var c cancelFlowsCoordinator
+
+	globalRng, _ := randutil.NewPseudoRand()
+	numNodes := globalRng.Intn(16) + 2
+	gatewayNodeID := roachpb.NodeID(1)
+
+	assertInvariants := func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		// Check that the coordinator hasn't created duplicate entries for some
+		// nodes.
+		require.GreaterOrEqual(t, numNodes-1, c.mu.deadFlowsByNode.Len())
+		seen := make(map[roachpb.NodeID]struct{})
+		for i := 0; i < c.mu.deadFlowsByNode.Len(); i++ {
+			deadFlows := c.mu.deadFlowsByNode.Get(i).(*deadFlowsOnNode)
+			require.NotEqual(t, gatewayNodeID, deadFlows.nodeID)
+			_, ok := seen[deadFlows.nodeID]
+			require.False(t, ok)
+			seen[deadFlows.nodeID] = struct{}{}
+		}
+	}
+
+	// makeFlowsToCancel returns a fake flows map where each node in the cluster
+	// has 67% probability of participating in the plan.
+	makeFlowsToCancel := func(rng *rand.Rand) map[roachpb.NodeID]*execinfrapb.FlowSpec {
+		res := make(map[roachpb.NodeID]*execinfrapb.FlowSpec)
+		flowID := execinfrapb.FlowID{UUID: uuid.FastMakeV4()}
+		for id := 1; id <= numNodes; id++ {
+			if rng.Float64() < 0.33 {
+				// This node wasn't a part of the current plan.
+				continue
+			}
+			res[roachpb.NodeID(id)] = &execinfrapb.FlowSpec{
+				FlowID:  flowID,
+				Gateway: gatewayNodeID,
+			}
+		}
+		return res
+	}
+
+	var wg sync.WaitGroup
+	maxSleepTime := 100 * time.Millisecond
+
+	// Spin up some goroutines that simulate query runners, with each hitting an
+	// error and deciding to cancel all scheduled dead flows.
+	numQueryRunners := globalRng.Intn(8) + 1
+	numRunsPerRunner := globalRng.Intn(10) + 1
+	wg.Add(numQueryRunners)
+	for i := 0; i < numQueryRunners; i++ {
+		go func() {
+			defer wg.Done()
+			rng, _ := randutil.NewPseudoRand()
+			for i := 0; i < numRunsPerRunner; i++ {
+				c.addFlowsToCancel(makeFlowsToCancel(rng))
+				time.Sleep(time.Duration(rng.Int63n(int64(maxSleepTime))))
+			}
+		}()
+	}
+
+	// Have a single goroutine that checks the internal state of the coordinator
+	// and retrieves the next request to cancel some flows (in order to simulate
+	// the canceling worker).
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		rng, _ := randutil.NewPseudoRand()
+		done := time.After(2 * time.Second)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				assertInvariants()
+				time.Sleep(time.Duration(rng.Int63n(int64(maxSleepTime))))
+				// We're not interested in the result of this call.
+				_, _ = c.getFlowsToCancel()
+			}
+		}
+	}()
+
+	wg.Wait()
+}
+
+// TestDistSQLReceiverCancelsDeadFlows verifies that if a local flow of a
+// distributed query errors out while the remote flows are queued for running,
+// then the remote flows won't actually run and will be canceled via
+// CancelDeadFlows RPC instead.
+//
+// It does so by forcing all remote flows to be placed in queue, waiting for the
+// query to error out on the gateway and making sure that the remote flows are
+// promptly canceled.
+func TestDistSQLReceiverCancelsDeadFlows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numNodes = 3
+	const gatewayNodeID = 0
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a table with 30 rows, split them into 3 ranges with each node
+	// having one.
+	db := tc.ServerConn(gatewayNodeID)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlutils.CreateTable(
+		t, db, "foo",
+		"k INT PRIMARY KEY, v INT",
+		30,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(2)),
+	)
+	sqlDB.Exec(t, "ALTER TABLE test.foo SPLIT AT VALUES (10), (20)")
+	sqlDB.Exec(
+		t,
+		fmt.Sprintf("ALTER TABLE test.foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 0), (ARRAY[%d], 10), (ARRAY[%d], 20)",
+			tc.Server(0).GetFirstStoreID(),
+			tc.Server(1).GetFirstStoreID(),
+			tc.Server(2).GetFirstStoreID(),
+		),
+	)
+
+	// Disable the execution of all remote flows and shorten the timeout.
+	const maxRunningFlows = 0
+	const flowStreamTimeout = 1 // in seconds
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.max_running_flows=$1", maxRunningFlows)
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_stream_timeout=$1", fmt.Sprintf("%ds", flowStreamTimeout))
+
+	// Wait for all nodes to get the updated values of these cluster settings.
+	testutils.SucceedsSoon(t, func() error {
+		for nodeID := 0; nodeID < numNodes; nodeID++ {
+			conn := tc.ServerConn(nodeID)
+			db := sqlutils.MakeSQLRunner(conn)
+			var flows int
+			db.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.max_running_flows").Scan(&flows)
+			if flows != maxRunningFlows {
+				return errors.New("old max_running_flows value")
+			}
+			var timeout string
+			db.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.flow_stream_timeout").Scan(&timeout)
+			if timeout != fmt.Sprintf("00:00:0%d", flowStreamTimeout) {
+				return errors.Errorf("old flow_stream_timeout value")
+			}
+		}
+		return nil
+	})
+
+	remoteServers := []*distsql.ServerImpl{
+		tc.Server(1).DistSQLServer().(*distsql.ServerImpl),
+		tc.Server(2).DistSQLServer().(*distsql.ServerImpl),
+	}
+
+	// If assertEmpty is true, this function asserts that the queues of the
+	// remote servers are empty; otherwise - that the queues are not empty.
+	assertQueues := func(assertEmpty bool) error {
+		for idx, s := range remoteServers {
+			numQueued := s.NumRemoteFlowsInQueue()
+			if (numQueued != 0 && assertEmpty) || (numQueued == 0 && !assertEmpty) {
+				return errors.Errorf("unexpectedly %d flows are found in the queue of node %d", numQueued, idx+1)
+			}
+		}
+		return nil
+	}
+
+	// Check that the queues on the remote servers are empty and set the testing
+	// callback.
+	if err := assertQueues(true /* assertEmpty */); err != nil {
+		t.Fatal(err)
+	}
+	var numCanceledAtomic int64
+	for _, s := range remoteServers {
+		s.SetCancelDeadFlowsCallback(func(numCanceled int) {
+			atomic.AddInt64(&numCanceledAtomic, int64(numCanceled))
+		})
+	}
+
+	// Spin up a separate goroutine that will try running the query. The query
+	// eventually will error out because the remote flows don't connect in time.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		conn := tc.ServerConn(gatewayNodeID)
+		_, err := conn.ExecContext(ctx, "SELECT * FROM test.foo")
+		return err
+	})
+
+	// Wait for remote flows to be scheduled (i.e. for queues to become
+	// non-empty).
+	t.Log("waiting for remote flows to be scheduled")
+	testutils.SucceedsSoon(t, func() error {
+		return assertQueues(false /* assertEmpty */)
+	})
+
+	t.Log("waiting for query to error out")
+	queryErr := g.Wait()
+	require.Error(t, queryErr)
+	require.True(t, strings.Contains(queryErr.Error(), "no inbound stream connection"))
+
+	// Now wait for the queues to become empty again and make sure that the dead
+	// flows were, in fact, canceled.
+	t.Log("waiting for queues to be empty")
+	testutils.SucceedsSoon(t, func() error {
+		if err := assertQueues(true /* assertEmpty */); err != nil {
+			return err
+		}
+		if int64(numNodes-1) != atomic.LoadInt64(&numCanceledAtomic) {
+			return errors.New("not all flows are still canceled")
+		}
+		return nil
+	})
 }
