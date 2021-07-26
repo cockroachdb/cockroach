@@ -932,6 +932,44 @@ func TestTrimSuspendedPortals(t *testing.T) {
 
 }
 
+func TestShowLastQueryStatisticsUnknown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, sqlConn, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlConn.Exec("SELECT 1")
+	require.NoError(t, err)
+
+	rows, err := sqlConn.Query("SHOW LAST QUERY STATISTICS RETURNING x, y")
+	require.NoError(t, err, "show last query statistics failed")
+	defer rows.Close()
+
+	resultColumns, err := rows.Columns()
+	require.NoError(t, err)
+
+	const expectedNumColumns = 2
+	if len(resultColumns) != expectedNumColumns {
+		t.Fatalf(
+			"unexpected number of columns in result; expected %d, found %d",
+			expectedNumColumns,
+			len(resultColumns),
+		)
+	}
+
+	var x, y gosql.NullString
+
+	rows.Next()
+	err = rows.Scan(&x, &y)
+	require.NoError(t, err, "unexpected error while reading last query statistics")
+
+	require.False(t, x.Valid)
+	require.False(t, y.Valid)
+}
+
 func TestShowLastQueryStatistics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -975,7 +1013,7 @@ ALTER TABLE t1 ADD COLUMN b INT DEFAULT 1`,
 			require.NoError(t, err, "executing %s  ", tc.stmt)
 		}
 
-		rows, err := sqlConn.Query("SHOW LAST QUERY STATISTICS")
+		rows, err := sqlConn.Query("SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency")
 		require.NoError(t, err, "show last query statistics failed")
 		defer rows.Close()
 

@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -56,6 +55,9 @@ type sqlConn struct {
 	// This is used by the Query() interface to avoid interleaving
 	// notices with result rows.
 	delayNotices bool
+
+	// showLastQueryStatsMode determines how to implement query timings.
+	lastQueryStatsMode showLastQueryStatsMode
 
 	// dbName is the last known current database, to be reconfigured in
 	// case of automatic reconnects.
@@ -191,17 +193,47 @@ func (c *sqlConn) EnsureConn() error {
 	return nil
 }
 
+type showLastQueryStatsMode int
+
+const (
+	modeDisabled showLastQueryStatsMode = iota
+	modeModern
+	modeSimple // Remove this when pre-21.2 compatibility is not needed any more.
+)
+
 // tryEnableServerExecutionTimings attempts to check if the server supports the
 // SHOW LAST QUERY STATISTICS statements. This allows the CLI client to report
 // server side execution timings instead of timing on the client.
-func (c *sqlConn) tryEnableServerExecutionTimings() {
-	_, _, _, _, _, _, err := c.getLastQueryStatisticsInternal()
-	if err != nil {
-		fmt.Fprintf(c.errw, "warning: cannot show server execution timings: %v\n", err)
-		c.connCtx.EnableServerExecutionTimings = false
-	} else {
-		c.connCtx.EnableServerExecutionTimings = true
+func (c *sqlConn) tryEnableServerExecutionTimings() error {
+	// Starting in v21.2 servers, clients can request an explicit set of
+	// values which makes them compatible with any post-21.2 column
+	// additions.
+	_, err := c.QueryRow("SHOW LAST QUERY STATISTICS RETURNING x", nil)
+	if err != nil && !clierror.IsSQLSyntaxError(err) {
+		return err
 	}
+	if err == nil {
+		c.connCtx.EnableServerExecutionTimings = true
+		c.lastQueryStatsMode = modeModern
+		return nil
+	}
+	// Pre-21.2 servers may have SHOW LAST QUERY STATISTICS.
+	// Note: this branch is obsolete, remove it when compatibility
+	// with pre-21.2 servers is not required any more.
+	_, err = c.QueryRow("SHOW LAST QUERY STATISTICS", nil)
+	if err != nil && !clierror.IsSQLSyntaxError(err) {
+		return err
+	}
+	if err == nil {
+		c.connCtx.EnableServerExecutionTimings = true
+		c.lastQueryStatsMode = modeSimple
+		return nil
+	}
+
+	fmt.Fprintln(c.errw, "warning: server does not support query statistics, cannot enable verbose timings")
+	c.lastQueryStatsMode = modeDisabled
+	c.connCtx.EnableServerExecutionTimings = false
+	return nil
 }
 
 func (c *sqlConn) GetServerMetadata() (nodeID int32, version, clusterID string, err error) {
@@ -369,9 +401,7 @@ func (c *sqlConn) checkServerMetadata() error {
 	}
 	// Try to enable server execution timings for the CLI to display if
 	// supported by the server.
-	c.tryEnableServerExecutionTimings()
-
-	return nil
+	return c.tryEnableServerExecutionTimings()
 }
 
 // GetServerValue retrieves the first driverValue returned by the
@@ -402,76 +432,54 @@ func (c *sqlConn) GetServerValue(what, sql string) (driver.Value, string, bool) 
 	return dbVals[0], dbColType, true
 }
 
-func (c *sqlConn) GetLastQueryStatistics() (
-	hasStats bool,
-	parseLat, planLat, execLat, serviceLat, jobsLat time.Duration,
-	providesJobLat bool,
-	err error,
-) {
-	if !c.connCtx.EnableServerExecutionTimings {
-		return false, 0, 0, 0, 0, 0, false, nil
+func (c *sqlConn) GetLastQueryStatistics() (results QueryStats, resErr error) {
+	if !c.connCtx.EnableServerExecutionTimings || c.lastQueryStatsMode == modeDisabled {
+		return results, nil
 	}
-	l1, l2, l3, l4, l5, l6, err := c.getLastQueryStatisticsInternal()
-	return err == nil, l1, l2, l3, l4, l5, l6, err
-}
 
-// getLastQueryStatisticsInternal runs the "SHOW LAST QUERY STATISTICS" statements,
-// performs sanity checks, and returns the exec latency and service latency from
-// the sql row parsed as time.Duration.
-func (c *sqlConn) getLastQueryStatisticsInternal() (
-	parseLat, planLat, execLat, serviceLat, jobsLat time.Duration,
-	containsJobLat bool,
-	err error,
-) {
-	vals, err := c.QueryRow("SHOW LAST QUERY STATISTICS", nil)
+	stmt := `SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency`
+	if c.lastQueryStatsMode == modeSimple {
+		// Note: remove this case when compatibility with pre-21.2 clients
+		// is not needed any more.
+		stmt = `SHOW LAST QUERY STATISTICS`
+	}
+
+	vals, cols, err := c.queryRowInternal(stmt, nil)
 	if err != nil {
-		return 0, 0, 0, 0, 0, false, err
+		return results, err
 	}
 
-	// TODO(arul): In 21.1, SHOW LAST QUERY STATISTICS returned 4 columns. In 21.2,
-	// it returns 5. Depending on which server version the CLI is connected to,
-	// both are valid. We won't have to account for this mixed version state in
-	// 22.1. All this logic can be simplified in 22.1.
-	if len(vals) == 5 {
-		containsJobLat = true
-	} else if len(vals) != 4 {
-		return 0, 0, 0, 0, 0, false,
-			errors.Newf("unexpected number of columns in SHOW LAST QUERY STATISTICS")
+	// The following code extracts the values from whichever set of
+	// columns was reported by the server. This ensures compatibility
+	// with pre-21.2 servers which would return 4 or 5 columns
+	// depending on version.
+	for i, c := range cols {
+		var dst *QueryStatsDuration
+		switch c {
+		case "parse_latency":
+			dst = &results.Parse
+		case "plan_latency":
+			dst = &results.Plan
+		case "exec_latency":
+			dst = &results.Exec
+		case "service_latency":
+			dst = &results.Service
+		case "post_commit_jobs_latency":
+			dst = &results.PostCommitJobs
+		}
+		if vals[i] != nil {
+			rawVal := toString(vals[i])
+			parsedLat, err := stringToDuration(rawVal)
+			if err != nil {
+				return results, errors.Wrapf(err, "invalid interval value in SHOW LAST QUERY STATISTICS, column %q", c)
+			}
+			dst.Valid = true
+			dst.Value = parsedLat
+		}
 	}
 
-	parseLatencyRaw := toString(vals[0])
-	planLatencyRaw := toString(vals[1])
-	execLatencyRaw := toString(vals[2])
-	serviceLatencyRaw := toString(vals[3])
-	var jobsLatencyRaw string
-	if containsJobLat {
-		jobsLatencyRaw = toString(vals[4])
-	}
-
-	parsedExecLatency, e1 := stringToDuration(execLatencyRaw)
-	parsedServiceLatency, e2 := stringToDuration(serviceLatencyRaw)
-	parsedPlanLatency, e3 := stringToDuration(planLatencyRaw)
-	parsedParseLatency, e4 := stringToDuration(parseLatencyRaw)
-	var e5 error
-	var parsedJobsLatency time.Duration
-	if containsJobLat {
-		parsedJobsLatency, e5 = stringToDuration(jobsLatencyRaw)
-	}
-	if err := errors.CombineErrors(e1,
-		errors.CombineErrors(e2,
-			errors.CombineErrors(e3,
-				errors.CombineErrors(e4, e5)))); err != nil {
-		return 0, 0, 0, 0, 0, false,
-			errors.Wrap(err, "invalid interval value in SHOW LAST QUERY STATISTICS")
-	}
-
-	return parsedParseLatency,
-		parsedPlanLatency,
-		parsedExecLatency,
-		parsedServiceLatency,
-		parsedJobsLatency,
-		containsJobLat,
-		nil
+	results.Enabled = true
+	return results, nil
 }
 
 // ExecTxn runs fn inside a transaction and retries it as needed.
@@ -523,28 +531,36 @@ func (c *sqlConn) Query(query string, args []driver.Value) (Rows, error) {
 	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
 }
 
-func (c *sqlConn) QueryRow(query string, args []driver.Value) (vals []driver.Value, resErr error) {
+func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, error) {
+	results, _, err := c.queryRowInternal(query, args)
+	return results, err
+}
+
+func (c *sqlConn) queryRowInternal(
+	query string, args []driver.Value,
+) (vals []driver.Value, colNames []string, resErr error) {
 	rows, _, err := MakeQuery(query, args...)(c)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, rows.Close()) }()
-	vals = make([]driver.Value, len(rows.Columns()))
+	colNames = rows.Columns()
+	vals = make([]driver.Value, len(colNames))
 	err = rows.Next(vals)
 
 	// Assert that there is just one row.
 	if err == nil {
-		nextVals := make([]driver.Value, len(rows.Columns()))
+		nextVals := make([]driver.Value, len(colNames))
 		nextErr := rows.Next(nextVals)
 		if nextErr != io.EOF {
 			if nextErr != nil {
-				return nil, nextErr
+				return nil, nil, nextErr
 			}
-			return nil, errors.AssertionFailedf("programming error: %q: expected just 1 row of result, got more", query)
+			return nil, nil, errors.AssertionFailedf("programming error: %q: expected just 1 row of result, got more", query)
 		}
 	}
 
-	return vals, err
+	return vals, colNames, err
 }
 
 func (c *sqlConn) Close() error {

@@ -1512,10 +1512,18 @@ EXPLAIN SHOW SAVEPOINT STATUS -- identifiers removed
 parse
 SHOW LAST QUERY STATISTICS
 ----
-SHOW LAST QUERY STATISTICS
-SHOW LAST QUERY STATISTICS -- fully parenthesized
-SHOW LAST QUERY STATISTICS -- literals removed
-SHOW LAST QUERY STATISTICS -- identifiers removed
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency -- normalized!
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency -- fully parenthesized
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency -- literals removed
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency -- identifiers removed
+
+parse
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, service_latency
+----
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, service_latency
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, service_latency -- fully parenthesized
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, service_latency -- literals removed
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, service_latency -- identifiers removed
 
 parse
 SHOW SYNTAX 'select 1'
