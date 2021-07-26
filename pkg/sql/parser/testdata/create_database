@@ -347,7 +347,6 @@ CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1" -- fully parenthesize
 CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1" -- literals removed
 CREATE DATABASE IF NOT EXISTS _ PRIMARY REGION _ -- identifiers removed
 
-
 error
 CREATE DATABASE a b
 ----

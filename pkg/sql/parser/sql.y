@@ -696,6 +696,9 @@ func (u *sqlSymUnion) locality() *tree.Locality {
 func (u *sqlSymUnion) survivalGoal() tree.SurvivalGoal {
   return u.val.(tree.SurvivalGoal)
 }
+func (u *sqlSymUnion) dataPlacement() tree.DataPlacement {
+  return u.val.(tree.DataPlacement)
+}
 func (u *sqlSymUnion) objectNamePrefix() tree.ObjectNamePrefix {
 	return u.val.(tree.ObjectNamePrefix)
 }
@@ -796,7 +799,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
-%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
+%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
@@ -806,8 +809,8 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %token <str> RANGE RANGES READ REAL REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
-%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
-%token <str> ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
+%token <str> RELEASE RESET RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
+%token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
@@ -899,6 +902,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %type <tree.Statement> alter_database_primary_region_stmt
 %type <tree.Statement> alter_zone_database_stmt
 %type <tree.Statement> alter_database_owner
+%type <tree.Statement> alter_database_placement_stmt
 
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
@@ -1107,6 +1111,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 %type <tree.NameList> opt_regions_list
 %type <str> region_name primary_region_clause opt_primary_region_clause
+%type <tree.DataPlacement> opt_placement_clause placement_clause
 %type <tree.NameList> region_name_list
 %type <tree.SurvivalGoal> survival_goal_clause opt_survival_goal_clause
 %type <*tree.Locality> locality opt_locality
@@ -1638,6 +1643,7 @@ alter_database_stmt:
 | alter_database_drop_region_stmt
 | alter_database_survival_goal_stmt
 | alter_database_primary_region_stmt
+| alter_database_placement_stmt
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
@@ -1647,6 +1653,10 @@ alter_database_owner:
   {
     $$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: $6.user()}
   }
+
+alter_database_placement_stmt:
+  ALTER DATABASE database_name SET placement_clause
+  { return unimplemented(sqllex, "alter database placement") }
 
 alter_database_add_region_stmt:
   ALTER DATABASE database_name ADD REGION region_name
@@ -8336,7 +8346,7 @@ transaction_deferrable_mode:
 // %Text: CREATE DATABASE [IF NOT EXISTS] <name>
 // %SeeAlso: WEBDOCS/create-database.html
 create_database_stmt:
-  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
+  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause
   {
     $$.val = &tree.CreateDatabase{
       Name: tree.Name($3),
@@ -8348,9 +8358,10 @@ create_database_stmt:
       PrimaryRegion: tree.Name($10),
       Regions: $11.nameList(),
       SurvivalGoal: $12.survivalGoal(),
+      Placement: $13.dataPlacement(),
     }
   }
-| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
+| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause
   {
     $$.val = &tree.CreateDatabase{
       IfNotExists: true,
@@ -8363,6 +8374,7 @@ create_database_stmt:
       PrimaryRegion: tree.Name($13),
       Regions: $14.nameList(),
       SurvivalGoal: $15.survivalGoal(),
+      Placement: $16.dataPlacement(),
     }
   }
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
@@ -8377,6 +8389,23 @@ opt_primary_region_clause:
 primary_region_clause:
   PRIMARY REGION opt_equal region_name {
     $$ = $4
+  }
+
+opt_placement_clause:
+  placement_clause
+| /* EMPTY */
+  {
+    $$.val = tree.DataPlacementUnspecified
+  }
+
+placement_clause:
+  PLACEMENT RESTRICTED
+  {
+    $$.val = tree.DataPlacementRestricted
+  }
+| PLACEMENT DEFAULT
+  {
+    $$.val = tree.DataPlacementDefault
   }
 
 opt_regions_list:
@@ -12972,6 +13001,7 @@ unreserved_keyword:
 | PAUSE
 | PAUSED
 | PHYSICAL
+| PLACEMENT
 | PLAN
 | PLANS
 | POINTM
@@ -13009,6 +13039,7 @@ unreserved_keyword:
 | RESET
 | RESTORE
 | RESTRICT
+| RESTRICTED
 | RESUME
 | RETRY
 | REVISION_HISTORY
