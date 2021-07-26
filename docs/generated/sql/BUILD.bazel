@@ -7,11 +7,7 @@ genrule(
         "window_functions.md",
     ],
     cmd = """
-$(location //pkg/cmd/docgen) functions . --quiet
-mv aggregates.md $(location aggregates.md)
-mv functions.md $(location functions.md)
-mv operators.md $(location operators.md)
-mv window_functions.md $(location window_functions.md)
+$(location //pkg/cmd/docgen) functions $(RULEDIR) --quiet
 """,
     exec_tools = ["//pkg/cmd/docgen"],
 )
