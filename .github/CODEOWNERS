@@ -102,7 +102,7 @@
 /pkg/ccl/gssapiccl/          @cockroachdb/sql-queries
 /pkg/ccl/kvccl/              @cockroachdb/kv-noreview
 /pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
-/pkg/ccl/multiregionccl/     @cockroachdb/sql-queries-noreview
+/pkg/ccl/multiregionccl/     @cockroachdb/multiregion
 /pkg/ccl/multitenantccl/     @cockroachdb/unowned
 /pkg/ccl/oidcccl/            @cockroachdb/sql-queries
 /pkg/ccl/partitionccl/       @cockroachdb/sql-schema
