@@ -2262,31 +2262,31 @@ func (*DTimestamp) ResolvedType() *types.T {
 
 // timeFromDatumForComparison gets the time from a datum object to use
 // strictly for comparison usage.
-func timeFromDatumForComparison(ctx *EvalContext, d Datum) (time.Time, bool) {
+func timeFromDatumForComparison(ctx *EvalContext, d Datum) (time.Time, error) {
 	d = UnwrapDatum(ctx, d)
 	switch t := d.(type) {
 	case *DDate:
 		ts, err := MakeDTimestampTZFromDate(ctx.GetLocation(), t)
 		if err != nil {
-			return time.Time{}, false
+			return time.Time{}, err
 		}
-		return ts.Time, true
+		return ts.Time, nil
 	case *DTimestampTZ:
-		return t.Time, true
+		return t.Time, nil
 	case *DTimestamp:
 		// Normalize to the timezone of the context.
 		_, zoneOffset := t.Time.In(ctx.GetLocation()).Zone()
 		ts := t.Time.In(ctx.GetLocation()).Add(-time.Duration(zoneOffset) * time.Second)
-		return ts, true
+		return ts, nil
 	case *DTime:
 		// Normalize to the timezone of the context.
 		toTime := timeofday.TimeOfDay(*t).ToTime()
 		_, zoneOffsetSecs := toTime.In(ctx.GetLocation()).Zone()
-		return toTime.In(ctx.GetLocation()).Add(-time.Duration(zoneOffsetSecs) * time.Second), true
+		return toTime.In(ctx.GetLocation()).Add(-time.Duration(zoneOffsetSecs) * time.Second), nil
 	case *DTimeTZ:
-		return t.ToTime(), true
+		return t.ToTime(), nil
 	default:
-		return time.Time{}, false
+		return time.Time{}, errors.AssertionFailedf("unexpected type: %v", t.ResolvedType())
 	}
 }
 
@@ -2333,9 +2333,9 @@ func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
 		// values to get the desired result for comparison.
 		return int(leftInf - rightInf)
 	}
-	lTime, lOk := timeFromDatumForComparison(ctx, l)
-	rTime, rOk := timeFromDatumForComparison(ctx, r)
-	if !lOk || !rOk {
+	lTime, lErr := timeFromDatumForComparison(ctx, l)
+	rTime, rErr := timeFromDatumForComparison(ctx, r)
+	if lErr != nil || rErr != nil {
 		panic(makeUnsupportedComparisonMessage(l, r))
 	}
 	if lTime.Before(rTime) {
