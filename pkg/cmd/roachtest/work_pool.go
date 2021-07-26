@@ -53,6 +53,8 @@ type testToRunRes struct {
 	noWork bool
 	// spec is the selected test.
 	spec registry.TestSpec
+	// runCount is the total number of runs. 1 if --count was not used.
+	runCount int
 	// runNum is run number. 1 if --count was not used.
 	runNum int
 
@@ -158,6 +160,7 @@ func (p *workPool) selectTestForCluster(
 	runNum := p.count - candidate.count + 1
 	return testToRunRes{
 		spec:            candidate.spec,
+		runCount:        p.count,
 		runNum:          runNum,
 		canReuseCluster: true,
 	}
@@ -212,6 +215,7 @@ func (p *workPool) selectTest(ctx context.Context, qp *quotapool.IntPool) (testT
 		p.decTestLocked(ctx, tc.spec.Name)
 		ttr = testToRunRes{
 			spec:            tc.spec,
+			runCount:        p.count,
 			runNum:          runNum,
 			canReuseCluster: false,
 		}
