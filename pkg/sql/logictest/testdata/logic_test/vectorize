@@ -1291,3 +1291,35 @@ CREATE TYPE greeting AS ENUM ('hello');
 CREATE TABLE greeting_table (x greeting);
 EXPLAIN (VEC) SELECT * FROM greeting_table;
 SET vectorize = experimental_always
+
+statement ok
+RESET vectorize
+
+# Regression test for #66706. Ensure that cfetcher can correctly determine when
+# consecutive KVs in a unique secondary index belong to the same row.
+statement ok
+CREATE TABLE t66706 (
+  a STRING,
+  b STRING,
+  UNIQUE INDEX u (b, a),
+  FAMILY (a),
+  FAMILY (b)
+)
+
+statement ok
+INSERT INTO t66706 VALUES
+  (NULL, 'bar'),
+  (NULL, 'bar')
+
+statement ok
+SET vectorize = experimental_always
+
+query T
+SET vectorize = experimental_always;
+SELECT b FROM t66706@u WHERE NOT (b = 'foo')
+----
+bar
+bar
+
+statement ok
+RESET vectorize

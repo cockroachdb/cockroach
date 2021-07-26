@@ -35,6 +35,12 @@ import (
 // "seek prefix": the next key that might be part of the table being searched
 // for. The input key will also be mutated if matches is false. See the analog
 // in sqlbase/index_encoding.go.
+//
+// Sometimes it is necessary to determine if the value of a column is NULL even
+// though the value itself is not needed. If checkAllColsForNull is true, then
+// foundNull=true will be returned if any columns in the key are NULL,
+// regardless of whether or not indexColIdx indicates that the column should be
+// decoded.
 func DecodeIndexKeyToCols(
 	da *rowenc.DatumAlloc,
 	vecs []coldata.Vec,
@@ -42,6 +48,7 @@ func DecodeIndexKeyToCols(
 	desc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	indexColIdx []int,
+	checkAllColsForNull bool,
 	types []*types.T,
 	colDirs []descpb.IndexDescriptor_Direction,
 	key roachpb.Key,
@@ -75,7 +82,7 @@ func DecodeIndexKeyToCols(
 			// it is a interleaving ancestor.
 			var isNull bool
 			key, isNull, err = DecodeKeyValsToCols(
-				da, vecs, idx, indexColIdx[:length], types[:length],
+				da, vecs, idx, indexColIdx[:length], checkAllColsForNull, types[:length],
 				colDirs[:length], nil /* unseen */, key,
 			)
 			if err != nil {
@@ -111,7 +118,7 @@ func DecodeIndexKeyToCols(
 
 	var isNull bool
 	key, isNull, err = DecodeKeyValsToCols(
-		da, vecs, idx, indexColIdx, types, colDirs, nil /* unseen */, key,
+		da, vecs, idx, indexColIdx, checkAllColsForNull, types, colDirs, nil /* unseen */, key,
 	)
 	if err != nil {
 		return nil, false, false, err
@@ -139,17 +146,23 @@ func DecodeIndexKeyToCols(
 // have been observed during decoding.
 // See the analog in sqlbase/index_encoding.go.
 // DecodeKeyValsToCols additionally returns whether a NULL was encountered when decoding.
+//
+// Sometimes it is necessary to determine if the value of a column is NULL even
+// though the value itself is not needed. If checkAllColsForNull is true, then
+// foundNull=true will be returned if any columns in the key are NULL,
+// regardless of whether or not indexColIdx indicates that the column should be
+// decoded.
 func DecodeKeyValsToCols(
 	da *rowenc.DatumAlloc,
 	vecs []coldata.Vec,
 	idx int,
 	indexColIdx []int,
+	checkAllColsForNull bool,
 	types []*types.T,
 	directions []descpb.IndexDescriptor_Direction,
 	unseen *util.FastIntSet,
 	key []byte,
-) ([]byte, bool, error) {
-	foundNull := false
+) (remainingKey []byte, foundNull bool, _ error) {
 	for j := range types {
 		enc := descpb.IndexDescriptor_ASC
 		if directions != nil {
@@ -158,6 +171,10 @@ func DecodeKeyValsToCols(
 		var err error
 		i := indexColIdx[j]
 		if i == -1 {
+			if checkAllColsForNull {
+				isNull := encoding.PeekType(key) == encoding.Null
+				foundNull = foundNull || isNull
+			}
 			// Don't need the coldata - skip it.
 			key, err = rowenc.SkipTableKey(key)
 		} else {
