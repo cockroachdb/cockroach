@@ -501,25 +501,6 @@ weird_names  CREATE TABLE public.weird_names (
              CONSTRAINT "check_crdb_internal_'quotes' in the column's name_shard_4" CHECK ("crdb_internal_'quotes' in the column's name_shard_4" IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8))
 )
 
-subtest interleave_disabled
-
-statement ok
-CREATE TABLE parent (x INT PRIMARY KEY);
-
-statement error pq: interleaved indexes cannot also be hash sharded
-CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 10) INTERLEAVE IN PARENT parent (x)
-
-statement error pq: interleaved indexes cannot also be hash sharded
-CREATE TABLE t (x INT, y INT, PRIMARY KEY (x, y) USING HASH WITH BUCKET_COUNT = 10) INTERLEAVE IN PARENT parent (x)
-
-statement error pq: interleaved indexes cannot also be hash sharded
-CREATE INDEX ON parent (x) USING HASH WITH BUCKET_COUNT = 10 INTERLEAVE IN PARENT parent(x)
-
-statement ok
-DROP TABLE parent;
-
-# This test ensures that the appropriate error is returned when trying to create
-# a hash sharded index with a column which does not exist.
 subtest column_does_not_exist
 
 statement ok

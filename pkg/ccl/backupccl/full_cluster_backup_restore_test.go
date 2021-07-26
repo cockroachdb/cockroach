@@ -331,27 +331,6 @@ CREATE TABLE data2.foo (a int);
 	})
 }
 
-func TestFullClusterBackupDroppedTables(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const numAccounts = 10
-	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
-	defer cleanupFn()
-	defer cleanupEmptyCluster()
-
-	_, tablesToCheck := generateInterleavedData(sqlDB, t, numAccounts)
-
-	sqlDB.Exec(t, `BACKUP TO $1 WITH include_deprecated_interleaves`, LocalFoo)
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
-
-	for _, table := range tablesToCheck {
-		query := fmt.Sprintf("SELECT * FROM data.%s", table)
-		sqlDBRestore.CheckQueryResults(t, query, sqlDB.QueryStr(t, query))
-	}
-}
-
 func TestIncrementalFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -1131,20 +1131,6 @@ SELECT * FROM mixed_type_a AS a INNER MERGE JOIN mixed_type_b AS b ON a.a = b.a 
 statement error .* dates and timestamp\(tz\) not supported in mixed-type expressions in the vectorized engine
 SELECT * FROM mixed_type_a AS a JOIN mixed_type_b AS b ON a.a = b.a AND a.b < (now() - b.b)
 
-# Regression for 46140.
-statement ok
-DROP TABLE IF EXISTS t0, t1;
-CREATE TABLE t0(c0 INT);
-CREATE TABLE t1(c0 BOOL) INTERLEAVE IN PARENT t0(rowid);
-INSERT INTO t0(c0) VALUES (0);
-INSERT INTO t1(rowid, c0) VALUES(0, TRUE);
-
-query I
-SELECT max(t1.rowid) FROM t1 WHERE t1.c0
-----
-0
-
-
 # Regression for #46183.
 statement ok
 CREATE TABLE t46183 (x INT PRIMARY KEY, y JSONB, INVERTED INDEX (y));
@@ -1154,19 +1140,6 @@ query I
 SELECT count(*) FROM t46183 WHERE y->'y' = to_jsonb('hello')
 ----
 1
-
-# Regression test for #47029 (not resetting nulls vector when cfetcher read a
-# NULL value in the interleaved table).
-statement ok
-CREATE TABLE t47029_0(c0 INT);
-CREATE TABLE t47029_1(c0 INT);
-INSERT INTO t47029_0(c0) VALUES(0);
-INSERT INTO t47029_1(c0) VALUES(NULL);
-CREATE INDEX ON t47029_1(c0) INTERLEAVE IN PARENT t47029_0(c0);
-
-query I
-SELECT * FROM t47029_0 WHERE (t47029_0.rowid > 0) IS NULL
-----
 
 # Regression for #47115 (cfetcher sometimes not reading value component
 # of composite encoded data).

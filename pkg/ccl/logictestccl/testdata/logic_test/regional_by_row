@@ -115,7 +115,7 @@ LOCALITY REGIONAL BY ROW
 statement ok
 CREATE TABLE parent_table (pk INT PRIMARY KEY)
 
-statement error interleaved tables are not compatible with REGIONAL BY ROW tables
+statement error pq: creation of new interleaved tables and interleaved indexes is no longer supported. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
 CREATE TABLE regional_by_row_table (
   pk INT NOT NULL PRIMARY KEY
 )
@@ -530,7 +530,7 @@ CREATE INDEX bad_idx ON regional_by_row_table(a) USING HASH WITH BUCKET_COUNT = 
 statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
 ALTER TABLE regional_by_row_table ALTER PRIMARY KEY USING COLUMNS(pk2) USING HASH WITH BUCKET_COUNT = 8
 
-statement error interleaved tables are not compatible with REGIONAL BY ROW tables
+statement error pq: creation of new interleaved tables and interleaved indexes is no longer supported. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
 CREATE INDEX bad_idx ON regional_by_row_table(pk) INTERLEAVE IN PARENT parent_table(pk)
 
 # Try add a new unique column.
@@ -797,7 +797,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/73/1/"@"/1/0, /Table/73/1/"\x80"/1/0, /Table/73/1/"\xc0"/1/0
+Scan /Table/72/1/"@"/1/0, /Table/72/1/"\x80"/1/0, /Table/72/1/"\xc0"/1/0
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -834,7 +834,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/73/1/"@"/1/0
+Scan /Table/72/1/"@"/1/0
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -849,8 +849,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/73/1/"@"/10/0
-Scan /Table/73/1/"\x80"/10/0, /Table/73/1/"\xc0"/10/0
+Scan /Table/72/1/"@"/10/0
+Scan /Table/72/1/"\x80"/10/0, /Table/72/1/"\xc0"/10/0
 fetched: /regional_by_row_table/primary/'ca-central-1'/10/pk2/a/b -> /10/11/12
 output row: [10 10 11 12 NULL]
 
@@ -926,9 +926,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
-fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/73/1/"@"/10/0, /Table/73/1/"\x80"/10/0, /Table/73/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 
 # Semi join with locality optimized search disabled.
@@ -956,9 +956,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
-fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/73/1/"@"/10/0, /Table/73/1/"\x80"/10/0, /Table/73/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 output row: [10 10]
 
@@ -987,9 +987,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
-fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/73/1/"@"/10/0, /Table/73/1/"\x80"/10/0, /Table/73/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 output row: [10 10 10]
 
@@ -1018,9 +1018,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0, /Table/75/1/"\x80"/10/0, /Table/75/1/"\xc0"/10/0
-fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/73/1/"@"/10/0, /Table/73/1/"\x80"/10/0, /Table/73/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 output row: [10 10 10]
 
@@ -1067,9 +1067,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0
-fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/73/1/"@"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 
 statement ok
@@ -1083,11 +1083,11 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/20/0
-Scan /Table/75/1/"\x80"/20/0, /Table/75/1/"\xc0"/20/0
-fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
 Scan /Table/74/1/"@"/20/0
 Scan /Table/74/1/"\x80"/20/0, /Table/74/1/"\xc0"/20/0
+fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
+Scan /Table/73/1/"@"/20/0
+Scan /Table/73/1/"\x80"/20/0, /Table/73/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 
 # Semi join with locality optimized search enabled.
@@ -1126,9 +1126,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0
-fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/73/1/"@"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 output row: [10 10]
 
@@ -1143,11 +1143,11 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/20/0
-Scan /Table/75/1/"\x80"/20/0, /Table/75/1/"\xc0"/20/0
-fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
 Scan /Table/74/1/"@"/20/0
 Scan /Table/74/1/"\x80"/20/0, /Table/74/1/"\xc0"/20/0
+fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
+Scan /Table/73/1/"@"/20/0
+Scan /Table/73/1/"\x80"/20/0, /Table/73/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 output row: [20 20]
 
@@ -1187,9 +1187,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0
-fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/73/1/"@"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 output row: [10 10 10]
 
@@ -1204,11 +1204,11 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/20/0
-Scan /Table/75/1/"\x80"/20/0, /Table/75/1/"\xc0"/20/0
-fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
 Scan /Table/74/1/"@"/20/0
 Scan /Table/74/1/"\x80"/20/0, /Table/74/1/"\xc0"/20/0
+fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
+Scan /Table/73/1/"@"/20/0
+Scan /Table/73/1/"\x80"/20/0, /Table/73/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 output row: [20 20 20]
 
@@ -1248,9 +1248,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10/0
-fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
 Scan /Table/74/1/"@"/10/0
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/73/1/"@"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 output row: [10 10 10]
 
@@ -1265,11 +1265,11 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/20/0
-Scan /Table/75/1/"\x80"/20/0, /Table/75/1/"\xc0"/20/0
-fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
 Scan /Table/74/1/"@"/20/0
 Scan /Table/74/1/"\x80"/20/0, /Table/74/1/"\xc0"/20/0
+fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
+Scan /Table/73/1/"@"/20/0
+Scan /Table/73/1/"\x80"/20/0, /Table/73/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 output row: [20 20 20]
 

@@ -602,9 +602,19 @@ var interleavedTableDisabledError = errors.WithIssueLink(
 	errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
 )
 
+var interleavedTableDisabledMigrationError = errors.WithIssueLink(
+	pgerror.New(pgcode.WarningDeprecatedFeature,
+		"creation of new interleaved tables and interleaved indexes is no longer supported."+
+			" For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations"),
+	errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
+)
+
 // interleavedTableDeprecationAction either returns an error, if interleaved
 // tables are disabled, or sends a notice, if they're not.
 func interleavedTableDeprecationAction(params runParams) error {
+	if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.PreventNewInterleavedTables) {
+		return interleavedTableDisabledMigrationError
+	}
 	if !InterleavedTablesEnabled.Get(params.p.execCfg.SV()) {
 		return interleavedTableDisabledError
 	}

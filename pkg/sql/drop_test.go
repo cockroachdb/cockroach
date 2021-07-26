@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -575,6 +576,10 @@ func TestDropIndexInterleaved(t *testing.T) {
 	const chunkSize = 200
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: 1,
+			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PreventNewInterleavedTables - 1),
+		},
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
 		},
@@ -917,7 +922,12 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
-
+	params.Knobs = base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: 1,
+			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PreventNewInterleavedTables - 1),
+		},
+	}
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
