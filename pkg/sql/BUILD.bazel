@@ -520,6 +520,7 @@ go_test(
         "//pkg/base",
         "//pkg/build/bazel",
         "//pkg/ccl/kvccl/kvtenantccl",
+        "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/gossip",
