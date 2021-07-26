@@ -111,7 +111,7 @@ func TestIndexUsageStatisticsSubsystem(t *testing.T) {
 	}
 
 	statsProcessedSignal := make(chan struct{})
-	onStatsIngested := func() {
+	onStatsIngested := func(_ roachpb.IndexUsageKey) {
 		statsProcessedSignal <- struct{}{}
 	}
 	waitForStatsIngested := func() {

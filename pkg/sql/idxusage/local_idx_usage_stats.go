@@ -102,11 +102,19 @@ type Config struct {
 	Knobs *TestingKnobs
 }
 
+// IteratorOptions provides knobs to change the iterating behavior when
+// calling ForEach.
+type IteratorOptions struct {
+	SortedTableID bool
+	SortedIndexID bool
+	Max           *uint64
+}
+
+// StatsVisitor is the callback invoked when calling ForEach.
+type StatsVisitor func(key *roachpb.IndexUsageKey, value *roachpb.IndexUsageStatistics) error
+
 // DefaultChannelSize is the default size of the statsChan.
 const DefaultChannelSize = uint64(128)
-
-var _ Reader = &LocalIndexUsageStats{}
-var _ Writer = &LocalIndexUsageStats{}
 
 var emptyIndexUsageStats roachpb.IndexUsageStatistics
 
@@ -128,7 +136,7 @@ func (s *LocalIndexUsageStats) Start(ctx context.Context, stopper *stop.Stopper)
 	s.startStatsIngestionLoop(ctx, stopper)
 }
 
-// RecordRead implements the idxusage.Writer interface.
+// RecordRead records a read operation on the specified index.
 func (s *LocalIndexUsageStats) RecordRead(ctx context.Context, key roachpb.IndexUsageKey) {
 	s.record(ctx, indexUse{
 		key:      key,
@@ -150,7 +158,7 @@ func (s *LocalIndexUsageStats) record(ctx context.Context, payload indexUse) {
 	}
 }
 
-// Get implements the idxusage.Reader interface.
+// Get returns the index usage statistics for a given key.
 func (s *LocalIndexUsageStats) Get(key roachpb.IndexUsageKey) roachpb.IndexUsageStatistics {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -177,7 +185,9 @@ func (s *LocalIndexUsageStats) Get(key roachpb.IndexUsageKey) roachpb.IndexUsage
 	return indexStats.IndexUsageStatistics
 }
 
-// ForEach the idxusage.Reader interface.
+// ForEach iterates through all stored index usage statistics
+// based on the options specified in IteratorOptions. If an error is
+// encountered when calling StatsVisitor, the iteration is aborted.
 func (s *LocalIndexUsageStats) ForEach(options IteratorOptions, visitor StatsVisitor) error {
 	maxIterationLimit := uint64(math.MaxUint64)
 	if options.Max != nil {
@@ -356,7 +366,7 @@ func (s *LocalIndexUsageStats) startStatsIngestionLoop(ctx context.Context, stop
 			case payload := <-s.statsChan:
 				s.insertIndexUsage(&payload)
 				if s.testingKnobs != nil && s.testingKnobs.OnIndexUsageStatsProcessedCallback != nil {
-					s.testingKnobs.OnIndexUsageStatsProcessedCallback()
+					s.testingKnobs.OnIndexUsageStatsProcessedCallback(payload.key)
 				}
 			case <-stopper.ShouldQuiesce():
 				return
