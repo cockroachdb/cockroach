@@ -70,11 +70,6 @@ CREATE TABLE d (
 statement ok
 CREATE TABLE t1 (id1 INT PRIMARY KEY, id2 INT, id3 INT);
 
-statement error pq: inverted indexes don't support interleaved tables
-CREATE INDEX c on t1 USING GIN (id2)
-   STORING (id1,id3)
-   INTERLEAVE in PARENT t1 (id2);
-
 statement error pq: inverted indexes don't support stored columns
 CREATE INDEX c on t1 USING GIN (id2) STORING (id1,id3);
 
