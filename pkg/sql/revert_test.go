@@ -16,9 +16,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -40,7 +42,15 @@ func TestRevertTable(t *testing.T) {
 	ctx := context.Background()
 
 	s, sqlDB, kv := serverutils.StartServer(
-		t, base.TestServerArgs{UseDatabase: "test"})
+		t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: 1,
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.InterleavedCreationBlockedMigration - 1),
+				},
+			},
+			UseDatabase: "test"})
 	defer s.Stopper().Stop(context.Background())
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
