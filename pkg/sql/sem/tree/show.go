@@ -558,11 +558,30 @@ func (node *ShowTransactionStatus) Format(ctx *FmtCtx) {
 }
 
 // ShowLastQueryStatistics represents a SHOW LAST QUERY STATS statement.
-type ShowLastQueryStatistics struct{}
+type ShowLastQueryStatistics struct {
+	Columns NameList
+}
+
+// ShowLastQueryStatisticsDefaultColumns is the default list of columns
+// when the USING clause is not specified.
+// Note: the form that does not specify the USING clause is deprecated.
+// Remove it when there are no more clients using it (22.1 or later).
+var ShowLastQueryStatisticsDefaultColumns = NameList([]Name{
+	"parse_latency",
+	"plan_latency",
+	"exec_latency",
+	"service_latency",
+	"post_commit_jobs_latency",
+})
 
 // Format implements the NodeFormatter interface.
 func (node *ShowLastQueryStatistics) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW LAST QUERY STATISTICS")
+	ctx.WriteString("SHOW LAST QUERY STATISTICS RETURNING ")
+	// The column names for this statement never contain PII and should
+	// be distinguished for feature tracking purposes.
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
+		ctx.FormatNode(&node.Columns)
+	})
 }
 
 // ShowFullTableScans represents a SHOW FULL TABLE SCANS statement.
