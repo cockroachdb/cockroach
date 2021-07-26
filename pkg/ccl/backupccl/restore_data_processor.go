@@ -13,6 +13,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -59,6 +60,9 @@ type restoreDataProcessor struct {
 	// restore data workers.
 	phaseGroup ctxgroup.Group
 
+	// sstCh is a channel that holds SSTs opened by the processor, but not yet
+	// ingested.
+	sstCh chan mergedSST
 	// Metas from the input are forwarded to the output of this processor.
 	metaCh chan *execinfrapb.ProducerMetadata
 	// progress updates are accumulated on this channel. It is populated by the
@@ -135,14 +139,26 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	rd.phaseGroup = ctxgroup.WithContext(ctx)
 
 	entries := make(chan execinfrapb.RestoreSpanEntry, rd.numWorkers)
+	rd.sstCh = make(chan mergedSST, rd.numWorkers)
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(entries)
 		return inputReader(ctx, rd.input, entries, rd.metaCh)
 	})
 
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
+		defer close(rd.sstCh)
+		for entry := range entries {
+			if err := rd.openSSTs(entry, rd.sstCh); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(rd.progCh)
-		return rd.runRestoreWorkers(entries)
+		return rd.runRestoreWorkers(rd.sstCh)
 	})
 }
 
@@ -209,23 +225,112 @@ func inputReader(
 	}
 }
 
-func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.RestoreSpanEntry) error {
+type mergedSST struct {
+	entry   execinfrapb.RestoreSpanEntry
+	iter    storage.SimpleMVCCIterator
+	cleanup func()
+}
+
+func (rd *restoreDataProcessor) openSSTs(
+	entry execinfrapb.RestoreSpanEntry, sstCh chan mergedSST,
+) error {
+	ctx := rd.Ctx
+	ctxDone := ctx.Done()
+
+	// The sstables only contain MVCC data and no intents, so using an MVCC
+	// iterator is sufficient.
+	var iters []storage.SimpleMVCCIterator
+	var dirs []cloud.ExternalStorage
+
+	// If we bail early and haven't handed off responsibility of the dirs/iters to
+	// the channel, close anything that we had open.
+	defer func() {
+		for _, iter := range iters {
+			iter.Close()
+		}
+
+		for _, dir := range dirs {
+			if err := dir.Close(); err != nil {
+				log.Warningf(ctx, "close export storage failed %v", err)
+			}
+		}
+	}()
+
+	// sendIters sends all of the currently accumulated iterators over the
+	// channel.
+	sendIters := func(itersToSend []storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage) error {
+		multiIter := storage.MakeMultiIterator(itersToSend)
+
+		cleanup := func() {
+			multiIter.Close()
+			for _, iter := range itersToSend {
+				iter.Close()
+			}
+
+			for _, dir := range dirsToSend {
+				if err := dir.Close(); err != nil {
+					log.Warningf(ctx, "close export storage failed %v", err)
+				}
+			}
+		}
+
+		mSST := mergedSST{
+			entry:   entry,
+			iter:    multiIter,
+			cleanup: cleanup,
+		}
+
+		select {
+		case sstCh <- mSST:
+		case <-ctxDone:
+			return ctx.Err()
+		}
+
+		iters = make([]storage.SimpleMVCCIterator, 0)
+		dirs = make([]cloud.ExternalStorage, 0)
+		return nil
+	}
+
+	log.VEventf(rd.Ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
+
+	for _, file := range entry.Files {
+		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
+
+		dir, err := rd.flowCtx.Cfg.ExternalStorage(ctx, file.Dir)
+		if err != nil {
+			return err
+		}
+		dirs = append(dirs, dir)
+
+		// TODO(pbardea): When memory monitoring is added, send the currently
+		// accumulated iterators on the channel if we run into memory pressure.
+		iter, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
+		if err != nil {
+			return err
+		}
+		iters = append(iters, iter)
+	}
+
+	return sendIters(iters, dirs)
+}
+
+func (rd *restoreDataProcessor) runRestoreWorkers(ssts chan mergedSST) error {
 	return ctxgroup.GroupWorkers(rd.Ctx, rd.numWorkers, func(ctx context.Context, _ int) error {
 		for {
 			done, err := func() (done bool, _ error) {
-				entry, ok := <-entries
+				sstIter, ok := <-ssts
 				if !ok {
 					done = true
 					return done, nil
 				}
 
-				summary, err := rd.processRestoreSpanEntry(entry)
+				summary, err := rd.processRestoreSpanEntry(sstIter)
 				if err != nil {
 					return done, err
 				}
 
 				select {
-				case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs):
+				case rd.progCh <- makeProgressUpdate(summary, sstIter.entry, rd.spec.PKIDs):
 				case <-ctx.Done():
 					return done, ctx.Err()
 				}
@@ -245,38 +350,16 @@ func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.Resto
 }
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
-	entry execinfrapb.RestoreSpanEntry,
+	sst mergedSST,
 ) (roachpb.BulkOpSummary, error) {
 	db := rd.flowCtx.Cfg.DB
 	ctx := rd.Ctx
 	evalCtx := rd.EvalCtx
 	var summary roachpb.BulkOpSummary
 
-	// The sstables only contain MVCC data and no intents, so using an MVCC
-	// iterator is sufficient.
-	var iters []storage.SimpleMVCCIterator
-
-	log.VEventf(rd.Ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
-
-	for _, file := range entry.Files {
-		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
-
-		dir, err := rd.flowCtx.Cfg.ExternalStorage(ctx, file.Dir)
-		if err != nil {
-			return summary, err
-		}
-		defer func() {
-			if err := dir.Close(); err != nil {
-				log.Warningf(ctx, "close export storage failed %v", err)
-			}
-		}()
-		iter, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
-		if err != nil {
-			return summary, err
-		}
-		defer iter.Close()
-		iters = append(iters, iter)
-	}
+	entry := sst.entry
+	iter := sst.iter
+	defer sst.cleanup()
 
 	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
 		func() int64 { return rd.flushBytes })
@@ -285,11 +368,10 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	}
 	defer batcher.Close()
 
+	var keyScratch, valueScratch []byte
+
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
 		storage.MVCCKey{Key: entry.Span.EndKey}
-	iter := storage.MakeMultiIterator(iters)
-	defer iter.Close()
-	var keyScratch, valueScratch []byte
 
 	for iter.SeekGE(startKeyMVCC); ; {
 		ok, err := iter.Valid()
@@ -409,6 +491,12 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 	if rd.InternalClose() {
 		if rd.metaCh != nil {
 			close(rd.metaCh)
+		}
+		if rd.sstCh != nil {
+			// Cleanup all the remaining open SSTs that have not been consumed.
+			for sst := range rd.sstCh {
+				sst.cleanup()
+			}
 		}
 	}
 }
