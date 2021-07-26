@@ -391,9 +391,9 @@ support contract. Otherwise, please open an issue at:
 // executed as 1PC.
 func (r *Replica) canAttempt1PCEvaluation(
 	ctx context.Context, ba *roachpb.BatchRequest, latchSpans *spanset.SpanSet,
-) (bool, *roachpb.Error) {
+) bool {
 	if !isOnePhaseCommit(ba) {
-		return false, nil
+		return false
 	}
 
 	if ba.Timestamp != ba.Txn.WriteTimestamp {
@@ -401,42 +401,25 @@ func (r *Replica) canAttempt1PCEvaluation(
 			ba.Timestamp, ba.Txn.WriteTimestamp)
 	}
 
-	// Check whether the txn record has already been created. If so, we can't
-	// perform a 1PC evaluation because we need to clean up the record during
-	// evaluation.
-	//
-	// We only perform this check if the transaction's EndTxn indicates that it
-	// has started its heartbeat loop. If not, the transaction cannot have an
-	// existing record. However, we perform it unconditionally under race to
-	// catch bugs.
-	arg, _ := ba.GetArg(roachpb.EndTxn)
-	etArg := arg.(*roachpb.EndTxnRequest)
-	if etArg.TxnHeartbeating || util.RaceEnabled {
-		if ok, err := batcheval.HasTxnRecord(ctx, r.store.Engine(), ba.Txn); err != nil {
-			return false, roachpb.NewError(err)
-		} else if ok {
-			if !etArg.TxnHeartbeating {
-				log.Fatalf(ctx, "non-heartbeating txn with txn record before EndTxn: %v", ba.Txn)
-			}
-			return false, nil
-		}
-	}
-
 	// The EndTxn checks whether the txn record can be created, but we're
 	// eliding the EndTxn. So, we'll do the check instead.
-	ok, minCommitTS, reason := r.CanCreateTxnRecord(ctx, ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
+	//
+	// Note that the returned reason does not distinguish between an existing
+	// record (which should fall back to non-1PC EndTxn evaluation) and a
+	// finalized record (which should return an error), so we ignore it here and
+	// let EndTxn return an error as appropriate. This lets us avoid a disk read
+	// to check for an existing record.
+	ok, minCommitTS, _ := r.CanCreateTxnRecord(ctx, ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
 	if !ok {
-		newTxn := ba.Txn.Clone()
-		newTxn.Status = roachpb.ABORTED
-		return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(reason), newTxn)
+		return false
 	}
 	if ba.Timestamp.Less(minCommitTS) {
 		ba.Txn.WriteTimestamp = minCommitTS
 		// We can only evaluate at the new timestamp if we manage to bump the read
 		// timestamp.
-		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba, latchSpans), nil
+		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba, latchSpans)
 	}
-	return true, nil
+	return true
 }
 
 // evaluateWriteBatch evaluates the supplied batch.
@@ -464,11 +447,7 @@ func (r *Replica) evaluateWriteBatch(
 
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
-	ok, pErr := r.canAttempt1PCEvaluation(ctx, ba, latchSpans)
-	if pErr != nil {
-		return nil, enginepb.MVCCStats{}, nil, result.Result{}, pErr
-	}
-	if ok {
+	if r.canAttempt1PCEvaluation(ctx, ba, latchSpans) {
 		res := r.evaluate1PC(ctx, idKey, ba, latchSpans, lockSpans)
 		switch res.success {
 		case onePCSucceeded:
@@ -613,11 +592,6 @@ func (r *Replica) evaluate1PC(
 	// have acquired unreplicated locks, so inform the concurrency manager that
 	// it is finalized and than any unreplicated locks that it has acquired can
 	// be released.
-	//
-	// TODO(nvanbenschoten): once we can rely on EndTxn.TxnHeartbeating being
-	// correct in v21.1, we can gate these notifications on TxnHeartbeating
-	// because we know that a transaction hasn't acquired any unreplicated
-	// locks if it hasn't started heartbeating.
 	res.Local.UpdatedTxns = []*roachpb.Transaction{clonedTxn}
 	res.Local.ResolvedLocks = make([]roachpb.LockUpdate, len(etArg.LockSpans))
 	for i, sp := range etArg.LockSpans {
