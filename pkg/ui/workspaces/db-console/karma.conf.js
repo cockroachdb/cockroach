@@ -13,7 +13,10 @@
 
 "use strict";
 
-const webpackConfig = require("./webpack.app")({dist: "ccl"}, {mode: "development"});
+const webpackConfig = require("./webpack.app")(
+  { dist: "ccl" },
+  { mode: "development" },
+);
 
 module.exports = function(config) {
   config.set({
@@ -43,10 +46,7 @@ module.exports = function(config) {
     concurrency: Infinity,
 
     // list of files / patterns to load in the browser
-    files: [
-      "src/polyfills.ts",
-      "tests-loader.js",
-    ],
+    files: ["src/polyfills.ts", "tests-loader.js"],
 
     // frameworks to use
     // available frameworks: https://npmjs.org/browse/keyword/karma-adapter
