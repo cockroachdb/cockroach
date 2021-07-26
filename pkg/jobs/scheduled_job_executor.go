@@ -50,6 +50,10 @@ type ScheduledJobExecutor interface {
 
 	// Metrics returns optional metric.Struct object for this executor.
 	Metrics() metric.Struct
+
+	// GetCreateScheduleStatement returns the statement used to create schedule
+	// for the scheduled job executed by this executor
+	GetCreateScheduleStatement(schedule *ScheduledJob) (string, error)
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.

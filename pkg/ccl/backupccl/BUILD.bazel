@@ -176,6 +176,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowflow",

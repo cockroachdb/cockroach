@@ -136,14 +136,23 @@ func processUnaryQualOpInternal(
     // operator, so adjust accordingly.
     switch op.Symbol {
     case tree.Plus:
-      return expr, 0
+      return &tree.UnaryExpr{
+        Operator: tree.MakeUnaryOperator(tree.UnaryPlus),
+        Expr: expr,
+      }, 0
     case tree.Minus:
-      return unaryNegation(expr), 0
+      return &tree.UnaryExpr{
+        Operator: tree.MakeUnaryOperator(tree.UnaryMinus),
+        Expr: expr,
+      }, 0
     }
   case tree.ComparisonOperator:
     switch op.Symbol {
     case tree.RegMatch:
-      return &tree.UnaryExpr{Operator: tree.MakeUnaryOperator(tree.UnaryComplement), Expr: expr}, 0
+      return &tree.UnaryExpr{
+        Operator: tree.MakeUnaryOperator(tree.UnaryComplement),
+        Expr: expr,
+      }, 0
     }
   }
   sqllex.Error(fmt.Sprintf("unknown unary operator %s", op))
@@ -1022,6 +1031,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %type <tree.Statement> show_columns_stmt
 %type <tree.Statement> show_constraints_stmt
 %type <tree.Statement> show_create_stmt
+%type <tree.Statement> show_create_schedules_stmt
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_enums_stmt
@@ -4733,49 +4743,50 @@ zone_value:
 // %Category: Group
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
-// SHOW CREATE, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
+// SHOW CREATE, SHOW CREATE SCHEDULES, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
 // PARTITIONS, SHOW JOBS, SHOW STATEMENTS, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
 // SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS
 show_stmt:
-  show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
-| show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
-| show_constraints_stmt     // EXTEND WITH HELP: SHOW CONSTRAINTS
-| show_create_stmt          // EXTEND WITH HELP: SHOW CREATE
-| show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
-| show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
-| show_enums_stmt           // EXTEND WITH HELP: SHOW ENUMS
-| show_types_stmt           // EXTEND WITH HELP: SHOW TYPES
+  show_backup_stmt           // EXTEND WITH HELP: SHOW BACKUP
+| show_columns_stmt          // EXTEND WITH HELP: SHOW COLUMNS
+| show_constraints_stmt      // EXTEND WITH HELP: SHOW CONSTRAINTS
+| show_create_stmt           // EXTEND WITH HELP: SHOW CREATE
+| show_create_schedules_stmt // EXTEND WITH HELP: SHOW CREATE SCHEDULES
+| show_csettings_stmt        // EXTEND WITH HELP: SHOW CLUSTER SETTING
+| show_databases_stmt        // EXTEND WITH HELP: SHOW DATABASES
+| show_enums_stmt            // EXTEND WITH HELP: SHOW ENUMS
+| show_types_stmt            // EXTEND WITH HELP: SHOW TYPES
 | show_fingerprints_stmt
-| show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
-| show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
-| show_indexes_stmt         // EXTEND WITH HELP: SHOW INDEXES
-| show_partitions_stmt      // EXTEND WITH HELP: SHOW PARTITIONS
-| show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
+| show_grants_stmt           // EXTEND WITH HELP: SHOW GRANTS
+| show_histogram_stmt        // EXTEND WITH HELP: SHOW HISTOGRAM
+| show_indexes_stmt          // EXTEND WITH HELP: SHOW INDEXES
+| show_partitions_stmt       // EXTEND WITH HELP: SHOW PARTITIONS
+| show_jobs_stmt             // EXTEND WITH HELP: SHOW JOBS
 | show_locality_stmt
-| show_schedules_stmt       // EXTEND WITH HELP: SHOW SCHEDULES
-| show_statements_stmt      // EXTEND WITH HELP: SHOW STATEMENTS
-| show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
+| show_schedules_stmt        // EXTEND WITH HELP: SHOW SCHEDULES
+| show_statements_stmt       // EXTEND WITH HELP: SHOW STATEMENTS
+| show_ranges_stmt           // EXTEND WITH HELP: SHOW RANGES
 | show_range_for_row_stmt
-| show_regions_stmt         // EXTEND WITH HELP: SHOW REGIONS
-| show_survival_goal_stmt   // EXTEND_WITH_HELP: SHOW SURVIVAL GOAL
-| show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
-| show_savepoint_stmt       // EXTEND WITH HELP: SHOW SAVEPOINT
-| show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
-| show_sequences_stmt       // EXTEND WITH HELP: SHOW SEQUENCES
-| show_session_stmt         // EXTEND WITH HELP: SHOW SESSION
-| show_sessions_stmt        // EXTEND WITH HELP: SHOW SESSIONS
-| show_stats_stmt           // EXTEND WITH HELP: SHOW STATISTICS
-| show_syntax_stmt          // EXTEND WITH HELP: SHOW SYNTAX
-| show_tables_stmt          // EXTEND WITH HELP: SHOW TABLES
-| show_trace_stmt           // EXTEND WITH HELP: SHOW TRACE
-| show_transaction_stmt     // EXTEND WITH HELP: SHOW TRANSACTION
-| show_transactions_stmt    // EXTEND WITH HELP: SHOW TRANSACTIONS
-| show_users_stmt           // EXTEND WITH HELP: SHOW USERS
-| show_zone_stmt            // EXTEND WITH HELP: SHOW ZONE CONFIGURATION
-| SHOW error                // SHOW HELP: SHOW
+| show_regions_stmt          // EXTEND WITH HELP: SHOW REGIONS
+| show_survival_goal_stmt    // EXTEND_WITH_HELP: SHOW SURVIVAL GOAL
+| show_roles_stmt            // EXTEND WITH HELP: SHOW ROLES
+| show_savepoint_stmt        // EXTEND WITH HELP: SHOW SAVEPOINT
+| show_schemas_stmt          // EXTEND WITH HELP: SHOW SCHEMAS
+| show_sequences_stmt        // EXTEND WITH HELP: SHOW SEQUENCES
+| show_session_stmt          // EXTEND WITH HELP: SHOW SESSION
+| show_sessions_stmt         // EXTEND WITH HELP: SHOW SESSIONS
+| show_stats_stmt            // EXTEND WITH HELP: SHOW STATISTICS
+| show_syntax_stmt           // EXTEND WITH HELP: SHOW SYNTAX
+| show_tables_stmt           // EXTEND WITH HELP: SHOW TABLES
+| show_trace_stmt            // EXTEND WITH HELP: SHOW TRACE
+| show_transaction_stmt      // EXTEND WITH HELP: SHOW TRANSACTION
+| show_transactions_stmt     // EXTEND WITH HELP: SHOW TRANSACTIONS
+| show_users_stmt            // EXTEND WITH HELP: SHOW USERS
+| show_zone_stmt             // EXTEND WITH HELP: SHOW ZONE CONFIGURATION
+| SHOW error                 // SHOW HELP: SHOW
 | show_last_query_stats_stmt
 | show_full_scans_stmt
 
@@ -5492,6 +5503,26 @@ show_create_stmt:
     $$.val = &tree.ShowCreateAllTables{}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
+
+// %Help: SHOW CREATE SCHEDULES - list CREATE statements for scheduled jobs
+// %Category: DDL
+// %Text:
+// SHOW CREATE ALL SCHEDULES
+// SHOW CREATE SCHEDULE <schedule_id>
+// %SeeAlso: SHOW SCHEDULES, PAUSE SCHEDULES, RESUME SCHEDULES, DROP SCHEDULES
+show_create_schedules_stmt:
+  SHOW CREATE ALL SCHEDULES
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreateSchedules{}
+  }
+| SHOW CREATE ALL SCHEDULES error // SHOW HELP: SHOW CREATE SCHEDULES
+| SHOW CREATE SCHEDULE a_expr
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreateSchedules{ScheduleID: $4.expr()}
+  }
+| SHOW CREATE SCHEDULE error // SHOW HELP: SHOW CREATE SCHEDULES
 
 // %Help: SHOW USERS - list defined users
 // %Category: Priv

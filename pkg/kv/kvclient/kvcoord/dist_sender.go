@@ -1768,13 +1768,14 @@ func (ds *DistSender) sendToReplicas(
 	desc := routing.Desc()
 	ba.RangeID = desc.RangeID
 	leaseholder := routing.Leaseholder()
-	canFollowerRead := CanSendToFollower(ds.clusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba)
+	// TODO(nvanbenschoten): push ba.RequiresLeaseHolder() into CanSendToFollower.
+	wantLeaseholder := ba.RequiresLeaseHolder() && !CanSendToFollower(ds.clusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba)
 	var replicas ReplicaSlice
 	var err error
-	if canFollowerRead {
-		replicas, err = NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, AllExtantReplicas)
-	} else {
+	if wantLeaseholder {
 		replicas, err = NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, OnlyPotentialLeaseholders)
+	} else {
+		replicas, err = NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, AllExtantReplicas)
 	}
 	if err != nil {
 		return nil, err
@@ -1787,7 +1788,7 @@ func (ds *DistSender) sendToReplicas(
 	}
 
 	// Try the leaseholder first, if the request wants it.
-	sendToLeaseholder := (leaseholder != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
+	sendToLeaseholder := (leaseholder != nil) && wantLeaseholder
 	if sendToLeaseholder {
 		idx := replicas.Find(leaseholder.ReplicaID)
 		if idx != -1 {
@@ -1797,6 +1798,8 @@ func (ds *DistSender) sendToReplicas(
 			// we created replicas.
 			log.Eventf(ctx, "leaseholder %s missing from replicas", leaseholder)
 		}
+	} else if wantLeaseholder {
+		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not known")
 	} else {
 		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
 	}

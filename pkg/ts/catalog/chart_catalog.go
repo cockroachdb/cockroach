@@ -309,6 +309,7 @@ var charts = []sectionDescription{
 					"distsender.rpc.pushtxn.sent",
 					"distsender.rpc.put.sent",
 					"distsender.rpc.queryintent.sent",
+					"distsender.rpc.queryresolvedtimestamp.sent",
 					"distsender.rpc.querytxn.sent",
 					"distsender.rpc.rangestats.sent",
 					"distsender.rpc.recomputestats.sent",

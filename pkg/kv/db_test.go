@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -515,6 +516,24 @@ func TestDB_Put_insecure(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkResult(t, []byte("1"), result.ValueBytes())
+}
+
+func TestDB_QueryResolvedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	// Perform a write to ensure that the range sets a non-zero closed timestamp.
+	err := db.Put(context.Background(), "a", "val")
+	require.NoError(t, err)
+
+	// One node cluster, so "local" should not make a difference. Test both.
+	testutils.RunTrueAndFalse(t, "local", func(t *testing.T, local bool) {
+		resTS, err := db.QueryResolvedTimestamp(context.Background(), "a", "c", local)
+		require.NoError(t, err)
+		require.NotEmpty(t, resTS)
+	})
 }
 
 // Test that all operations on a decommissioned node will return a

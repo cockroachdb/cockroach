@@ -77,7 +77,7 @@ func (rc ReadConsistencyType) SupportsBatch(ba BatchRequest) error {
 		for _, ru := range ba.Requests {
 			m := ru.GetInner().Method()
 			switch m {
-			case Get, Scan, ReverseScan:
+			case Get, Scan, ReverseScan, QueryResolvedTimestamp:
 			default:
 				return errors.Errorf("method %s not allowed with %s batch", m, rc)
 			}
@@ -340,22 +340,6 @@ func (sr *ScanResponse) combine(c combinable) error {
 
 var _ combinable = &ScanResponse{}
 
-func (avptr *AdminVerifyProtectedTimestampResponse) combine(c combinable) error {
-	other := c.(*AdminVerifyProtectedTimestampResponse)
-	if avptr != nil {
-		avptr.DeprecatedFailedRanges = append(avptr.DeprecatedFailedRanges,
-			other.DeprecatedFailedRanges...)
-		avptr.VerificationFailedRanges = append(avptr.VerificationFailedRanges,
-			other.VerificationFailedRanges...)
-		if err := avptr.ResponseHeader.combine(other.Header()); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-var _ combinable = &AdminVerifyProtectedTimestampResponse{}
-
 // combine implements the combinable interface.
 func (sr *ReverseScanResponse) combine(c combinable) error {
 	otherSR := c.(*ReverseScanResponse)
@@ -412,7 +396,7 @@ func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
 
 var _ combinable = &ResolveIntentRangeResponse{}
 
-// Combine implements the combinable interface.
+// combine implements the combinable interface.
 func (cc *CheckConsistencyResponse) combine(c combinable) error {
 	if cc != nil {
 		otherCC := c.(*CheckConsistencyResponse)
@@ -426,7 +410,7 @@ func (cc *CheckConsistencyResponse) combine(c combinable) error {
 
 var _ combinable = &CheckConsistencyResponse{}
 
-// Combine implements the combinable interface.
+// combine implements the combinable interface.
 func (er *ExportResponse) combine(c combinable) error {
 	if er != nil {
 		otherER := c.(*ExportResponse)
@@ -440,7 +424,7 @@ func (er *ExportResponse) combine(c combinable) error {
 
 var _ combinable = &ExportResponse{}
 
-// Combine implements the combinable interface.
+// combine implements the combinable interface.
 func (r *AdminScatterResponse) combine(c combinable) error {
 	if r != nil {
 		otherR := c.(*AdminScatterResponse)
@@ -454,6 +438,37 @@ func (r *AdminScatterResponse) combine(c combinable) error {
 }
 
 var _ combinable = &AdminScatterResponse{}
+
+func (avptr *AdminVerifyProtectedTimestampResponse) combine(c combinable) error {
+	other := c.(*AdminVerifyProtectedTimestampResponse)
+	if avptr != nil {
+		avptr.DeprecatedFailedRanges = append(avptr.DeprecatedFailedRanges,
+			other.DeprecatedFailedRanges...)
+		avptr.VerificationFailedRanges = append(avptr.VerificationFailedRanges,
+			other.VerificationFailedRanges...)
+		if err := avptr.ResponseHeader.combine(other.Header()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ combinable = &AdminVerifyProtectedTimestampResponse{}
+
+// combine implements the combinable interface.
+func (r *QueryResolvedTimestampResponse) combine(c combinable) error {
+	if r != nil {
+		otherR := c.(*QueryResolvedTimestampResponse)
+		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
+			return err
+		}
+
+		r.ResolvedTS.Backward(otherR.ResolvedTS)
+	}
+	return nil
+}
+
+var _ combinable = &QueryResolvedTimestampResponse{}
 
 // Header implements the Request interface.
 func (rh RequestHeader) Header() RequestHeader {
@@ -675,6 +690,9 @@ func (*RangeStatsRequest) Method() Method { return RangeStats }
 
 // Method implements the Request interface.
 func (*AdminVerifyProtectedTimestampRequest) Method() Method { return AdminVerifyProtectedTimestamp }
+
+// Method implements the Request interface.
+func (*QueryResolvedTimestampRequest) Method() Method { return QueryResolvedTimestamp }
 
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
@@ -930,6 +948,12 @@ func (r *RangeStatsRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *AdminVerifyProtectedTimestampRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *QueryResolvedTimestampRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1275,8 +1299,9 @@ func (r *RefreshRangeRequest) flags() int {
 	return isRead | isTxn | isRange | updatesTSCache
 }
 
-func (*SubsumeRequest) flags() int    { return isRead | isAlone | updatesTSCache }
-func (*RangeStatsRequest) flags() int { return isRead }
+func (*SubsumeRequest) flags() int                { return isRead | isAlone | updatesTSCache }
+func (*RangeStatsRequest) flags() int             { return isRead }
+func (*QueryResolvedTimestampRequest) flags() int { return isRead | isRange }
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
 // a parallel commit. See txn_interceptor_committer.go for a discussion about

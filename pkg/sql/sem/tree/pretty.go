@@ -417,6 +417,10 @@ func (p *PrettyCfg) peelBinaryOperand(e Expr, sameLevel bool, parenPrio int) Exp
 	stripped := StripParens(e)
 	switch te := stripped.(type) {
 	case *BinaryExpr:
+		// Do not fold explicit operators.
+		if te.Operator.IsExplicitOperator {
+			return e
+		}
 		childPrio := binaryOpPrio[te.Operator.Symbol]
 		if childPrio < parenPrio || (sameLevel && childPrio == parenPrio) {
 			return stripped
