@@ -3440,6 +3440,7 @@ database
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | database | [string](#cockroach.server.serverpb.DatabaseDetailsRequest-string) |  | database is the name of the database we are querying. | [reserved](#support-status) |
+| include_stats | [bool](#cockroach.server.serverpb.DatabaseDetailsRequest-bool) |  | Setting this flag includes a computationally-expensive stats field in the response. | [reserved](#support-status) |
 
 
 
@@ -3452,8 +3453,8 @@ database
 
 
 
-DatabaseDetailsResponse contains grant information and table names for a
-database.
+DatabaseDetailsResponse contains grant information, table names,
+zone configuration, and size statistics for a database.
 
 
 | Field | Type | Label | Description | Support status |
@@ -3463,6 +3464,7 @@ database.
 | descriptor_id | [int64](#cockroach.server.serverpb.DatabaseDetailsResponse-int64) |  | descriptor_id is an identifier used to uniquely identify this database. It can be used to find events pertaining to this database by filtering on the 'target_id' field of events. | [reserved](#support-status) |
 | zone_config | [cockroach.config.zonepb.ZoneConfig](#cockroach.server.serverpb.DatabaseDetailsResponse-cockroach.config.zonepb.ZoneConfig) |  | The zone configuration in effect for this database. | [reserved](#support-status) |
 | zone_config_level | [ZoneConfigurationLevel](#cockroach.server.serverpb.DatabaseDetailsResponse-cockroach.server.serverpb.ZoneConfigurationLevel) |  | The level at which this object's zone configuration is set. | [reserved](#support-status) |
+| stats | [DatabaseDetailsResponse.Stats](#cockroach.server.serverpb.DatabaseDetailsResponse-cockroach.server.serverpb.DatabaseDetailsResponse.Stats) |  | Size information about the database, present only when explicitly requested. | [reserved](#support-status) |
 
 
 
@@ -3478,6 +3480,36 @@ database.
 | ----- | ---- | ----- | ----------- | -------------- |
 | user | [string](#cockroach.server.serverpb.DatabaseDetailsResponse-string) |  | user is the user that this grant applies to. | [reserved](#support-status) |
 | privileges | [string](#cockroach.server.serverpb.DatabaseDetailsResponse-string) | repeated | privileges are the abilities this grant gives to the user. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.DatabaseDetailsResponse-cockroach.server.serverpb.DatabaseDetailsResponse.Stats"></a>
+#### DatabaseDetailsResponse.Stats
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| missing_tables | [DatabaseDetailsResponse.Stats.MissingTable](#cockroach.server.serverpb.DatabaseDetailsResponse-cockroach.server.serverpb.DatabaseDetailsResponse.Stats.MissingTable) | repeated | A list of tables that exist in the database, but for which stats could not be loaded due to failures during this request. | [reserved](#support-status) |
+| range_count | [int64](#cockroach.server.serverpb.DatabaseDetailsResponse-int64) |  | The number of ranges, as determined from a query of range meta keys, across all tables. | [reserved](#support-status) |
+| approximate_disk_bytes | [uint64](#cockroach.server.serverpb.DatabaseDetailsResponse-uint64) |  | An approximation of the disk space (in bytes) used for all replicas of all tables across the cluster. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.DatabaseDetailsResponse-cockroach.server.serverpb.DatabaseDetailsResponse.Stats.MissingTable"></a>
+#### DatabaseDetailsResponse.Stats.MissingTable
+
+A table which exists in the database, but for which we could not load stats
+during this request.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| name | [string](#cockroach.server.serverpb.DatabaseDetailsResponse-string) |  | The name of the table for which we could not load stats. | [reserved](#support-status) |
+| error_message | [string](#cockroach.server.serverpb.DatabaseDetailsResponse-string) |  | The error message that resulted when the request for this table failed. | [reserved](#support-status) |
 
 
 
