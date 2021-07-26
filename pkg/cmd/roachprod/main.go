@@ -88,6 +88,7 @@ var (
 	listJSON          bool
 	listMine          bool
 	secure            = false
+	extraSSHOptions   = ""
 	nodeEnv           = []string{
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
@@ -1273,7 +1274,7 @@ var runCmd = &cobra.Command{
 		// Use "ssh" if an interactive session was requested (i.e. there is no
 		// remote command to run).
 		if len(args) == 1 {
-			return c.SSH(nil, args[1:])
+			return c.SSH(strings.Split(extraSSHOptions, " "), args[1:])
 		}
 
 		cmd := strings.TrimSpace(strings.Join(args[1:], " "))
@@ -1957,6 +1958,8 @@ func main() {
 
 	runCmd.Flags().BoolVar(
 		&secure, "secure", false, "use a secure cluster")
+	runCmd.Flags().StringVarP(
+		&extraSSHOptions, "ssh-options", "O", "", "extra args to pass to ssh")
 
 	startCmd.Flags().IntVarP(&numRacks,
 		"racks", "r", 0, "the number of racks to partition the nodes into")
