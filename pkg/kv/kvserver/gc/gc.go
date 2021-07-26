@@ -61,39 +61,40 @@ var IntentAgeThreshold = settings.RegisterDurationSetting(
 	},
 )
 
-// MaxIntentsPerCleanupBatch is a maximum number of intents that GC will send
+// MaxIntentsPerCleanupBatch is the maximum number of intents that GC will send
 // for intent resolution as a single batch.
-// Default value is set to half of the maximum lock table size at the time
-// of writing.
-// This value is subject to tuning in real environment as we have more
-// data available.
+//
+// The setting is also used by foreground requests like QueryResolvedTimestamp
+// that do not need to resolve intents synchronously when they encounter them,
+// but do want to perform best-effort asynchronous intent resolution. The
+// setting dictates how many intents these requests will collect at a time.
+//
+// The default value is set to half of the maximum lock table size at the time
+// of writing. This value is subject to tuning in real environment as we have
+// more data available.
 var MaxIntentsPerCleanupBatch = settings.RegisterIntSetting(
 	"kv.gc.intent_cleanup_batch_size",
 	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
 	5000,
-	func(batchSize int64) error {
-		if batchSize < 0 {
-			return errors.New("gc intent cleanup batch size must be non negative")
-		}
-		return nil
-	},
+	settings.NonNegativeInt,
 )
 
-// MaxIntentKeyBytesPerCleanupBatch is maximum number of intent bytes GC will try to
-// send as a single batch to intent resolution. This number is approximate and
-// only includes size of the intent keys.
-// Default value is conservative limit to prevent pending intent key sizes from
-// ballooning.
+// MaxIntentKeyBytesPerCleanupBatch is the maximum intent bytes that GC will try
+// to send as a single batch to intent resolution. This number is approximate
+// and only includes size of the intent keys.
+//
+// The setting is also used by foreground requests like QueryResolvedTimestamp
+// that do not need to resolve intents synchronously when they encounter them,
+// but do want to perform best-effort asynchronous intent resolution. The
+// setting dictates how many intents these requests will collect at a time.
+//
+// The default value is a conservative limit to prevent pending intent key sizes
+// from ballooning.
 var MaxIntentKeyBytesPerCleanupBatch = settings.RegisterIntSetting(
 	"kv.gc.intent_cleanup_batch_byte_size",
 	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
 	1e6,
-	func(batchSize int64) error {
-		if batchSize < 0 {
-			return errors.New("gc intent cleanup batch size must be non negative")
-		}
-		return nil
-	},
+	settings.NonNegativeInt,
 )
 
 // CalculateThreshold calculates the GC threshold given the policy and the

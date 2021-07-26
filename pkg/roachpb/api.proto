@@ -1731,6 +1731,56 @@ message MigrateResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// QueryResolvedTimestampRequest is the argument to the QueryResolvedTimestamp()
+// method. It requests a resolved timestamp for the key span it is issued over.
+//
+// A resolved timestamp for a key span is a timestamp at or below which all
+// future reads within the span are guaranteed to produce the same results, i.e.
+// at which MVCC history has become immutable. The most up-to-date such bound
+// can be computed for a key span contained in a single range by taking the
+// minimum of the leaseholder's closed timestamp and the timestamp preceding the
+// earliest intent present on the range that overlaps with the key span of
+// interest. This optimum timestamp is nondecreasing over time, since the closed
+// timestamp will not regress and since it also prevents intents at lower
+// timestamps from being created. Follower replicas can also provide a resolved
+// timestamp, though it may not be the most recent one due to replication delay.
+// However, a given follower replica will similarly produce a nondecreasing
+// sequence of resolved timestamps.
+//
+// QueryResolvedTimestampRequest returns a resolved timestamp for the input key
+// span by returning the minimum of all replicas contacted in order to cover the
+// key span. This means that repeated invocations of this operation will be
+// guaranteed nondecreasing only if routed to the same replicas.
+//
+// A CONSISTENT read at or below a key span's resolved timestamp will never
+// block on replication or on conflicting transactions. However, as can be
+// inferred from the previous paragraph, for this to be guaranteed, the read
+// must be issued to the same replica or set of replicas (for multi-range reads)
+// that were consulted when computing the key span's resolved timestamp.
+//
+// A resolved timestamp for a key span is a sibling concept a resolved timestamp
+// for a rangefeed, which is defined in:
+//   pkg/kv/kvserver/rangefeed/resolved_timestamp.go
+// Whereas a resolved timestamp for a rangefeed refers to a timestamp below
+// which no future updates will be published on the rangefeed, a resolved
+// timestamp for a key span refers to a timestamp below which no future state
+// modifications that could change the result of read requests will be made.
+// Both concepts rely on some notion of immutability, but the former imparts
+// this property on a stream of events while the latter imparts this property
+// on materialized state.
+message QueryResolvedTimestampRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// QueryResolvedTimestampResponse is the response to a QueryResolvedTimestampRequest.
+message QueryResolvedTimestampResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // ResolvedTS is the resolved timestamp of the key span.
+  util.hlc.Timestamp resolved_ts = 2 [
+    (gogoproto.nullable) = false, (gogoproto.customname) = "ResolvedTS"];
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -1781,6 +1831,7 @@ message RequestUnion {
     RangeStatsRequest range_stats = 44;
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
     MigrateRequest migrate = 50;
+    QueryResolvedTimestampRequest query_resolved_timestamp = 51;
   }
   reserved 8, 15, 23, 25, 27, 31, 34;
 }
@@ -1831,6 +1882,7 @@ message ResponseUnion {
     RangeStatsResponse range_stats = 44;
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
     MigrateResponse migrate = 50;
+    QueryResolvedTimestampResponse query_resolved_timestamp = 51;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34;
 }

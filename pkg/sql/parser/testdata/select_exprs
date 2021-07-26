@@ -1719,10 +1719,10 @@ SELECT 1 OPERATOR(<<) 2, 1 OPERATOR(<<) 2 -- identifiers removed
 parse
 SELECT OPERATOR(+) 1, OPERATOR(-) 1, OPERATOR(~) 1, OPERATOR(|/) 1, OPERATOR(||/) 1
 ----
-SELECT 1, -1, OPERATOR(~)1, OPERATOR(|/)1, OPERATOR(||/)1 -- normalized!
-SELECT (1), (-1), (OPERATOR(~)(1)), (OPERATOR(|/)(1)), (OPERATOR(||/)(1)) -- fully parenthesized
-SELECT _, _, OPERATOR(~)_, OPERATOR(|/)_, OPERATOR(||/)_ -- literals removed
-SELECT 1, -1, OPERATOR(~)1, OPERATOR(|/)1, OPERATOR(||/)1 -- identifiers removed
+SELECT OPERATOR(+)1, OPERATOR(-)(1), OPERATOR(~)1, OPERATOR(|/)1, OPERATOR(||/)1 -- normalized!
+SELECT (OPERATOR(+)(1)), (OPERATOR(-)((1))), (OPERATOR(~)(1)), (OPERATOR(|/)(1)), (OPERATOR(||/)(1)) -- fully parenthesized
+SELECT OPERATOR(+)_, OPERATOR(-)(_), OPERATOR(~)_, OPERATOR(|/)_, OPERATOR(||/)_ -- literals removed
+SELECT OPERATOR(+)1, OPERATOR(-)(1), OPERATOR(~)1, OPERATOR(|/)1, OPERATOR(||/)1 -- identifiers removed
 
 parse
 SELECT OPERATOR ( ~ ) 1 COLLATE ident AS ILIKE FROM ident

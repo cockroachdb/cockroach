@@ -87,6 +87,9 @@ func (expr *UnaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 
 	switch expr.Operator.Symbol {
 	case UnaryMinus:
+		if expr.Operator.IsExplicitOperator {
+			return expr
+		}
 		// -0 -> 0 (except for float which has negative zero)
 		if val.ResolvedType().Family() != types.FloatFamily && v.isNumericZero(val) {
 			return val

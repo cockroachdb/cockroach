@@ -1322,6 +1322,7 @@ const (
 	UnaryComplement
 	UnarySqrt
 	UnaryCbrt
+	UnaryPlus
 
 	NumUnaryOperatorSymbols
 )
@@ -1330,6 +1331,7 @@ var _ = NumUnaryOperatorSymbols
 
 var unaryOpName = [...]string{
 	UnaryMinus:      "-",
+	UnaryPlus:       "+",
 	UnaryComplement: "~",
 	UnarySqrt:       "|/",
 	UnaryCbrt:       "||/",
