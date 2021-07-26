@@ -18,7 +18,7 @@ statement ok
 CREATE TABLE c1 (
   a STRING COLLATE en_u_ks_level1 PRIMARY KEY,
   b STRING COLLATE en_u_ks_level1
-) INTERLEAVE IN PARENT p (a)
+)
 
 statement ok
 INSERT INTO c1 VALUES ('A' COLLATE en_u_ks_level1, 'apple' COLLATE en_u_ks_level1)
@@ -54,7 +54,7 @@ CREATE TABLE c2 (
   a STRING COLLATE en_u_ks_level1 PRIMARY KEY,
   b STRING COLLATE en_u_ks_level1,
   CONSTRAINT fk_p FOREIGN KEY (a) REFERENCES p
-) INTERLEAVE IN PARENT p (a)
+)
 
 statement ok
 INSERT INTO c2 VALUES ('A' COLLATE en_u_ks_level1, 'apple' COLLATE en_u_ks_level1)
