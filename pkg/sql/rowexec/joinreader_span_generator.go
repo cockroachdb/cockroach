@@ -105,9 +105,6 @@ func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool 
 func (g *defaultSpanGenerator) generateSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
-	// Memory accounting.
-	beforeSize := g.memUsage()
-
 	// This loop gets optimized to a runtime.mapclear call.
 	for k := range g.keyToInputRowIndices {
 		delete(g.keyToInputRowIndices, k)
@@ -140,7 +137,7 @@ func (g *defaultSpanGenerator) generateSpans(
 
 	// Memory accounting.
 	afterSize := g.memUsage()
-	if err := g.memAcc.Resize(ctx, beforeSize, afterSize); err != nil {
+	if err := g.memAcc.ResizeTo(ctx, afterSize); err != nil {
 		return nil, err
 	}
 

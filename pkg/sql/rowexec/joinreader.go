@@ -629,6 +629,14 @@ func (jr *joinReader) readInput() (
 	}
 
 	sizeBefore := jr.memUsage()
+	// Make sure we're accounting for, at least, the batch size in bytes we're
+	// expecting to read in the loop.
+	if sizeBefore < jr.batchSizeBytes {
+		if err := jr.memAcc.ResizeTo(jr.Ctx, jr.batchSizeBytes); err != nil {
+			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
+		}
+	}
 
 	// Read the next batch of input rows.
 	for jr.curBatchSizeBytes < jr.batchSizeBytes {
@@ -641,7 +649,7 @@ func (jr *joinReader) readInput() (
 
 			// Perform memory accounting.
 			sizeAfter := jr.memUsage()
-			if err := jr.memAcc.Resize(jr.Ctx, sizeBefore, sizeAfter); err != nil {
+			if err := jr.memAcc.ResizeTo(jr.Ctx, sizeAfter); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, nil, meta
 			}
@@ -664,7 +672,7 @@ func (jr *joinReader) readInput() (
 
 	// Perform memory accounting.
 	sizeAfter := jr.memUsage()
-	if err := jr.memAcc.Resize(jr.Ctx, sizeBefore, sizeAfter); err != nil {
+	if err := jr.memAcc.ResizeTo(jr.Ctx, sizeAfter); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}

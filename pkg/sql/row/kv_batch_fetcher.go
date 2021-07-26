@@ -87,12 +87,12 @@ type txnKVFetcher struct {
 	fetchEnd bool
 	batchIdx int
 
-	// requestSpans contains the spans that were requested in the last request,
-	// and is one to one with responses. This field is kept separately from spans
-	// so that the fetcher can keep track of which response was produced for each
-	// input span.
-	requestSpans roachpb.Spans
-	responses    []roachpb.ResponseUnion
+	// getRequestKeys contains the keys of the GetRequests that were sent in the
+	// last request, and is one to one with the responses that have GetResponses.
+	// This field is kept separately from spans so spans can be quickly reused
+	// to create resume spans.
+	getRequestKeys []roachpb.Key
+	responses      []roachpb.ResponseUnion
 
 	remainingBatches [][]byte
 	mon              *mon.BytesMonitor
@@ -356,6 +356,11 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		req   roachpb.GetRequest
 		union roachpb.RequestUnion_Get
 	}, nGets)
+	if cap(f.getRequestKeys) < nGets {
+		f.getRequestKeys = make([]roachpb.Key, nGets)
+	} else {
+		f.getRequestKeys = f.getRequestKeys[:nGets]
+	}
 
 	// curGet is incremented each time we fill in a GetRequest.
 	curGet := 0
@@ -364,19 +369,21 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			req   roachpb.ReverseScanRequest
 			union roachpb.RequestUnion_ReverseScan
 		}, len(f.spans)-nGets)
-		for i := range f.spans {
-			if f.spans[i].EndKey == nil {
+		for i, span := range f.spans {
+			f.spans[i] = roachpb.Span{}
+			if span.EndKey == nil {
 				// A span without an EndKey indicates that the caller is requesting a
 				// single key fetch, which can be served using a GetRequest.
-				gets[curGet].req.Key = f.spans[i].Key
+				gets[curGet].req.Key = span.Key
 				gets[curGet].req.KeyLocking = keyLocking
 				gets[curGet].union.Get = &gets[curGet].req
 				ba.Requests[i].Value = &gets[curGet].union
+				f.getRequestKeys[curGet] = span.Key
 				curGet++
 				continue
 			}
 			curScan := i - curGet
-			scans[curScan].req.SetSpan(f.spans[i])
+			scans[curScan].req.SetSpan(span)
 			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
 			scans[curScan].req.KeyLocking = keyLocking
 			scans[curScan].union.ReverseScan = &scans[curScan].req
@@ -387,31 +394,27 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			req   roachpb.ScanRequest
 			union roachpb.RequestUnion_Scan
 		}, len(f.spans)-nGets)
-		for i := range f.spans {
-			if f.spans[i].EndKey == nil {
+		for i, span := range f.spans {
+			f.spans[i] = roachpb.Span{}
+			if span.EndKey == nil {
 				// A span without an EndKey indicates that the caller is requesting a
 				// single key fetch, which can be served using a GetRequest.
-				gets[curGet].req.Key = f.spans[i].Key
+				gets[curGet].req.Key = span.Key
 				gets[curGet].req.KeyLocking = keyLocking
 				gets[curGet].union.Get = &gets[curGet].req
 				ba.Requests[i].Value = &gets[curGet].union
+				f.getRequestKeys[curGet] = span.Key
 				curGet++
 				continue
 			}
 			curScan := i - curGet
-			scans[curScan].req.SetSpan(f.spans[i])
+			scans[curScan].req.SetSpan(span)
 			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
 			scans[curScan].req.KeyLocking = keyLocking
 			scans[curScan].union.Scan = &scans[curScan].req
 			ba.Requests[i].Value = &scans[curScan].union
 		}
 	}
-	if cap(f.requestSpans) < len(f.spans) {
-		f.requestSpans = make(roachpb.Spans, len(f.spans))
-	} else {
-		f.requestSpans = f.requestSpans[:len(f.spans)]
-	}
-	copy(f.requestSpans, f.spans)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		var buf bytes.Buffer
@@ -554,9 +557,6 @@ func (f *txnKVFetcher) nextBatch(
 		reply := f.responses[0].GetInner()
 		f.responses[0] = roachpb.ResponseUnion{}
 		f.responses = f.responses[1:]
-		origSpan := f.requestSpans[0]
-		f.requestSpans[0] = roachpb.Span{}
-		f.requestSpans = f.requestSpans[1:]
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
 			if len(t.BatchResponses) > 0 {
@@ -569,6 +569,9 @@ func (f *txnKVFetcher) nextBatch(
 			}
 			return true, t.Rows, batchResp, nil
 		case *roachpb.GetResponse:
+			origKey := f.getRequestKeys[0]
+			f.getRequestKeys[0] = roachpb.Key{}
+			f.getRequestKeys = f.getRequestKeys[1:]
 			if t.IntentValue != nil {
 				return false, nil, nil, errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
 			}
@@ -577,7 +580,7 @@ func (f *txnKVFetcher) nextBatch(
 				// one.
 				continue
 			}
-			return true, []roachpb.KeyValue{{Key: origSpan.Key, Value: *t.Value}}, nil, nil
+			return true, []roachpb.KeyValue{{Key: origKey, Value: *t.Value}}, nil, nil
 		}
 	}
 	// No more responses from the last BatchRequest. If we are out of keys, we can
