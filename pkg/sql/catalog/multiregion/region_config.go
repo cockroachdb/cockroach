@@ -34,6 +34,7 @@ type RegionConfig struct {
 	transitioningRegions descpb.RegionNames
 	primaryRegion        descpb.RegionName
 	regionEnumID         descpb.ID
+	placement            descpb.DataPlacement
 }
 
 // SurvivalGoal returns the survival goal configured on the RegionConfig.
@@ -77,6 +78,11 @@ func (r *RegionConfig) RegionEnumID() descpb.ID {
 	return r.regionEnumID
 }
 
+// Placement returns the data placement strategy.
+func (r *RegionConfig) Placement() descpb.DataPlacement {
+	return r.placement
+}
+
 // MakeRegionConfigOption is an option for MakeRegionConfig
 type MakeRegionConfigOption func(r *RegionConfig)
 
@@ -94,6 +100,7 @@ func MakeRegionConfig(
 	primaryRegion descpb.RegionName,
 	survivalGoal descpb.SurvivalGoal,
 	regionEnumID descpb.ID,
+	placement descpb.DataPlacement,
 	opts ...MakeRegionConfigOption,
 ) RegionConfig {
 	ret := RegionConfig{
@@ -101,6 +108,7 @@ func MakeRegionConfig(
 		primaryRegion: primaryRegion,
 		survivalGoal:  survivalGoal,
 		regionEnumID:  regionEnumID,
+		placement:     placement,
 	}
 	for _, opt := range opts {
 		opt(&ret)
@@ -134,6 +142,11 @@ func ValidateRegionConfig(config RegionConfig) error {
 	}
 	if len(config.regions) == 0 {
 		return errors.AssertionFailedf("expected > 0 number of regions in the region config")
+	}
+	if config.placement == descpb.DataPlacement_RESTRICTED &&
+		config.survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		return errors.AssertionFailedf(
+			"cannot have a database with restricted placement that is also region survivable")
 	}
 	return canSatisfySurvivalGoal(config.survivalGoal, len(config.regions))
 }
