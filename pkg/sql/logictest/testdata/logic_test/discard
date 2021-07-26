@@ -12,7 +12,7 @@ DISCARD ALL
 query T
 SHOW SEARCH_PATH
 ----
-$user,public
+"$user", public
 
 query T
 SET timezone = 'Europe/Amsterdam'; SHOW TIMEZONE
