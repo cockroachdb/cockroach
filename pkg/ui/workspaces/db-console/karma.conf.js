@@ -13,7 +13,10 @@
 
 "use strict";
 
-const webpackConfig = require("./webpack.app")({dist: "ccl"}, {mode: "development"});
+const webpackConfig = require("./webpack.app")(
+  { dist: "ccl" },
+  { mode: "development" },
+);
 
 module.exports = function(config) {
   config.set({
@@ -43,10 +46,7 @@ module.exports = function(config) {
     concurrency: Infinity,
 
     // list of files / patterns to load in the browser
-    files: [
-      "src/polyfills.ts",
-      "tests-loader.js",
-    ],
+    files: ["src/polyfills.ts", "tests-loader.js"],
 
     // frameworks to use
     // available frameworks: https://npmjs.org/browse/keyword/karma-adapter
@@ -68,7 +68,7 @@ module.exports = function(config) {
     // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
     preprocessors: {
       "src/polyfills.ts": ["webpack"],
-      "tests-loader.js": ["webpack", "sourcemap"],
+      "tests-loader.js": ["webpack"],
     },
 
     // test results reporter to use
@@ -82,7 +82,7 @@ module.exports = function(config) {
 
     // https://github.com/airbnb/enzyme/blob/master/docs/guides/webpack.md
     webpack: {
-      devtool: "eval-cheap-source-map",
+      // devtool: "eval-cheap-source-map",
       mode: "development",
       module: webpackConfig.module,
       resolve: webpackConfig.resolve,

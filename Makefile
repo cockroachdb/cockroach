@@ -1360,7 +1360,7 @@ pkg/ui/workspaces/db-console/dist/%.ccl.dll.js pkg/ui/workspaces/db-console/%.cc
 
 .PHONY: ui-test
 ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start
+	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start --source-map=false
 	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn ci
 
 .PHONY: ui-test-watch
