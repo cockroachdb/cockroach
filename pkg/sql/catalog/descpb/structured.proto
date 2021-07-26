@@ -1200,6 +1200,14 @@ enum SurvivalGoal {
   REGION_FAILURE = 1;
 }
 
+// DataPlacement is the data placement strategy for a database.
+enum DataPlacement {
+  // Default placement - use non-voters.
+  DEFAULT = 0;
+  // Restricted placement - contain data strictly inside assigned region.
+  RESTRICTED = 1;
+}
+
 // DatabaseDescriptor represents a namespace (aka database) and is stored
 // in a structured metadata key. The DatabaseDescriptor has a globally-unique ID
 // shared with other Descriptors.
@@ -1251,6 +1259,10 @@ message DatabaseDescriptor {
     // region enum for a multi-region database. If the database is not a
     // multi-region database then this field is 0 and no such region enum exists.
     optional uint32 region_enum_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "RegionEnumID", (gogoproto.casttype) = "ID"];
+
+    // DataPlacement dictates whether or not to use a restricted data placement
+    // policy.
+    optional DataPlacement placement = 5 [(gogoproto.nullable) = false];
   }
   // RegionConfig is only set if multi-region controls are set on the database.
   optional RegionConfig region_config = 10;
