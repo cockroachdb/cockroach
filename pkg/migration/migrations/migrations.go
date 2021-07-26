@@ -82,6 +82,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.SQLInstancesTable),
 		sqlInstancesTableMigration,
 	),
+	migration.NewTenantMigration(
+		"validates no interleaved tables exist",
+		toCV(clusterversion.EnsureNoInterleavedTables),
+		interleavedTablesRemovedMigration,
+	),
 }
 
 func init() {
