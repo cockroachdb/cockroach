@@ -670,6 +670,10 @@ message EndTxnRequest {
   //
   // WARNING: this flag was introduced in the v20.2 release. v20.1 nodes may not
   // set this properly so it should not be relied upon for correctness.
+  //
+  // TODO(erikgrinaker): This flag is no longer used in v21.2 as we now always
+  // heartbeat the txn record, but we still need to set it when interacting with
+  // v21.1 nodes. It should be removed in v22.1.
   bool txn_heartbeating = 10;
   reserved 7, 8;
 }

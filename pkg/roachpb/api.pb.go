@@ -1745,6 +1745,10 @@ type EndTxnRequest struct {
 	//
 	// WARNING: this flag was introduced in the v20.2 release. v20.1 nodes may not
 	// set this properly so it should not be relied upon for correctness.
+	//
+	// TODO(erikgrinaker): This flag is no longer used in v21.2 as we now always
+	// heartbeat the txn record, but we still need to set it when interacting with
+	// v21.1 nodes. It should be removed in v22.1.
 	TxnHeartbeating bool `protobuf:"varint,10,opt,name=txn_heartbeating,json=txnHeartbeating,proto3" json:"txn_heartbeating,omitempty"`
 }
 
