@@ -4881,6 +4881,5 @@ CREATE TABLE crdb_internal.default_privileges (
 				}
 				return nil
 			})
-		return nil
 	},
 }
