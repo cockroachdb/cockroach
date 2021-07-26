@@ -289,6 +289,12 @@ const (
 	// type.
 	AutoSpanConfigReconciliationJob
 
+	// PreventNewInterleavedTables interleaved table creation is completely
+	// blocked on this version.
+	PreventNewInterleavedTables
+	// EnsureNoInterleavedTables interleaved tables no longer exist in
+	// this version.
+	EnsureNoInterleavedTables
 	// Step (1): Add new versions here.
 )
 
@@ -479,6 +485,14 @@ var versionsSingleton = keyedVersions{
 	}, {
 		Key:     AutoSpanConfigReconciliationJob,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 136},
+	},
+	{
+		Key:     PreventNewInterleavedTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 138},
+	},
+	{
+		Key:     EnsureNoInterleavedTables,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 140},
 	},
 
 	// Step (2): Add new versions here.

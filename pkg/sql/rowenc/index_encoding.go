@@ -1702,53 +1702,6 @@ func maxKeyTokens(index catalog.Index, containsNull bool) int {
 	return 3*nTables + nKeyCols - 1
 }
 
-// AdjustStartKeyForInterleave adjusts the start key to skip unnecessary
-// interleaved sections.
-//
-// For example, if child is interleaved into parent, a typical parent
-// span might look like
-//    /1 - /3
-// and a typical child span might look like
-//    /1/#/2 - /2/#/5
-// Suppose the parent span is
-//    /1/#/2 - /3
-// where the start key is a child's index key. Notice that the first parent
-// key read actually starts at /2 since all the parent keys with the prefix
-// /1 come before the child key /1/#/2 (and is not read in the span).
-// We can thus push forward the start key from /1/#/2 to /2. If the start key
-// was /1, we cannot push this forwards since that is the first key we want
-// to read.
-func AdjustStartKeyForInterleave(
-	codec keys.SQLCodec, index catalog.Index, start roachpb.Key,
-) (roachpb.Key, error) {
-	// Remove the tenant prefix before decomposing.
-	strippedStart, err := codec.StripTenantPrefix(start)
-	if err != nil {
-		return roachpb.Key{}, err
-	}
-
-	keyTokens, containsNull, err := encoding.DecomposeKeyTokens(strippedStart)
-	if err != nil {
-		return roachpb.Key{}, err
-	}
-	nIndexTokens := maxKeyTokens(index, containsNull)
-
-	// This is either the index's own key or one of its ancestor's key.
-	// Nothing to do.
-	if len(keyTokens) <= nIndexTokens {
-		return start, nil
-	}
-
-	// len(keyTokens) > nIndexTokens, so this must be a child key.
-	// Transform /1/#/2 --> /2.
-	firstNTokenLen := 0
-	for _, token := range keyTokens[:nIndexTokens] {
-		firstNTokenLen += len(token)
-	}
-
-	return start[:firstNTokenLen].PrefixEnd(), nil
-}
-
 // AdjustEndKeyForInterleave returns an exclusive end key. It does two things:
 //    - determines the end key based on the prior: inclusive vs exclusive
 //    - adjusts the end key to skip unnecessary interleaved sections
