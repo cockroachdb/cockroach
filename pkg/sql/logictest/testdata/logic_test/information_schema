@@ -4322,7 +4322,7 @@ require_explicit_primary_keys                          off
 results_buffer_size                                    16384
 row_security                                           off
 save_tables_prefix                                     ·
-search_path                                            $user,public
+search_path                                            "$user", public
 serial_normalization                                   rowid
 server_encoding                                        UTF8
 server_version                                         13.0.0
