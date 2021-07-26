@@ -1170,3 +1170,12 @@ statement ok
 CREATE TYPE greeting AS ENUM ('hello');
 CREATE TABLE greeting_table (x greeting);
 EXPLAIN (VEC) SELECT * FROM greeting_table;
+
+# Regression test for ignoring the escaping in the LIKE pattern (#68040).
+statement ok
+CREATE TABLE t68040 (c) AS SELECT 'string with \ backslash'
+
+query T
+SELECT c FROM t68040 WHERE c LIKE '%\\%'
+----
+string with \ backslash
