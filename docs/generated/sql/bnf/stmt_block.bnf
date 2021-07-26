@@ -1005,6 +1005,7 @@ unreserved_keyword ::=
 	| 'PAUSE'
 	| 'PAUSED'
 	| 'PHYSICAL'
+	| 'PLACEMENT'
 	| 'PLAN'
 	| 'PLANS'
 	| 'POINTM'
@@ -1042,6 +1043,7 @@ unreserved_keyword ::=
 	| 'RESET'
 	| 'RESTORE'
 	| 'RESTRICT'
+	| 'RESTRICTED'
 	| 'RESUME'
 	| 'RETRY'
 	| 'REVISION_HISTORY'
@@ -1338,8 +1340,8 @@ for_schedules_clause ::=
 	| 'FOR' 'SCHEDULE' a_expr
 
 create_database_stmt ::=
-	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
-	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
+	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause
 
 create_index_stmt ::=
 	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
@@ -1883,6 +1885,10 @@ opt_survival_goal_clause ::=
 	survival_goal_clause
 	| 
 
+opt_placement_clause ::=
+	placement_clause
+	| 
+
 opt_unique ::=
 	'UNIQUE'
 	| 
@@ -2392,6 +2398,10 @@ region_or_regions ::=
 
 region_name_list ::=
 	name_list
+
+placement_clause ::=
+	'PLACEMENT' 'RESTRICTED'
+	| 'PLACEMENT' 'DEFAULT'
 
 opt_name ::=
 	name
