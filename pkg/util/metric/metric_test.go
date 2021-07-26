@@ -13,6 +13,7 @@ package metric
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"reflect"
 	"sync"
 	"testing"
@@ -69,6 +70,17 @@ func TestGaugeFloat64(t *testing.T) {
 		t.Fatalf("unexpected value: %f", v)
 	}
 	testMarshal(t, g, "10.4")
+
+	var wg sync.WaitGroup
+	for i := int64(0); i < 10; i++ {
+		wg.Add(2)
+		go func(i int64) { g.Inc(float64(i)); wg.Done() }(i)
+		go func(i int64) { g.Dec(float64(i)); wg.Done() }(i)
+	}
+	wg.Wait()
+	if v := g.Value(); math.Abs(v-10.4) > 0.001 {
+		t.Fatalf("unexpected value: %g", v)
+	}
 }
 
 func TestRate(t *testing.T) {
