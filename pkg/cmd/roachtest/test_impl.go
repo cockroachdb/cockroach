@@ -69,8 +69,9 @@ type testImpl struct {
 
 	mu struct {
 		syncutil.RWMutex
-		done   bool
-		failed bool
+		done    bool
+		failed  bool
+		timeout bool // if failed == true, this indicates whether the test timed out
 		// cancel, if set, is called from the t.Fatal() family of functions when the
 		// test is being marked as failed (i.e. when the failed field above is also
 		// set). This is used to cancel the context passed to t.spec.Run(), so async
@@ -94,6 +95,18 @@ type testImpl struct {
 	//
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
+}
+
+func (t *testImpl) timedOut() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.mu.timeout
+}
+
+func (t *testImpl) setTimedOut() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.timeout = true
 }
 
 // BuildVersion exposes the build version of the cluster
