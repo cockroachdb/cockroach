@@ -3522,38 +3522,38 @@ INSERT INTO wxyz VALUES
 query IIIII rowsort
 SELECT *, rank() OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
 ----
-3  10  1  1  1
 1  10  1  1  1
+3  10  1  1  1
 
 query IIIII rowsort
 SELECT *, dense_rank() OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
 ----
-3  10  1  1  1
 1  10  1  1  1
+3  10  1  1  1
 
 query IIIIR rowsort
 SELECT *, avg(w) OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
 ----
-3  10  1  1  2
 1  10  1  1  2
+3  10  1  1  2
 
 query IIIII rowsort
 SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
 ----
-3  10  1  1  1
 1  10  1  1  1
+3  10  1  1  1
 
 query IIIII rowsort
 SELECT *, dense_rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
 ----
-3  10  1  1  1
 1  10  1  1  1
+3  10  1  1  1
 
 query IIIIR rowsort
 SELECT *, avg(w) OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
 ----
-3  10  1  1  3
 1  10  1  1  1
+3  10  1  1  3
 
 query IIIII rowsort
 SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w, y LIMIT 2

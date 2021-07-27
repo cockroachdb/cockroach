@@ -59,12 +59,12 @@ b 1
 query TI
 SELECT * FROM (SELECT * FROM foo ORDER BY x) WITH ORDINALITY ORDER BY x DESC LIMIT 1
 ----
-b 2
+b  2
 
 query TI
 SELECT * FROM (SELECT * FROM foo ORDER BY x) WITH ORDINALITY ORDER BY ordinality DESC LIMIT 1
 ----
-b 2
+b  2
 
 statement ok
 INSERT INTO foo(x) VALUES ('c')

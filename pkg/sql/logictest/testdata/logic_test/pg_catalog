@@ -449,8 +449,8 @@ SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, datt
 FROM pg_catalog.pg_database
 ORDER BY oid LIMIT 1
 ----
-oid  datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-1    system         -1            0              NULL          NULL        0              NULL
+oid  datname  datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
+1    system   -1            0              NULL          NULL        0              NULL
 
 user root
 
