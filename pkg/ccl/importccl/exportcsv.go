@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -85,16 +86,18 @@ func (c *csvExporter) Len() int {
 	return c.buf.Len()
 }
 
-func (c *csvExporter) FileName(spec execinfrapb.CSVWriterSpec, part string) string {
+func csvFileName(spec execinfrapb.CSVWriterSpec, part string) string {
 	pattern := exportFilePatternDefault
 	if spec.NamePattern != "" {
 		pattern = spec.NamePattern
 	}
 
 	fileName := strings.Replace(pattern, exportFilePatternPart, part, -1)
-	// TODO: add suffix based on compressor type
-	if c.compressor != nil {
+
+	switch spec.CompressionCodec {
+	case execinfrapb.FileCompression_Gzip:
 		fileName += ".gz"
+	default:
 	}
 	return fileName
 }
@@ -154,6 +157,7 @@ type csvWriter struct {
 	input       execinfra.RowSource
 	out         execinfra.ProcOutputHelper
 	output      execinfra.RowReceiver
+	ch          chan [][]string
 }
 
 var _ execinfra.Processor = &csvWriter{}
@@ -174,21 +178,27 @@ func (sp *csvWriter) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "csvWriter")
 	defer span.Finish()
 
-	err := sp.doRun(ctx)
+	sp.ch = make(chan [][]string)
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(sp.writeFiles)
+	grp.GoCtx(sp.stringify)
+	err := grp.Wait()
 
 	// TODO(dt): pick up tracing info in trailing meta
 	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 }
 
-func (sp *csvWriter) doRun(ctx context.Context) error {
+// stringify converts incoming rows from sql datums to the strings that will be
+// in each cell of a csv, sending produced [][]string batches to sp.ch.
+func (sp *csvWriter) stringify(ctx context.Context) error {
+	defer close(sp.ch)
+
 	typs := sp.input.OutputTypes()
 	sp.input.Start(ctx)
 	input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 
 	alloc := &rowenc.DatumAlloc{}
-
-	writer := newCSVExporter(sp.spec)
 
 	var nullsAs string
 	if sp.spec.Options.NullEncoding != nil {
@@ -197,23 +207,24 @@ func (sp *csvWriter) doRun(ctx context.Context) error {
 	f := tree.NewFmtCtx(tree.FmtExport)
 	defer f.Close()
 
-	csvRow := make([]string, len(typs))
+	// Handing batches of 1k rows from the string serializer to the writer should
+	// minimize the chan overhead, but we may want to lower more closely comply
+	// with small requested file row/byte sizes.
+	batchSize := 1000
+	if sp.spec.ChunkRows > 0 && sp.spec.ChunkRows < int64(batchSize) {
+		batchSize = int(sp.spec.ChunkRows)
+	} else if sp.spec.ChunkSize > 0 && sp.spec.ChunkSize < 1<<20 {
+		batchSize = 10
+	}
 
-	chunk := 0
+	before := timeutil.Now()
+
 	done := false
 	for {
-		var rows int64
-		writer.ResetBuffer()
-		beforeAccumulate := timeutil.Now()
+		// TODO(dt): pool these.
+		batch := make([][]string, 0, batchSize)
+
 		for {
-			// If the bytes.Buffer sink exceeds the target size of a CSV file, we
-			// flush before exporting any additional rows.
-			if int64(writer.buf.Len()) >= sp.spec.ChunkSize {
-				break
-			}
-			if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
-				break
-			}
 			row, err := input.NextRow()
 			if err != nil {
 				return err
@@ -222,12 +233,12 @@ func (sp *csvWriter) doRun(ctx context.Context) error {
 				done = true
 				break
 			}
-			rows++
+			strs := make([]string, len(typs))
 
 			for i, ed := range row {
 				if ed.IsNull() {
 					if sp.spec.Options.NullEncoding != nil {
-						csvRow[i] = nullsAs
+						strs[i] = nullsAs
 						continue
 					} else {
 						return errors.New("NULL value encountered during EXPORT, " +
@@ -238,29 +249,97 @@ func (sp *csvWriter) doRun(ctx context.Context) error {
 					return err
 				}
 				ed.Datum.Format(f)
-				csvRow[i] = f.String()
+				strs[i] = f.String()
 				f.Reset()
 			}
-			if err := writer.Write(csvRow); err != nil {
-				return err
+			batch = append(batch, strs)
+
+			if len(batch) == batchSize {
+				break
 			}
 		}
-		if rows < 1 {
+
+		if len(batch) > 0 {
+			sp.ch <- batch
+			if log.V(1) {
+				now := timeutil.Now()
+				log.VEventf(ctx, 1, "accumulated %d rows in %02.fs", len(batch), now.Sub(before).Seconds())
+				before = now
+			}
+		}
+		if done {
 			break
 		}
+	}
+	return nil
+}
+
+// writeFiles reads batches of stringified rows off sp.ch and writes them to the
+// csv file, optionally compressing them as well.
+func (sp *csvWriter) writeFiles(ctx context.Context) error {
+	ctxDone := ctx.Done()
+	writer := newCSVExporter(sp.spec)
+
+	conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
+	if err != nil {
+		return err
+	}
+	es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
+	if err != nil {
+		return err
+	}
+	defer es.Close()
+
+	chunk := 0
+	for {
+		var rows int
+		writer.ResetBuffer()
+		beforeAccumulate := timeutil.Now()
+
+		for {
+			flush := false
+			select {
+			case <-ctxDone:
+				return ctx.Err()
+			case batch := <-sp.ch:
+				if batch == nil {
+					flush = true
+					break
+				}
+				for i := range batch {
+					if err := writer.Write(batch[i]); err != nil {
+						return err
+					}
+				}
+				rows += len(batch)
+				// If the bytes.Buffer sink exceeds the target size of a CSV file, we
+				// flush before exporting any additional rows.
+				if int64(writer.buf.Len()) >= sp.spec.ChunkSize {
+					flush = true
+				}
+				if sp.spec.ChunkRows > 0 && int64(rows) >= sp.spec.ChunkRows {
+					flush = true
+				}
+			}
+			if flush {
+				break
+			}
+		}
+
+		if rows == 0 {
+			break
+		}
+
 		if err := writer.Flush(); err != nil {
 			return errors.Wrap(err, "failed to flush csv writer")
 		}
 
-		conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
-		if err != nil {
-			return err
+		// Close writer to ensure buffer and any compression footer is flushed.
+		if err := writer.Close(); err != nil {
+			return errors.Wrapf(err, "failed to close exporting writer")
 		}
-		es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
-		if err != nil {
-			return err
-		}
-		defer es.Close()
+
+		size := writer.Len()
 
 		nodeID, err := sp.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(47970)
 		if err != nil {
@@ -269,21 +348,13 @@ func (sp *csvWriter) doRun(ctx context.Context) error {
 
 		part := fmt.Sprintf("n%d.%d", nodeID, chunk)
 		chunk++
-		filename := writer.FileName(sp.spec, part)
-		// Close writer to ensure buffer and any compression footer is flushed.
-		err = writer.Close()
-		if err != nil {
-			return errors.Wrapf(err, "failed to close exporting writer")
-		}
-
-		size := writer.Len()
-
+		filename := csvFileName(sp.spec, part)
 		beforeUpload := timeutil.Now()
-		log.VEventf(ctx, 1, "accumulated %d row / %db file in %02.fs", rows, size, beforeUpload.Sub(beforeAccumulate).Seconds())
+		log.VEventf(ctx, 1, "accumulated %d rows / %d bytes in %02.fs", rows, size, beforeUpload.Sub(beforeAccumulate).Seconds())
 		if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
 			return err
 		}
-		log.VEventf(ctx, 1, "uploaded %d row / %db file in %02.fs", rows, size, timeutil.Since(beforeUpload).Seconds())
+		log.VEventf(ctx, 1, "uploaded %d rows / %d bytes in %02.fs", rows, size, timeutil.Since(beforeUpload).Seconds())
 
 		res := rowenc.EncDatumRow{
 			rowenc.DatumToEncDatum(
@@ -309,9 +380,7 @@ func (sp *csvWriter) doRun(ctx context.Context) error {
 			// another error... so do we really need another one?
 			return errors.New("unexpected closure of consumer")
 		}
-		if done {
-			break
-		}
+		rows = 0
 	}
 
 	return nil
