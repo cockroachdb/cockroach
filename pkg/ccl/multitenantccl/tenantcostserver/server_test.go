@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"gopkg.in/yaml.v2"
 )
 
@@ -77,6 +78,7 @@ func TestDataDriven(t *testing.T) {
 					d.Fatalf(t, "failed to parse request yaml: %v", err)
 				}
 				req := roachpb.TokenBucketRequest{
+					TenantID: uint64(tenantID),
 					ConsumptionSinceLastRequest: roachpb.TokenBucketRequest_Consumption{
 						RU:               args.Consumption.RU,
 						ReadRequests:     args.Consumption.ReadReq,
@@ -86,9 +88,9 @@ func TestDataDriven(t *testing.T) {
 						SQLPodCPUSeconds: args.Consumption.SQLPodsCPUUsage,
 					},
 				}
-				_, err = tenantUsage.TokenBucketRequest(ctx, roachpb.MakeTenantID(uint64(tenantID)), &req)
-				if err != nil {
-					return fmt.Sprintf("error: %v", err)
+				res := tenantUsage.TokenBucketRequest(ctx, roachpb.MakeTenantID(uint64(tenantID)), &req)
+				if res.Error != (errors.EncodedError{}) {
+					return fmt.Sprintf("error: %v", errors.DecodeError(context.Background(), res.Error))
 				}
 				return ""
 

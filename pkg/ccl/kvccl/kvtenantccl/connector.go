@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -404,6 +405,10 @@ func (c *Connector) TokenBucket(
 			// Soft RPC error. Drop client and retry.
 			c.tryForgetClient(ctx, client)
 			continue
+		}
+		if resp.Error != (errorspb.EncodedError{}) {
+			// Hard logical error. Propagate.
+			return nil, errors.DecodeError(ctx, resp.Error)
 		}
 		return resp, nil
 	}
