@@ -308,6 +308,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("error: \"%s\"", private.ErrorOnDup)
 		}
 
+	case *TopKExpr:
+		if !f.HasFlags(ExprFmtHidePhysProps) && !t.Ordering.Any() {
+			tp.Childf("internal-ordering: %s", t.Ordering)
+			tp.Childf("limit: %d", t.Limit)
+		}
+
 	case *LimitExpr:
 		if !f.HasFlags(ExprFmtHidePhysProps) && !t.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", t.Ordering)
