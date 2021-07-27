@@ -41,14 +41,12 @@ func registerDjango(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
+		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		err = alterZoneConfigAndClusterSettings(
-			ctx, version, c, node[0], nil,
-		)
+		err = alterZoneConfigAndClusterSettings(ctx, version, c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
