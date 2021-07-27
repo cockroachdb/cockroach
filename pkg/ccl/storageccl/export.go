@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -180,8 +181,8 @@ func evalExport(
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
-		summary, resume, err := reader.ExportMVCCToSst(ctx, start, args.EndKey, args.StartTime,
-			h.Timestamp, exportAllRevisions, targetSize, maxSize, useTBI, destFile)
+		summary, resume, _, err := reader.ExportMVCCToSst(ctx, start, args.EndKey, args.StartTime,
+			h.Timestamp, hlc.Timestamp{}, exportAllRevisions, targetSize, maxSize, false, useTBI, destFile)
 		if err != nil {
 			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
 				err = errors.WithHintf(err,
