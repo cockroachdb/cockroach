@@ -31,7 +31,7 @@ func (l *stderrSink) attachHints(stacks []byte) []byte {
 }
 
 // output implements the logSink interface.
-func (l *stderrSink) output(_ bool, b []byte) error {
+func (l *stderrSink) output(b []byte, _ sinkOutputOptions) error {
 	_, err := OrigStderr.Write(b)
 	return err
 }
@@ -39,9 +39,4 @@ func (l *stderrSink) output(_ bool, b []byte) error {
 // exitCode implements the logSink interface.
 func (l *stderrSink) exitCode() exit.Code {
 	return exit.LoggingStderrUnavailable()
-}
-
-// emergencyOutput implements the logSink interface.
-func (l *stderrSink) emergencyOutput(b []byte) {
-	_, _ = OrigStderr.Write(b)
 }

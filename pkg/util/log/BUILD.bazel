@@ -1,9 +1,13 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+# gazelle:exclude mock_generated.go
 
 go_library(
     name = "log",
     srcs = [
         "ambient_context.go",
+        "buffer_sink.go",
         "channels.go",
         "clog.go",
         "doc.go",
@@ -127,6 +131,7 @@ go_test(
     size = "small",
     srcs = [
         "ambient_context_test.go",
+        "buffer_sink_test.go",
         "clog_test.go",
         "file_log_gc_test.go",
         "file_names_test.go",
@@ -146,6 +151,7 @@ go_test(
         "test_log_scope_test.go",
         "trace_client_test.go",
         "trace_test.go",
+        ":mock_logsink",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":log"],
@@ -170,6 +176,7 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_golang_mock//gomock",  # keep
         "@com_github_kr_pretty//:pretty",
         "@com_github_pmezard_go_difflib//difflib",
         "@com_github_stretchr_testify//assert",
@@ -191,4 +198,14 @@ genrule(
     exec_tools = [
         "//pkg/util/log/gen",
     ],
+)
+
+gomock(
+    name = "mock_logsink",
+    out = "mock_generated.go",
+    interfaces = ["logSink"],
+    library = ":log",
+    mock_names = {"logSink": "MockLogSink"},
+    package = "log",
+    source = "sinks.go",
 )

@@ -73,7 +73,7 @@ type httpSink struct {
 // The parent logger's outputMu is held during this operation: log
 // sinks must not recursively call into logging when implementing
 // this method.
-func (hs *httpSink) output(extraSync bool, b []byte) (err error) {
+func (hs *httpSink) output(b []byte, _ sinkOutputOptions) (err error) {
 	resp, err := hs.doRequest(hs, b)
 	if err != nil {
 		return err
@@ -85,16 +85,6 @@ func (hs *httpSink) output(extraSync bool, b []byte) (err error) {
 			Address:    hs.address}
 	}
 	return nil
-}
-
-// emergencyOutput attempts to emit some formatted bytes, and
-// ignores any errors.
-//
-// The parent logger's outputMu is held during this operation: log
-// sinks must not recursively call into logging when implementing
-// this method.
-func (hs *httpSink) emergencyOutput(b []byte) {
-	_, _ = hs.doRequest(hs, b)
 }
 
 func doPost(hs *httpSink, b []byte) (*http.Response, error) {

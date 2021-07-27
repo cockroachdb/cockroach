@@ -86,6 +86,7 @@ Configuration options shared across all sink types:
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
 | `auditable` | translated to tweaks to the other settings for this sink during validation. For example, it enables `exit-on-error` and changes the format of files from `crdb-v1` to `crdb-v1-count`. |
+| `buffering` | configures buffering for this log sink, or NONE to explicitly disable. See the [common buffering configuration](#buffering-config) section for details.  |
 
 
 
@@ -168,6 +169,7 @@ Configuration options shared across all sink types:
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
 | `auditable` | translated to tweaks to the other settings for this sink during validation. For example, it enables `exit-on-error` and changes the format of files from `crdb-v1` to `crdb-v1-count`. |
+| `buffering` | configures buffering for this log sink, or NONE to explicitly disable. See the [common buffering configuration](#buffering-config) section for details.  |
 
 
 
@@ -233,6 +235,7 @@ Configuration options shared across all sink types:
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
 | `auditable` | translated to tweaks to the other settings for this sink during validation. For example, it enables `exit-on-error` and changes the format of files from `crdb-v1` to `crdb-v1-count`. |
+| `buffering` | configures buffering for this log sink, or NONE to explicitly disable. See the [common buffering configuration](#buffering-config) section for details.  |
 
 
 
@@ -291,6 +294,7 @@ Configuration options shared across all sink types:
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
 | `auditable` | translated to tweaks to the other settings for this sink during validation. For example, it enables `exit-on-error` and changes the format of files from `crdb-v1` to `crdb-v1-count`. |
+| `buffering` | configures buffering for this log sink, or NONE to explicitly disable. See the [common buffering configuration](#buffering-config) section for details.  |
 
 
 
@@ -370,3 +374,36 @@ Likewise:
     channels: {INFO: all except ops,health}
 
 etc.
+
+
+
+<a name="buffering-config">
+
+## Common buffering configuration
+
+Buffering may be configured with the following fields. It may also be explicitly
+set to "NONE" to disable buffering. Example configuration:
+
+    file-defaults:
+       dir: logs
+       buffering:
+          max-staleness: 20s
+          flush-trigger-size: 25KB
+    sinks:
+       file-groups:
+          health:
+             channels: HEALTH
+             buffering:
+                max-staleness: 5s  # Override max-staleness for this sink.
+          ops:
+             channels: OPS
+             buffering: NONE  # Disable buffering for this sink.
+
+
+| Field | Description |
+|--|--|
+| `max-staleness` | the maximum time a log message will sit in the buffer before a flush is triggered. |
+| `flush-trigger-size` | the number of bytes that will trigger the buffer to flush. |
+| `max-in-flight` | the maximum number of buffered flushes before messages start being dropped. |
+
+

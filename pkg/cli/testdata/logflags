@@ -482,7 +482,8 @@ file-permissions: "0644",
 buffered-writes: true,
 filter: INFO,
 format: crdb-v2,
-redactable: true}},
+redactable: true,
+buffering: NONE}},
 <stderrEnabledWarningNoRedaction>}}
 
 # For servers, --logtostderr overrides the threshold and keeps
