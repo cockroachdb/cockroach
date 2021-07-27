@@ -268,6 +268,7 @@ type IndexID uint32
 //  - FORCE_INDEX=<index_name|index_id>
 //  - ASC / DESC
 //  - NO_INDEX_JOIN
+//  - NO_ZIGZAG_JOIN
 //  - IGNORE_FOREIGN_KEYS
 // It is used optionally after a table name in SELECT statements.
 type IndexFlags struct {
@@ -278,6 +279,8 @@ type IndexFlags struct {
 	Direction Direction
 	// NoIndexJoin cannot be specified together with an index.
 	NoIndexJoin bool
+	// NoZigzagJoin indicates we should not plan a zigzag join for this scan.
+	NoZigzagJoin bool
 	// IgnoreForeignKeys disables optimizations based on outbound foreign key
 	// references from this table. This is useful in particular for scrub queries
 	// used to verify the consistency of foreign key relations.
@@ -299,6 +302,9 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	if ih.NoIndexJoin && other.NoIndexJoin {
 		return errors.New("NO_INDEX_JOIN specified multiple times")
 	}
+	if ih.NoZigzagJoin && other.NoZigzagJoin {
+		return errors.New("NO_ZIGZAG_JOIN specified multiple times")
+	}
 	if ih.IgnoreForeignKeys && other.IgnoreForeignKeys {
 		return errors.New("IGNORE_FOREIGN_KEYS specified multiple times")
 	}
@@ -307,6 +313,7 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	}
 	result := *ih
 	result.NoIndexJoin = ih.NoIndexJoin || other.NoIndexJoin
+	result.NoZigzagJoin = ih.NoZigzagJoin || other.NoZigzagJoin
 	result.IgnoreForeignKeys = ih.IgnoreForeignKeys || other.IgnoreForeignKeys
 	result.IgnoreUniqueWithoutIndexKeys = ih.IgnoreUniqueWithoutIndexKeys ||
 		other.IgnoreUniqueWithoutIndexKeys
@@ -348,8 +355,8 @@ func (ih *IndexFlags) Check() error {
 // Format implements the NodeFormatter interface.
 func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	ctx.WriteByte('@')
-	if !ih.NoIndexJoin && !ih.IgnoreForeignKeys && !ih.IgnoreUniqueWithoutIndexKeys &&
-		ih.Direction == 0 {
+	if !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.IgnoreForeignKeys &&
+		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 {
 		if ih.Index != "" {
 			ctx.FormatNode(&ih.Index)
 		} else {
@@ -377,6 +384,11 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 		if ih.NoIndexJoin {
 			sep()
 			ctx.WriteString("NO_INDEX_JOIN")
+		}
+
+		if ih.NoZigzagJoin {
+			sep()
+			ctx.WriteString("NO_ZIGZAG_JOIN")
 		}
 
 		if ih.IgnoreForeignKeys {
