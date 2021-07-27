@@ -1341,12 +1341,16 @@ func (n *Node) Join(
 func (n *Node) TokenBucket(
 	ctx context.Context, in *roachpb.TokenBucketRequest,
 ) (*roachpb.TokenBucketResponse, error) {
-	tenantID, ok := roachpb.TenantFromContext(ctx)
-	if !ok {
+	// Check tenant ID. Note that in production configuration, the tenant ID has
+	// already been checked in the RPC layer (see rpc.tenantAuthorizer).
+	if in.TenantID == 0 || in.TenantID == roachpb.SystemTenantID.ToUint64() {
 		return &roachpb.TokenBucketResponse{
-			Error: errors.EncodeError(ctx, errors.New("token bucket request with no tenant")),
+			Error: errors.EncodeError(ctx, errors.Errorf(
+				"token bucket request with invalid tenant ID %d", in.TenantID,
+			)),
 		}, nil
 	}
+	tenantID := roachpb.MakeTenantID(in.TenantID)
 	return n.tenantUsage.TokenBucketRequest(ctx, tenantID, in), nil
 }
 

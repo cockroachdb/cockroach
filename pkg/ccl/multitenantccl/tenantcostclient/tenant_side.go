@@ -61,6 +61,7 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context, stopper *stop.S
 		select {
 		case <-ticker.C:
 			req := roachpb.TokenBucketRequest{
+				TenantID: c.tenantID.ToUint64(),
 				ConsumptionSinceLastRequest: roachpb.TokenBucketRequest_Consumption{
 					// Report a dummy 1 RU consumption each time.
 					RU:               1,

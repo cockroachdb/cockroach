@@ -53,9 +53,7 @@ func (a tenantAuthorizer) authorize(
 		return a.authGossipSubscription(tenID, req.(*roachpb.GossipSubscriptionRequest))
 
 	case "/cockroach.roachpb.Internal/TokenBucket":
-		// No authorization required for TokenBucket; the request is inherently
-		// scoped to a single tenant.
-		return nil
+		return a.authTokenBucket(tenID, req.(*roachpb.TokenBucketRequest))
 
 	case "/cockroach.rpc.Heartbeat/Ping":
 		return nil // no authorization
@@ -172,6 +170,20 @@ var gossipSubscriptionPatternAllowlist = []string{
 	"cluster-id",
 	"node:.*",
 	"system-db",
+}
+
+// authTokenBucket authorizes the provided tenant to invoke the
+// TokenBucket RPC with the provided args.
+func (a tenantAuthorizer) authTokenBucket(
+	tenID roachpb.TenantID, args *roachpb.TokenBucketRequest,
+) error {
+	if args.TenantID == 0 {
+		return authErrorf("token bucket request with unspecified tenant not permitted")
+	}
+	if argTenant := roachpb.MakeTenantID(args.TenantID); argTenant != tenID {
+		return authErrorf("token bucket request for tenant %s not permitted", argTenant)
+	}
+	return nil
 }
 
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {

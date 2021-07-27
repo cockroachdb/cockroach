@@ -2259,6 +2259,8 @@ message GossipSubscriptionEvent {
 }
 
 message TokenBucketRequest {
+  uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID"];
+
   message Consumption {
     double r_u = 1;
     uint64 read_requests = 2;
