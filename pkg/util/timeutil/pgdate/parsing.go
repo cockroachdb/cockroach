@@ -11,6 +11,7 @@
 package pgdate
 
 import (
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -271,4 +272,42 @@ func parseError(err error, kind string, s string) error {
 	return pgerror.WithCandidateCode(
 		errors.Wrapf(err, "parsing as type %s", errors.Safe(kind)),
 		pgcode.InvalidDatetimeFormat)
+}
+
+// DefaultDateStyle returns the default datestyle for Postgres.
+func DefaultDateStyle() DateStyle {
+	return DateStyle{
+		Order: Order_MDY,
+		Style: Style_ISO,
+	}
+}
+
+// ParseDateStyle parses a given DateStyle, modifying the existingDateStyle
+// as appropriate. This is because specifying just Style or Order will leave
+// the other field unchanged.
+func ParseDateStyle(s string, existingDateStyle DateStyle) (DateStyle, error) {
+	ds := existingDateStyle
+	fields := strings.Split(s, ",")
+	for _, field := range fields {
+		field = strings.ToLower(strings.TrimSpace(field))
+		switch field {
+		case "iso":
+			ds.Style = Style_ISO
+		case "german":
+			ds.Style = Style_GERMAN
+		case "sql":
+			ds.Style = Style_SQL
+		case "postgres":
+			ds.Style = Style_POSTGRES
+		case "ymd":
+			ds.Order = Order_YMD
+		case "mdy":
+			ds.Order = Order_MDY
+		case "dmy":
+			ds.Order = Order_DMY
+		default:
+			return ds, pgerror.Newf(pgcode.InvalidParameterValue, "unknown DateStyle parameter: %s", field)
+		}
+	}
+	return ds, nil
 }
