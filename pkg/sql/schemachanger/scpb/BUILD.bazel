@@ -5,19 +5,23 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "scpb",
     srcs = [
-        "attribute.go",
-        "attribute_value.go",
+        "attr.go",
+        "attr_values.go",
+        "element_attrs.go",
         "elements.go",
-        ":gen-attribute-stringer",  # keep
+        "entity.go",
+        "format.go",
+        ":gen-attr-stringer",  # keep
     ],
     embed = [":scpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/lexbase",
+        "//pkg/sql/schemachanger/eav",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_protobuf//proto",
     ],
 )
 
@@ -39,9 +43,17 @@ go_test(
     srcs = [
         "attribute_test.go",
         "elements_test.go",
+        "query_test.go",
+        "tree_test.go",
     ],
     embed = [":scpb"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/eav",
+        "//pkg/sql/schemachanger/eav/eavquery",
+        "//pkg/util/iterutil",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 proto_library(
@@ -57,11 +69,11 @@ proto_library(
 
 # Keep this genrule and not using common string function due to extra flags eg: trimprefix
 genrule(
-    name = "gen-attribute-stringer",
+    name = "gen-attr-stringer",
     srcs = [
-        "attribute.go",
+        "attr.go",
     ],
-    outs = ["attribute_string.go"],
+    outs = ["attr_string.go"],
     # golang.org/x/tools executes commands via
     # golang.org/x/sys/execabs which requires all PATH lookups to
     # result in absolute paths. To account for this, we resolve the
@@ -71,7 +83,7 @@ genrule(
        GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
        # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
        env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
-       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Attribute -trimprefix Attribute $<
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Attr -trimprefix Attr $<
     """,
     exec_tools = [
         "@go_sdk//:bin/go",

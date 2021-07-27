@@ -5,7 +5,7 @@ CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
-- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "j"}
+- ADD Column: {DescID: 52, ColumnID: 2, Name: "j"}
   state: ABSENT
   details:
     column:
@@ -18,7 +18,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
         width: 64
     familyName: primary
     tableId: 52
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+- ADD PrimaryIndex: {DescID: 52, Name: "new_primary_key", IndexID: 2}
   state: ABSENT
   details:
     index:
@@ -44,7 +44,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
       version: 4
     otherPrimaryIndexId: 1
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex: {DescID: 52, Name: "primary", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -70,7 +70,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
-- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "j"}
+- ADD Column: {DescID: 52, ColumnID: 2, Name: "j"}
   state: ABSENT
   details:
     column:
@@ -84,7 +84,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
         width: 64
     familyName: primary
     tableId: 52
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+- ADD PrimaryIndex: {DescID: 52, Name: "new_primary_key", IndexID: 2}
   state: ABSENT
   details:
     index:
@@ -110,7 +110,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
       version: 4
     otherPrimaryIndexId: 1
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex: {DescID: 52, Name: "primary", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -137,7 +137,7 @@ build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
-- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "j"}
+- ADD Column: {DescID: 52, ColumnID: 2, Name: "j"}
   state: ABSENT
   details:
     column:
@@ -151,7 +151,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
         width: 64
     familyName: primary
     tableId: 52
-- ADD Column:{DescID: 52, ColumnID: 3, ElementName: "k"}
+- ADD Column: {DescID: 52, ColumnID: 3, Name: "k"}
   state: ABSENT
   details:
     column:
@@ -165,7 +165,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
         width: 64
     familyName: primary
     tableId: 52
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+- ADD PrimaryIndex: {DescID: 52, Name: "new_primary_key", IndexID: 2}
   state: ABSENT
   details:
     index:
@@ -193,7 +193,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       version: 4
     otherPrimaryIndexId: 1
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex: {DescID: 52, Name: "primary", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -219,7 +219,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "a"}
+- ADD Column: {DescID: 52, ColumnID: 2, Name: "a"}
   state: ABSENT
   details:
     column:
@@ -233,7 +233,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
         width: 64
     familyName: primary
     tableId: 52
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+- ADD PrimaryIndex: {DescID: 52, Name: "new_primary_key", IndexID: 2}
   state: ABSENT
   details:
     index:
@@ -259,7 +259,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       version: 4
     otherPrimaryIndexId: 1
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex: {DescID: 52, Name: "primary", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -290,7 +290,7 @@ build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
-- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "a"}
+- ADD Column: {DescID: 52, ColumnID: 2, Name: "a"}
   state: ABSENT
   details:
     column:
@@ -303,7 +303,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
         width: 64
     familyName: primary
     tableId: 52
-- ADD Column:{DescID: 53, ColumnID: 3, ElementName: "b"}
+- ADD Column: {DescID: 53, ColumnID: 3, Name: "b"}
   state: ABSENT
   details:
     column:
@@ -316,7 +316,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
         width: 64
     familyName: primary
     tableId: 53
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+- ADD PrimaryIndex: {DescID: 52, Name: "new_primary_key", IndexID: 2}
   state: ABSENT
   details:
     index:
@@ -342,7 +342,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       version: 4
     otherPrimaryIndexId: 1
     tableId: 52
-- ADD PrimaryIndex:{DescID: 53, ElementName: "new_primary_key", IndexID: 2}
+- ADD PrimaryIndex: {DescID: 53, Name: "new_primary_key", IndexID: 2}
   state: ABSENT
   details:
     index:
@@ -370,7 +370,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       version: 4
     otherPrimaryIndexId: 1
     tableId: 53
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex: {DescID: 52, Name: "primary", IndexID: 1}
   state: PUBLIC
   details:
     index:
@@ -392,7 +392,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       version: 4
     otherPrimaryIndexId: 2
     tableId: 52
-- DROP PrimaryIndex:{DescID: 53, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex: {DescID: 53, Name: "primary", IndexID: 1}
   state: PUBLIC
   details:
     index:

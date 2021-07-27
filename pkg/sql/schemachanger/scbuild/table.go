@@ -215,7 +215,7 @@ func (b *buildContext) validateColumnName(
 		panic(sqlerrors.NewColumnAlreadyExistsError(string(d.Name), table.GetName()))
 	}
 	for _, n := range b.output {
-		switch t := n.Element().(type) {
+		switch t := n.GetElement().(type) {
 		case *scpb.Column:
 			if t.TableID != table.GetID() || t.Column.Name != string(d.Name) {
 				continue
@@ -256,7 +256,7 @@ func (b *buildContext) findOrAddColumnFamily(
 	// name is being dropped and then if there is or isn't a create directive.
 	nextFamilyID := table.GetNextFamilyID()
 	for _, n := range b.output {
-		switch col := n.Element().(type) {
+		switch col := n.GetElement().(type) {
 		case *scpb.Column:
 			if col.TableID != table.GetID() {
 				continue
@@ -298,7 +298,7 @@ func (b *buildContext) alterTableDropColumn(
 	}
 	// Check whether the column is being dropped.
 	for _, n := range b.output {
-		switch col := n.Element().(type) {
+		switch col := n.GetElement().(type) {
 		case *scpb.Column:
 			if col.TableID != table.GetID() ||
 				n.Target.Direction != scpb.Target_DROP ||
@@ -428,7 +428,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	// Check whether a target to add a PK already exists. If so, update its
 	// storing columns.
 	for i, n := range b.output {
-		if t, ok := n.Element().(*scpb.PrimaryIndex); ok &&
+		if t, ok := n.GetElement().(*scpb.PrimaryIndex); ok &&
 			b.output[i].Target.Direction == scpb.Target_ADD &&
 			t.TableID == table.GetID() {
 			t.Index.StoreColumnIDs = append(t.Index.StoreColumnIDs, colID)
@@ -480,7 +480,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	// Check whether a target to add a PK already exists. If so, update its
 	// storing columns.
 	for _, n := range b.output {
-		if t, ok := n.Element().(*scpb.PrimaryIndex); ok &&
+		if t, ok := n.GetElement().(*scpb.PrimaryIndex); ok &&
 			n.Target.Direction == scpb.Target_ADD &&
 			t.TableID == table.GetID() {
 			for j := range t.Index.StoreColumnIDs {
@@ -547,10 +547,10 @@ func (b *buildContext) nextColumnID(table catalog.TableDescriptor) descpb.Column
 	var maxColID descpb.ColumnID
 
 	for _, n := range b.output {
-		if n.Target.Direction != scpb.Target_ADD || scpb.GetDescID(n.Element()) != table.GetID() {
+		if n.Target.Direction != scpb.Target_ADD || scpb.GetDescID(n) != table.GetID() {
 			continue
 		}
-		if ac, ok := n.Element().(*scpb.Column); ok {
+		if ac, ok := n.GetElement().(*scpb.Column); ok {
 			if ac.Column.ID > maxColID {
 				maxColID = ac.Column.ID
 			}
@@ -566,14 +566,14 @@ func (b *buildContext) nextIndexID(table catalog.TableDescriptor) descpb.IndexID
 	nextMaxID := table.GetNextIndexID()
 	var maxIdxID descpb.IndexID
 	for _, n := range b.output {
-		if n.Target.Direction != scpb.Target_ADD || scpb.GetDescID(n.Element()) != table.GetID() {
+		if n.Target.Direction != scpb.Target_ADD || scpb.GetDescID(n) != table.GetID() {
 			continue
 		}
-		if ai, ok := n.Element().(*scpb.SecondaryIndex); ok {
+		if ai, ok := n.GetElement().(*scpb.SecondaryIndex); ok {
 			if ai.Index.ID > maxIdxID {
 				maxIdxID = ai.Index.ID
 			}
-		} else if ai, ok := n.Element().(*scpb.PrimaryIndex); ok {
+		} else if ai, ok := n.GetElement().(*scpb.PrimaryIndex); ok {
 			if ai.Index.ID > maxIdxID {
 				maxIdxID = ai.Index.ID
 			}

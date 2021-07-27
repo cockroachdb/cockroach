@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -153,16 +152,21 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 	err := plan.Graph.ForEachNode(func(n *scpb.Node) error {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
 			var deps strings.Builder
-			fmt.Fprintf(&deps, "- from: [%s, %s]\n",
-				scpb.AttributesString(de.From().Element()), de.From().Status)
-			fmt.Fprintf(&deps, "  to:   [%s, %s]\n",
-				scpb.AttributesString(de.To().Element()), de.To().Status)
+			deps.WriteString("- from: ")
+			if err := scpb.Format(de.From(), &deps); err != nil {
+				return err
+			}
+			deps.WriteString("\n  to:   ")
+			if err := scpb.Format(de.To(), &deps); err != nil {
+				return err
+			}
+			deps.WriteString("\n")
 			sortedDeps = append(sortedDeps, deps.String())
 			return nil
 		})
 	})
 	if err != nil {
-		panic(errors.Wrap(err, "failed marshaling dependencies."))
+		t.Fatalf("failed marshaling dependencies: %+v", err)
 	}
 	// Lexicographically sort the dependencies,
 	// since the order is not fully deterministic.
