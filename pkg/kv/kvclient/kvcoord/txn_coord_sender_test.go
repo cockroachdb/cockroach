@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2669,6 +2670,100 @@ func TestTxnManualRefresh(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			run(t, tc)
+		})
+	}
+}
+
+// TestTxnCoordSenderSetFixedTimestamp tests that SetFixedTimestamp cannot be
+// called after a transaction has already been used in the current epoch to read
+// or write.
+func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	for _, test := range []struct {
+		name     string
+		before   func(*testing.T, *kv.Txn)
+		expFatal bool
+	}{
+		{
+			name:     "nothing before",
+			before:   func(t *testing.T, txn *kv.Txn) {},
+			expFatal: false,
+		},
+		{
+			name: "read before",
+			before: func(t *testing.T, txn *kv.Txn) {
+				_, err := txn.Get(ctx, "k")
+				require.NoError(t, err)
+			},
+			expFatal: true,
+		},
+		{
+			name: "write before",
+			before: func(t *testing.T, txn *kv.Txn) {
+				require.NoError(t, txn.Put(ctx, "k", "v"))
+			},
+			expFatal: true,
+		},
+		{
+			name: "read and write before",
+			before: func(t *testing.T, txn *kv.Txn) {
+				_, err := txn.Get(ctx, "k")
+				require.NoError(t, err)
+				require.NoError(t, txn.Put(ctx, "k", "v"))
+			},
+			expFatal: true,
+		},
+		{
+			name: "read before, in prior epoch",
+			before: func(t *testing.T, txn *kv.Txn) {
+				_, err := txn.Get(ctx, "k")
+				require.NoError(t, err)
+				txn.ManualRestart(ctx, txn.ReadTimestamp().Next())
+			},
+			expFatal: false,
+		},
+		{
+			name: "write before, in prior epoch",
+			before: func(t *testing.T, txn *kv.Txn) {
+				require.NoError(t, txn.Put(ctx, "k", "v"))
+				txn.ManualRestart(ctx, txn.ReadTimestamp().Next())
+			},
+			expFatal: false,
+		},
+		{
+			name: "read and write before, in prior epoch",
+			before: func(t *testing.T, txn *kv.Txn) {
+				_, err := txn.Get(ctx, "k")
+				require.NoError(t, err)
+				require.NoError(t, txn.Put(ctx, "k", "v"))
+				txn.ManualRestart(ctx, txn.ReadTimestamp().Next())
+			},
+			expFatal: false,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var exited bool
+			log.SetExitFunc(true /* hideStack */, func(exit.Code) { exited = true })
+			defer log.ResetExitFunc()
+
+			s := createTestDB(t)
+			defer s.Stop()
+
+			txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+			test.before(t, txn)
+
+			ts := s.Clock.Now()
+			txn.SetFixedTimestamp(ctx, ts)
+			if test.expFatal {
+				require.True(t, exited)
+			} else {
+				require.False(t, exited)
+				require.True(t, txn.CommitTimestampFixed())
+				require.Equal(t, ts, txn.CommitTimestamp())
+			}
 		})
 	}
 }

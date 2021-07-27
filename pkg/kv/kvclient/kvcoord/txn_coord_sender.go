@@ -1011,6 +1011,14 @@ func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+	// The transaction must not have already been used in this epoch.
+	if !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty() {
+		log.Fatal(ctx, "cannot set fixed timestamp, txn already performed reads")
+	}
+	if tc.mu.txn.Sequence != 0 {
+		log.Fatal(ctx, "cannot set fixed timestamp, txn already performed writes")
+	}
+
 	tc.mu.txn.ReadTimestamp = ts
 	tc.mu.txn.WriteTimestamp = ts
 	tc.mu.txn.GlobalUncertaintyLimit = ts
