@@ -55,12 +55,6 @@ stringer(
     typ = "field",
 )
 
-stringer(
-    name = "gen-parsemode-stringer",
-    src = "parsing.go",
-    typ = "ParseMode",
-)
-
 proto_library(
     name = "pgdate_proto",
     srcs = ["pgdate.proto"],
