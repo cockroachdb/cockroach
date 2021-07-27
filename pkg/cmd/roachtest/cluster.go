@@ -774,6 +774,15 @@ func (f *clusterFactory) releaseSem() {
 	<-f.sem
 }
 
+func (f *clusterFactory) genName(cfg clusterConfig) string {
+	if cfg.localCluster {
+		return "local" // The roachprod tool understands this magic name.
+	}
+	count := atomic.AddUint64(&f.counter, 1)
+	return makeClusterName(
+		fmt.Sprintf("%s-%02d-%s", f.namePrefix, count, cfg.spec.String()))
+}
+
 // newCluster creates a new roachprod cluster.
 //
 // setStatus is called with status messages indicating the stage of cluster
@@ -787,19 +796,10 @@ func (f *clusterFactory) newCluster(
 		return nil, errors.Wrap(ctx.Err(), "newCluster")
 	}
 
-	var name string
-	if cfg.localCluster {
-		name = "local" // The roachprod tool understands this magic name.
-	} else {
-		count := atomic.AddUint64(&f.counter, 1)
-		name = makeClusterName(
-			fmt.Sprintf("%s-%02d-%s", f.namePrefix, count, cfg.spec.String()))
-	}
-
 	if cfg.spec.NodeCount == 0 {
 		// For tests. Return the minimum that makes them happy.
 		c := &clusterImpl{
-			name:       name,
+			name:       f.genName(cfg),
 			expiration: timeutil.Now().Add(24 * time.Hour),
 			r:          f.r,
 		}
@@ -814,73 +814,70 @@ func (f *clusterFactory) newCluster(
 		// Local clusters never expire.
 		exp = timeutil.Now().Add(100000 * time.Hour)
 	}
-	c := &clusterImpl{
-		name:           name,
-		spec:           cfg.spec,
-		expiration:     exp,
-		encryptDefault: encrypt.asBool(),
-		r:              f.r,
-		destroyState: destroyState{
-			owned: true,
-			alloc: cfg.alloc,
-		},
-	}
 
-	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
-	{
-		args, err := cfg.spec.Args(createArgs...)
-		if err != nil {
-			return nil, err
-		}
-		sargs = append(sargs, args...)
-	}
-	if !cfg.useIOBarrier && localSSDArg {
-		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
-	}
-
-	setStatus("acquring cluster creation semaphore")
+	setStatus("acquiring cluster creation semaphore")
 	release := f.acquireSem()
 	defer release()
+
 	setStatus("roachprod create")
-	c.status("creating cluster")
+	defer setStatus("idle")
 
-	// Logs for creating a new cluster go to a dedicated log file.
-	logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", name+".log")
-	l, err := logger.RootLogger(logPath, teeOpt)
-	if err != nil {
-		log.Fatalf(ctx, "%v", err)
-	}
-
-	success := false
-	// Attempt to create a cluster several times, cause them clouds be flaky that
-	// my phone says it's snowing.
-	for i := 0; i < 3; i++ {
-		if i > 0 {
-			l.PrintfCtx(ctx, "Retrying cluster creation (attempt #%d)", i+1)
+	// Attempt to create a cluster several times to be able to move past
+	// temporary flakiness in the cloud providers.
+	const maxAttempts = 3
+	for i := 0; ; i++ {
+		c := &clusterImpl{
+			// NB: this intentionally avoids re-using the name across iterations in
+			// the loop. See:
+			//
+			// https://github.com/cockroachdb/cockroach/issues/67906#issuecomment-887477675
+			name:           f.genName(cfg),
+			spec:           cfg.spec,
+			expiration:     exp,
+			encryptDefault: encrypt.asBool(),
+			r:              f.r,
+			destroyState: destroyState{
+				owned: true,
+				alloc: cfg.alloc,
+			},
 		}
+		c.status("creating cluster")
+
+		sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
+		{
+			args, err := cfg.spec.Args(createArgs...)
+			if err != nil {
+				return nil, err
+			}
+			sargs = append(sargs, args...)
+		}
+		if !cfg.useIOBarrier && localSSDArg {
+			sargs = append(sargs, "--local-ssd-no-ext4-barrier")
+		}
+
+		// Logs for creating a new cluster go to a dedicated log file.
+		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", c.name+".log")
+		l, err := logger.RootLogger(logPath, teeOpt)
+		if err != nil {
+			log.Fatalf(ctx, "%v", err)
+		}
+
+		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i+1, maxAttempts)
 		err = execCmd(ctx, l, sargs...)
 		if err == nil {
-			success = true
-			break
+			if err := f.r.registerCluster(c); err != nil {
+				return nil, err
+			}
+			c.status("idle")
+			l.Close()
+			return c, nil
 		}
-		l.PrintfCtx(ctx, "Failed to create cluster.")
-		if !strings.Contains(cluster.GetStderr(err), "already exists") {
-			l.PrintfCtx(ctx, "Cleaning up in case it was partially created.")
-			c.Destroy(ctx, closeLogger, l)
-		} else {
-			break
+		l.PrintfCtx(ctx, "Cleaning up in case it was partially created.")
+		c.Destroy(ctx, closeLogger, l)
+		if i > maxAttempts {
+			return nil, err
 		}
 	}
-	if !success {
-		return nil, err
-	}
-
-	if err := f.r.registerCluster(c); err != nil {
-		return nil, err
-	}
-
-	c.status("idle")
-	return c, nil
 }
 
 type attachOpt struct {
