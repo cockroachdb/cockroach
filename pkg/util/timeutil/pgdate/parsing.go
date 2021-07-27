@@ -82,21 +82,6 @@ var (
 	TimeNegativeInfinity = timeutil.Unix(-210866803200, 0)
 )
 
-//go:generate stringer -type=ParseMode
-
-// ParseMode controls the resolution of ambiguous date formats such as
-// `01/02/03`.
-type ParseMode uint
-
-// These are the various parsing modes that determine in which order
-// we should look for years, months, and date.
-// ParseModeYMD is the default value.
-const (
-	ParseModeYMD ParseMode = iota
-	ParseModeDMY
-	ParseModeMDY
-)
-
 // ParseDate converts a string into Date.
 //
 // Any specified timezone is inconsequential. Examples:
@@ -107,10 +92,12 @@ const (
 // The dependsOnContext return value indicates if we had to consult the given
 // `now` value (either for the time or the local timezone).
 //
-func ParseDate(now time.Time, mode ParseMode, s string) (_ Date, dependsOnContext bool, _ error) {
+func ParseDate(
+	now time.Time, dateStyle DateStyle, s string,
+) (_ Date, dependsOnContext bool, _ error) {
 	fe := fieldExtract{
 		currentTime: now,
-		mode:        mode,
+		dateStyle:   dateStyle,
 		required:    dateRequiredFields,
 		// We allow time fields to be provided since they occur after
 		// the date fields that we're really looking for and for
@@ -130,7 +117,7 @@ func ParseDate(now time.Time, mode ParseMode, s string) (_ Date, dependsOnContex
 // The dependsOnContext return value indicates if we had to consult the given
 // `now` value (either for the time or the local timezone).
 func ParseTime(
-	now time.Time, mode ParseMode, s string,
+	now time.Time, dateStyle DateStyle, s string,
 ) (_ time.Time, dependsOnContext bool, _ error) {
 	fe := fieldExtract{
 		currentTime: now,
@@ -143,7 +130,7 @@ func ParseTime(
 		// timestamp string; let's try again, accepting more fields.
 		fe = fieldExtract{
 			currentTime: now,
-			mode:        mode,
+			dateStyle:   dateStyle,
 			required:    timeRequiredFields,
 			wanted:      dateTimeFields,
 		}
@@ -167,7 +154,7 @@ func ParseTime(
 // The dependsOnContext return value indicates if we had to consult the given
 // `now` value (either for the time or the local timezone).
 func ParseTimeWithoutTimezone(
-	now time.Time, mode ParseMode, s string,
+	now time.Time, dateStyle DateStyle, s string,
 ) (_ time.Time, dependsOnContext bool, _ error) {
 	fe := fieldExtract{
 		currentTime: now,
@@ -180,7 +167,7 @@ func ParseTimeWithoutTimezone(
 		// timestamp string; let's try again, accepting more fields.
 		fe = fieldExtract{
 			currentTime: now,
-			mode:        mode,
+			dateStyle:   dateStyle,
 			required:    timeRequiredFields,
 			wanted:      dateTimeFields,
 		}
@@ -198,10 +185,10 @@ func ParseTimeWithoutTimezone(
 // The dependsOnContext return value indicates if we had to consult the given
 // `now` value (either for the time or the local timezone).
 func ParseTimestamp(
-	now time.Time, mode ParseMode, s string,
+	now time.Time, dateStyle DateStyle, s string,
 ) (_ time.Time, dependsOnContext bool, _ error) {
 	fe := fieldExtract{
-		mode:        mode,
+		dateStyle:   dateStyle,
 		currentTime: now,
 		// A timestamp only actually needs a date component; the time
 		// would be midnight.
@@ -230,10 +217,10 @@ func ParseTimestamp(
 // The dependsOnContext return value indicates if we had to consult the given
 // `now` value (either for the time or the local timezone).
 func ParseTimestampWithoutTimezone(
-	now time.Time, mode ParseMode, s string,
+	now time.Time, dateStyle DateStyle, s string,
 ) (_ time.Time, dependsOnContext bool, _ error) {
 	fe := fieldExtract{
-		mode:        mode,
+		dateStyle:   dateStyle,
 		currentTime: now,
 		// A timestamp only actually needs a date component; the time
 		// would be midnight.
