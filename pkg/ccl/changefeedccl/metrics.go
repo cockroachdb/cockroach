@@ -39,9 +39,11 @@ func (s *metricsSink) EmitRow(
 	start := timeutil.Now()
 	err := s.wrapped.EmitRow(ctx, topic, key, value, updated)
 	if err == nil {
+		emitNanos := timeutil.Since(start).Nanoseconds()
 		s.metrics.EmittedMessages.Inc(1)
 		s.metrics.EmittedBytes.Inc(int64(len(key) + len(value)))
-		s.metrics.EmitNanos.Inc(timeutil.Since(start).Nanoseconds())
+		s.metrics.EmitNanos.Inc(emitNanos)
+		s.metrics.EmitHistNanos.RecordValue(emitNanos)
 	}
 	return err
 }
@@ -52,11 +54,13 @@ func (s *metricsSink) EmitResolvedTimestamp(
 	start := timeutil.Now()
 	err := s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved)
 	if err == nil {
+		emitNanos := timeutil.Since(start).Nanoseconds()
 		s.metrics.EmittedMessages.Inc(1)
 		// TODO(dan): This wasn't correct. The wrapped sink may emit the payload
 		// any number of times.
 		// s.metrics.EmittedBytes.Inc(int64(len(payload)))
-		s.metrics.EmitNanos.Inc(timeutil.Since(start).Nanoseconds())
+		s.metrics.EmitNanos.Inc(emitNanos)
+		s.metrics.EmitHistNanos.RecordValue(emitNanos)
 	}
 	return err
 }
@@ -65,15 +69,24 @@ func (s *metricsSink) Flush(ctx context.Context) error {
 	start := timeutil.Now()
 	err := s.wrapped.Flush(ctx)
 	if err == nil {
+		flushNanos := timeutil.Since(start).Nanoseconds()
 		s.metrics.Flushes.Inc(1)
-		s.metrics.FlushNanos.Inc(timeutil.Since(start).Nanoseconds())
+		s.metrics.FlushNanos.Inc(flushNanos)
+		s.metrics.FlushHistNanos.RecordValue(flushNanos)
 	}
+
 	return err
 }
 
 func (s *metricsSink) Close() error {
 	return s.wrapped.Close()
 }
+
+const (
+	changefeedCheckpointHistMaxLatency = 30 * time.Second
+	changefeedEmitHistMaxLatency       = 30 * time.Second
+	changefeedFlushHistMaxLatency      = 1 * time.Minute
+)
 
 var (
 	metaChangefeedEmittedMessages = metric.Metadata{
@@ -138,6 +151,32 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaChangefeedCheckpointHistNanos = metric.Metadata{
+		Name:        "changefeed.checkpoint_hist_nanos",
+		Help:        "Time spent checkpointing changefeed progress",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	// emit_hist_nanos and flush_hist_nanos duplicate information
+	// in emit_nanos, emitted_messages, and flush_nanos,
+	// flushes. While all of those could be reconstructed from
+	// information in the histogram, We've kept the older metrics
+	// to avoid breaking historical timeseries data.
+	metaChangefeedEmitHistNanos = metric.Metadata{
+		Name:        "changefeed.emit_hist_nanos",
+		Help:        "Time spent emitting messages across all changefeeds",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	metaChangefeedFlushHistNanos = metric.Metadata{
+		Name:        "changefeed.flush_hist_nanos",
+		Help:        "Time spent flushing messages across all changefeeds",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
 	// TODO(dan): This was intended to be a measure of the minimum distance of
 	// any changefeed ahead of its gc ttl threshold, but keeping that correct in
 	// the face of changing zone configs is much harder, so this will have to do
@@ -147,6 +186,13 @@ var (
 		Help:        "Largest commit-to-emit duration of any running feed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	metaChangefeedFrontierUpdates = metric.Metadata{
+		Name:        "changefeed.frontier_updates",
+		Help:        "Number of change frontier updates across all feeds",
+		Measurement: "Updates",
+		Unit:        metric.Unit_COUNT,
 	}
 )
 
@@ -164,7 +210,13 @@ type Metrics struct {
 	EmitNanos          *metric.Counter
 	FlushNanos         *metric.Counter
 
+	CheckpointHistNanos *metric.Histogram
+	EmitHistNanos       *metric.Histogram
+	FlushHistNanos      *metric.Histogram
+
 	Running *metric.Gauge
+
+	FrontierUpdates *metric.Counter
 
 	mu struct {
 		syncutil.Mutex
@@ -191,7 +243,16 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		TableMetadataNanos: metric.NewCounter(metaChangefeedTableMetadataNanos),
 		EmitNanos:          metric.NewCounter(metaChangefeedEmitNanos),
 		FlushNanos:         metric.NewCounter(metaChangefeedFlushNanos),
-		Running:            metric.NewGauge(metaChangefeedRunning),
+
+		CheckpointHistNanos: metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow,
+			changefeedCheckpointHistMaxLatency.Nanoseconds(), 2),
+		EmitHistNanos: metric.NewHistogram(metaChangefeedEmitHistNanos, histogramWindow,
+			changefeedEmitHistMaxLatency.Nanoseconds(), 2),
+		FlushHistNanos: metric.NewHistogram(metaChangefeedFlushHistNanos, histogramWindow,
+			changefeedFlushHistMaxLatency.Nanoseconds(), 2),
+
+		Running:         metric.NewGauge(metaChangefeedRunning),
+		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
 	}
 	m.mu.resolved = make(map[int]hlc.Timestamp)
 	m.mu.id = 1 // start the first id at 1 so we can detect initialization

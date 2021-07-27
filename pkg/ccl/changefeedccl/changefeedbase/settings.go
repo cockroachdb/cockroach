@@ -45,3 +45,20 @@ var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
 	"controls amount of data that can be buffered per changefeed",
 	1<<30,
 )
+
+// SlowSpanLogThreshold controls when we will log slow spans.
+var SlowSpanLogThreshold = settings.RegisterDurationSetting(
+	"changefeed.slow_span_log_threshold",
+	"a changefeed will log spans with resolved timestamps this far behind the current wall-clock time; if 0, a default value is calculated based on other cluster settings",
+	0,
+	settings.NonNegativeDuration,
+)
+
+// ScanRequestLimit is the number of Scan requests that can run at once.
+// Scan requests are issued when changefeed performs the backfill.
+// If set to 0, a reasonable default will be chosen.
+var ScanRequestLimit = settings.RegisterIntSetting(
+	"changefeed.backfill.concurrent_scan_requests",
+	"number of concurrent scan requests per node issued during a backfill",
+	0,
+)

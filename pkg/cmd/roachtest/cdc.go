@@ -158,10 +158,24 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		// changefeed is never considered sufficiently caught up. We could
 		// instead make targetSteadyLatency less aggressive, but it'd be nice to
 		// keep it where it is.
+		//
+		// TODO(ssd): As of 797819b35f5 this is actually increasing rather than decreasing
+		// the closed_timestamp.target_duration. We can probably remove this. However,
+		// as of 2021-04-20, we want to understand why this test has started failing more often
+		// before changing this.
 		if _, err := db.Exec(
 			`SET CLUSTER SETTING kv.closed_timestamp.target_duration='10s'`,
 		); err != nil {
 			t.Fatal(err)
+		}
+
+		// With a target_duration of 10s, we won't see slow span logs from changefeeds untils we are > 100s
+		// behind, which is well above the 60s targetSteadyLatency we have in some tests.
+		if _, err := db.Exec(
+			`SET CLUSTER SETTING changefeed.slow_span_log_threshold='30s'`,
+		); err != nil {
+			// We don't hard fail here because, not all versions support this setting
+			t.l.Printf("failed to set cluster setting: %s", err)
 		}
 
 		for _, stmt := range args.preStartStatements {
