@@ -1519,7 +1519,7 @@ func TestSetSessionArguments(t *testing.T) {
 	}
 
 	expectedOptions := map[string]string{
-		"search_path": "public,testsp",
+		"search_path": "public, testsp",
 		// setting an isolation level is a noop:
 		// all transactions execute with serializable isolation.
 		"default_transaction_isolation": "serializable",
