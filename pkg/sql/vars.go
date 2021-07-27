@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -1597,6 +1598,30 @@ func makeIntGetStringValFn(name string) getStringValFn {
 func IsSessionVariableConfigurable(varName string) (exists, configurable bool) {
 	v, exists := varGen[varName]
 	return exists, v.Set != nil
+}
+
+// CheckSessionVariableValueValid returns an error if the value is not valid
+// for the given variable. It also returns an error if there is no variable with
+// the given name or if the variable is not configurable.
+func CheckSessionVariableValueValid(
+	ctx context.Context, settings *cluster.Settings, varName, varValue string,
+) error {
+	_, sVar, err := getSessionVar(varName, false)
+	if err != nil {
+		return err
+	}
+	if sVar.Set == nil {
+		return pgerror.Newf(pgcode.CantChangeRuntimeParam,
+			"parameter %q cannot be changed", varName)
+	}
+	fakeSessionMutator := &sessionDataMutator{
+		data:               &sessiondata.SessionData{},
+		defaults:           SessionDefaults(map[string]string{}),
+		settings:           settings,
+		paramStatusUpdater: &noopParamStatusUpdater{},
+		setCurTxnReadOnly:  func(bool) {},
+	}
+	return sVar.Set(ctx, fakeSessionMutator, varValue)
 }
 
 var varNames []string

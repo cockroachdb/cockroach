@@ -1592,3 +1592,153 @@ func TestCancelQuery(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }
+
+func TestRoleDefaultSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	_, err := db.ExecContext(ctx, "CREATE ROLE testuser WITH LOGIN")
+	require.NoError(t, err)
+
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User("testuser"),
+	)
+	defer cleanupFunc()
+
+	for i, tc := range []struct {
+		setupStmt             string
+		postConnectStmt       string
+		databaseOverride      string
+		searchPathOptOverride string
+		userOverride          string
+		expectedSearchPath    string
+	}{
+		// The test cases need to be in order since the default settings have
+		// an order of precedence that is being checked here.
+		{
+			setupStmt:          "ALTER ROLE ALL SET search_path = 'a'",
+			expectedSearchPath: "a",
+		},
+		{
+			setupStmt:          "ALTER ROLE ALL IN DATABASE defaultdb SET search_path = 'b'",
+			expectedSearchPath: "b",
+		},
+		{
+			setupStmt:          "ALTER ROLE testuser SET search_path = 'c'",
+			expectedSearchPath: "c",
+		},
+		{
+			setupStmt:          "ALTER ROLE testuser IN DATABASE defaultdb SET search_path = 'd'",
+			expectedSearchPath: "d",
+		},
+		{
+			// Connecting to a different database should use the role-wide default.
+			databaseOverride:   "postgres",
+			expectedSearchPath: "c",
+		},
+		{
+			// Connecting to a non-existent database should use the role-wide default
+			// (and should not error). After connecting, we need to switch to a
+			// real database so that `SHOW var` works correctly.
+			databaseOverride:   "this_is_not_a_database",
+			postConnectStmt:    "SET DATABASE = defaultdb",
+			expectedSearchPath: "c",
+		},
+		{
+			// The setting in the connection URL should take precedence.
+			searchPathOptOverride: "e",
+			expectedSearchPath:    "e",
+		},
+		{
+			// Connecting as a different user, should use the database-wide default.
+			setupStmt:          "CREATE ROLE testuser2 WITH LOGIN",
+			userOverride:       "testuser2",
+			databaseOverride:   "defaultdb",
+			expectedSearchPath: "b",
+		},
+		{
+			// Connecting as a different user and to a different database should
+			// use the global default.
+			userOverride:       "testuser2",
+			databaseOverride:   "postgres",
+			expectedSearchPath: "a",
+		},
+		{
+			// Test that RESETing the global default works.
+			setupStmt:          "ALTER ROLE ALL RESET search_path",
+			userOverride:       "testuser2",
+			databaseOverride:   "postgres",
+			expectedSearchPath: `"$user", public`,
+		},
+		{
+			// Change an existing default setting.
+			setupStmt:          "ALTER ROLE testuser IN DATABASE defaultdb SET search_path = 'f'",
+			expectedSearchPath: "f",
+		},
+		{
+			setupStmt:          "ALTER ROLE testuser IN DATABASE defaultdb SET search_path = DEFAULT",
+			expectedSearchPath: "c",
+		},
+		{
+			setupStmt:          "ALTER ROLE testuser SET search_path TO DEFAULT",
+			expectedSearchPath: "b",
+		},
+		{
+			// Add a default setting for a different variable.
+			setupStmt:          "ALTER ROLE ALL IN DATABASE defaultdb SET serial_normalization = sql_sequence",
+			expectedSearchPath: "b",
+		},
+		{
+			// RESETing the other variable should not affect search_path.
+			setupStmt:          "ALTER ROLE ALL IN DATABASE defaultdb RESET serial_normalization",
+			expectedSearchPath: "b",
+		},
+		{
+			// The global default was already reset earlier, so there should be
+			// no default setting after this.
+			setupStmt:          "ALTER ROLE ALL IN DATABASE defaultdb RESET ALL",
+			expectedSearchPath: `"$user", public`,
+		},
+	} {
+		t.Run(fmt.Sprintf("TestRoleDefaultSettings-%d", i), func(t *testing.T) {
+			_, err := db.ExecContext(ctx, tc.setupStmt)
+			require.NoError(t, err)
+
+			pgURLCopy := pgURL
+			if tc.userOverride != "" {
+				newPGURL, cleanupFunc := sqlutils.PGUrl(
+					t, s.ServingSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User(tc.userOverride),
+				)
+				defer cleanupFunc()
+				pgURLCopy = newPGURL
+			}
+			pgURLCopy.Path = tc.databaseOverride
+			if tc.searchPathOptOverride != "" {
+				q := pgURLCopy.Query()
+				q.Add("search_path", tc.searchPathOptOverride)
+				pgURLCopy.RawQuery = q.Encode()
+			}
+
+			thisDB, err := gosql.Open("postgres", pgURLCopy.String())
+			require.NoError(t, err)
+			defer thisDB.Close()
+
+			if tc.postConnectStmt != "" {
+				_, err = thisDB.ExecContext(ctx, tc.postConnectStmt)
+				require.NoError(t, err)
+			}
+
+			var actual string
+			err = thisDB.QueryRow("SHOW search_path").Scan(&actual)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedSearchPath, actual)
+		})
+
+	}
+
+}
