@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -1119,7 +1120,7 @@ func TestEncodeDecodeTimeTZ(t *testing.T) {
 		t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
 			for i := range testCases {
 				t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-					current, _, err := timetz.ParseTimeTZ(timeutil.Now(), testCases[i], time.Microsecond)
+					current, _, err := timetz.ParseTimeTZ(timeutil.Now(), pgdate.DefaultDateStyle(), testCases[i], time.Microsecond)
 					assert.NoError(t, err)
 
 					var b []byte
