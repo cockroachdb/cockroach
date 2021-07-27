@@ -131,6 +131,17 @@ func (r *NewColOperatorResult) AssertInvariants() {
 	}
 }
 
+// TestCleanup releases the resources associated with this result. It should
+// only be used in tests.
+func (r *NewColOperatorResult) TestCleanup() {
+	for _, acc := range r.OpAccounts {
+		acc.Close(context.Background())
+	}
+	for _, m := range r.OpMonitors {
+		m.Stop(context.Background())
+	}
+}
+
 var newColOperatorResultPool = sync.Pool{
 	New: func() interface{} {
 		return &NewColOperatorResult{}

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
@@ -336,6 +337,33 @@ func (a *Allocator) PerformAppend(batch coldata.Batch, operation func()) {
 	a.AdjustMemoryUsage(after - before)
 }
 
+// AccountForSet accounts for the variable length memory allocated for all
+// elements of rowIdx row that has just been set in batch. It assumes that batch
+// has been instantiated via this allocator (meaning that all fixed-length
+// vectors are already properly accounted for). It returns the total memory
+// footprint of all Bytes-like vectors in batch.
+func (a *Allocator) AccountForSet(
+	batch coldata.Batch, varLengthVecIdxs []int, rowIdx int, prevBytesLikeTotalSize int64,
+) (newBytesLikeTotalSize int64) {
+	var extraDatumsSize int64
+	for _, vecIdx := range varLengthVecIdxs {
+		vec := batch.ColVec(vecIdx)
+		switch vec.CanonicalTypeFamily() {
+		case types.BytesFamily:
+			newBytesLikeTotalSize += vec.Bytes().Size()
+		case types.JsonFamily:
+			newBytesLikeTotalSize += vec.JSON().Size()
+		case types.DecimalFamily:
+			d := vec.Decimal().Get(rowIdx)
+			extraDatumsSize += int64(tree.SizeOfDecimal(&d))
+		case typeconv.DatumVecCanonicalTypeFamily:
+			extraDatumsSize += int64(vec.Datum().Get(rowIdx).(*coldataext.Datum).Size())
+		}
+	}
+	a.AdjustMemoryUsage(newBytesLikeTotalSize - prevBytesLikeTotalSize + extraDatumsSize)
+	return newBytesLikeTotalSize
+}
+
 // Used returns the number of bytes currently allocated through this allocator.
 func (a *Allocator) Used() int64 {
 	return a.acc.Used()
@@ -475,4 +503,22 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 	// Add the offsets.
 	bytesVectorsSize += int64(numBytesVectors+numUUIDVectors) * memsize.Int32 * int64(batchLength+1)
 	return acc*int64(batchLength) + bytesVectorsSize
+}
+
+// GetVarLengthIdxs returns indices into typs for which each element can take up
+// variable amount of space.
+func GetVarLengthIdxs(typs []*types.T) []int {
+	var varLengthIdxs []int
+	for i, typ := range typs {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+		case types.BytesFamily, types.JsonFamily, types.DecimalFamily:
+			varLengthIdxs = append(varLengthIdxs, i)
+		case typeconv.DatumVecCanonicalTypeFamily:
+			_, isVarlen := tree.DatumTypeSize(typ)
+			if isVarlen {
+				varLengthIdxs = append(varLengthIdxs, i)
+			}
+		}
+	}
+	return varLengthIdxs
 }
