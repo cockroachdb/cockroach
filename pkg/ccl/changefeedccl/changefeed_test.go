@@ -2647,6 +2647,22 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `client has run out of available brokers`,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both kafka_sink_config and kafka_sink_config_file`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}', kafka_sink_config_file='cfg.json'`,
+	)
+	sqlDB.ExpectErr(
+		t, `failed to parse sarama config; check kafka_sink_config_file option: 'not a file' could not be recognized as a valid filepath, S3 path or GCS path`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config_file='not a file'`,
+	)
+	sqlDB.ExpectErr(
+		t, `failed to parse sarama config; check kafka_sink_config_file option: 'invalid-scheme://nope' could not be recognized as a valid filepath, S3 path or GCS path`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config_file='invalid-scheme://nope'`,
+	)
+	sqlDB.ExpectErr(
+		t, `failed to parse sarama config; check kafka_sink_config_file option: 'file_dne.json' could not be recognized as a valid filepath, S3 path or GCS path`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config_file='file_dne.json'`,
+	)
 	// The avro format doesn't support key_in_value or topic_in_value yet.
 	sqlDB.ExpectErr(
 		t, `key_in_value is not supported with format=experimental_avro`,
