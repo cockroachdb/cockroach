@@ -1826,7 +1826,7 @@ func TestSessionParameters(t *testing.T) {
 		{"server_version", "bar", false, false, `parameter "server_version" cannot be changed.*55P02`},
 		// Erroneous values are also rejected.
 		{"extra_float_digits", "42", false, false, `42 is outside the valid range for parameter "extra_float_digits".*22023`},
-		{"datestyle", "woo", false, false, `invalid value for parameter "DateStyle".*22023`},
+		{"datestyle", "woo", false, false, `invalid value for parameter "DateStyle": "woo".*22023`},
 	}
 
 	for _, test := range testData {

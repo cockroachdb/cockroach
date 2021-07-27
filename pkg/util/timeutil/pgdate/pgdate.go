@@ -267,3 +267,12 @@ func (s Style) SQLString() string {
 func (ds DateStyle) SQLString() string {
 	return fmt.Sprintf("%s, %s", ds.Style.SQLString(), ds.Order.String())
 }
+
+// AllowedDateStyles returns the list of allowed date styles.
+func AllowedDateStyles() []string {
+	var allowed []string
+	for _, order := range []Order{Order_MDY, Order_DMY, Order_YMD} {
+		allowed = append(allowed, fmt.Sprintf("%s", DateStyle{Style: Style_ISO, Order: order}))
+	}
+	return allowed
+}

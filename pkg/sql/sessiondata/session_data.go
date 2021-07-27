@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
 // SessionData contains session parameters. They are all user-configurable.
@@ -113,6 +114,14 @@ func (s *SessionData) GetIntervalStyle() duration.IntervalStyle {
 		return duration.IntervalStyle_POSTGRES
 	}
 	return s.DataConversionConfig.IntervalStyle
+}
+
+// GetDateStyle returns the session date style.
+func (s *SessionData) GetDateStyle() pgdate.DateStyle {
+	if s == nil {
+		return pgdate.DefaultDateStyle()
+	}
+	return s.DataConversionConfig.DateStyle
 }
 
 // LocalOnlySessionData contains session parameters that only influence the
