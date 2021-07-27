@@ -2040,23 +2040,6 @@ func (c *clusterImpl) ExternalPGUrl(
 	return c.pgURLErr(ctx, node, true /* external */)
 }
 
-// ExternalPGUrlSecure returns the external Postgres endpoint for the specified
-// nodes.
-func (c *clusterImpl) ExternalPGUrlSecure(
-	ctx context.Context, node option.NodeListOption, user string, certsDir string, port int,
-) ([]string, error) {
-	urlTemplate := "postgres://%s@%s:%d?sslcert=%s/client.%s.crt&sslkey=%s/client.%s.key&sslrootcert=%s/ca.crt&sslmode=require"
-	ips, err := c.ExternalIP(ctx, node)
-	if err != nil {
-		return nil, err
-	}
-	var urls []string
-	for _, ip := range ips {
-		urls = append(urls, fmt.Sprintf(urlTemplate, user, ip, port, certsDir, user, certsDir, user, certsDir))
-	}
-	return urls, nil
-}
-
 func addrToAdminUIAddr(c *clusterImpl, addr string) (string, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -2235,21 +2218,6 @@ func (c *clusterImpl) Conn(ctx context.Context, node int) *gosql.DB {
 // ConnE returns a SQL connection to the specified node.
 func (c *clusterImpl) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
 	urls, err := c.ExternalPGUrl(ctx, c.Node(node))
-	if err != nil {
-		return nil, err
-	}
-	db, err := gosql.Open("postgres", urls[0])
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
-}
-
-// ConnSecure returns a secure SQL connection to the specified node.
-func (c *clusterImpl) ConnSecure(
-	ctx context.Context, node int, user string, certsDir string, port int,
-) (*gosql.DB, error) {
-	urls, err := c.ExternalPGUrlSecure(ctx, c.Node(node), user, certsDir, port)
 	if err != nil {
 		return nil, err
 	}

@@ -71,9 +71,6 @@ type Cluster interface {
 
 	Conn(ctx context.Context, node int) *gosql.DB
 	ConnE(ctx context.Context, node int) (*gosql.DB, error)
-	ConnSecure(
-		ctx context.Context, node int, user string, certsDir string, port int,
-	) (*gosql.DB, error)
 
 	// URLs for the Admin UI.
 
