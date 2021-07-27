@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "eavtest",
+    srcs = [
+        "attribute.go",
+        "data_driven.go",
+        "entity.go",
+        "schema.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/eav/eavtest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/schemachanger/eav",
+        "//pkg/sql/schemachanger/eav/eavquery",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)

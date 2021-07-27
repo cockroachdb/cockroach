@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "eavquery",
+    srcs = [
+        "eval.go",
+        "query.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/eav/eavquery",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/schemachanger/eav",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "eavquery_test",
+    srcs = [
+        "bench_test.go",
+        "datadriven_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":eavquery",
+        "//pkg/sql/schemachanger/eav",
+        "//pkg/sql/schemachanger/eav/eavtest",
+        "//pkg/testutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
