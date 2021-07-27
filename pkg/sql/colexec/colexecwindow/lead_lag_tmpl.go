@@ -24,14 +24,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-	"github.com/marusama/semaphore"
 )
 
 // {{/*
@@ -50,49 +46,35 @@ const _TYPE_WIDTH = 0
 // function _OP_NAME. outputColIdx specifies in which coldata.Vec the operator
 // should put its output (if there is no such column, a new column is appended).
 func New_UPPERCASE_NAMEOperator(
-	unlimitedAllocator *colmem.Allocator,
-	bufferAllocator *colmem.Allocator,
-	memoryLimit int64,
-	diskQueueCfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	diskAcc *mon.BoundAccount,
-	input colexecop.Operator,
-	inputTypes []*types.T,
-	outputColIdx int,
-	partitionColIdx int,
-	argIdx int,
-	offsetIdx int,
-	defaultIdx int,
+	args *WindowArgs, argIdx int, offsetIdx int, defaultIdx int,
 ) (colexecop.Operator, error) {
 	// Allow the direct-access buffer 10% of the available memory. The rest will
 	// be given to the bufferedWindowOp queue. While it is somewhat more important
 	// for the direct-access buffer tuples to be kept in-memory, it only has to
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
-	bufferMemLimit := int64(float64(memoryLimit) * 0.10)
+	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
 	buffer := colexecutils.NewSpillingBuffer(
-		bufferAllocator, bufferMemLimit, diskQueueCfg, fdSemaphore, inputTypes, diskAcc, argIdx)
+		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
+		args.FdSemaphore, args.InputTypes, args.DiskAcc, argIdx)
 	base := _OP_NAMEBase{
 		partitionSeekerBase: partitionSeekerBase{
 			buffer:          buffer,
-			partitionColIdx: partitionColIdx,
+			partitionColIdx: args.PartitionColIdx,
 		},
-		outputColIdx: outputColIdx,
+		outputColIdx: args.OutputColIdx,
 		argIdx:       argIdx,
 		offsetIdx:    offsetIdx,
 		defaultIdx:   defaultIdx,
 	}
-	argType := inputTypes[argIdx]
+	argType := args.InputTypes[argIdx]
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch argType.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			return newBufferedWindowOperator(
-				&_OP_NAME_TYPEWindow{_OP_NAMEBase: base}, unlimitedAllocator, memoryLimit-bufferMemLimit,
-				diskQueueCfg, fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, &_OP_NAME_TYPEWindow{_OP_NAMEBase: base}, argType), nil
 			// {{end}}
 		}
 		// {{end}}
@@ -223,12 +205,14 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 				continue
 			}
 			// {{end}}
-			// {{if .IsBytesLike}}
-			leadLagCol.CopySlice(defaultCol, i, i, i+1)
-			// {{else}}
-			val := defaultCol.Get(i)
-			leadLagCol.Set(i, val)
+			// {{if .Sliceable}}
+			//gcassert:bce
 			// {{end}}
+			val := defaultCol.Get(i)
+			// {{if .Sliceable}}
+			//gcassert:bce
+			// {{end}}
+			leadLagCol.Set(i, val)
 			continue
 		}
 		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -237,17 +221,11 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 			continue
 		}
 		col := vec.TemplateType()
-		// {{if .IsBytesLike}}
-		// We have to use CopySlice here because the column already has a length of
-		// n elements, and Set cannot set values before the last one.
-		leadLagCol.CopySlice(col, i, idx, idx+1)
-		// {{else}}
 		val := col.Get(idx)
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		leadLagCol.Set(i, val)
-		// {{end}}
 	}
 	// {{end}}
 	// {{/*

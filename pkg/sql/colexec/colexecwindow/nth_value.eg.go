@@ -14,62 +14,46 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-	"github.com/marusama/semaphore"
 )
 
 // NewNthValueOperator creates a new Operator that computes window
 // function nthValue. outputColIdx specifies in which coldata.Vec the operator
 // should put its output (if there is no such column, a new column is appended).
 func NewNthValueOperator(
-	evalCtx *tree.EvalContext,
+	args *WindowArgs,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
-	unlimitedAllocator *colmem.Allocator,
-	bufferAllocator *colmem.Allocator,
-	memoryLimit int64,
-	diskQueueCfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	diskAcc *mon.BoundAccount,
-	input colexecop.Operator,
-	inputTypes []*types.T,
-	outputColIdx int,
-	partitionColIdx int,
-	peersColIdx int,
 	argIdxs []int,
 ) (colexecop.Operator, error) {
-	framer := newWindowFramer(evalCtx, frame, ordering, inputTypes, peersColIdx)
-	colsToStore := []int{argIdxs[0]}
-	colsToStore = framer.getColsToStore(colsToStore)
+	framer := newWindowFramer(args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
+	colsToStore := framer.getColsToStore([]int{argIdxs[0]})
 
 	// Allow the direct-access buffer 10% of the available memory. The rest will
 	// be given to the bufferedWindowOp queue. While it is somewhat more important
 	// for the direct-access buffer tuples to be kept in-memory, it only has to
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
-	bufferMemLimit := int64(float64(memoryLimit) * 0.10)
+	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
 	buffer := colexecutils.NewSpillingBuffer(
-		bufferAllocator, bufferMemLimit, diskQueueCfg, fdSemaphore, inputTypes, diskAcc, colsToStore...)
+		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
+		args.FdSemaphore, args.InputTypes, args.DiskAcc, colsToStore...)
 	base := nthValueBase{
 		partitionSeekerBase: partitionSeekerBase{
 			buffer:          buffer,
-			partitionColIdx: partitionColIdx,
+			partitionColIdx: args.PartitionColIdx,
 		},
 		framer:       framer,
-		outputColIdx: outputColIdx,
+		outputColIdx: args.OutputColIdx,
 		bufferArgIdx: 0, // The arg column is the first column in the buffer.
 	}
-	argType := inputTypes[argIdxs[0]]
+	argType := args.InputTypes[argIdxs[0]]
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
 	case types.BoolFamily:
 		switch argType.Width() {
@@ -77,10 +61,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueBoolWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		}
 	case types.BytesFamily:
 		switch argType.Width() {
@@ -88,10 +69,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueBytesWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		}
 	case types.DecimalFamily:
 		switch argType.Width() {
@@ -99,35 +77,23 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueDecimalWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		}
 	case types.IntFamily:
 		switch argType.Width() {
 		case 16:
 			windower := &nthValueInt16Window{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		case 32:
 			windower := &nthValueInt32Window{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		case -1:
 		default:
 			windower := &nthValueInt64Window{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		}
 	case types.FloatFamily:
 		switch argType.Width() {
@@ -135,10 +101,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueFloat64Window{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		}
 	case types.TimestampTZFamily:
 		switch argType.Width() {
@@ -146,10 +109,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueTimestampWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		}
 	case types.IntervalFamily:
 		switch argType.Width() {
@@ -157,10 +117,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueIntervalWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		}
 	case types.JsonFamily:
 		switch argType.Width() {
@@ -168,10 +125,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueJSONWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
@@ -179,10 +133,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueDatumWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 		}
 	}
 	return nil, errors.Errorf("unsupported nthValue window operator type %s", argType.Name())
@@ -300,9 +251,8 @@ func (w *nthValueBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 			continue
 		}
 		col := vec.Bytes()
-		// We have to use CopySlice here because the column already has a length of
-		// n elements, and Set cannot set values before the last one.
-		outputCol.CopySlice(col, i, idx, idx+1)
+		val := col.Get(idx)
+		outputCol.Set(i, val)
 	}
 }
 
@@ -739,9 +689,8 @@ func (w *nthValueJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 			continue
 		}
 		col := vec.JSON()
-		// We have to use CopySlice here because the column already has a length of
-		// n elements, and Set cannot set values before the last one.
-		outputCol.CopySlice(col, i, idx, idx+1)
+		val := col.Get(idx)
+		outputCol.Set(i, val)
 	}
 }
 

@@ -25,18 +25,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-	"github.com/marusama/semaphore"
 )
 
 // {{/*
@@ -55,44 +50,33 @@ const _TYPE_WIDTH = 0
 // function _OP_NAME. outputColIdx specifies in which coldata.Vec the operator
 // should put its output (if there is no such column, a new column is appended).
 func New_UPPERCASE_NAMEOperator(
-	evalCtx *tree.EvalContext,
+	args *WindowArgs,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
-	unlimitedAllocator *colmem.Allocator,
-	bufferAllocator *colmem.Allocator,
-	memoryLimit int64,
-	diskQueueCfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	diskAcc *mon.BoundAccount,
-	input colexecop.Operator,
-	inputTypes []*types.T,
-	outputColIdx int,
-	partitionColIdx int,
-	peersColIdx int,
 	argIdxs []int,
 ) (colexecop.Operator, error) {
-	framer := newWindowFramer(evalCtx, frame, ordering, inputTypes, peersColIdx)
-	colsToStore := []int{argIdxs[0]}
-	colsToStore = framer.getColsToStore(colsToStore)
+	framer := newWindowFramer(args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
+	colsToStore := framer.getColsToStore([]int{argIdxs[0]})
 
 	// Allow the direct-access buffer 10% of the available memory. The rest will
 	// be given to the bufferedWindowOp queue. While it is somewhat more important
 	// for the direct-access buffer tuples to be kept in-memory, it only has to
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
-	bufferMemLimit := int64(float64(memoryLimit) * 0.10)
+	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
 	buffer := colexecutils.NewSpillingBuffer(
-		bufferAllocator, bufferMemLimit, diskQueueCfg, fdSemaphore, inputTypes, diskAcc, colsToStore...)
+		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
+		args.FdSemaphore, args.InputTypes, args.DiskAcc, colsToStore...)
 	base := _OP_NAMEBase{
 		partitionSeekerBase: partitionSeekerBase{
 			buffer:          buffer,
-			partitionColIdx: partitionColIdx,
+			partitionColIdx: args.PartitionColIdx,
 		},
 		framer:       framer,
-		outputColIdx: outputColIdx,
+		outputColIdx: args.OutputColIdx,
 		bufferArgIdx: 0, // The arg column is the first column in the buffer.
 	}
-	argType := inputTypes[argIdxs[0]]
+	argType := args.InputTypes[argIdxs[0]]
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
@@ -103,10 +87,7 @@ func New_UPPERCASE_NAMEOperator(
 			// {{if .IsNthValue}}
 			windower.nColIdx = argIdxs[1]
 			// {{end}}
-			return newBufferedWindowOperator(
-				windower, unlimitedAllocator, memoryLimit-bufferMemLimit, diskQueueCfg,
-				fdSemaphore, diskAcc, input, inputTypes, argType, outputColIdx,
-			), nil
+			return newBufferedWindowOperator(args, windower, argType), nil
 			// {{end}}
 		}
 		// {{end}}
@@ -187,17 +168,11 @@ func (w *_OP_NAME_TYPEWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 			continue
 		}
 		col := vec.TemplateType()
-		// {{if .IsBytesLike}}
-		// We have to use CopySlice here because the column already has a length of
-		// n elements, and Set cannot set values before the last one.
-		outputCol.CopySlice(col, i, idx, idx+1)
-		// {{else}}
 		val := col.Get(idx)
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		outputCol.Set(i, val)
-		// {{end}}
 	}
 }
 

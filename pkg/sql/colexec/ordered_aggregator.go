@@ -159,7 +159,7 @@ func NewOrderedAggregator(
 	// We will be reusing the same aggregate functions, so we use 1 as the
 	// allocation size.
 	funcsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-		args, 1 /* allocSize */, false, /* isHashAgg */
+		args, args.Spec.Aggregations, 1 /* allocSize */, colexecagg.OrderedAggKind,
 	)
 	if err != nil {
 		return nil, errors.AssertionFailedf(

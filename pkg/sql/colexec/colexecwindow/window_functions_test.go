@@ -16,8 +16,10 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -57,8 +59,15 @@ func TestWindowFunctions(t *testing.T) {
 		},
 		DiskMonitor: testDiskMonitor,
 	}
+	semaCtx := tree.MakeSemaContext()
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+
+	dec := func(val string) apd.Decimal {
+		res, _, err := apd.NewFromString(val)
+		require.NoError(t, err)
+		return *res
+	}
 
 	rowNumberFn := execinfrapb.WindowerSpec_ROW_NUMBER
 	rankFn := execinfrapb.WindowerSpec_RANK
@@ -71,6 +80,14 @@ func TestWindowFunctions(t *testing.T) {
 	firstValueFn := execinfrapb.WindowerSpec_FIRST_VALUE
 	lastValueFn := execinfrapb.WindowerSpec_LAST_VALUE
 	nthValueFn := execinfrapb.WindowerSpec_NTH_VALUE
+
+	// Because aggregate window functions are all executed by the same operator,
+	// we only test a few representative aggregates.
+	sumFn := execinfrapb.AggregatorSpec_SUM
+	countFn := execinfrapb.AggregatorSpec_COUNT
+	avgFn := execinfrapb.AggregatorSpec_AVG
+	maxFn := execinfrapb.AggregatorSpec_MAX
+
 	accounts := make([]*mon.BoundAccount, 0)
 	monitors := make([]*mon.BytesMonitor, 0)
 	for _, spillForced := range []bool{true} {
@@ -238,6 +255,69 @@ func TestWindowFunctions(t *testing.T) {
 					},
 				},
 			},
+			{
+				tuples: colexectestutils.Tuples{{1, 7}, {1, 3}, {1, -5}, {2, nil}, {2, 0}, {3, 6}},
+				expected: colexectestutils.Tuples{
+					{1, 7, dec("5")}, {1, 3, dec("5")}, {1, -5, dec("5")},
+					{2, nil, dec("0")}, {2, 0, dec("0")}, {3, 6, dec("6")},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &sumFn},
+							ArgsIdxs:     []uint32{1},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{1, 7}, {1, 3}, {1, -5}, {2, nil}, {2, 0}, {3, 6}},
+				expected: colexectestutils.Tuples{{1, 7, 3}, {1, 3, 3}, {1, -5, 3}, {2, nil, 1}, {2, 0, 1}, {3, 6, 1}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &countFn},
+							ArgsIdxs:     []uint32{1},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
+			{
+				tuples: colexectestutils.Tuples{{1, 7}, {1, 3}, {1, -5}, {2, nil}, {2, 0}, {3, 6}},
+				expected: colexectestutils.Tuples{
+					{1, 7, dec("1.6666666666666666667")}, {1, 3, dec("1.6666666666666666667")},
+					{1, -5, dec("1.6666666666666666667")}, {2, nil, dec("0")},
+					{2, 0, dec("0")}, {3, 6, dec("6")},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &avgFn},
+							ArgsIdxs:     []uint32{1},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{1, 7}, {1, 3}, {1, -5}, {2, nil}, {2, 0}, {3, 6}},
+				expected: colexectestutils.Tuples{{1, 7, 7}, {1, 3, 7}, {1, -5, 7}, {2, nil, 0}, {2, 0, 0}, {3, 6, 6}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &maxFn},
+							ArgsIdxs:     []uint32{1},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
 
 			// No PARTITION BY, with ORDER BY.
 			{
@@ -397,6 +477,67 @@ func TestWindowFunctions(t *testing.T) {
 							ArgsIdxs:     []uint32{1, 2},
 							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
 							OutputColIdx: 3,
+						},
+					},
+				},
+			},
+			{
+				tuples: colexectestutils.Tuples{{nil, 4}, {nil, -6}, {1, 2}, {1, nil}, {2, -3}, {3, 1}, {3, 7}},
+				expected: colexectestutils.Tuples{
+					{nil, 4, dec("-2")}, {nil, -6, dec("-2")}, {1, 2, dec("0")},
+					{1, nil, dec("0")}, {2, -3, dec("-3")}, {3, 1, dec("5")}, {3, 7, dec("5")}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &sumFn},
+							ArgsIdxs:     []uint32{1},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{nil, 4}, {nil, -6}, {1, 2}, {1, nil}, {2, -3}, {3, 1}, {3, 7}},
+				expected: colexectestutils.Tuples{{nil, 4, 2}, {nil, -6, 2}, {1, 2, 3}, {1, nil, 3}, {2, -3, 4}, {3, 1, 6}, {3, 7, 6}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &countFn},
+							ArgsIdxs:     []uint32{1},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
+			{
+				tuples: colexectestutils.Tuples{{nil, 4}, {nil, -6}, {1, 2}, {1, nil}, {2, -3}, {3, 1}, {3, 7}},
+				expected: colexectestutils.Tuples{
+					{nil, 4, dec("-1")}, {nil, -6, dec("-1")},
+					{1, 2, dec("0")}, {1, nil, dec("0")}, {2, -3, dec("-0.75")},
+					{3, 1, dec("0.83333333333333333333")}, {3, 7, dec("0.83333333333333333333")}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &avgFn},
+							ArgsIdxs:     []uint32{1},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
+							OutputColIdx: 2,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{nil, 4}, {nil, -6}, {1, 2}, {1, nil}, {2, -3}, {3, 1}, {3, 7}},
+				expected: colexectestutils.Tuples{{nil, 4, 4}, {nil, -6, 4}, {1, 2, 4}, {1, nil, 4}, {2, -3, 4}, {3, 1, 7}, {3, 7, 7}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &maxFn},
+							ArgsIdxs:     []uint32{1},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
+							OutputColIdx: 2,
 						},
 					},
 				},
@@ -593,6 +734,93 @@ func TestWindowFunctions(t *testing.T) {
 					},
 				},
 			},
+			{
+				tuples: colexectestutils.Tuples{
+					{nil, nil, -10}, {nil, nil, 4}, {nil, 1, 6}, {1, nil, 2},
+					{1, 2, 5}, {2, 1, nil}, {3, 1, 8}, {3, 2, 1},
+				},
+				expected: colexectestutils.Tuples{
+					{nil, nil, -10, dec("-6")}, {nil, nil, 4, dec("-6")}, {nil, 1, 6, dec("0")},
+					{1, nil, 2, dec("2")}, {1, 2, 5, dec("7")}, {2, 1, nil, nil},
+					{3, 1, 8, dec("8")}, {3, 2, 1, dec("9")},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &sumFn},
+							ArgsIdxs:     []uint32{2},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 1}}},
+							OutputColIdx: 3,
+						},
+					},
+				},
+			},
+			{
+				tuples: colexectestutils.Tuples{
+					{nil, nil, -10}, {nil, nil, 4}, {nil, 1, 6}, {1, nil, 2},
+					{1, 2, 5}, {2, 1, nil}, {3, 1, 8}, {3, 2, 1},
+				},
+				expected: colexectestutils.Tuples{
+					{nil, nil, -10, 2}, {nil, nil, 4, 2}, {nil, 1, 6, 3}, {1, nil, 2, 1},
+					{1, 2, 5, 2}, {2, 1, nil, 0}, {3, 1, 8, 1}, {3, 2, 1, 2},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &countFn},
+							ArgsIdxs:     []uint32{2},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 1}}},
+							OutputColIdx: 3,
+						},
+					},
+				},
+			},
+			{
+				tuples: colexectestutils.Tuples{
+					{nil, nil, -10}, {nil, nil, 4}, {nil, 1, 6}, {1, nil, 2},
+					{1, 2, 5}, {2, 1, nil}, {3, 1, 8}, {3, 2, 1},
+				},
+				expected: colexectestutils.Tuples{
+					{nil, nil, -10, dec("-3")}, {nil, nil, 4, dec("-3")},
+					{nil, 1, 6, dec("0")}, {1, nil, 2, dec("2")},
+					{1, 2, 5, dec("3.5")}, {2, 1, nil, nil},
+					{3, 1, 8, dec("8")}, {3, 2, 1, dec("4.5")},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &avgFn},
+							ArgsIdxs:     []uint32{2},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 1}}},
+							OutputColIdx: 3,
+						},
+					},
+				},
+			},
+			{
+				tuples: colexectestutils.Tuples{
+					{nil, nil, -10}, {nil, nil, 4}, {nil, 1, 6}, {1, nil, 2},
+					{1, 2, 5}, {2, 1, nil}, {3, 1, 8}, {3, 2, 1},
+				},
+				expected: colexectestutils.Tuples{
+					{nil, nil, -10, 4}, {nil, nil, 4, 4}, {nil, 1, 6, 6}, {1, nil, 2, 2},
+					{1, 2, 5, 5}, {2, 1, nil, nil}, {3, 1, 8, 8}, {3, 2, 1, 8},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &maxFn},
+							ArgsIdxs:     []uint32{2},
+							Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 1}}},
+							OutputColIdx: 3,
+						},
+					},
+				},
+			},
 
 			// With neither PARTITION BY nor ORDER BY.
 			{
@@ -745,6 +973,64 @@ func TestWindowFunctions(t *testing.T) {
 					},
 				},
 			},
+			{
+				tuples: colexectestutils.Tuples{{1}, {2}, {3}, {4}, {5}, {6}},
+				expected: colexectestutils.Tuples{
+					{1, dec("21")}, {2, dec("21")}, {3, dec("21")},
+					{4, dec("21")}, {5, dec("21")}, {6, dec("21")},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &sumFn},
+							ArgsIdxs:     []uint32{0},
+							OutputColIdx: 1,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{1}, {2}, {nil}, {4}, {nil}, {6}},
+				expected: colexectestutils.Tuples{{1, 4}, {2, 4}, {nil, 4}, {4, 4}, {nil, 4}, {6, 4}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &countFn},
+							ArgsIdxs:     []uint32{0},
+							OutputColIdx: 1,
+						},
+					},
+				},
+			},
+			{
+				tuples: colexectestutils.Tuples{{1}, {2}, {nil}, {4}, {nil}, {6}},
+				expected: colexectestutils.Tuples{
+					{1, dec("3.25")}, {2, dec("3.25")}, {nil, dec("3.25")},
+					{4, dec("3.25")}, {nil, dec("3.25")}, {6, dec("3.25")},
+				},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &avgFn},
+							ArgsIdxs:     []uint32{0},
+							OutputColIdx: 1,
+						},
+					},
+				},
+			},
+			{
+				tuples:   colexectestutils.Tuples{{1}, {2}, {nil}, {4}, {nil}, {6}},
+				expected: colexectestutils.Tuples{{1, 6}, {2, 6}, {nil, 6}, {4, 6}, {nil, 6}, {6, 6}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &maxFn},
+							ArgsIdxs:     []uint32{0},
+							OutputColIdx: 1,
+						},
+					},
+				},
+			},
 		} {
 			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
 			var semsToCheck []semaphore.Semaphore
@@ -755,9 +1041,21 @@ func TestWindowFunctions(t *testing.T) {
 					ct[i] = types.Int
 				}
 				resultType := types.Int
-				wf := tc.windowerSpec.WindowFns[0].Func.WindowFunc
-				if wf == &percentRankFn || wf == &cumeDistFn {
-					resultType = types.Float
+				fun := tc.windowerSpec.WindowFns[0].Func
+				if fun.WindowFunc != nil {
+					if fun.WindowFunc == &percentRankFn || fun.WindowFunc == &cumeDistFn {
+						resultType = types.Float
+					}
+				} else {
+					argIdxs := tc.windowerSpec.WindowFns[0].ArgsIdxs
+					aggregations := []execinfrapb.AggregatorSpec_Aggregation{{
+						Func:   *fun.AggregateFunc,
+						ColIdx: argIdxs,
+					}}
+					_, _, outputTypes, err :=
+						colexecagg.ProcessAggregations(&evalCtx, &semaCtx, aggregations, ct)
+					require.NoError(t, err)
+					resultType = outputTypes[0]
 				}
 				spec := &execinfrapb.ProcessorSpec{
 					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: ct}},
@@ -802,6 +1100,7 @@ func BenchmarkWindowFunctions(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	semaCtx := tree.MakeSemaContext()
 
 	const (
 		memLimit        = 64 << 20
@@ -814,8 +1113,6 @@ func BenchmarkWindowFunctions(b *testing.B) {
 		partitionColIdx = 3
 		orderColIdx     = 4
 		peersColIdx     = 5
-		numIntCols      = 4
-		numBoolCols     = 2
 	)
 
 	sourceTypes := []*types.T{
@@ -831,7 +1128,7 @@ func BenchmarkWindowFunctions(b *testing.B) {
 	defer benchMemAccount.Close(ctx)
 
 	getWindowFn := func(
-		windowFn execinfrapb.WindowerSpec_WindowFunc, source colexecop.Operator, partition, order bool,
+		fun execinfrapb.WindowerSpec_Func, source colexecop.Operator, partition, order bool,
 	) (op colexecop.Operator) {
 		var err error
 		outputIdx := len(sourceTypes)
@@ -852,53 +1149,76 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			})
 		}
 
-		switch windowFn {
-		case execinfrapb.WindowerSpec_ROW_NUMBER:
-			op = NewRowNumberOperator(mainAllocator, source, outputIdx, partitionCol)
-		case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
-			op, err = NewRankOperator(
-				mainAllocator, source, windowFn, orderingCols, outputIdx, partitionCol, peersCol,
+		args := &WindowArgs{
+			EvalCtx:         &evalCtx,
+			MainAllocator:   mainAllocator,
+			BufferAllocator: bufferAllocator,
+			MemoryLimit:     memLimit,
+			QueueCfg:        queueCfg,
+			FdSemaphore:     colexecop.NewTestingSemaphore(fdLimit),
+			DiskAcc:         testDiskAcc,
+			Input:           source,
+			InputTypes:      sourceTypes,
+			OutputColIdx:    outputIdx,
+			PartitionColIdx: partitionCol,
+			PeersColIdx:     peersCol,
+		}
+
+		if fun.WindowFunc != nil {
+			switch *fun.WindowFunc {
+			case execinfrapb.WindowerSpec_ROW_NUMBER:
+				op = NewRowNumberOperator(args)
+			case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
+				op, err = NewRankOperator(args, *fun.WindowFunc, orderingCols)
+			case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
+				op, err = NewRelativeRankOperator(args, *fun.WindowFunc, orderingCols)
+			case execinfrapb.WindowerSpec_NTILE:
+				op = NewNTileOperator(args, arg1ColIdx)
+			case execinfrapb.WindowerSpec_LAG:
+				op, err = NewLagOperator(args, arg1ColIdx, arg2ColIdx, arg3ColIdx)
+			case execinfrapb.WindowerSpec_LEAD:
+				op, err = NewLeadOperator(args, arg1ColIdx, arg2ColIdx, arg3ColIdx)
+			case execinfrapb.WindowerSpec_FIRST_VALUE:
+				op, err = NewFirstValueOperator(args, NormalizeWindowFrame(nil),
+					&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx})
+			case execinfrapb.WindowerSpec_LAST_VALUE:
+				op, err = NewLastValueOperator(args, NormalizeWindowFrame(nil),
+					&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx})
+			case execinfrapb.WindowerSpec_NTH_VALUE:
+				op, err = NewNthValueOperator(args, NormalizeWindowFrame(nil),
+					&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx, arg2ColIdx})
+			}
+		} else if fun.AggregateFunc != nil {
+			var argIdxs []int
+			if *fun.AggregateFunc != execinfrapb.CountRows {
+				// Supported aggregate functions other than CountRows take one argument.
+				argIdxs = []int{arg1ColIdx}
+			}
+			colIdxs := make([]uint32, len(argIdxs))
+			for i, idx := range argIdxs {
+				colIdxs[i] = uint32(idx)
+			}
+			aggArgs := colexecagg.NewAggregatorArgs{
+				Allocator:  mainAllocator,
+				InputTypes: sourceTypes,
+				EvalCtx:    &evalCtx,
+			}
+			aggregations := []execinfrapb.AggregatorSpec_Aggregation{{
+				Func:   *fun.AggregateFunc,
+				ColIdx: colIdxs,
+			}}
+			aggArgs.Constructors, aggArgs.ConstArguments, aggArgs.OutputTypes, err =
+				colexecagg.ProcessAggregations(&evalCtx, &semaCtx, aggregations, sourceTypes)
+			require.NoError(b, err)
+			aggFnsAlloc, _, toClose, err := colexecagg.NewAggregateFuncsAlloc(
+				&aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
 			)
-		case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
-			op, err = NewRelativeRankOperator(
-				mainAllocator, memLimit, queueCfg, colexecop.NewTestingSemaphore(fdLimit), source,
-				sourceTypes, windowFn, orderingCols, outputIdx, partitionColIdx, peersColIdx, testDiskAcc,
-			)
-		case execinfrapb.WindowerSpec_NTILE:
-			op = NewNTileOperator(mainAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionCol, arg1ColIdx,
-			)
-		case execinfrapb.WindowerSpec_LAG:
-			op, err = NewLagOperator(
-				mainAllocator, bufferAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionCol, arg1ColIdx, arg2ColIdx, arg3ColIdx,
-			)
-		case execinfrapb.WindowerSpec_LEAD:
-			op, err = NewLeadOperator(
-				mainAllocator, bufferAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionCol, arg1ColIdx, arg2ColIdx, arg3ColIdx,
-			)
-		case execinfrapb.WindowerSpec_FIRST_VALUE:
-			op, err = NewFirstValueOperator(
-				&evalCtx, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
-				mainAllocator, bufferAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionColIdx, peersColIdx, []int{arg1ColIdx})
-		case execinfrapb.WindowerSpec_LAST_VALUE:
-			op, err = NewLastValueOperator(
-				&evalCtx, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
-				mainAllocator, bufferAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionColIdx, peersColIdx, []int{arg1ColIdx})
-		case execinfrapb.WindowerSpec_NTH_VALUE:
-			op, err = NewFirstValueOperator(
-				&evalCtx, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
-				mainAllocator, bufferAllocator, memLimit, queueCfg,
-				colexecop.NewTestingSemaphore(fdLimit), testDiskAcc, source, sourceTypes,
-				outputIdx, partitionColIdx, peersColIdx, []int{arg1ColIdx, arg2ColIdx})
+			require.NoError(b, err)
+			op = NewWindowAggregatorOperator(
+				args, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
+				[]int{arg1ColIdx}, aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
+		} else {
+			require.Fail(b, "expected non-nil window function")
 		}
 		require.NoError(b, err)
 		return op
@@ -906,7 +1226,7 @@ func BenchmarkWindowFunctions(b *testing.B) {
 
 	var batch coldata.Batch
 	batchCreator := func(batchLength int) coldata.Batch {
-		const arg1Offset = 5
+		const arg1Offset, arg1Range = 5, 10
 		batch, _ = testAllocator.ResetMaybeReallocate(sourceTypes, batch, batchLength, math.MaxInt64)
 		argCol1 := batch.ColVec(arg1ColIdx).Int64()
 		argCol2 := batch.ColVec(arg2ColIdx).Int64()
@@ -914,7 +1234,7 @@ func BenchmarkWindowFunctions(b *testing.B) {
 		orderCol := batch.ColVec(orderColIdx).Int64()
 		peersCol := batch.ColVec(peersColIdx).Bool()
 		for i := 0; i < batchLength; i++ {
-			argCol1[i] = int64(i + arg1Offset)
+			argCol1[i] = int64(1 + (i+arg1Offset)%arg1Range)
 			argCol2[i] = 1
 			partitionCol[i] = i%partitionSize == 0
 			orderCol[i] = int64(i / peerGroupSize)
@@ -932,11 +1252,18 @@ func BenchmarkWindowFunctions(b *testing.B) {
 
 	// The number of rows should be a multiple of coldata.BatchSize().
 	rowsOptions := []int{4 * coldata.BatchSize(), 32 * coldata.BatchSize()}
+	if testing.Short() {
+		rowsOptions = []int{4 * coldata.BatchSize()}
+	}
 
-	for windowFnIdx := 0; windowFnIdx < len(execinfrapb.WindowerSpec_WindowFunc_name); windowFnIdx++ {
-		windowFn := execinfrapb.WindowerSpec_WindowFunc(windowFnIdx)
-		b.Run(fmt.Sprintf("%v", windowFn), func(b *testing.B) {
+	runBench := func(fun execinfrapb.WindowerSpec_Func, fnName string, numArgs int) {
+		b.Run(fnName, func(b *testing.B) {
 			for _, nRows := range rowsOptions {
+				if fun.AggregateFunc != nil && nRows == 32*coldata.BatchSize() {
+					// Aggregate functions are too slow until the sliding window approach
+					// is implemented.
+					continue
+				}
 				b.Run(fmt.Sprintf("rows=%d", nRows), func(b *testing.B) {
 					nBatches := nRows / coldata.BatchSize()
 					batch := batchCreator(coldata.BatchSize())
@@ -948,14 +1275,14 @@ func BenchmarkWindowFunctions(b *testing.B) {
 									// well as the output column. All other
 									// columns are internal and should be
 									// ignored.
-									numArgs := windowFnMaxNumArgs[windowFn]
+									// TODO(drewk): the type isn't always int.
 									b.SetBytes(int64(nRows * 8 * (numArgs + 1)))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
 										source := colexectestutils.NewFiniteChunksSource(
 											testAllocator, batch, sourceTypes, nBatches, 1,
 										)
-										s := getWindowFn(windowFn, source, partitionInput, orderInput)
+										s := getWindowFn(fun, source, partitionInput, orderInput)
 										s.Init(ctx)
 										b.StartTimer()
 										for b := s.Next(); b.Length() != 0; b = s.Next() {
@@ -969,5 +1296,32 @@ func BenchmarkWindowFunctions(b *testing.B) {
 				})
 			}
 		})
+	}
+
+	for windowFnIdx := 0; windowFnIdx < len(execinfrapb.WindowerSpec_WindowFunc_name); windowFnIdx++ {
+		windowFn := execinfrapb.WindowerSpec_WindowFunc(windowFnIdx)
+		numArgs := windowFnMaxNumArgs[windowFn]
+		runBench(execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn}, windowFn.String(), numArgs)
+	}
+
+	// We need <= because an entry for index=6 was omitted by mistake.
+	for aggFnIdx := 0; aggFnIdx <= len(execinfrapb.AggregatorSpec_Func_name); aggFnIdx++ {
+		aggFn := execinfrapb.AggregatorSpec_Func(aggFnIdx)
+		if !colexecagg.IsAggOptimized(aggFn) {
+			continue
+		}
+		switch aggFn {
+		case execinfrapb.AnyNotNull, execinfrapb.BoolAnd, execinfrapb.BoolOr, execinfrapb.ConcatAgg:
+			// Skip AnyNotNull because it is not a valid window function, and the
+			// other three in order to avoid handling non-integer arguments.
+			continue
+		}
+		// Of the supported aggregate functions, only count_rows has zero arguments.
+		// The rest take one argument.
+		var numArgs int
+		if aggFn != execinfrapb.CountRows {
+			numArgs = 1
+		}
+		runBench(execinfrapb.WindowerSpec_Func{AggregateFunc: &aggFn}, aggFn.String(), numArgs)
 	}
 }

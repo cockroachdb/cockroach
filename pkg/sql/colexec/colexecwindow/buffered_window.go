@@ -15,6 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -29,31 +30,24 @@ import (
 // newBufferedWindowOperator creates a new Operator that computes the given
 // window function.
 func newBufferedWindowOperator(
-	windower bufferedWindower,
-	unlimitedAllocator *colmem.Allocator,
-	memoryLimit int64,
-	diskQueueCfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	diskAcc *mon.BoundAccount,
-	input colexecop.Operator,
-	inputTypes []*types.T,
-	outputColType *types.T,
-	outputColIdx int,
+	args *WindowArgs, windower bufferedWindower, outputColType *types.T,
 ) colexecop.Operator {
-	outputTypes := make([]*types.T, len(inputTypes), len(inputTypes)+1)
-	copy(outputTypes, inputTypes)
+	outputTypes := make([]*types.T, len(args.InputTypes), len(args.InputTypes)+1)
+	copy(outputTypes, args.InputTypes)
 	outputTypes = append(outputTypes, outputColType)
-	input = colexecutils.NewVectorTypeEnforcer(unlimitedAllocator, input, outputColType, outputColIdx)
+	input := colexecutils.NewVectorTypeEnforcer(
+		args.MainAllocator, args.Input, outputColType, args.OutputColIdx)
 	return &bufferedWindowOp{
 		windowInitFields: windowInitFields{
 			OneInputNode: colexecop.NewOneInputNode(input),
-			allocator:    unlimitedAllocator,
-			memoryLimit:  memoryLimit,
-			diskQueueCfg: diskQueueCfg,
-			fdSemaphore:  fdSemaphore,
+			allocator:    args.MainAllocator,
+			memoryLimit:  args.MemoryLimit,
+			diskQueueCfg: args.QueueCfg,
+			fdSemaphore:  args.FdSemaphore,
 			outputTypes:  outputTypes,
-			diskAcc:      diskAcc,
-			outputColIdx: outputColIdx,
+			diskAcc:      args.DiskAcc,
+			outputColIdx: args.OutputColIdx,
+			outputColFam: typeconv.TypeFamilyToCanonicalTypeFamily(outputColType.Family()),
 		},
 		windower: windower,
 	}
@@ -155,6 +149,7 @@ type windowInitFields struct {
 	outputTypes  []*types.T
 	diskAcc      *mon.BoundAccount
 	outputColIdx int
+	outputColFam types.Family
 }
 
 // bufferedWindowOp extracts common fields for the various window operators
@@ -295,6 +290,14 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 				var output coldata.Batch
 				if output, err = b.bufferQueue.Dequeue(b.Ctx); err != nil {
 					colexecerror.InternalError(err)
+				}
+				// The spilling queue sets 'maxSetLength' to the length of the batch for
+				// bytes-like types, so we have to reset it so that `Set` can be used.
+				switch b.outputColFam {
+				case types.BytesFamily:
+					output.ColVec(b.outputColIdx).Bytes().Truncate(b.processingIdx)
+				case types.JsonFamily:
+					output.ColVec(b.outputColIdx).JSON().Truncate(b.processingIdx)
 				}
 				// Set all the window output values that remain unset, then emit this
 				// batch. Note that because the beginning of the next partition will

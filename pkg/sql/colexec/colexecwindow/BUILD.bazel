@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "buffered_window.go",
         "partitioner.go",
+        "window_aggregator.go",
         "window_functions_util.go",
         ":gen-exec",  # keep
     ],
@@ -18,6 +19,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",  # keep
         "//pkg/sql/colconv",  # keep
+        "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexecutils",  # keep
         "//pkg/sql/colexec/execgen",  # keep
@@ -59,6 +61,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colexec/colbuilder",
+        "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexec/colexecutils",
@@ -78,6 +81,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_marusama_semaphore//:semaphore",
         "@com_github_stretchr_testify//require",

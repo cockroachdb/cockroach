@@ -23,15 +23,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-	"github.com/marusama/semaphore"
 )
 
 // TODO(yuzefovich): add benchmarks.
@@ -42,33 +38,19 @@ import (
 // NewNTileOperator creates a new Operator that computes window function NTILE.
 // outputColIdx specifies in which coldata.Vec the operator should put its
 // output (if there is no such column, a new column is appended).
-func NewNTileOperator(
-	unlimitedAllocator *colmem.Allocator,
-	memoryLimit int64,
-	diskQueueCfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	diskAcc *mon.BoundAccount,
-	input colexecop.Operator,
-	inputTypes []*types.T,
-	outputColIdx int,
-	partitionColIdx int,
-	argIdx int,
-) colexecop.Operator {
+func NewNTileOperator(args *WindowArgs, argIdx int) colexecop.Operator {
 	base := nTileBase{
-		outputColIdx:    outputColIdx,
-		partitionColIdx: partitionColIdx,
+		outputColIdx:    args.OutputColIdx,
+		partitionColIdx: args.PartitionColIdx,
 		argIdx:          argIdx,
 	}
 	var windower bufferedWindower
-	if partitionColIdx == -1 {
+	if args.PartitionColIdx == -1 {
 		windower = &nTileNoPartition{base}
 	} else {
 		windower = &nTileWithPartition{base}
 	}
-	return newBufferedWindowOperator(
-		windower, unlimitedAllocator, memoryLimit, diskQueueCfg,
-		fdSemaphore, diskAcc, input, inputTypes, types.Int, outputColIdx,
-	)
+	return newBufferedWindowOperator(args, windower, types.Int)
 }
 
 // nTileBase extracts common fields and methods of the two variations of ntile
