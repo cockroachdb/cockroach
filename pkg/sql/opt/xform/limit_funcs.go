@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/tools/container/intsets"
 )
 
 // LimitScanPrivate constructs a new ScanPrivate value that is based on the
@@ -207,4 +208,22 @@ func (c *CustomFuncs) SplitLimitedScanIntoUnionScans(
 
 	limitVal := int(*limit.(*tree.DInt))
 	return c.splitScanIntoUnionScans(limitOrdering, scan, sp, cons, limitVal, keyPrefixLength)
+}
+
+// MakeTopKPrivate returns a TopKPrivate operator with a constant, positive
+// integer limit and an order.
+func (c *CustomFuncs) MakeTopKPrivate(
+	limit tree.Datum, ordering props.OrderingChoice,
+	) *memo.TopKPrivate {
+	var k int
+	limitVal := int64(*limit.(*tree.DInt))
+	if limitVal > int64(intsets.MaxInt) {
+		k = intsets.MaxInt
+	} else {
+		k = int(limitVal)
+	}
+	return &memo.TopKPrivate{
+		K: k,
+		Ordering: ordering,
+	}
 }
