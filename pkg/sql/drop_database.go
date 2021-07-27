@@ -328,7 +328,7 @@ func (p *planner) removeDbRoleSettings(ctx context.Context, dbID descpb.ID) erro
 	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
 		return nil
 	}
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	rowsDeleted, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
 		"delete-db-role-settings",
 		p.txn,
@@ -337,7 +337,13 @@ func (p *planner) removeDbRoleSettings(ctx context.Context, dbID descpb.ID) erro
 			`DELETE FROM %s WHERE database_id = $1`,
 			authentication.DatabaseRoleSettingsTableName,
 		),
-		dbID)
+		dbID,
+	)
+	if rowsDeleted > 0 && authentication.CacheEnabled.Get(&p.ExecCfg().Settings.SV) {
+		if err := p.bumpDatabaseRoleSettingsTableVersion(ctx); err != nil {
+			return err
+		}
+	}
 
 	return err
 }
