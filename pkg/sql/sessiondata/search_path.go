@@ -11,10 +11,12 @@
 package sessiondata
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -206,6 +208,18 @@ func (s SearchPath) Equals(other *SearchPath) bool {
 		}
 	}
 	return true
+}
+
+// SQLIdentifiers returns quotes for string starting with special characters.
+func (s SearchPath) SQLIdentifiers() string {
+	var buf bytes.Buffer
+	for i, path := range s.paths {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		lexbase.EncodeRestrictedSQLIdent(&buf, path, lexbase.EncNoFlags)
+	}
+	return buf.String()
 }
 
 func (s SearchPath) String() string {
