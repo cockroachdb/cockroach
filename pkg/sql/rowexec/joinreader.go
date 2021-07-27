@@ -373,10 +373,21 @@ func newJoinReader(
 		}
 	}
 
+	// We will create a memory monitor with at least 8MiB of memory limit since
+	// the join reader doesn't know how to spill to disk. It is most likely that
+	// if the target limit is below 8MiB, then we're in a test scenario and we
+	// don't want to error out.
+	const minMemoryLimit = 8 << 20
+	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
+	if memoryLimit < minMemoryLimit {
+		memoryLimit = minMemoryLimit
+	}
+
 	// Initialize memory monitors and bound account for data structures in the joinReader.
-	jr.MemMonitor = execinfra.NewLimitedMonitorNoDiskSpill(
-		flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, flowCtx, "joinreader-mem",
+	jr.MemMonitor = mon.NewMonitorInheritWithLimit(
+		"joinreader-mem" /* name */, memoryLimit, flowCtx.EvalCtx.Mon,
 	)
+	jr.MemMonitor.Start(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
 
 	if err := jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), rightCols, readerType); err != nil {
