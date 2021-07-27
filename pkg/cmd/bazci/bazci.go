@@ -124,6 +124,8 @@ type buildInfo struct {
 	goBinaries []string
 	// Expanded list of cmake targets to be built.
 	cmakeTargets []string
+	// Expanded list of genrule targets to be built.
+	genruleTargets []string
 	// Expanded list of Go test targets to be run. Test suites are split up
 	// into their component tests and all put in this list, so this may be
 	// considerably longer than the argument list.
@@ -175,6 +177,8 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 		switch targetKind {
 		case "cmake":
 			ret.cmakeTargets = append(ret.cmakeTargets, fullTarget)
+		case "genrule":
+			ret.genruleTargets = append(ret.genruleTargets, fullTarget)
 		case "go_binary":
 			ret.goBinaries = append(ret.goBinaries, fullTarget)
 		case "go_test":
