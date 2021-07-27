@@ -103,8 +103,9 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		},
 		StreamingMemAccount: &streamingMemAcc,
 	}
-	r, err := NewColOperator(ctx, flowCtx, args)
+	r1, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
+	defer r1.TestCleanup()
 
 	args = &colexecargs.NewColOperatorArgs{
 		Spec: &execinfrapb.ProcessorSpec{
@@ -113,11 +114,12 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 			Post:        execinfrapb.PostProcessSpec{RenderExprs: []execinfrapb.Expression{{Expr: "@1 - 1"}}},
 			ResultTypes: []*types.T{types.Int},
 		},
-		Inputs:              []colexecargs.OpWithMetaInfo{{Root: r.Root}},
+		Inputs:              []colexecargs.OpWithMetaInfo{{Root: r1.Root}},
 		StreamingMemAccount: &streamingMemAcc,
 	}
-	r, err = NewColOperator(ctx, flowCtx, args)
+	r, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
+	defer r.TestCleanup()
 
 	m := colexec.NewMaterializer(
 		flowCtx,

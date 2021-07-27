@@ -175,6 +175,11 @@ func (b *AppendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
 	colexecerror.InternalError(errors.AssertionFailedf("ReplaceCol is prohibited on AppendOnlyBufferedBatch"))
 }
 
+// BytesLikeTotalSize implements the coldata.Batch interface.
+func (b *AppendOnlyBufferedBatch) BytesLikeTotalSize() int64 {
+	return b.batch.BytesLikeTotalSize()
+}
+
 // Reset implements the coldata.Batch interface.
 func (b *AppendOnlyBufferedBatch) Reset([]*types.T, int, coldata.ColumnFactory) {
 	colexecerror.InternalError(errors.AssertionFailedf("Reset is prohibited on AppendOnlyBufferedBatch"))
