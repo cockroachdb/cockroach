@@ -633,8 +633,8 @@ func TestSstExportFailureIntentBatching(t *testing.T) {
 			require.NoError(t, fillInData(ctx, engine, data))
 
 			destination := &MemFile{}
-			_, _, err := engine.ExportMVCCToSst(ctx, key(10), key(20000), ts(999), ts(2000),
-				true, 0, 0, true, destination)
+			_, _, _, err := engine.ExportMVCCToSst(ctx, key(10), key(20000), ts(999), ts(2000), hlc.Timestamp{},
+				true, 0, 0, false, true, destination)
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
 			} else {

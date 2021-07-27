@@ -668,18 +668,20 @@ func (p *Pebble) ExportMVCCToSst(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
+	firstKeyTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
+	stopMidKey bool,
 	useTBI bool,
 	dest io.Writer,
-) (roachpb.BulkOpSummary, roachpb.Key, error) {
+) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
 	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
-	summary, k, err := pebbleExportToSst(ctx, r, startKey, endKey, startTS, endTS, exportAllRevisions,
-		targetSize, maxSize, useTBI, dest, maxIntentCount)
+	summary, k, err := pebbleExportToSst(ctx, r, MVCCKey{Key: startKey, Timestamp: firstKeyTS}, endKey, startTS, endTS,
+		exportAllRevisions, targetSize, maxSize, stopMidKey, useTBI, dest, maxIntentCount)
 	r.Free()
-	return summary, k, err
+	return summary, k.Key, k.Timestamp, err
 }
 
 // MVCCGet implements the Engine interface.
@@ -1389,19 +1391,20 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
+	firstKeyTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
+	stopMidKey bool,
 	useTBI bool,
 	dest io.Writer,
-) (roachpb.BulkOpSummary, roachpb.Key, error) {
+) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
 	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.parent.settings.SV)
-	summary, k, err := pebbleExportToSst(
-		ctx, r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest,
-		maxIntentCount)
+	summary, k, err := pebbleExportToSst(ctx, r, MVCCKey{Key: startKey, Timestamp: firstKeyTS}, endKey, startTS, endTS,
+		exportAllRevisions, targetSize, maxSize, stopMidKey, useTBI, dest, maxIntentCount)
 	r.Free()
-	return summary, k, err
+	return summary, k.Key, k.Timestamp, err
 }
 
 func (p *pebbleReadOnly) MVCCGet(key MVCCKey) ([]byte, error) {
@@ -1664,19 +1667,20 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
+	firstKeyTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
+	stopMidKey bool,
 	useTBI bool,
 	dest io.Writer,
-) (roachpb.BulkOpSummary, roachpb.Key, error) {
+) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
 	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
-	summary, k, err := pebbleExportToSst(
-		ctx, r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest,
-		maxIntentCount)
+	summary, k, err := pebbleExportToSst(ctx, r, MVCCKey{Key: startKey, Timestamp: firstKeyTS}, endKey, startTS, endTS,
+		exportAllRevisions, targetSize, maxSize, stopMidKey, useTBI, dest, maxIntentCount)
 	r.Free()
-	return summary, k, err
+	return summary, k.Key, k.Timestamp, err
 }
 
 // Get implements the Reader interface.
@@ -1797,14 +1801,16 @@ func (e *ExceedMaxSizeError) Error() string {
 func pebbleExportToSst(
 	ctx context.Context,
 	reader Reader,
-	startKey, endKey roachpb.Key,
+	startKey MVCCKey,
+	endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
+	stopMidKey bool,
 	useTBI bool,
 	dest io.Writer,
 	maxIntentCount int64,
-) (roachpb.BulkOpSummary, roachpb.Key, error) {
+) (roachpb.BulkOpSummary, MVCCKey, error) {
 	var span *tracing.Span
 	ctx, span = tracing.ChildSpan(ctx, "pebbleExportToSst")
 	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
@@ -1825,13 +1831,14 @@ func pebbleExportToSst(
 	defer iter.Close()
 	var curKey roachpb.Key // only used if exportAllRevisions
 	var resumeKey roachpb.Key
+	var resumeTS hlc.Timestamp
 	paginated := targetSize > 0
-	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; {
+	for iter.SeekGE(startKey); ; {
 		ok, err := iter.Valid()
 		if err != nil {
 			// This is an underlying iterator error, return it to the caller to deal
 			// with.
-			return roachpb.BulkOpSummary{}, nil, err
+			return roachpb.BulkOpSummary{}, MVCCKey{}, err
 		}
 		if !ok {
 			break
@@ -1856,29 +1863,32 @@ func pebbleExportToSst(
 		skipTombstones := !exportAllRevisions && startTS.IsEmpty()
 		if len(unsafeValue) > 0 || !skipTombstones {
 			if err := rows.Count(unsafeKey.Key); err != nil {
-				return roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "decoding %s", unsafeKey)
+				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding %s", unsafeKey)
 			}
 			curSize := rows.BulkOpSummary.DataSize
 			reachedTargetSize := curSize > 0 && uint64(curSize) >= targetSize
-			if paginated && isNewKey && reachedTargetSize {
+			if paginated && (isNewKey || stopMidKey) && reachedTargetSize {
 				// Allocate the right size for resumeKey rather than using curKey.
 				resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
+				if stopMidKey {
+					resumeTS = unsafeKey.Timestamp
+				}
 				break
 			}
 			if unsafeKey.Timestamp.IsEmpty() {
 				// This should never be an intent since the incremental iterator returns
 				// an error when encountering intents.
 				if err := sstWriter.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
-					return roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			} else {
 				if err := sstWriter.PutMVCC(unsafeKey, unsafeValue); err != nil {
-					return roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			}
 			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
 			if maxSize > 0 && newSize > int64(maxSize) {
-				return roachpb.BulkOpSummary{}, nil, &ExceedMaxSizeError{reached: newSize, maxSize: maxSize}
+				return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{reached: newSize, maxSize: maxSize}
 			}
 			rows.BulkOpSummary.DataSize = newSize
 		}
@@ -1904,18 +1914,18 @@ func pebbleExportToSst(
 			}
 		}
 		err := iter.TryGetIntentError()
-		return roachpb.BulkOpSummary{}, nil, err
+		return roachpb.BulkOpSummary{}, MVCCKey{}, err
 	}
 
 	if rows.BulkOpSummary.DataSize == 0 {
 		// If no records were added to the sstable, skip completing it and return a
 		// nil slice – the export code will discard it anyway (based on 0 DataSize).
-		return roachpb.BulkOpSummary{}, nil, nil
+		return roachpb.BulkOpSummary{}, MVCCKey{}, nil
 	}
 
 	if err := sstWriter.Finish(); err != nil {
-		return roachpb.BulkOpSummary{}, nil, err
+		return roachpb.BulkOpSummary{}, MVCCKey{}, err
 	}
 
-	return rows.BulkOpSummary, resumeKey, nil
+	return rows.BulkOpSummary, MVCCKey{Key: resumeKey, Timestamp: resumeTS}, nil
 }
