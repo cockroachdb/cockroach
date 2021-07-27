@@ -1526,7 +1526,6 @@ func (b *Builder) buildTopK(e *memo.TopKExpr) (execPlan, error) {
 	}
 	ordering := e.Ordering.ToOrdering()
 
-
 	// TODO(harding): Eventually we should build a topk node to pass down to the
 	// exec engines.
 	// Construct sort first.

@@ -1066,7 +1066,7 @@ func (b *logicalPropsBuilder) buildTopKProps(topK *TopKExpr, rel *props.Relation
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
 	haveConstLimit := false
 	constLimit := int64(math.MaxUint32)
-	if cnst, ok := limit.Limit.(*ConstExpr); ok {
+	if cnst, ok := limitNode.Child(1).(*ConstExpr); ok {
 		haveConstLimit = true
 		constLimit = int64(*cnst.Value.(*tree.DInt))
 	}

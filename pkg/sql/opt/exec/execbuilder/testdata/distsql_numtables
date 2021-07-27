@@ -386,7 +386,6 @@ vectorized: true
 └── • sort
     │ columns: (res, y, str)
     │ ordering: +res
-    │ estimated row count: 1,000 (missing stats)
     │ order: +res
     │
     └── • render

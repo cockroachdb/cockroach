@@ -1713,7 +1713,6 @@ vectorized: true
 │ count: 100
 │
 └── • sort
-    │ estimated row count: 0
     │ order: -count_rows,+s_name
     │
     └── • group

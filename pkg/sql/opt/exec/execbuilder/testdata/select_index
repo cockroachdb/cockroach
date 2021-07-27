@@ -1521,7 +1521,6 @@ vectorized: true
 └── • sort
     │ columns: (a, b, c, d)
     │ ordering: +c
-    │ estimated row count: 1,000 (missing stats)
     │ order: +c
     │
     └── • scan

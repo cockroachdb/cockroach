@@ -321,6 +321,7 @@ sort
       │    │         │    │    └── unfiltered-cols: (16-20)
       │    │         │    └── filters (true)
       │    │         └── filters (true)
+
       │    └── filters (true)
       └── projections
            └── const: 1 [as="?column?":22, type=int]
@@ -364,3 +365,4 @@ top-k
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── prune: (1-4)
       └── interesting orderings: (+1) (-4,+3,+1)
+
