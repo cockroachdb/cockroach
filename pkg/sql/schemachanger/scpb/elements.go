@@ -10,289 +10,75 @@
 
 package scpb
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
-)
+// GetElement implements the Entity interface.
+func (m *Column) GetElement() Element { return m }
 
-// State represents a current or potential future state of the
-// schema change system.
-type State []*Node
+// GetElement implements the Entity interface.
+func (m *PrimaryIndex) GetElement() Element { return m }
 
-// NumStatus is the number of values which Status may take on.
-var NumStatus = len(Status_name)
+// GetElement implements the Entity interface.
+func (m *SecondaryIndex) GetElement() Element { return m }
 
-// Node represents a Target with a given status.
-type Node struct {
-	Target *Target
-	Status Status
-}
+// GetElement implements the Entity interface.
+func (m *SequenceDependency) GetElement() Element { return m }
 
-// Element returns the target's element.
-func (n *Node) Element() Element {
-	return n.Target.Element()
-}
+// GetElement implements the Entity interface.
+func (m *UniqueConstraint) GetElement() Element { return m }
 
-// Element represents a logical component of a catalog entry's schema (e.g., an
-// index or column in a table).
-type Element interface {
-	protoutil.Message
+// GetElement implements the Entity interface.
+func (m *CheckConstraint) GetElement() Element { return m }
 
-	// getAttribute returns the value of a given attribute of an element.
-	// If the attribute is not defined on the element, nil will be returned.
-	getAttribute(Attribute) attributeValue
-}
+// GetElement implements the Entity interface.
+func (m *Sequence) GetElement() Element { return m }
 
-// Element returns an Element from its wrapper for serialization.
-func (e *ElementProto) Element() Element {
-	return e.GetValue().(Element)
-}
+// GetElement implements the Entity interface.
+func (m *DefaultExpression) GetElement() Element { return m }
 
-// NewTarget constructs a new Target. The passed elem must be one of the oneOf
-// members of Element. If not, this call will panic.
-func NewTarget(dir Target_Direction, elem Element) *Target {
-	t := Target{
-		Direction: dir,
-	}
-	if !t.SetValue(elem) {
-		panic(errors.Errorf("unknown element type %T", elem))
-	}
-	return &t
-}
+// GetElement implements the Entity interface.
+func (m *View) GetElement() Element { return m }
 
-func (e *Column) getAttribute(attribute Attribute) attributeValue {
-	switch attribute {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeColumnID:
-		return (*columnID)(&e.Column.ID)
-	case AttributeElementName:
-		return (*elementName)(&e.Column.Name)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Entity interface.
+func (m *TypeReference) GetElement() Element { return m }
 
-func (e *PrimaryIndex) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeIndexID:
-		return (*indexID)(&e.Index.ID)
-	case AttributeElementName:
-		return (*elementName)(&e.Index.Name)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Entity interface.
+func (m *Table) GetElement() Element { return m }
 
-func (e *SecondaryIndex) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeIndexID:
-		return (*indexID)(&e.Index.ID)
-	case AttributeElementName:
-		return (*elementName)(&e.Index.Name)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Entity interface.
+func (m *InboundForeignKey) GetElement() Element { return m }
 
-func (e *SequenceDependency) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.SequenceID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.TableID)
-	case AttributeColumnID:
-		return (*columnID)(&e.ColumnID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Entity interface.
+func (m *OutboundForeignKey) GetElement() Element { return m }
 
-func (e *UniqueConstraint) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeIndexID:
-		return (*indexID)(&e.IndexID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Entity interface.
+func (m *RelationDependedOnBy) GetElement() Element { return m }
 
-func (e *CheckConstraint) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeElementName:
-		return (*elementName)(&e.Name)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Entity interface.
+func (m *SequenceOwnedBy) GetElement() Element { return m }
 
-func (e *Sequence) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.SequenceID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Entity interface.
+func (m *Type) GetElement() Element { return m }
 
-func (e *DefaultExpression) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeColumnID:
-		return (*columnID)(&e.ColumnID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Entity interface.
+func (m *Schema) GetElement() Element { return m }
 
-func (e *View) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	default:
-		return nil
-	}
-}
+// GetElement implements the Entity interface.
+func (m *Database) GetElement() Element { return m }
 
-func (e *TypeReference) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.DescID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.TypeID)
-	default:
-		return nil
-	}
-}
-
-func (e *Table) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	default:
-		return nil
-	}
-}
-
-func (e *InboundForeignKey) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.OriginID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.ReferenceID)
-	case AttributeElementName:
-		return (*elementName)(&e.Name)
-	default:
-		return nil
-	}
-}
-
-func (e *OutboundForeignKey) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.OriginID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.ReferenceID)
-	case AttributeElementName:
-		return (*elementName)(&e.Name)
-	default:
-		return nil
-	}
-}
-
-func (e *RelationDependedOnBy) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TableID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.DependedOnBy)
-	default:
-		return nil
-	}
-}
-
-func (e *SequenceOwnedBy) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.SequenceID)
-	case AttributeReferencedDescID:
-		return (*descID)(&e.OwnerTableID)
-	default:
-		return nil
-	}
-}
-
-// getAttributes implements the Element interface
-func (e *Type) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.TypeID)
-	default:
-		return nil
-	}
-}
-
-// getAttributes implements the Element interface
-func (e *Schema) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.SchemaID)
-	default:
-		return nil
-	}
-}
-
-// getAttributes implements the Element interface
-func (e *Database) getAttribute(attr Attribute) attributeValue {
-	switch attr {
-	case AttributeType:
-		return getElementTypeID(e)
-	case AttributeDescID:
-		return (*descID)(&e.DatabaseID)
-	default:
-		return nil
-	}
-}
+func (m *Column) element()               {}
+func (m *PrimaryIndex) element()         {}
+func (m *SecondaryIndex) element()       {}
+func (m *SequenceDependency) element()   {}
+func (m *UniqueConstraint) element()     {}
+func (m *CheckConstraint) element()      {}
+func (m *Sequence) element()             {}
+func (m *DefaultExpression) element()    {}
+func (m *View) element()                 {}
+func (m *TypeReference) element()        {}
+func (m *Table) element()                {}
+func (m *InboundForeignKey) element()    {}
+func (m *OutboundForeignKey) element()   {}
+func (m *RelationDependedOnBy) element() {}
+func (m *SequenceOwnedBy) element()      {}
+func (m *Type) element()                 {}
+func (m *Schema) element()               {}
+func (m *Database) element()             {}
