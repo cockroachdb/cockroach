@@ -821,10 +821,11 @@ var varGen = map[string]sessionVar{
 						),
 						"You can enable IntervalStyle customization for all sessions with the cluster setting sql.defaults.intervalstyle_enabled, or per session using SET intervalstyle_enabled = true.",
 					),
-					// TODO(#67887): add docs link to look up more information to.
-					// TODO(#67887): add substitute builtins and add comment about using them.
-					// TODO(#67887): finalize list of places this stable change affects.
-					"Setting IntervalStyle changes the volatility of string::interval or interval::string casts from immutable to stable. No computed columns and check constraints can use these casts.",
+					"Setting IntervalStyle changes the volatility of string::interval or interval::string "+
+						"casts from immutable to stable. No computed columns, partial indexes, partitions "+
+						"and check constraints can use this casts. "+
+						"Use to_char_with_style or parse_interval instead if you need these casts to work "+
+						"in the aforementioned cases.",
 				)
 			}
 			m.SetIntervalStyle(style)

@@ -180,7 +180,12 @@ var validCasts = []castInfo{
 		from: types.TimestampTZFamily, to: types.StringFamily, volatility: VolatilityStable,
 		volatilityHint: "TIMESTAMPTZ to STRING casts depend on the current timezone; consider using (t AT TIME ZONE 'UTC')::STRING instead.",
 	},
-	{from: types.IntervalFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{
+		from:           types.IntervalFamily,
+		to:             types.StringFamily,
+		volatility:     VolatilityImmutable,
+		volatilityHint: "INTERVAL to STRING casts depends on IntervalStyle; consider using to_char_with_style(interval, 'postgres')",
+	},
 	{from: types.UuidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.DateFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.TimeFamily, to: types.StringFamily, volatility: VolatilityImmutable},
@@ -279,7 +284,12 @@ var validCasts = []castInfo{
 
 	// Casts to IntervalFamily.
 	{from: types.UnknownFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
-	{from: types.StringFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
+	{
+		from:           types.StringFamily,
+		to:             types.IntervalFamily,
+		volatility:     VolatilityImmutable,
+		volatilityHint: "STRING to INTERVAL casts depend on session IntervalStyle; use parse_interval(string, 'postgres') instead",
+	},
 	{from: types.CollatedStringFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
 	{from: types.IntFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
 	{from: types.TimeFamily, to: types.IntervalFamily, volatility: VolatilityImmutable},
@@ -334,8 +344,12 @@ type castsMapKey struct {
 
 var castsMap map[castsMapKey]*castInfo
 
+// styleCastsMap contains castInfos for casts affected by a style parameter.
+var styleCastsMap map[castsMapKey]*castInfo
+
 func init() {
 	castsMap = make(map[castsMapKey]*castInfo, len(validCasts))
+	styleCastsMap = make(map[castsMapKey]*castInfo)
 	for i := range validCasts {
 		c := &validCasts[i]
 
@@ -344,14 +358,27 @@ func init() {
 
 		key := castsMapKey{from: c.from, to: c.to}
 		castsMap[key] = c
+
+		if c.from == types.IntervalFamily && (c.to == types.StringFamily || c.to == types.CollatedStringFamily) ||
+			c.to == types.IntervalFamily && (c.from == types.StringFamily || c.from == types.CollatedStringFamily) {
+			cCopy := *c
+			cCopy.volatility = VolatilityStable
+			styleCastsMap[key] = &cCopy
+		}
 	}
 }
 
 // lookupCast returns the information for a valid cast.
 // Returns nil if this is not a valid cast.
 // Does not handle array and tuple casts.
-func lookupCast(from, to types.Family) *castInfo {
-	return castsMap[castsMapKey{from: from, to: to}]
+func lookupCast(from, to types.Family, intervalStyleEnabled bool) *castInfo {
+	k := castsMapKey{from: from, to: to}
+	if intervalStyleEnabled && (from == types.IntervalFamily || to == types.IntervalFamily) {
+		if r, ok := styleCastsMap[k]; ok {
+			return r
+		}
+	}
+	return castsMap[k]
 }
 
 // LookupCastVolatility returns the volatility of a valid cast.
@@ -386,24 +413,7 @@ func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Vol
 		return maxVolatility, true
 	}
 
-	// Special case for IntervalStyle.
-	switch fromFamily {
-	case types.StringFamily, types.CollatedStringFamily:
-		switch toFamily {
-		case types.IntervalFamily:
-			if sd != nil && sd.IntervalStyleEnabled {
-				return VolatilityStable, true
-			}
-		}
-	case types.IntervalFamily:
-		switch toFamily {
-		case types.StringFamily, types.CollatedStringFamily:
-			if sd != nil && sd.IntervalStyleEnabled {
-				return VolatilityStable, true
-			}
-		}
-	}
-	cast := lookupCast(fromFamily, toFamily)
+	cast := lookupCast(fromFamily, toFamily, sd != nil && sd.IntervalStyleEnabled)
 	if cast == nil {
 		return 0, false
 	}
