@@ -1605,7 +1605,6 @@ SELECT (SELECT m FROM
 with &1
  ├── columns: m:29(int)
  ├── volatile, mutations
- ├── fd: ()-->(29)
  ├── prune: (29)
  ├── project
  │    ├── columns: uv.u:6(int!null) uv.v:7(int!null)
@@ -1637,7 +1636,6 @@ with &1
  │                   └── function: unique_rowid [type=int]
  └── project
       ├── columns: m:29(int)
-      ├── fd: ()-->(29)
       ├── prune: (29)
       ├── scan uv
       └── projections

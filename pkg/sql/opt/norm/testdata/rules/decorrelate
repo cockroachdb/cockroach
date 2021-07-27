@@ -4241,7 +4241,7 @@ FROM a
 ----
 project
  ├── columns: a:29!null x:30 y:31 b:32 exists:33 count:34!null
- ├── fd: ()-->(29,31-33)
+ ├── fd: ()-->(29)
  ├── group-by
  │    ├── columns: k:1!null xy.x:8 count_rows:28!null
  │    ├── grouping columns: k:1!null

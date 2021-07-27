@@ -284,7 +284,6 @@ project
            └── project
                 ├── columns: exists:18(bool)
                 ├── outer: (1)
-                ├── fd: ()-->(18)
                 ├── prune: (18)
                 ├── scan xysd
                 │    ├── columns: x:6(int!null) y:7(int) s:8(string) d:9(decimal!null) xysd.crdb_internal_mvcc_timestamp:10(decimal) xysd.tableoid:11(oid)

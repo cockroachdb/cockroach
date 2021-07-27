@@ -986,7 +986,6 @@ SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 AS r FROM (SELECT k+1 A
 project
  ├── columns: exists:13 r:14!null
  ├── immutable
- ├── fd: ()-->(13)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
