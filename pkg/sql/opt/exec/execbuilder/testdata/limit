@@ -64,7 +64,6 @@ vectorized: true
         └── • sort
             │ columns: (w)
             │ ordering: +w
-            │ estimated row count: 1,000 (missing stats)
             │ order: +w
             │
             └── • scan
@@ -165,7 +164,6 @@ vectorized: true
         └── • sort
             │ columns: (k, sum, any_not_null)
             │ ordering: -any_not_null
-            │ estimated row count: 1,000 (missing stats)
             │ order: -any_not_null
             │
             └── • group
