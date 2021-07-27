@@ -68,6 +68,7 @@ type SyncedCluster struct {
 	// all other fields are populated in newCluster.
 	Nodes          []int
 	Secure         bool
+	CertsDir       string
 	Env            string
 	Args           []string
 	Tag            string
