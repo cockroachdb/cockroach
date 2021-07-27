@@ -90,6 +90,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer res.TestCleanup()
 	tr := res.Root
 	tr.Init(ctx)
 	meta := tr.(*colexecutils.CancelChecker).Input.(colexecop.DrainableOperator).DrainMeta()
@@ -150,7 +151,6 @@ func BenchmarkColBatchScan(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				b.StopTimer()
 				args := &colexecargs.NewColOperatorArgs{
 					Spec:                &spec,
 					StreamingMemAccount: testMemAcc,
@@ -160,14 +160,16 @@ func BenchmarkColBatchScan(b *testing.B) {
 					b.Fatal(err)
 				}
 				tr := res.Root
-				tr.Init(ctx)
 				b.StartTimer()
+				tr.Init(ctx)
 				for {
 					bat := tr.Next()
 					if bat.Length() == 0 {
 						break
 					}
 				}
+				b.StopTimer()
+				res.TestCleanup()
 			}
 		})
 	}

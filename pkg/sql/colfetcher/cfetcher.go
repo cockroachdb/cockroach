@@ -213,7 +213,7 @@ const noOutputColumn = -1
 //   err := rf.StartScan(..)
 //   // Handle err
 //   for {
-//      res, err := rf.nextBatch()
+//      res, err := rf.NextBatch()
 //      // Handle err
 //      if res.colBatch.Length() == 0 {
 //         // Done
@@ -313,18 +313,29 @@ type cFetcher struct {
 	allocator   *colmem.Allocator
 	memoryLimit int64
 
-	// adapter is a utility struct that helps with memory accounting.
-	adapter struct {
-		ctx   context.Context
-		batch coldata.Batch
-		err   error
+	memAccounting struct {
+		// varLengthVecIdxs stores the indices into colvecs of those vectors the
+		// elements of which can be of variable length and which are needed for
+		// the output.
+		varLengthVecIdxs []int
+		// prevBytesLikeTotalSize track the total size of the bytes-like vectors
+		// that we have already accounted for.
+		prevBytesLikeTotalSize int64
+		// maxCapacity if non-zero indicates the target capacity of the output
+		// batch. It is set when at the row finalization we realize that the
+		// output batch has exceeded the memory limit.
+		maxCapacity int
 	}
 }
 
-func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
+func (rf *cFetcher) resetBatch() {
 	var reallocated bool
 	var minCapacity int
-	if rf.machine.limitHint > 0 && (rf.estimatedRowCount == 0 || uint64(rf.machine.limitHint) < rf.estimatedRowCount) {
+	if rf.memAccounting.maxCapacity > 0 {
+		// If we have already exceeded the memory limit for the output batch, we
+		// will only be using the same batch from now on.
+		minCapacity = rf.memAccounting.maxCapacity
+	} else if rf.machine.limitHint > 0 && (rf.estimatedRowCount == 0 || uint64(rf.machine.limitHint) < rf.estimatedRowCount) {
 		// If we have a limit hint, and either
 		//   1) we don't have an estimate, or
 		//   2) we have a soft limit,
@@ -351,15 +362,16 @@ func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 	if reallocated {
 		rf.machine.colvecs = rf.machine.batch.ColVecs()
 		// Pull out any requested system column output vecs.
-		if timestampOutputIdx != noOutputColumn {
-			rf.machine.timestampCol = rf.machine.colvecs[timestampOutputIdx].Decimal()
+		if rf.table.timestampOutputIdx != noOutputColumn {
+			rf.machine.timestampCol = rf.machine.colvecs[rf.table.timestampOutputIdx].Decimal()
 		}
-		if tableOidOutputIdx != noOutputColumn {
-			rf.machine.tableoidCol = rf.machine.colvecs[tableOidOutputIdx].Datum()
+		if rf.table.oidOutputIdx != noOutputColumn {
+			rf.machine.tableoidCol = rf.machine.colvecs[rf.table.oidOutputIdx].Datum()
 		}
 		// Change the allocation size to be the same as the capacity of the
 		// batch we allocated above.
 		rf.table.da.AllocSize = rf.machine.batch.Capacity()
+		rf.memAccounting.prevBytesLikeTotalSize = rf.machine.batch.BytesLikeTotalSize()
 	}
 }
 
@@ -430,6 +442,7 @@ func (rf *cFetcher) Init(
 		//gcassert:bce
 		typs[i] = colDescriptors[i].GetType()
 	}
+	rf.memAccounting.varLengthVecIdxs = colmem.GetVarLengthIdxs(rf.typs)
 
 	var err error
 
@@ -455,6 +468,7 @@ func (rf *cFetcher) Init(
 			switch colinfo.GetSystemColumnKindFromColumnID(col) {
 			case descpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
+				rf.memAccounting.varLengthVecIdxs = append(rf.memAccounting.varLengthVecIdxs, idx)
 				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
 			case descpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
@@ -700,7 +714,7 @@ func (rf *cFetcher) StartScan(
 	return nil
 }
 
-// fetcherState is the state enum for nextBatch.
+// fetcherState is the state enum for NextBatch.
 type fetcherState int
 
 //go:generate stringer -type=fetcherState
@@ -776,27 +790,13 @@ const (
 	// stateFinished.
 	stateEmitLastBatch
 
-	// stateFinished is the end state of the state machine - it causes nextBatch
+	// stateFinished is the end state of the state machine - it causes NextBatch
 	// to return empty batches forever.
 	stateFinished
 )
 
 // Turn this on to enable super verbose logging of the fetcher state machine.
 const debugState = false
-
-// NextBatch is nextBatch with the addition of memory accounting.
-func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
-	rf.adapter.ctx = ctx
-	rf.allocator.PerformOperation(
-		rf.machine.colvecs,
-		rf.nextAdapter,
-	)
-	return rf.adapter.batch, rf.adapter.err
-}
-
-func (rf *cFetcher) nextAdapter() {
-	rf.adapter.batch, rf.adapter.err = rf.nextBatch(rf.adapter.ctx)
-}
 
 // setNextKV sets the next KV to process to the input KV. needsCopy, if true,
 // causes the input kv to be deep copied. needsCopy should be set to true if
@@ -821,13 +821,14 @@ func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 	rf.machine.nextKV = kvCopy
 }
 
-// nextBatch processes keys until we complete one batch of rows,
-// coldata.BatchSize() in length, which are returned in columnar format as a
-// coldata.Batch. The batch contains one Vec per table column, regardless of
-// the index used; columns that are not needed (as per neededCols) are empty.
-// The Batch should not be modified and is only valid until the next call.
-// When there are no more rows, the Batch.Length is 0.
-func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
+// NextBatch processes keys until we complete one batch of rows (subject to the
+// limit hint and the memory limit while being max coldata.BatchSize() in
+// length), which are returned in columnar format as a coldata.Batch. The batch
+// contains one Vec per table column, regardless of the index used; columns that
+// are not needed (as per neededCols) are filled with nulls. The Batch should
+// not be modified and is only valid until the next call. When there are no more
+// rows, the Batch.Length is 0.
+func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	for {
 		if debugState {
 			log.Infof(ctx, "State %s", rf.machine.state[0])
@@ -870,7 +871,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
-			rf.resetBatch(rf.table.timestampOutputIdx, rf.table.oidOutputIdx)
+			rf.resetBatch()
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
@@ -1119,17 +1120,26 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				rf.machine.tableoidCol.Set(rf.machine.rowIdx, tree.NewDOid(tree.DInt(rf.table.desc.GetID())))
 			}
 
-			// We're finished with a row. Bump the row index, fill the row in with
-			// nulls if necessary, emit the batch if necessary, and move to the next
+			// We're finished with a row. Fill the row in with nulls if
+			// necessary, perform the memory accounting for the row, bump the
+			// row index, emit the batch if necessary, and move to the next
 			// state.
 			if err := rf.fillNulls(); err != nil {
 				return nil, err
 			}
+			rf.memAccounting.prevBytesLikeTotalSize = rf.allocator.AccountForSet(
+				rf.machine.batch, rf.memAccounting.varLengthVecIdxs,
+				rf.machine.rowIdx, rf.memAccounting.prevBytesLikeTotalSize,
+			)
 			rf.machine.rowIdx++
 			rf.shiftState()
 
 			var emitBatch bool
+			if rf.memAccounting.maxCapacity == 0 && rf.allocator.Used() >= rf.memoryLimit {
+				rf.memAccounting.maxCapacity = rf.machine.rowIdx
+			}
 			if rf.machine.rowIdx >= rf.machine.batch.Capacity() ||
+				(rf.memAccounting.maxCapacity > 0 && rf.machine.rowIdx >= rf.memAccounting.maxCapacity) ||
 				(rf.machine.limitHint > 0 && rf.machine.rowIdx >= rf.machine.limitHint) {
 				// We either
 				//   1. have no more room in our batch, so output it immediately

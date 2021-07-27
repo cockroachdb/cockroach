@@ -241,9 +241,17 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	kvFeedMemMon.Start(ctx, pool, mon.BoundAccount{})
 	ca.kvFeedMemMon = kvFeedMemMon
 
+	// NB: sink uses pool bound account, and not kvFeedMemMon.
+	// This is because if we use shared kvFeedMemMon budget, it is possible that that budget
+	// will be exhausted by kvfeed (e.g. because of a down or slow sink); Then, when sink
+	// is no longer unavailable, we will proceed with the message, but once it gets to the sink,
+	// we won't be able to allocate additional memory because more events could have been added
+	// to KVFeed buffer.  Basically, the problem is that the ingress rate of messages into kvfeed
+	// buffer is different from the eggress rate from the sink.
+	// TODO(yevgeniy): The real solution is to have the sink pushback.
 	ca.sink, err = getSink(
 		ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), kvFeedMemMon.MakeBoundAccount(), ca.spec.JobID)
+		ca.spec.User(), pool.MakeBoundAccount(), ca.spec.JobID)
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
