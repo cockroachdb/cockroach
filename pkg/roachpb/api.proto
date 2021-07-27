@@ -1375,8 +1375,29 @@ message FileEncryptionOptions {
 message ExportRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   ExternalStorage storage = 2 [(gogoproto.nullable) = false];
-  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+
+  // ResumeKeyTS allows export request to resume at arbitrary key timestamp. This
+  // value doesn't affect export bounds, but ensures that no keys are skipped or
+  // duplicated when previous request doesn't complete fully and returned EndKeyTS
+  // together with resume span.
+  util.hlc.Timestamp resume_key_ts = 12 [
+      (gogoproto.nullable) = false,
+      (gogoproto.customname) = "ResumeKeyTS"
+  ];
+
+  // MVCCFilter determines if request exports all data or latest data as of
+  // Timestamp specified in request header. If all data is requested StartTime
+  // is used as a lower bound and header Timestamp as higher bound or exported
+  // entries.
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
+  // StartTime is only used whe MVCCFilter is set to All.
+  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+
+  // Split large rows in the middle of key sequence. This option will allow
+  // large history being broken up into target_file_size chunks and prevent
+  // blowing up on memory usage. This option is only allowed together with
+  // return_sst since caller should reconstruct full tables.
+  bool split_mid_key = 13;
 
   // Return the exported SST data in the response.
   bool return_sst = 5 [(gogoproto.customname) = "ReturnSST"];
@@ -1447,6 +1468,10 @@ message ExportResponse {
   // path.
   message File {
     Span span = 1 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp end_key_ts = 9 [
+        (gogoproto.nullable) = false,
+        (gogoproto.customname) = "EndKeyTS"
+    ];
     string path = 2;
     reserved 3;
     reserved 4;
