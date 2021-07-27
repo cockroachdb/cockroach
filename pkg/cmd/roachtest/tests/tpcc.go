@@ -336,7 +336,7 @@ func maxSupportedTPCCWarehouses(
 
 func registerTPCC(r registry.Registry) {
 	cloud := r.MakeClusterSpec(1).Cloud
-	headroomSpec := r.MakeClusterSpec(4, spec.CPU(16))
+	headroomSpec := r.MakeClusterSpec(4, spec.CPU(16), spec.RandomlyUseZfs(true))
 	r.Add(registry.TestSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
