@@ -141,7 +141,9 @@ func (c *sortChunksOp) ExportBuffered(colexecop.Operator) coldata.Batch {
 	// batch that hasn't been "processed" and should be the first to be exported.
 	firstTupleIdx := c.input.exportState.numProcessedTuplesFromBatch
 	if c.input.batch != nil && firstTupleIdx+c.exportedFromBatch < c.input.batch.Length() {
-		colexecutils.MakeWindowIntoBatch(c.windowedBatch, c.input.batch, firstTupleIdx, c.input.inputTypes)
+		colexecutils.MakeWindowIntoBatch(
+			c.windowedBatch, c.input.batch, firstTupleIdx, c.input.batch.Length(), c.input.inputTypes,
+		)
 		c.exportedFromBatch = c.windowedBatch.Length()
 		return c.windowedBatch
 	}

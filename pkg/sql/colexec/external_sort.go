@@ -266,7 +266,7 @@ func NewExternalSorter(
 		inMemSortOutputLimit = 1
 		mergeMemoryLimit = 1
 	}
-	inputPartitioner := newInputPartitioningOperator(input, inMemSortPartitionLimit)
+	inputPartitioner := newInputPartitioningOperator(sortUnlimitedAllocator, input, inputTypes, inMemSortPartitionLimit)
 	var inMemSorter colexecop.ResettableOperator
 	if topK > 0 {
 		inMemSorter = NewTopKSorter(sortUnlimitedAllocator, inputPartitioner, inputTypes, ordering.Columns, topK, inMemSortOutputLimit)
@@ -675,11 +675,15 @@ func (s *externalSorter) createMergerForPartitions(n int) colexecop.Operator {
 }
 
 func newInputPartitioningOperator(
-	input colexecop.Operator, memoryLimit int64,
+	allocator *colmem.Allocator, input colexecop.Operator, typs []*types.T, memoryLimit int64,
 ) colexecop.ResettableOperator {
 	return &inputPartitioningOperator{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		memoryLimit:    memoryLimit,
+		// The columns will be replaced into this windowed batch, but we do need
+		// to support a selection vector of an arbitrary length.
+		windowedBatch: allocator.NewMemBatchNoCols(typs, coldata.BatchSize()),
+		typs:          typs,
 	}
 }
 
@@ -695,6 +699,24 @@ type inputPartitioningOperator struct {
 	memoryLimit int64
 	// alreadyUsedMemory tracks the size of the current partition so far.
 	alreadyUsedMemory int64
+	// lastBatchState keeps track of the state around emitting rows from the
+	// last batch we read from input. This is needed in case a single batch
+	// needs to be divided between different partitions (possibly more than
+	// two).
+	lastBatchState struct {
+		// batch is non-nil only if there are more rows to be emitted from the
+		// last read batch.
+		batch coldata.Batch
+		// avgRowSize is an estimate about the size of each row in batch, in
+		// bytes.
+		avgRowSize int64
+		// emitted is the number of rows alread emitted from batch.
+		emitted int
+	}
+
+	windowedBatch coldata.Batch
+	typs          []*types.T
+
 	// interceptReset determines whether the reset method will be called on
 	// the input to this operator when the latter is being reset. This field is
 	// managed by externalSorter.
@@ -722,8 +744,13 @@ func (o *inputPartitioningOperator) Next() coldata.Batch {
 	if o.alreadyUsedMemory >= o.memoryLimit {
 		return coldata.ZeroBatch
 	}
+	if o.lastBatchState.batch != nil {
+		// We still have some rows from the last batch.
+		return o.emitWindowIntoLastBatch()
+	}
 	b := o.Input.Next()
-	if b.Length() == 0 {
+	n := b.Length()
+	if n == 0 {
 		return b
 	}
 	// This operator is an input to sortOp which will spool all the tuples and
@@ -732,8 +759,46 @@ func (o *inputPartitioningOperator) Next() coldata.Batch {
 	// exactly true for Bytes type, but it's ok if we have some deviation. This
 	// numbers matter only to understand when to start a new partition, and the
 	// memory will be actually accounted for correctly.)
-	o.alreadyUsedMemory += colmem.GetProportionalBatchMemSize(b, int64(b.Length()))
+	proportionalBatchMemSize := colmem.GetProportionalBatchMemSize(b, int64(n))
+	if o.alreadyUsedMemory+proportionalBatchMemSize >= o.memoryLimit {
+		// Emitting this batch as is will make the current partition exceed the
+		// memory limit, so we will actually "split" this batch between multiple
+		// partitions.
+		o.lastBatchState.batch = b
+		o.lastBatchState.emitted = 0
+		o.lastBatchState.avgRowSize = proportionalBatchMemSize / int64(n)
+		return o.emitWindowIntoLastBatch()
+	}
+	o.alreadyUsedMemory += proportionalBatchMemSize
+	o.lastBatchState.batch = nil
 	return b
+}
+
+// emitWindowIntoLastBatch returns a window into the last batch such that either
+// all remaining rows are emitted or this window batch barely puts the current
+// partition above the memory limit. The method assumes that the last batch is
+// not nil and not all rows have been emitted from it.
+func (o *inputPartitioningOperator) emitWindowIntoLastBatch() coldata.Batch {
+	// We use plus one so that this windowed batch reached the memory limit if
+	// possible.
+	toEmit := (o.memoryLimit-o.alreadyUsedMemory)/o.lastBatchState.avgRowSize + 1
+	// But do not try to emit more than there are rows remaining.
+	n := o.lastBatchState.batch.Length()
+	if toEmit > int64(n-o.lastBatchState.emitted) {
+		toEmit = int64(n - o.lastBatchState.emitted)
+	}
+	colexecutils.MakeWindowIntoBatch(
+		o.windowedBatch, o.lastBatchState.batch, o.lastBatchState.emitted,
+		o.lastBatchState.emitted+int(toEmit), o.typs,
+	)
+	o.alreadyUsedMemory += o.lastBatchState.avgRowSize * toEmit
+	o.lastBatchState.emitted += int(toEmit)
+	if o.lastBatchState.emitted == n {
+		// This batch is now fully emitted, so we will need to fetch a new one
+		// from the input.
+		o.lastBatchState.batch = nil
+	}
+	return o.windowedBatch
 }
 
 func (o *inputPartitioningOperator) Reset(ctx context.Context) {
