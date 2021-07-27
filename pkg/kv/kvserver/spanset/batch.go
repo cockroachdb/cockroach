@@ -401,13 +401,13 @@ func (s spanSetReader) Closed() bool {
 func (s spanSetReader) ExportMVCCToSst(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
-	startTS, endTS, firstKeyTs hlc.Timestamp,
+	startTS, endTS, firstKeyTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	stopMidKey, useTBI bool,
 	dest io.Writer,
 ) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
-	return s.r.ExportMVCCToSst(ctx, startKey, endKey, startTS, endTS, firstKeyTs, exportAllRevisions, targetSize,
+	return s.r.ExportMVCCToSst(ctx, startKey, endKey, startTS, endTS, firstKeyTS, exportAllRevisions, targetSize,
 		maxSize, stopMidKey, useTBI, dest)
 }
 

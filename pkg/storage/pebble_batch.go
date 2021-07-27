@@ -133,7 +133,7 @@ func (p *pebbleBatch) ExportMVCCToSst(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
-	firstKeyTs hlc.Timestamp,
+	firstKeyTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	stopMidKey bool,

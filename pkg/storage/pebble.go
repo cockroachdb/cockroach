@@ -692,7 +692,7 @@ func (p *Pebble) ExportMVCCToSst(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
-	firstKeyTs hlc.Timestamp,
+	firstKeyTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	stopMidKey bool,
@@ -702,7 +702,7 @@ func (p *Pebble) ExportMVCCToSst(
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
 	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
-	summary, k, err := pebbleExportToSst(ctx, r, MVCCKey{Key: startKey, Timestamp: firstKeyTs}, endKey, startTS, endTS,
+	summary, k, err := pebbleExportToSst(ctx, r, MVCCKey{Key: startKey, Timestamp: firstKeyTS}, endKey, startTS, endTS,
 		exportAllRevisions, targetSize, maxSize, stopMidKey, useTBI, dest, maxIntentCount)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
@@ -1414,7 +1414,7 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
-	firstKeyTs hlc.Timestamp,
+	firstKeyTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	stopMidKey bool,
@@ -1424,7 +1424,7 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
 	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.parent.settings.SV)
-	summary, k, err := pebbleExportToSst(ctx, r, MVCCKey{Key: startKey, Timestamp: firstKeyTs}, endKey, startTS, endTS,
+	summary, k, err := pebbleExportToSst(ctx, r, MVCCKey{Key: startKey, Timestamp: firstKeyTS}, endKey, startTS, endTS,
 		exportAllRevisions, targetSize, maxSize, stopMidKey, useTBI, dest, maxIntentCount)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
@@ -1690,7 +1690,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
-	firstKeyTs hlc.Timestamp,
+	firstKeyTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	stopMidKey bool,
@@ -1700,7 +1700,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
 	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
-	summary, k, err := pebbleExportToSst(ctx, r, MVCCKey{Key: startKey, Timestamp: firstKeyTs}, endKey, startTS, endTS,
+	summary, k, err := pebbleExportToSst(ctx, r, MVCCKey{Key: startKey, Timestamp: firstKeyTS}, endKey, startTS, endTS,
 		exportAllRevisions, targetSize, maxSize, stopMidKey, useTBI, dest, maxIntentCount)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
@@ -1854,7 +1854,7 @@ func pebbleExportToSst(
 	defer iter.Close()
 	var curKey roachpb.Key // only used if exportAllRevisions
 	var resumeKey roachpb.Key
-	var resumeTs hlc.Timestamp
+	var resumeTS hlc.Timestamp
 	paginated := targetSize > 0
 	for iter.SeekGE(startKey); ; {
 		ok, err := iter.Valid()
@@ -1894,7 +1894,7 @@ func pebbleExportToSst(
 				// Allocate the right size for resumeKey rather than using curKey.
 				resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
 				if stopMidKey {
-					resumeTs = unsafeKey.Timestamp
+					resumeTS = unsafeKey.Timestamp
 				}
 				break
 			}
@@ -1950,5 +1950,5 @@ func pebbleExportToSst(
 		return roachpb.BulkOpSummary{}, MVCCKey{}, err
 	}
 
-	return rows.BulkOpSummary, MVCCKey{Key: resumeKey, Timestamp: resumeTs}, nil
+	return rows.BulkOpSummary, MVCCKey{Key: resumeKey, Timestamp: resumeTS}, nil
 }
