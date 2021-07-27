@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // TenantUsageServer is an interface through which tenant usage is reported and
@@ -61,4 +62,7 @@ type TenantUsageServer interface {
 		asOf time.Time,
 		asOfConsumedRequestUnits float64,
 	) error
+
+	// Metrics returns the top-level metrics.
+	Metrics() metric.Struct
 }

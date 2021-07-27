@@ -630,6 +630,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	tenantUsage := NewTenantUsageServer(db, internalExecutor)
+	registry.AddMetricStruct(tenantUsage.Metrics())
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID,

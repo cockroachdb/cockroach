@@ -1365,7 +1365,7 @@ func (dummyTenantUsageServer) TokenBucketRequest(
 	return nil, errors.Errorf("tenant usage requires a CCL binary")
 }
 
-// TokenBucketRequest is defined in the TenantUsageServer interface.
+// ReconfigureTokenBucket is defined in the TenantUsageServer interface.
 func (dummyTenantUsageServer) ReconfigureTokenBucket(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -1378,3 +1378,14 @@ func (dummyTenantUsageServer) ReconfigureTokenBucket(
 ) error {
 	return errors.Errorf("tenant resource limits require a CCL binary")
 }
+
+// Metrics is defined in the TenantUsageServer interface.
+func (dummyTenantUsageServer) Metrics() metric.Struct {
+	return emptyMetricStruct{}
+}
+
+type emptyMetricStruct struct{}
+
+var _ metric.Struct = emptyMetricStruct{}
+
+func (emptyMetricStruct) MetricStruct() {}

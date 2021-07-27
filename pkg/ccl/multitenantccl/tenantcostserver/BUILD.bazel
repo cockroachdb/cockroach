@@ -1,9 +1,10 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tenantcostserver",
     srcs = [
         "configure.go",
+        "metrics.go",
         "server.go",
         "token_bucket.go",
     ],
@@ -20,7 +21,38 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "tenantcostserver_test",
+    srcs = [
+        "main_test.go",
+        "server_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":tenantcostserver",
+        "//pkg/base",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/testutils/metrictestutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
