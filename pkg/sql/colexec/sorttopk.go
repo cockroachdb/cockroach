@@ -303,7 +303,9 @@ func (t *topKSorter) ExportBuffered(colexecop.Operator) coldata.Batch {
 	// Next, we check whether we have exported all tuples from the last read
 	// batch.
 	if t.inputBatch != nil && t.firstUnprocessedTupleIdx+t.exportedFromBatch < t.inputBatch.Length() {
-		colexecutils.MakeWindowIntoBatch(t.windowedBatch, t.inputBatch, t.firstUnprocessedTupleIdx, t.inputTypes)
+		colexecutils.MakeWindowIntoBatch(
+			t.windowedBatch, t.inputBatch, t.firstUnprocessedTupleIdx, t.inputBatch.Length(), t.inputTypes,
+		)
 		t.exportedFromBatch = t.windowedBatch.Length()
 		return t.windowedBatch
 	}
