@@ -12,6 +12,7 @@ package colexecjoin
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -693,17 +694,15 @@ func (hj *hashJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch {
 }
 
 func (hj *hashJoiner) resetOutput(nResults int) {
-	minCapacity := nResults
-	if minCapacity < 1 {
-		minCapacity = 1
-	}
 	// We're resetting the output meaning that we have already fully built the
 	// hash table from the right input and now are only populating output one
 	// batch at a time. If we were to use a limited allocator, we could hit the
 	// limit here, and it would have been very hard to fall back to disk backed
 	// hash joiner because we might have already emitted partial output.
+	// TODO(yuzefovich): use hj.memoryLimit here.
+	const maxOutputBatchMemSize = math.MaxInt64
 	hj.output, _ = hj.outputUnlimitedAllocator.ResetMaybeReallocate(
-		hj.outputTypes, hj.output, minCapacity, hj.memoryLimit,
+		hj.outputTypes, hj.output, nResults, maxOutputBatchMemSize,
 	)
 }
 

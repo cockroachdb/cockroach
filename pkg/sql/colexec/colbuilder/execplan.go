@@ -352,6 +352,9 @@ func (r opResult) createDiskBackedSort(
 		// The input is already fully ordered, so there is nothing to sort.
 		return input, nil
 	}
+	totalMemLimit := execinfra.GetWorkMemLimit(flowCtx)
+	spoolMemLimit := totalMemLimit * 4 / 5
+	maxOutputBatchMemSize := totalMemLimit - spoolMemLimit
 	if matchLen > 0 {
 		// The input is already partially ordered. Use a chunks sorter to avoid
 		// loading all the rows into memory.
@@ -359,13 +362,13 @@ func (r opResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			sortChunksMemAccount = streamingMemAccount
 		} else {
-			sortChunksMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategy(
-				ctx, flowCtx, opNamePrefix+"sort-chunks", processorID,
+			sortChunksMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
 			)
 		}
 		inMemorySorter, err = colexec.NewSortChunks(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
-			ordering.Columns, int(matchLen),
+			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
 		)
 	} else if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
 		// There is a limit specified, so we know exactly how many rows the
@@ -381,14 +384,14 @@ func (r opResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			topKSorterMemAccount = streamingMemAccount
 		} else {
-			topKSorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategy(
-				ctx, flowCtx, opNamePrefix+"topk-sort", processorID,
+			topKSorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+				ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
 			)
 		}
 		topK = post.Limit + post.Offset
 		inMemorySorter = colexec.NewTopKSorter(
-			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input, inputTypes,
-			ordering.Columns, topK,
+			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
+			inputTypes, ordering.Columns, topK, maxOutputBatchMemSize,
 		)
 	} else {
 		// No optimizations possible. Default to the standard sort operator.
@@ -396,12 +399,13 @@ func (r opResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			sorterMemAccount = streamingMemAccount
 		} else {
-			sorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategy(
-				ctx, flowCtx, opNamePrefix+"sort-all", processorID,
+			sorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-all", processorID,
 			)
 		}
 		inMemorySorter, err = colexec.NewSorter(
-			colmem.NewAllocator(ctx, sorterMemAccount, factory), input, inputTypes, ordering.Columns,
+			colmem.NewAllocator(ctx, sorterMemAccount, factory), input,
+			inputTypes, ordering.Columns, maxOutputBatchMemSize,
 		)
 	}
 	if err != nil {

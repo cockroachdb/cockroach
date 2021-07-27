@@ -34,6 +34,7 @@ func NewSortChunks(
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
+	maxOutputBatchMemSize int64,
 ) (colexecop.Operator, error) {
 	if matchLen < 1 || matchLen == len(orderingCols) {
 		colexecerror.InternalError(errors.AssertionFailedf(
@@ -49,7 +50,7 @@ func NewSortChunks(
 	if err != nil {
 		return nil, err
 	}
-	sorter, err := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:])
+	sorter, err := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:], maxOutputBatchMemSize)
 	if err != nil {
 		return nil, err
 	}

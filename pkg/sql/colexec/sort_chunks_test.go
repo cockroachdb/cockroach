@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -188,7 +189,7 @@ func TestSortChunks(t *testing.T) {
 
 	for _, tc := range sortChunksTestCases {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen)
+			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, execinfra.DefaultMemoryLimit)
 		})
 	}
 }
@@ -230,7 +231,7 @@ func TestSortChunksRandomized(t *testing.T) {
 				sort.Slice(expected, less(expected, ordCols))
 
 				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{sortedTups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen)
+					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen, execinfra.DefaultMemoryLimit)
 				})
 			}
 		}
@@ -242,10 +243,10 @@ func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.Ordering_Column, int) (colexecop.Operator, error){
+	sorterConstructors := []func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.Ordering_Column, int, int64) (colexecop.Operator, error){
 		NewSortChunks,
-		func(allocator *colmem.Allocator, input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, _ int) (colexecop.Operator, error) {
-			return NewSorter(allocator, input, inputTypes, orderingCols)
+		func(allocator *colmem.Allocator, input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, _ int, maxOutputBatchMemSize int64) (colexecop.Operator, error) {
+			return NewSorter(allocator, input, inputTypes, orderingCols, maxOutputBatchMemSize)
 		},
 	}
 	sorterNames := []string{"CHUNKS", "ALL"}
@@ -295,7 +296,7 @@ func BenchmarkSortChunks(b *testing.B) {
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
 									source := colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, matchLen)
-									sorter, err := sorterConstructor(testAllocator, source, typs, ordCols, matchLen)
+									sorter, err := sorterConstructor(testAllocator, source, typs, ordCols, matchLen, execinfra.DefaultMemoryLimit)
 									if err != nil {
 										b.Fatal(err)
 									}

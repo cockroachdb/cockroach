@@ -137,37 +137,38 @@ func TestResetMaybeReallocate(t *testing.T) {
 
 		var b coldata.Batch
 		typs := []*types.T{types.Int}
-		const minCapacity = 2
-		const maxBatchMemSize = 0
+		const minDesiredCapacity = 2
+		const smallMemSize = 0
+		const largeMemSize = math.MaxInt64
 
 		// Allocate a batch with smaller capacity.
-		smallBatch := testAllocator.NewMemBatchWithFixedCapacity(typs, minCapacity/2)
+		smallBatch := testAllocator.NewMemBatchWithFixedCapacity(typs, minDesiredCapacity/2)
 
 		// Allocate a new batch attempting to use the batch with too small of a
-		// capacity - new batch should be allocated.
-		b, _ = testAllocator.ResetMaybeReallocate(typs, smallBatch, minCapacity, maxBatchMemSize)
-		require.NotEqual(t, smallBatch, b)
-		require.Equal(t, minCapacity, b.Capacity())
+		// capacity - new batch should **not** be allocated because the memory
+		// limit is already exceeded.
+		b, _ = testAllocator.ResetMaybeReallocate(typs, smallBatch, minDesiredCapacity, smallMemSize)
+		require.Equal(t, smallBatch, b)
+		require.Equal(t, minDesiredCapacity/2, b.Capacity())
 
 		oldBatch := b
 
-		// Reset the batch and confirm that a new batch is not allocated because
-		// the old batch has enough capacity and it has reached the memory
-		// limit.
-		b, _ = testAllocator.ResetMaybeReallocate(typs, b, minCapacity, maxBatchMemSize)
-		require.Equal(t, oldBatch, b)
-		require.Equal(t, minCapacity, b.Capacity())
+		// Reset the batch and confirm that a new batch is allocated because we
+		// have given larger memory limit.
+		b, _ = testAllocator.ResetMaybeReallocate(typs, b, minDesiredCapacity, largeMemSize)
+		require.NotEqual(t, oldBatch, b)
+		require.Equal(t, minDesiredCapacity, b.Capacity())
 
-		if coldata.BatchSize() >= minCapacity*2 {
+		if coldata.BatchSize() >= minDesiredCapacity*2 {
 			// Now reset the batch with large memory limit - we should get a new
 			// batch with the double capacity.
 			//
 			// ResetMaybeReallocate truncates the capacity at
 			// coldata.BatchSize(), so we run this part of the test only when
 			// doubled capacity will not be truncated.
-			b, _ = testAllocator.ResetMaybeReallocate(typs, b, minCapacity, math.MaxInt64)
+			b, _ = testAllocator.ResetMaybeReallocate(typs, b, minDesiredCapacity, largeMemSize)
 			require.NotEqual(t, oldBatch, b)
-			require.Equal(t, 2*minCapacity, b.Capacity())
+			require.Equal(t, 2*minDesiredCapacity, b.Capacity())
 		}
 	})
 }

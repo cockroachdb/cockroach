@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -34,8 +33,12 @@ func NewSorter(
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
+	maxOutputBatchMemSize int64,
 ) (colexecop.Operator, error) {
-	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
+	return newSorter(
+		allocator, newAllSpooler(allocator, input, inputTypes),
+		inputTypes, orderingCols, maxOutputBatchMemSize,
+	)
 }
 
 func newSorter(
@@ -43,6 +46,7 @@ func newSorter(
 	input spooler,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
+	maxOutputBatchMemSize int64,
 ) (colexecop.ResettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
@@ -60,13 +64,14 @@ func newSorter(
 	}
 
 	return &sortOp{
-		allocator:    allocator,
-		input:        input,
-		inputTypes:   inputTypes,
-		sorters:      make([]colSorter, len(orderingCols)),
-		partitioners: partitioners,
-		orderingCols: orderingCols,
-		state:        sortSpooling,
+		allocator:             allocator,
+		input:                 input,
+		inputTypes:            inputTypes,
+		sorters:               make([]colSorter, len(orderingCols)),
+		partitioners:          partitioners,
+		orderingCols:          orderingCols,
+		state:                 sortSpooling,
+		maxOutputBatchMemSize: maxOutputBatchMemSize,
 	}, nil
 }
 
@@ -221,7 +226,8 @@ type sortOp struct {
 		partitionsCol []bool
 	}
 
-	output coldata.Batch
+	output                coldata.Batch
+	maxOutputBatchMemSize int64
 
 	exported int
 }
@@ -282,13 +288,10 @@ func (p *sortOp) Next() coldata.Batch {
 				p.state = sortDone
 				continue
 			}
-			if toEmit > coldata.BatchSize() {
-				toEmit = coldata.BatchSize()
+			p.output, _ = p.allocator.ResetMaybeReallocate(p.inputTypes, p.output, toEmit, p.maxOutputBatchMemSize)
+			if toEmit > p.output.Capacity() {
+				toEmit = p.output.Capacity()
 			}
-			// For now, we don't enforce any footprint-based memory limit.
-			// TODO(yuzefovich): refactor this.
-			const maxBatchMemSize = math.MaxInt64
-			p.output, _ = p.allocator.ResetMaybeReallocate(p.inputTypes, p.output, toEmit, maxBatchMemSize)
 			newEmitted := p.emitted + toEmit
 			for j := 0; j < len(p.inputTypes); j++ {
 				// At this point, we have already fully sorted the input. It is ok to do
