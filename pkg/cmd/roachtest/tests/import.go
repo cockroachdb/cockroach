@@ -123,7 +123,10 @@ func registerImportTPCC(r registry.Registry) {
 			// Upload the perf artifacts to any one of the nodes so that the test
 			// runner copies it into an appropriate directory path.
 			dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-			if err := c.PutString(ctx, perfBuf.String(), dest, 755, c.Node(1)); err != nil {
+			if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+				log.Errorf(ctx, "failed to create perf dir: %+v", err)
+			}
+			if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
 				log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 			}
 			return nil
@@ -172,8 +175,10 @@ func registerImportTPCH(r registry.Registry) {
 		// is required to confirm this. Until then, the 4 and 32 node configurations
 		// are removed (4 is too slow and 32 is pretty expensive) while 8-node is
 		// given a 50% longer timeout (which running by hand suggests should be OK).
-		// (10/30/19) The timeout was increased again to 8 hours.
-		{8, 8 * time.Hour},
+		// (07/27/21) The timeout was increased again to 10 hours. The test runs in
+		// ~7 hours which causes it to occasionally exceed the previous timeout of 8
+		// hours.
+		{8, 10 * time.Hour},
 	} {
 		item := item
 		r.Add(registry.TestSpec{
@@ -260,7 +265,10 @@ func registerImportTPCH(r registry.Registry) {
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
 					dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-					if err := c.PutString(ctx, perfBuf.String(), dest, 755, c.Node(1)); err != nil {
+					if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+						log.Errorf(ctx, "failed to create perf dir: %+v", err)
+					}
+					if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
 						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 					}
 					return nil
