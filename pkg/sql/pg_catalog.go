@@ -88,33 +88,6 @@ var pgCatalog = virtualSchema{
 		// select distinct '"'||table_name||'",' from information_schema.tables
 		//    where table_schema='pg_catalog' order by table_name;
 		"pg_pltemplate",
-		"pg_stat_all_indexes",
-		"pg_stat_all_tables",
-		"pg_stat_archiver",
-		"pg_stat_bgwriter",
-		"pg_stat_progress_vacuum",
-		"pg_stat_replication",
-		"pg_stat_ssl",
-		"pg_stat_subscription",
-		"pg_stat_sys_indexes",
-		"pg_stat_sys_tables",
-		"pg_stat_user_functions",
-		"pg_stat_user_indexes",
-		"pg_stat_user_tables",
-		"pg_stat_wal_receiver",
-		"pg_stat_xact_all_tables",
-		"pg_stat_xact_sys_tables",
-		"pg_stat_xact_user_functions",
-		"pg_stat_xact_user_tables",
-		"pg_statio_all_indexes",
-		"pg_statio_all_sequences",
-		"pg_statio_all_tables",
-		"pg_statio_sys_indexes",
-		"pg_statio_sys_sequences",
-		"pg_statio_sys_tables",
-		"pg_statio_user_indexes",
-		"pg_statio_user_sequences",
-		"pg_statio_user_tables",
 		"pg_statistic",
 		"pg_stats",
 	),
@@ -190,8 +163,41 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogShdependTableID:                   pgCatalogShdependTable,
 		catconstants.PgCatalogShmemAllocationsTableID:           pgCatalogShmemAllocationsTable,
 		catconstants.PgCatalogStatActivityTableID:               pgCatalogStatActivityTable,
+		catconstants.PgCatalogStatAllIndexesTableID:             pgCatalogStatAllIndexesTable,
+		catconstants.PgCatalogStatAllTablesTableID:              pgCatalogStatAllTablesTable,
+		catconstants.PgCatalogStatArchiverTableID:               pgCatalogStatArchiverTable,
+		catconstants.PgCatalogStatBgwriterTableID:               pgCatalogStatBgwriterTable,
 		catconstants.PgCatalogStatDatabaseConflictsTableID:      pgCatalogStatDatabaseConflictsTable,
 		catconstants.PgCatalogStatDatabaseTableID:               pgCatalogStatDatabaseTable,
+		catconstants.PgCatalogStatGssapiTableID:                 pgCatalogStatGssapiTable,
+		catconstants.PgCatalogStatProgressAnalyzeTableID:        pgCatalogStatProgressAnalyzeTable,
+		catconstants.PgCatalogStatProgressBasebackupTableID:     pgCatalogStatProgressBasebackupTable,
+		catconstants.PgCatalogStatProgressClusterTableID:        pgCatalogStatProgressClusterTable,
+		catconstants.PgCatalogStatProgressCreateIndexTableID:    pgCatalogStatProgressCreateIndexTable,
+		catconstants.PgCatalogStatProgressVacuumTableID:         pgCatalogStatProgressVacuumTable,
+		catconstants.PgCatalogStatReplicationTableID:            pgCatalogStatReplicationTable,
+		catconstants.PgCatalogStatSlruTableID:                   pgCatalogStatSlruTable,
+		catconstants.PgCatalogStatSslTableID:                    pgCatalogStatSslTable,
+		catconstants.PgCatalogStatSubscriptionTableID:           pgCatalogStatSubscriptionTable,
+		catconstants.PgCatalogStatSysIndexesTableID:             pgCatalogStatSysIndexesTable,
+		catconstants.PgCatalogStatSysTablesTableID:              pgCatalogStatSysTablesTable,
+		catconstants.PgCatalogStatUserFunctionsTableID:          pgCatalogStatUserFunctionsTable,
+		catconstants.PgCatalogStatUserIndexesTableID:            pgCatalogStatUserIndexesTable,
+		catconstants.PgCatalogStatUserTablesTableID:             pgCatalogStatUserTablesTable,
+		catconstants.PgCatalogStatWalReceiverTableID:            pgCatalogStatWalReceiverTable,
+		catconstants.PgCatalogStatXactAllTablesTableID:          pgCatalogStatXactAllTablesTable,
+		catconstants.PgCatalogStatXactSysTablesTableID:          pgCatalogStatXactSysTablesTable,
+		catconstants.PgCatalogStatXactUserFunctionsTableID:      pgCatalogStatXactUserFunctionsTable,
+		catconstants.PgCatalogStatXactUserTablesTableID:         pgCatalogStatXactUserTablesTable,
+		catconstants.PgCatalogStatioAllIndexesTableID:           pgCatalogStatioAllIndexesTable,
+		catconstants.PgCatalogStatioAllSequencesTableID:         pgCatalogStatioAllSequencesTable,
+		catconstants.PgCatalogStatioAllTablesTableID:            pgCatalogStatioAllTablesTable,
+		catconstants.PgCatalogStatioSysIndexesTableID:           pgCatalogStatioSysIndexesTable,
+		catconstants.PgCatalogStatioSysSequencesTableID:         pgCatalogStatioSysSequencesTable,
+		catconstants.PgCatalogStatioSysTablesTableID:            pgCatalogStatioSysTablesTable,
+		catconstants.PgCatalogStatioUserIndexesTableID:          pgCatalogStatioUserIndexesTable,
+		catconstants.PgCatalogStatioUserSequencesTableID:        pgCatalogStatioUserSequencesTable,
+		catconstants.PgCatalogStatioUserTablesTableID:           pgCatalogStatioUserTablesTable,
 		catconstants.PgCatalogStatisticExtTableID:               pgCatalogStatisticExtTable,
 		catconstants.PgCatalogSubscriptionRelTableID:            pgCatalogSubscriptionRelTable,
 		catconstants.PgCatalogSubscriptionTableID:               pgCatalogSubscriptionTable,
@@ -3176,6 +3182,303 @@ var pgCatalogStatDatabaseTable = virtualSchemaTable{
 var pgCatalogStatDatabaseConflictsTable = virtualSchemaTable{
 	comment: "pg_stat_database_conflicts was created for compatibility and is currently unimplemented",
 	schema:  vtable.PgCatalogStatDatabaseConflicts,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatioUserSequencesTable = virtualSchemaTable{
+	comment: "pg_statio_user_sequences was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatioUserSequences,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatReplicationTable = virtualSchemaTable{
+	comment: "pg_stat_replication was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatReplication,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatSysIndexesTable = virtualSchemaTable{
+	comment: "pg_stat_sys_indexes was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatSysIndexes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatXactUserTablesTable = virtualSchemaTable{
+	comment: "pg_stat_xact_user_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatXactUserTables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatUserTablesTable = virtualSchemaTable{
+	comment: "pg_stat_user_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatUserTables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatAllTablesTable = virtualSchemaTable{
+	comment: "pg_stat_all_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatAllTables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatioUserTablesTable = virtualSchemaTable{
+	comment: "pg_statio_user_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatioUserTables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatUserIndexesTable = virtualSchemaTable{
+	comment: "pg_stat_user_indexes was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatUserIndexes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatXactSysTablesTable = virtualSchemaTable{
+	comment: "pg_stat_xact_sys_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatXactSysTables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatioSysTablesTable = virtualSchemaTable{
+	comment: "pg_statio_sys_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatioSysTables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatGssapiTable = virtualSchemaTable{
+	comment: "pg_stat_gssapi was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatGssapi,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatSlruTable = virtualSchemaTable{
+	comment: "pg_stat_slru was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatSlru,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatXactAllTablesTable = virtualSchemaTable{
+	comment: "pg_stat_xact_all_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatXactAllTables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatioUserIndexesTable = virtualSchemaTable{
+	comment: "pg_statio_user_indexes was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatioUserIndexes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatioSysSequencesTable = virtualSchemaTable{
+	comment: "pg_statio_sys_sequences was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatioSysSequences,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatSubscriptionTable = virtualSchemaTable{
+	comment: "pg_stat_subscription was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatSubscription,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatProgressBasebackupTable = virtualSchemaTable{
+	comment: "pg_stat_progress_basebackup was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatProgressBasebackup,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatWalReceiverTable = virtualSchemaTable{
+	comment: "pg_stat_wal_receiver was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatWalReceiver,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatSysTablesTable = virtualSchemaTable{
+	comment: "pg_stat_sys_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatSysTables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatSslTable = virtualSchemaTable{
+	comment: "pg_stat_ssl was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatSsl,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatioAllSequencesTable = virtualSchemaTable{
+	comment: "pg_statio_all_sequences was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatioAllSequences,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatProgressVacuumTable = virtualSchemaTable{
+	comment: "pg_stat_progress_vacuum was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatProgressVacuum,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatAllIndexesTable = virtualSchemaTable{
+	comment: "pg_stat_all_indexes was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatAllIndexes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatioSysIndexesTable = virtualSchemaTable{
+	comment: "pg_statio_sys_indexes was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatioSysIndexes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatUserFunctionsTable = virtualSchemaTable{
+	comment: "pg_stat_user_functions was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatUserFunctions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatArchiverTable = virtualSchemaTable{
+	comment: "pg_stat_archiver was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatArchiver,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatProgressClusterTable = virtualSchemaTable{
+	comment: "pg_stat_progress_cluster was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatProgressCluster,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatBgwriterTable = virtualSchemaTable{
+	comment: "pg_stat_bgwriter was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatBgwriter,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatProgressAnalyzeTable = virtualSchemaTable{
+	comment: "pg_stat_progress_analyze was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatProgressAnalyze,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatioAllIndexesTable = virtualSchemaTable{
+	comment: "pg_statio_all_indexes was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatioAllIndexes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatXactUserFunctionsTable = virtualSchemaTable{
+	comment: "pg_stat_xact_user_functions was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatXactUserFunctions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatioAllTablesTable = virtualSchemaTable{
+	comment: "pg_statio_all_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatioAllTables,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatProgressCreateIndexTable = virtualSchemaTable{
+	comment: "pg_stat_progress_create_index was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatProgressCreateIndex,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},

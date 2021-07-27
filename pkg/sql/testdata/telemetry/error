@@ -97,14 +97,6 @@ error: pq: unimplemented: use CREATE INDEX to make interleaved indexes
 errorcodes.0A000
 unimplemented.#9148
 
-# 0A000 is pgcode.FeatureNotSupported.
-feature-usage
-SELECT * FROM pg_catalog.pg_stat_wal_receiver
-----
-error: pq: unimplemented: virtual schema table not implemented: pg_catalog.pg_stat_wal_receiver
-errorcodes.0A000
-unimplemented.pg_catalog.pg_stat_wal_receiver
-
 # 22012 is pgcode.DivisionByZero.
 feature-usage
 SELECT 2/0
