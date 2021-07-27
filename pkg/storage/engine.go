@@ -423,10 +423,10 @@ type Reader interface {
 	// that allow resuming export if it was cut short because it reached limits or
 	// an error if export failed for some reason.
 	ExportMVCCToSst(
-		ctx context.Context, startKey, endKey roachpb.Key, startTS, endTS, firstKeyTs hlc.Timestamp,
+		ctx context.Context, startKey, endKey roachpb.Key, startTS, endTS, firstKeyTS hlc.Timestamp,
 		exportAllRevisions bool, targetSize uint64, maxSize uint64, stopMidKey bool, useTBI bool,
 		dest io.Writer,
-	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, resumeTs hlc.Timestamp, _ error)
+	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, resumeTS hlc.Timestamp, _ error)
 	// MVCCGet returns the value for the given key, nil otherwise. Semantically, it
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
 	//
