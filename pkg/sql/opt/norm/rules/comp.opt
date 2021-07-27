@@ -240,7 +240,8 @@
 # early-exit behavior, and may allow an inverted index scan to be generated.
 [FoldEqZeroSTDistance, Normalize]
 (Eq
-    (Function $args:* $private:(FunctionPrivate "st_distance"))
+    (Function $args:* $private:(FunctionPrivate "st_distance")) &
+        ^(STDistanceUseSpheroid $args)
     $right:(Const
         $value:* & (IsFloatDatum $value) & (DatumsEqual $value 0)
     )
