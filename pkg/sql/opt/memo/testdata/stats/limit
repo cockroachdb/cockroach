@@ -249,19 +249,33 @@ offset
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(1)=0.995511979, null(1)=0.01]
  ├── ordering: +1
- ├── limit
+ ├── top-k
  │    ├── columns: x:1(int)
  │    ├── internal-ordering: +1
+ │    ├── k: 10000
  │    ├── cardinality: [0 - 10000]
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── ordering: +1
- │    ├── sort
- │    │    ├── columns: x:1(int)
- │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    │    ├── ordering: +1
- │    │    ├── limit hint: 10000.00
- │    │    └── scan b
- │    │         ├── columns: x:1(int)
- │    │         └── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    └── 10000 [type=int]
+ │    └── scan b
+ │         ├── columns: x:1(int)
+ │         └── stats: [rows=1000, distinct(1)=100, null(1)=10]
  └── 9999 [type=int]
+
+# TopK
+opt colstat=1
+SELECT * FROM a ORDER BY y LIMIT 500
+----
+top-k
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── internal-ordering: +2
+ ├── k: 500
+ ├── cardinality: [0 - 500]
+ ├── stats: [rows=500, distinct(1)=500, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── ordering: +2
+ └── scan a
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+      ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2-4), (3,4)~~>(1,2)
