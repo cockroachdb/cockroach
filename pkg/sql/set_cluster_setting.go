@@ -230,8 +230,23 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 
 			if isSetVersion {
+				setCurrentVersion := func(ctx context.Context, version clusterversion.ClusterVersion) error {
+					rawValue, err := protoutil.Marshal(&version)
+					if err != nil {
+						return err
+					}
+					return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+						_, err = execCfg.InternalExecutor.ExecEx(
+							ctx, "update-setting", txn,
+							sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+							`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+							n.name, string(rawValue), n.setting.Typ(),
+						)
+						return err
+					})
+				}
 				if err := runVersionUpgradeHook(
-					ctx, params, prev, value, n.versionUpgradeHook,
+					ctx, params, prev, value, n.versionUpgradeHook, setCurrentVersion,
 				); err != nil {
 					return err
 				}
@@ -342,7 +357,12 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 }
 
 func runVersionUpgradeHook(
-	ctx context.Context, params runParams, prev tree.Datum, value tree.Datum, f VersionUpgradeHook,
+	ctx context.Context,
+	params runParams,
+	prev tree.Datum,
+	value tree.Datum,
+	f VersionUpgradeHook,
+	setCurrentVersion SetCurrentVersionHook,
 ) error {
 	var from, to clusterversion.ClusterVersion
 
@@ -372,7 +392,7 @@ func runVersionUpgradeHook(
 	// toSettingString already validated the input, and checked to
 	// see that we are allowed to transition. Let's call into our
 	// upgrade hook to run migrations, if any.
-	if err := f(ctx, params.p.User(), from, to); err != nil {
+	if err := f(ctx, params.p.User(), from, to, setCurrentVersion); err != nil {
 		return err
 	}
 	return nil
