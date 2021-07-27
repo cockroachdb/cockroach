@@ -319,6 +319,14 @@ SELECT _ FROM t@{NO_INDEX_JOIN} -- literals removed
 SELECT 'a' FROM _@{NO_INDEX_JOIN} -- identifiers removed
 
 parse
+SELECT 'a' FROM t@{NO_ZIGZAG_JOIN}
+----
+SELECT 'a' FROM t@{NO_ZIGZAG_JOIN}
+SELECT ('a') FROM t@{NO_ZIGZAG_JOIN} -- fully parenthesized
+SELECT _ FROM t@{NO_ZIGZAG_JOIN} -- literals removed
+SELECT 'a' FROM _@{NO_ZIGZAG_JOIN} -- identifiers removed
+
+parse
 SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}
 ----
 SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}
@@ -335,12 +343,12 @@ SELECT _ FROM t@{FORCE_INDEX=idx,ASC} -- literals removed
 SELECT 'a' FROM _@{FORCE_INDEX=_,ASC} -- identifiers removed
 
 parse
-SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS}
+SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS,NO_ZIGZAG_JOIN}
 ----
-SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS}
-SELECT ('a') FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS} -- fully parenthesized
-SELECT _ FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS} -- literals removed
-SELECT 'a' FROM _@{FORCE_INDEX=_,DESC,IGNORE_FOREIGN_KEYS} -- identifiers removed
+SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,IGNORE_FOREIGN_KEYS} -- normalized!
+SELECT ('a') FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,IGNORE_FOREIGN_KEYS} -- fully parenthesized
+SELECT _ FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,IGNORE_FOREIGN_KEYS} -- literals removed
+SELECT 'a' FROM _@{FORCE_INDEX=_,DESC,NO_ZIGZAG_JOIN,IGNORE_FOREIGN_KEYS} -- identifiers removed
 
 error
 SELECT a FROM foo@{FORCE_INDEX}
