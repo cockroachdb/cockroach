@@ -95,3 +95,14 @@
 )
 =>
 (Limit $unionScans $limitExpr $ordering)
+
+# TopK generates an operator that returns the top constant number of rows
+# according to the ordering, so does not require its input to be ordered.
+[TopK, Explore]
+(Limit
+    $input:*
+    $limitExpr:(Const $limit:*) & (IsPositiveInt $limit)
+    $ordering:* & ^(IsSameOrdering $ordering (EmptyOrdering))
+)
+=>
+(TopK $input $limitExpr $ordering)

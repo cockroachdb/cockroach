@@ -458,6 +458,9 @@ func (c *coster) Init(evalCtx *tree.EvalContext, mem *memo.Memo, perturbation fl
 func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost {
 	var cost memo.Cost
 	switch candidate.Op() {
+	case opt.TopKOp:
+		cost = c.computeTopKCost(candidate.(*memo.TopKExpr), required)
+
 	case opt.SortOp:
 		cost = c.computeSortCost(candidate.(*memo.SortExpr), required)
 
@@ -553,6 +556,29 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 		}
 	}
 
+	return cost
+}
+
+func (c *coster) computeTopKCost(topk *memo.TopKExpr, required *physical.Required) memo.Cost {
+
+	rel := topk.Relational()
+	inputRowCount := topk.Child(0).(memo.RelExpr).Relational().Stats.RowCount
+	outputRowCount := rel.Stats.RowCount
+
+	// Add the cost of sorting.
+	// Start with a cost of storing each row; TopK sort only stores K rows in a max heap.
+	cost := memo.Cost(cpuCostFactor * float64(rel.OutputCols.Len()) * outputRowCount)
+
+	// TODO(harding) Do we need to account for buffering rows and spilling to disk
+	// if K is larger than what can fit in memory?
+
+	// In the worst case, there are O(N*log(K)) comparisons to compare each row in
+	// the input to the top of the max heap and sift the max heap if each row
+	// compared is in the top K found so far.
+	cost += c.rowCmpCost(len(required.Ordering.Columns)) * memo.Cost((1+math.Log2(outputRowCount))*inputRowCount)
+
+	// Add the CPU cost of emitting the K rows.
+	cost += memo.Cost(outputRowCount) * cpuCostFactor
 	return cost
 }
 
@@ -1166,6 +1192,28 @@ func (c *coster) computeProjectSetCost(projectSet *memo.ProjectSetExpr) memo.Cos
 	// Add the CPU cost of emitting the rows.
 	cost := memo.Cost(projectSet.Relational().Stats.RowCount) * cpuCostFactor
 	return cost
+}
+
+// countSegments calculates the number of segments that will be used to execute
+// the sort. If no input ordering is provided, there's only one segment.
+func (c *coster) countSegmentsHelper(expr memo.RelExpr, rel *props.Relational, order props.OrderingChoice) float64 {
+	if order.Any() {
+		return 1
+	}
+	stats := rel.Stats
+	orderedCols := order.ColSet()
+	orderedStats, ok := stats.ColStats.Lookup(orderedCols)
+	if !ok {
+		orderedStats, ok = c.mem.RequestColStat(expr, orderedCols)
+		if !ok {
+			// I don't think we can ever get here. Since we don't allow the memo
+			// to be optimized twice, the coster should never be used after
+			// logPropsBuilder.clear() is called.
+			panic(errors.AssertionFailedf("could not request the stats for ColSet %v", orderedCols))
+		}
+	}
+
+	return orderedStats.DistinctCount
 }
 
 // countSegments calculates the number of segments that will be used to execute

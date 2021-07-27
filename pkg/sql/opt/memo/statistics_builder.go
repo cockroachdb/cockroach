@@ -1964,7 +1964,7 @@ func (sb *statisticsBuilder) colStatValues(
 // | Limit |
 // +-------+
 
-func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relational) {
+func (sb *statisticsBuilder) buildLimit(limit RelExpr, relProps *props.Relational) {
 	s := &relProps.Stats
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
@@ -1972,13 +1972,13 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 	}
 	s.Available = sb.availabilityFromInput(limit)
 
-	inputStats := &limit.Input.Relational().Stats
+	inputStats := sb.statsFromChild(limit, 0 /* childIdx */)
 
 	// Copy row count from input.
 	s.RowCount = inputStats.RowCount
 
 	// Update row count if limit is a constant and row count is non-zero.
-	if cnst, ok := limit.Limit.(*ConstExpr); ok && inputStats.RowCount > 0 {
+	if cnst, ok := limit.Child(1).(*ConstExpr); ok && inputStats.RowCount > 0 {
 		hardLimit := *cnst.Value.(*tree.DInt)
 		if hardLimit > 0 {
 			s.RowCount = min(float64(hardLimit), inputStats.RowCount)
