@@ -25,9 +25,11 @@ import (
 // kvtenant.Connector).
 func (s *instance) TokenBucketRequest(
 	ctx context.Context, tenantID roachpb.TenantID, in *roachpb.TokenBucketRequest,
-) (*roachpb.TokenBucketResponse, error) {
+) *roachpb.TokenBucketResponse {
 	if tenantID == roachpb.SystemTenantID {
-		return nil, errors.New("token bucket request for system tenant")
+		return &roachpb.TokenBucketResponse{
+			Error: errors.EncodeError(ctx, errors.New("token bucket request for system tenant")),
+		}
 	}
 
 	result := &roachpb.TokenBucketResponse{}
@@ -63,9 +65,11 @@ func (s *instance) TokenBucketRequest(
 
 		return updateTenantUsageState(ctx, s.executor, txn, tenantID, state)
 	}); err != nil {
-		return nil, err
+		*result = roachpb.TokenBucketResponse{
+			Error: errors.EncodeError(ctx, err),
+		}
 	}
-	return result, nil
+	return result
 }
 
 type tenantUsageState struct {

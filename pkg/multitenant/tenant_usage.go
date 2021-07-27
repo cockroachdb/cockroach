@@ -28,7 +28,7 @@ type TenantUsageServer interface {
 	// kvtenant.Connector)
 	TokenBucketRequest(
 		ctx context.Context, tenantID roachpb.TenantID, in *roachpb.TokenBucketRequest,
-	) (*roachpb.TokenBucketResponse, error)
+	) *roachpb.TokenBucketResponse
 
 	// ReconfigureTokenBucket updates a tenant's token bucket settings.
 	//
