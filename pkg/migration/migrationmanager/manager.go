@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -92,7 +93,10 @@ var _ migration.JobDeps = (*Manager)(nil)
 // Migrate runs the set of migrations required to upgrade the cluster version
 // from the current version to the target one.
 func (m *Manager) Migrate(
-	ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion,
+	ctx context.Context,
+	user security.SQLUsername,
+	from, to clusterversion.ClusterVersion,
+	setCurrentVersion sql.SetCurrentVersionHook,
 ) error {
 	// TODO(irfansharif): Should we inject every ctx here with specific labels
 	// for each migration, so they log distinctly?
@@ -220,15 +224,25 @@ func (m *Manager) Migrate(
 		}
 		{
 			// Finally, bump the real version cluster-wide.
+			anyVersionBumped := false
 			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
 			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
 			if err := m.c.UntilClusterStable(ctx, func() error {
 				return m.c.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
 					_, err := client.BumpClusterVersion(ctx, req)
+					anyVersionBumped = true
 					return err
 				})
 			}); err != nil {
 				return err
+			}
+			if !anyVersionBumped {
+				// Bump up the cluster version for tenants, which
+				// will bump over individual version bumps.
+				err := setCurrentVersion(ctx, clusterVersion)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
