@@ -174,7 +174,7 @@ func TestSpillingQueue(t *testing.T) {
 				// the desired value and restore it below.
 				numTuples := tuples.Length()
 				tuples.SetLength(numAlreadyDequeuedTuples + windowLen)
-				MakeWindowIntoBatch(windowedBatch, tuples, numAlreadyDequeuedTuples, typs)
+				MakeWindowIntoBatch(windowedBatch, tuples, numAlreadyDequeuedTuples, numAlreadyDequeuedTuples+windowLen, typs)
 				tuples.SetLength(numTuples)
 				numAlreadyDequeuedTuples += windowLen
 				return windowedBatch
