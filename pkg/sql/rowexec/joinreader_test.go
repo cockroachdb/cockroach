@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -851,155 +850,131 @@ func TestJoinReader(t *testing.T) {
 				// paired joins, so do both.
 				for _, smallBatch := range []bool{true, false} {
 					for _, outputContinuation := range []bool{false, true} {
-						for _, lowMemory := range []bool{false, true} {
-							if outputContinuation && c.secondJoinInPairedJoin {
-								// outputContinuation is for the first join in paired-joins, so
-								// can't do that when this test case is for the second join in
-								// paired-joins.
-								continue
-							}
-							if outputContinuation && !reqOrdering {
-								// The first join in paired-joins must preserve ordering.
-								continue
-							}
-							if outputContinuation && len(c.expectedWithContinuation) == 0 {
-								continue
-							}
-							if smallBatch && lowMemory {
-								continue
-							}
-							t.Run(fmt.Sprintf("%d/reqOrdering=%t/%s/smallBatch=%t/cont=%t/lowMem=%t",
-								i, reqOrdering, c.description, smallBatch, outputContinuation, lowMemory), func(t *testing.T) {
-								evalCtx := tree.MakeTestingEvalContext(st)
-								defer evalCtx.Stop(ctx)
-								flowCtx := execinfra.FlowCtx{
-									EvalCtx: &evalCtx,
-									Cfg: &execinfra.ServerConfig{
-										Settings:    st,
-										TempStorage: tempEngine,
-									},
-									Txn:         kv.NewTxn(ctx, s.DB(), s.NodeID()),
-									DiskMonitor: diskMonitor,
-								}
-								encRows := make(rowenc.EncDatumRows, len(c.input))
-								for rowIdx, row := range c.input {
-									encRow := make(rowenc.EncDatumRow, len(row))
-									for i, d := range row {
-										encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
-									}
-									encRows[rowIdx] = encRow
-								}
-								in := distsqlutils.NewRowBuffer(c.inputTypes, encRows, distsqlutils.RowBufferArgs{})
-
-								if lowMemory {
-									flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = int64(encRows[0].Size() * 2)
-								}
-
-								out := &distsqlutils.RowBuffer{}
-								post := c.post
-								if outputContinuation {
-									post.OutputColumns = append(post.OutputColumns, c.outputColumnForContinuation)
-								}
-								jr, err := newJoinReader(
-									&flowCtx,
-									0, /* processorID */
-									&execinfrapb.JoinReaderSpec{
-										Table:                             *td.TableDesc(),
-										IndexIdx:                          c.indexIdx,
-										LookupColumns:                     c.lookupCols,
-										LookupExpr:                        execinfrapb.Expression{Expr: c.lookupExpr},
-										RemoteLookupExpr:                  execinfrapb.Expression{Expr: c.remoteLookupExpr},
-										OnExpr:                            execinfrapb.Expression{Expr: c.onExpr},
-										Type:                              c.joinType,
-										MaintainOrdering:                  reqOrdering,
-										LeftJoinWithPairedJoiner:          c.secondJoinInPairedJoin,
-										OutputGroupContinuationForLeftRow: outputContinuation,
-									},
-									in,
-									&post,
-									out,
-									lookupJoinReaderType,
-								)
-								if err != nil {
-									t.Fatal(err)
-								}
-
-								if smallBatch {
-									// Set a lower batch size to force multiple batches.
-									jr.(*joinReader).SetBatchSizeBytes(int64(encRows[0].Size() * 2))
-								}
-								// Else, use the default.
-
-								jr.Run(ctx)
-
-								if !in.Done {
-									t.Fatal("joinReader didn't consume all the rows")
-								}
-								if !out.ProducerClosed() {
-									t.Fatalf("output RowReceiver not closed")
-								}
-
-								var res rowenc.EncDatumRows
-								var gotOutOfMemoryError bool
-								for {
-									row, meta := out.Next()
-									if meta != nil {
-										if lowMemory && meta.Err != nil {
-											if !sqlerrors.IsOutOfMemoryError(meta.Err) {
-												t.Fatalf("unexpected metadata %+v", meta)
-											}
-											gotOutOfMemoryError = true
-										} else if meta.Metrics == nil {
-											t.Fatalf("unexpected metadata %+v", meta)
-										}
-									}
-									if row == nil {
-										break
-									}
-									res = append(res, row)
-								}
-
-								if lowMemory {
-									if gotOutOfMemoryError {
-										return
-									}
-									t.Fatal("expected out of memory error but it did not occur")
-								}
-
-								// processOutputRows is a helper function that takes a stringified
-								// EncDatumRows output (e.g. [[1 2] [3 1]]) and returns a slice of
-								// stringified rows without brackets (e.g. []string{"1 2", "3 1"}).
-								processOutputRows := func(output string) []string {
-									// Comma-separate the rows.
-									output = strings.ReplaceAll(output, "] [", ",")
-									// Remove leading and trailing bracket.
-									output = strings.Trim(output, "[]")
-									// Split on the commas that were introduced and return that.
-									return strings.Split(output, ",")
-								}
-
-								outputTypes := c.outputTypes
-								if outputContinuation {
-									outputTypes = append(outputTypes, types.Bool)
-								}
-								result := processOutputRows(res.String(outputTypes))
-								var expected []string
-								if outputContinuation {
-									expected = processOutputRows(c.expectedWithContinuation)
-								} else {
-									expected = processOutputRows(c.expected)
-								}
-
-								if !reqOrdering {
-									// An ordering was not required, so sort both the result and
-									// expected slice to reuse equality comparison.
-									sort.Strings(result)
-									sort.Strings(expected)
-								}
-
-								require.Equal(t, expected, result)
-							})
+						if outputContinuation && c.secondJoinInPairedJoin {
+							// outputContinuation is for the first join in paired-joins, so
+							// can't do that when this test case is for the second join in
+							// paired-joins.
+							continue
 						}
+						if outputContinuation && !reqOrdering {
+							// The first join in paired-joins must preserve ordering.
+							continue
+						}
+						if outputContinuation && len(c.expectedWithContinuation) == 0 {
+							continue
+						}
+						t.Run(fmt.Sprintf("%d/reqOrdering=%t/%s/smallBatch=%t/cont=%t",
+							i, reqOrdering, c.description, smallBatch, outputContinuation), func(t *testing.T) {
+							evalCtx := tree.MakeTestingEvalContext(st)
+							defer evalCtx.Stop(ctx)
+							flowCtx := execinfra.FlowCtx{
+								EvalCtx: &evalCtx,
+								Cfg: &execinfra.ServerConfig{
+									Settings:    st,
+									TempStorage: tempEngine,
+								},
+								Txn:         kv.NewTxn(ctx, s.DB(), s.NodeID()),
+								DiskMonitor: diskMonitor,
+							}
+							encRows := make(rowenc.EncDatumRows, len(c.input))
+							for rowIdx, row := range c.input {
+								encRow := make(rowenc.EncDatumRow, len(row))
+								for i, d := range row {
+									encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+								}
+								encRows[rowIdx] = encRow
+							}
+							in := distsqlutils.NewRowBuffer(c.inputTypes, encRows, distsqlutils.RowBufferArgs{})
+
+							out := &distsqlutils.RowBuffer{}
+							post := c.post
+							if outputContinuation {
+								post.OutputColumns = append(post.OutputColumns, c.outputColumnForContinuation)
+							}
+							jr, err := newJoinReader(
+								&flowCtx,
+								0, /* processorID */
+								&execinfrapb.JoinReaderSpec{
+									Table:                             *td.TableDesc(),
+									IndexIdx:                          c.indexIdx,
+									LookupColumns:                     c.lookupCols,
+									LookupExpr:                        execinfrapb.Expression{Expr: c.lookupExpr},
+									RemoteLookupExpr:                  execinfrapb.Expression{Expr: c.remoteLookupExpr},
+									OnExpr:                            execinfrapb.Expression{Expr: c.onExpr},
+									Type:                              c.joinType,
+									MaintainOrdering:                  reqOrdering,
+									LeftJoinWithPairedJoiner:          c.secondJoinInPairedJoin,
+									OutputGroupContinuationForLeftRow: outputContinuation,
+								},
+								in,
+								&post,
+								out,
+								lookupJoinReaderType,
+							)
+							if err != nil {
+								t.Fatal(err)
+							}
+
+							if smallBatch {
+								// Set a lower batch size to force multiple batches.
+								jr.(*joinReader).SetBatchSizeBytes(int64(encRows[0].Size() * 2))
+							}
+							// Else, use the default.
+
+							jr.Run(ctx)
+
+							if !in.Done {
+								t.Fatal("joinReader didn't consume all the rows")
+							}
+							if !out.ProducerClosed() {
+								t.Fatalf("output RowReceiver not closed")
+							}
+
+							var res rowenc.EncDatumRows
+							for {
+								row, meta := out.Next()
+								if meta != nil && meta.Metrics == nil {
+									t.Fatalf("unexpected metadata %+v", meta)
+								}
+								if row == nil {
+									break
+								}
+								res = append(res, row)
+							}
+
+							// processOutputRows is a helper function that takes a stringified
+							// EncDatumRows output (e.g. [[1 2] [3 1]]) and returns a slice of
+							// stringified rows without brackets (e.g. []string{"1 2", "3 1"}).
+							processOutputRows := func(output string) []string {
+								// Comma-separate the rows.
+								output = strings.ReplaceAll(output, "] [", ",")
+								// Remove leading and trailing bracket.
+								output = strings.Trim(output, "[]")
+								// Split on the commas that were introduced and return that.
+								return strings.Split(output, ",")
+							}
+
+							outputTypes := c.outputTypes
+							if outputContinuation {
+								outputTypes = append(outputTypes, types.Bool)
+							}
+							result := processOutputRows(res.String(outputTypes))
+							var expected []string
+							if outputContinuation {
+								expected = processOutputRows(c.expectedWithContinuation)
+							} else {
+								expected = processOutputRows(c.expected)
+							}
+
+							if !reqOrdering {
+								// An ordering was not required, so sort both the result and
+								// expected slice to reuse equality comparison.
+								sort.Strings(result)
+								sort.Strings(expected)
+							}
+
+							require.Equal(t, expected, result)
+						})
 					}
 				}
 			}
