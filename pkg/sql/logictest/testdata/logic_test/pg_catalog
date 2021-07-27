@@ -3639,7 +3639,7 @@ bytea_output                                           hex                 NULL 
 client_encoding                                        UTF8                NULL  user     NULL      UTF8                UTF8
 client_min_messages                                    notice              NULL  user     NULL      notice              notice
 database                                               test                NULL  user     NULL      ·                   test
-datestyle                                              ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
+datestyle                                              ISO, MDY            NULL  user     NULL      iso, mdy            ISO, MDY
 default_int_size                                       8                   NULL  user     NULL      8                   8
 default_tablespace                                     ·                   NULL  user     NULL      ·                   ·
 default_transaction_isolation                          serializable        NULL  user     NULL      default             default
