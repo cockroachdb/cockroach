@@ -38,6 +38,7 @@ type Builder struct {
 	catalog          cat.Catalog
 	e                opt.Expr
 	disableTelemetry bool
+	semaCtx          *tree.SemaContext
 	evalCtx          *tree.EvalContext
 
 	// subqueries accumulates information about subqueries that are part of scalar
@@ -111,6 +112,7 @@ func New(
 	mem *memo.Memo,
 	catalog cat.Catalog,
 	e opt.Expr,
+	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	allowAutoCommit bool,
 ) *Builder {
@@ -120,6 +122,7 @@ func New(
 		mem:                    mem,
 		catalog:                catalog,
 		e:                      e,
+		semaCtx:                semaCtx,
 		evalCtx:                evalCtx,
 		allowAutoCommit:        allowAutoCommit,
 		initialAllowAutoCommit: allowAutoCommit,

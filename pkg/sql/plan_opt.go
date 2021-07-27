@@ -210,6 +210,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 			&p.stmt,
 			newDistSQLSpecExecFactory(p, planningMode),
 			execMemo,
+			p.SemaCtx(),
 			p.EvalContext(),
 			p.autoCommit,
 		)
@@ -244,6 +245,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 					&p.stmt,
 					newDistSQLSpecExecFactory(p, distSQLLocalOnlyPlanning),
 					execMemo,
+					p.SemaCtx(),
 					p.EvalContext(),
 					p.autoCommit,
 				)
@@ -264,6 +266,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		&p.stmt,
 		newExecFactory(p),
 		execMemo,
+		p.SemaCtx(),
 		p.EvalContext(),
 		p.autoCommit,
 	)
@@ -554,6 +557,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	stmt *Statement,
 	f exec.Factory,
 	mem *memo.Memo,
+	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	allowAutoCommit bool,
 ) error {
@@ -563,7 +567,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var containsFullIndexScan bool
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
-		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld := execbuilder.New(
+			f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), semaCtx, evalCtx, allowAutoCommit,
+		)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -576,7 +582,14 @@ func (opc *optPlanningCtx) runExecBuilder(
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
 		bld := execbuilder.New(
-			explainFactory, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit,
+			explainFactory,
+			&opc.optimizer,
+			mem,
+			&opc.catalog,
+			mem.RootExpr(),
+			semaCtx,
+			evalCtx,
+			allowAutoCommit,
 		)
 		plan, err := bld.Build()
 		if err != nil {
