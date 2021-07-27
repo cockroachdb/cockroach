@@ -45,29 +45,29 @@ CREATE VIEW sc2.v6 AS (SELECT 'a'::sc1.typ::string AS k, n2, n1 from sc1.v4)
 build
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-- DROP DefaultExpression:{DescID: 55, ColumnID: 1}
+- DROP DefaultExpression: {DescID: 55, ColumnID: 1}
   state: PUBLIC
   details:
     columnId: 1
     tableId: 55
-- DROP DefaultExpression:{DescID: 55, ColumnID: 2}
+- DROP DefaultExpression: {DescID: 55, ColumnID: 2}
   state: PUBLIC
   details:
     columnId: 2
     tableId: 55
-- DROP DefaultExpression:{DescID: 55, ColumnID: 3}
+- DROP DefaultExpression: {DescID: 55, ColumnID: 3}
   state: PUBLIC
   details:
     columnId: 3
     tableId: 55
     usesSequenceIDs:
     - 54
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
+- DROP RelationDependedOnBy: {DescID: 54, ReferencedDescID: 55}
   state: PUBLIC
   details:
     dependedOn: 55
     tableId: 54
-- DROP Schema:{DescID: 52}
+- DROP Schema: {DescID: 52}
   state: PUBLIC
   details:
     dependentObjects:
@@ -81,43 +81,43 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     - 61
     - 62
     schemaId: 52
-- DROP Sequence:{DescID: 54}
+- DROP Sequence: {DescID: 54}
   state: PUBLIC
   details:
     sequenceId: 54
-- DROP Table:{DescID: 55}
+- DROP Table: {DescID: 55}
   state: PUBLIC
   details:
     tableId: 55
-- DROP Type:{DescID: 60}
+- DROP Type: {DescID: 60}
   state: PUBLIC
   details:
     typeId: 60
-- DROP Type:{DescID: 61}
+- DROP Type: {DescID: 61}
   state: PUBLIC
   details:
     typeId: 61
-- DROP TypeReference:{DescID: 62, ReferencedDescID: 60}
+- DROP TypeReference: {DescID: 62, ReferencedDescID: 60}
   state: PUBLIC
   details:
     descriptorId: 62
     typeId: 60
-- DROP TypeReference:{DescID: 62, ReferencedDescID: 61}
+- DROP TypeReference: {DescID: 62, ReferencedDescID: 61}
   state: PUBLIC
   details:
     descriptorId: 62
     typeId: 61
-- DROP TypeReference:{DescID: 63, ReferencedDescID: 60}
+- DROP TypeReference: {DescID: 63, ReferencedDescID: 60}
   state: PUBLIC
   details:
     descriptorId: 63
     typeId: 60
-- DROP TypeReference:{DescID: 63, ReferencedDescID: 61}
+- DROP TypeReference: {DescID: 63, ReferencedDescID: 61}
   state: PUBLIC
   details:
     descriptorId: 63
     typeId: 61
-- DROP View:{DescID: 56}
+- DROP View: {DescID: 56}
   state: PUBLIC
   details:
     dependedOnBy:
@@ -126,7 +126,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     dependsOn:
     - 55
     tableId: 56
-- DROP View:{DescID: 57}
+- DROP View: {DescID: 57}
   state: PUBLIC
   details:
     dependedOnBy:
@@ -135,7 +135,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     dependsOn:
     - 56
     tableId: 57
-- DROP View:{DescID: 58}
+- DROP View: {DescID: 58}
   state: PUBLIC
   details:
     dependedOnBy: []
@@ -143,7 +143,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     - 56
     - 57
     tableId: 58
-- DROP View:{DescID: 59}
+- DROP View: {DescID: 59}
   state: PUBLIC
   details:
     dependedOnBy:
@@ -152,14 +152,14 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     dependsOn:
     - 57
     tableId: 59
-- DROP View:{DescID: 62}
+- DROP View: {DescID: 62}
   state: PUBLIC
   details:
     dependedOnBy: []
     dependsOn:
     - 59
     tableId: 62
-- DROP View:{DescID: 63}
+- DROP View: {DescID: 63}
   state: PUBLIC
   details:
     dependedOnBy: []

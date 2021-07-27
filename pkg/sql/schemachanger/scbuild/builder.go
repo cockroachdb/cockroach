@@ -174,7 +174,7 @@ func (b *buildContext) checkIfNodeExists(
 	// Check if any existing node matches the new node we are
 	// trying to add.
 	for idx, node := range b.output {
-		if scpb.EqualElements(node.Element(), elem) {
+		if scpb.Equal(node.GetElement(), elem) {
 			return true, idx
 		}
 	}

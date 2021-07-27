@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/eav"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,13 +22,13 @@ import (
 // have a given Attribute, that the values all have the same type.
 func TestElementAttributeValueTypesMatch(t *testing.T) {
 	typ := reflect.TypeOf((*ElementProto)(nil)).Elem()
-	attributeMap := make(map[Attribute]reflect.Type)
+	attributeMap := make(map[eav.Attribute]reflect.Type)
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
 		elem := reflect.New(f.Type.Elem()).Interface().(Element)
-		for i := 0; i < numAttributes; i++ {
-			attr := attributeOrder[i]
-			av := elem.getAttribute(attr)
+		for i := 0; i < NumAttrs; i++ {
+			attr := AttrSchema().At(eav.Ordinal(i))
+			av := elem.Get(attr)
 			if av == nil {
 				continue
 			}
@@ -59,6 +60,36 @@ func TestAllElementsHaveDescID(t *testing.T) {
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
 		elem := reflect.New(f.Type.Elem()).Interface().(Element)
-		require.NotNilf(t, elem.getAttribute(AttributeDescID), "%s", f.Type.Elem())
+		require.NotNilf(t, elem.Get(AttrDescID), "%s", f.Type.Elem())
+	}
+}
+
+// TestAllElementsHaveExpectedAttributes ensures that each element type
+// broadcasts the correct set of attributes.
+func TestAllElementsHaveExpectedAttributes(t *testing.T) {
+	typ := reflect.TypeOf((*ElementProto)(nil)).Elem()
+	sc := AttrSchema()
+	check := func(e Entity) {
+		e.Attributes().ForEach(
+			sc, func(a eav.Attribute) (wantMore bool) {
+				require.NotNilf(t, e.Get(a), "%T/%T@a", e, e.GetElement(), a)
+				return true
+			})
+
+		sc.Attributes().Without(e.Attributes()).ForEach(
+			sc, func(a eav.Attribute) (wantMore bool) {
+				require.Nilf(t, e.Get(a), "%T/%T@a", e, e.GetElement(), a)
+				return true
+			})
+	}
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		elem := reflect.New(f.Type.Elem()).Interface().(Element)
+		check(elem)
+		check(NewTarget(Target_ADD, elem))
+		check(&Node{
+			Target: NewTarget(Target_ADD, elem),
+			Status: Status_ABSENT,
+		})
 	}
 }

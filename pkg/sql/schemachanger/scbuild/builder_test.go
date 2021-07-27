@@ -143,14 +143,14 @@ func marshalNodes(t *testing.T, nodes scpb.State) string {
 	var sortedEntries []string
 	for _, node := range nodes {
 		var buf bytes.Buffer
-		require.NoError(t, (&jsonpb.Marshaler{}).Marshal(&buf, node.Target.Element()))
+		require.NoError(t, (&jsonpb.Marshaler{}).Marshal(&buf, node.Target.GetElement()))
 		target := make(map[string]interface{})
 		require.NoError(t, gojson.Unmarshal(buf.Bytes(), &target))
 		entry := strings.Builder{}
 		entry.WriteString("- ")
 		entry.WriteString(node.Target.Direction.String())
 		entry.WriteString(" ")
-		scpb.FormatAttributes(node.Element(), &entry)
+		require.NoError(t, scpb.Format(node.GetElement(), &entry))
 		entry.WriteString("\n")
 		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.Status.String()), "  "))
 		entry.WriteString(indentText("details:\n", "  "))
