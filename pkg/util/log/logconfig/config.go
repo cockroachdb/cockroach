@@ -138,6 +138,29 @@ type CaptureFd2Config struct {
 	MaxGroupSize *ByteSize `yaml:"max-group-size,omitempty"`
 }
 
+// BufferSinkConfig represents the common buffering configuration for sinks.
+type BufferSinkConfig struct {
+	// MaxStaleness is the maximum time a log message will sit in the buffer
+	// before a flush is triggered.
+	MaxStaleness *time.Duration `yaml:"max-staleness,omitempty"`
+
+	// FlushTriggerSize is the number of bytes that will trigger the buffer
+	// to flush.
+	FlushTriggerSize *ByteSize `yaml:"flush-trigger-size,omitempty"`
+
+	// MaxInFlight is the maximum number of buffered flushes before messages
+	// start being dropped.
+	MaxInFlight *int `yaml:"max-in-flight,omitempty"`
+}
+
+// BufferSinkConfigWrapper is a BufferSinkConfig with an additional value, represented
+// when Disabled is true, represented in YAML by the string "NONE".
+// This is a separate type so that marshaling and unmarshaling of the inner BufferSinkConfig
+// can be handled by the library without causing infinite recursion.
+type BufferSinkConfigWrapper struct {
+	BufferSinkConfig
+}
+
 // CommonSinkConfig represents the common configuration shared across all sinks.
 type CommonSinkConfig struct {
 	// Filter specifies the default minimum severity for log events to
@@ -167,6 +190,9 @@ type CommonSinkConfig struct {
 	// it enables `exit-on-error` and changes the format of files
 	// from `crdb-v1` to `crdb-v1-count`.
 	Auditable *bool `yaml:",omitempty"`
+
+	// Buffering configures buffering for this log sink.
+	Buffering BufferSinkConfigWrapper `yaml:",omitempty"`
 }
 
 // SinkConfig represents the sink configurations.
@@ -992,6 +1018,38 @@ func (*Holder) Type() string { return "yaml" }
 // Set implements the pflag.Value interface.
 func (h *Holder) Set(value string) error {
 	return yaml.UnmarshalStrict([]byte(value), &h.Config)
+}
+
+// MarshalYAML implements yaml.Marshaler interface.
+func (w BufferSinkConfigWrapper) MarshalYAML() (interface{}, error) {
+	if w.IsNone() {
+		return "NONE", nil
+	}
+	b, err := yaml.Marshal(w.BufferSinkConfig)
+	return string(b), err
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (w *BufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error) error {
+	var v string
+	if err := fn(&v); err == nil {
+		if strings.ToUpper(v) == "NONE" {
+			w.BufferSinkConfig = BufferSinkConfig{
+				MaxStaleness:     func() *time.Duration { s := time.Duration(0); return &s }(),
+				FlushTriggerSize: func() *ByteSize { s := ByteSize(0); return &s }(),
+			}
+			return nil
+		}
+	}
+	return fn(&w.BufferSinkConfig)
+}
+
+// IsNone before default propagation indicates that the config explicitly disables
+// buffering, such that no propagated defaults can actiate them.
+// After default propagation, buffering is disabled iff IsNone().
+func (w BufferSinkConfigWrapper) IsNone() bool {
+	return (w.MaxStaleness != nil && *w.MaxStaleness == 0) &&
+		(w.FlushTriggerSize != nil && *w.FlushTriggerSize == 0)
 }
 
 // HTTPSinkMethod is a string restricted to "POST" and "GET"
