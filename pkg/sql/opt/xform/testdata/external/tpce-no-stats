@@ -328,75 +328,68 @@ LEFT JOIN last_trade      ON lt_s_symb = hs_s_symb
  ORDER BY 3 ASC
     LIMIT 10;
 ----
-limit
+top-k
  ├── columns: ca_id:1!null ca_bal:23!null coalesce:24
  ├── internal-ordering: +24
+ ├── k: 10
  ├── cardinality: [0 - 10]
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(23,24)
  ├── ordering: +24
- ├── sort
- │    ├── columns: ca_id:1!null ca_bal:23!null coalesce:24
- │    ├── immutable
- │    ├── key: (1)
- │    ├── fd: (1)-->(23,24)
- │    ├── ordering: +24
- │    ├── limit hint: 10.00
- │    └── project
- │         ├── columns: ca_bal:23!null coalesce:24 ca_id:1!null
- │         ├── immutable
- │         ├── key: (1)
- │         ├── fd: (1)-->(23,24)
- │         ├── group-by
- │         │    ├── columns: ca_id:1!null customer_account.ca_bal:6!null sum:22
- │         │    ├── grouping columns: ca_id:1!null
- │         │    ├── internal-ordering: +1
- │         │    ├── immutable
- │         │    ├── key: (1)
- │         │    ├── fd: (1)-->(6,22)
- │         │    ├── project
- │         │    │    ├── columns: column21:21 ca_id:1!null customer_account.ca_bal:6!null
- │         │    │    ├── immutable
- │         │    │    ├── fd: (1)-->(6)
- │         │    │    ├── ordering: +1
- │         │    │    ├── left-join (lookup last_trade)
- │         │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:9 hs_s_symb:10 hs_qty:11 lt_s_symb:14 lt_price:16
- │         │    │    │    ├── key columns: [10] = [14]
- │         │    │    │    ├── lookup columns are key
- │         │    │    │    ├── key: (1,9,10)
- │         │    │    │    ├── fd: ()-->(3), (1)-->(6), (9,10)-->(11), (14)-->(16), (1,9,10)-->(14,16)
- │         │    │    │    ├── ordering: +1 opt(3) [actual: +1]
- │         │    │    │    ├── left-join (lookup holding_summary)
- │         │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:9 hs_s_symb:10 hs_qty:11
- │         │    │    │    │    ├── key columns: [1] = [9]
- │         │    │    │    │    ├── key: (1,9,10)
- │         │    │    │    │    ├── fd: ()-->(3), (1)-->(6), (9,10)-->(11)
- │         │    │    │    │    ├── ordering: +1 opt(3) [actual: +1]
- │         │    │    │    │    ├── index-join customer_account
- │         │    │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null
- │         │    │    │    │    │    ├── key: (1)
- │         │    │    │    │    │    ├── fd: ()-->(3), (1)-->(6)
- │         │    │    │    │    │    ├── ordering: +1 opt(3) [actual: +1]
- │         │    │    │    │    │    └── scan customer_account@secondary
- │         │    │    │    │    │         ├── columns: ca_id:1!null ca_c_id:3!null
- │         │    │    │    │    │         ├── constraint: /3/1: [/0 - /0]
- │         │    │    │    │    │         ├── key: (1)
- │         │    │    │    │    │         ├── fd: ()-->(3)
- │         │    │    │    │    │         └── ordering: +1 opt(3) [actual: +1]
- │         │    │    │    │    └── filters (true)
- │         │    │    │    └── filters (true)
- │         │    │    └── projections
- │         │    │         └── hs_qty:11::INT8 * lt_price:16::DECIMAL [as=column21:21, outer=(11,16), immutable]
- │         │    └── aggregations
- │         │         ├── sum [as=sum:22, outer=(21)]
- │         │         │    └── column21:21
- │         │         └── const-agg [as=customer_account.ca_bal:6, outer=(6)]
- │         │              └── customer_account.ca_bal:6
- │         └── projections
- │              ├── customer_account.ca_bal:6::FLOAT8 [as=ca_bal:23, outer=(6), immutable]
- │              └── COALESCE(sum:22, 0)::FLOAT8 [as=coalesce:24, outer=(22), immutable]
- └── 10
+ └── project
+      ├── columns: ca_bal:23!null coalesce:24 ca_id:1!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(23,24)
+      ├── group-by
+      │    ├── columns: ca_id:1!null customer_account.ca_bal:6!null sum:22
+      │    ├── grouping columns: ca_id:1!null
+      │    ├── internal-ordering: +1
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(6,22)
+      │    ├── project
+      │    │    ├── columns: column21:21 ca_id:1!null customer_account.ca_bal:6!null
+      │    │    ├── immutable
+      │    │    ├── fd: (1)-->(6)
+      │    │    ├── ordering: +1
+      │    │    ├── left-join (lookup last_trade)
+      │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:9 hs_s_symb:10 hs_qty:11 lt_s_symb:14 lt_price:16
+      │    │    │    ├── key columns: [10] = [14]
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── key: (1,9,10)
+      │    │    │    ├── fd: ()-->(3), (1)-->(6), (9,10)-->(11), (14)-->(16), (1,9,10)-->(14,16)
+      │    │    │    ├── ordering: +1 opt(3) [actual: +1]
+      │    │    │    ├── left-join (lookup holding_summary)
+      │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:9 hs_s_symb:10 hs_qty:11
+      │    │    │    │    ├── key columns: [1] = [9]
+      │    │    │    │    ├── key: (1,9,10)
+      │    │    │    │    ├── fd: ()-->(3), (1)-->(6), (9,10)-->(11)
+      │    │    │    │    ├── ordering: +1 opt(3) [actual: +1]
+      │    │    │    │    ├── index-join customer_account
+      │    │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null
+      │    │    │    │    │    ├── key: (1)
+      │    │    │    │    │    ├── fd: ()-->(3), (1)-->(6)
+      │    │    │    │    │    ├── ordering: +1 opt(3) [actual: +1]
+      │    │    │    │    │    └── scan customer_account@secondary
+      │    │    │    │    │         ├── columns: ca_id:1!null ca_c_id:3!null
+      │    │    │    │    │         ├── constraint: /3/1: [/0 - /0]
+      │    │    │    │    │         ├── key: (1)
+      │    │    │    │    │         ├── fd: ()-->(3)
+      │    │    │    │    │         └── ordering: +1 opt(3) [actual: +1]
+      │    │    │    │    └── filters (true)
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── hs_qty:11::INT8 * lt_price:16::DECIMAL [as=column21:21, outer=(11,16), immutable]
+      │    └── aggregations
+      │         ├── sum [as=sum:22, outer=(21)]
+      │         │    └── column21:21
+      │         └── const-agg [as=customer_account.ca_bal:6, outer=(6)]
+      │              └── customer_account.ca_bal:6
+      └── projections
+           ├── customer_account.ca_bal:6::FLOAT8 [as=ca_bal:23, outer=(6), immutable]
+           └── COALESCE(sum:22, 0)::FLOAT8 [as=coalesce:24, outer=(22), immutable]
 
 # Q3 (With Hints)
 opt
@@ -411,77 +404,70 @@ LEFT LOOKUP JOIN last_trade      ON lt_s_symb = hs_s_symb
         ORDER BY 3 ASC
            LIMIT 10;
 ----
-limit
+top-k
  ├── columns: ca_id:1!null ca_bal:23!null coalesce:24
  ├── internal-ordering: +24
+ ├── k: 10
  ├── cardinality: [0 - 10]
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(23,24)
  ├── ordering: +24
- ├── sort
- │    ├── columns: ca_id:1!null ca_bal:23!null coalesce:24
- │    ├── immutable
- │    ├── key: (1)
- │    ├── fd: (1)-->(23,24)
- │    ├── ordering: +24
- │    ├── limit hint: 10.00
- │    └── project
- │         ├── columns: ca_bal:23!null coalesce:24 ca_id:1!null
- │         ├── immutable
- │         ├── key: (1)
- │         ├── fd: (1)-->(23,24)
- │         ├── group-by
- │         │    ├── columns: ca_id:1!null customer_account.ca_bal:6!null sum:22
- │         │    ├── grouping columns: ca_id:1!null
- │         │    ├── internal-ordering: +1
- │         │    ├── immutable
- │         │    ├── key: (1)
- │         │    ├── fd: (1)-->(6,22)
- │         │    ├── project
- │         │    │    ├── columns: column21:21 ca_id:1!null customer_account.ca_bal:6!null
- │         │    │    ├── immutable
- │         │    │    ├── fd: (1)-->(6)
- │         │    │    ├── ordering: +1
- │         │    │    ├── left-join (lookup last_trade)
- │         │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:9 hs_s_symb:10 hs_qty:11 lt_s_symb:14 lt_price:16
- │         │    │    │    ├── flags: force lookup join (into right side)
- │         │    │    │    ├── key columns: [10] = [14]
- │         │    │    │    ├── lookup columns are key
- │         │    │    │    ├── key: (1,9,10)
- │         │    │    │    ├── fd: ()-->(3), (1)-->(6), (9,10)-->(11), (14)-->(16), (1,9,10)-->(14,16)
- │         │    │    │    ├── ordering: +1 opt(3) [actual: +1]
- │         │    │    │    ├── left-join (lookup holding_summary)
- │         │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:9 hs_s_symb:10 hs_qty:11
- │         │    │    │    │    ├── flags: force lookup join (into right side)
- │         │    │    │    │    ├── key columns: [1] = [9]
- │         │    │    │    │    ├── key: (1,9,10)
- │         │    │    │    │    ├── fd: ()-->(3), (1)-->(6), (9,10)-->(11)
- │         │    │    │    │    ├── ordering: +1 opt(3) [actual: +1]
- │         │    │    │    │    ├── index-join customer_account
- │         │    │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null
- │         │    │    │    │    │    ├── key: (1)
- │         │    │    │    │    │    ├── fd: ()-->(3), (1)-->(6)
- │         │    │    │    │    │    ├── ordering: +1 opt(3) [actual: +1]
- │         │    │    │    │    │    └── scan customer_account@secondary
- │         │    │    │    │    │         ├── columns: ca_id:1!null ca_c_id:3!null
- │         │    │    │    │    │         ├── constraint: /3/1: [/0 - /0]
- │         │    │    │    │    │         ├── key: (1)
- │         │    │    │    │    │         ├── fd: ()-->(3)
- │         │    │    │    │    │         └── ordering: +1 opt(3) [actual: +1]
- │         │    │    │    │    └── filters (true)
- │         │    │    │    └── filters (true)
- │         │    │    └── projections
- │         │    │         └── hs_qty:11::INT8 * lt_price:16::DECIMAL [as=column21:21, outer=(11,16), immutable]
- │         │    └── aggregations
- │         │         ├── sum [as=sum:22, outer=(21)]
- │         │         │    └── column21:21
- │         │         └── const-agg [as=customer_account.ca_bal:6, outer=(6)]
- │         │              └── customer_account.ca_bal:6
- │         └── projections
- │              ├── customer_account.ca_bal:6::FLOAT8 [as=ca_bal:23, outer=(6), immutable]
- │              └── COALESCE(sum:22, 0)::FLOAT8 [as=coalesce:24, outer=(22), immutable]
- └── 10
+ └── project
+      ├── columns: ca_bal:23!null coalesce:24 ca_id:1!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(23,24)
+      ├── group-by
+      │    ├── columns: ca_id:1!null customer_account.ca_bal:6!null sum:22
+      │    ├── grouping columns: ca_id:1!null
+      │    ├── internal-ordering: +1
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(6,22)
+      │    ├── project
+      │    │    ├── columns: column21:21 ca_id:1!null customer_account.ca_bal:6!null
+      │    │    ├── immutable
+      │    │    ├── fd: (1)-->(6)
+      │    │    ├── ordering: +1
+      │    │    ├── left-join (lookup last_trade)
+      │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:9 hs_s_symb:10 hs_qty:11 lt_s_symb:14 lt_price:16
+      │    │    │    ├── flags: force lookup join (into right side)
+      │    │    │    ├── key columns: [10] = [14]
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── key: (1,9,10)
+      │    │    │    ├── fd: ()-->(3), (1)-->(6), (9,10)-->(11), (14)-->(16), (1,9,10)-->(14,16)
+      │    │    │    ├── ordering: +1 opt(3) [actual: +1]
+      │    │    │    ├── left-join (lookup holding_summary)
+      │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:9 hs_s_symb:10 hs_qty:11
+      │    │    │    │    ├── flags: force lookup join (into right side)
+      │    │    │    │    ├── key columns: [1] = [9]
+      │    │    │    │    ├── key: (1,9,10)
+      │    │    │    │    ├── fd: ()-->(3), (1)-->(6), (9,10)-->(11)
+      │    │    │    │    ├── ordering: +1 opt(3) [actual: +1]
+      │    │    │    │    ├── index-join customer_account
+      │    │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null
+      │    │    │    │    │    ├── key: (1)
+      │    │    │    │    │    ├── fd: ()-->(3), (1)-->(6)
+      │    │    │    │    │    ├── ordering: +1 opt(3) [actual: +1]
+      │    │    │    │    │    └── scan customer_account@secondary
+      │    │    │    │    │         ├── columns: ca_id:1!null ca_c_id:3!null
+      │    │    │    │    │         ├── constraint: /3/1: [/0 - /0]
+      │    │    │    │    │         ├── key: (1)
+      │    │    │    │    │         ├── fd: ()-->(3)
+      │    │    │    │    │         └── ordering: +1 opt(3) [actual: +1]
+      │    │    │    │    └── filters (true)
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── hs_qty:11::INT8 * lt_price:16::DECIMAL [as=column21:21, outer=(11,16), immutable]
+      │    └── aggregations
+      │         ├── sum [as=sum:22, outer=(21)]
+      │         │    └── column21:21
+      │         └── const-agg [as=customer_account.ca_bal:6, outer=(6)]
+      │              └── customer_account.ca_bal:6
+      └── projections
+           ├── customer_account.ca_bal:6::FLOAT8 [as=ca_bal:23, outer=(6), immutable]
+           └── COALESCE(sum:22, 0)::FLOAT8 [as=coalesce:24, outer=(22), immutable]
 
 # Q4
 #
@@ -508,41 +494,33 @@ project
  ├── cardinality: [0 - 30]
  ├── fd: (1)-->(6,7)
  ├── ordering: -19
- └── limit
+ └── top-k
       ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:18!null th_dts:19!null th_st_id:20!null st_id:23!null st_name:24!null
       ├── internal-ordering: -19 opt(9)
+      ├── k: 30
       ├── cardinality: [0 - 30]
       ├── key: (18,23)
       ├── fd: ()-->(9), (1)-->(2,6,7), (18,20)-->(19), (23)-->(24), (20)==(23), (23)==(20), (1)==(18), (18)==(1)
       ├── ordering: -19 opt(9) [actual: -19]
-      ├── inner-join (lookup status_type)
-      │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:18!null th_dts:19!null th_st_id:20!null st_id:23!null st_name:24!null
-      │    ├── key columns: [20] = [23]
-      │    ├── lookup columns are key
-      │    ├── key: (18,23)
-      │    ├── fd: ()-->(9), (1)-->(2,6,7), (18,20)-->(19), (23)-->(24), (20)==(23), (23)==(20), (1)==(18), (18)==(1)
-      │    ├── ordering: -19 opt(9) [actual: -19]
-      │    ├── limit hint: 30.00
-      │    ├── sort
-      │    │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:18!null th_dts:19!null th_st_id:20!null
-      │    │    ├── key: (18,20)
-      │    │    ├── fd: ()-->(9), (1)-->(2,6,7), (18,20)-->(19), (1)==(18), (18)==(1)
-      │    │    ├── ordering: -19 opt(9) [actual: -19]
-      │    │    ├── limit hint: 100.00
-      │    │    └── inner-join (lookup trade_history)
-      │    │         ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:18!null th_dts:19!null th_st_id:20!null
-      │    │         ├── key columns: [1] = [18]
-      │    │         ├── key: (18,20)
-      │    │         ├── fd: ()-->(9), (1)-->(2,6,7), (18,20)-->(19), (1)==(18), (18)==(1)
-      │    │         ├── scan trade@secondary
-      │    │         │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null
-      │    │         │    ├── constraint: /9/-2/1: [/0 - /0]
-      │    │         │    ├── limit: 10
-      │    │         │    ├── key: (1)
-      │    │         │    └── fd: ()-->(9), (1)-->(2,6,7)
-      │    │         └── filters (true)
-      │    └── filters (true)
-      └── 30
+      └── inner-join (lookup status_type)
+           ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:18!null th_dts:19!null th_st_id:20!null st_id:23!null st_name:24!null
+           ├── key columns: [20] = [23]
+           ├── lookup columns are key
+           ├── key: (18,23)
+           ├── fd: ()-->(9), (1)-->(2,6,7), (18,20)-->(19), (23)-->(24), (20)==(23), (23)==(20), (1)==(18), (18)==(1)
+           ├── inner-join (lookup trade_history)
+           │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:18!null th_dts:19!null th_st_id:20!null
+           │    ├── key columns: [1] = [18]
+           │    ├── key: (18,20)
+           │    ├── fd: ()-->(9), (1)-->(2,6,7), (18,20)-->(19), (1)==(18), (18)==(1)
+           │    ├── scan trade@secondary
+           │    │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null
+           │    │    ├── constraint: /9/-2/1: [/0 - /0]
+           │    │    ├── limit: 10
+           │    │    ├── key: (1)
+           │    │    └── fd: ()-->(9), (1)-->(2,6,7)
+           │    └── filters (true)
+           └── filters (true)
 
 # --------------------------------------------------
 # T3
@@ -5605,22 +5583,17 @@ project
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2)
- └── limit
+ └── top-k
       ├── columns: ap_ca_id:1!null ap_acl:2!null
       ├── internal-ordering: -2 opt(1)
+      ├── k: 1
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1,2)
-      ├── sort
-      │    ├── columns: ap_ca_id:1!null ap_acl:2!null
-      │    ├── fd: ()-->(1)
-      │    ├── ordering: -2 opt(1) [actual: -2]
-      │    ├── limit hint: 1.00
-      │    └── scan account_permission
-      │         ├── columns: ap_ca_id:1!null ap_acl:2!null
-      │         ├── constraint: /1/3: [/0 - /0]
-      │         └── fd: ()-->(1)
-      └── 1
+      └── scan account_permission
+           ├── columns: ap_ca_id:1!null ap_acl:2!null
+           ├── constraint: /1/3: [/0 - /0]
+           └── fd: ()-->(1)
 
 # Q2
 opt

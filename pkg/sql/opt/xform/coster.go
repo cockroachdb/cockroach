@@ -458,6 +458,9 @@ func (c *coster) Init(evalCtx *tree.EvalContext, mem *memo.Memo, perturbation fl
 func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost {
 	var cost memo.Cost
 	switch candidate.Op() {
+	case opt.TopKOp:
+		cost = c.computeTopKCost(candidate.(*memo.TopKExpr), required)
+
 	case opt.SortOp:
 		cost = c.computeSortCost(candidate.(*memo.SortExpr), required)
 
@@ -563,6 +566,30 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	return cost
 }
 
+func (c *coster) computeTopKCost(topk *memo.TopKExpr, required *physical.Required) memo.Cost {
+	rel := topk.Relational()
+	inputRowCount := topk.Input.Relational().Stats.RowCount
+	outputRowCount := rel.Stats.RowCount
+
+	// Add the cost of sorting.
+	// Start with a cost of storing each row; TopK sort only stores K rows in a
+	// max heap.
+	cost := memo.Cost(cpuCostFactor * float64(rel.OutputCols.Len()) * outputRowCount)
+
+	// Add buffering cost for the output rows.
+	cost += c.rowBufferCost(outputRowCount)
+
+	// In the worst case, there are O(N*log(K)) comparisons to compare each row in
+	// the input to the top of the max heap and sift the max heap if each row
+	// compared is in the top K found so far.
+	cost += c.rowCmpCost(len(topk.Ordering.Columns)) * memo.Cost((1+math.Log2(math.Max(outputRowCount, 1)))*inputRowCount)
+
+	// TODO(harding): Add the CPU cost of emitting the K output rows. This should
+	// be done in conjunction with computeSortCost.
+
+	return cost
+}
+
 func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Required) memo.Cost {
 	// We calculate the cost of a (potentially) segmented sort.
 	//
@@ -603,6 +630,8 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 		cost += memo.Cost(numSegments) * c.rowBufferCost(segmentSize)
 	}
 	cost += c.rowCmpCost(numKeyCols-numPreorderedCols) * memo.Cost(numCmpOpsPerRow*stats.RowCount)
+	// TODO(harding): Add the CPU cost of emitting the output rows. This should be
+	// done in conjunction with computeTopKCost.
 	return cost
 }
 
