@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "multitenant",
     srcs = [
+        "constants.go",
         "cost_controller.go",
         "doc.go",
         "tenant_usage.go",
@@ -12,6 +13,7 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/roachpb:with-mocks",
+        "//pkg/util/metric",
         "//pkg/util/stop",
     ],
 )

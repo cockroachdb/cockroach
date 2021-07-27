@@ -13,18 +13,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 type instance struct {
 	db       *kv.DB
 	executor *sql.InternalExecutor
+	metrics  Metrics
 }
 
 func newInstance(db *kv.DB, executor *sql.InternalExecutor) *instance {
-	return &instance{
+	res := &instance{
 		db:       db,
 		executor: executor,
 	}
+	res.metrics.init()
+	return res
+}
+
+// Metrics is part of the multitenant.TenantUsageServer.
+func (s *instance) Metrics() metric.Struct {
+	return &s.metrics
 }
 
 var _ multitenant.TenantUsageServer = (*instance)(nil)

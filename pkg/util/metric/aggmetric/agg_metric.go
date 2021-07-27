@@ -38,6 +38,11 @@ func (b Builder) Gauge(metadata metric.Metadata) *AggGauge {
 	return NewGauge(metadata, b.labels...)
 }
 
+// GaugeFloat64 constructs a new AggGaugeFloat64 with the Builder's labels.
+func (b Builder) GaugeFloat64(metadata metric.Metadata) *AggGaugeFloat64 {
+	return NewGaugeFloat64(metadata, b.labels...)
+}
+
 // Counter constructs a new AggCounter with the Builder's labels.
 func (b Builder) Counter(metadata metric.Metadata) *AggCounter {
 	return NewCounter(metadata, b.labels...)
