@@ -138,6 +138,21 @@ type CaptureFd2Config struct {
 	MaxGroupSize *ByteSize `yaml:"max-group-size,omitempty"`
 }
 
+// BufferSinkConfig represents the common buffering configuration for sinks.
+type BufferSinkConfig struct {
+	// MaxStaleness is the maximum time a log message will sit in the buffer
+	// before a flush is triggered.
+	MaxStaleness time.Duration `yaml:"max-staleness,omitempty"`
+
+	// FlushTriggerSize is the number of bytes that will trigger the buffer
+	// to flush.
+	FlushTriggerSize ByteSize `yaml:"flush-trigger-size,omitempty"`
+
+	// MaxInFlight is the maximum number of buffered flushes before messages
+	// start being dropped.
+	MaxInFlight int32 `yaml:"max-in-flight,omitempty"`
+}
+
 // CommonSinkConfig represents the common configuration shared across all sinks.
 type CommonSinkConfig struct {
 	// Filter specifies the default minimum severity for log events to
@@ -167,6 +182,9 @@ type CommonSinkConfig struct {
 	// it enables `exit-on-error` and changes the format of files
 	// from `crdb-v1` to `crdb-v1-count`.
 	Auditable *bool `yaml:",omitempty"`
+
+	// Buffering configures buffering for this log sink.
+	Buffering *BufferSinkConfig `yaml:",omitempty"`
 }
 
 // SinkConfig represents the sink configurations.
