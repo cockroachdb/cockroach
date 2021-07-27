@@ -69,7 +69,7 @@ func newAvgHashAggAlloc(
 }
 
 type avgInt16HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
@@ -88,12 +88,12 @@ type avgInt16HashAgg struct {
 var _ AggregateFunc = &avgInt16HashAgg{}
 
 func (a *avgInt16HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
 func (a *avgInt16HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
@@ -103,7 +103,7 @@ func (a *avgInt16HashAgg) Compute(
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -199,7 +199,7 @@ func (a *avgInt16HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type avgInt32HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
@@ -218,12 +218,12 @@ type avgInt32HashAgg struct {
 var _ AggregateFunc = &avgInt32HashAgg{}
 
 func (a *avgInt32HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
 func (a *avgInt32HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
@@ -233,7 +233,7 @@ func (a *avgInt32HashAgg) Compute(
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -329,7 +329,7 @@ func (a *avgInt32HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type avgInt64HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
@@ -348,12 +348,12 @@ type avgInt64HashAgg struct {
 var _ AggregateFunc = &avgInt64HashAgg{}
 
 func (a *avgInt64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
 func (a *avgInt64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
@@ -363,7 +363,7 @@ func (a *avgInt64HashAgg) Compute(
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -459,7 +459,7 @@ func (a *avgInt64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type avgDecimalHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
@@ -477,19 +477,19 @@ type avgDecimalHashAgg struct {
 var _ AggregateFunc = &avgDecimalHashAgg{}
 
 func (a *avgDecimalHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
 func (a *avgDecimalHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -583,7 +583,7 @@ func (a *avgDecimalHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type avgFloat64HashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
@@ -601,19 +601,19 @@ type avgFloat64HashAgg struct {
 var _ AggregateFunc = &avgFloat64HashAgg{}
 
 func (a *avgFloat64HashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Float64()
 }
 
 func (a *avgFloat64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurSumSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 
@@ -697,7 +697,7 @@ func (a *avgFloat64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type avgIntervalHashAgg struct {
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
@@ -715,19 +715,19 @@ type avgIntervalHashAgg struct {
 var _ AggregateFunc = &avgIntervalHashAgg{}
 
 func (a *avgIntervalHashAgg) SetOutput(vec coldata.Vec) {
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Interval()
 }
 
 func (a *avgIntervalHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurSumSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			sel = sel[:inputLen]
+			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 

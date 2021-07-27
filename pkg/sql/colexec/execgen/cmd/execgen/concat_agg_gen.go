@@ -33,5 +33,6 @@ func genConcatAgg(inputFileContents string, wr io.Writer) error {
 }
 
 func init() {
-	registerAggGenerator(genConcatAgg, "concat_agg.eg.go", concatAggTmpl)
+	registerAggGenerator(
+		genConcatAgg, "concat_agg.eg.go", concatAggTmpl, true /* genWindowVariant */)
 }

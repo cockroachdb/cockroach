@@ -62,6 +62,12 @@ type windowFramer interface {
 	// no such row exists, frameNthIdx returns -1.
 	frameNthIdx(n int) int
 
+	// frameIntervals returns a series of intervals that describes the set of all
+	// rows that are part of the frame for the current row. Note that there are at
+	// most three intervals - this case can occur when EXCLUDE TIES is used.
+	// frameIntervals is used to compute aggregate functions over a window.
+	frameIntervals() []windowInterval
+
 	// close should always be called upon closing of the parent operator. It
 	// releases all references to enable garbage collection.
 	close()
@@ -1075,6 +1081,10 @@ type windowFramerBase struct {
 	datumAlloc *rowenc.DatumAlloc
 
 	exclusion execinfrapb.WindowerSpec_Frame_Exclusion
+
+	// intervals is a small (at most length 3) slice that is used during
+	// aggregation computation.
+	intervals []windowInterval
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -1113,6 +1123,16 @@ func (b *windowFramerBase) frameNthIdx(n int) (idx int) {
 		return -1
 	}
 	return idx
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (b *windowFramerBase) frameIntervals() []windowInterval {
+	b.intervals = b.intervals[:0]
+	b.intervals = append(b.intervals, windowInterval{start: b.startIdx, end: b.endIdx})
+	return b.intervals
 }
 
 // getColsToStore appends to the given slice of column indices whatever columns
@@ -1459,6 +1479,28 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) frameNthIdx(n
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRowsUnboundedPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -1546,6 +1588,28 @@ func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) frameNthIdx(n int)
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRowsUnboundedPrecedingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -1570,7 +1634,9 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetFollowing) next(ctx context.Con
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + f.endOffset + 1
-	if f.endIdx > f.partitionSize {
+	if f.endIdx > f.partitionSize || f.endOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
 }
@@ -1606,7 +1672,9 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) next(ctx cont
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + f.endOffset + 1
-	if f.endIdx > f.partitionSize {
+	if f.endIdx > f.partitionSize || f.endOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
 	// Handle exclusion clause.
@@ -1637,6 +1705,28 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) frameLastIdx(
 func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerRowsUnboundedPrecedingUnboundedFollowing struct {
@@ -1724,6 +1814,28 @@ func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) frameLastI
 func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerRowsOffsetPrecedingOffsetPreceding struct {
@@ -1825,6 +1937,28 @@ func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) frameNthIdx(n in
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRowsOffsetPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -1918,6 +2052,28 @@ func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) frameNthIdx(n int) (i
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRowsOffsetPrecedingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -1945,7 +2101,9 @@ func (f *windowFramerRowsOffsetPrecedingOffsetFollowing) next(ctx context.Contex
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + f.endOffset + 1
-	if f.endIdx > f.partitionSize {
+	if f.endIdx > f.partitionSize || f.endOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
 }
@@ -1984,7 +2142,9 @@ func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) next(ctx context
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + f.endOffset + 1
-	if f.endIdx > f.partitionSize {
+	if f.endIdx > f.partitionSize || f.endOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
 	// Handle exclusion clause.
@@ -2015,6 +2175,28 @@ func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) frameLastIdx() (
 func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerRowsOffsetPrecedingUnboundedFollowing struct {
@@ -2110,6 +2292,28 @@ func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) frameNthIdx(n
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRowsCurrentRowCurrentRow struct {
 	windowFramerBase
 }
@@ -2197,6 +2401,28 @@ func (f *windowFramerRowsCurrentRowCurrentRowExclude) frameNthIdx(n int) (idx in
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsCurrentRowCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRowsCurrentRowOffsetFollowing struct {
 	windowFramerBase
 }
@@ -2221,7 +2447,9 @@ func (f *windowFramerRowsCurrentRowOffsetFollowing) next(ctx context.Context) {
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + f.endOffset + 1
-	if f.endIdx > f.partitionSize {
+	if f.endIdx > f.partitionSize || f.endOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
 }
@@ -2257,7 +2485,9 @@ func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) next(ctx context.Cont
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + f.endOffset + 1
-	if f.endIdx > f.partitionSize {
+	if f.endIdx > f.partitionSize || f.endOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
 	// Handle exclusion clause.
@@ -2288,6 +2518,28 @@ func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) frameLastIdx() (idx i
 func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerRowsCurrentRowUnboundedFollowing struct {
@@ -2377,6 +2629,28 @@ func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) frameNthIdx(n int)
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRowsOffsetFollowingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -2398,13 +2672,17 @@ func (f *windowFramerRowsOffsetFollowingOffsetFollowing) next(ctx context.Contex
 	f.currentRow++
 	// Handle the start bound.
 	f.startIdx = f.currentRow + f.startOffset
-	if f.startIdx > f.partitionSize {
+	if f.startIdx > f.partitionSize || f.startOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.startIdx = f.partitionSize
 	}
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + f.endOffset + 1
-	if f.endIdx > f.partitionSize {
+	if f.endIdx > f.partitionSize || f.endOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
 }
@@ -2437,13 +2715,17 @@ func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) next(ctx context
 	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
 	// Handle the start bound.
 	f.startIdx = f.currentRow + f.startOffset
-	if f.startIdx > f.partitionSize {
+	if f.startIdx > f.partitionSize || f.startOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.startIdx = f.partitionSize
 	}
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + f.endOffset + 1
-	if f.endIdx > f.partitionSize {
+	if f.endIdx > f.partitionSize || f.endOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
 	// Handle exclusion clause.
@@ -2476,6 +2758,28 @@ func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) frameNthIdx(n in
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRowsOffsetFollowingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -2497,7 +2801,9 @@ func (f *windowFramerRowsOffsetFollowingUnboundedFollowing) next(ctx context.Con
 	f.currentRow++
 	// Handle the start bound.
 	f.startIdx = f.currentRow + f.startOffset
-	if f.startIdx > f.partitionSize {
+	if f.startIdx > f.partitionSize || f.startOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.startIdx = f.partitionSize
 	}
 
@@ -2533,7 +2839,9 @@ func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) next(ctx cont
 	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
 	// Handle the start bound.
 	f.startIdx = f.currentRow + f.startOffset
-	if f.startIdx > f.partitionSize {
+	if f.startIdx > f.partitionSize || f.startOffset >= f.partitionSize {
+		// The second part of the condition protects us from an integer
+		// overflow when offset is very large.
 		f.startIdx = f.partitionSize
 	}
 
@@ -2567,6 +2875,28 @@ func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) frameLastIdx(
 func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerGroupsUnboundedPrecedingOffsetPreceding struct {
@@ -2671,6 +3001,28 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) frameNthIdx
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerGroupsUnboundedPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -2761,6 +3113,28 @@ func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) frameLastIdx() (
 func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerGroupsUnboundedPrecedingOffsetFollowing struct {
@@ -2865,6 +3239,28 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) frameNthIdx
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerGroupsUnboundedPrecedingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -2950,6 +3346,28 @@ func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameLas
 func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerGroupsOffsetPrecedingOffsetPreceding struct {
@@ -3060,6 +3478,28 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) frameNthIdx(n 
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerGroupsOffsetPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -3164,6 +3604,28 @@ func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) frameLastIdx() (idx
 func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerGroupsOffsetPrecedingOffsetFollowing struct {
@@ -3282,6 +3744,28 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) frameNthIdx(n 
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerGroupsOffsetPrecedingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -3384,6 +3868,28 @@ func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) frameNthIdx
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerGroupsCurrentRowCurrentRow struct {
 	windowFramerBase
 }
@@ -3478,6 +3984,28 @@ func (f *windowFramerGroupsCurrentRowCurrentRowExclude) frameLastIdx() (idx int)
 func (f *windowFramerGroupsCurrentRowCurrentRowExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsCurrentRowCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerGroupsCurrentRowOffsetFollowing struct {
@@ -3586,6 +4114,28 @@ func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) frameNthIdx(n int) 
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerGroupsCurrentRowUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -3676,6 +4226,28 @@ func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) frameLastIdx() (
 func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerGroupsOffsetFollowingOffsetFollowing struct {
@@ -3794,6 +4366,28 @@ func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) frameNthIdx(n 
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerGroupsOffsetFollowingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -3896,6 +4490,28 @@ func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) frameNthIdx
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRangeUnboundedPrecedingOffsetPreceding struct {
 	windowFramerBase
 }
@@ -3992,6 +4608,28 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) frameNthIdx(
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRangeUnboundedPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -4082,6 +4720,28 @@ func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) frameLastIdx() (i
 func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerRangeUnboundedPrecedingOffsetFollowing struct {
@@ -4180,6 +4840,28 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) frameNthIdx(
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRangeUnboundedPrecedingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -4265,6 +4947,28 @@ func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameLast
 func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerRangeOffsetPrecedingOffsetPreceding struct {
@@ -4371,6 +5075,28 @@ func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) frameNthIdx(n i
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRangeOffsetPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -4469,6 +5195,28 @@ func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) frameLastIdx() (idx 
 func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerRangeOffsetPrecedingOffsetFollowing struct {
@@ -4575,6 +5323,28 @@ func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) frameNthIdx(n i
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRangeOffsetPrecedingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -4671,6 +5441,28 @@ func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) frameNthIdx(
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRangeCurrentRowCurrentRow struct {
 	windowFramerBase
 }
@@ -4765,6 +5557,28 @@ func (f *windowFramerRangeCurrentRowCurrentRowExclude) frameLastIdx() (idx int) 
 func (f *windowFramerRangeCurrentRowCurrentRowExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeCurrentRowCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerRangeCurrentRowOffsetFollowing struct {
@@ -4867,6 +5681,28 @@ func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) frameNthIdx(n int) (
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRangeCurrentRowUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -4957,6 +5793,28 @@ func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) frameLastIdx() (i
 func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }
 
 type windowFramerRangeOffsetFollowingOffsetFollowing struct {
@@ -5063,6 +5921,28 @@ func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) frameNthIdx(n i
 	return f.handleExcludeForNthIdx(idx)
 }
 
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
+}
+
 type windowFramerRangeOffsetFollowingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -5157,4 +6037,26 @@ func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) frameLastIdx
 func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
+}
+
+// frameIntervals returns a series of intervals that describes the set of all
+// rows that are part of the frame for the current row. Note that there are at
+// most three intervals - this case can occur when EXCLUDE TIES is used.
+// frameIntervals is used to compute aggregate functions over a window.
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
+		// No rows excluded.
+		return f.windowFramerBase.frameIntervals()
+	}
+	f.intervals = f.intervals[:0]
+	if f.excludeStartIdx > f.startIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.startIdx, end: f.excludeStartIdx})
+	}
+	if f.excludeTies() && f.currentRow >= f.startIdx && f.currentRow < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.currentRow, end: f.currentRow + 1})
+	}
+	if f.excludeEndIdx < f.endIdx {
+		f.intervals = append(f.intervals, windowInterval{start: f.excludeEndIdx, end: f.endIdx})
+	}
+	return f.intervals
 }

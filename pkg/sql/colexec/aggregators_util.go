@@ -111,7 +111,7 @@ func (h *defaultAggregatorHelper) performAggregation(
 	_ context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
 ) {
 	for fnIdx, fn := range bucket.fns {
-		fn.Compute(vecs, h.spec.Aggregations[fnIdx].ColIdx, inputLen, sel)
+		fn.Compute(vecs, h.spec.Aggregations[fnIdx].ColIdx, 0 /* startIdx */, inputLen, sel)
 	}
 }
 
@@ -231,7 +231,7 @@ func (h *filteringHashAggregatorHelper) performAggregation(
 		if inputLen > 0 {
 			// It is possible that all tuples to aggregate have been filtered
 			// out, so we need to check the length.
-			fn.Compute(vecs, h.spec.Aggregations[fnIdx].ColIdx, inputLen, sel)
+			fn.Compute(vecs, h.spec.Aggregations[fnIdx].ColIdx, 0 /* startIdx */, inputLen, sel)
 		}
 		if maybeModified {
 			// Restore the state so that the next iteration sees the input with
@@ -439,7 +439,7 @@ func (h *filteringDistinctHashAggregatorHelper) performAggregation(
 			maybeModified = true
 		}
 		if inputLen > 0 {
-			bucket.fns[aggFnIdx].Compute(vecs, aggFn.ColIdx, inputLen, sel)
+			bucket.fns[aggFnIdx].Compute(vecs, aggFn.ColIdx, 0 /* startIdx */, inputLen, sel)
 		}
 		if maybeModified {
 			vecs, inputLen, sel = h.restoreState()
@@ -487,7 +487,7 @@ func (h *distinctOrderedAggregatorHelper) performAggregation(
 			maybeModified = true
 		}
 		if inputLen > 0 {
-			bucket.fns[aggFnIdx].Compute(vecs, aggFn.ColIdx, inputLen, sel)
+			bucket.fns[aggFnIdx].Compute(vecs, aggFn.ColIdx, 0 /* startIdx */, inputLen, sel)
 		}
 		if maybeModified {
 			vecs, inputLen, sel = h.restoreState()

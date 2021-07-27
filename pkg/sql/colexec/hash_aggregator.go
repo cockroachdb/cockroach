@@ -168,7 +168,7 @@ func NewHashAggregator(
 	args *colexecagg.NewAggregatorArgs, newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
 ) (colexecop.ResettableOperator, error) {
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-		args, hashAggregatorAllocSize, true, /* isHashAgg */
+		args, args.Spec.Aggregations, hashAggregatorAllocSize, colexecagg.HashAggKind,
 	)
 	// We want this number to be coldata.MaxBatchSize, but then we would lose
 	// some test coverage due to disabling of the randomization of the batch

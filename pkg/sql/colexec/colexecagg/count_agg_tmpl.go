@@ -43,7 +43,7 @@ type count_COUNTKIND_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
 	// {{else}}
-	hashAggregateFuncBase
+	unorderedAggregateFuncBase
 	// {{end}}
 	col    []int64
 	curAgg int64
@@ -55,13 +55,13 @@ func (a *count_COUNTKIND_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.SetOutput(vec)
+	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.col = vec.Int64()
 }
 
 func (a *count_COUNTKIND_AGGKINDAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	// {{if not (eq .CountKind "Rows")}}
@@ -70,6 +70,7 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
 	// {{end}}
+	// {{if not (eq "_AGGKIND" "Window")}}
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
 		// Capture groups to force bounds check to work. See
@@ -81,16 +82,16 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 		// sel to specify the tuples to be aggregated.
 		// */}}
 		if sel == nil {
-			_ = groups[inputLen-1]
+			_, _ = groups[endIdx-1], groups[startIdx]
 			// {{if not (eq .CountKind "Rows")}}
 			if nulls.MaybeHasNulls() {
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					_ACCUMULATE_COUNT(a, nulls, i, true, false)
 				}
 			} else
 			// {{end}}
 			{
-				for i := 0; i < inputLen; i++ {
+				for i := startIdx; i < endIdx; i++ {
 					_ACCUMULATE_COUNT(a, nulls, i, false, false)
 				}
 			}
@@ -99,7 +100,7 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 		{
 			// {{if not (eq .CountKind "Rows")}}
 			if nulls.MaybeHasNulls() {
-				for _, i := range sel[:inputLen] {
+				for _, i := range sel[startIdx:endIdx] {
 					_ACCUMULATE_COUNT(a, nulls, i, true, true)
 				}
 			} else
@@ -109,10 +110,10 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 				// We don't need to pay attention to nulls (either because it's a
 				// COUNT_ROWS aggregate or because there are no nulls), and we're
 				// performing a hash aggregation (meaning there is a single group),
-				// so all inputLen tuples contribute to the count.
-				a.curAgg += int64(inputLen)
+				// so all endIdx-startIdx tuples contribute to the count.
+				a.curAgg += int64(endIdx - startIdx)
 				// {{else}}
-				for _, i := range sel[:inputLen] {
+				for _, i := range sel[startIdx:endIdx] {
 					_ACCUMULATE_COUNT(a, nulls, i, false, true)
 				}
 				// {{end}}
@@ -120,6 +121,23 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 		}
 	},
 	)
+	// {{else}}
+	// Unnecessary memory accounting can have significant overhead for window
+	// aggregate functions because Compute is called at least once for every row.
+	// For this reason, we do not use PerformOperation here.
+	// {{if not (eq .CountKind "Rows")}}
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+			_ACCUMULATE_COUNT(a, nulls, i, true, false)
+		}
+	} else
+	// {{end}}
+	{
+		for i := startIdx; i < endIdx; i++ {
+			_ACCUMULATE_COUNT(a, nulls, i, false, false)
+		}
+	}
+	// {{end}}
 	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))

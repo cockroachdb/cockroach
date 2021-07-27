@@ -15,16 +15,37 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
 )
+
+// WindowArgs extracts common arguments to window operators.
+type WindowArgs struct {
+	EvalCtx         *tree.EvalContext
+	MainAllocator   *colmem.Allocator
+	BufferAllocator *colmem.Allocator
+	MemoryLimit     int64
+	QueueCfg        colcontainer.DiskQueueCfg
+	FdSemaphore     semaphore.Semaphore
+	DiskAcc         *mon.BoundAccount
+	Input           colexecop.Operator
+	InputTypes      []*types.T
+	OutputColIdx    int
+	PartitionColIdx int
+	PeersColIdx     int
+}
 
 // windowFnMaxNumArgs is a mapping from the window function to the maximum
 // number of arguments it takes.
@@ -49,104 +70,121 @@ var windowFnMaxNumArgs = map[execinfrapb.WindowerSpec_WindowFunc]int{
 // computation should be the same for "peers", so most window functions do need
 // this information.
 func WindowFnNeedsPeersInfo(windowFn *execinfrapb.WindowerSpec_WindowFn) bool {
-	switch *windowFn.Func.WindowFunc {
-	case
-		execinfrapb.WindowerSpec_ROW_NUMBER,
-		execinfrapb.WindowerSpec_NTILE,
-		execinfrapb.WindowerSpec_LAG,
-		execinfrapb.WindowerSpec_LEAD:
-		// Functions that ignore the concept of "peers."
-		return false
-	case
-		execinfrapb.WindowerSpec_RANK,
-		execinfrapb.WindowerSpec_DENSE_RANK,
-		execinfrapb.WindowerSpec_PERCENT_RANK,
-		execinfrapb.WindowerSpec_CUME_DIST:
-		return true
-	case
-		execinfrapb.WindowerSpec_FIRST_VALUE,
-		execinfrapb.WindowerSpec_LAST_VALUE,
-		execinfrapb.WindowerSpec_NTH_VALUE:
-		if len(windowFn.Ordering.Columns) == 0 {
+	if windowFn.Func.WindowFunc != nil {
+		switch *windowFn.Func.WindowFunc {
+		case
+			execinfrapb.WindowerSpec_ROW_NUMBER,
+			execinfrapb.WindowerSpec_NTILE,
+			execinfrapb.WindowerSpec_LAG,
+			execinfrapb.WindowerSpec_LEAD:
+			// Functions that ignore the concept of "peers."
+			return false
+		case
+			execinfrapb.WindowerSpec_RANK,
+			execinfrapb.WindowerSpec_DENSE_RANK,
+			execinfrapb.WindowerSpec_PERCENT_RANK,
+			execinfrapb.WindowerSpec_CUME_DIST:
+			return true
+		case
+			execinfrapb.WindowerSpec_FIRST_VALUE,
+			execinfrapb.WindowerSpec_LAST_VALUE,
+			execinfrapb.WindowerSpec_NTH_VALUE:
+			if len(windowFn.Ordering.Columns) == 0 {
+				return false
+			}
+			return windowFrameNeedsPeersInfo(windowFn.Frame, &windowFn.Ordering)
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("window function %s is not supported", windowFn.String()))
+			// This code is unreachable, but the compiler cannot infer that.
 			return false
 		}
-		windowFrame := windowFn.Frame
-		switch windowFrame.Mode {
-		case
-			execinfrapb.WindowerSpec_Frame_GROUPS,
-			execinfrapb.WindowerSpec_Frame_RANGE:
-			if windowFrame.Bounds.Start.BoundType != execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
-				windowFrame.Bounds.End.BoundType != execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING {
-				return true
-			}
-		}
-		if windowFrame.Exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_GROUP ||
-			windowFrame.Exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES {
-			return true
-		}
-		return false
-	default:
-		colexecerror.InternalError(errors.AssertionFailedf("window function %s is not supported", windowFn.String()))
-		// This code is unreachable, but the compiler cannot infer that.
+	}
+	// Aggregate window functions need the peer groups column only if the frame
+	// requires it.
+	return windowFrameNeedsPeersInfo(windowFn.Frame, &windowFn.Ordering)
+}
+
+// windowFrameNeedsPeersInfo returns whether a window function will need access
+// to a peer group column.
+func windowFrameNeedsPeersInfo(
+	windowFrame *execinfrapb.WindowerSpec_Frame, ordering *execinfrapb.Ordering,
+) bool {
+	if len(ordering.Columns) == 0 {
 		return false
 	}
+	switch windowFrame.Mode {
+	case
+		execinfrapb.WindowerSpec_Frame_GROUPS,
+		execinfrapb.WindowerSpec_Frame_RANGE:
+		if windowFrame.Bounds.Start.BoundType != execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
+			windowFrame.Bounds.End.BoundType != execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING {
+			return true
+		}
+	}
+	if windowFrame.Exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_GROUP ||
+		windowFrame.Exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES {
+		return true
+	}
+	return false
 }
 
 // WindowFnArgNeedsCast returns true if the given argument type requires a cast,
 // as well as the expected type (if the cast is needed). If the cast is not
 // needed, the provided type is returned.
 func WindowFnArgNeedsCast(
-	windowFn execinfrapb.WindowerSpec_WindowFunc, provided *types.T, idx int,
+	windowFn execinfrapb.WindowerSpec_Func, provided *types.T, idx int,
 ) (needsCast bool, expectedType *types.T) {
-	switch windowFn {
-	case execinfrapb.WindowerSpec_NTILE:
-		// NTile expects a single int64 argument.
-		if idx != 0 {
-			colexecerror.InternalError(errors.AssertionFailedf("ntile expects exactly one argument"))
-		}
-		return !types.Int.Identical(provided), types.Int
-	case
-		execinfrapb.WindowerSpec_LAG,
-		execinfrapb.WindowerSpec_LEAD:
-		if idx == 0 || idx == 2 {
-			// The first and third arguments can have any type. No casting necessary.
-			return false, provided
-		}
-		if idx == 1 {
-			// The second argument is an integer offset that must be an int64.
+	if windowFn.WindowFunc != nil {
+		switch *windowFn.WindowFunc {
+		case execinfrapb.WindowerSpec_NTILE:
+			// NTile expects a single int64 argument.
+			if idx != 0 {
+				colexecerror.InternalError(errors.AssertionFailedf("ntile expects exactly one argument"))
+			}
 			return !types.Int.Identical(provided), types.Int
-		}
-		colexecerror.InternalError(errors.AssertionFailedf("lag and lead expect between one and three arguments"))
-	case
-		execinfrapb.WindowerSpec_FIRST_VALUE,
-		execinfrapb.WindowerSpec_LAST_VALUE:
-		if idx > 0 {
-			colexecerror.InternalError(errors.AssertionFailedf("first_value and last_value expect exactly one argument"))
-		}
-		// These window functions can take any argument type.
-		return false, provided
-	case execinfrapb.WindowerSpec_NTH_VALUE:
-		// The first argument can be any type, but the second must be an integer.
-		if idx > 1 {
-			colexecerror.InternalError(errors.AssertionFailedf("nth_value expects exactly two arguments"))
-		}
-		if idx == 0 {
+		case
+			execinfrapb.WindowerSpec_LAG,
+			execinfrapb.WindowerSpec_LEAD:
+			if idx == 0 || idx == 2 {
+				// The first and third arguments can have any type. No casting necessary.
+				return false, provided
+			}
+			if idx == 1 {
+				// The second argument is an integer offset that must be an int64.
+				return !types.Int.Identical(provided), types.Int
+			}
+			colexecerror.InternalError(errors.AssertionFailedf("lag and lead expect between one and three arguments"))
+		case
+			execinfrapb.WindowerSpec_FIRST_VALUE,
+			execinfrapb.WindowerSpec_LAST_VALUE:
+			if idx > 0 {
+				colexecerror.InternalError(errors.AssertionFailedf("first_value and last_value expect exactly one argument"))
+			}
+			// These window functions can take any argument type.
 			return false, provided
+		case execinfrapb.WindowerSpec_NTH_VALUE:
+			// The first argument can be any type, but the second must be an integer.
+			if idx > 1 {
+				colexecerror.InternalError(errors.AssertionFailedf("nth_value expects exactly two arguments"))
+			}
+			if idx == 0 {
+				return false, provided
+			}
+			return !types.Int.Identical(provided), types.Int
+		case
+			execinfrapb.WindowerSpec_ROW_NUMBER,
+			execinfrapb.WindowerSpec_RANK,
+			execinfrapb.WindowerSpec_DENSE_RANK,
+			execinfrapb.WindowerSpec_PERCENT_RANK,
+			execinfrapb.WindowerSpec_CUME_DIST:
+			colexecerror.InternalError(errors.AssertionFailedf("window function %s does not expect an argument", windowFn.WindowFunc.String()))
+			// This code is unreachable, but the compiler cannot infer that.
+			return false, nil
 		}
-		return !types.Int.Identical(provided), types.Int
-	case
-		execinfrapb.WindowerSpec_ROW_NUMBER,
-		execinfrapb.WindowerSpec_RANK,
-		execinfrapb.WindowerSpec_DENSE_RANK,
-		execinfrapb.WindowerSpec_PERCENT_RANK,
-		execinfrapb.WindowerSpec_CUME_DIST:
-		colexecerror.InternalError(errors.AssertionFailedf("window function %s does not expect an argument", windowFn.String()))
-		// This code is unreachable, but the compiler cannot infer that.
-		return false, nil
+		colexecerror.InternalError(errors.AssertionFailedf("unknown window function: %v", windowFn.WindowFunc))
 	}
-	colexecerror.InternalError(errors.AssertionFailedf("window function %s is not supported", windowFn.String()))
-	// This code is unreachable, but the compiler cannot infer that.
-	return false, nil
+	// Aggregate functions do not require casts.
+	return false, provided
 }
 
 // NormalizeWindowFrame returns a frame that is identical to the given one
