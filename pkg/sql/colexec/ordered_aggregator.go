@@ -282,11 +282,6 @@ func (a *orderedAggregator) Next() coldata.Batch {
 			// Twice the batchSize is allocated to avoid having to check for
 			// overflow when outputting.
 			newMinCapacity := 2 * a.lastReadBatch.Length()
-			if newMinCapacity == 0 {
-				// If batchLength is 0, we still need to flush the last group,
-				// so we need to have the capacity of at least 1.
-				newMinCapacity = 1
-			}
 			if newMinCapacity > coldata.BatchSize() {
 				// ResetMaybeReallocate truncates the capacity to
 				// coldata.BatchSize(), but we actually want a batch with larger
@@ -302,12 +297,8 @@ func (a *orderedAggregator) Next() coldata.Batch {
 			// We will never copy more than coldata.BatchSize() into the
 			// temporary buffer, so a half of the scratch's capacity will always
 			// be sufficient.
-			tempBufferCapacity := newMinCapacity / 2
-			if tempBufferCapacity == 0 {
-				tempBufferCapacity = 1
-			}
 			a.scratch.tempBuffer, _ = a.allocator.ResetMaybeReallocate(
-				a.outputTypes, a.scratch.tempBuffer, tempBufferCapacity, maxBatchMemSize,
+				a.outputTypes, a.scratch.tempBuffer, newMinCapacity/2, maxBatchMemSize,
 			)
 			for fnIdx, fn := range a.bucket.fns {
 				fn.SetOutput(a.scratch.ColVec(fnIdx))

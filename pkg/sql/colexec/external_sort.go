@@ -254,24 +254,27 @@ func NewExternalSorter(
 	// We give half of the available RAM to the in-memory sorter. Note that we
 	// will reuse that memory for each partition and will be holding onto it all
 	// the time, so we cannot "return" this usage after spilling each partition.
-	inMemSortMemoryLimit := memoryLimit / 2
+	inMemSortTotalMemoryLimit := memoryLimit / 2
+	inMemSortPartitionLimit := inMemSortTotalMemoryLimit * 4 / 5
+	inMemSortOutputLimit := inMemSortTotalMemoryLimit / 5
 	// We give another half of the available RAM to the merge operation.
 	mergeMemoryLimit := memoryLimit / 2
-	if inMemSortMemoryLimit < 1 {
+	if inMemSortPartitionLimit < 1 {
 		// If the memory limit is 0, the input partitioning operator will return
 		// a zero-length batch, so make it at least 1.
-		inMemSortMemoryLimit = 1
+		inMemSortPartitionLimit = 1
+		inMemSortOutputLimit = 1
 		mergeMemoryLimit = 1
 	}
-	inputPartitioner := newInputPartitioningOperator(input, inMemSortMemoryLimit)
+	inputPartitioner := newInputPartitioningOperator(input, inMemSortPartitionLimit)
 	var inMemSorter colexecop.ResettableOperator
 	if topK > 0 {
-		inMemSorter = NewTopKSorter(sortUnlimitedAllocator, inputPartitioner, inputTypes, ordering.Columns, topK)
+		inMemSorter = NewTopKSorter(sortUnlimitedAllocator, inputPartitioner, inputTypes, ordering.Columns, topK, inMemSortOutputLimit)
 	} else {
 		var err error
 		inMemSorter, err = newSorter(
 			sortUnlimitedAllocator, newAllSpooler(sortUnlimitedAllocator, inputPartitioner, inputTypes),
-			inputTypes, ordering.Columns,
+			inputTypes, ordering.Columns, inMemSortOutputLimit,
 		)
 		if err != nil {
 			colexecerror.InternalError(err)

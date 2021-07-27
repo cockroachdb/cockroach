@@ -371,8 +371,7 @@ func (i *Inbox) Next() coldata.Batch {
 		if err != nil {
 			colexecerror.InternalError(err)
 		}
-		// For now, we don't enforce any footprint-based memory limit.
-		// TODO(yuzefovich): refactor this.
+		// We rely on the outboxes to produce reasonably sized batches.
 		const maxBatchMemSize = math.MaxInt64
 		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(i.typs, i.scratch.b, batchLength, maxBatchMemSize)
 		i.allocator.PerformOperation(i.scratch.b.ColVecs(), func() {

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -144,7 +145,7 @@ func TestSort(t *testing.T) {
 	for _, tc := range sortAllTestCases {
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols)
+				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols, execinfra.DefaultMemoryLimit)
 			})
 	}
 }
@@ -172,9 +173,9 @@ func TestSortRandomized(t *testing.T) {
 				}
 				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 					if topK {
-						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, uint64(k)), nil
+						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, uint64(k), execinfra.DefaultMemoryLimit), nil
 					}
-					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols)
+					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
 				})
 			}
 		}
@@ -314,10 +315,10 @@ func BenchmarkSort(b *testing.B) {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 						var sorter colexecop.Operator
 						if topK {
-							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k)
+							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k, execinfra.DefaultMemoryLimit)
 						} else {
 							var err error
-							sorter, err = NewSorter(testAllocator, source, typs, ordCols)
+							sorter, err = NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
 							if err != nil {
 								b.Fatal(err)
 							}
