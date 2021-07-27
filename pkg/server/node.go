@@ -1343,9 +1343,11 @@ func (n *Node) TokenBucket(
 ) (*roachpb.TokenBucketResponse, error) {
 	tenantID, ok := roachpb.TenantFromContext(ctx)
 	if !ok {
-		return nil, errors.New("token bucket request with no tenant")
+		return &roachpb.TokenBucketResponse{
+			Error: errors.EncodeError(ctx, errors.New("token bucket request with no tenant")),
+		}, nil
 	}
-	return n.tenantUsage.TokenBucketRequest(ctx, tenantID, in)
+	return n.tenantUsage.TokenBucketRequest(ctx, tenantID, in), nil
 }
 
 // NewTenantUsageServer is a hook for CCL code which implements the tenant usage
@@ -1361,8 +1363,10 @@ type dummyTenantUsageServer struct{}
 // TokenBucketRequest is defined in the TenantUsageServer interface.
 func (dummyTenantUsageServer) TokenBucketRequest(
 	ctx context.Context, tenantID roachpb.TenantID, in *roachpb.TokenBucketRequest,
-) (*roachpb.TokenBucketResponse, error) {
-	return nil, errors.Errorf("tenant usage requires a CCL binary")
+) *roachpb.TokenBucketResponse {
+	return &roachpb.TokenBucketResponse{
+		Error: errors.EncodeError(ctx, errors.New("tenant usage requires a CCL binary")),
+	}
 }
 
 // ReconfigureTokenBucket is defined in the TenantUsageServer interface.
