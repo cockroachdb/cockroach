@@ -349,6 +349,9 @@ type ScanFlags struct {
 	// this table.
 	NoIndexJoin bool
 
+	// NoZigzagJoin disallows use of a zigzag join for scanning this table.
+	NoZigzagJoin bool
+
 	// ForceIndex forces the use of a specific index (specified in Index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
 	ForceIndex bool
@@ -358,7 +361,7 @@ type ScanFlags struct {
 
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {
-	return !sf.NoIndexJoin && !sf.ForceIndex
+	return !sf.NoIndexJoin && !sf.NoZigzagJoin && !sf.ForceIndex
 }
 
 // JoinFlags stores restrictions on the join execution method, derived from
