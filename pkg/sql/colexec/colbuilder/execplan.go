@@ -425,15 +425,15 @@ func (r opResult) createDiskBackedSort(
 			// sort itself is responsible for making sure that we stay within
 			// the memory limit.
 			sortUnlimitedAllocator := colmem.NewAllocator(
-				ctx, r.createBufferingUnlimitedMemAccount(
+				ctx, r.createUnlimitedMemAccount(
 					ctx, flowCtx, opName+"-sort", processorID,
 				), factory)
 			mergeUnlimitedAllocator := colmem.NewAllocator(
-				ctx, r.createBufferingUnlimitedMemAccount(
+				ctx, r.createUnlimitedMemAccount(
 					ctx, flowCtx, opName+"-merge", processorID,
 				), factory)
 			outputUnlimitedAllocator := colmem.NewAllocator(
-				ctx, r.createBufferingUnlimitedMemAccount(
+				ctx, r.createUnlimitedMemAccount(
 					ctx, flowCtx, opName+"-output", processorID,
 				), factory)
 			diskAccount := r.createDiskAccount(ctx, flowCtx, opName, processorID)
@@ -742,10 +742,17 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return r, err
 			}
-
+			// We have to create a separate account in order for the cFetcher to
+			// be able to precisely track the size of its output batch. This
+			// memory account is "streaming" in its nature, so we create an
+			// unlimited one.
+			cFetcherMemAcc := result.createUnlimitedMemAccount(
+				ctx, flowCtx, "cfetcher", spec.ProcessorID,
+			)
 			estimatedRowCount := spec.EstimatedRowCount
 			scanOp, err := colfetcher.NewColBatchScan(
-				ctx, streamingAllocator, flowCtx, evalCtx, core.TableReader, post, estimatedRowCount,
+				ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), flowCtx,
+				evalCtx, core.TableReader, post, estimatedRowCount,
 			)
 			if err != nil {
 				return r, err
@@ -843,7 +850,7 @@ func NewColOperator(
 					// The disk spilling is disabled by the cluster setting, so
 					// we give an unlimited memory account to the in-memory
 					// hash aggregator and don't set up the disk spiller.
-					hashAggregatorUnlimitedMemAccount := result.createBufferingUnlimitedMemAccount(
+					hashAggregatorUnlimitedMemAccount := result.createUnlimitedMemAccount(
 						ctx, flowCtx, opName, spec.ProcessorID,
 					)
 					newAggArgs.Allocator = colmem.NewAllocator(
@@ -866,7 +873,7 @@ func NewColOperator(
 					// We need to create a separate memory account for the
 					// spilling queue because it looks at how much memory it has
 					// already used in order to decide when to spill to disk.
-					spillingQueueMemAccount := result.createBufferingUnlimitedMemAccount(
+					spillingQueueMemAccount := result.createUnlimitedMemAccount(
 						ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID,
 					)
 					spillingQueueCfg := args.DiskQueueCfg
@@ -890,7 +897,7 @@ func NewColOperator(
 						return r, err
 					}
 					ehaOpName := "external-hash-aggregator"
-					ehaMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID)
+					ehaMemAccount := result.createUnlimitedMemAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID)
 					// Note that we will use an unlimited memory account here
 					// even for the in-memory hash aggregator since it is easier
 					// to do so than to try to replace the memory account if the
@@ -964,7 +971,7 @@ func NewColOperator(
 					distinctMemMonitorName,
 					func(input colexecop.Operator) colexecop.Operator {
 						unlimitedAllocator := colmem.NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, edOpName, spec.ProcessorID), factory,
+							ctx, result.createUnlimitedMemAccount(ctx, flowCtx, edOpName, spec.ProcessorID), factory,
 						)
 						return colexec.NewExternalDistinct(
 							unlimitedAllocator,
@@ -1004,7 +1011,7 @@ func NewColOperator(
 				// We are performing a cross-join, so we need to plan a
 				// specialized operator.
 				opName := "cross-joiner"
-				crossJoinerMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID)
+				crossJoinerMemAccount := result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID)
 				crossJoinerDiskAcc := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 				unlimitedAllocator := colmem.NewAllocator(ctx, crossJoinerMemAccount, factory)
 				result.Root = colexecjoin.NewCrossJoiner(
@@ -1031,7 +1038,7 @@ func NewColOperator(
 						ctx, flowCtx, opName, spec.ProcessorID,
 					)
 					hashJoinerUnlimitedAllocator = colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+						ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 					)
 				}
 				hjSpec := colexecjoin.MakeHashJoinerSpec(
@@ -1061,7 +1068,7 @@ func NewColOperator(
 						hashJoinerMemMonitorName,
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 							unlimitedAllocator := colmem.NewAllocator(
-								ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+								ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 							)
 							ehj := colexec.NewExternalHashJoiner(
 								unlimitedAllocator,
@@ -1117,7 +1124,7 @@ func NewColOperator(
 			// joiner itself is responsible for making sure that we stay within
 			// the memory limit, and it will fall back to disk if necessary.
 			unlimitedAllocator := colmem.NewAllocator(
-				ctx, result.createBufferingUnlimitedMemAccount(
+				ctx, result.createUnlimitedMemAccount(
 					ctx, flowCtx, opName, spec.ProcessorID,
 				), factory)
 			diskAccount := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
@@ -1294,7 +1301,7 @@ func NewColOperator(
 						ctx, opName, flowCtx, spec.ProcessorID, factory)
 					// Lag operators need an extra allocator.
 					bufferAllocator := colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+						ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 					)
 					result.Root, err = colexecwindow.NewLagOperator(
 						unlimitedAllocator, bufferAllocator, execinfra.GetWorkMemLimit(flowCtx),
@@ -1307,7 +1314,7 @@ func NewColOperator(
 						ctx, opName, flowCtx, spec.ProcessorID, factory)
 					// Lead operators need an extra allocator.
 					bufferAllocator := colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+						ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 					)
 					result.Root, err = colexecwindow.NewLeadOperator(
 						unlimitedAllocator, bufferAllocator, execinfra.GetWorkMemLimit(flowCtx),
@@ -1320,7 +1327,7 @@ func NewColOperator(
 						ctx, opName, flowCtx, spec.ProcessorID, factory)
 					// FirstValue operators need an extra allocator.
 					bufferAllocator := colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+						ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 					)
 					result.Root, err = colexecwindow.NewFirstValueOperator(
 						evalCtx, wf.Frame, &wf.Ordering, unlimitedAllocator, bufferAllocator,
@@ -1333,7 +1340,7 @@ func NewColOperator(
 						ctx, opName, flowCtx, spec.ProcessorID, factory)
 					// LastValue operators need an extra allocator.
 					bufferAllocator := colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+						ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 					)
 					result.Root, err = colexecwindow.NewLastValueOperator(
 						evalCtx, wf.Frame, &wf.Ordering, unlimitedAllocator, bufferAllocator,
@@ -1346,7 +1353,7 @@ func NewColOperator(
 						ctx, opName, flowCtx, spec.ProcessorID, factory)
 					// NthValue operators need an extra allocator.
 					bufferAllocator := colmem.NewAllocator(
-						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+						ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 					)
 					result.Root, err = colexecwindow.NewNthValueOperator(
 						evalCtx, wf.Frame, &wf.Ordering, unlimitedAllocator, bufferAllocator,
@@ -1646,15 +1653,17 @@ func (r opResult) createMemAccountForSpillStrategyWithLimit(
 	return &bufferingMemAccount, monitorName
 }
 
-// createBufferingUnlimitedMemAccount instantiates an unlimited memory monitor
-// and a memory account to be used with a buffering disk-backed Operator. The
-// receiver is updated to have references to both objects. Note that the
-// returned account is only "unlimited" in that it does not have a hard limit
-// that it enforces, but a limit might be enforced by a root monitor.
+// createUnlimitedMemAccount instantiates an unlimited memory monitor
+// and a memory account to be used with a buffering disk-backed Operator (or in
+// special circumstances in place of a streaming account when the precise memory
+// usage is needed by an operator). The receiver is updated to have references
+// to both objects. Note that the returned account is only "unlimited" in that
+// it does not have a hard limit that it enforces, but a limit might be enforced
+// by a root monitor.
 //
 // Note that the memory monitor name is not returned (unlike above) because no
 // caller actually needs it.
-func (r opResult) createBufferingUnlimitedMemAccount(
+func (r opResult) createUnlimitedMemAccount(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
 ) *mon.BoundAccount {
 	monitorName := r.getMemMonitorName(opName, processorID, "unlimited" /* suffix */)
@@ -1706,7 +1715,7 @@ func (r opResult) getDiskBackedWindowFnFields(
 	factory coldata.ColumnFactory,
 ) (*colmem.Allocator, *mon.BoundAccount) {
 	unlimitedAllocator := colmem.NewAllocator(
-		ctx, r.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, processorID), factory,
+		ctx, r.createUnlimitedMemAccount(ctx, flowCtx, opName, processorID), factory,
 	)
 	diskAcc := r.createDiskAccount(ctx, flowCtx, opName, processorID)
 	return unlimitedAllocator, diskAcc
