@@ -258,7 +258,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	}
 
 	// All safe - do the work.
-	var numRoleMembershipsDeleted int
+	var numRoleMembershipsDeleted, numRoleSettingsRowsDeleted int
 	for normalizedUsername := range userNames {
 		// Specifically reject special users and roles. Some (root, admin) would fail with
 		// "privileges still exist" first.
@@ -308,7 +308,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		// Drop all role memberships involving the user/role.
-		numRoleMembershipsDeleted, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		rowsDeleted, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
 			"drop-role-membership",
 			params.p.txn,
@@ -318,6 +318,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
+		numRoleMembershipsDeleted += rowsDeleted
 
 		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
@@ -335,7 +336,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 
 		// TODO(rafi): Remove this condition in 21.2.
 		if params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.DatabaseRoleSettings) {
-			_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			rowsDeleted, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -348,10 +349,11 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
+			numRoleSettingsRowsDeleted += rowsDeleted
 		}
 	}
 
-	// Bump role-related table versions to force a refresh of membership/password
+	// Bump role-related table versions to force a refresh of membership/auth
 	// caches.
 	if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
 		if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
@@ -359,6 +361,12 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 			return err
+		}
+		if numRoleSettingsRowsDeleted > 0 &&
+			params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.DatabaseRoleSettings) {
+			if err := params.p.bumpDatabaseRoleSettingsTableVersion(params.ctx); err != nil {
+				return err
+			}
 		}
 	}
 	if numRoleMembershipsDeleted > 0 {
