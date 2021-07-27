@@ -12,6 +12,7 @@ package spec
 
 import (
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,8 @@ type ClusterSpec struct {
 	// FileSystem determines the underlying FileSystem
 	// to be used. The default is ext4.
 	FileSystem fileSystemType
+
+	RandomlyUseZfs bool
 }
 
 // MakeClusterSpec makes a ClusterSpec.
@@ -201,6 +204,11 @@ func (s *ClusterSpec) Args(extra ...string) ([]string, error) {
 			)
 		}
 		args = append(args, "--filesystem=zfs")
+	} else if s.RandomlyUseZfs && s.Cloud == GCE {
+		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		if rng.Float32() <= 0.2 {
+			args = append(args, "--filesystem=zfs")
+		}
 	}
 
 	if s.Geo {
