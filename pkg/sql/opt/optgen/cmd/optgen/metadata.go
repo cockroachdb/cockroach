@@ -212,6 +212,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ShowTraceType":       {fullName: "tree.ShowTraceType", passByVal: true},
 		"bool":                {fullName: "bool", passByVal: true},
 		"int":                 {fullName: "int", passByVal: true},
+		"int64":               {fullName: "int64", passByVal: true},
 		"string":              {fullName: "string", passByVal: true},
 		"Type":                {fullName: "types.T", isPointer: true},
 		"Datum":               {fullName: "tree.Datum", isInterface: true},
