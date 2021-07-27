@@ -346,6 +346,7 @@ func newInternalPlanner(
 	p.semaCtx = tree.MakeSemaContext()
 	p.semaCtx.SearchPath = sd.SearchPath
 	p.semaCtx.TypeResolver = p
+	p.semaCtx.DateStyle = sd.GetDateStyle()
 
 	plannerMon := mon.NewMonitor(fmt.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,

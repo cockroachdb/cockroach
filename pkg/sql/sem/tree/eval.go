@@ -3786,11 +3786,17 @@ func (ctx *EvalContext) GetLocation() *time.Location {
 
 // GetIntervalStyle returns the session interval style.
 func (ctx *EvalContext) GetIntervalStyle() duration.IntervalStyle {
+	if ctx.SessionData == nil {
+		return duration.IntervalStyle_POSTGRES
+	}
 	return ctx.SessionData.GetIntervalStyle()
 }
 
 // GetDateStyle returns the session date style.
 func (ctx *EvalContext) GetDateStyle() pgdate.DateStyle {
+	if ctx.SessionData == nil {
+		return pgdate.DefaultDateStyle()
+	}
 	return ctx.SessionData.GetDateStyle()
 }
 

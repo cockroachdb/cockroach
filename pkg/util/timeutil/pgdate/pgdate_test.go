@@ -72,7 +72,7 @@ func TestParseDate(t *testing.T) {
 		},
 	} {
 		t.Run(tc.s, func(t *testing.T) {
-			d, depOnCtx, err := ParseDate(time.Time{}, ParseModeYMD, tc.s)
+			d, depOnCtx, err := ParseDate(time.Time{}, DateStyle{Order: Order_YMD}, tc.s)
 			if tc.err != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.err) {
 					t.Fatalf("got %v, expected %v", err, tc.err)

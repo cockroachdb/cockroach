@@ -14,7 +14,6 @@ go_library(
         "setters.go",
         "zone_cache.go",
         ":gen-field-stringer",  # keep
-        ":gen-parsemode-stringer",  # keep
     ],
     embed = [":pgdate_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate",
@@ -53,12 +52,6 @@ stringer(
     name = "gen-field-stringer",
     src = "fields.go",
     typ = "field",
-)
-
-stringer(
-    name = "gen-parsemode-stringer",
-    src = "parsing.go",
-    typ = "ParseMode",
 )
 
 proto_library(
