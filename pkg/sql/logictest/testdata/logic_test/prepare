@@ -630,7 +630,7 @@ PREPARE new_table_in_search_path_2 AS
 query TT
 EXECUTE new_table_in_search_path_2
 ----
-_bit _bit
+_bit  _bit
 
 statement ok
 CREATE TABLE pg_type(typname STRING); INSERT INTO pg_type VALUES('test')
@@ -638,7 +638,7 @@ CREATE TABLE pg_type(typname STRING); INSERT INTO pg_type VALUES('test')
 query TT
 EXECUTE new_table_in_search_path_2
 ----
-test _bit
+test  _bit
 
 statement ok
 DROP TABLE pg_type

@@ -1,0 +1,25 @@
+statement ok
+CREATE TABLE foo (x CHAR PRIMARY KEY, y INT); INSERT INTO foo(x, y) VALUES ('a', 30), ('b', 40), ('c', 50)
+
+query T
+EXPLAIN(vec) SELECT * FROM foo ORDER BY y DESC LIMIT 1
+----
+│
+└ Node 1
+  └ *colexec.limitOp
+    └ *colexec.topKSorter
+      └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN(vec) SELECT * FROM foo ORDER BY y DESC LIMIT 1
+----
+│
+└ Node 1
+  └ *colexec.limitOp
+    └ *colexec.topKSorter
+      └ *colfetcher.ColBatchScan
+
+query TI
+SELECT * FROM foo ORDER BY y DESC LIMIT 1
+----
+c  50

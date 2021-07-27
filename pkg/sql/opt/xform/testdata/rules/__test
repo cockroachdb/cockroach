@@ -1,0 +1,33 @@
+exec-ddl
+CREATE TABLE foo (x CHAR PRIMARY KEY, y INT)
+----
+
+opt
+SELECT * FROM foo ORDER BY y LIMIT 1
+----
+top-k
+ ├── columns: x:1!null y:2
+ ├── ordering: +2
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan foo
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── 1
+
+opt
+SELECT * FROM foo ORDER BY y LIMIT 1
+----
+top-k
+ ├── columns: x:1!null y:2
+ ├── ordering: +2
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan foo
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── 1

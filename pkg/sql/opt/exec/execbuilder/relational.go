@@ -219,6 +219,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		*memo.EnsureUpsertDistinctOnExpr:
 		ep, err = b.buildDistinct(t)
 
+	case *memo.TopKExpr:
+		ep, err = b.buildTopK(t)
+
 	case *memo.LimitExpr, *memo.OffsetExpr:
 		ep, err = b.buildLimitOffset(e)
 
@@ -1512,6 +1515,41 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return ep, nil
+}
+
+// buildTopK builds a plan for a TopKOp, which is like a combined SortOp and LimitOp
+func (b *Builder) buildTopK(e *memo.TopKExpr) (execPlan, error) {
+	inputExpr := e.Child(0).(memo.RelExpr)
+	input, err := b.buildRelational(inputExpr)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ordering := e.Ordering.ToOrdering()
+
+	limit, err := b.buildScalar(nil, e.Child(1).(opt.ScalarExpr))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// TODO(harding): Eventually we should build a topk node to pass down to the
+	// exec engines.
+	// Construct sort first.
+	node, err := b.factory.ConstructSort(
+		input.root,
+		exec.OutputOrdering(input.sqlOrdering(ordering)),
+		0,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Construct the limit, using the sort as the child.
+	node, err = b.factory.ConstructLimit(node, limit, nil)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
 // buildLimitOffset builds a plan for a LimitOp or OffsetOp
