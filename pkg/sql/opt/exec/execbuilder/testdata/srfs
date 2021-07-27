@@ -432,7 +432,6 @@ vectorized: true
 └── • sort
     │ columns: (id, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null)
     │ ordering: +any_not_null
-    │ estimated row count: 14 (missing stats)
     │ order: +any_not_null
     │
     └── • group
