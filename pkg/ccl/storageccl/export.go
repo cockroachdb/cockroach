@@ -178,11 +178,16 @@ func evalExport(
 
 	// Time-bound iterators only make sense to use if the start time is set.
 	useTBI := args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty()
+	// Only use resume timestamp if splitting mid key is enabled.
+	resumeKeyTs := hlc.Timestamp{}
+	if args.SplitMidKey {
+		resumeKeyTs = args.ResumeKeyTs
+	}
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
-		summary, resume, _, err := reader.ExportMVCCToSst(ctx, start, args.EndKey, args.StartTime,
-			h.Timestamp, hlc.Timestamp{}, exportAllRevisions, targetSize, maxSize, false, useTBI, destFile)
+		summary, resume, resumeTs, err := reader.ExportMVCCToSst(ctx, start, args.EndKey, args.StartTime,
+			h.Timestamp, resumeKeyTs, exportAllRevisions, targetSize, maxSize, args.SplitMidKey, useTBI, destFile)
 		if err != nil {
 			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
 				err = errors.WithHintf(err,
@@ -206,9 +211,10 @@ func evalExport(
 			span.EndKey = args.EndKey
 		}
 		exported := roachpb.ExportResponse_File{
-			Span:       span,
-			Exported:   summary,
-			LocalityKV: localityKV,
+			Span:        span,
+			ResumeKeyTs: resumeTs,
+			Exported:    summary,
+			LocalityKV:  localityKV,
 		}
 
 		returnSST := args.ReturnSST

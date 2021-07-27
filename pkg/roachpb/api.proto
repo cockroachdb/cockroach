@@ -1362,8 +1362,16 @@ message FileEncryptionOptions {
 message ExportRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   ExternalStorage storage = 2 [(gogoproto.nullable) = false];
+  // When using split_mid_key, resume span should provide resume timestamp which is
+  // different from start_time.
+  util.hlc.Timestamp resume_key_ts = 12 [(gogoproto.nullable) = false];
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
+
+  // Split large rows in the middle of key sequence. This option will allow
+  // large history being broken up into target_file_size chunks and prevent
+  // blowing up on memory usage.
+  bool split_mid_key = 13;
 
   // Return the exported SST data in the response.
   bool return_sst = 5 [(gogoproto.customname) = "ReturnSST"];
@@ -1434,6 +1442,7 @@ message ExportResponse {
   // path.
   message File {
     Span span = 1 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp resume_key_ts = 9 [(gogoproto.nullable) = false];
     string path = 2;
     reserved 3;
     reserved 4;
