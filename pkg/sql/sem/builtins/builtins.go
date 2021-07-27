@@ -5392,6 +5392,28 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+	"crdb_internal.reset_multi_region_zone_configs_for_table": makeBuiltin(
+		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"id", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := int64(*args[0].(*tree.DInt))
+
+				if err := evalCtx.Sequence.ResetMultiRegionZoneConfigsForTable(
+					evalCtx.Context,
+					id,
+				); err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(true), nil
+			},
+			Info: `Resets the zone configuration for a multi-region table to 
+match its original state. No-ops if the given table ID is not a multi-region 
+table`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 	"crdb_internal.filter_multiregion_fields_from_zone_config_sql": makeBuiltin(
 		tree.FunctionProperties{Category: categoryMultiRegion},
 		stringOverload1(
