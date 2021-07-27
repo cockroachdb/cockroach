@@ -949,20 +949,6 @@ func NewLimitedMonitor(
 	return limitedMon
 }
 
-// NewLimitedMonitorNoDiskSpill is a utility function used by processors to
-// create a new limited memory monitor with the given name and start it. The
-// returned monitor must be closed. The limit is determined by
-// SessionData.WorkMemLimit (stored inside of the flowCtx) but overridden to
-// ServerConfig.TestingKnobs.MemoryLimitBytes if that knob is set.
-// ServerConfig.TestingKnobs.ForceDiskSpill is ignored by this function.
-func NewLimitedMonitorNoDiskSpill(
-	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name string,
-) *mon.BytesMonitor {
-	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimitNoDiskSpill(flowCtx), parent)
-	limitedMon.Start(ctx, parent, mon.BoundAccount{})
-	return limitedMon
-}
-
 // NewLimitedMonitorNoFlowCtx is the same as NewLimitedMonitor and should be
 // used when the caller doesn't have an access to *FlowCtx.
 func NewLimitedMonitorNoFlowCtx(
