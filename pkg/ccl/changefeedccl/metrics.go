@@ -105,6 +105,12 @@ var (
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedForwardedResolvedMessages = metric.Metadata{
+		Name:        "changefeed.forwarded_resolved_messages",
+		Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaChangefeedEmittedBytes = metric.Metadata{
 		Name:        "changefeed.emitted_bytes",
 		Help:        "Bytes emitted by all feeds",
@@ -205,11 +211,12 @@ type Metrics struct {
 	KVFeedMetrics     kvevent.Metrics
 	SchemaFeedMetrics schemafeed.Metrics
 
-	EmittedMessages *metric.Counter
-	EmittedBytes    *metric.Counter
-	Flushes         *metric.Counter
-	ErrorRetries    *metric.Counter
-	Failures        *metric.Counter
+	EmittedMessages  *metric.Counter
+	ResolvedMessages *metric.Counter
+	EmittedBytes     *metric.Counter
+	Flushes          *metric.Counter
+	ErrorRetries     *metric.Counter
+	Failures         *metric.Counter
 
 	ProcessingNanos *metric.Counter
 	EmitNanos       *metric.Counter
@@ -240,6 +247,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
 		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
 		EmittedMessages:   metric.NewCounter(metaChangefeedEmittedMessages),
+		ResolvedMessages:  metric.NewCounter(metaChangefeedForwardedResolvedMessages),
 		EmittedBytes:      metric.NewCounter(metaChangefeedEmittedBytes),
 		Flushes:           metric.NewCounter(metaChangefeedFlushes),
 		ErrorRetries:      metric.NewCounter(metaChangefeedErrorRetries),
