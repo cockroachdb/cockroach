@@ -2345,6 +2345,31 @@ var builtins = map[string]builtinDefinition{
 		},
 	),
 
+	"to_char_with_style": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"interval", types.Interval}, {"style", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				d := tree.MustBeDInterval(args[0]).Duration
+				styleStr := string(tree.MustBeDString(args[1]))
+				styleVal, ok := duration.IntervalStyle_value[strings.ToUpper(styleStr)]
+				if !ok {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"invalid IntervalStyle: %s",
+						styleStr,
+					)
+				}
+				var buf bytes.Buffer
+				d.FormatWithStyle(&buf, duration.IntervalStyle(styleVal))
+				return tree.NewDString(buf.String()), nil
+			},
+			Info:       "Convert an interval to a string using the given IntervalStyle.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	// https://www.postgresql.org/docs/10/static/functions-datetime.html
 	"age": makeBuiltin(
 		tree.FunctionProperties{},
@@ -2992,6 +3017,29 @@ may increase either contention or retry errors, or both.`,
 				return ts, nil
 			},
 			Info:       "Convert a string containing an absolute timestamp to the corresponding timestamp.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"parse_interval": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"string", types.String}, {"style", types.String}},
+			ReturnType: tree.FixedReturnType(types.Interval),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				styleStr := string(tree.MustBeDString(args[1]))
+				styleVal, ok := duration.IntervalStyle_value[strings.ToUpper(styleStr)]
+				if !ok {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"invalid IntervalStyle: %s",
+						styleStr,
+					)
+				}
+				return tree.ParseDInterval(duration.IntervalStyle(styleVal), s)
+			},
+			Info:       "Convert a string to an interval using the given IntervalStyle.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
