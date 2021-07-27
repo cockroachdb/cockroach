@@ -483,7 +483,7 @@ type PostRequest struct {
 	// that should be mentioned in the message.
 	Mention []string
 	// The instructions to reproduce the failure.
-	ReproductionCommand string
+	ReproductionCommand func(*Renderer)
 	// Additional labels that will be added to the issue. They will be created
 	// as necessary (as a side effect of creating an issue with them). An
 	// existing issue may be adopted even if it does not have these labels.
@@ -508,4 +508,19 @@ func Post(ctx context.Context, formatter IssueFormatter, req PostRequest) error 
 		&oauth2.Token{AccessToken: opts.Token},
 	)))
 	return newPoster(client, opts).post(ctx, formatter, req)
+}
+
+// ReproductionCommandFromString returns a value for the
+// PostRequest.ReproductionCommand field that is a command to run. It is
+// formatted as a bash code block.
+func ReproductionCommandFromString(repro string) func(*Renderer) {
+	if repro == "" {
+		return func(*Renderer) {}
+	}
+	return func(r *Renderer) {
+		r.P(func() {
+			r.Escaped("To reproduce, try:\n")
+			r.CodeBlock("bash", repro)
+		})
+	}
 }
