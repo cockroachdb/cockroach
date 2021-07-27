@@ -92,6 +92,9 @@ func clearExpectedValues(c *Config) {
 		if *f.Criticality == true {
 			f.Criticality = nil
 		}
+		if f.Buffering.IsNone() {
+			f.Buffering = CommonBufferSinkConfigWrapper{}
+		}
 	}
 
 	// Clear stderr sink defaults
@@ -108,6 +111,9 @@ func clearExpectedValues(c *Config) {
 		}
 		if *s.Criticality == true {
 			s.Criticality = nil
+		}
+		if s.Buffering.IsNone() {
+			s.Buffering = CommonBufferSinkConfigWrapper{}
 		}
 	}
 }
