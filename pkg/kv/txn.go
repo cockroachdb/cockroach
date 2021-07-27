@@ -1186,6 +1186,8 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	if ts.IsEmpty() {
 		log.Fatalf(ctx, "empty timestamp is invalid for SetFixedTimestamp()")
 	}
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
 	txn.mu.sender.SetFixedTimestamp(ctx, ts)
 }
 

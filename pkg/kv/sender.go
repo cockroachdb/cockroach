@@ -170,10 +170,11 @@ type TxnSender interface {
 	// such that the transaction can't be pushed to a different
 	// timestamp.
 	//
-	// This is used to support historical queries (AS OF SYSTEM TIME
-	// queries and backups). This method must be called on every
-	// transaction retry (but note that retries should be rare for
-	// read-only queries with no clock uncertainty).
+	// This is used to support historical queries (AS OF SYSTEM TIME queries
+	// and backups). This method must be called on every transaction retry
+	// (but note that retries should be rare for read-only queries with no
+	// clock uncertainty). The method must not be called after the
+	// transaction has been used in the current epoch to read or write.
 	SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp)
 
 	// ManualRestart bumps the transactions epoch, and can upgrade the
