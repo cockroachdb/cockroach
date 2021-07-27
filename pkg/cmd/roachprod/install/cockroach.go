@@ -13,6 +13,7 @@ package install
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -260,15 +261,21 @@ func (Cockroach) CertsDir(c *SyncedCluster, index int) string {
 
 // NodeURL implements the ClusterImpl.NodeDir interface.
 func (Cockroach) NodeURL(c *SyncedCluster, host string, port int) string {
-	url := fmt.Sprintf("'postgres://root@%s:%d", host, port)
+	var u url.URL
+	u.User = url.User("root")
+	u.Scheme = "postgres"
+	u.Host = fmt.Sprintf("%s:%d", host, port)
+	v := url.Values{}
 	if c.Secure {
-		url += "?sslcert=certs%2Fclient.root.crt&sslkey=certs%2Fclient.root.key&" +
-			"sslrootcert=certs%2Fca.crt&sslmode=verify-full"
+		v.Add("sslcert", c.CertsDir+"/client.root.crt")
+		v.Add("sslkey", c.CertsDir+"/client.root.key")
+		v.Add("sslrootcert", c.CertsDir+"/ca.crt")
+		v.Add("sslmode", "verify-full")
 	} else {
-		url += "?sslmode=disable"
+		v.Add("sslmode", "disable")
 	}
-	url += "'"
-	return url
+	u.RawQuery = v.Encode()
+	return "'" + u.String() + "'"
 }
 
 // NodePort implements the ClusterImpl.NodeDir interface.
