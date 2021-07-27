@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -195,6 +197,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		for {
 			var rows int64
 			writer.ResetBuffer()
+			beforeAccumulate := timeutil.Now()
 			for {
 				// If the bytes.Buffer sink exceeds the target size of a CSV file, we
 				// flush before exporting any additional rows.
@@ -268,9 +271,13 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 			size := writer.Len()
 
+			beforeUpload := timeutil.Now()
+			log.VEventf(ctx, 1, "accumulated %d row / %db file in %02.fs", rows, size, beforeUpload.Sub(beforeAccumulate).Seconds())
 			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
 				return err
 			}
+			log.VEventf(ctx, 1, "uploaded %d row / %db file in %02.fs", rows, size, timeutil.Since(beforeUpload).Seconds())
+
 			res := rowenc.EncDatumRow{
 				rowenc.DatumToEncDatum(
 					types.String,
