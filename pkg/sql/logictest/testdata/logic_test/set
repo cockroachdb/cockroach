@@ -150,11 +150,51 @@ SET escape_string_warning = 'off'
 statement ok
 SET datestyle = 'ISO'
 
+query T
+SHOW datestyle
+----
+ISO, MDY
+
 statement ok
 SET datestyle = 'ISO, MDY'
 
+query T
+SHOW datestyle
+----
+ISO, MDY
+
 statement ok
 SET datestyle = 'mdy, iso'
+
+query T
+SHOW datestyle
+----
+ISO, MDY
+
+statement ok
+SET datestyle = 'ymd'
+
+query T
+SHOW datestyle
+----
+ISO, YMD
+
+statement ok
+SET datestyle = 'DMY,   ISo'
+
+query T
+SHOW datestyle
+----
+ISO, DMY
+
+statement error only ISO style is supported
+SET datestyle = 'postgres'
+
+statement error only ISO style is supported
+SET datestyle = 'german'
+
+statement error only ISO style is supported
+SET datestyle = 'sql'
 
 statement error invalid value for parameter "DateStyle": "other"
 SET datestyle = 'other'
