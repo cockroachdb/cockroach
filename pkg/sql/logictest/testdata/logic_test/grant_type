@@ -54,3 +54,23 @@ test           schema_a     enum_b         user1    ALL
 
 statement error type "non_existent" does not exist
 SHOW GRANTS ON TYPE non_existent
+
+# Regression test for #67512: should be able to see grants for a type in a
+# different database.
+statement ok
+CREATE DATABASE other;
+CREATE TYPE other.typ AS ENUM();
+GRANT ALL ON TYPE other.typ TO user1
+
+query TTTTT
+SHOW GRANTS ON TYPE other.typ
+----
+other  public  typ  admin   ALL
+other  public  typ  public  USAGE
+other  public  typ  root    ALL
+other  public  typ  user1   ALL
+
+query TTTTT
+SHOW GRANTS ON TYPE other.typ FOR user1
+----
+other  public  typ  user1  ALL
