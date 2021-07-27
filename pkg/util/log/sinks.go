@@ -12,6 +12,17 @@ package log
 
 import "github.com/cockroachdb/cockroach/pkg/cli/exit"
 
+// sinkOutputOptions provides various options for a logSink.output call.
+type sinkOutputOptions struct {
+	// extraFlush invites an explicit flush of any buffering.
+	extraFlush bool
+	// ignoreErrors disables internal error handling (i.e. fail fast).
+	ignoreErrors bool
+	// forceSync forces synchronous operation of this output operation.
+	// This is, it will block until the output has been handled.
+	forceSync bool
+}
+
 // logSink abstracts the destination of logging events, after all
 // their details have been collected into a logpb.Entry.
 //
@@ -32,7 +43,7 @@ type logSink interface {
 	// The parent logger's outputMu is held during this operation: log
 	// sinks must not recursively call into logging when implementing
 	// this method.
-	output(extraSync bool, b []byte) error
+	output(b []byte, opts sinkOutputOptions) error
 
 	// exitCode returns the exit code to use if the logger decides
 	// to terminate because of an error in output().
@@ -44,10 +55,11 @@ type logSink interface {
 	// The parent logger's outputMu is held during this operation: log
 	// sinks must not recursively call into logging when implementing
 	// this method.
-	emergencyOutput([]byte)
+	// emergencyOutput([]byte)
 }
 
 var _ logSink = (*stderrSink)(nil)
 var _ logSink = (*fileSink)(nil)
 var _ logSink = (*fluentSink)(nil)
 var _ logSink = (*httpSink)(nil)
+var _ logSink = (*bufferSink)(nil)

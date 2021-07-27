@@ -60,7 +60,7 @@ func (l *fluentSink) exitCode() exit.Code {
 }
 
 // output implements the logSink interface.
-func (l *fluentSink) output(extraSync bool, b []byte) error {
+func (l *fluentSink) output(b []byte, opts sinkOutputOptions) (err error) {
 	// Try to write and reconnect immediately if the first write fails.
 	_ = l.tryWrite(b)
 	if l.good {
@@ -71,15 +71,6 @@ func (l *fluentSink) output(extraSync bool, b []byte) error {
 		return err
 	}
 	return l.tryWrite(b)
-}
-
-// emergencyOutput implements the logSink interface.
-func (l *fluentSink) emergencyOutput(b []byte) {
-	_ = l.tryWrite(b)
-	if !l.good {
-		_ = l.ensureConn(b)
-		_ = l.tryWrite(b)
-	}
 }
 
 func (l *fluentSink) close() {

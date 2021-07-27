@@ -289,6 +289,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
+		attachBufferWrapper(secLoggersCtx, fileSinkInfo, fc.CommonSinkConfig)
 		attachSinkInfo(fileSinkInfo, &fc.Channels)
 
 		// Start the GC process. This ensures that old capture files get
@@ -305,6 +306,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
+		attachBufferWrapper(secLoggersCtx, fluentSinkInfo, fc.CommonSinkConfig)
 		attachSinkInfo(fluentSinkInfo, &fc.Channels)
 	}
 
@@ -317,6 +319,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
+		attachBufferWrapper(secLoggersCtx, httpSinkInfo, fc.CommonSinkConfig)
 		attachSinkInfo(httpSinkInfo, &fc.Channels)
 	}
 
@@ -394,6 +397,21 @@ func (l *sinkInfo) applyFilters(chs logconfig.ChannelFilters) {
 	for ch, threshold := range chs.ChannelFilters {
 		l.threshold.set(ch, threshold)
 	}
+}
+
+func attachBufferWrapper(ctx context.Context, s *sinkInfo, c logconfig.CommonSinkConfig) {
+	if c.Buffering == nil {
+		return
+	}
+	errCallback := func(err error) {
+		Ops.Errorf(context.Background(), "logging error: %v", err)
+	}
+	if s.criticality {
+		errCallback = func(err error) {
+
+		}
+	}
+	s.sink = newBufferSink(ctx, s.sink, c.Buffering.MaxStaleness, int(c.Buffering.FlushTriggerSize), errCallback)
 }
 
 // applyConfig applies a common sink configuration to a sinkInfo.
