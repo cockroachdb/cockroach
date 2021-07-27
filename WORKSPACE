@@ -56,6 +56,14 @@ go_repository(
 )
 
 go_repository(
+    name = "org_golang_x_net",
+    build_file_proto_mode = "disable_global",
+    importpath = "golang.org/x/net",
+    sum = "h1:j2EK/QoxYNBsXI4R7fQkkRUk8y6wnOBI+6hgPdP/6Ds=",
+    version = "v0.0.0-20210716203947-853a461950ff",
+)
+
+go_repository(
     name = "org_golang_x_xerrors",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/xerrors",
