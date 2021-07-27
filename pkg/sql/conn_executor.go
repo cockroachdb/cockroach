@@ -1100,6 +1100,11 @@ type connExecutor struct {
 		// stateOpen.
 		autoRetryCounter int
 
+		// autoRetryReason records the error causing an auto-retryable error event if
+		// the current transaction is being automatically retried. This is used in
+		// statement traces to give more information in statement diagnostic bundles.
+		autoRetryReason error
+
 		// numDDL keeps track of how many DDL statements have been
 		// executed so far.
 		numDDL int
@@ -2167,6 +2172,11 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 	retriable := errIsRetriable(err)
 	if retriable {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
+
+		if canAutoRetry {
+			ex.extraTxnState.autoRetryReason = err
+		}
+
 		ev := eventRetriableErr{
 			IsCommit:     fsm.FromBool(isCommit(stmt)),
 			CanAutoRetry: fsm.FromBool(canAutoRetry),
@@ -2466,6 +2476,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 	case txnStart:
 		ex.extraTxnState.autoRetryCounter = 0
+		ex.extraTxnState.autoRetryReason = nil
 		ex.extraTxnState.onTxnFinish, ex.extraTxnState.onTxnRestart = ex.recordTransactionStart()
 		// Bump the txn counter for logging.
 		ex.extraTxnState.txnCounter++
