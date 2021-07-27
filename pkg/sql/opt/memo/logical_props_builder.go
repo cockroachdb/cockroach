@@ -1052,15 +1052,23 @@ func (b *logicalPropsBuilder) buildCreateStatisticsProps(
 func (b *logicalPropsBuilder) buildExportProps(export *ExportExpr, rel *props.Relational) {
 	b.buildBasicProps(export, export.Columns, rel)
 }
+func (b *logicalPropsBuilder) buildTopKProps(limit *TopKExpr, rel *props.Relational) {
+	// TopK has the same logical properties as limit.
+	b.buildLimitNodeProps(limit, rel)
+}
 
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
-	BuildSharedProps(limit, &rel.Shared)
+	b.buildLimitNodeProps(limit, rel)
+}
 
-	inputProps := limit.Input.Relational()
+func (b *logicalPropsBuilder) buildLimitNodeProps(limitNode RelExpr, rel *props.Relational) {
+	BuildSharedProps(limitNode, &rel.Shared)
+
+	inputProps := limitNode.Child(0).(RelExpr).Relational()
 
 	haveConstLimit := false
 	constLimit := int64(math.MaxUint32)
-	if cnst, ok := limit.Limit.(*ConstExpr); ok {
+	if cnst, ok := limitNode.Child(1).(*ConstExpr); ok {
 		haveConstLimit = true
 		constLimit = int64(*cnst.Value.(*tree.DInt))
 	}
@@ -1088,7 +1096,7 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 
 	// Functional Dependencies
 	// -----------------------
-	// Inherit functional dependencies from input. If limit is <= 1, add a
+	// Inherit functional dependencies from input. If limitNode is <= 1, add a
 	// single row dependency.
 	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
 	if constLimit <= 1 {
@@ -1108,7 +1116,7 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildLimit(limit, rel)
+		b.sb.buildLimit(limitNode, rel)
 	}
 }
 

@@ -174,6 +174,11 @@ func init() {
 		buildChildReqOrdering: limitOrOffsetBuildChildReqOrdering,
 		buildProvidedOrdering: limitOrOffsetBuildProvided,
 	}
+	funcMap[opt.TopKOp] = funcs{
+		canProvideOrdering:    TopKCanProvideOrdering,
+		buildChildReqOrdering: noChildReqOrdering,
+		buildProvidedOrdering: TopKBuildProvided,
+	}
 	funcMap[opt.ScalarGroupByOp] = funcs{
 		// ScalarGroupBy always has exactly one result; any required ordering should
 		// have been simplified to Any (unless normalization rules are disabled).
