@@ -1,438 +1,438 @@
 print-args-for-all
 ----
-1: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+1: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-2: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+2: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-2 --lifetime=12h0m0s
-3: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+3: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-2 --gce-zones=us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-4: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+4: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-5: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-a,us-central1-b,us-central1-c", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+5: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-a,us-central1-b,us-central1-c", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-16 --gce-zones=us-central1-a,us-central1-b,us-central1-c --geo --lifetime=12h0m0s
-6: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+6: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-32 --lifetime=12h0m0s
-7: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"offset-injector"}, FileSystem:0}
+7: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"offset-injector"}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-8: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:32, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+8: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:32, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-9: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"jepsen"}, FileSystem:0}
+9: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"jepsen"}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-10: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+10: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-32 --lifetime=12h0m0s
-11: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+11: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-96 --lifetime=12h0m0s
-12: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:16, SSDs:0, VolumeSize:2500, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+12: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:16, SSDs:0, VolumeSize:2500, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-16 --gce-pd-volume-size=2500 --lifetime=12h0m0s
-13: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+13: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --gce-zones=us-central1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-14: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+14: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
-15: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+15: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
-16: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:8, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+16: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:8, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-16 --gce-zones=europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b --geo --lifetime=12h0m0s
-17: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+17: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-18: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:33, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+18: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:33, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-19: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+19: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-20: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+20: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --gce-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-21: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+21: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-22: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+22: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
-23: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:11, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+23: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:11, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-24: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+24: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-1 --lifetime=12h0m0s
-25: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+25: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-32 --gce-local-ssd-count=2 --lifetime=12h0m0s
-26: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+26: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
-27: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+27: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-96 --lifetime=12h0m0s
-28: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+28: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --gce-local-ssd-count=1 --lifetime=12h0m0s
-29: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+29: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-30: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+30: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-31: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+31: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-32: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:13, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+32: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:13, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
-33: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+33: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-34: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+34: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-35: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:12, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+35: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:12, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --gce-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-36: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+36: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-37: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+37: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-16 --gce-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-38: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:21, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+38: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:21, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-39: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+39: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-40: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+40: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-41: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+41: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-42: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+42: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --gce-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-43: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyNone{}, FileSystem:0}
+43: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyNone{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-44: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+44: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.2xlarge --lifetime=12h0m0s
-45: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:21, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+45: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:21, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.2xlarge --lifetime=12h0m0s
-46: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+46: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-47: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyNone{}, FileSystem:0}
+47: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyNone{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-48: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+48: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-49: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+49: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.4xlarge --lifetime=12h0m0s
-50: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+50: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-51: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:8, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+51: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:8, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.4xlarge --aws-zones=europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b --geo --lifetime=12h0m0s
-52: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:33, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+52: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:33, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.2xlarge --lifetime=12h0m0s
-53: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+53: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --aws-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-54: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+54: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   specifying SSD count is not yet supported on aws
-55: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+55: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.4xlarge --lifetime=12h0m0s
-56: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+56: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.9xlarge --lifetime=12h0m0s
-57: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+57: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=m5d.24xlarge --lifetime=12h0m0s
-58: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+58: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-59: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+59: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.large --lifetime=12h0m0s
-60: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:11, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+60: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:11, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.2xlarge --lifetime=12h0m0s
-61: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+61: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.4xlarge --lifetime=12h0m0s
-62: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+62: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --aws-zones=us-central1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-63: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"offset-injector"}, FileSystem:0}
+63: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"offset-injector"}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-64: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+64: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.large --lifetime=12h0m0s
-65: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:32, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+65: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:32, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-66: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"jepsen"}, FileSystem:0}
+66: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"jepsen"}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-67: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+67: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.2xlarge --lifetime=12h0m0s
-68: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:13, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+68: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:13, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.4xlarge --lifetime=12h0m0s
-69: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+69: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.2xlarge --lifetime=12h0m0s
-70: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-a,us-central1-b,us-central1-c", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+70: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-a,us-central1-b,us-central1-c", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.4xlarge --aws-zones=us-central1-a,us-central1-b,us-central1-c --geo --lifetime=12h0m0s
-71: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+71: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-72: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+72: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-73: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+73: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-74: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+74: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-75: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+75: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=m5d.24xlarge --lifetime=12h0m0s
-76: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+76: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-77: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+77: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.large --aws-zones=us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-78: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+78: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.9xlarge --lifetime=12h0m0s
-79: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:12, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+79: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:12, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --aws-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-80: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:16, SSDs:0, VolumeSize:2500, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+80: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:16, SSDs:0, VolumeSize:2500, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   specifying volume size is not yet supported on aws
-81: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east-2b,us-west-1a,eu-west-1a", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+81: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east-2b,us-west-1a,eu-west-1a", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --aws-zones=us-east-2b,us-west-1a,eu-west-1a --geo --lifetime=12h0m0s
-82: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+82: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.xlarge --lifetime=12h0m0s
-83: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+83: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.4xlarge --lifetime=12h0m0s
-84: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east-2b,us-west-1a,eu-west-1a", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+84: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east-2b,us-west-1a,eu-west-1a", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.4xlarge --aws-zones=us-east-2b,us-west-1a,eu-west-1a --geo --lifetime=12h0m0s
-85: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+85: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=true --aws-machine-type-ssd=c5d.2xlarge --lifetime=12h0m0s
-86: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+86: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   specifying SSD count is not yet supported on aws
-87: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+87: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-88: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+88: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-2 --lifetime=12h0m0s
-89: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+89: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-2 --gce-zones=us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-90: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+90: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-91: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-central1-a,us-central1-b,us-central1-c", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+91: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-central1-a,us-central1-b,us-central1-c", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-16 --gce-zones=us-central1-a,us-central1-b,us-central1-c --geo --lifetime=12h0m0s
-92: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+92: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-32 --lifetime=12h0m0s
-93: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"offset-injector"}, FileSystem:0}
+93: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"offset-injector"}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-94: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:32, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+94: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:32, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-95: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"jepsen"}, FileSystem:0}
+95: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"jepsen"}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-96: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+96: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-32 --lifetime=12h0m0s
-97: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+97: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-96 --lifetime=12h0m0s
-98: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:16, SSDs:0, VolumeSize:2500, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+98: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:16, SSDs:0, VolumeSize:2500, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-16 --gce-pd-volume-size=2500 --lifetime=12h0m0s
-99: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-central1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+99: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-central1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --gce-zones=us-central1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-100: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+100: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
-101: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+101: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
-102: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:8, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+102: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:8, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-16 --gce-zones=europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b --geo --lifetime=12h0m0s
-103: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+103: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-104: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:33, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+104: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:33, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-105: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+105: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-106: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+106: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --gce-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-107: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+107: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-108: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+108: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
-109: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:11, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+109: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:11, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-110: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+110: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-1 --lifetime=12h0m0s
-111: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+111: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-32 --lifetime=12h0m0s
-112: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+112: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
-113: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+113: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-96 --lifetime=12h0m0s
-114: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+114: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-115: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+115: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-116: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+116: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-117: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+117: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:5, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-118: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:13, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+118: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:13, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-16 --lifetime=12h0m0s
-119: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+119: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:4, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-120: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+120: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-121: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:12, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+121: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:12, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --gce-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-122: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+122: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-123: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+123: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-highcpu-16 --gce-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-124: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:21, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+124: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:21, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-125: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+125: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:6, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-8 --lifetime=12h0m0s
-126: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+126: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:2, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-127: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+127: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-128: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+128: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --gce-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-129: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyNone{}, FileSystem:0}
+129: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyNone{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=false --gce-machine-type=n1-standard-4 --lifetime=12h0m0s
-130: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+130: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.2xlarge --lifetime=12h0m0s
-131: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:21, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+131: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:21, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.2xlarge --lifetime=12h0m0s
-132: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+132: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-133: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyNone{}, FileSystem:0}
+133: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyNone{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-134: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+134: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-135: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+135: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.4xlarge --lifetime=12h0m0s
-136: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+136: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-137: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:8, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+137: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:8, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.4xlarge --aws-zones=europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b --geo --lifetime=12h0m0s
-138: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:33, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+138: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:33, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.2xlarge --lifetime=12h0m0s
-139: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+139: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --aws-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-140: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+140: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.9xlarge --lifetime=12h0m0s
-141: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+141: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.4xlarge --lifetime=12h0m0s
-142: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+142: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.9xlarge --lifetime=12h0m0s
-143: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+143: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=m5d.24xlarge --lifetime=12h0m0s
-144: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+144: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-145: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+145: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.large --lifetime=12h0m0s
-146: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:11, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+146: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:11, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.2xlarge --lifetime=12h0m0s
-147: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+147: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.4xlarge --lifetime=12h0m0s
-148: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-central1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+148: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-central1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --aws-zones=us-central1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-149: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"offset-injector"}, FileSystem:0}
+149: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"offset-injector"}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-150: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+150: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.large --lifetime=12h0m0s
-151: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:32, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+151: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:32, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-152: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"jepsen"}, FileSystem:0}
+152: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"jepsen"}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-153: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+153: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.2xlarge --lifetime=12h0m0s
-154: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:13, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+154: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:13, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.4xlarge --lifetime=12h0m0s
-155: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+155: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.2xlarge --lifetime=12h0m0s
-156: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-central1-a,us-central1-b,us-central1-c", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+156: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-central1-a,us-central1-b,us-central1-c", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.4xlarge --aws-zones=us-central1-a,us-central1-b,us-central1-c --geo --lifetime=12h0m0s
-157: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+157: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-158: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+158: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:5, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-159: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+159: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-160: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+160: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-161: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+161: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=m5d.24xlarge --lifetime=12h0m0s
-162: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+162: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-163: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+163: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.large --aws-zones=us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-164: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+164: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.9xlarge --lifetime=12h0m0s
-165: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:12, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+165: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:12, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --aws-zones=us-east1-b,us-west1-b,europe-west2-b --geo --lifetime=12h0m0s
-166: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:16, SSDs:0, VolumeSize:2500, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+166: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:6, CPUs:16, SSDs:0, VolumeSize:2500, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   specifying volume size is not yet supported on aws
-167: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east-2b,us-west-1a,eu-west-1a", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+167: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east-2b,us-west-1a,eu-west-1a", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --aws-zones=us-east-2b,us-west-1a,eu-west-1a --geo --lifetime=12h0m0s
-168: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+168: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-169: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+169: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.4xlarge --lifetime=12h0m0s
-170: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east-2b,us-west-1a,eu-west-1a", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+170: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"us-east-2b,us-west-1a,eu-west-1a", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.4xlarge --aws-zones=us-east-2b,us-west-1a,eu-west-1a --geo --lifetime=12h0m0s
-171: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+171: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:9, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.2xlarge --lifetime=12h0m0s
-172: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+172: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:false, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --clouds=aws --local-ssd=false --aws-machine-type=c5d.xlarge --lifetime=12h0m0s
-173: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+173: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-174: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:3, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+174: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:3, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-175: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+175: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:2, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --geo --lifetime=12h0m0s
-176: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:9, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+176: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:9, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-177: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-a,us-central1-b,us-central1-c", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+177: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-a,us-central1-b,us-central1-c", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --geo --lifetime=12h0m0s
-178: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+178: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-179: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"offset-injector"}, FileSystem:0}
+179: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"offset-injector"}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-180: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:32, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+180: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:32, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-181: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"jepsen"}, FileSystem:0}
+181: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyTagged{Tag:"jepsen"}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-182: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:2, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+182: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:2, CPUs:32, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-183: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:5, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+183: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:5, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-184: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:16, SSDs:0, VolumeSize:2500, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+184: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:16, SSDs:0, VolumeSize:2500, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-185: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+185: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:9, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-central1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --geo --lifetime=12h0m0s
-186: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+186: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-187: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:1, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+187: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:1, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-188: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:8, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+188: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:8, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --geo --lifetime=12h0m0s
-189: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+189: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-190: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:33, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+190: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:33, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-191: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:7, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+191: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:7, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-192: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+192: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --geo --lifetime=12h0m0s
-193: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+193: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-194: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:5, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+194: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:5, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-195: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:11, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+195: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:11, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-196: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+196: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:9, CPUs:1, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-197: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+197: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:32, SSDs:2, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-198: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+198: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:10, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-199: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+199: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:96, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-200: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+200: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:4, SSDs:1, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-201: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+201: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:2, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-202: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+202: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:8, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-203: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:5, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+203: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:5, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-204: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:13, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+204: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:13, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-205: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+205: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:4, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-206: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+206: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:3, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-207: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:12, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+207: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:12, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --geo --lifetime=12h0m0s
-208: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+208: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-209: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+209: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --geo --lifetime=12h0m0s
-210: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:21, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+210: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:21, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-211: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+211: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:6, CPUs:8, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-212: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:2, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+212: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:2, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-213: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+213: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-214: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0}
+214: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:10, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"us-east1-b,us-west1-b,europe-west2-b", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --geo --lifetime=12h0m0s
-215: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyNone{}, FileSystem:0}
+215: spec.ClusterSpec{Cloud:"local", InstanceType:"", NodeCount:1, CPUs:4, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:false, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyNone{}, FileSystem:0, RandomlyUseZfs:false}
   --local-ssd=false --lifetime=12h0m0s
-216: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:1}
+216: spec.ClusterSpec{Cloud:"gce", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:1, RandomlyUseZfs:false}
   --clouds=gce --local-ssd=true --gce-machine-type=n1-highcpu-16 --filesystem=zfs --geo --lifetime=12h0m0s
-217: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:1}
+217: spec.ClusterSpec{Cloud:"aws", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:1, RandomlyUseZfs:false}
   node creation with zfs file system not yet supported on aws
-218: spec.ClusterSpec{Cloud:"azure", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:1}
+218: spec.ClusterSpec{Cloud:"azure", InstanceType:"", NodeCount:7, CPUs:16, SSDs:0, VolumeSize:0, PreferLocalSSD:true, Zones:"", Geo:true, Lifetime:43200000000000, ReusePolicy:spec.ReusePolicyAny{}, FileSystem:1, RandomlyUseZfs:false}
   node creation with zfs file system not yet supported on azure
