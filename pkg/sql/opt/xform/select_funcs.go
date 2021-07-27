@@ -913,19 +913,18 @@ func (c *CustomFuncs) canMaybeConstrainNonInvertedIndex(
 func (c *CustomFuncs) GenerateZigzagJoins(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
 ) {
-	tab := c.e.mem.Metadata().Table(scanPrivate.Table)
-
 	// Short circuit unless zigzag joins are explicitly enabled.
-	if !c.e.evalCtx.SessionData.ZigzagJoinEnabled {
+	if !c.e.evalCtx.SessionData.ZigzagJoinEnabled || scanPrivate.Flags.NoZigzagJoin {
 		return
 	}
 
 	fixedCols := memo.ExtractConstColumns(filters, c.e.evalCtx)
-
 	if fixedCols.Len() < 2 {
 		// Zigzagging requires at least 2 columns to have fixed values.
 		return
 	}
+
+	tab := c.e.mem.Metadata().Table(scanPrivate.Table)
 
 	// Zigzag joins aren't currently equipped to produce system columns, so
 	// don't generate any if some system columns are requested.
@@ -1271,7 +1270,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
 ) {
 	// Short circuit unless zigzag joins are explicitly enabled.
-	if !c.e.evalCtx.SessionData.ZigzagJoinEnabled {
+	if !c.e.evalCtx.SessionData.ZigzagJoinEnabled || scanPrivate.Flags.NoZigzagJoin {
 		return
 	}
 

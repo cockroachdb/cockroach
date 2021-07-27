@@ -510,6 +510,7 @@ func (b *Builder) buildScan(
 	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
 	if indexFlags != nil {
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
+		private.Flags.NoZigzagJoin = indexFlags.NoZigzagJoin
 		if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 			idx := -1
 			for i := 0; i < tab.IndexCount(); i++ {
