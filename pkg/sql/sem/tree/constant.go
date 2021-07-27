@@ -581,6 +581,7 @@ func (expr *StrVal) ResolveAsType(
 		}
 		if semaCtx != nil {
 			ptCtx.DateStyle = semaCtx.DateStyle
+			ptCtx.IntervalStyle = semaCtx.IntervalStyle
 		}
 		val, dependsOnContext, err := ParseAndRequireString(typ, expr.s, ptCtx)
 		if err != nil {

@@ -2399,6 +2399,7 @@ func (ex *connExecutor) resetPlanner(
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.TableNameResolver = p
 	p.semaCtx.DateStyle = ex.sessionData.GetDateStyle()
+	p.semaCtx.IntervalStyle = ex.sessionData.GetIntervalStyle()
 
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 
