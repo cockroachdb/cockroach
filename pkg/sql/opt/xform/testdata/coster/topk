@@ -1,0 +1,67 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, j INT, INDEX j(j))
+----
+
+opt
+SELECT * FROM a ORDER BY i LIMIT 10
+----
+top-k
+ ├── columns: k:1!null i:2 j:3
+ ├── ordering: +2
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 1171.35856
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +2
+ ├── scan a
+ │    ├── columns: k:1!null i:2 j:3
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1084.61
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── 10
+
+# TopK has a lower cost than using a min aggregate.
+opt
+SELECT min(j+1) FROM a
+----
+scalar-group-by
+ ├── columns: min:7
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── cost: 1077.73333
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── top-k
+ │    ├── columns: column6:6
+ │    ├── ordering: +6
+ │    ├── cardinality: [0 - 1]
+ │    ├── immutable
+ │    ├── stats: [rows=1]
+ │    ├── cost: 1077.69333
+ │    ├── key: ()
+ │    ├── fd: ()-->(6)
+ │    ├── project
+ │    │    ├── columns: column6:6
+ │    │    ├── immutable
+ │    │    ├── stats: [rows=333.333333]
+ │    │    ├── cost: 1071.00667
+ │    │    ├── select
+ │    │    │    ├── columns: j:3
+ │    │    │    ├── immutable
+ │    │    │    ├── stats: [rows=333.333333]
+ │    │    │    ├── cost: 1064.33
+ │    │    │    ├── scan a@j
+ │    │    │    │    ├── columns: j:3
+ │    │    │    │    ├── stats: [rows=1000]
+ │    │    │    │    └── cost: 1054.31
+ │    │    │    └── filters
+ │    │    │         └── (j:3 + 1) IS NOT NULL [outer=(3), immutable]
+ │    │    └── projections
+ │    │         └── j:3 + 1 [as=column6:6, outer=(3), immutable]
+ │    └── 1
+ └── aggregations
+      └── const-agg [as=min:7, outer=(6)]
+           └── column6:6
