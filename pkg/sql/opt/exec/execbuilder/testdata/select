@@ -1858,3 +1858,4 @@ vectorized: true
       estimated row count: 11,110,000 (100% of the table; stats collected <hidden> ago)
       table: nulls@primary
       spans: FULL SCAN
+

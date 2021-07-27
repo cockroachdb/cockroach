@@ -1,0 +1,23 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT)
+----
+
+opt
+SELECT * FROM a ORDER BY i LIMIT 10
+----
+top-k
+ ├── columns: k:1!null i:2
+ ├── ordering: +2
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 1151.55856
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: +2
+ ├── scan a
+ │    ├── columns: k:1!null i:2
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1064.81
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── 10
