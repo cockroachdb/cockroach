@@ -466,8 +466,10 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 	// Instead of inserting an empty settings array, this function will make
 	// sure the row is deleted instead.
 	upsertOrDeleteFunc := func(newSettings []string) error {
+		var rowsAffected int
+		var internalExecErr error
 		if newSettings == nil {
-			_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -476,11 +478,11 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				n.dbDescID,
 				roleName,
 			)
-			if err != nil {
-				return err
+			if internalExecErr != nil {
+				return internalExecErr
 			}
 		} else {
-			_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -490,11 +492,22 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				roleName,
 				newSettings,
 			)
-			if err != nil {
+			if internalExecErr != nil {
+				return internalExecErr
+			}
+		}
+		if rowsAffected > 0 && authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+			// Bump database_role_settings table versions to force a refresh of AuthInfo cache.
+			if err := params.p.bumpDatabaseRoleSettingsTableVersion(params.ctx); err != nil {
 				return err
 			}
 		}
-		return nil
+		return params.p.logEvent(params.ctx,
+			0, /* no target */
+			&eventpb.AlterRole{
+				RoleName: roleName.Normalized(),
+				Options:  []string{roleoption.DEFAULTSETTINGS.String()},
+			})
 	}
 
 	if n.setVarKind == resetAllVars {
@@ -521,16 +534,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 
 	newSetting := fmt.Sprintf("%s=%s", n.varName, strVal)
 	newSettings = append(newSettings, newSetting)
-	if err := upsertOrDeleteFunc(newSettings); err != nil {
-		return err
-	}
-
-	return params.p.logEvent(params.ctx,
-		0, /* no target */
-		&eventpb.AlterRole{
-			RoleName: roleName.Normalized(),
-			Options:  []string{roleoption.DEFAULTSETTINGS.String()},
-		})
+	return upsertOrDeleteFunc(newSettings)
 }
 
 // getRoleName resolves the roleName and performs additional validation
@@ -655,14 +659,7 @@ func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
 
 	// Validate the new string value, but don't actually apply it to any real
 	// session.
-	fakeSessionMutator := &sessionDataMutator{
-		data:               &sessiondata.SessionData{},
-		defaults:           SessionDefaults(map[string]string{}),
-		settings:           params.ExecCfg().Settings,
-		paramStatusUpdater: &noopParamStatusUpdater{},
-		setCurTxnReadOnly:  func(bool) {},
-	}
-	if err := n.sVar.Set(params.ctx, fakeSessionMutator, strVal); err != nil {
+	if err := CheckSessionVariableValueValid(params.ctx, params.ExecCfg().Settings, n.varName, strVal); err != nil {
 		return "", err
 	}
 	return strVal, nil
