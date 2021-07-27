@@ -1053,17 +1053,37 @@ func (b *logicalPropsBuilder) buildExportProps(export *ExportExpr, rel *props.Re
 	b.buildBasicProps(export, export.Columns, rel)
 }
 
+func (b *logicalPropsBuilder) buildTopKProps(topK *TopKExpr, rel *props.Relational) {
+	// TopK has the same logical properties as limit.
+	b.buildLimitOrTopKProps(topK, rel, int64(topK.K), true /* haveConstLimit */)
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildTopK(topK, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
-	BuildSharedProps(limit, &rel.Shared, b.evalCtx)
-
-	inputProps := limit.Input.Relational()
-
 	haveConstLimit := false
 	constLimit := int64(math.MaxUint32)
 	if cnst, ok := limit.Limit.(*ConstExpr); ok {
 		haveConstLimit = true
 		constLimit = int64(*cnst.Value.(*tree.DInt))
 	}
+	b.buildLimitOrTopKProps(limit, rel, constLimit, haveConstLimit)
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildLimit(limit, rel)
+	}
+}
+
+func (b *logicalPropsBuilder) buildLimitOrTopKProps(limitNode RelExpr, rel *props.Relational, constLimit int64, haveConstLimit bool) {
+	BuildSharedProps(limitNode, &rel.Shared, b.evalCtx)
+
+	inputProps := limitNode.Child(0).(RelExpr).Relational()
 
 	// Side Effects
 	// ------------
@@ -1103,12 +1123,6 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 		rel.Cardinality = props.ZeroCardinality
 	} else if constLimit < math.MaxUint32 {
 		rel.Cardinality = rel.Cardinality.Limit(uint32(constLimit))
-	}
-
-	// Statistics
-	// ----------
-	if !b.disableStats {
-		b.sb.buildLimit(limit, rel)
 	}
 }
 
