@@ -933,15 +933,12 @@ func (r *testRunner) maybePostGithubIssue(
 		Message:         msg,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
-		ReproductionCommand: fmt.Sprintf(
-			`## Simple repro (linux-only):
-  $ make cockroachshort bin/worklaod bin/roachprod bin/roachtest
-  $ PATH=$PWD/bin:$PATH roachtest run %[1]s --local
-
-## Proper repro probably needs more roachtest flags, or running
-## the programs remotely on GCE. For more details, refer to
-## pkg/cmd/roachtest/README.md.
-`, t.Name()),
+		ReproductionCommand: func(r *issues.Renderer) {
+			r.P(func() {
+				r.Escaped("See the corresponding section in the ")
+				r.A("roachtest README", "https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/roachtest")
+			})
+		},
 	}
 	if err := issues.Post(
 		context.Background(),
