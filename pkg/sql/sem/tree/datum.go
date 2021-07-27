@@ -1790,6 +1790,7 @@ func NewParseTimeContext(relativeParseTime time.Time) ParseTimeContext {
 type simpleParseTimeContext struct {
 	RelativeParseTime time.Time
 	DateStyle         pgdate.DateStyle
+	IntervalStyle     duration.IntervalStyle
 }
 
 // GetRelativeParseTime implements ParseTimeContext.
@@ -1799,7 +1800,7 @@ func (ctx simpleParseTimeContext) GetRelativeParseTime() time.Time {
 
 // GetIntervalStyle implements ParseTimeContext.
 func (ctx simpleParseTimeContext) GetIntervalStyle() duration.IntervalStyle {
-	return duration.IntervalStyle_POSTGRES
+	return ctx.IntervalStyle
 }
 
 // GetDateStyle implements ParseTimeContext.
@@ -1821,6 +1822,13 @@ func dateStyle(ctx ParseTimeContext) pgdate.DateStyle {
 		return pgdate.DefaultDateStyle()
 	}
 	return ctx.GetDateStyle()
+}
+
+func intervalStyle(ctx ParseTimeContext) duration.IntervalStyle {
+	if ctx == nil {
+		return duration.IntervalStyle_POSTGRES
+	}
+	return ctx.GetIntervalStyle()
 }
 
 // ParseDDate parses and returns the *DDate Datum value represented by the provided
