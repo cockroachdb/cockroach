@@ -287,8 +287,10 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	numFDs := colexecop.ExternalSorterMinPartitions + rng.Intn(3)
 	// The memory limit in the external sorter is divided as follows:
 	// - BufferSizeBytes for each of the disk queues is subtracted right away
-	// - the remaining part is divided evenly between the sorter and the merger.
-	memoryLimit := 2*colmem.GetBatchMemSize(batch)*int64(numInMemoryBufferedBatches) + int64(queueCfg.BufferSizeBytes*numFDs)
+	// - the remaining part is divided evenly between the sorter and the merger
+	// - the sorter gives 80% of its half to the buffer.
+	bufferMemoryLimit := colmem.GetBatchMemSize(batch) * int64(numInMemoryBufferedBatches)
+	memoryLimit := int64(queueCfg.BufferSizeBytes*numFDs) + int64(float64(bufferMemoryLimit)/0.8*2)
 	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 	input := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, numTotalBatches)
 
@@ -352,8 +354,8 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	// (the monitor for the in-memory sorter reports slightly below and the
 	// monitors for the external sorter report slightly above memoryLimit
 	// usage).
-	expMin := memoryLimit * 3 / 2
-	expMax := memoryLimit * 5 / 2
+	expMin := memoryLimit * 5 / 4
+	expMax := memoryLimit * 9 / 4
 	require.GreaterOrEqualf(t, totalMaxMemUsage, expMin, "minimum memory bound not satisfied: "+
 		"actual %d, expected min %d", totalMaxMemUsage, expMin)
 	require.GreaterOrEqualf(t, expMax, totalMaxMemUsage, "maximum memory bound not satisfied: "+

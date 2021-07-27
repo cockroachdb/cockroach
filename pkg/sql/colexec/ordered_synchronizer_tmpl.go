@@ -214,7 +214,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 func (o *OrderedSynchronizer) resetOutput() {
 	var reallocated bool
 	o.output, reallocated = o.allocator.ResetMaybeReallocate(
-		o.typs, o.output, 1 /* minCapacity */, o.memoryLimit,
+		o.typs, o.output, 1 /* minDesiredCapacity */, o.memoryLimit,
 	)
 	if reallocated {
 		// {{range .}}
