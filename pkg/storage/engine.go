@@ -409,11 +409,11 @@ type Reader interface {
 	// This function looks at MVCC versions and intents, and returns an error if an
 	// intent is found.
 	ExportMVCCToSst(
-		ctx context.Context, startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
-		exportAllRevisions bool, targetSize uint64, maxSize uint64, useTBI bool,
+		ctx context.Context, startKey, endKey roachpb.Key, startTS, endTS, firstKeyTs hlc.Timestamp,
+		exportAllRevisions bool, targetSize uint64, maxSize uint64, stopMidKey bool, useTBI bool,
 		dest io.Writer,
-	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
-	// Get returns the value for the given key, nil otherwise. Semantically, it
+	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, resumeTs hlc.Timestamp, _ error)
+	// MVCCGet returns the value for the given key, nil otherwise. Semantically, it
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
 	//
 	// Deprecated: use storage.MVCCGet instead.
