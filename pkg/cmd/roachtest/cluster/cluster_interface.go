@@ -66,9 +66,6 @@ type Cluster interface {
 
 	InternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error)
 	ExternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error)
-	ExternalPGUrlSecure(
-		ctx context.Context, node option.NodeListOption, user string, certsDir string, port int,
-	) ([]string, error)
 
 	// SQL clients to nodes.
 
