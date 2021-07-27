@@ -195,6 +195,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.StatementStatisticsTableID, systemschema.StatementStatisticsTableSchema, systemschema.StatementStatisticsTable},
 		{keys.TransactionStatisticsTableID, systemschema.TransactionStatisticsTableSchema, systemschema.TransactionStatisticsTable},
 		{keys.DatabaseRoleSettingsTableID, systemschema.DatabaseRoleSettingsTableSchema, systemschema.DatabaseRoleSettingsTable},
+		{keys.TenantUsageTableID, systemschema.TenantUsageTableSchema, systemschema.TenantUsageTable},
 	} {
 		privs := *test.pkg.GetPrivileges()
 		gen, err := sql.CreateTestTableDescriptor(
@@ -210,6 +211,8 @@ func TestSystemTableLiterals(t *testing.T) {
 		require.NoError(t, catalog.ValidateSelf(gen))
 
 		if !test.pkg.TableDesc().Equal(gen.TableDesc()) {
+			t.Errorf("\n%#v\n", test.pkg.TableDesc())
+			t.Errorf("\n%#v\n", gen.TableDesc())
 			diff := strings.Join(pretty.Diff(test.pkg.TableDesc(), gen.TableDesc()), "\n")
 			t.Errorf("%s table descriptor generated from CREATE TABLE statement does not match "+
 				"hardcoded table descriptor:\n%s", test.pkg.GetName(), diff)

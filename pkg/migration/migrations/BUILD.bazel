@@ -11,6 +11,7 @@ go_library(
         "migrations.go",
         "protected_ts_meta_migration.go",
         "sql_stats.go",
+        "tenant_usage.go",
         "truncated_state.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrations",
