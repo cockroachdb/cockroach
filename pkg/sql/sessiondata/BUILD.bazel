@@ -14,6 +14,7 @@ go_library(
     deps = [
         "//pkg/security",
         "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
