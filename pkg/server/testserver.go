@@ -1162,10 +1162,12 @@ func (ts *TestServer) GetRangeLease(
 		ctx,
 		ts.DB().NonTransactionalSender(),
 		roachpb.Header{
-			// INCONSISTENT read, since we want to make sure that the node used to
-			// send this is the one that processes the command, for the hint to
+			// INCONSISTENT read with a NEAREST routing policy, since we want to make
+			// sure that the node used to send this is the one that processes the
+			// command, regardless of whether it is the leaseholder, for the hint to
 			// matter.
 			ReadConsistency: roachpb.INCONSISTENT,
+			RoutingPolicy:   roachpb.RoutingPolicy_NEAREST,
 		},
 		&leaseReq,
 	)

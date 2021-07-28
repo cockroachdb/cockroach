@@ -528,9 +528,9 @@ func TestDB_QueryResolvedTimestamp(t *testing.T) {
 	err := db.Put(context.Background(), "a", "val")
 	require.NoError(t, err)
 
-	// One node cluster, so "local" should not make a difference. Test both.
-	testutils.RunTrueAndFalse(t, "local", func(t *testing.T, local bool) {
-		resTS, err := db.QueryResolvedTimestamp(context.Background(), "a", "c", local)
+	// One node cluster, so "nearest" should not make a difference. Test both.
+	testutils.RunTrueAndFalse(t, "nearest", func(t *testing.T, nearest bool) {
+		resTS, err := db.QueryResolvedTimestamp(context.Background(), "a", "c", nearest)
 		require.NoError(t, err)
 		require.NotEmpty(t, resTS)
 	})

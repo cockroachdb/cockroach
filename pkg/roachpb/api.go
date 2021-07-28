@@ -51,22 +51,6 @@ const (
 	MaxUserPriority UserPriority = 1000
 )
 
-// RequiresReadLease returns whether the ReadConsistencyType requires
-// that a read-only request be performed on an active valid leaseholder.
-// TODO(aayush): Rename the method since we no longer require a replica to be a
-// leaseholder to serve a consistent read.
-func (rc ReadConsistencyType) RequiresReadLease() bool {
-	switch rc {
-	case CONSISTENT:
-		return true
-	case READ_UNCOMMITTED:
-		return true
-	case INCONSISTENT:
-		return false
-	}
-	panic("unreachable")
-}
-
 // SupportsBatch determines whether the methods in the provided batch
 // are supported by the ReadConsistencyType, returning an error if not.
 func (rc ReadConsistencyType) SupportsBatch(ba BatchRequest) error {
