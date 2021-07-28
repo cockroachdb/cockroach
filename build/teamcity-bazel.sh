@@ -15,6 +15,7 @@ set +e
 
 tc_start_block "Ensure generated files match"
 FAILED=
+# Ensure all generated docs are byte-for-byte identical with the checkout.
 for FILE in $(find $root/artifacts/bazel-bin/docs -type f)
 do
     RESULT=$(diff $FILE $root/${FILE##$root/artifacts/bazel-bin/})
@@ -25,6 +26,26 @@ do
         FAILED=1
     fi
 done
+# Ensure the generated docs are inclusive of what we have in tree: list all
+# generated files in a few subdirectories and make sure they're all in the
+# build output.
+for FILE in $(ls $root/docs/generated/sql/*.md | xargs -n1 basename)
+do
+    if [[ ! -f $root/artifacts/bazel-bin/docs/generated/sql/$FILE ]]
+    then
+        echo "File $root/artifacts/bazel-bin/docs/generated/sql/$FILE does not exist as a generated artifact. Is docs/generated/sql/BUILD.bazel up-to-date?"
+        FAILED=1
+    fi
+done
+for FILE in $(ls $root/docs/generated/sql/bnf/*.bnf | xargs -n1 basename)
+do
+    if [[ ! -f $root/artifacts/bazel-bin/docs/generated/sql/bnf/$FILE ]]
+    then
+        echo "File $root/artifacts/bazel-bin/docs/generated/sql/bnf/$FILE does not exist as a generated artifact. Is docs/generated/sql/bnf/BUILD.bazel up-to-date?"
+        FAILED=1
+    fi
+done
+
 if [[ ! -z "$FAILED" ]]
 then
     echo 'Generated files do not match! Are the checked-in generated files up-to-date?'
