@@ -735,6 +735,126 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 func TestNonBlockingReadsAtResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	testNonBlockingReadsWithReaderFn(t, func(
+		store *kvserver.Store, rangeID roachpb.RangeID, keySpan roachpb.Span,
+	) func(context.Context) error {
+		// The reader queries the resolved timestamp and then reads at that time.
+		var lastResTS hlc.Timestamp
+		return func(ctx context.Context) error {
+			// Query the key span's resolved timestamp.
+			queryResTS := roachpb.QueryResolvedTimestampRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+			}
+			queryResTSHeader := roachpb.Header{
+				RangeID:         rangeID,
+				ReadConsistency: roachpb.INCONSISTENT,
+			}
+			resp, pErr := kv.SendWrappedWith(ctx, store, queryResTSHeader, &queryResTS)
+			if pErr != nil {
+				return pErr.GoError()
+			}
+
+			// Validate that the resolved timestamp increases monotonically.
+			resTS := resp.(*roachpb.QueryResolvedTimestampResponse).ResolvedTS
+			if resTS.IsEmpty() {
+				return errors.Errorf("empty resolved timestamp")
+			}
+			if resTS.Less(lastResTS) {
+				return errors.Errorf("resolved timestamp regression: %s -> %s", lastResTS, resTS)
+			}
+			lastResTS = resTS
+
+			// Issue a transactional scan over the keys at the resolved timestamp on
+			// the same store. Use an error wait policy so that we'll hear an error
+			// (WriteIntentError) under conditions that would otherwise cause us to
+			// block on an intent. Send to a specific store instead of through a
+			// DistSender so that we'll hear an error (NotLeaseholderError) if the
+			// request would otherwise be redirected to the leaseholder.
+			scan := roachpb.ScanRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+			}
+			txn := roachpb.MakeTransaction("test", keySpan.Key, 0, resTS, 0)
+			scanHeader := roachpb.Header{
+				RangeID:         rangeID,
+				ReadConsistency: roachpb.CONSISTENT,
+				Txn:             &txn,
+				WaitPolicy:      lock.WaitPolicy_Error,
+			}
+			_, pErr = kv.SendWrappedWith(ctx, store, scanHeader, &scan)
+			return pErr.GoError()
+		}
+	})
+}
+
+// TestNonBlockingReadsWithServerSideBoundedStalenessNegotiation tests that
+// bounded staleness reads that hit the server-side negotiation fast-path (i.e.
+// those that negotiate and execute in a single RPC) never block on conflicting
+// intents or redirect to the leaseholder if run on follower replicas. For
+// details, see (*Store).executeServerSideBoundedStalenessNegotiation.
+//
+// The test is a higher-level version of TestNonBlockingReadsAtResolvedTimestamp
+// that exercises the server-side negotiation fast-path.
+func TestNonBlockingReadsWithServerSideBoundedStalenessNegotiation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testNonBlockingReadsWithReaderFn(t, func(
+		store *kvserver.Store, rangeID roachpb.RangeID, keySpan roachpb.Span,
+	) func(context.Context) error {
+		// The reader performs bounded-staleness reads that hit the server-side
+		// negotiation fast-path.
+		minTSBound := hlc.MinTimestamp
+		var lastTS hlc.Timestamp
+		return func(ctx context.Context) error {
+			// Issue a bounded-staleness read (a read with a MinTimestampBound)
+			// over the keys. Use an error wait policy so that we'll hear an error
+			// (WriteIntentError) under conditions that would otherwise cause us
+			// to block on an intent. Send to a specific store instead of through
+			// a DistSender so that we'll hear an error (NotLeaseholderError) if
+			// the request would otherwise be redirected to the leaseholder.
+			var ba roachpb.BatchRequest
+			ba.RangeID = rangeID
+			ba.MinTimestampBound = minTSBound
+			ba.WaitPolicy = lock.WaitPolicy_Error
+			ba.Add(&roachpb.ScanRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+			})
+			br, pErr := store.Send(ctx, ba)
+			if pErr != nil {
+				return pErr.GoError()
+			}
+
+			// Validate that the bounded staleness timestamp increases monotonically
+			// across attempts, since we're issuing bounded staleness reads to the
+			// same replica.
+			reqTS := br.Timestamp
+			if reqTS.IsEmpty() {
+				return errors.Errorf("empty bounded staleness timestamp")
+			}
+			if reqTS.Less(lastTS) {
+				return errors.Errorf("bounded staleness timestamp regression: %s -> %s", lastTS, reqTS)
+			}
+			lastTS = reqTS
+
+			// Forward the minimum timestamp bound for the next request. Once a
+			// bounded staleness read has been served at a timestamp, future reads
+			// should be able to be served at the same timestamp (or later) as long
+			// as they are routed to the same replica.
+			minTSBound = lastTS
+			return nil
+		}
+	})
+}
+
+// testNonBlockingReadsWithReaderFn is shared between the preceding two tests.
+// It sets up a three node cluster, launches a collection of writers writing to
+// a set of keys, and uses the provided readerFnFactory to create a reader per
+// node. The reader is invoked repeatedly.
+func testNonBlockingReadsWithReaderFn(
+	t *testing.T,
+	readerFnFactory func(*kvserver.Store, roachpb.RangeID, roachpb.Span) func(context.Context) error,
+) {
 	const testTime = 3 * time.Second
 	ctx := context.Background()
 
@@ -790,58 +910,16 @@ func TestNonBlockingReadsAtResolvedTimestamp(t *testing.T) {
 		})
 	}
 
-	// Reader goroutines: query resolved timestamp and read at that time.
+	// Reader goroutines: run one reader per store.
 	for _, s := range tc.Servers {
 		store, err := s.Stores().GetStore(s.GetFirstStoreID())
 		require.NoError(t, err)
 		g.Go(func() error {
-			var lastResTS hlc.Timestamp
+			readerFn := readerFnFactory(store, scratchRange.RangeID, keySpan)
 			for ; atomic.LoadInt32(&done) == 0; sleep() {
-				// Query the key span's resolved timestamp.
-				queryResTS := roachpb.QueryResolvedTimestampRequest{
-					RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+				if err := readerFn(ctx); err != nil {
+					return err
 				}
-				queryResTSHeader := roachpb.Header{
-					RangeID:         scratchRange.RangeID,
-					ReadConsistency: roachpb.INCONSISTENT,
-				}
-				resp, pErr := kv.SendWrappedWith(ctx, store, queryResTSHeader, &queryResTS)
-				if pErr != nil {
-					return pErr.GoError()
-				}
-
-				// Validate that the resolved timestamp increases monotonically.
-				resTS := resp.(*roachpb.QueryResolvedTimestampResponse).ResolvedTS
-				if resTS.Less(lastResTS) {
-					return errors.Errorf("resolved timestamp regression: %s -> %s", lastResTS, resTS)
-				}
-				lastResTS = resTS
-
-				// Issue a transactional scan over the keys at the resolved timestamp on
-				// the same store. Use an error wait policy so that we'll hear an error
-				// (WriteIntentError) under conditions that would otherwise cause us to
-				// block on an intent. Send to a specific store instead of through a
-				// DistSender so that we'll hear an error (NotLeaseholderError) if the
-				// request would otherwise be redirected to the leaseholder.
-				scan := roachpb.ScanRequest{
-					RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
-				}
-				txn := roachpb.MakeTransaction("test", scratchKey, 0, resTS, 0)
-				scanHeader := roachpb.Header{
-					RangeID:         scratchRange.RangeID,
-					ReadConsistency: roachpb.CONSISTENT,
-					Txn:             &txn,
-					WaitPolicy:      lock.WaitPolicy_Error,
-				}
-				_, pErr = kv.SendWrappedWith(ctx, store, scanHeader, &scan)
-				if pErr != nil {
-					return pErr.GoError()
-				}
-			}
-
-			// Confirm that the resolved timestamp was not stuck at 0 for the entire time.
-			if lastResTS.IsEmpty() {
-				return errors.Errorf("resolved timestamp never progressed: %s", lastResTS)
 			}
 			return nil
 		})
