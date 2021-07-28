@@ -160,3 +160,9 @@ var CreateUnloggedTableCounter = telemetry.GetCounterOnce("sql.schema.create_unl
 // SchemaRefreshMaterializedView is to be incremented every time a materialized
 // view is refreshed.
 var SchemaRefreshMaterializedView = telemetry.GetCounterOnce("sql.schema.refresh_materialized_view")
+
+// SchemaChangeErrorCounter is to be incremented for different types
+// of errors.
+func SchemaChangeErrorCounter(typ string) telemetry.Counter {
+	return telemetry.GetCounter(fmt.Sprintf("sql.schema_changer.errors.%s", typ))
+}
