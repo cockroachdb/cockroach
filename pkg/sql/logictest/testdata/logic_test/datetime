@@ -1908,3 +1908,34 @@ ORDER BY pk
 ----
 2012-07-09 11:30:45.123 +0000 +0000  2012-07-09 11:30:45.123 +0000 +0000  2012-09-07 11:30:45.123 +0000 +0000  2007-09-12 11:30:45.123 +0000 +0000
 2012-07-09 00:00:00 +0000 +0000      2012-07-09 00:00:00 +0000 +0000      2012-09-07 00:00:00 +0000 +0000      2007-09-12 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT parse_date('01-02-2020 01:02:03', 'postgres')
+
+query error parse_date\(\): relative dates are not supported
+SELECT parse_date('now')
+
+query error parse_date\(\): relative dates are not supported
+SELECT parse_date('tomorrow', 'iso,mdy')
+
+query TTTT
+SELECT
+  parse_date(s),
+  parse_date(s, 'iso,mdy'),
+  parse_date(s, 'iso,dmy'),
+  parse_date(s, 'iso,ymd')
+FROM timestamp_datestyle_parse
+ORDER BY pk
+----
+2012-07-09 00:00:00 +0000 +0000  2012-07-09 00:00:00 +0000 +0000  2012-09-07 00:00:00 +0000 +0000  2007-09-12 00:00:00 +0000 +0000
+2012-07-09 00:00:00 +0000 +0000  2012-07-09 00:00:00 +0000 +0000  2012-09-07 00:00:00 +0000 +0000  2007-09-12 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT to_char_with_style(now()::date, 'postgres')
+
+query TT
+SELECT
+  to_char('2020-01-02 01:02:03'::date),
+  to_char_with_style('2020-01-02 01:02:03'::date, 'DMY')
+----
+2020-01-02  2020-01-02
