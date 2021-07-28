@@ -2370,6 +2370,16 @@ var builtins = map[string]builtinDefinition{
 			Info:       "Convert an timestamp to a string assuming the ISO, MDY DateStyle.",
 			Volatility: tree.VolatilityImmutable,
 		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"date", types.Date}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDDate(args[0])
+				return tree.NewDString(tree.AsStringWithFlags(&ts, tree.FmtBareStrings)), nil
+			},
+			Info:       "Convert an date to a string assuming the ISO, MDY DateStyle.",
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 
 	"to_char_with_style": makeBuiltin(
@@ -2411,6 +2421,24 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(tree.AsStringWithFlags(&ts, tree.FmtBareStrings)), nil
 			},
 			Info:       "Convert an timestamp to a string assuming the string is formatted using the given DateStyle.",
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"date", types.Date}, {"datestyle", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDDate(args[0])
+				dateStyleStr := string(tree.MustBeDString(args[1]))
+				ds, err := pgdate.ParseDateStyle(dateStyleStr, pgdate.DefaultDateStyle())
+				if err != nil {
+					return nil, err
+				}
+				if ds.Style != pgdate.Style_ISO {
+					return nil, unimplemented.NewWithIssue(41773, "only ISO style is supported")
+				}
+				return tree.NewDString(tree.AsStringWithFlags(&ts, tree.FmtBareStrings)), nil
+			},
+			Info:       "Convert an date to a string assuming the string is formatted using the given DateStyle.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
@@ -3097,6 +3125,56 @@ may increase either contention or retry errors, or both.`,
 				return ts, nil
 			},
 			Info:       "Convert a string containing an absolute timestamp to the corresponding timestamp assuming dates formatted using the given DateStyle.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"parse_date": makeBuiltin(
+		defProps(),
+		stringOverload1(
+			func(ctx *tree.EvalContext, s string) (tree.Datum, error) {
+				ts, dependsOnContext, err := tree.ParseDDate(
+					tree.NewParseTimeContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
+					s,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if dependsOnContext {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"relative dates are not supported",
+					)
+				}
+				return ts, nil
+			},
+			types.Date,
+			"Parses a date assuming it is in MDY format.",
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"string", types.String}, {"datestyle", types.String}},
+			ReturnType: tree.FixedReturnType(types.Date),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arg := string(tree.MustBeDString(args[0]))
+				dateStyle := string(tree.MustBeDString(args[1]))
+				parseCtx, err := parseContextFromDateStyle(ctx, dateStyle)
+				if err != nil {
+					return nil, err
+				}
+				ts, dependsOnContext, err := tree.ParseDDate(parseCtx, arg)
+				if err != nil {
+					return nil, err
+				}
+				if dependsOnContext {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"relative dates are not supported",
+					)
+				}
+				return ts, nil
+			},
+			Info:       "Parses a date assuming it is in format specified by DateStyle.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
