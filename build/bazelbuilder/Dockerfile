@@ -10,6 +10,7 @@ RUN apt-get update \
     cmake \
     curl \
     flex \
+    g++ \
     git \
     gnupg2 \
     libncurses-dev \
@@ -32,14 +33,9 @@ RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-
  && tar --strip-components=1 -C /usr -xzf cmake.tar.gz \
  && rm cmake.tar.gz
 
-RUN echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list \
- && curl https://bazel.build/bazel-release.pub.gpg | apt-key add - \
- && apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    bazel-4.0.0
-
 # git - Upgrade to a more modern version
-RUN DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
     curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
     unzip "git-2.29.2.zip" && \
     cd git-2.29.2 && \
@@ -56,9 +52,15 @@ RUN apt-get purge -y \
     gettext \
  && apt-get autoremove -y
 
-RUN rm -rf /tmp/* /var/lib/apt/lists/*
+# Install Bazelisk as Bazel.
+# NOTE: you should keep this in sync with build/packer/teamcity-agent.sh -- if
+# an update is necessary here, it's probably necessary in the agent as well.
+RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/bazelisk-linux-amd64 > /tmp/bazelisk \
+ && echo '4cb534c52cdd47a6223d4596d530e7c9c785438ab3b0a49ff347e991c210b2cd /tmp/bazelisk' | sha256sum -c - \
+ && chmod +x /tmp/bazelisk \
+ && mv /tmp/bazelisk /usr/bin/bazel
 
-RUN ln -s /usr/bin/bazel-4.0.0 /usr/bin/bazel
+RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
 COPY entrypoint.sh /usr/bin
 COPY autom4te /usr/local/sbin
