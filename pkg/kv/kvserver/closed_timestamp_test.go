@@ -537,27 +537,39 @@ func TestClosedTimestampCantServeForNonTransactionalBatch(t *testing.T) {
 	// drives up the test duration.
 	skip.UnderRace(t)
 
-	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
-	defer tc.Stopper().Stop(ctx)
-	repls := replsForRange(ctx, t, tc, desc, numNodes)
+	testutils.RunTrueAndFalse(t, "tsFromServer", func(t *testing.T, tsFromServer bool) {
+		ctx := context.Background()
+		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
+			testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+		defer tc.Stopper().Stop(ctx)
+		repls := replsForRange(ctx, t, tc, desc, numNodes)
 
-	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
-		t.Fatal(err)
-	}
+		if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
+			t.Fatal(err)
+		}
 
-	// Verify that we can serve a follower read at a timestamp with a
-	// transactional batch. Wait if necessary.
-	ts := tc.Server(0).Clock().Now()
-	baRead := makeTxnReadBatchForDesc(desc, ts)
-	testutils.SucceedsSoon(t, func() error {
-		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
+		// Verify that we can serve a follower read at a timestamp with a
+		// transactional batch. Wait if necessary.
+		ts := tc.Server(0).Clock().Now()
+		baRead := makeTxnReadBatchForDesc(desc, ts)
+		testutils.SucceedsSoon(t, func() error {
+			return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
+		})
+
+		// Remove the transaction and send the request to all three replicas. If the
+		// batch indicates that the timestamp was set from the server's clock, then
+		// one should succeed and the other two should return NotLeaseHolderErrors.
+		// Otherwise, all three should succeed.
+		baRead.Txn = nil
+		if tsFromServer {
+			baRead.TimestampFromServerClock = true
+			verifyNotLeaseHolderErrors(t, baRead, repls, 2)
+		} else {
+			testutils.SucceedsSoon(t, func() error {
+				return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
+			})
+		}
 	})
-
-	// Remove the transaction and send the request to all three replicas. One
-	// should succeed and the other two should return NotLeaseHolderErrors.
-	baRead.Txn = nil
-	verifyNotLeaseHolderErrors(t, baRead, repls, 2)
 }
 
 // Test that, during a merge, the closed timestamp of the subsumed RHS doesn't
