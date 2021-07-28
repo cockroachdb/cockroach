@@ -426,6 +426,15 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 				}
 
 				return sip.flush()
+			case streamingccl.GenerationEvent:
+				log.Info(sip.Ctx, "GenerationEvent received")
+				select {
+				case <-sip.cutoverCh:
+					sip.internalDrained = true
+					return nil, nil
+				case <-sip.Ctx.Done():
+					return nil, sip.Ctx.Err()
+				}
 			default:
 				return nil, errors.Newf("unknown streaming event type %v", event.Type())
 			}
