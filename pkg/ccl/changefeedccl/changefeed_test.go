@@ -2775,6 +2775,16 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='row'`,
 		`webhook-https://fake-host`,
 	)
+
+	// Sanity check on_error option
+	sqlDB.ExpectErr(
+		t, `option "on_error" requires a value`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH on_error`,
+		`kafka://nope`)
+	sqlDB.ExpectErr(
+		t, `unknown on_error: not_valid`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
+		`kafka://nope`)
 }
 
 func TestChangefeedDescription(t *testing.T) {
@@ -4226,5 +4236,111 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 
 	// only used for webhook sink for now since it's the only testfeed where
 	// we can control the ordering of errors
+	t.Run(`webhook`, webhookTest(testFn))
+}
+
+func TestChangefeedOnErrorOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		t.Run(`pause on error`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+			knobs := f.Server().TestingKnobs().
+				DistSQL.(*execinfra.TestingKnobs).
+				Changefeed.(*TestingKnobs)
+			knobs.BeforeEmitRow = func(_ context.Context) error {
+				return errors.Errorf("should fail with custom error")
+			}
+
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH on_error='pause'`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
+
+			feedJob := foo.(cdctest.EnterpriseTestFeed)
+
+			// check for paused status on failure
+			err := feedJob.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusPaused })
+			if err != nil {
+				t.Fatal(err)
+			}
+			knobs.BeforeEmitRow = nil
+
+			err = feedJob.Resume()
+			if err != nil {
+				t.Fatal(err)
+			}
+			// changefeed should continue to work after it has been resumed
+			assertPayloads(t, foo, []string{
+				`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			})
+
+			closeFeed(t, foo)
+			// cancellation should still go through if option is in place
+			// to avoid race condition, check only that the job is progressing to be
+			// canceled (we don't know what stage it will be in)
+			err = feedJob.WaitForStatus(func(s jobs.Status) bool {
+				return s == jobs.StatusCancelRequested ||
+					s == jobs.StatusReverting ||
+					s == jobs.StatusCanceled
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run(`fail on error`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+
+			knobs := f.Server().TestingKnobs().
+				DistSQL.(*execinfra.TestingKnobs).
+				Changefeed.(*TestingKnobs)
+			knobs.BeforeEmitRow = func(_ context.Context) error {
+				return errors.Errorf("should fail with custom error")
+			}
+
+			foo := feed(t, f, `CREATE CHANGEFEED FOR bar WITH on_error = 'fail'`)
+			sqlDB.Exec(t, `INSERT INTO bar VALUES (1, 'a')`)
+			defer closeFeed(t, foo)
+
+			feedJob := foo.(cdctest.EnterpriseTestFeed)
+
+			err := feedJob.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusFailed })
+			if err != nil {
+				t.Fatal(err)
+			}
+			require.EqualError(t, feedJob.FetchTerminalJobErr(), "should fail with custom error")
+		})
+
+		t.Run(`default`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE quux (a INT PRIMARY KEY, b STRING)`)
+
+			knobs := f.Server().TestingKnobs().
+				DistSQL.(*execinfra.TestingKnobs).
+				Changefeed.(*TestingKnobs)
+			knobs.BeforeEmitRow = func(_ context.Context) error {
+				return errors.Errorf("should fail with custom error")
+			}
+
+			foo := feed(t, f, `CREATE CHANGEFEED FOR quux`)
+			sqlDB.Exec(t, `INSERT INTO quux VALUES (1, 'a')`)
+			defer closeFeed(t, foo)
+
+			feedJob := foo.(cdctest.EnterpriseTestFeed)
+
+			// if no option is provided, fail should be the default behavior
+			err := feedJob.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusFailed })
+			if err != nil {
+				t.Fatal(err)
+			}
+			require.EqualError(t, feedJob.FetchTerminalJobErr(), "should fail with custom error")
+		})
+	}
+
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
 }

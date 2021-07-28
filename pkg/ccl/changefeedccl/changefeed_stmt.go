@@ -543,6 +543,18 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 				`unknown %s: %s`, opt, v)
 		}
 	}
+	{
+		const opt = changefeedbase.OptOnError
+		switch v := changefeedbase.OnErrorType(details.Opts[opt]); v {
+		case ``, changefeedbase.OptOnErrorFail:
+			details.Opts[opt] = string(changefeedbase.OptOnErrorFail)
+		case changefeedbase.OptOnErrorPause:
+			// No-op.
+		default:
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`unknown %s: %s`, opt, v)
+		}
+	}
 	return details, nil
 }
 
@@ -599,6 +611,38 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
+	err := b.resumeWithRetries(ctx, jobExec, jobID, details, progress, execCfg)
+	if err != nil {
+		switch onError := changefeedbase.OnErrorType(details.Opts[changefeedbase.OptOnError]); onError {
+		// default behavior
+		case changefeedbase.OptOnErrorFail:
+			return err
+		// pause instead of failing
+		case changefeedbase.OptOnErrorPause:
+			// note: we only want the job to pause here if a failure happens, not a
+			// user-initiated cancellation. if the job has been canceled, the ctx
+			// will handle it and the pause will return an error.
+			pauseErr := execCfg.JobRegistry.PauseRequested(ctx, jobExec.ExtendedEvalContext().Txn, jobID)
+			if pauseErr != nil {
+				return pauseErr
+			}
+			// TODO (ryan min): Populate pause reason with error once column is added (#67928)
+		default:
+			return errors.Errorf("unrecognized option value: %s=%s",
+				changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
+		}
+	}
+	return nil
+}
+
+func (b *changefeedResumer) resumeWithRetries(
+	ctx context.Context,
+	jobExec sql.JobExecContext,
+	jobID jobspb.JobID,
+	details jobspb.ChangefeedDetails,
+	progress jobspb.Progress,
+	execCfg *sql.ExecutorConfig,
+) error {
 	// We'd like to avoid failing a changefeed unnecessarily, so when an error
 	// bubbles up to this level, we'd like to "retry" the flow if possible. This
 	// could be because the sink is down or because a cockroach node has crashed
@@ -665,8 +709,6 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 			progress = reloadedJob.Progress()
 		}
 	}
-	// We only hit this if `r.Next()` returns false, which right now only happens
-	// on context cancellation.
 	return errors.Wrap(err, `ran out of retries`)
 }
 
