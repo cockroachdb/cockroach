@@ -223,7 +223,7 @@ func newNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
 }
 
 // TestSendRPCOrder verifies that sendRPC correctly takes into account the
-// lease holder, attributes and required consistency to determine where to send
+// lease holder, attributes, and routing policy to determine where to send
 // remote requests.
 func TestSendRPCOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -267,74 +267,71 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	testCases := []struct {
-		args        roachpb.Request
-		tiers       []roachpb.Tier
-		expReplica  []roachpb.NodeID
-		leaseHolder int32 // 0 for not caching a lease holder.
-		// Naming is somewhat off, as eventually consistent reads usually
-		// do not have to go to the lease holder when a node has a read lease.
-		// Would really want CONSENSUS here, but that is not implemented.
-		// Likely a test setup here will never have a read lease, but good
-		// to keep in mind.
-		consistent bool
+		name          string
+		routingPolicy roachpb.RoutingPolicy
+		tiers         []roachpb.Tier
+		leaseHolder   int32            // 0 for not caching a lease holder.
+		expReplica    []roachpb.NodeID // 0 elements ignored
 	}{
-		// Inconsistent Scan without matching attributes.
 		{
-			args:       &roachpb.ScanRequest{},
-			tiers:      []roachpb.Tier{},
+			name:          "route to leaseholder, without matching attributes",
+			routingPolicy: roachpb.RoutingPolicy_LEASEHOLDER,
+			tiers:         []roachpb.Tier{},
+			// No ordering.
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 		},
-		// Inconsistent Scan with matching attributes.
-		// Should move the two nodes matching the attributes to the front and
-		// go stable.
 		{
-			args:  &roachpb.ScanRequest{},
-			tiers: nodeTiers[5],
-			// Compare only the first two resulting addresses.
+			name:          "route to leaseholder, with matching attributes",
+			routingPolicy: roachpb.RoutingPolicy_LEASEHOLDER,
+			tiers:         nodeTiers[5],
+			// Order nearest first.
 			expReplica: []roachpb.NodeID{5, 4, 0, 0, 0},
 		},
-
-		// Scan without matching attributes that requires but does not find
-		// a lease holder.
 		{
-			args:       &roachpb.ScanRequest{},
-			tiers:      []roachpb.Tier{},
-			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
-			consistent: true,
+			name:          "route to leaseholder, without matching attributes, known leaseholder",
+			routingPolicy: roachpb.RoutingPolicy_LEASEHOLDER,
+			tiers:         []roachpb.Tier{},
+			leaseHolder:   2,
+			// Order leaseholder first.
+			expReplica: []roachpb.NodeID{2, 0, 0, 0, 0},
 		},
-		// Put without matching attributes that requires but does not find lease holder.
-		// Should go random and not change anything.
 		{
-			args:       &roachpb.PutRequest{},
-			tiers:      []roachpb.Tier{{Key: "nomatch", Value: ""}},
+			name:          "route to leaseholder, with matching attributes, known leaseholder",
+			routingPolicy: roachpb.RoutingPolicy_LEASEHOLDER,
+			tiers:         nodeTiers[5],
+			leaseHolder:   2,
+			// Order leaseholder first, then nearest.
+			expReplica: []roachpb.NodeID{2, 5, 4, 0, 0},
+		},
+		{
+			name:          "route to nearest, without matching attributes",
+			routingPolicy: roachpb.RoutingPolicy_NEAREST,
+			tiers:         []roachpb.Tier{},
+			// No ordering.
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 		},
-		// Put with matching attributes but no lease holder.
-		// Should move the two nodes matching the attributes to the front.
 		{
-			args:  &roachpb.PutRequest{},
-			tiers: append(nodeTiers[5], roachpb.Tier{Key: "irrelevant", Value: ""}),
-			// Compare only the first two resulting addresses.
+			name:          "route to nearest, with matching attributes",
+			routingPolicy: roachpb.RoutingPolicy_NEAREST,
+			tiers:         nodeTiers[5],
+			// Order nearest first.
 			expReplica: []roachpb.NodeID{5, 4, 0, 0, 0},
 		},
-		// Put with matching attributes that finds the lease holder (node 2).
-		// Should address the lease holder and the two nodes matching the attributes
-		// (the last and second to last) in that order.
 		{
-			args:  &roachpb.PutRequest{},
-			tiers: append(nodeTiers[5], roachpb.Tier{Key: "irrelevant", Value: ""}),
-			// Compare only the first resulting address as we have a lease holder
-			// and that means we're only trying to send there.
-			expReplica:  []roachpb.NodeID{2, 0, 0, 0, 0},
-			leaseHolder: 2,
+			name:          "route to nearest, without matching attributes, known leaseholder",
+			routingPolicy: roachpb.RoutingPolicy_NEAREST,
+			tiers:         []roachpb.Tier{},
+			leaseHolder:   2,
+			// No ordering.
+			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 		},
-		// Inconsistent Get without matching attributes but lease holder (node 3). Should just
-		// go random as the lease holder does not matter.
 		{
-			args:        &roachpb.GetRequest{},
-			tiers:       []roachpb.Tier{},
-			expReplica:  []roachpb.NodeID{1, 2, 3, 4, 5},
-			leaseHolder: 2,
+			name:          "route to nearest, with matching attributes, known leaseholder",
+			routingPolicy: roachpb.RoutingPolicy_NEAREST,
+			tiers:         nodeTiers[5],
+			leaseHolder:   2,
+			// Order nearest first.
+			expReplica: []roachpb.NodeID{5, 4, 0, 0, 0},
 		},
 	}
 
@@ -390,8 +387,8 @@ func TestSendRPCOrder(t *testing.T) {
 
 	ds := NewDistSender(cfg)
 
-	for n, tc := range testCases {
-		t.Run("", func(t *testing.T) {
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
 			verifyCall = makeVerifier(tc.expReplica)
 
 			{
@@ -404,9 +401,8 @@ func TestSendRPCOrder(t *testing.T) {
 					},
 				}
 				g.NodeID.Reset(nd.NodeID)
-				if err := g.SetNodeDescriptor(nd); err != nil {
-					t.Fatal(err)
-				}
+				err := g.SetNodeDescriptor(nd)
+				require.NoError(t, err)
 			}
 
 			ds.rangeCache.Clear()
@@ -419,29 +415,17 @@ func TestSendRPCOrder(t *testing.T) {
 				Lease: lease,
 			})
 
-			args := tc.args
-			{
-				header := args.Header()
-				header.Key = roachpb.Key("a")
-				args.SetHeader(header)
-			}
-			if roachpb.IsRange(args) {
-				header := args.Header()
-				header.EndKey = args.Header().Key.Next()
-				args.SetHeader(header)
-			}
-			consistency := roachpb.CONSISTENT
-			if !tc.consistent {
-				consistency = roachpb.INCONSISTENT
-			}
 			// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 			ds.nodeDescriptor = nil
-			if _, err := kv.SendWrappedWith(ctx, ds, roachpb.Header{
-				RangeID:         rangeID, // Not used in this test, but why not.
-				ReadConsistency: consistency,
-			}, args); err != nil {
-				t.Errorf("%d: %s", n, err)
+
+			// Issue the request.
+			header := roachpb.Header{
+				RangeID:       rangeID, // Not used in this test, but why not.
+				RoutingPolicy: tc.routingPolicy,
 			}
+			req := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("b"), false)
+			_, pErr := kv.SendWrappedWith(ctx, ds, header, req)
+			require.Nil(t, pErr)
 		})
 	}
 }
