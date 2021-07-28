@@ -1376,7 +1376,6 @@ func NewColOperator(
 					semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 					aggArgs.Constructors, aggArgs.ConstArguments, aggArgs.OutputTypes, err =
 						colexecagg.ProcessAggregations(evalCtx, semaCtx, aggregations, argTypes)
-					// Window functions reuse the hash aggregate function implementation.
 					aggFnsAlloc, _, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 						&aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
 					)

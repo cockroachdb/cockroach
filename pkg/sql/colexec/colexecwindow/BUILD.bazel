@@ -6,7 +6,6 @@ go_library(
     srcs = [
         "buffered_window.go",
         "partitioner.go",
-        "window_aggregator.go",
         "window_functions_util.go",
         ":gen-exec",  # keep
     ],
@@ -19,7 +18,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",  # keep
         "//pkg/sql/colconv",  # keep
-        "//pkg/sql/colexec/colexecagg",
+        "//pkg/sql/colexec/colexecagg",  # keep
         "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexecutils",  # keep
         "//pkg/sql/colexec/execgen",  # keep
@@ -100,6 +99,7 @@ targets = [
     ("rank.eg.go", "rank_tmpl.go"),
     ("relative_rank.eg.go", "relative_rank_tmpl.go"),
     ("row_number.eg.go", "row_number_tmpl.go"),
+    ("window_aggregator.eg.go", "window_aggregator_tmpl.go"),
     ("window_framer.eg.go", "window_framer_tmpl.go"),
     ("window_peer_grouper.eg.go", "window_peer_grouper_tmpl.go"),
 ]

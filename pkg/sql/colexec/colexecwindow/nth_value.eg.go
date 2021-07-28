@@ -41,6 +41,7 @@ func NewNthValueOperator(
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
 	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
+	mainMemLimit := args.MemoryLimit - bufferMemLimit
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
 		args.FdSemaphore, args.InputTypes, args.DiskAcc, colsToStore...)
@@ -61,7 +62,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueBoolWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.BytesFamily:
 		switch argType.Width() {
@@ -69,7 +70,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueBytesWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.DecimalFamily:
 		switch argType.Width() {
@@ -77,23 +78,23 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueDecimalWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.IntFamily:
 		switch argType.Width() {
 		case 16:
 			windower := &nthValueInt16Window{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		case 32:
 			windower := &nthValueInt32Window{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		case -1:
 		default:
 			windower := &nthValueInt64Window{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.FloatFamily:
 		switch argType.Width() {
@@ -101,7 +102,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueFloat64Window{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.TimestampTZFamily:
 		switch argType.Width() {
@@ -109,7 +110,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueTimestampWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.IntervalFamily:
 		switch argType.Width() {
@@ -117,7 +118,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueIntervalWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.JsonFamily:
 		switch argType.Width() {
@@ -125,7 +126,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueJSONWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
@@ -133,7 +134,7 @@ func NewNthValueOperator(
 		default:
 			windower := &nthValueDatumWindow{nthValueBase: base}
 			windower.nColIdx = argIdxs[1]
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	}
 	return nil, errors.Errorf("unsupported nthValue window operator type %s", argType.Name())
