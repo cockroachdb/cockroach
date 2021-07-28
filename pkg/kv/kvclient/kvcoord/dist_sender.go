@@ -286,7 +286,8 @@ type DistSender struct {
 	latencyFunc LatencyFunc
 
 	// If set, the DistSender will try the replicas in the order they appear in
-	// the descriptor, instead of trying to reorder them by latency.
+	// the descriptor, instead of trying to reorder them by latency. The knob
+	// only applies to requests sent with the LEASEHOLDER routing policy.
 	dontReorderReplicas bool
 }
 
@@ -1792,41 +1793,61 @@ func (ds *DistSender) sendToReplicas(
 ) (*roachpb.BatchResponse, error) {
 	desc := routing.Desc()
 	ba.RangeID = desc.RangeID
-	leaseholder := routing.Leaseholder()
-	// TODO(nvanbenschoten): push ba.RequiresLeaseHolder() into CanSendToFollower.
-	wantLeaseholder := ba.RequiresLeaseHolder() && !CanSendToFollower(ds.clusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba)
-	var replicas ReplicaSlice
-	var err error
-	if wantLeaseholder {
-		replicas, err = NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, OnlyPotentialLeaseholders)
-	} else {
-		replicas, err = NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, AllExtantReplicas)
+
+	// If this request can be sent to a follower to perform a consistent follower
+	// read under the closed timestamp, promote its routing policy to NEAREST.
+	if ba.RoutingPolicy == roachpb.RoutingPolicy_LEASEHOLDER &&
+		CanSendToFollower(ds.clusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba) {
+		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
 	}
+
+	// Filter the replicas to only those that are relevant to the routing policy.
+	var replicaFilter ReplicaSliceFilter
+	switch ba.RoutingPolicy {
+	case roachpb.RoutingPolicy_LEASEHOLDER:
+		replicaFilter = OnlyPotentialLeaseholders
+	case roachpb.RoutingPolicy_NEAREST:
+		replicaFilter = AllExtantReplicas
+	default:
+		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
+	}
+	leaseholder := routing.Leaseholder()
+	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, replicaFilter)
 	if err != nil {
 		return nil, err
 	}
 
-	// Rearrange the replicas so that they're ordered in expectation of
-	// request latency. Leaseholder considerations come below.
-	if !ds.dontReorderReplicas {
-		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
-	}
+	// Rearrange the replicas so that they're ordered according to the routing
+	// policy.
+	var leaseholderFirst bool
+	switch ba.RoutingPolicy {
+	case roachpb.RoutingPolicy_LEASEHOLDER:
+		// First order by latency, then move the leaseholder to the front of the
+		// list, if it is known.
+		if !ds.dontReorderReplicas {
+			replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
+		}
 
-	// Try the leaseholder first, if the request wants it.
-	sendToLeaseholder := (leaseholder != nil) && wantLeaseholder
-	if sendToLeaseholder {
-		idx := replicas.Find(leaseholder.ReplicaID)
+		idx := -1
+		if leaseholder != nil {
+			idx = replicas.Find(leaseholder.ReplicaID)
+		}
 		if idx != -1 {
 			replicas.MoveToFront(idx)
+			leaseholderFirst = true
 		} else {
-			// The leaseholder node's info must have been missing from gossip when
-			// we created replicas.
-			log.Eventf(ctx, "leaseholder %s missing from replicas", leaseholder)
+			// The leaseholder node's info must have been missing from gossip when we
+			// created replicas.
+			log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not known")
 		}
-	} else if wantLeaseholder {
-		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not known")
-	} else {
+
+	case roachpb.RoutingPolicy_NEAREST:
+		// Order by latency.
 		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
+		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
+
+	default:
+		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
 	}
 
 	opts := SendOptions{
@@ -2062,7 +2083,7 @@ func (ds *DistSender) sendToReplicas(
 					// have a sufficient closed timestamp. In response, we should
 					// immediately redirect to the leaseholder, without a backoff
 					// period.
-					intentionallySentToFollower := first && !sendToLeaseholder
+					intentionallySentToFollower := first && !leaseholderFirst
 					// See if we want to backoff a little before the next attempt. If
 					// the lease info we got is stale and we were intending to send to
 					// the leaseholder, we backoff because it might be the case that

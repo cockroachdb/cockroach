@@ -35,7 +35,8 @@ type ClientTestingKnobs struct {
 	LatencyFunc LatencyFunc
 
 	// If set, the DistSender will try the replicas in the order they appear in
-	// the descriptor, instead of trying to reorder them by latency.
+	// the descriptor, instead of trying to reorder them by latency. The knob
+	// only applies to requests sent with the LEASEHOLDER routing policy.
 	DontReorderReplicas bool
 }
 
