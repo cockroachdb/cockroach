@@ -67,6 +67,7 @@ var (
 	clusterWipe      bool
 	zonesF           string
 	teamCity         bool
+	disableIssue     bool
 )
 
 type encryptValue string

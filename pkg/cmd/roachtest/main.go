@@ -187,6 +187,8 @@ runner itself.
 		&slackToken, "slack-token", "", "Slack bot token")
 	runCmd.Flags().BoolVar(
 		&teamCity, "teamcity", false, "include teamcity-specific markers in output")
+	runCmd.Flags().BoolVar(
+		&disableIssue, "disable-issue", false, "disable posting GitHub issue for failures")
 
 	var benchCmd = &cobra.Command{
 		// Don't display usage when tests fail.

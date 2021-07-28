@@ -64,6 +64,8 @@ type testRunner struct {
 		// the registry uses for running tests. It implies skipClusterWipeOnAttach.
 		skipClusterStopOnAttach bool
 		skipClusterWipeOnAttach bool
+		// disableIssue disables posting GitHub issues for test failures.
+		disableIssue bool
 	}
 
 	status struct {
@@ -105,6 +107,7 @@ func newTestRunner(cr *clusterRegistry, buildVersion version.Version) *testRunne
 		buildVersion: buildVersion,
 	}
 	r.config.skipClusterWipeOnAttach = !clusterWipe
+	r.config.disableIssue = disableIssue
 	r.workersMu.workers = make(map[string]*workerStatus)
 	return r
 }
@@ -886,9 +889,13 @@ func (r *testRunner) runTest(
 }
 
 func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
-	// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 	opts := issues.DefaultOptionsFromEnv()
-	return opts.CanPost() && opts.IsReleaseBranch() && t.Spec().(*registry.TestSpec).Run != nil && t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
+	return !r.config.disableIssue &&
+		opts.CanPost() &&
+		opts.IsReleaseBranch() &&
+		t.Spec().(*registry.TestSpec).Run != nil &&
+		// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
+		t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
 }
 
 func (r *testRunner) maybePostGithubIssue(
