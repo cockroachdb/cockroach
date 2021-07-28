@@ -1,4 +1,17 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+exports_files(["config.go"])
+
+go_binary(
+    name = "gen",
+    srcs = ["gen.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/exit",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
 
 go_library(
     name = "logconfig",
