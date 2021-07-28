@@ -30,7 +30,7 @@ type sumAggTmplInfo struct {
 	RetGoType      string
 	RetVecMethod   string
 
-	addOverload assignFunc
+	sumOverload assignFunc
 }
 
 func (s sumAggTmplInfo) AssignAdd(
@@ -42,10 +42,24 @@ func (s sumAggTmplInfo) AssignAdd(
 	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
 		overloadBase: newBinaryOverloadBase(tree.Plus),
 	}}
-	return s.addOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
+	return s.sumOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
 }
 
 var _ = sumAggTmplInfo{}.AssignAdd
+
+func (s sumAggTmplInfo) AssignSubtract(
+	targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string,
+) string {
+	// Note that we need to create lastArgWidthOverload only in order to tell
+	// the resolved overload to use Minus overload in particular, so all other
+	// fields remain unset.
+	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
+		overloadBase: newBinaryOverloadBase(tree.Minus),
+	}}
+	return s.sumOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
+}
+
+var _ = sumAggTmplInfo{}.AssignSubtract
 
 // avgAggTypeTmplInfo is similar to lastArgTypeOverload and provides a way to
 // see the type family of the overload. This is the top level of data passed to
@@ -111,8 +125,14 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
 	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAdd", 6))
 
+	assignSubtractRe := makeFunctionRegex("_ASSIGN_SUBTRACT", 6)
+	s = assignSubtractRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignSubtract", 6))
+
 	accumulateSum := makeFunctionRegex("_ACCUMULATE_SUM", 5)
 	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateSum" buildDict "Global" . "HasNulls" $4 "HasSel" $5}}`)
+
+	removeRow := makeFunctionRegex("_REMOVE_ROW", 4)
+	s = removeRow.ReplaceAllString(s, `{{template "removeRow" buildDict "Global" . "HasNulls" $4}}`)
 
 	s = replaceManipulationFuncs(s)
 
@@ -169,7 +189,7 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 					InputVecMethod: toVecMethod(inputTypeFamily, inputTypeWidth),
 					RetGoType:      toPhysicalRepresentation(retTypeFamily, retTypeWidth),
 					RetVecMethod:   toVecMethod(retTypeFamily, retTypeWidth),
-					addOverload:    getAddOverload(inputTypeFamily),
+					sumOverload:    getAddOverload(inputTypeFamily),
 				}})
 		}
 		tmplInfos = append(tmplInfos, tmplInfo)
