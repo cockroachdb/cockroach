@@ -6,10 +6,8 @@ go_library(
         "database_role_settings.go",
         "delete_deprecated_namespace_tabledesc.go",
         "fix_descriptor_migration.go",
-        "foreign_key_representation_upgrade.go",
         "join_tokens.go",
         "migrations.go",
-        "protected_ts_meta_migration.go",
         "sql_stats.go",
         "truncated_state.go",
     ],
@@ -43,9 +41,7 @@ go_test(
     srcs = [
         "delete_deprecated_namespace_tabledesc_external_test.go",
         "fix_descriptor_migration_external_test.go",
-        "foreign_key_representation_upgrade_external_test.go",
         "main_test.go",
-        "protected_ts_meta_migration_external_test.go",
         "truncated_state_external_test.go",
     ],
     deps = [

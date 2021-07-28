@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1198,18 +1197,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			// Detect whether this boundary should be used to kill or restart the
 			// changefeed.
 			if cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART {
-				// The code to restart the changefeed is only supported once 21.1 is
-				// activated.
-				//
-				// TODO(ajwerner): Remove this gate in 21.2.
-				if cf.EvalCtx.Settings.Version.IsActive(
-					cf.Ctx, clusterversion.ChangefeedsSupportPrimaryIndexChanges,
-				) {
-					err = changefeedbase.MarkRetryableError(err)
-				} else {
-					err = errors.Wrap(err, "primary key change occurred")
-				}
-
+				err = changefeedbase.MarkRetryableError(err)
 			}
 			// TODO(ajwerner): make this more useful by at least informing the client
 			// of which tables changed.

@@ -36,7 +36,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -7866,12 +7865,8 @@ func arrayNumInvertedIndexEntries(
 	}
 	arr := tree.MustBeDArray(val)
 
-	v := descpb.SecondaryIndexFamilyFormatVersion
-	if version == tree.DNull {
-		if ctx.Settings.Version.IsActive(ctx.Context, clusterversion.EmptyArraysInInvertedIndexes) {
-			v = descpb.EmptyArraysInInvertedIndexesVersion
-		}
-	} else {
+	v := descpb.EmptyArraysInInvertedIndexesVersion
+	if version != tree.DNull {
 		v = descpb.IndexDescriptorVersion(tree.MustBeDInt(version))
 	}
 

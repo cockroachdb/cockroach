@@ -96,18 +96,15 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0 /* maxRows */); err != nil {
 		t.Fatal(err)
 	} else {
-		descriptorIDs, err := startupmigrations.ExpectedDescriptorIDs(
+		systemDescriptorIDs, err := startupmigrations.ExpectedDescriptorIDs(
 			ctx, kvDB, codec, &s.(*server.TestServer).Cfg.DefaultZoneConfig, &s.(*server.TestServer).Cfg.DefaultSystemZoneConfig,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		// TODO(arul): Revert this back to to len(descriptorIDs) once the migration
-		//  to the new system.namespace is done.
-		// Every database is initialized with a public schema, which does not have
-		// a descriptor associated with it. There are 3 databases: defaultdb,
-		// system, and postgres.
-		e := len(descriptorIDs) + 3
+		// In addition to the system database and its tables, there are 3 other
+		// databases: defaultdb, system, and postgres.
+		e := len(systemDescriptorIDs) + 3
 		if a := len(kvs); a != e {
 			t.Fatalf("expected %d keys to have been written, found %d keys", e, a)
 		}

@@ -163,16 +163,6 @@ const (
 	// the 21.1 release. This is because we now support tenants at the
 	// predecessor binary interacting with a fully upgraded KV cluster.
 	Start20_2
-	// GeospatialType enables the use of Geospatial features.
-	GeospatialType
-	// AlterColumnTypeGeneral enables the use of alter column type for
-	// conversions that require the column data to be rewritten.
-	AlterColumnTypeGeneral
-	// UserDefinedSchemas enables the creation of user defined schemas.
-	UserDefinedSchemas
-	// NoOriginFKIndexes allows for foreign keys to no longer need indexes on
-	// the origin side of the relationship.
-	NoOriginFKIndexes
 	// NodeMembershipStatus gates the usage of the MembershipStatus enum in the
 	// Liveness proto. See comment on proto definition for more details.
 	NodeMembershipStatus
@@ -181,10 +171,6 @@ const (
 	// AbortSpanBytes adds a field to MVCCStats
 	// (MVCCStats.AbortSpanBytes) that tracks the size of a range's abort span.
 	AbortSpanBytes
-	// MaterializedViews enables the use of materialized views.
-	MaterializedViews
-	// Box2DType enables the use of the box2d type.
-	Box2DType
 	// CreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN are introduced.
 	//
 	// It represents adding authn principal management via CREATELOGIN role
@@ -200,14 +186,6 @@ const (
 	//
 	// Start21_1 demarcates work towards CockroachDB v21.1.
 	Start21_1
-	// EmptyArraysInInvertedIndexes is when empty arrays are added to array
-	// inverted indexes.
-	EmptyArraysInInvertedIndexes
-	// UniqueWithoutIndexConstraints is when adding UNIQUE WITHOUT INDEX
-	// constraints is supported.
-	UniqueWithoutIndexConstraints
-	// VirtualComputedColumns is when virtual computed columns are supported.
-	VirtualComputedColumns
 	// CPutInline is conditional put support for inline values.
 	CPutInline
 	// ReplicaVersions enables the versioning of Replica state.
@@ -219,17 +197,11 @@ const (
 	// was introduced after this version was first introduced. Later code in the
 	// release relies on the job to run the migration but the job relies on
 	// its startup migrations having been run. Versions associated with long
-	// running migrations must follow LongRunningMigrations.
+	// running migrations must follow deletedLongRunningMigrations.
 	replacedTruncatedAndRangeAppliedStateMigration
 	// replacedPostTruncatedAndRangeAppliedStateMigration is like the above
 	// version. See its comment.
 	replacedPostTruncatedAndRangeAppliedStateMigration
-	// NewSchemaChanger enables the new schema changer.
-	NewSchemaChanger
-	// LongRunningMigrations introduces the LongRunningMigrations table and jobs.
-	// All versions which have a registered long-running migration must have a
-	// version higher than this version.
-	LongRunningMigrations
 	// TruncatedAndRangeAppliedStateMigration is part of the migration to stop
 	// using the legacy truncated state within KV. After the migration, we'll be
 	// using the unreplicated truncated state and the RangeAppliedState on all
@@ -250,35 +222,15 @@ const (
 	// are propagated across RPC boundaries independently of their verbosity setting.
 	// This requires a version gate this violates implicit assumptions in v20.2.
 	TracingVerbosityIndependentSemantics
-	// SequencesRegclass starts storing sequences used in DEFAULT expressions
-	// via their IDs instead of their names, which leads to allowing such
-	// sequences to be renamed.
-	SequencesRegclass
-	// ImplicitColumnPartitioning introduces implicit column partitioning to
-	// tables.
-	ImplicitColumnPartitioning
-	// MultiRegionFeatures introduces new multi-region features to the
-	// database, such as adding REGIONS to a DATABASE or setting the LOCALITY
-	// on a TABLE.
-	MultiRegionFeatures
 	// ClosedTimestampsRaftTransport enables the Raft transport for closed
 	// timestamps and disables the previous per-node transport.
 	ClosedTimestampsRaftTransport
-	// ChangefeedsSupportPrimaryIndexChanges is used to indicate that all
-	// nodes support detecting and restarting on primary index changes.
-	ChangefeedsSupportPrimaryIndexChanges
-	// ForeignKeyRepresentationMigration is used to ensure that all no table
-	// descriptors use the pre-19.2 foreign key migration.
-	ForeignKeyRepresentationMigration
 	// PriorReadSummaries introduces support for the use of read summary objects
 	// to ship information about reads on a range through lease changes and
 	// range merges.
 	PriorReadSummaries
 	// NonVotingReplicas enables the creation of non-voting replicas.
 	NonVotingReplicas
-	// ProtectedTsMetaPrivilegesMigration is for the migration which fixes the
-	// privileges of the protected_ts_meta system table.
-	ProtectedTsMetaPrivilegesMigration
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	V21_1
 
@@ -341,22 +293,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 1},
 	},
 	{
-		Key:     GeospatialType,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 2},
-	},
-	{
-		Key:     AlterColumnTypeGeneral,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 5},
-	},
-	{
-		Key:     UserDefinedSchemas,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 8},
-	},
-	{
-		Key:     NoOriginFKIndexes,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 9},
-	},
-	{
 		Key:     NodeMembershipStatus,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 11},
 	},
@@ -367,14 +303,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AbortSpanBytes,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 14},
-	},
-	{
-		Key:     MaterializedViews,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 16},
-	},
-	{
-		Key:     Box2DType,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 17},
 	},
 	{
 		Key:     CreateLoginPrivilege,
@@ -395,18 +323,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
 	},
 	{
-		Key:     EmptyArraysInInvertedIndexes,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 4},
-	},
-	{
-		Key:     UniqueWithoutIndexConstraints,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 6},
-	},
-	{
-		Key:     VirtualComputedColumns,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 8},
-	},
-	{
 		Key:     CPutInline,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 10},
 	},
@@ -421,14 +337,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     replacedPostTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 16},
-	},
-	{
-		Key:     NewSchemaChanger,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 18},
-	},
-	{
-		Key:     LongRunningMigrations,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 20},
 	},
 	{
 		Key:     TruncatedAndRangeAppliedStateMigration,
@@ -447,28 +355,8 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 28},
 	},
 	{
-		Key:     SequencesRegclass,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 30},
-	},
-	{
-		Key:     ImplicitColumnPartitioning,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 32},
-	},
-	{
-		Key:     MultiRegionFeatures,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 34},
-	},
-	{
 		Key:     ClosedTimestampsRaftTransport,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 36},
-	},
-	{
-		Key:     ChangefeedsSupportPrimaryIndexChanges,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 38},
-	},
-	{
-		Key:     ForeignKeyRepresentationMigration,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 42},
 	},
 	{
 		Key:     PriorReadSummaries,
@@ -477,10 +365,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     NonVotingReplicas,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 46},
-	},
-	{
-		Key:     ProtectedTsMetaPrivilegesMigration,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 48},
 	},
 	{
 		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
