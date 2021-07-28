@@ -56,9 +56,9 @@ type sumIntInt16HashAgg struct {
 	curAgg int64
 	// col points to the output vector we are updating.
 	col []int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumIntInt16HashAgg{}
@@ -93,7 +93,7 @@ func (a *sumIntInt16HashAgg) Compute(
 							a.curAgg = result
 						}
 
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -112,7 +112,7 @@ func (a *sumIntInt16HashAgg) Compute(
 							a.curAgg = result
 						}
 
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -129,7 +129,7 @@ func (a *sumIntInt16HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curAgg
@@ -138,7 +138,7 @@ func (a *sumIntInt16HashAgg) Flush(outputIdx int) {
 
 func (a *sumIntInt16HashAgg) Reset() {
 	a.curAgg = zeroInt64Value
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type sumIntInt16HashAggAlloc struct {
@@ -169,9 +169,9 @@ type sumIntInt32HashAgg struct {
 	curAgg int64
 	// col points to the output vector we are updating.
 	col []int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumIntInt32HashAgg{}
@@ -206,7 +206,7 @@ func (a *sumIntInt32HashAgg) Compute(
 							a.curAgg = result
 						}
 
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -225,7 +225,7 @@ func (a *sumIntInt32HashAgg) Compute(
 							a.curAgg = result
 						}
 
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -242,7 +242,7 @@ func (a *sumIntInt32HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curAgg
@@ -251,7 +251,7 @@ func (a *sumIntInt32HashAgg) Flush(outputIdx int) {
 
 func (a *sumIntInt32HashAgg) Reset() {
 	a.curAgg = zeroInt64Value
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type sumIntInt32HashAggAlloc struct {
@@ -282,9 +282,9 @@ type sumIntInt64HashAgg struct {
 	curAgg int64
 	// col points to the output vector we are updating.
 	col []int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumIntInt64HashAgg{}
@@ -319,7 +319,7 @@ func (a *sumIntInt64HashAgg) Compute(
 							a.curAgg = result
 						}
 
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -338,7 +338,7 @@ func (a *sumIntInt64HashAgg) Compute(
 							a.curAgg = result
 						}
 
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -355,7 +355,7 @@ func (a *sumIntInt64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curAgg
@@ -364,7 +364,7 @@ func (a *sumIntInt64HashAgg) Flush(outputIdx int) {
 
 func (a *sumIntInt64HashAgg) Reset() {
 	a.curAgg = zeroInt64Value
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type sumIntInt64HashAggAlloc struct {
