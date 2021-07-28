@@ -1253,18 +1253,18 @@ SHOW GRANTS ON TABLE _ -- identifiers removed
 parse
 SHOW GRANTS ON "role"
 ----
-SHOW GRANTS ON TABLE role -- normalized!
-SHOW GRANTS ON TABLE (role) -- fully parenthesized
-SHOW GRANTS ON TABLE role -- literals removed
+SHOW GRANTS ON TABLE "role" -- normalized!
+SHOW GRANTS ON TABLE ("role") -- fully parenthesized
+SHOW GRANTS ON TABLE "role" -- literals removed
 SHOW GRANTS ON TABLE _ -- identifiers removed
 
 
 parse
 SHOW GRANTS ON role, foo
 ----
-SHOW GRANTS ON TABLE role, foo -- normalized!
-SHOW GRANTS ON TABLE (role), (foo) -- fully parenthesized
-SHOW GRANTS ON TABLE role, foo -- literals removed
+SHOW GRANTS ON TABLE "role", foo -- normalized!
+SHOW GRANTS ON TABLE ("role"), (foo) -- fully parenthesized
+SHOW GRANTS ON TABLE "role", foo -- literals removed
 SHOW GRANTS ON TABLE _, _ -- identifiers removed
 
 parse
@@ -1286,33 +1286,33 @@ SHOW GRANTS ON TABLE _, _._ -- identifiers removed
 parse
 SHOW GRANTS ON "role", foo
 ----
-SHOW GRANTS ON TABLE role, foo -- normalized!
-SHOW GRANTS ON TABLE (role), (foo) -- fully parenthesized
-SHOW GRANTS ON TABLE role, foo -- literals removed
+SHOW GRANTS ON TABLE "role", foo -- normalized!
+SHOW GRANTS ON TABLE ("role"), (foo) -- fully parenthesized
+SHOW GRANTS ON TABLE "role", foo -- literals removed
 SHOW GRANTS ON TABLE _, _ -- identifiers removed
 
 parse
 SHOW GRANTS ON "role".foo
 ----
-SHOW GRANTS ON TABLE role.foo -- normalized!
-SHOW GRANTS ON TABLE (role.foo) -- fully parenthesized
-SHOW GRANTS ON TABLE role.foo -- literals removed
+SHOW GRANTS ON TABLE "role".foo -- normalized!
+SHOW GRANTS ON TABLE ("role".foo) -- fully parenthesized
+SHOW GRANTS ON TABLE "role".foo -- literals removed
 SHOW GRANTS ON TABLE _._ -- identifiers removed
 
 parse
 SHOW GRANTS ON role.foo
 ----
-SHOW GRANTS ON TABLE role.foo -- normalized!
-SHOW GRANTS ON TABLE (role.foo) -- fully parenthesized
-SHOW GRANTS ON TABLE role.foo -- literals removed
+SHOW GRANTS ON TABLE "role".foo -- normalized!
+SHOW GRANTS ON TABLE ("role".foo) -- fully parenthesized
+SHOW GRANTS ON TABLE "role".foo -- literals removed
 SHOW GRANTS ON TABLE _._ -- identifiers removed
 
 parse
 SHOW GRANTS ON role.*
 ----
-SHOW GRANTS ON TABLE role.* -- normalized!
-SHOW GRANTS ON TABLE (role.*) -- fully parenthesized
-SHOW GRANTS ON TABLE role.* -- literals removed
+SHOW GRANTS ON TABLE "role".* -- normalized!
+SHOW GRANTS ON TABLE ("role".*) -- fully parenthesized
+SHOW GRANTS ON TABLE "role".* -- literals removed
 SHOW GRANTS ON TABLE _.* -- identifiers removed
 
 parse

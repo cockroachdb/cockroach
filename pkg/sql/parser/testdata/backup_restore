@@ -28,10 +28,10 @@ BACKUP TO 'bar' -- identifiers removed
 parse
 BACKUP role TO 'bar'
 ----
-BACKUP TABLE role TO 'bar' -- normalized!
-BACKUP TABLE (role) TO ('bar') -- fully parenthesized
-BACKUP TABLE role TO _ -- literals removed
-BACKUP TABLE role TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE "role" TO 'bar' -- normalized!
+BACKUP TABLE ("role") TO ('bar') -- fully parenthesized
+BACKUP TABLE "role" TO _ -- literals removed
+BACKUP TABLE "role" TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
 BACKUP TABLE _ TO 'bar' -- identifiers removed
 
 parse
