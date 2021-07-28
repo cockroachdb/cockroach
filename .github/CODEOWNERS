@@ -18,6 +18,7 @@
 # [3]: pkg/internal/codeowners
 
 /.github/                    @cockroachdb/dev-inf
+/.github/CODEOWNERS          @cockroachdb/unowned
 
 /build/                      @cockroachdb/dev-inf
 
