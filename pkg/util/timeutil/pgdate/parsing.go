@@ -250,7 +250,10 @@ func inputErrorf(format string, args ...interface{}) error {
 // outOfRangeError returns an error with pg code DatetimeFieldOverflow.
 func outOfRangeError(field string, val int) error {
 	err := errors.Newf("field %s value %d is out of range", errors.Safe(field), errors.Safe(val))
-	return pgerror.WithCandidateCode(err, pgcode.DatetimeFieldOverflow)
+	return errors.WithHint(
+		pgerror.WithCandidateCode(err, pgcode.DatetimeFieldOverflow),
+		`Perhaps you need a different "datestyle" setting.`,
+	)
 }
 
 // parseError ensures that any error we return to the client will

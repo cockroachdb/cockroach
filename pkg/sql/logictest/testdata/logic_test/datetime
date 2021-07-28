@@ -1796,7 +1796,7 @@ FROM ( VALUES
 statement ok
 set datestyle = 'ymd'
 
-statement error field day value 2020 is out of range
+statement error field day value 2020 is out of range\nHINT: Perhaps you need a different "datestyle" setting.
 SELECT '05-07-2020'::date
 
 query TTTTT
