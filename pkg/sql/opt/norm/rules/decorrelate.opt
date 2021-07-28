@@ -508,7 +508,7 @@
         (CanHaveZeroRows $right) &
 
         # Let EliminateExistsGroupBy match instead.
-        (GroupBy | DistinctOn | Project | ProjectSet)
+        (GroupBy | DistinctOn | Project | ProjectSet | Window)
     $on:*
     $private:*
 )
@@ -567,6 +567,41 @@
     )
     []
     (OutputCols2 $left $right)
+)
+
+# TryDecorrelateLimit "pushes down" a Join into a Limit operator with a limit
+# greater than one, in an attempt to keep "digging" down to find and eliminate
+# unnecessary correlation. The eventual hope is to trigger the DecorrelateJoin
+# rule to turn a JoinApply operator into a non-apply Join operator.
+#
+# The limit is replaced with a row_number window function on the right input and
+# a filter on top of the apply-join that removes all rows for which row_number()
+# is less than the limit.
+[TryDecorrelateLimit, Normalize]
+(InnerJoin | InnerJoinApply
+    $left:*
+    $right:(Limit $input:* (Const $limit:*) $ordering:*) &
+        (HasOuterCols $right) &
+        (IsGreaterThan $limit 1)
+    $on:*
+    $private:*
+)
+=>
+(Select
+    ((OpName)
+        $left
+        (Window
+            $input
+            (Let
+                ($rowNum $rowNumCol):(MakeRowNumberWindowFunc)
+                $rowNum
+            )
+            (MakeWindowPrivate (MakeEmptyColSet) $ordering)
+        )
+        $on
+        $private
+    )
+    (LimitToRowNumberFilter $limit $rowNumCol)
 )
 
 # TryDecorrelateProjectSet "pushes down" an InnerJoinApply operator into a
