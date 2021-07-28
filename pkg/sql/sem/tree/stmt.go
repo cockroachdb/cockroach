@@ -230,6 +230,17 @@ func (*AlterDatabaseSurvivalGoal) StatementTag() string { return "ALTER DATABASE
 func (*AlterDatabaseSurvivalGoal) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterDatabasePlacement) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterDatabasePlacement) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabasePlacement) StatementTag() string { return "ALTER DATABASE PLACEMENT" }
+
+func (*AlterDatabasePlacement) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterDefaultPrivileges) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1568,6 +1579,7 @@ func (n *AlterDatabaseOwner) String() string             { return AsString(n) }
 func (n *AlterDatabaseAddRegion) String() string         { return AsString(n) }
 func (n *AlterDatabaseDropRegion) String() string        { return AsString(n) }
 func (n *AlterDatabaseSurvivalGoal) String() string      { return AsString(n) }
+func (n *AlterDatabasePlacement) String() string         { return AsString(n) }
 func (n *AlterDatabasePrimaryRegion) String() string     { return AsString(n) }
 func (n *AlterDefaultPrivileges) String() string         { return AsString(n) }
 func (n *AlterSchema) String() string                    { return AsString(n) }

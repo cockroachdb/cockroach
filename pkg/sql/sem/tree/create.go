@@ -49,6 +49,7 @@ type CreateDatabase struct {
 	PrimaryRegion   Name
 	Regions         NameList
 	SurvivalGoal    SurvivalGoal
+	Placement       DataPlacement
 }
 
 // Format implements the NodeFormatter interface.
@@ -110,6 +111,10 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.SurvivalGoal != SurvivalGoalDefault {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.SurvivalGoal)
+	}
+	if node.Placement != DataPlacementUnspecified {
+		ctx.WriteString(" ")
+		ctx.FormatNode(&node.Placement)
 	}
 }
 
