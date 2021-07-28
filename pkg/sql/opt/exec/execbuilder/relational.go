@@ -170,6 +170,15 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 			"cannot execute %s in a read-only transaction", b.statementTag(e))
 	}
 
+	// Raise error if bounded staleness is used incorrectly.
+	if b.boundedStaleness() {
+		if _, ok := boundedStalenessAllowList[e.Op()]; !ok {
+			return execPlan{}, unimplemented.NewWithIssuef(67562,
+				"cannot use bounded staleness for %s", b.statementTag(e),
+			)
+		}
+	}
+
 	// Collect usage telemetry for relational node, if appropriate.
 	if !b.disableTelemetry {
 		if c := opt.OpTelemetryCounters[e.Op()]; c != nil {
@@ -561,6 +570,24 @@ func (b *Builder) scanParams(
 
 	softLimit := int64(math.Ceil(reqProps.LimitHint))
 	hardLimit := scan.HardLimit.RowCount()
+
+	// If this is a bounded staleness query, check that it returns at most one row.
+	if b.boundedStaleness() {
+		valid := true
+		if b.containsBoundedStalenessScan {
+			// We already planned a scan, perhaps as part of a subquery.
+			valid = false
+		} else if hardLimit != 1 {
+			maxResults, ok := b.indexConstraintMaxResults(scan, relProps)
+			valid = ok && maxResults == 1
+		}
+		if !valid {
+			return exec.ScanParams{}, opt.ColMap{}, unimplemented.NewWithIssuef(67562,
+				"cannot use bounded staleness for queries that may touch more than one row or require an index join",
+			)
+		}
+		b.containsBoundedStalenessScan = true
+	}
 
 	parallelize := false
 	if hardLimit == 0 && softLimit == 0 {
@@ -2471,4 +2498,26 @@ func (b *Builder) statementTag(expr memo.RelExpr) string {
 	default:
 		return expr.Op().SyntaxTag()
 	}
+}
+
+// boundedStalenessAllowList contains the operators that may be used with
+// bounded staleness queries.
+var boundedStalenessAllowList = map[opt.Operator]struct{}{
+	opt.ValuesOp:           {},
+	opt.ScanOp:             {},
+	opt.PlaceholderScanOp:  {},
+	opt.SelectOp:           {},
+	opt.ProjectOp:          {},
+	opt.GroupByOp:          {},
+	opt.ScalarGroupByOp:    {},
+	opt.DistinctOnOp:       {},
+	opt.EnsureDistinctOnOp: {},
+	opt.LimitOp:            {},
+	opt.OffsetOp:           {},
+	opt.SortOp:             {},
+	opt.OrdinalityOp:       {},
+	opt.Max1RowOp:          {},
+	opt.ProjectSetOp:       {},
+	opt.WindowOp:           {},
+	opt.ExplainOp:          {},
 }
