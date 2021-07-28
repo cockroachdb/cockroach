@@ -21,25 +21,25 @@ message WatchPodsRequest {}
 enum PodState {
   option (gogoproto.goproto_enum_prefix) = false;
 
+  // UNKNOWN indicates that the pod values being reported are from a
+  // potentially out of date source. UNKNOWN may be used to notify updates to
+  // pod values when the pod's state may be out of date by the time the update
+  // is processed.
+  UNKNOWN = 0;
   // RUNNING indicates the pod may have active SQL connections and is ready to
   // accept new SQL connections.
   // NOTE: The proxy must still be prepared to retry connections against a
   // running pod in case of transient failures.
-  RUNNING = 0;
+  RUNNING = 1;
   // DRAINING indicates that the pod may still have active SQL connections to
   // it, but is in the process of shedding those connections so that it can be
   // terminated. No new connections should be routed to the pod. In addition,
   // the proxy will begin terminating existing, less-active connections to the
   // pod.
-  DRAINING = 1;
+  DRAINING = 2;
   // DELETING indicates that the pod is being terminated. This state is only
   // used by WatchPods.
-  DELETING = 2;
-  // UNKNOWN indicates that the pod values being reported are from a
-  // potentially out of date source. UNKNOWN may be used to notify updates to
-  // pod values when the pod's state may be out of date by the time the update
-  // is processed.
-  UNKNOWN = 3;
+  DELETING = 3;
 }
 
 // Pod contains information about a tenant pod, such as its tenant owner,
