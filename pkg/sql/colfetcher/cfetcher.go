@@ -309,32 +309,23 @@ type cFetcher struct {
 		tableoidCol coldata.DatumVec
 	}
 
-	typs        []*types.T
-	allocator   *colmem.Allocator
-	memoryLimit int64
+	typs             []*types.T
+	accountingHelper colmem.SetAccountingHelper
+	memoryLimit      int64
 
-	memAccounting struct {
-		// varLengthVecIdxs stores the indices into colvecs of those vectors the
-		// elements of which can be of variable length and which are needed for
-		// the output.
-		varLengthVecIdxs []int
-		// prevBytesLikeTotalSize track the total size of the bytes-like vectors
-		// that we have already accounted for.
-		prevBytesLikeTotalSize int64
-		// maxCapacity if non-zero indicates the target capacity of the output
-		// batch. It is set when at the row finalization we realize that the
-		// output batch has exceeded the memory limit.
-		maxCapacity int
-	}
+	// maxCapacity if non-zero indicates the target capacity of the output
+	// batch. It is set when at the row finalization we realize that the output
+	// batch has exceeded the memory limit.
+	maxCapacity int
 }
 
 func (rf *cFetcher) resetBatch() {
 	var reallocated bool
 	var minCapacity int
-	if rf.memAccounting.maxCapacity > 0 {
+	if rf.maxCapacity > 0 {
 		// If we have already exceeded the memory limit for the output batch, we
 		// will only be using the same batch from now on.
-		minCapacity = rf.memAccounting.maxCapacity
+		minCapacity = rf.maxCapacity
 	} else if rf.machine.limitHint > 0 && (rf.estimatedRowCount == 0 || uint64(rf.machine.limitHint) < rf.estimatedRowCount) {
 		// If we have a limit hint, and either
 		//   1) we don't have an estimate, or
@@ -356,7 +347,7 @@ func (rf *cFetcher) resetBatch() {
 			minCapacity = int(rf.estimatedRowCount)
 		}
 	}
-	rf.machine.batch, reallocated = rf.allocator.ResetMaybeReallocate(
+	rf.machine.batch, reallocated = rf.accountingHelper.ResetMaybeReallocate(
 		rf.typs, rf.machine.batch, minCapacity, rf.memoryLimit,
 	)
 	if reallocated {
@@ -371,7 +362,6 @@ func (rf *cFetcher) resetBatch() {
 		// Change the allocation size to be the same as the capacity of the
 		// batch we allocated above.
 		rf.table.da.AllocSize = rf.machine.batch.Capacity()
-		rf.memAccounting.prevBytesLikeTotalSize = rf.machine.batch.BytesLikeTotalSize()
 	}
 }
 
@@ -387,7 +377,6 @@ func (rf *cFetcher) Init(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	tables ...row.FetcherTableArgs,
 ) error {
-	rf.allocator = allocator
 	rf.memoryLimit = memoryLimit
 	if len(tables) == 0 {
 		return errors.AssertionFailedf("no tables to fetch from")
@@ -442,7 +431,6 @@ func (rf *cFetcher) Init(
 		//gcassert:bce
 		typs[i] = colDescriptors[i].GetType()
 	}
-	rf.memAccounting.varLengthVecIdxs = colmem.GetVarLengthIdxs(rf.typs)
 
 	var err error
 
@@ -468,7 +456,6 @@ func (rf *cFetcher) Init(
 			switch colinfo.GetSystemColumnKindFromColumnID(col) {
 			case descpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
-				rf.memAccounting.varLengthVecIdxs = append(rf.memAccounting.varLengthVecIdxs, idx)
 				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
 			case descpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
@@ -656,6 +643,7 @@ func (rf *cFetcher) Init(
 	})
 
 	rf.table = table
+	rf.accountingHelper.Init(allocator, rf.typs, rf.table.notNeededColOrdinals)
 
 	return nil
 }
@@ -1127,19 +1115,16 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			if err := rf.fillNulls(); err != nil {
 				return nil, err
 			}
-			rf.memAccounting.prevBytesLikeTotalSize = rf.allocator.AccountForSet(
-				rf.machine.batch, rf.memAccounting.varLengthVecIdxs,
-				rf.machine.rowIdx, rf.memAccounting.prevBytesLikeTotalSize,
-			)
+			rf.accountingHelper.AccountForSet(rf.machine.batch, rf.machine.rowIdx)
 			rf.machine.rowIdx++
 			rf.shiftState()
 
 			var emitBatch bool
-			if rf.memAccounting.maxCapacity == 0 && rf.allocator.Used() >= rf.memoryLimit {
-				rf.memAccounting.maxCapacity = rf.machine.rowIdx
+			if rf.maxCapacity == 0 && rf.accountingHelper.Allocator.Used() >= rf.memoryLimit {
+				rf.maxCapacity = rf.machine.rowIdx
 			}
 			if rf.machine.rowIdx >= rf.machine.batch.Capacity() ||
-				(rf.memAccounting.maxCapacity > 0 && rf.machine.rowIdx >= rf.memAccounting.maxCapacity) ||
+				(rf.maxCapacity > 0 && rf.machine.rowIdx >= rf.maxCapacity) ||
 				(rf.machine.limitHint > 0 && rf.machine.rowIdx >= rf.machine.limitHint) {
 				// We either
 				//   1. have no more room in our batch, so output it immediately
