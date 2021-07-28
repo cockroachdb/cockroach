@@ -79,8 +79,9 @@ func (p *planner) AlterRoleNode(
 	kvOptions tree.KVOptions,
 ) (*alterRoleNode, error) {
 	// Note that for Postgres, only superuser can ALTER another superuser.
-	// CockroachDB does not support superuser privilege right now.
-	// However we make it so the admin role cannot be edited (done in startExec).
+	// CockroachDB does not support the superuser role option right now, but we
+	// make it so any member of the ADMIN role can only be edited by another ADMIN
+	// (done in startExec).
 	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
@@ -189,6 +190,16 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			return nil
 		}
 		return errors.Newf("role/user %s does not exist", normalizedUsername)
+	}
+
+	isAdmin, err := params.p.UserHasAdminRole(params.ctx, normalizedUsername)
+	if err != nil {
+		return err
+	}
+	if isAdmin {
+		if err := params.p.RequireAdminRole(params.ctx, "ALTER ROLE admin"); err != nil {
+			return err
+		}
 	}
 
 	if n.roleOptions.Contains(roleoption.PASSWORD) {
