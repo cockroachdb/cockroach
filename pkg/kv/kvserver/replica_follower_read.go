@@ -38,10 +38,11 @@ var FollowerReadsEnabled = settings.RegisterBoolSetting(
 // advanced closed timestamp.
 func BatchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
 	// Explanation of conditions:
-	// 1. the batch needs to be part of a transaction, because non-transactional
-	//    batches often rely on the server setting their timestamp. If a follower
-	//    with a lagging clock sets their timestamp then they might miss past
-	//    writes served at higher timestamps.
+	// 1. the batch cannot have or intend to receive a timestamp set from a
+	//    server-side clock. If a follower with a lagging clock sets its timestamp
+	//    and this then allows the follower to evaluate the batch as a follower
+	//    read, then the batch might miss past writes served at higher timestamps
+	//    on the leaseholder.
 	// 2. each request in the batch needs to be "transactional", because those are
 	//    the only ones that have clearly defined semantics when served under the
 	//    closed timestamp.
@@ -49,7 +50,11 @@ func BatchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
 	//    propose writes to Raft.
 	// 4. the batch needs to be non-locking, because unreplicated locks are only
 	//    held on the leaseholder.
-	return ba.Txn != nil && ba.IsAllTransactional() && ba.IsReadOnly() && !ba.IsLocking()
+	tsFromServerClock := ba.Txn == nil && (ba.Timestamp.IsEmpty() || ba.TimestampFromServerClock)
+	if tsFromServerClock {
+		return false
+	}
+	return ba.IsAllTransactional() && ba.IsReadOnly() && !ba.IsLocking()
 }
 
 // canServeFollowerReadRLocked tests, when a range lease could not be acquired,
@@ -83,7 +88,7 @@ func (r *Replica) canServeFollowerReadRLocked(
 		return false
 	}
 
-	requiredFrontier := ba.Txn.RequiredFrontier()
+	requiredFrontier := ba.RequiredFrontier()
 	maxClosed, _ := r.maxClosedRLocked(ctx, requiredFrontier /* sufficient */)
 	canServeFollowerRead := requiredFrontier.LessEq(maxClosed)
 	tsDiff := requiredFrontier.GoTime().Sub(maxClosed.GoTime())

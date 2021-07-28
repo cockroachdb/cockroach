@@ -109,6 +109,15 @@ func TestCanSendToFollower(t *testing.T) {
 		ba.Add(req)
 		return ba
 	}
+	withBatchTimestamp := func(ba roachpb.BatchRequest, ts hlc.Timestamp) roachpb.BatchRequest {
+		ba.Timestamp = ts
+		return ba
+	}
+	withServerSideBatchTimestamp := func(ba roachpb.BatchRequest, ts hlc.Timestamp) roachpb.BatchRequest {
+		ba = withBatchTimestamp(ba, ts)
+		ba.TimestampFromServerClock = true
+		return ba
+	}
 
 	testCases := []struct {
 		name                  string
@@ -120,8 +129,38 @@ func TestCanSendToFollower(t *testing.T) {
 		exp                   bool
 	}{
 		{
-			name: "non-txn batch",
+			name: "non-txn batch, without ts",
 			ba:   batch(nil, &roachpb.GetRequest{}),
+			exp:  false,
+		},
+		{
+			name: "stale non-txn batch",
+			ba:   withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), stale),
+			exp:  true,
+		},
+		{
+			name: "current-time non-txn batch",
+			ba:   withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), current),
+			exp:  false,
+		},
+		{
+			name: "future non-txn batch",
+			ba:   withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), future),
+			exp:  false,
+		},
+		{
+			name: "stale non-txn batch, server-side ts",
+			ba:   withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), stale),
+			exp:  false,
+		},
+		{
+			name: "current-time non-txn batch, server-side ts",
+			ba:   withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), current),
+			exp:  false,
+		},
+		{
+			name: "future non-txn batch, server-side ts",
+			ba:   withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), future),
 			exp:  false,
 		},
 		{
@@ -181,8 +220,44 @@ func TestCanSendToFollower(t *testing.T) {
 			exp:  false,
 		},
 		{
-			name:     "non-txn batch, global reads policy",
+			name:     "non-txn batch, without ts, global reads policy",
 			ba:       batch(nil, &roachpb.GetRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "stale non-txn batch, global reads policy",
+			ba:       withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), stale),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "current-time non-txn batch, global reads policy",
+			ba:       withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), current),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "future non-txn batch, global reads policy",
+			ba:       withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), future),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "stale non-txn batch, server-side ts, global reads policy",
+			ba:       withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), stale),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "current-time non-txn batch, server-side ts, global reads policy",
+			ba:       withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), current),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "future non-txn batch, server-side ts, global reads policy",
+			ba:       withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), future),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
