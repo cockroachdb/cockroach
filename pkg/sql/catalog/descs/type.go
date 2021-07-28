@@ -12,6 +12,7 @@ package descs
 
 import (
 	"context"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -107,6 +109,8 @@ func (tc *Collection) getTypeByID(
 	desc, err := tc.getDescriptorByID(ctx, txn, typeID, flags.CommonLookupFlags)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			log.Infof(ctx, "type ID %d does not exist for txn %s, dumping stack %s",
+				typeID, txn, string(debug.Stack()))
 			return nil, pgerror.Newf(
 				pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
 		}
