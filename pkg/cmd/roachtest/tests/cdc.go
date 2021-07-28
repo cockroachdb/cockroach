@@ -812,6 +812,7 @@ func registerCDC(r registry.Registry) {
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4),
 		RequiresLicense: true,
+		Skip:            "timeouts #68167",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCBank(ctx, t, c)
 		},
