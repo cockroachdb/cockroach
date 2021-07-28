@@ -97,6 +97,10 @@ const (
 
 	// Maximum allowable permissions.
 	maxKeyPermissions os.FileMode = 0700
+
+	// Maximum allowable permissions if file is owned by root.
+	maxGroupKeyPermissions os.FileMode = 0740
+
 	// Filename extenstions.
 	certExtension = `.crt`
 	keyExtension  = `.key`
@@ -390,11 +394,8 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 	}
 
 	if !cl.skipPermissionChecks {
-		// Check permissions bits.
-		filePerm := fileMode.Perm()
-		if exceedsPermissions(filePerm, maxKeyPermissions) {
-			return errors.Errorf("key file %s has permissions %s, exceeds %s",
-				fullKeyPath, filePerm, maxKeyPermissions)
+		if err = checkFilePermissions(os.Getgid(), fullKeyPath, info); err != nil {
+			return err
 		}
 	}
 
