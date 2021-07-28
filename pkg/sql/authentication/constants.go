@@ -17,3 +17,6 @@ var UsersTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName
 
 // RoleOptionsTableName represents system.role_options.
 var RoleOptionsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "role_options")
+
+// DatabaseRoleSettingsTableName represents system.database_role_settings.
+var DatabaseRoleSettingsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "database_role_settings")

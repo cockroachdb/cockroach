@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -330,6 +331,23 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		)
 		if err != nil {
 			return err
+		}
+
+		// TODO(rafi): Remove this condition in 21.2.
+		if params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.DatabaseRoleSettings) {
+			_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+				params.ctx,
+				opName,
+				params.p.txn,
+				fmt.Sprintf(
+					`DELETE FROM %s WHERE role_name = $1`,
+					authentication.DatabaseRoleSettingsTableName,
+				),
+				normalizedUsername,
+			)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

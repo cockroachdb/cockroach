@@ -348,6 +348,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableSetSchemaNode{}):        "alter table set schema",
 	reflect.TypeOf(&alterTypeNode{}):                  "alter type",
 	reflect.TypeOf(&alterRoleNode{}):                  "alter role",
+	reflect.TypeOf(&alterRoleSetNode{}):               "alter role set var",
 	reflect.TypeOf(&applyJoinNode{}):                  "apply join",
 	reflect.TypeOf(&bufferNode{}):                     "buffer",
 	reflect.TypeOf(&cancelQueriesNode{}):              "cancel queries",
