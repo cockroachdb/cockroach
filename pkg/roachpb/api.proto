@@ -1984,6 +1984,23 @@ message Header {
   // violations where a non-transactional read following a write could fail to
   // observe the write.
   bool timestamp_from_server_clock = 20;
+  // min_timestamp_bound is set when a read-only batch is performing a bounded
+  // staleness read and wants its timestamp to be chosen dynamically, based on
+  // a resolved timestamp from its target replica(s). If the field is set, a
+  // resolved timestamp over the request's key span will be computed on the
+  // target replica. If the resolved timestamp is equal to or greater than the
+  // minimum timestamp bound, the batch timestamp will be set to the resolved
+  // timestamp, the batch will be evaluated, and the negotiated timestamp will
+  // be recorded in the BatchResponse Header. If the resolved timestamp is
+  // below the minimum timestamp bound, the request will be rejected with a
+  // MinTimestampBoundUnsatisfiableError.
+  //
+  // Transactional requests are not allowed to set this field. As a result,
+  // the request can not span ranges and will be rejected by the DistSender
+  // with an OpRequiresTxnError if it attempts to.
+  //
+  // Requests with a non-zero timestamp are not allowed to set this field.
+  util.hlc.Timestamp min_timestamp_bound = 22 [(gogoproto.nullable) = false];
   // replica specifies the destination of the request.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
   // range_id specifies the ID of the Raft consensus group which the key
