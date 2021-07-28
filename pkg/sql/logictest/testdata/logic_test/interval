@@ -404,12 +404,12 @@ SET intervalstyle = 'sql_standard'
 statement ok
 SET intervalstyle_enabled = 'on'
 
-statement error context-dependent operators are not allowed in computed column\nHINT: INTERVAL to STRING casts depends on IntervalStyle; consider using to_char_with_style\(interval, 'postgres'\)
+statement error context-dependent operators are not allowed in computed column\nHINT: INTERVAL to STRING casts depends on IntervalStyle; consider using to_char\(interval\)
 CREATE TABLE invalid_table (
   invalid_col string AS ('1 hour'::interval::string) STORED
 )
 
-statement error string::interval: context-dependent operators are not allowed in computed column\nHINT: STRING to INTERVAL casts depend on session IntervalStyle; use parse_interval\(string, 'postgres'\) instead
+statement error string::interval: context-dependent operators are not allowed in computed column\nHINT: STRING to INTERVAL casts depend on session IntervalStyle; use parse_interval\(string\) instead
 CREATE TABLE invalid_table (
   invalid_col interval AS ('1 hour'::string::interval) STORED
 )
@@ -445,29 +445,32 @@ SELECT i FROM intervals ORDER BY pk
 1 day 04:06:08.123
 2 years 11 mons -2 days +03:25:45.678
 
-query TTTBBB
-WITH tbl(pk, i, pg, iso, sql_std) AS (
+query TTTTBBBB
+WITH tbl(pk, i, pg, iso, sql_std, default_style) AS (
   SELECT
     pk,
     i,
     to_char_with_style(i, 'postgres') AS pg,
     to_char_with_style(i, 'iso_8601') AS iso,
-    to_char_with_style(i, 'sql_standard') AS sql_std
+    to_char_with_style(i, 'sql_standard') AS sql_std,
+    to_char(i) AS default_style
   FROM intervals
 )
 SELECT
   pg,
   iso,
   sql_std,
+  default_style,
   i = parse_interval(pg, 'postgres'),
   i = parse_interval(iso, 'iso_8601'),
-  i = parse_interval(sql_std, 'sql_standard')
+  i = parse_interval(sql_std, 'sql_standard'),
+  i = parse_interval(default_style) AND pg = default_style
 FROM tbl
 ORDER BY pk
 ----
--2 years -11 mons +1 day 04:05:06.123  P-2Y-11M1DT4H5M6.123S   -2-11 +1 +4:05:06.123  true  true  true
-1 day 04:06:08.123                     P1DT4H6M8.123S          1 4:06:08.123          true  true  true
-2 years 11 mons -2 days +03:25:45.678  P2Y11M-2DT3H25M45.678S  +2-11 -2 +3:25:45.678  true  true  true
+-2 years -11 mons +1 day 04:05:06.123  P-2Y-11M1DT4H5M6.123S   -2-11 +1 +4:05:06.123  -2 years -11 mons +1 day 04:05:06.123  true  true  true  true
+1 day 04:06:08.123                     P1DT4H6M8.123S          1 4:06:08.123          1 day 04:06:08.123                     true  true  true  true
+2 years 11 mons -2 days +03:25:45.678  P2Y11M-2DT3H25M45.678S  +2-11 -2 +3:25:45.678  2 years 11 mons -2 days +03:25:45.678  true  true  true  true
 
 query T
 SELECT array_to_string(array_agg(i ORDER BY pk), ' ') FROM intervals
