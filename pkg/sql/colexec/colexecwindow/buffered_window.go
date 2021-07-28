@@ -30,7 +30,7 @@ import (
 // newBufferedWindowOperator creates a new Operator that computes the given
 // window function.
 func newBufferedWindowOperator(
-	args *WindowArgs, windower bufferedWindower, outputColType *types.T,
+	args *WindowArgs, windower bufferedWindower, outputColType *types.T, memoryLimit int64,
 ) colexecop.Operator {
 	outputTypes := make([]*types.T, len(args.InputTypes), len(args.InputTypes)+1)
 	copy(outputTypes, args.InputTypes)
@@ -41,7 +41,7 @@ func newBufferedWindowOperator(
 		windowInitFields: windowInitFields{
 			OneInputNode: colexecop.NewOneInputNode(input),
 			allocator:    args.MainAllocator,
-			memoryLimit:  args.MemoryLimit,
+			memoryLimit:  memoryLimit,
 			diskQueueCfg: args.QueueCfg,
 			fdSemaphore:  args.FdSemaphore,
 			outputTypes:  outputTypes,

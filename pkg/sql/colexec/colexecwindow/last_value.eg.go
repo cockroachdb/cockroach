@@ -39,6 +39,7 @@ func NewLastValueOperator(
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
 	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
+	mainMemLimit := args.MemoryLimit - bufferMemLimit
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
 		args.FdSemaphore, args.InputTypes, args.DiskAcc, colsToStore...)
@@ -58,69 +59,69 @@ func NewLastValueOperator(
 		case -1:
 		default:
 			windower := &lastValueBoolWindow{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.BytesFamily:
 		switch argType.Width() {
 		case -1:
 		default:
 			windower := &lastValueBytesWindow{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.DecimalFamily:
 		switch argType.Width() {
 		case -1:
 		default:
 			windower := &lastValueDecimalWindow{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.IntFamily:
 		switch argType.Width() {
 		case 16:
 			windower := &lastValueInt16Window{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		case 32:
 			windower := &lastValueInt32Window{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		case -1:
 		default:
 			windower := &lastValueInt64Window{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.FloatFamily:
 		switch argType.Width() {
 		case -1:
 		default:
 			windower := &lastValueFloat64Window{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.TimestampTZFamily:
 		switch argType.Width() {
 		case -1:
 		default:
 			windower := &lastValueTimestampWindow{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.IntervalFamily:
 		switch argType.Width() {
 		case -1:
 		default:
 			windower := &lastValueIntervalWindow{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case types.JsonFamily:
 		switch argType.Width() {
 		case -1:
 		default:
 			windower := &lastValueJSONWindow{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
 		case -1:
 		default:
 			windower := &lastValueDatumWindow{lastValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	}
 	return nil, errors.Errorf("unsupported lastValue window operator type %s", argType.Name())
