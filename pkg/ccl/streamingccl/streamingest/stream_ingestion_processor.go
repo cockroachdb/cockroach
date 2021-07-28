@@ -397,12 +397,19 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 		return nil, nil
 	}
 
+	var waitingForCutover bool
 	for sip.State == execinfra.StateRunning {
 		select {
 		case event, ok := <-sip.eventCh:
-			if !ok {
+			if !ok && !waitingForCutover {
 				sip.internalDrained = true
 				return sip.flush()
+			}
+
+			// If we lost connection with the client, wait for cutover signal instead of
+			// moving to draining state.
+			if !ok && waitingForCutover {
+				continue
 			}
 
 			switch event.Type() {
@@ -426,6 +433,9 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 				}
 
 				return sip.flush()
+			case streamingccl.GenerationEvent:
+				log.Info(sip.Ctx, "client disconnected")
+				waitingForCutover = true
 			default:
 				return nil, errors.Newf("unknown streaming event type %v", event.Type())
 			}

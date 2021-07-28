@@ -11,6 +11,7 @@ package streamclient
 import (
 	"context"
 	gosql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"strconv"
 
@@ -123,9 +124,15 @@ func (m *sinklessReplicationClient) ConsumePartition(
 				return
 			}
 		}
-		if err := rows.Err(); err != nil {
+		if err := rows.Err(); errors.Is(err, driver.ErrBadConn) {
+			select {
+			case <-eventCh:
+				eventCh <- streamingccl.MakeGenerationEvent()
+			default:
+				errCh <- err
+			}
+		} else if err != nil {
 			errCh <- err
-			return
 		}
 	}()
 
