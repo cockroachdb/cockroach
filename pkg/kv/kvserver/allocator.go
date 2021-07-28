@@ -544,7 +544,14 @@ func (a *Allocator) computeAction(
 		return action, adjustedPriority
 	}
 
-	liveVoters, deadVoters := a.storePool.liveAndDeadReplicas(voterReplicas)
+	// NB: For the purposes of determining whether a range has quorum, we
+	// consider stores marked as "suspect" to be live. This is necessary because
+	// we would otherwise spuriously consider ranges with replicas on suspect
+	// stores to be unavailable, just because their nodes have failed a liveness
+	// heartbeat in the recent past. This means we won't move those replicas
+	// elsewhere (for a regular rebalance or for decommissioning).
+	const includeSuspectStores = true
+	liveVoters, deadVoters := a.storePool.liveAndDeadReplicas(voterReplicas, includeSuspectStores)
 
 	if len(liveVoters) < quorum {
 		// Do not take any replacement/removal action if we do not have a quorum of
@@ -623,7 +630,9 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
-	liveNonVoters, deadNonVoters := a.storePool.liveAndDeadReplicas(nonVoterReplicas)
+	liveNonVoters, deadNonVoters := a.storePool.liveAndDeadReplicas(
+		nonVoterReplicas, includeSuspectStores,
+	)
 	if haveNonVoters == neededNonVoters && len(deadNonVoters) > 0 {
 		// The range has non-voter(s) on a dead node that we should replace.
 		action = AllocatorReplaceDeadNonVoter
@@ -1289,7 +1298,7 @@ func (a *Allocator) TransferLeaseTarget(
 			return roachpb.ReplicaDescriptor{}
 		}
 		// Verify that the preferred replica is eligible to receive the lease.
-		preferred, _ = a.storePool.liveAndDeadReplicas(preferred)
+		preferred, _ = a.storePool.liveAndDeadReplicas(preferred, false /* includeSuspectStores */)
 		if len(preferred) == 1 {
 			return preferred[0]
 		}
@@ -1303,8 +1312,8 @@ func (a *Allocator) TransferLeaseTarget(
 		}
 	}
 
-	// Only consider live, non-draining replicas.
-	existing, _ = a.storePool.liveAndDeadReplicas(existing)
+	// Only consider live, non-draining, non-suspect replicas.
+	existing, _ = a.storePool.liveAndDeadReplicas(existing, false /* includeSuspectStores */)
 
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseStoreID) {
@@ -1408,8 +1417,8 @@ func (a *Allocator) ShouldTransferLease(
 	sl = sl.filter(zone.VoterConstraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
-	// Only consider live, non-draining replicas.
-	existing, _ = a.storePool.liveAndDeadReplicas(existing)
+	// Only consider live, non-draining, non-suspect replicas.
+	existing, _ = a.storePool.liveAndDeadReplicas(existing, false /* includeSuspectNodes */)
 
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == source.StoreID) {
