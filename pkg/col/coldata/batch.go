@@ -55,9 +55,6 @@ type Batch interface {
 	// provided Vec. The original and the replacement vectors *must* be of the
 	// same type.
 	ReplaceCol(Vec, int)
-	// BytesLikeTotalSize returns the total size in bytes of all Bytes-like
-	// vectors in the batch.
-	BytesLikeTotalSize() int64
 	// Reset modifies the caller in-place to have the given length and columns
 	// with the given types. If it's possible, Reset will reuse the existing
 	// columns and allocations, invalidating existing references to the Batch or
@@ -184,10 +181,6 @@ func (b *zeroBatch) ReplaceCol(Vec, int) {
 	panic("no columns should be replaced in zero batch")
 }
 
-func (b *zeroBatch) BytesLikeTotalSize() int64 {
-	return 0
-}
-
 func (b *zeroBatch) Reset([]*types.T, int, ColumnFactory) {
 	panic("zero batch should not be reset")
 }
@@ -286,20 +279,6 @@ func (m *MemBatch) ReplaceCol(col Vec, colIdx int) {
 			"whereas the replacement is %s", m.b[colIdx].Type(), col.Type()))
 	}
 	m.b[colIdx] = col
-}
-
-// BytesLikeTotalSize implements the Batch interface.
-func (m *MemBatch) BytesLikeTotalSize() int64 {
-	var sz int64
-	for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
-		switch m.b[i].CanonicalTypeFamily() {
-		case types.BytesFamily:
-			sz += m.b[i].Bytes().Size()
-		case types.JsonFamily:
-			sz += m.b[i].JSON().Size()
-		}
-	}
-	return sz
 }
 
 // Reset implements the Batch interface.

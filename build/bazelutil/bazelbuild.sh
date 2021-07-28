@@ -10,10 +10,11 @@ fi
 
 CONFIG="$1"
 
+# Only build docs on Linux.
 DOC_TARGETS=
 if [ "$CONFIG" == "crosslinux" ]
 then
-   DOC_TARGETS="//docs/generated:gen-logging-md //docs/generated/settings:settings //docs/generated/settings:settings_for_tenants //docs/generated/sql"
+   DOC_TARGETS="//docs/generated:gen-logging-md //docs/generated:gen-logsinks-md //docs/generated:gen-eventlog-md //docs/generated:gen-logformats-md //docs/generated/settings:settings //docs/generated/settings:settings_for_tenants //docs/generated/sql //docs/generated/sql/bnf"
 fi
 
 bazel build //pkg/cmd/bazci --config=ci

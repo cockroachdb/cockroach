@@ -12,12 +12,14 @@ package colmem_test
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -247,6 +250,86 @@ func TestPerformAppend(t *testing.T) {
 			// Reset the test batches in order to simulate reuse.
 			batch1.ResetInternalBatch()
 			batch2.ResetInternalBatch()
+		}
+	}
+}
+
+func TestSetAccountingHelper(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
+	st := cluster.MakeTestingClusterSettings()
+	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	defer testMemMonitor.Stop(ctx)
+	memAcc := testMemMonitor.MakeBoundAccount()
+	defer memAcc.Close(ctx)
+	evalCtx := tree.MakeTestingEvalContext(st)
+	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
+	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
+	numCols := rng.Intn(10) + 1
+	typs := make([]*types.T, numCols)
+	for i := range typs {
+		typs[i] = randgen.RandType(rng)
+	}
+
+	var helper colmem.SetAccountingHelper
+	// We don't use notNeededVecIdxs because it is difficult to calculate
+	// expected value for the memory used (the vectors are appropriately
+	// allocated when creating a new batch but then aren't modified - and, thus,
+	// ignored by the helper.
+	helper.Init(testAllocator, typs, nil /* notNeededVecIdxs */)
+
+	numIterations := rng.Intn(10) + 1
+	numRows := rng.Intn(coldata.BatchSize()) + 1
+
+	const smallMemSize = 0
+	const largeMemSize = math.MaxInt64
+
+	var batch coldata.Batch
+	for iteration := 0; iteration < numIterations; iteration++ {
+		// We use zero memory limit so that the same batch is used between most
+		// iterations.
+		maxBatchMemSize := int64(smallMemSize)
+		if rng.Float64() < 0.25 {
+			// But occasionally we'll use the large mem limit - as a result, a
+			// new batch with larger capacity might be allocated.
+			maxBatchMemSize = largeMemSize
+		}
+		batch, _ = helper.ResetMaybeReallocate(typs, batch, numRows, maxBatchMemSize)
+
+		for rowIdx := 0; rowIdx < batch.Capacity(); rowIdx++ {
+			for vecIdx, typ := range typs {
+				switch typ.Family() {
+				case types.BytesFamily:
+					// For Bytes, insert pretty large values.
+					v := make([]byte, rng.Intn(8*coldata.BytesInitialAllocationFactor))
+					_, _ = rng.Read(v)
+					batch.ColVec(vecIdx).Bytes().Set(rowIdx, v)
+				default:
+					datum := randgen.RandDatum(rng, typ, false /* nullOk */)
+					converter := colconv.GetDatumToPhysicalFn(typ)
+					coldata.SetValueAt(batch.ColVec(vecIdx), converter(datum), rowIdx)
+				}
+			}
+			helper.AccountForSet(batch, rowIdx)
+		}
+
+		// At this point, we have set all rows in the batch and performed the
+		// memory accounting for each set. We no longer have any uninitialized
+		// elements, so the memory footprint of the batch must be exactly as
+		// what we have accounted for.
+		expected := colmem.GetBatchMemSize(batch)
+		actual := testAllocator.Used()
+		if expected != actual {
+			fmt.Printf("iteration = %d numRows = %d\n", iteration, numRows)
+			for i := range typs {
+				fmt.Printf("%s ", typs[i].SQLString())
+			}
+			fmt.Println()
+			t.Fatal(errors.Newf("expected %d, actual %d", expected, actual))
 		}
 	}
 }

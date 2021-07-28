@@ -167,6 +167,7 @@ genrule(
         "set_csetting_stmt.bnf",
         "set_exprs_internal.bnf",
         "set_operation.bnf",
+        "set_rest.bnf",
         "set_rest_more.bnf",
         "set_session_stmt.bnf",
         "set_transaction.bnf",
