@@ -45,6 +45,19 @@ enum ReadConsistencyType {
   INCONSISTENT = 2;
 }
 
+// RoutingPolicy specifies how a request should be routed to the
+// replicas of its target range(s) by the DistSender. Policies can
+// dictate which replicas are considered to be targets and in which
+// order.
+enum RoutingPolicy {
+  // LEASEHOLDER means that the DistSender should route the request to the
+  // leaseholder replica(s) of its target range(s).
+  LEASEHOLDER = 0;
+  // NEAREST means that the DistSender should route the request to the
+  // nearest replica(s) of its target range(s).
+  NEAREST = 1;
+}
+
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
   reserved 1, 2;
@@ -1935,6 +1948,18 @@ message Header {
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
   ReadConsistencyType read_consistency = 6;
+  // routing_policy specifies how a request should be routed to the
+  // replicas of its target range(s) by the DistSender. The default is
+  // LEASEHOLDER, which means that the request should be routed to the
+  // leaseholder(s) of its target range(s).
+  //
+  // The policy does not dictate which replicas in a range are eligible to
+  // serve the request, only which replicas are considered as targets by
+  // the DistSender, and in which order. A request that is routed to an
+  // ineligible replica (a function of request type, timestamp, and read
+  // consistency) will be rejected by that replica and the DistSender will
+  // target another replica in the range.
+  RoutingPolicy routing_policy = 19;
   // wait_policy specifies the desired behavior for the batch request if it
   // encounters a conflicting lock held by another active transaction.
   //
