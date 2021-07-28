@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/memsize",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/mon",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
@@ -28,6 +29,7 @@ go_test(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/settings/cluster",
+        "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",
         "//pkg/sql/execinfra",
@@ -38,6 +40,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
