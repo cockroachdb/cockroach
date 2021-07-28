@@ -2344,6 +2344,22 @@ var builtins = map[string]builtinDefinition{
 		},
 	),
 
+	"to_char": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"interval", types.Interval}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				d := tree.MustBeDInterval(args[0]).Duration
+				var buf bytes.Buffer
+				d.FormatWithStyle(&buf, duration.IntervalStyle_POSTGRES)
+				return tree.NewDString(buf.String()), nil
+			},
+			Info:       "Convert an interval to a string assuming the Postgres IntervalStyle.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"to_char_with_style": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -3022,6 +3038,14 @@ may increase either contention or retry errors, or both.`,
 
 	"parse_interval": makeBuiltin(
 		defProps(),
+		stringOverload1(
+			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
+				return tree.ParseDInterval(duration.IntervalStyle_POSTGRES, s)
+			},
+			types.Interval,
+			"Convert a string to an interval assuming the Postgres IntervalStyle.",
+			tree.VolatilityImmutable,
+		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"string", types.String}, {"style", types.String}},
 			ReturnType: tree.FixedReturnType(types.Interval),
