@@ -98,7 +98,7 @@ func (rf *ReplicationFeed) Close() {
 }
 
 func (rf *ReplicationFeed) consumeUntil(pred FeedPredicate) error {
-	const maxWait = 10 * time.Second
+	const maxWait = 20 * time.Second
 	doneCh := make(chan struct{})
 	mu := struct {
 		syncutil.Mutex

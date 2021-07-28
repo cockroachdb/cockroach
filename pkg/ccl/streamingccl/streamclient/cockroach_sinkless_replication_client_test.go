@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer" // Ensure we can start replication stream.
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -27,9 +26,10 @@ import (
 // channelFeedSource wraps the eventsCh returned from a client. It expects that
 // no errors are returned from the client.
 type channelFeedSource struct {
-	t       *testing.T
-	eventCh chan streamingccl.Event
-	errCh   chan error
+	t               *testing.T
+	cancelIngestion context.CancelFunc
+	eventCh         chan streamingccl.Event
+	errCh           chan error
 }
 
 var _ streamingtest.FeedSource = (*channelFeedSource)(nil)
@@ -50,14 +50,11 @@ func (f *channelFeedSource) Next() (streamingccl.Event, bool) {
 
 // Close implements the streamingtest.FeedSource interface.
 func (f *channelFeedSource) Close() {
-	close(f.eventCh)
+	f.cancelIngestion()
 }
 
 func TestSinklessReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	// channel usage error in this test
-	skip.WithIssue(t, 68168)
 
 	defer log.Scope(t).Close(t)
 	h, cleanup := streamingtest.NewReplicationHelper(t)
@@ -99,7 +96,7 @@ INSERT INTO d.t2 VALUES (2);
 		clientCtx, cancelIngestion := context.WithCancel(ctx)
 		eventCh, errCh, err := client.ConsumePartition(clientCtx, pa, startTime)
 		require.NoError(t, err)
-		feedSource := &channelFeedSource{eventCh: eventCh, errCh: errCh}
+		feedSource := &channelFeedSource{cancelIngestion: cancelIngestion, eventCh: eventCh, errCh: errCh}
 		feed := streamingtest.MakeReplicationFeed(t, feedSource)
 
 		// We should observe 2 versions of this key: one with ("привет", "world"), and a later
