@@ -11,7 +11,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"go/constant"
@@ -19,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -57,29 +55,6 @@ type createTableNode struct {
 	n          *tree.CreateTable
 	dbDesc     catalog.DatabaseDescriptor
 	sourcePlan planNode
-}
-
-// minimumTypeUsageVersions defines the minimum version needed for a new
-// data type.
-var minimumTypeUsageVersions = map[types.Family]clusterversion.Key{
-	types.GeographyFamily: clusterversion.GeospatialType,
-	types.GeometryFamily:  clusterversion.GeospatialType,
-	types.Box2DFamily:     clusterversion.Box2DType,
-}
-
-// isTypeSupportedInVersion returns whether a given type is supported in the given version.
-func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) (bool, error) {
-	// For these checks, if we have an array, we only want to find whether
-	// we support the array contents.
-	if t.Family() == types.ArrayFamily {
-		t = t.ArrayContents()
-	}
-
-	minVersion, ok := minimumTypeUsageVersions[t.Family()]
-	if !ok {
-		return true, nil
-	}
-	return v.IsActive(minVersion), nil
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -587,11 +562,6 @@ func addUniqueWithoutIndexColumnTableDef(
 	ts TableState,
 	validationBehavior tree.ValidationBehavior,
 ) error {
-	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to use UNIQUE WITHOUT INDEX",
-			clusterversion.UniqueWithoutIndexConstraints)
-	}
 	if !sessionData.EnableUniqueWithoutIndexConstraints {
 		return pgerror.New(pgcode.FeatureNotSupported,
 			"unique constraints without an index are not yet supported",
@@ -626,11 +596,6 @@ func addUniqueWithoutIndexTableDef(
 	validationBehavior tree.ValidationBehavior,
 	semaCtx *tree.SemaContext,
 ) error {
-	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to use UNIQUE WITHOUT INDEX",
-			clusterversion.UniqueWithoutIndexConstraints)
-	}
 	if !sessionData.EnableUniqueWithoutIndexConstraints {
 		return pgerror.New(pgcode.FeatureNotSupported,
 			"unique constraints without an index are not yet supported",
@@ -969,40 +934,6 @@ func ResolveFK(
 		}
 	}
 
-	// Check if the version is high enough to stop creating origin indexes.
-	if evalCtx.Settings != nil &&
-		!evalCtx.Settings.Version.IsActive(ctx, clusterversion.NoOriginFKIndexes) {
-		// Search for an index on the origin table that matches. If one doesn't exist,
-		// we create one automatically if the table to alter is new or empty. We also
-		// search if an index for the set of columns was created in this transaction.
-		_, err = tabledesc.FindFKOriginIndexInTxn(tbl, originColumnIDs)
-		// If there was no error, we found a suitable index.
-		if err != nil {
-			// No existing suitable index was found.
-			if ts == NonEmptyTable {
-				var colNames bytes.Buffer
-				colNames.WriteString(`("`)
-				for i, id := range originColumnIDs {
-					if i != 0 {
-						colNames.WriteString(`", "`)
-					}
-					col, err := tbl.FindColumnWithID(id)
-					if err != nil {
-						return err
-					}
-					colNames.WriteString(col.GetName())
-				}
-				colNames.WriteString(`")`)
-				return pgerror.Newf(pgcode.ForeignKeyViolation,
-					"foreign key requires an existing index on columns %s", colNames.String())
-			}
-			_, err := addIndexForFK(ctx, tbl, originCols, constraintName, ts)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
 	// Ensure that there is a unique constraint on the referenced side to use.
 	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, targetColIDs)
 	if err != nil {
@@ -1038,57 +969,6 @@ func ResolveFK(
 	}
 
 	return nil
-}
-
-// Adds an index to a table descriptor (that is in the process of being created)
-// that will support using `srcCols` as the referencing (src) side of an FK.
-func addIndexForFK(
-	ctx context.Context,
-	tbl *tabledesc.Mutable,
-	srcCols []catalog.Column,
-	constraintName string,
-	ts TableState,
-) (descpb.IndexID, error) {
-	autoIndexName := tabledesc.GenerateUniqueName(
-		fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
-		func(name string) bool {
-			return tbl.ValidateIndexNameIsUnique(name) != nil
-		},
-	)
-	// No existing index for the referencing columns found, so we add one.
-	idx := descpb.IndexDescriptor{
-		Name:                autoIndexName,
-		KeyColumnNames:      make([]string, len(srcCols)),
-		KeyColumnDirections: make([]descpb.IndexDescriptor_Direction, len(srcCols)),
-	}
-	for i, c := range srcCols {
-		idx.KeyColumnDirections[i] = descpb.IndexDescriptor_ASC
-		idx.KeyColumnNames[i] = c.GetName()
-	}
-
-	if ts == NewTable {
-		if err := tbl.AddSecondaryIndex(idx); err != nil {
-			return 0, err
-		}
-		if err := tbl.AllocateIDs(ctx); err != nil {
-			return 0, err
-		}
-		added := tbl.PublicNonPrimaryIndexes()[len(tbl.PublicNonPrimaryIndexes())-1]
-		return added.GetID(), nil
-	}
-
-	// TODO (lucy): In the EmptyTable case, we add an index mutation, making this
-	// the only case where a foreign key is added to an index being added.
-	// Allowing FKs to be added to other indexes/columns also being added should
-	// be a generalization of this special case.
-	if err := tbl.AddIndexMutation(&idx, descpb.DescriptorMutation_ADD); err != nil {
-		return 0, err
-	}
-	if err := tbl.AllocateIDs(ctx); err != nil {
-		return 0, err
-	}
-	id := tbl.Mutations[len(tbl.Mutations)-1].GetIndex().ID
-	return id, nil
 }
 
 func (p *planner) addInterleave(
@@ -1486,19 +1366,7 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	indexEncodingVersion := descpb.SecondaryIndexFamilyFormatVersion
-	// We can't use st.Version.IsActive because this method is used during
-	// server setup before the cluster version has been initialized.
-	version := st.Version.ActiveVersionOrEmpty(ctx)
-	if version != (clusterversion.ClusterVersion{}) {
-		if version.IsActive(clusterversion.EmptyArraysInInvertedIndexes) {
-			// descpb.StrictIndexColumnIDGuaranteesVersion is like
-			// descpb.EmptyArraysInInvertedIndexesVersion but allows a stronger level
-			// of descriptor validation checks.
-			indexEncodingVersion = descpb.StrictIndexColumnIDGuaranteesVersion
-		}
-	}
-
+	indexEncodingVersion := descpb.StrictIndexColumnIDGuaranteesVersion
 	isRegionalByRow := n.Locality != nil && n.Locality.LocalityLevel == tree.LocalityLevelRow
 
 	var partitionAllBy *tree.PartitionBy
@@ -1646,9 +1514,6 @@ func NewTableDesc(
 					"to enable, use SET experimental_enable_implicit_column_partitioning = true",
 				)
 			}
-			if err := checkClusterSupportsPartitionByAll(evalCtx); err != nil {
-				return nil, err
-			}
 			desc.PartitionAllBy = true
 			partitionAllBy = n.PartitionByTable.PartitionBy
 		}
@@ -1688,15 +1553,6 @@ func NewTableDesc(
 					)
 				}
 			}
-			if supported, err := isTypeSupportedInVersion(version, defType); err != nil {
-				return nil, err
-			} else if !supported {
-				return nil, pgerror.Newf(
-					pgcode.FeatureNotSupported,
-					"type %s is not supported until version upgrade is finalized",
-					defType.SQLString(),
-				)
-			}
 			if d.PrimaryKey.Sharded {
 				if !sessionData.HashShardedIndexesEnabled {
 					return nil, hashShardedIndexesDisabledError
@@ -1730,15 +1586,8 @@ func NewTableDesc(
 				n.Defs = append(n.Defs, checkConstraint)
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
-			if d.IsVirtual() {
-				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.VirtualComputedColumns) {
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-						"version %v must be finalized to use virtual columns",
-						clusterversion.VirtualComputedColumns)
-				}
-				if d.HasColumnFamily() {
-					return nil, pgerror.Newf(pgcode.Syntax, "virtual columns cannot have family specifications")
-				}
+			if d.IsVirtual() && d.HasColumnFamily() {
+				return nil, pgerror.Newf(pgcode.Syntax, "virtual columns cannot have family specifications")
 			}
 
 			col, idx, expr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
@@ -2881,14 +2730,4 @@ func hashShardedIndexesOnRegionalByRowError() error {
 
 func interleaveOnRegionalByRowError() error {
 	return pgerror.New(pgcode.FeatureNotSupported, "interleaved tables are not compatible with REGIONAL BY ROW tables")
-}
-
-func checkClusterSupportsPartitionByAll(evalCtx *tree.EvalContext) error {
-	if !evalCtx.Settings.Version.IsActive(evalCtx.Context, clusterversion.MultiRegionFeatures) {
-		return pgerror.Newf(
-			pgcode.ObjectNotInPrerequisiteState,
-			`cannot use PARTITION ALL BY until the cluster upgrade is finalized`,
-		)
-	}
-	return nil
 }

@@ -23,7 +23,6 @@ go_library(
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/startupmigrations/leasemanager",

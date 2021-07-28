@@ -21,7 +21,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1404,10 +1403,8 @@ func (ns *prepStmtNamespace) resetTo(
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
-	if ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.NewSchemaChanger) {
-		ex.extraTxnState.schemaChangerState = SchemaChangerState{
-			mode: ex.sessionData.NewSchemaChangerMode,
-		}
+	ex.extraTxnState.schemaChangerState = SchemaChangerState{
+		mode: ex.sessionData.NewSchemaChangerMode,
 	}
 
 	for k := range ex.extraTxnState.schemaChangeJobsCache {

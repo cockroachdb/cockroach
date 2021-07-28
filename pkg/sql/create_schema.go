@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -94,13 +93,6 @@ func CreateUserDefinedSchemaDescriptor(
 	// Check validity of the schema name.
 	if err := schemadesc.IsSchemaNameValid(schemaName); err != nil {
 		return nil, nil, err
-	}
-
-	// Ensure that the cluster version is high enough to create the schema.
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.UserDefinedSchemas) {
-		return nil, nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			`creating schemas requires all nodes to be upgraded to %s`,
-			clusterversion.ByKey(clusterversion.UserDefinedSchemas))
 	}
 
 	// Create the ID.

@@ -251,7 +251,6 @@ func (p *planner) checkRegionIsCurrentlyActive(
 // CCL-licensed multi-region initialization code.
 var InitializeMultiRegionMetadataCCL = func(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
 	execCfg *ExecutorConfig,
 	liveClusterRegions LiveClusterRegions,
 	survivalGoal tree.SurvivalGoal,
@@ -300,7 +299,6 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 
 	regionConfig, err := InitializeMultiRegionMetadataCCL(
 		ctx,
-		p.EvalContext(),
 		p.ExecCfg(),
 		liveRegions,
 		survivalGoal,

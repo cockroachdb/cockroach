@@ -174,7 +174,6 @@ func (n *createViewNode) startExec(params runParams) error {
 	if replacingDesc != nil {
 		newDesc, err = params.p.replaceViewDesc(
 			params.ctx,
-			params.p.ExecCfg().Settings,
 			params.p,
 			n,
 			replacingDesc,
@@ -217,11 +216,6 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 
 		if n.materialized {
-			// Ensure all nodes are the correct version.
-			if !params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.MaterializedViews) {
-				return pgerror.New(pgcode.FeatureNotSupported,
-					"all nodes are not the correct version to use materialized views")
-			}
 			// If the view is materialized, set up some more state on the view descriptor.
 			// In particular,
 			// * mark the descriptor as a materialized view
@@ -266,13 +260,6 @@ func (n *createViewNode) startExec(params runParams) error {
 		newDesc = &desc
 	}
 
-	// Used to determine if we want users to be allowed to rename
-	// sequences used in views.
-	st := params.p.ExecCfg().Settings
-	version := st.Version.ActiveVersionOrEmpty(params.ctx)
-	byID := version != (clusterversion.ClusterVersion{}) &&
-		version.IsActive(clusterversion.SequencesRegclass)
-
 	// Persist the back-references in all referenced table descriptors.
 	for id, updated := range n.planDeps {
 		backRefMutable := backRefMutables[id]
@@ -290,7 +277,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			// yet known.
 			// We need to do it here.
 			dep.ID = newDesc.ID
-			dep.ByID = byID && updated.desc.IsSequence()
+			dep.ByID = updated.desc.IsSequence()
 			backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, dep)
 		}
 		if err := params.p.writeSchemaChange(
@@ -391,9 +378,7 @@ func makeViewTableDesc(
 	// If we're in 21.1, then sequences in views should be referenced
 	// by IDs, so walk the tree and replace sequence names with IDs.
 	version := st.Version.ActiveVersionOrEmpty(ctx)
-	byID := version != (clusterversion.ClusterVersion{}) &&
-		version.IsActive(clusterversion.SequencesRegclass)
-	if sc != nil && byID {
+	if sc != nil {
 		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery)
 		if err != nil {
 			return tabledesc.Mutable{}, err
@@ -501,7 +486,6 @@ func serializeUserDefinedTypes(
 // on that the new view no longer depends on.
 func (p *planner) replaceViewDesc(
 	ctx context.Context,
-	st *cluster.Settings,
 	sc resolver.SchemaResolver,
 	n *createViewNode,
 	toReplace *tabledesc.Mutable,
@@ -510,13 +494,7 @@ func (p *planner) replaceViewDesc(
 	// Set the query to the new query.
 	toReplace.ViewQuery = n.viewQuery
 
-	// If we're in 21.1, then sequences in views should be referenced
-	// by IDs, so walk the tree and replace sequence names with IDs.
-	version := st.Version.ActiveVersionOrEmpty(ctx)
-	byID := version != (clusterversion.ClusterVersion{}) &&
-		version.IsActive(clusterversion.SequencesRegclass)
-
-	if sc != nil && byID {
+	if sc != nil {
 		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery)
 		if err != nil {
 			return nil, err

@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations/leasemanager"
@@ -278,13 +277,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name: "add new sqlliveness table and claim columns to system.jobs",
 	},
 	{
-		// Introduced in v20.2.
-		name:   "create new system.tenants table",
-		workFn: createTenantsTable,
-		// NB: no dedicated cluster version was introduced for this table at the
-		// time (4272248e573cbaa4fac436b0ea07195fcd648845). The below is the first
-		// cluster version that was added after the system.tenants table.
-		includedInBootstrap: clusterversion.ByKey(clusterversion.AlterColumnTypeGeneral),
+		// Introduced in v20.2. Baked into v21.1.
+		name: "create new system.tenants table",
+		// This migration does not have a dedicated cluster version key but was
+		// added just before 20.1.5. With the upcoming 21.2 release, all 20.2 and
+		// 21.1 version keys are deprecated and we are certainly not adding any new
+		// ones in those ranges. Until these deprecated version keys are all deleted
+		// we tie this migration to the last 20.2 version key.
+		includedInBootstrap: clusterversion.ByKey(clusterversion.V20_2),
 		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
 	},
 	{
@@ -962,8 +962,4 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 		}
 	}
 	return nil
-}
-
-func createTenantsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, systemschema.TenantsTable)
 }

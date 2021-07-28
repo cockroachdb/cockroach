@@ -4304,7 +4304,6 @@ func TestImportDefaultWithResume(t *testing.T) {
 				// returned the very first time we start the import.
 				jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 					resumer := raw.(*importResumer)
-					resumer.testingKnobs.ignoreProtectedTimestamps = true
 					resumer.testingKnobs.alwaysFlushJobProgress = true
 					resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
 						return nil
@@ -6621,7 +6620,6 @@ func TestImportClientDisconnect(t *testing.T) {
 
 	conn := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(conn)
-	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
 
 	// Make a server that will tell us when somebody has sent a request, wait to
 	// be signaled, and then serve a CSV row for our table.
@@ -6819,6 +6817,11 @@ func TestImportInTenant(t *testing.T) {
 
 	t11.Exec(t, importStmt, userfileURI)
 	t11.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"11", "22"}, {"33", "44"}, {"55", "66"}})
+
+	const createStmt = "CREATE TABLE bar (k INT PRIMARY KEY, v INT)"
+	const importIntoStmt = "IMPORT INTO bar CSV DATA ($1)"
+	t10.Exec(t, createStmt)
+	t10.Exec(t, importIntoStmt, userfileURI)
 }
 
 func putUserfile(
