@@ -272,9 +272,10 @@ func waitForZeroReplicasOnN3(ctx context.Context, t test.Test, db *gosql.DB) {
 		for rows.Next() {
 			var rangeID int64
 			var replicas string
-			if err := rows.Scan(&rangeID, replicas); err != nil {
+			if err := rows.Scan(&rangeID, &replicas); err != nil {
 				return err
 			}
+			m[rangeID] = replicas
 		}
 		if err := rows.Err(); err != nil {
 			return err
