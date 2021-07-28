@@ -2348,6 +2348,72 @@ INSERT INTO sc.tb2 VALUES ('hello');
 		sqlDB.ExpectErr(t, `pq: schema "unused" already exists`, `USE d; CREATE SCHEMA unused`)
 	})
 
+	// Tests backing up and restoring all tables in requested user defined
+	// schemas.
+	t.Run("all-tables-in-requested-schema", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `
+CREATE TABLE table_in_data (x INT);
+
+CREATE SCHEMA data;
+CREATE TABLE data.tb1 (x INT);
+
+CREATE DATABASE foo;
+USE foo;
+CREATE SCHEMA schema_in_foo;
+CREATE TABLE schema_in_foo.tb1 (x INT);
+
+CREATE SCHEMA schema_in_foo2;
+CREATE TABLE schema_in_foo2.tb1 (x INT);
+
+CREATE SCHEMA foo;
+CREATE TABLE foo.tb1 (x INT);
+
+CREATE TABLE tb2 (y INT);
+`)
+
+		for _, tc := range []struct {
+			name                   string
+			target                 string
+			expectedTablesInBackup [][]string
+		}{
+			{
+				name:                   "fully-qualified-target",
+				target:                 "foo.schema_in_foo.*",
+				expectedTablesInBackup: [][]string{{"schema_in_foo", "tb1"}},
+			},
+			{
+				name:                   "schema-qualified-target",
+				target:                 "schema_in_foo.*",
+				expectedTablesInBackup: [][]string{{"schema_in_foo", "tb1"}},
+			},
+			{
+				name:                   "schema-qualified-target-with-identical-name-as-curdb",
+				target:                 "foo.*",
+				expectedTablesInBackup: [][]string{{"foo", "tb1"}},
+			},
+			{
+				name:                   "curdb-public-schema-target",
+				target:                 "*",
+				expectedTablesInBackup: [][]string{{"public", "tb2"}},
+			},
+			{
+				name:                   "cross-db-qualified-target",
+				target:                 "data.*",
+				expectedTablesInBackup: [][]string{{"data", "tb1"}, {"public", "bank"}, {"public", "table_in_data"}},
+			},
+		} {
+			sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE %s TO 'nodelocal://0/%s'`, tc.target, tc.name))
+			sqlDB.Exec(t, `CREATE DATABASE restore`)
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE %s FROM 'nodelocal://0/%s' WITH into_db='restore'`, tc.target, tc.name))
+			sqlDB.CheckQueryResults(t, `SELECT schema_name,
+table_name from [SHOW TABLES FROM restore] ORDER BY schema_name, table_name`, tc.expectedTablesInBackup)
+			sqlDB.Exec(t, `DROP DATABASE restore CASCADE`)
+		}
+	})
+
 	// Test restoring tables with user defined schemas when restore schemas are
 	// not being remapped.
 	t.Run("no-remap", func(t *testing.T) {
