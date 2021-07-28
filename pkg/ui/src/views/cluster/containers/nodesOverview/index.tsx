@@ -129,7 +129,7 @@ interface DecommissionedNodeListProps extends NodeCategoryListProps {
 }
 
 const getBadgeTypeByNodeStatus = (
-  status: LivenessStatus | AggregatedNodeStatus,
+  status: LivenessStatus,
 ): BadgeProps["status"] => {
   switch (status) {
     case LivenessStatus.NODE_STATUS_UNKNOWN:
@@ -146,6 +146,15 @@ const getBadgeTypeByNodeStatus = (
       return "default";
     case LivenessStatus.NODE_STATUS_DRAINING:
       return "warning";
+    default:
+      return switchExhaustiveCheck(status);
+  }
+};
+
+const getBadgeTypeByNodeStatusAggregated = (
+  status: AggregatedNodeStatus,
+): BadgeProps["status"] => {
+  switch (status) {
     case AggregatedNodeStatus.LIVE:
       return "default";
     case AggregatedNodeStatus.WARNING:
@@ -312,9 +321,13 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       title: <StatusTooltip>Status</StatusTooltip>,
       render: (_text, record) => {
         let badgeText: string;
-        let tooltipText: any;
-        let nodeTooltip: any;
-        const badgeType = getBadgeTypeByNodeStatus(record.status);
+        let tooltipText: string | JSX.Element;
+        let nodeTooltip: string | JSX.Element;
+
+        // single node row
+        const badgeType = getBadgeTypeByNodeStatus(
+          record.status as LivenessStatus,
+        );
         switch (record.status) {
           case AggregatedNodeStatus.DEAD:
             badgeText = "warning";
@@ -336,7 +349,12 @@ export class NodeList extends React.Component<LiveNodeListProps> {
             tooltipText = getStatusDescription(record.status);
             break;
         }
+
+        // if aggregated row
         if (!record.nodeId) {
+          const badgeType = getBadgeTypeByNodeStatusAggregated(
+            record.status as AggregatedNodeStatus,
+          );
           return (
             <Tooltip title={nodeTooltip}>
               {""}
@@ -344,6 +362,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
             </Tooltip>
           );
         }
+
         return (
           <Badge
             status={badgeType}
