@@ -6297,6 +6297,13 @@ SELECT value
  WHERE name = 'sql.schema_changer.permanent_errors';
 `).Scan(&permanentErrors))
 		require.Equal(t, 1, permanentErrors)
+		var userErrors int
+		require.NoError(t, sqlDB.QueryRow(`
+SELECT usage_count
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.constraint_violation';
+`).Scan(&userErrors))
+		require.GreaterOrEqual(t, userErrors, 1)
 	}
 
 	t.Run("error-before-backfill", func(t *testing.T) {
