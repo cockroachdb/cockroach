@@ -109,7 +109,7 @@ func (m *MockTransactionalSender) CommitTimestamp() hlc.Timestamp {
 
 // CommitTimestampFixed is part of the TxnSender interface.
 func (m *MockTransactionalSender) CommitTimestampFixed() bool {
-	panic("unimplemented")
+	return m.txn.CommitTimestampFixed
 }
 
 // SetFixedTimestamp is part of the TxnSender interface.
@@ -217,6 +217,8 @@ func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(cont
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (
 		*roachpb.BatchResponse, *roachpb.Error)
+	// nonTxnSenderFunc is usually left as nil, but can be set if tests need it.
+	nonTxnSenderFunc SenderFunc
 }
 
 var _ TxnSenderFactory = MockTxnSenderFactory{}
@@ -248,5 +250,5 @@ func (f MockTxnSenderFactory) LeafTransactionalSender(tis *roachpb.LeafTxnInputS
 
 // NonTransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) NonTransactionalSender() Sender {
-	return nil
+	return f.nonTxnSenderFunc
 }
