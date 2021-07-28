@@ -521,3 +521,94 @@ func exclusionToExecinfrapb(
 	}
 	return 0
 }
+
+func TestGetSlidingWindowIntervals(t *testing.T) {
+	testCases := []struct {
+		prevIntervals []windowInterval
+		currIntervals []windowInterval
+		expectedToAdd []windowInterval
+		expectedToRem []windowInterval
+	}{
+		{
+			prevIntervals: []windowInterval{
+				{0, 2},
+				{4, 5},
+			},
+			currIntervals: []windowInterval{
+				{0, 6},
+			},
+			expectedToAdd: []windowInterval{
+				{2, 4},
+				{5, 6},
+			},
+			expectedToRem: nil,
+		},
+		{
+			prevIntervals: []windowInterval{
+				{1, 2},
+			},
+			currIntervals: []windowInterval{
+				{0, 4},
+			},
+			expectedToAdd: []windowInterval{
+				{0, 1},
+				{2, 4},
+			},
+			expectedToRem: nil,
+		},
+		{
+			prevIntervals: []windowInterval{
+				{0, 6},
+			},
+			currIntervals: []windowInterval{
+				{1, 2},
+				{5, 7},
+			},
+			expectedToAdd: []windowInterval{
+				{6, 7},
+			},
+			expectedToRem: []windowInterval{
+				{0, 1},
+				{2, 5},
+			},
+		},
+		{
+			prevIntervals: []windowInterval{
+				{0, 2},
+				{4, 5},
+				{6, 8},
+			},
+			currIntervals: []windowInterval{
+				{0, 2},
+				{4, 5},
+				{6, 8},
+			},
+			expectedToAdd: nil,
+			expectedToRem: nil,
+		},
+		{
+			prevIntervals: []windowInterval{
+				{0, 2},
+				{4, 5},
+				{6, 8},
+			},
+			currIntervals: []windowInterval{
+				{0, 2},
+				{4, 5},
+				{6, 8},
+				{9, 10},
+			},
+			expectedToAdd: []windowInterval{
+				{9, 10},
+			},
+			expectedToRem: nil,
+		},
+	}
+
+	for i := range testCases {
+		tc := &testCases[i]
+		toAdd, toRemove := getSlidingWindowIntervals(tc.currIntervals, tc.prevIntervals, nil, nil)
+		require.Equalf(t, tc.expectedToAdd, toAdd, "toAdd")
+		require.Equalf(t, tc.expectedToRem, toRemove, "toRemove")
+	}
+}
