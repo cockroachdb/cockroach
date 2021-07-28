@@ -37,9 +37,9 @@ GRANT SELECT, DELETE, UPDATE ON TABLE _, _._ TO _, _ -- identifiers removed
 parse
 GRANT SELECT ON role TO root
 ----
-GRANT SELECT ON TABLE role TO root -- normalized!
-GRANT SELECT ON TABLE (role) TO root -- fully parenthesized
-GRANT SELECT ON TABLE role TO root -- literals removed
+GRANT SELECT ON TABLE "role" TO root -- normalized!
+GRANT SELECT ON TABLE ("role") TO root -- fully parenthesized
+GRANT SELECT ON TABLE "role" TO root -- literals removed
 GRANT SELECT ON TABLE _ TO _ -- identifiers removed
 
 parse

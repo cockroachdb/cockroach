@@ -333,9 +333,18 @@ func (*AlterRole) StatementType() StatementType { return TypeDDL }
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterRole) StatementTag() string { return "ALTER ROLE" }
 
-func (*AlterRole) cclOnlyStatement() {}
-
 func (*AlterRole) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
+func (*AlterRoleSet) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*AlterRoleSet) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterRoleSet) StatementTag() string { return "ALTER ROLE" }
+
+func (*AlterRoleSet) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
 func (*Analyze) StatementReturnType() StatementReturnType { return DDL }
@@ -1579,6 +1588,7 @@ func (n *AlterTableOwner) String() string                { return AsString(n) }
 func (n *AlterTableSetSchema) String() string            { return AsString(n) }
 func (n *AlterType) String() string                      { return AsString(n) }
 func (n *AlterRole) String() string                      { return AsString(n) }
+func (n *AlterRoleSet) String() string                   { return AsString(n) }
 func (n *AlterSequence) String() string                  { return AsString(n) }
 func (n *Analyze) String() string                        { return AsString(n) }
 func (n *Backup) String() string                         { return AsString(n) }

@@ -720,6 +720,9 @@ func (u *sqlSymUnion) abbreviatedRevoke() tree.AbbreviatedRevoke {
 func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPrivilegesTargetObject {
   return u.val.(tree.AlterDefaultPrivilegesTargetObject)
 }
+func (u *sqlSymUnion) setVar() *tree.SetVar {
+    return u.val.(*tree.SetVar)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -852,8 +855,10 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 // NOT, at least with respect to their left-hand subexpression. WITH_LA is
 // needed to make the grammar LALR(1). GENERATED_ALWAYS is needed to support
 // the Postgres syntax for computed columns along with our family related
-// extensions (CREATE FAMILY/CREATE FAMILY family_name).
-%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS
+// extensions (CREATE FAMILY/CREATE FAMILY family_name). RESET_ALL is used
+// to differentiate `RESET var` from `RESET ALL`. ROLE_ALL and USER_ALL are
+// used in ALTER ROLE statements that affect all roles.
+%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS RESET_ALL ROLE_ALL USER_ALL
 
 %union {
   id    int32
@@ -876,6 +881,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %type <tree.Statement> alter_range_stmt
 %type <tree.Statement> alter_partition_stmt
 %type <tree.Statement> alter_role_stmt
+%type <*tree.SetVar> set_or_reset_clause
 %type <tree.Statement> alter_type_stmt
 %type <tree.Statement> alter_schema_stmt
 %type <tree.Statement> alter_unsupported_stmt
@@ -1024,6 +1030,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %type <tree.Statement> set_exprs_internal
 %type <tree.Statement> generic_set
 %type <tree.Statement> set_rest_more
+%type <tree.Statement> set_rest
 %type <tree.Statement> set_names
 
 %type <tree.Statement> show_stmt
@@ -1134,7 +1141,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %type <*tree.UnresolvedName> func_name func_name_no_crdb_extra
 %type <str> opt_class opt_collate
 
-%type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
+%type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name opt_in_database
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
@@ -4574,7 +4581,7 @@ generic_set:
     }
   }
 
-set_rest_more:
+set_rest:
 // Generic SET syntaxes:
    generic_set
 // Special SET syntax forms in addition to the generic form.
@@ -4586,6 +4593,7 @@ set_rest_more:
     /* SKIP DOC */
     $$.val = &tree.SetVar{Name: "timezone", Values: tree.Exprs{$3.expr()}}
   }
+| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
 // "SET SCHEMA 'value' is an alias for SET search_path TO value. Only
 // one schema can be specified using this syntax."
 | SCHEMA var_value
@@ -4593,6 +4601,10 @@ set_rest_more:
     /* SKIP DOC */
     $$.val = &tree.SetVar{Name: "search_path", Values: tree.Exprs{$2.expr()}}
   }
+
+set_rest_more:
+// SET syntaxes supported as a clause of other statements:
+  set_rest
 | SESSION AUTHORIZATION DEFAULT
   {
     /* SKIP DOC */
@@ -4604,7 +4616,6 @@ set_rest_more:
   }
 // See comment for the non-terminal for SET NAMES below.
 | set_names
-| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
 | error // SHOW HELP: SET SESSION
 
 // SET NAMES is the SQL standard syntax for SET client_encoding.
@@ -7179,7 +7190,10 @@ create_role_stmt:
 
 // %Help: ALTER ROLE - alter a role
 // %Category: Priv
-// %Text: ALTER ROLE <name> [WITH] <options...>
+// %Text:
+// ALTER ROLE <name> [WITH] <options...>
+// ALTER ROLE { name | ALL } [ IN DATABASE database_name ] SET var { TO | = } { value | DEFAULT }
+// ALTER ROLE { name | ALL } [ IN DATABASE database_name ] RESET { var | ALL }
 // %SeeAlso: CREATE ROLE, DROP ROLE, SHOW ROLES
 alter_role_stmt:
   ALTER role_or_group_or_user string_or_placeholder opt_role_options
@@ -7190,7 +7204,47 @@ alter_role_stmt:
 {
   $$.val = &tree.AlterRole{Name: $5.expr(), IfExists: true, KVOptions: $6.kvOptions(), IsRole: $2.bool()}
 }
+| ALTER role_or_group_or_user string_or_placeholder opt_in_database set_or_reset_clause
+  {
+    $$.val = &tree.AlterRoleSet{RoleName: $3.expr(), DatabaseName: tree.Name($4), IsRole: $2.bool(), SetOrReset: $5.setVar()}
+  }
+| ALTER role_or_group_or_user IF EXISTS string_or_placeholder opt_in_database set_or_reset_clause
+  {
+    $$.val = &tree.AlterRoleSet{RoleName: $5.expr(), IfExists: true, DatabaseName: tree.Name($6), IsRole: $2.bool(), SetOrReset: $7.setVar()}
+  }
+| ALTER ROLE_ALL ALL opt_in_database set_or_reset_clause
+  {
+    $$.val = &tree.AlterRoleSet{AllRoles: true, DatabaseName: tree.Name($4), IsRole: true, SetOrReset: $5.setVar()}
+  }
+| ALTER USER_ALL ALL opt_in_database set_or_reset_clause
+  {
+    $$.val = &tree.AlterRoleSet{AllRoles: true, DatabaseName: tree.Name($4), IsRole: false, SetOrReset: $5.setVar()}
+  }
 | ALTER role_or_group_or_user error // SHOW HELP: ALTER ROLE
+
+opt_in_database:
+  IN DATABASE database_name
+  {
+    $$ = $3
+  }
+| /* EMPTY */
+  {
+    $$ = ""
+  }
+
+set_or_reset_clause:
+  SET set_rest
+  {
+    $$.val = $2.setVar()
+  }
+| RESET_ALL ALL
+  {
+    $$.val = &tree.SetVar{ResetAll: true}
+  }
+| RESET session_var
+  {
+    $$.val = &tree.SetVar{Name: $2, Values:tree.Exprs{tree.DefaultVal{}}}
+  }
 
 // "CREATE GROUP is now an alias for CREATE ROLE"
 // https://www.postgresql.org/docs/10/static/sql-creategroup.html
