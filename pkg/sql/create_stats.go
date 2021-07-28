@@ -350,10 +350,9 @@ func createStatsDefaultColumns(
 		}
 		colStats = append(colStats, colStat)
 
-		// Generate histograms for inverted indexes. The above
-		// colStat append is still needed for a basic sketch of
-		// the column. The following colStat is needed for the
-		// sampling and sketch of the inverted index keys of
+		// Generate histograms for inverted indexes. The above colStat append is
+		// still needed for a basic sketch of the column. The following colStat
+		// is needed for the sampling and sketch of the inverted index keys of
 		// the column.
 		if isInverted {
 			colStat.Inverted = true
