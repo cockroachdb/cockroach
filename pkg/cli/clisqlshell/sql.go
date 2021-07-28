@@ -690,7 +690,7 @@ func (c *cliState) runSyscmd(line string, nextState, errState cliStateEnum) cliS
 		return errState
 	}
 
-	fmt.Print(cmdOut)
+	fmt.Fprint(c.iCtx.stdout, cmdOut)
 	return nextState
 }
 
