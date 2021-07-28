@@ -1316,6 +1316,7 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 func TestChangefeedColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDeadlock(t, "sometimes hangs")
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -2059,6 +2060,7 @@ func TestChangefeedUpdatePrimaryKey(t *testing.T) {
 func TestChangefeedTruncateOrDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDeadlock(t, "sometimes hangs")
 
 	assertFailuresCounter := func(t *testing.T, m *Metrics, exp int64) {
 		t.Helper()
@@ -4758,6 +4760,7 @@ func (s *memoryHoggingSink) Close() error {
 func TestChangefeedFlushesSinkToReleaseMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDeadlockWithIssue(t, 71364)
 
 	s, db, stopServer := startTestServer(t, newTestOptions())
 	defer stopServer()
