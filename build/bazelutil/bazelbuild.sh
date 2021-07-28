@@ -8,7 +8,15 @@ then
     exit 1
 fi
 
+CONFIG="$1"
+
+DOC_TARGETS=
+if [ "$CONFIG" == "crosslinux" ]
+then
+   DOC_TARGETS="//docs/generated:gen-logging-md //docs/generated/settings:settings //docs/generated/settings:settings_for_tenants //docs/generated/sql"
+fi
+
 bazel build //pkg/cmd/bazci --config=ci
 $(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci --compilation_mode opt \
-		       --config "$1" \
-		       build //pkg/cmd/cockroach-short //c-deps:libgeos
+		       --config "$CONFIG" \
+		       build //pkg/cmd/cockroach-short //c-deps:libgeos $DOC_TARGETS

@@ -121,7 +121,8 @@ FROM "".information_schema.type_privileges`
 				params = append(
 					params,
 					fmt.Sprintf(
-						"(%s, %s)",
+						"(%s, %s, %s)",
+						lexbase.EscapeSQLString(t.TypeMeta.Name.Catalog),
 						lexbase.EscapeSQLString(t.TypeMeta.Name.Schema),
 						lexbase.EscapeSQLString(t.TypeMeta.Name.Name),
 					),
@@ -130,27 +131,27 @@ FROM "".information_schema.type_privileges`
 				params = append(
 					params,
 					fmt.Sprintf(
-						"('pg_catalog', %s)",
+						"(%s, 'pg_catalog', %s)",
+						lexbase.EscapeSQLString(t.TypeMeta.Name.Catalog),
 						lexbase.EscapeSQLString(t.TypeMeta.Name.Name),
 					),
 				)
 			}
 		}
 
-		dbNameClause := "true"
-		// If the current database is set, restrict the command to it.
-		if currDB := d.evalCtx.SessionData.Database; currDB != "" {
-			dbNameClause = fmt.Sprintf("database_name = %s", lexbase.EscapeSQLString(currDB))
-		}
 		fmt.Fprint(&source, typePrivQuery)
 		orderBy = "1,2,3,4,5"
 		if len(params) == 0 {
+			dbNameClause := "true"
+			// If the current database is set, restrict the command to it.
+			if currDB := d.evalCtx.SessionData.Database; currDB != "" {
+				dbNameClause = fmt.Sprintf("database_name = %s", lexbase.EscapeSQLString(currDB))
+			}
 			cond.WriteString(fmt.Sprintf(`WHERE %s`, dbNameClause))
 		} else {
 			fmt.Fprintf(
 				&cond,
-				`WHERE %s AND (schema_name, type_name) IN (%s)`,
-				dbNameClause,
+				`WHERE (database_name, schema_name, type_name) IN (%s)`,
 				strings.Join(params, ","),
 			)
 		}
