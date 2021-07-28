@@ -2035,12 +2035,18 @@ type changeReplicasTxnArgs struct {
 	db *kv.DB
 
 	// liveAndDeadReplicas divides the provided repls slice into two slices: the
-	// first for live replicas, and the second for dead replicas. Replicas for
-	// which liveness or deadness cannot be ascertained are excluded from the
-	// returned slices. Replicas on decommissioning node/store are considered
-	// live.
+	// first for live replicas, and the second for dead replicas.
+	//
+	// - Replicas for  which liveness or deadness cannot be ascertained are
+	// excluded from the returned slices.
+	//
+	// - Replicas on decommissioning node/store are considered live.
+	//
+	// - If `includeSuspectStores` is true, stores that are marked suspect (i.e.
+	// stores that have failed a liveness heartbeat in the recent past) are
+	// considered live. Otherwise, they are excluded from the returned slices.
 	liveAndDeadReplicas func(
-		repls []roachpb.ReplicaDescriptor,
+		repls []roachpb.ReplicaDescriptor, includeSuspectStores bool,
 	) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor)
 
 	logChange                            logChangeFn
@@ -2127,7 +2133,15 @@ func execChangeReplicasTxn(
 			// See:
 			// https://github.com/cockroachdb/cockroach/issues/54444#issuecomment-707706553
 			replicas := crt.Desc.Replicas()
-			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors())
+			// We consider stores marked as "suspect" to be alive for the purposes of
+			// determining whether the range can achieve quorum since these stores are
+			// known to be currently live but have failed a liveness heartbeat in the
+			// recent past.
+			//
+			// Note that the allocator will avoid rebalancing to stores that are
+			// currently marked suspect. See uses of StorePool.getStoreList() in
+			// allocator.go.
+			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors(), true /* includeSuspectStores */)
 			if !replicas.CanMakeProgress(
 				func(rDesc roachpb.ReplicaDescriptor) bool {
 					for _, inner := range liveReplicas {
