@@ -3,6 +3,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "sysutil",
     srcs = [
+        "acl_unix.go",
+        "acl_windows.go",
+        "aclinfo.go",
         "large_file_linux.go",
         "large_file_naive.go",
         "sysutil.go",
@@ -61,6 +64,7 @@ go_test(
     name = "sysutil_test",
     size = "small",
     srcs = [
+        "acl_unix_test.go",
         "large_file_test.go",
         "sysutil_test.go",
         "sysutil_unix_test.go",
@@ -70,42 +74,66 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:android": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:darwin": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:dragonfly": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:freebsd": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:illumos": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:ios": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:js": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:linux": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:netbsd": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:openbsd": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:plan9": [
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:solaris": [
+            "//pkg/util/leaktest",
+            "@com_github_stretchr_testify//assert",
             "@org_golang_x_sys//unix",
         ],
         "//conditions:default": [],
