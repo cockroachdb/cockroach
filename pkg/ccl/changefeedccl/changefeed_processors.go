@@ -574,6 +574,7 @@ func (ca *changeAggregator) emitResolved(
 		rowenc.EncDatum{Datum: tree.DNull}, // key
 		rowenc.EncDatum{Datum: tree.DNull}, // value
 	})
+	ca.metrics.ResolvedMessages.Inc(1)
 	return nil
 }
 
