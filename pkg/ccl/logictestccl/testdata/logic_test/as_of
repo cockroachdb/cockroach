@@ -1,7 +1,7 @@
 # LogicTest: local
 
 statement ok
-CREATE TABLE t (i INT)
+CREATE TABLE t (i INT PRIMARY KEY, j INT UNIQUE, k INT, UNIQUE (k) STORING (j))
 
 statement ok
 INSERT INTO t VALUES (2)
@@ -114,11 +114,142 @@ true
 statement error interval duration for with_max_staleness must be greater or equal to 0
 SELECT with_max_staleness(-'1s')
 
-statement ok
+#
+# Tests for optimizer bounded staleness checks.
+#
+
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
 
-statement ok
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms')
+
+statement error unimplemented: cannot use bounded staleness for MERGE JOIN
+SELECT * FROM t AS t1 JOIN t AS t2 ON t1.i = t2.i AS OF SYSTEM TIME with_max_staleness('1ms')
+
+statement error unimplemented: cannot use bounded staleness for INNER JOIN
+SELECT * FROM t AS t1 INNER HASH JOIN t AS t2 ON t1.i = t2.i AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms')
+
+statement error unimplemented: cannot use bounded staleness for LOOKUP JOIN
+SELECT * FROM t AS t1 LEFT LOOKUP JOIN t AS t2 ON t1.i = t2.i AS OF SYSTEM TIME with_max_staleness('1ms')
+
+statement error unimplemented: cannot use bounded staleness for UNION
+SELECT * FROM (SELECT * FROM t UNION SELECT * FROM t) AS OF SYSTEM TIME with_max_staleness('1ms')
+
+statement error unimplemented: cannot use bounded staleness for INTERSECT ALL
+SELECT * FROM (SELECT * FROM t INTERSECT ALL SELECT * FROM t) AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms')
+
+statement ok
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE i = 2
+
+statement ok
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms') WHERE i = 1
+
+# Projections are supported.
+statement ok
+SELECT i+2 FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE i = 1
+
+# Select is supported.
+statement ok
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE i = 2 AND j > 5
+
+# Aggregations are supported.
+statement ok
+SELECT sum(i) FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms') WHERE i = 2
+
+# Scan from a secondary index is supported.
+statement ok
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k = 2
+
+# Scan from a secondary index is not supported if it requires an index join.
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2
+
+# No index join or zigzag join is produced.
+query T
+EXPLAIN (OPT, MEMO) SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2 AND i = 1
+----
+memo (optimized, ~7KB, required=[presentation: info:6])
+ ├── G1: (explain G2 [presentation: i:1,j:2,k:3])
+ │    └── [presentation: info:6]
+ │         ├── best: (explain G2="[presentation: i:1,j:2,k:3]" [presentation: i:1,j:2,k:3])
+ │         └── cost: 5.17
+ ├── G2: (select G3 G4) (select G5 G6)
+ │    └── [presentation: i:1,j:2,k:3]
+ │         ├── best: (select G5 G6)
+ │         └── cost: 5.16
+ ├── G3: (scan t,cols=(1-3)) (scan t@t_k_key,cols=(1-3))
+ │    └── []
+ │         ├── best: (scan t,cols=(1-3))
+ │         └── cost: 1146.41
+ ├── G4: (filters G7 G8)
+ ├── G5: (scan t,cols=(1-3),constrained)
+ │    └── []
+ │         ├── best: (scan t,cols=(1-3),constrained)
+ │         └── cost: 5.13
+ ├── G6: (filters G7)
+ ├── G7: (eq G9 G10)
+ ├── G8: (eq G11 G12)
+ ├── G9: (variable j)
+ ├── G10: (const 2)
+ ├── G11: (variable i)
+ └── G12: (const 1)
+select
+ ├── scan t
+ │    ├── constraint: /1: [/1 - /1]
+ │    └── flags: no-index-join no-zigzag-join
+ └── filters
+      └── j = 2
+
+# Scan may produce multiple rows.
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k IS NULL
+
+# Scan may produce multiple rows.
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k IS NULL LIMIT 10
+
+# Even though the scan is limited to 1 row, from KV's perspective, this is a
+# multi-row scan with a limit. That means that the scan can span multiple
+# ranges, but we expect it to short-circuit once it hits the first row. In
+# practice, we expect that to very often be in the first range we hit, but
+# there's no guarantee of that - we could have empty ranges.
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k IS NULL LIMIT 1
+
+# Subquery contains the only scan, so it succeeds.
+statement ok
+SELECT (SELECT k FROM t WHERE i = 1) FROM generate_series(1, 100) AS OF SYSTEM TIME with_max_staleness('1ms')
+
+# Subquery does not scan data, so it succeeds.
+statement ok
+SELECT (SELECT random()) FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k = 1
+
+# Subqueries that perform an additional scan are not supported.
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+SELECT (SELECT k FROM t WHERE i = 1) FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k = 1
+
+# Bounded staleness function must match outer query if used in subquery.
+statement ok
+SELECT (
+  SELECT k FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE i = 1
+) FROM generate_series(1, 100) AS OF SYSTEM TIME with_max_staleness('1ms')
+
+# Bounded staleness function must match outer query if used in subquery.
+statement error unimplemented: cannot specify AS OF SYSTEM TIME with different timestamps
+SELECT (
+  SELECT k FROM t AS OF SYSTEM TIME with_max_staleness('2ms') WHERE i = 1
+) FROM generate_series(1, 100) AS OF SYSTEM TIME with_max_staleness('1ms')
+
+# Bounded staleness function must match outer query if used in subquery.
+statement error AS OF SYSTEM TIME must be provided on a top-level statement
+SELECT (
+  SELECT k FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE i = 1
+) FROM generate_series(1, 100)
+
+#
+# Tests for nearest_only argument.
+#
 
 statement error with_max_staleness: expected bool argument for nearest_only
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', 5)
@@ -127,16 +258,20 @@ statement error with_min_timestamp: expected bool argument for nearest_only
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp(), 5)
 
 statement ok
-SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', false)
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', false) WHERE i = 2
 
 statement ok
-SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms', false)
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms', false) WHERE i = 2
 
 statement ok
-SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', true)
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', true) WHERE i = 2
 
 statement ok
-SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms', true)
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms', true) WHERE i = 2
+
+#
+# Tests for running bounded staleness queries in an explicit transaction.
+#
 
 statement error AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
 BEGIN AS OF SYSTEM TIME with_max_staleness('1ms')
@@ -146,6 +281,10 @@ BEGIN; SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
 
 statement ok
 ROLLBACK
+
+#
+# Tests for bounded staleness with prepared statements.
+#
 
 statement error bounded staleness queries do not yet work with prepared statements
 PREPARE prep_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '10s'::interval)
