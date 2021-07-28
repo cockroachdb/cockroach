@@ -174,145 +174,147 @@ func (sp *csvWriter) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "csvWriter")
 	defer span.Finish()
 
-	err := func() error {
-		typs := sp.input.OutputTypes()
-		sp.input.Start(ctx)
-		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
-
-		alloc := &rowenc.DatumAlloc{}
-
-		writer := newCSVExporter(sp.spec)
-
-		var nullsAs string
-		if sp.spec.Options.NullEncoding != nil {
-			nullsAs = *sp.spec.Options.NullEncoding
-		}
-		f := tree.NewFmtCtx(tree.FmtExport)
-		defer f.Close()
-
-		csvRow := make([]string, len(typs))
-
-		chunk := 0
-		done := false
-		for {
-			var rows int64
-			writer.ResetBuffer()
-			beforeAccumulate := timeutil.Now()
-			for {
-				// If the bytes.Buffer sink exceeds the target size of a CSV file, we
-				// flush before exporting any additional rows.
-				if int64(writer.buf.Len()) >= sp.spec.ChunkSize {
-					break
-				}
-				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
-					break
-				}
-				row, err := input.NextRow()
-				if err != nil {
-					return err
-				}
-				if row == nil {
-					done = true
-					break
-				}
-				rows++
-
-				for i, ed := range row {
-					if ed.IsNull() {
-						if sp.spec.Options.NullEncoding != nil {
-							csvRow[i] = nullsAs
-							continue
-						} else {
-							return errors.New("NULL value encountered during EXPORT, " +
-								"use `WITH nullas` to specify the string representation of NULL")
-						}
-					}
-					if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
-						return err
-					}
-					ed.Datum.Format(f)
-					csvRow[i] = f.String()
-					f.Reset()
-				}
-				if err := writer.Write(csvRow); err != nil {
-					return err
-				}
-			}
-			if rows < 1 {
-				break
-			}
-			if err := writer.Flush(); err != nil {
-				return errors.Wrap(err, "failed to flush csv writer")
-			}
-
-			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
-			if err != nil {
-				return err
-			}
-			es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
-			if err != nil {
-				return err
-			}
-			defer es.Close()
-
-			nodeID, err := sp.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(47970)
-			if err != nil {
-				return err
-			}
-
-			part := fmt.Sprintf("n%d.%d", nodeID, chunk)
-			chunk++
-			filename := writer.FileName(sp.spec, part)
-			// Close writer to ensure buffer and any compression footer is flushed.
-			err = writer.Close()
-			if err != nil {
-				return errors.Wrapf(err, "failed to close exporting writer")
-			}
-
-			size := writer.Len()
-
-			beforeUpload := timeutil.Now()
-			log.VEventf(ctx, 1, "accumulated %d row / %db file in %02.fs", rows, size, beforeUpload.Sub(beforeAccumulate).Seconds())
-			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
-				return err
-			}
-			log.VEventf(ctx, 1, "uploaded %d row / %db file in %02.fs", rows, size, timeutil.Since(beforeUpload).Seconds())
-
-			res := rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(
-					types.String,
-					tree.NewDString(filename),
-				),
-				rowenc.DatumToEncDatum(
-					types.Int,
-					tree.NewDInt(tree.DInt(rows)),
-				),
-				rowenc.DatumToEncDatum(
-					types.Int,
-					tree.NewDInt(tree.DInt(size)),
-				),
-			}
-
-			cs, err := sp.out.EmitRow(ctx, res, sp.output)
-			if err != nil {
-				return err
-			}
-			if cs != execinfra.NeedMoreRows {
-				// TODO(dt): presumably this is because our recv already closed due to
-				// another error... so do we really need another one?
-				return errors.New("unexpected closure of consumer")
-			}
-			if done {
-				break
-			}
-		}
-
-		return nil
-	}()
+	err := sp.doRun(ctx)
 
 	// TODO(dt): pick up tracing info in trailing meta
 	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
+}
+
+func (sp *csvWriter) doRun(ctx context.Context) error {
+	typs := sp.input.OutputTypes()
+	sp.input.Start(ctx)
+	input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
+
+	alloc := &rowenc.DatumAlloc{}
+
+	writer := newCSVExporter(sp.spec)
+
+	var nullsAs string
+	if sp.spec.Options.NullEncoding != nil {
+		nullsAs = *sp.spec.Options.NullEncoding
+	}
+	f := tree.NewFmtCtx(tree.FmtExport)
+	defer f.Close()
+
+	csvRow := make([]string, len(typs))
+
+	chunk := 0
+	done := false
+	for {
+		var rows int64
+		writer.ResetBuffer()
+		beforeAccumulate := timeutil.Now()
+		for {
+			// If the bytes.Buffer sink exceeds the target size of a CSV file, we
+			// flush before exporting any additional rows.
+			if int64(writer.buf.Len()) >= sp.spec.ChunkSize {
+				break
+			}
+			if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
+				break
+			}
+			row, err := input.NextRow()
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				done = true
+				break
+			}
+			rows++
+
+			for i, ed := range row {
+				if ed.IsNull() {
+					if sp.spec.Options.NullEncoding != nil {
+						csvRow[i] = nullsAs
+						continue
+					} else {
+						return errors.New("NULL value encountered during EXPORT, " +
+							"use `WITH nullas` to specify the string representation of NULL")
+					}
+				}
+				if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
+					return err
+				}
+				ed.Datum.Format(f)
+				csvRow[i] = f.String()
+				f.Reset()
+			}
+			if err := writer.Write(csvRow); err != nil {
+				return err
+			}
+		}
+		if rows < 1 {
+			break
+		}
+		if err := writer.Flush(); err != nil {
+			return errors.Wrap(err, "failed to flush csv writer")
+		}
+
+		conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
+		if err != nil {
+			return err
+		}
+		es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
+		if err != nil {
+			return err
+		}
+		defer es.Close()
+
+		nodeID, err := sp.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(47970)
+		if err != nil {
+			return err
+		}
+
+		part := fmt.Sprintf("n%d.%d", nodeID, chunk)
+		chunk++
+		filename := writer.FileName(sp.spec, part)
+		// Close writer to ensure buffer and any compression footer is flushed.
+		err = writer.Close()
+		if err != nil {
+			return errors.Wrapf(err, "failed to close exporting writer")
+		}
+
+		size := writer.Len()
+
+		beforeUpload := timeutil.Now()
+		log.VEventf(ctx, 1, "accumulated %d row / %db file in %02.fs", rows, size, beforeUpload.Sub(beforeAccumulate).Seconds())
+		if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
+			return err
+		}
+		log.VEventf(ctx, 1, "uploaded %d row / %db file in %02.fs", rows, size, timeutil.Since(beforeUpload).Seconds())
+
+		res := rowenc.EncDatumRow{
+			rowenc.DatumToEncDatum(
+				types.String,
+				tree.NewDString(filename),
+			),
+			rowenc.DatumToEncDatum(
+				types.Int,
+				tree.NewDInt(tree.DInt(rows)),
+			),
+			rowenc.DatumToEncDatum(
+				types.Int,
+				tree.NewDInt(tree.DInt(size)),
+			),
+		}
+
+		cs, err := sp.out.EmitRow(ctx, res, sp.output)
+		if err != nil {
+			return err
+		}
+		if cs != execinfra.NeedMoreRows {
+			// TODO(dt): presumably this is because our recv already closed due to
+			// another error... so do we really need another one?
+			return errors.New("unexpected closure of consumer")
+		}
+		if done {
+			break
+		}
+	}
+
+	return nil
 }
 
 func init() {
