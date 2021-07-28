@@ -1259,9 +1259,8 @@ func BenchmarkWindowFunctions(b *testing.B) {
 	runBench := func(fun execinfrapb.WindowerSpec_Func, fnName string, numArgs int) {
 		b.Run(fnName, func(b *testing.B) {
 			for _, nRows := range rowsOptions {
-				if fun.AggregateFunc != nil && nRows == 32*coldata.BatchSize() {
-					// Aggregate functions are too slow until the sliding window approach
-					// is implemented.
+				if !isWindowFnLinear(fun) && nRows == 32*coldata.BatchSize() {
+					// Skip functions that scale poorly for the larger row size.
 					continue
 				}
 				b.Run(fmt.Sprintf("rows=%d", nRows), func(b *testing.B) {

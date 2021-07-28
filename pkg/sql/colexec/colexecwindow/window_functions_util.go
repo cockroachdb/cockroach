@@ -276,3 +276,25 @@ func GetOffsetTypeFromOrderColType(t *testing.T, orderColType *types.T) *types.T
 	}
 	return orderColType
 }
+
+// isWindowFnLinear returns whether the vectorized engine has an implementation
+// of the given window function that scales linearly when the default window
+// frame is used.
+func isWindowFnLinear(fn execinfrapb.WindowerSpec_Func) bool {
+	if fn.WindowFunc != nil {
+		return true
+	}
+	switch *fn.AggregateFunc {
+	case
+		execinfrapb.Count,
+		execinfrapb.CountRows,
+		execinfrapb.Sum,
+		execinfrapb.SumInt,
+		execinfrapb.Avg,
+		execinfrapb.Min,
+		execinfrapb.Max:
+		return true
+	default:
+		return false
+	}
+}
