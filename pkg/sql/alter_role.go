@@ -13,21 +13,25 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
-// AlterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
+// alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
 type alterRoleNode struct {
 	userNameInfo
 	ifExists    bool
@@ -35,7 +39,32 @@ type alterRoleNode struct {
 	roleOptions roleoption.List
 }
 
-// AlterRole represents a ALTER ROLE statement.
+// alterRoleSetNode represents an `ALTER ROLE ... SET` statement.
+type alterRoleSetNode struct {
+	userNameInfo userNameInfo
+	ifExists     bool
+	isRole       bool
+	allRoles     bool
+	// dbDescID == 0 means all databases.
+	dbDescID    descpb.ID
+	setVarKind  setVarBehavior
+	varName     string
+	sVar        sessionVar
+	typedValues []tree.TypedExpr
+}
+
+// setVarBehavior is an enum that describes how to alter the session variable
+// defaults when executing alterRoleSetNode.
+type setVarBehavior int
+
+const (
+	setSingleVar   setVarBehavior = 0
+	resetSingleVar setVarBehavior = 1
+	resetAllVars   setVarBehavior = 2
+	unknown        setVarBehavior = 3
+)
+
+// AlterRole represents a `ALTER ROLE ... [WITH] OPTION` statement.
 // Privileges: CREATEROLE privilege.
 func (p *planner) AlterRole(ctx context.Context, n *tree.AlterRole) (planNode, error) {
 	return p.AlterRoleNode(ctx, n.Name, n.IfExists, n.IsRole, "ALTER ROLE", n.KVOptions)
@@ -276,3 +305,369 @@ func (n *alterRoleNode) startExec(params runParams) error {
 func (*alterRoleNode) Next(runParams) (bool, error) { return false, nil }
 func (*alterRoleNode) Values() tree.Datums          { return tree.Datums{} }
 func (*alterRoleNode) Close(context.Context)        {}
+
+// AlterRoleSet represents a `ALTER ROLE ... SET` statement.
+// Privileges: CREATEROLE privilege; or admin-only if `ALTER ROLE ALL`.
+func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planNode, error) {
+	// Note that for Postgres, only superuser can ALTER another superuser.
+	// CockroachDB does not support the superuser role option right now.
+	// However we make it so members of the ADMIN role can only be edited
+	// by other ADMINs (done in startExec).
+	// Also note that we diverge from Postgres by prohibiting users from
+	// modifying their own defaults unless they have CREATEROLE. This is analogous
+	// to our restriction that prevents a user from modifying their own password.
+	if n.AllRoles {
+		if err := p.RequireAdminRole(ctx, "ALTER ROLE ALL"); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+			return nil, err
+		}
+	}
+
+	// TODO(rafi): Remove this condition in 21.2.
+	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
+		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			`altering per-role defaults requires all nodes to be upgraded to %s`,
+			clusterversion.ByKey(clusterversion.DatabaseRoleSettings))
+	}
+
+	var ua userNameInfo
+	if !n.AllRoles {
+		var err error
+		ua, err = p.getUserAuthInfo(ctx, n.RoleName, "ALTER ROLE")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	dbDescID := descpb.ID(0)
+	if n.DatabaseName != "" {
+		dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
+			tree.DatabaseLookupFlags{Required: true})
+		if err != nil {
+			return nil, err
+		}
+		dbDescID = dbDesc.GetID()
+	}
+
+	setVarKind, varName, sVar, typedValues, err := p.processSetOrResetClause(ctx, n.SetOrReset)
+	if err != nil {
+		return nil, err
+	}
+
+	return &alterRoleSetNode{
+		userNameInfo: ua,
+		ifExists:     n.IfExists,
+		isRole:       n.IsRole,
+		allRoles:     n.AllRoles,
+		dbDescID:     dbDescID,
+		setVarKind:   setVarKind,
+		varName:      varName,
+		sVar:         sVar,
+		typedValues:  typedValues,
+	}, nil
+}
+
+func (p *planner) processSetOrResetClause(
+	ctx context.Context, setOrResetClause *tree.SetVar,
+) (
+	setVarKind setVarBehavior,
+	varName string,
+	sVar sessionVar,
+	typedValues []tree.TypedExpr,
+	err error,
+) {
+	if setOrResetClause.ResetAll {
+		return resetAllVars, "", sessionVar{}, nil, nil
+	}
+
+	if setOrResetClause.Name == "" {
+		// The user entered `SET "" = foo`. Reject it.
+		return unknown, "", sessionVar{}, nil, pgerror.Newf(pgcode.Syntax, "invalid variable name: %q", setOrResetClause.Name)
+	}
+
+	isReset := false
+	if len(setOrResetClause.Values) == 1 {
+		if _, ok := setOrResetClause.Values[0].(tree.DefaultVal); ok {
+			// `SET var = DEFAULT` means RESET.
+			// In that case, we want typedValues to remain nil.
+			isReset = true
+		}
+	}
+	varName = strings.ToLower(setOrResetClause.Name)
+
+	// For RESET, we shouldn't do any validation on the varName at all.
+	if isReset {
+		return resetSingleVar, varName, sessionVar{}, nil, nil
+	}
+
+	// The "database" setting can't be configured here, since the
+	// default settings are stored per-database.
+	if varName == "database" {
+		return unknown, "", sessionVar{}, nil, newCannotChangeParameterError(varName)
+	}
+	_, sVar, err = getSessionVar(varName, false /* missingOk */)
+	if err != nil {
+		return unknown, "", sessionVar{}, nil, err
+	}
+
+	// There must be a `Set` function defined. `RuntimeSet` is not allowed here
+	// since `RuntimeSet` cannot be used during session initialization.
+	if sVar.Set == nil {
+		return unknown, "", sessionVar{}, nil, newCannotChangeParameterError(varName)
+	}
+
+	// The typedValues will be turned into a string in startExec.
+	for _, expr := range setOrResetClause.Values {
+		expr = paramparse.UnresolvedNameToStrVal(expr)
+
+		typedValue, err := p.analyzeExpr(
+			ctx, expr, nil, tree.IndexedVarHelper{}, types.String, false, "ALTER ROLE ... SET ",
+		)
+		if err != nil {
+			return unknown, "", sessionVar{}, nil, wrapSetVarError(varName, expr.String(), "%v", err)
+		}
+		typedValues = append(typedValues, typedValue)
+	}
+
+	return setSingleVar, varName, sVar, typedValues, nil
+}
+
+func (n *alterRoleSetNode) startExec(params runParams) error {
+	var opName string
+	if n.isRole {
+		sqltelemetry.IncIAMAlterCounter(sqltelemetry.Role)
+		opName = "alter-role"
+	} else {
+		sqltelemetry.IncIAMAlterCounter(sqltelemetry.User)
+		opName = "alter-user"
+	}
+
+	needsUpdate, roleName, err := n.getRoleName(params, opName)
+	if err != nil {
+		return err
+	}
+	if !needsUpdate {
+		// Nothing to do if called with `IF EXISTS` for a role that doesn't exist.
+		return nil
+	}
+
+	var deleteQuery = fmt.Sprintf(
+		`DELETE FROM %s WHERE database_id = $1 AND role_name = $2`,
+		authentication.DatabaseRoleSettingsTableName,
+	)
+	var upsertQuery = fmt.Sprintf(
+		`UPSERT INTO %s (database_id, role_name, settings) VALUES ($1, $2, $3)`,
+		authentication.DatabaseRoleSettingsTableName,
+	)
+
+	// Instead of inserting an empty settings array, this function will make
+	// sure the row is deleted instead.
+	upsertOrDeleteFunc := func(newSettings []string) error {
+		if newSettings == nil {
+			_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+				params.ctx,
+				opName,
+				params.p.txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				deleteQuery,
+				n.dbDescID,
+				roleName,
+			)
+			if err != nil {
+				return err
+			}
+		} else {
+			_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+				params.ctx,
+				opName,
+				params.p.txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				upsertQuery,
+				n.dbDescID,
+				roleName,
+				newSettings,
+			)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if n.setVarKind == resetAllVars {
+		return upsertOrDeleteFunc(nil)
+	}
+
+	hasOldSettings, newSettings, err := n.makeNewSettings(params, opName, roleName)
+	if err != nil {
+		return err
+	}
+
+	if n.setVarKind == resetSingleVar {
+		if !hasOldSettings {
+			return nil
+		}
+		return upsertOrDeleteFunc(newSettings)
+	}
+
+	// The remaining case is `SET var = val`, to add a default setting.
+	strVal, err := n.getSessionVarVal(params)
+	if err != nil {
+		return err
+	}
+
+	newSetting := fmt.Sprintf("%s=%s", n.varName, strVal)
+	newSettings = append(newSettings, newSetting)
+	if err := upsertOrDeleteFunc(newSettings); err != nil {
+		return err
+	}
+
+	return params.p.logEvent(params.ctx,
+		0, /* no target */
+		&eventpb.AlterRole{
+			RoleName: roleName.Normalized(),
+			Options:  []string{roleoption.DEFAULTSETTINGS.String()},
+		})
+}
+
+// getRoleName resolves the roleName and performs additional validation
+// to make sure the role is safe to edit.
+func (n *alterRoleSetNode) getRoleName(
+	params runParams, opName string,
+) (needsUpdate bool, roleName security.SQLUsername, err error) {
+	if n.allRoles {
+		return true, security.MakeSQLUsernameFromPreNormalizedString(""), nil
+	}
+	name, err := n.userNameInfo.name()
+	if err != nil {
+		return false, security.SQLUsername{}, err
+	}
+	if name == "" {
+		return false, security.SQLUsername{}, errNoUserNameSpecified
+	}
+	roleName, err = NormalizeAndValidateUsername(name)
+	if err != nil {
+		return false, security.SQLUsername{}, err
+	}
+	if roleName.IsAdminRole() {
+		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit admin role")
+	}
+	if roleName.IsRootUser() {
+		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit root user")
+	}
+	if roleName.IsPublicRole() {
+		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit public role")
+	}
+	// Check if role exists.
+	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+		params.ctx,
+		opName,
+		params.p.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", authentication.UsersTableName),
+		roleName,
+	)
+	if err != nil {
+		return false, security.SQLUsername{}, err
+	}
+	if row == nil {
+		if n.ifExists {
+			return false, security.SQLUsername{}, nil
+		}
+		return false, security.SQLUsername{}, errors.Newf("role/user %s does not exist", roleName)
+	}
+	isAdmin, err := params.p.UserHasAdminRole(params.ctx, roleName)
+	if err != nil {
+		return false, security.SQLUsername{}, err
+	}
+	if isAdmin {
+		if err := params.p.RequireAdminRole(params.ctx, "ALTER ROLE admin"); err != nil {
+			return false, security.SQLUsername{}, err
+		}
+	}
+	return true, roleName, nil
+}
+
+// makeNewSettings first loads the existing settings for the (role, db), then
+// returns a newSettings list with any occurrence of varName removed.
+func (n *alterRoleSetNode) makeNewSettings(
+	params runParams, opName string, roleName security.SQLUsername,
+) (hasOldSettings bool, newSettings []string, err error) {
+	var selectQuery = fmt.Sprintf(
+		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,
+		authentication.DatabaseRoleSettingsTableName,
+	)
+	datums, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+		params.ctx,
+		opName,
+		params.p.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		selectQuery,
+		n.dbDescID,
+		roleName,
+	)
+	if err != nil {
+		return false, nil, err
+	}
+	var oldSettings *tree.DArray
+	if datums != nil {
+		oldSettings = tree.MustBeDArray(datums[0])
+		for _, s := range oldSettings.Array {
+			oldSetting := string(tree.MustBeDString(s))
+			keyVal := strings.SplitN(oldSetting, "=", 2)
+			if !strings.EqualFold(n.varName, keyVal[0]) {
+				newSettings = append(newSettings, oldSetting)
+			}
+		}
+	}
+	return oldSettings != nil, newSettings, nil
+}
+
+// getSessionVarVal evaluates typedValues to get a string value that can
+// be persisted as the default setting for the session variable. It also
+// performs validation to make sure the session variable exists and is
+// configurable with the given value.
+func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
+	if n.varName == "" || n.typedValues == nil {
+		return "", nil
+	}
+	for i, v := range n.typedValues {
+		d, err := v.Eval(params.EvalContext())
+		if err != nil {
+			return "", err
+		}
+		n.typedValues[i] = d
+	}
+	var strVal string
+	var err error
+	if n.sVar.GetStringVal != nil {
+		strVal, err = n.sVar.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues)
+	} else {
+		// No string converter defined, use the default one.
+		strVal, err = getStringVal(params.EvalContext(), n.varName, n.typedValues)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	// Validate the new string value, but don't actually apply it to any real
+	// session.
+	fakeSessionMutator := &sessionDataMutator{
+		data:               &sessiondata.SessionData{},
+		defaults:           SessionDefaults(map[string]string{}),
+		settings:           params.ExecCfg().Settings,
+		paramStatusUpdater: &noopParamStatusUpdater{},
+		setCurTxnReadOnly:  func(bool) {},
+	}
+	if err := n.sVar.Set(params.ctx, fakeSessionMutator, strVal); err != nil {
+		return "", err
+	}
+	return strVal, nil
+}
+
+func (*alterRoleSetNode) Next(runParams) (bool, error) { return false, nil }
+func (*alterRoleSetNode) Values() tree.Datums          { return tree.Datums{} }
+func (*alterRoleSetNode) Close(context.Context)        {}
