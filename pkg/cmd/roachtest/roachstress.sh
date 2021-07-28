@@ -10,6 +10,8 @@ set -euo pipefail
 # It's best practice to invoke this script with "caffeinate" on OSX and/or linux
 # to avoid computer going to standby.
 
+export GCE_PROJECT=andrei-jepsen
+
 if [ "${GCE_PROJECT-cockroach-ephemeral}" == "cockroach-ephemeral" ]; then
   cat <<EOF
 Please do not use roachstress on the cockroach-ephemeral project.
@@ -38,18 +40,9 @@ cr="${abase}/cockroach"
 # the same SHA multiple times and artifacts shouldn't mix.
 a="${abase}/$(date '+%H%M%S')"
 
-# Read user input.
-read -e -i "${TEST-}" -p "Test regexp: " TEST
-read -e -i "${COUNT-10}" -p "Count: " COUNT
-
-short="short"
-if [ ! -f "${cr}" ]; then
-  yn=""
-  read -e -i "${SHORT-y}" -p "Build cockroach without the UI: " yn
-  case $yn in
-    [Nn]* | false | "") short=""
-  esac
-fi
+TEST=tpcc/headroom/n4cpu16
+COUNT=50
+short=""
 
 mkdir -p "${a}"
 
@@ -74,4 +67,5 @@ fi
   --workload "${wl}" \
   --cockroach "${cr}" \
   --artifacts "${a}" \
+  --debug \
   --count "${COUNT}"

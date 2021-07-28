@@ -241,6 +241,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 		rampDuration = 30 * time.Second
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
+	return // exit early
 	t.Status("waiting")
 	m := c.NewMonitor(ctx, crdbNodes)
 	for i := range workloadInstances {
