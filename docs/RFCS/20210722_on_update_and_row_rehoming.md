@@ -49,16 +49,43 @@ UPDATE, it will be filled with the value calculated from the column's ON UPDATE
 expression.
 
 Note that this ON UPDATE expression is distinct from a column's DEFAULT
-expression i.e., a user can set different DEFAULT and ON UPDATE expressions.
+expression i.e., a user can set different DEFAULT and ON UPDATE expressions. It
+is also not required that a DEFAULT be specified in order to use ON UPDATE; they
+are separate constructs.
 
-### Interaction with CASCADE and backfills
+### When does ON UPDATE execute?
+
+| Update mechanism         | ON UPDATE applied |
+|--------------------------|:-----------------:|
+| UPDATE                   |         ✅         |
+| UPSERT                   |         ✅         |
+| ON UPDATE CASCADE        |         ✅         |
+| Backfilling a new column |         ❌         |
+
+#### UPDATE
+
+UPDATE statements will apply ON UPDATE expressions when an UPDATE is issued that
+does not modify a column with an ON UPDATE. For example, in a table `t(p int, b
+int)` where `b` has `ON UPDATE 100` if an UPDATE is issued that only touches
+`p`, `b` will be set to 100.
+
+#### UPSERT
+
+UPSERT statements follow the UPDATE rules if the row to be UPSERT already
+exists. If the UPSERT creates a new row, however, an ON UPDATE will not be
+applied.
+
+#### ON UPDATE CASCADE
 
 If a row in a table with an ON UPDATE column is modified by an ON UPDATE CASCADE
-operation, the ON UPDATE expression will be applied. This decision is made
-primarily in order to be semantically consistent with ON UPDATE in Postgres
-triggers; Postgres ON UPDATE triggers fire when a row is modified via an ON
-UPDATE CASCADE. This decision will become particularly relevant if triggers are
-implemented in Cockroach in the future.
+operation, the ON UPDATE expression will be applied. For example, in a table
+`t(p int, b int, c int)`, `c` is a foreign key with ON UPDATE CASCADE, and `b` has
+ON UPDATE, the ON UPDATE for `b` will be applied when `c` gets a cascade.
+
+This decision is made primarily in order to be semantically consistent with ON
+UPDATE in Postgres triggers; Postgres ON UPDATE triggers fire when a row is
+modified via an ON UPDATE CASCADE. This decision will become particularly
+relevant if triggers are implemented in Cockroach in the future.
 
 This behavior can also be motivated via the row rehoming use case. If a REGIONAL
 BY ROW table `rt` has a foreign key onto another RBR table `ft`, we'd like rows
@@ -68,10 +95,12 @@ in `rt` be recalculated, leading to rows in `rt` being in the same region as the
 rows they reference in `ft`. See the rehoming section below for more details on
 how ON UPDATE will be used in REGIONAL BY ROW tables.
 
-In the case of backfills, however, the ON UPDATE clause will not be
-re-evaluated. Applying the ON UPDATE to all rows is likely unexpected behavior,
-particularly when the ON UPDATE captures something unique about each row
-(region, last modified timestamp, etc.).
+#### Backfills
+
+In the case of a backfill resulting from adding a column, however, the ON UPDATE
+clause will not be re-evaluated. Applying the ON UPDATE to all rows is likely
+unexpected behavior, particularly when the ON UPDATE captures something unique
+about each row (region, last modified timestamp, etc.).
 
 ### Syntax
 
@@ -81,6 +110,12 @@ time with the following syntax:
 ```
 <column_name> <column_type> <other_constraints> ON UPDATE <update_expr>
 ```
+
+The ON UPDATE expression must be standalone i.e., it cannot reference other
+columns. The primary use of the expression is to capture context-specific
+information like gateway region, current time, current user. The purpose is
+_not_ to calculate information based on other columns - for this use case,
+computed columns are a better fit.
 
 Concretely, creating a table with a `quantity_on_hand` column that applies a
 value of 50 ON UPDATE would look like:
@@ -138,6 +173,13 @@ SELECT quantity_on_hand FROM inventories;
 > 100
 ```
 
+### Storage
+
+The ON UPDATE expression will be added to the column descriptor that it's
+applied to as a string field. The existing expression serializing code will be
+used to serialize the ON UPDATE expression to the string and to deserialize it
+to an expression.
+
 ## Row Rehoming
 
 To implement row rehoming, an ON UPDATE constraint will be added to the
@@ -176,6 +218,48 @@ rehome after 5 sequential UPDATEs” would be impossible to implement. Depending
 on the client workload, a heuristic like this may decrease thrashing,
 particularly if the vast majority of UPDATEs come from a single region but some
 occasionally come from other regions.
+
+Another drawback of modifying a row's region is that the region is part of the table's primary key,
+so modifying the region is a primary key modification. This means that in the case
+of a table with a column family with an indexed column, the whole family will have to be
+fetched for every UPDATE. Non-regional example (note that we must do a full scan after modifying `k`):
+
+```
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX a_idx (a),
+  INDEX b_idx (b),
+  FAMILY (k, a),
+  FAMILY (b)
+)
+
+statement ok
+INSERT INTO t VALUES (10, 20, 30)
+
+# We do not need to scan the column family with b because b_idx will never
+# change.
+query T kvtrace
+UPDATE t SET a = 220 WHERE k = 10
+----
+Scan /Table/53/1/10/0
+Put /Table/53/1/10/0 -> /TUPLE/2:2:Int/220
+Del /Table/53/2/20/10/0
+CPut /Table/53/2/220/10/0 -> /BYTES/ (expecting does not exist)
+
+# We must scan the column family with b because b_idx could change, if the PK
+# changes.
+query T kvtrace
+UPDATE t SET a = 222, k = 10 WHERE k = 10
+----
+Scan /Table/53/1/10{-/#}
+Scan /Table/53/1/10/{1/1-#}
+Put /Table/53/1/10/0 -> /TUPLE/2:2:Int/222
+Del /Table/53/2/220/10/0
+CPut /Table/53/2/222/10/0 -> /BYTES/ (expecting does not exist)
+```
 
 ## Rationale and Alternatives
 
