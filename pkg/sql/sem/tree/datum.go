@@ -1858,6 +1858,30 @@ func ParseDDate(ctx ParseTimeContext, s string) (_ *DDate, dependsOnContext bool
 	return NewDDate(t), dependsOnContext, err
 }
 
+// AsDDate attempts to retrieve a DDate from an Expr, returning a DDate and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DDate wrapped by a
+// *DOidWrapper is possible.
+func AsDDate(e Expr) (DDate, bool) {
+	switch t := e.(type) {
+	case *DDate:
+		return *t, true
+	case *DOidWrapper:
+		return AsDDate(t.Wrapped)
+	}
+	return DDate{}, false
+}
+
+// MustBeDDate attempts to retrieve a DDate from an Expr, panicking if the
+// assertion fails.
+func MustBeDDate(e Expr) DDate {
+	t, ok := AsDDate(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DDate, found %T", e))
+	}
+	return t
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DDate) ResolvedType() *types.T {
 	return types.Date
