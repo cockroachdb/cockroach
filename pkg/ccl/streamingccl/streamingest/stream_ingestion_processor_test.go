@@ -171,6 +171,32 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		require.Nil(t, row)
 		testutils.IsError(meta.Err, "this client always returns an error")
 	})
+
+	t.Run("stream client hangs on losing client connection", func(t *testing.T) {
+		events := []streamingccl.Event{streamingccl.MakeGenerationEvent()}
+		pa1 := streamingccl.PartitionAddress("partition1")
+		pa2 := streamingccl.PartitionAddress("partition2")
+		mockClient := &mockStreamClient{
+			partitionEvents: map[streamingccl.PartitionAddress][]streamingccl.Event{pa1: events, pa2: events},
+		}
+
+		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		partitionAddresses := []streamingccl.PartitionAddress{"partition1", "partition2"}
+
+		sip, _, err := getStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test/",
+			partitionAddresses, startTime, nil /* interceptEvents */, mockClient)
+		require.NoError(t, err)
+
+		go func() {
+			sip.Run(ctx)
+		}()
+
+		time.Sleep(10 * time.Second)
+		require.Equal(t, execinfra.StateRunning, sip.State)
+
+		// Send a cutover signal to put the processor in terminal state
+		sip.cutoverCh <- struct{}{}
+	})
 }
 
 func getPartitionSpanToTableID(
@@ -379,6 +405,30 @@ func runStreamIngestionProcessor(
 	interceptEvents []streamclient.InterceptFn,
 	mockClient streamclient.Client,
 ) (*distsqlutils.RowBuffer, error) {
+	sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB, streamAddr,
+		partitionAddresses, startTime, interceptEvents, mockClient)
+	require.NoError(t, err)
+
+	sip.Run(ctx)
+
+	// Ensure that all the outputs are properly closed.
+	if !out.ProducerClosed() {
+		t.Fatalf("output RowReceiver not closed")
+	}
+	return out, err
+}
+
+func getStreamIngestionProcessor(
+	ctx context.Context,
+	t *testing.T,
+	registry *jobs.Registry,
+	kvDB *kv.DB,
+	streamAddr string,
+	partitionAddresses []streamingccl.PartitionAddress,
+	startTime hlc.Timestamp,
+	interceptEvents []streamclient.InterceptFn,
+	mockClient streamclient.Client,
+) (*streamIngestionProcessor, *distsqlutils.RowBuffer, error) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
@@ -423,14 +473,7 @@ func runStreamIngestionProcessor(
 			interceptable.RegisterInterception(interceptor)
 		}
 	}
-
-	sip.Run(ctx)
-
-	// Ensure that all the outputs are properly closed.
-	if !out.ProducerClosed() {
-		t.Fatalf("output RowReceiver not closed")
-	}
-	return out, err
+	return sip, out, err
 }
 
 func registerValidatorWithClient(
