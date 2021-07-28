@@ -354,6 +354,7 @@ var charts = []sectionDescription{
 					"distsender.rpc.err.invalidleaseerrtype",
 					"distsender.rpc.err.leaserejectederrtype",
 					"distsender.rpc.err.mergeinprogresserrtype",
+					"distsender.rpc.err.mintimestampboundunsatisfiableerrtype",
 					"distsender.rpc.err.nodeunavailableerrtype",
 					"distsender.rpc.err.notleaseholdererrtype",
 					"distsender.rpc.err.oprequirestxnerrtype",
