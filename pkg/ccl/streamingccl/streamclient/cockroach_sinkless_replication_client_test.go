@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer" // Ensure we can start replication stream.
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -54,6 +55,10 @@ func (f *channelFeedSource) Close() {
 
 func TestSinklessReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// channel usage error in this test
+	skip.WithIssue(t, 68168)
+
 	defer log.Scope(t).Close(t)
 	h, cleanup := streamingtest.NewReplicationHelper(t)
 	defer cleanup()
