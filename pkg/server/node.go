@@ -1341,11 +1341,17 @@ func (n *Node) Join(
 func (n *Node) TokenBucket(
 	ctx context.Context, in *roachpb.TokenBucketRequest,
 ) (*roachpb.TokenBucketResponse, error) {
-	tenantID, ok := roachpb.TenantFromContext(ctx)
-	if !ok {
-		return nil, errors.New("token bucket request with no tenant")
+	// Check tenant ID. Note that in production configuration, the tenant ID has
+	// already been checked in the RPC layer (see rpc.tenantAuthorizer).
+	if in.TenantID == 0 || in.TenantID == roachpb.SystemTenantID.ToUint64() {
+		return &roachpb.TokenBucketResponse{
+			Error: errors.EncodeError(ctx, errors.Errorf(
+				"token bucket request with invalid tenant ID %d", in.TenantID,
+			)),
+		}, nil
 	}
-	return n.tenantUsage.TokenBucketRequest(ctx, tenantID, in)
+	tenantID := roachpb.MakeTenantID(in.TenantID)
+	return n.tenantUsage.TokenBucketRequest(ctx, tenantID, in), nil
 }
 
 // NewTenantUsageServer is a hook for CCL code which implements the tenant usage
@@ -1361,8 +1367,10 @@ type dummyTenantUsageServer struct{}
 // TokenBucketRequest is defined in the TenantUsageServer interface.
 func (dummyTenantUsageServer) TokenBucketRequest(
 	ctx context.Context, tenantID roachpb.TenantID, in *roachpb.TokenBucketRequest,
-) (*roachpb.TokenBucketResponse, error) {
-	return nil, errors.Errorf("tenant usage requires a CCL binary")
+) *roachpb.TokenBucketResponse {
+	return &roachpb.TokenBucketResponse{
+		Error: errors.EncodeError(ctx, errors.New("tenant usage requires a CCL binary")),
+	}
 }
 
 // ReconfigureTokenBucket is defined in the TenantUsageServer interface.

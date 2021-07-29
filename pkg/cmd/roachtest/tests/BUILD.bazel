@@ -93,6 +93,7 @@ go_library(
         "restart.go",
         "restore.go",
         "roachmart.go",
+        "roachtest.go",
         "ruby_pg.go",
         "ruby_pg_blocklist.go",
         "schema_change_database_version_upgrade.go",

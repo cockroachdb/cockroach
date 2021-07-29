@@ -53,6 +53,7 @@ go_test(
         "//pkg/util/metric",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
