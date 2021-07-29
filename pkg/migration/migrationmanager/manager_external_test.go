@@ -13,6 +13,7 @@ package migrationmanager_test
 import (
 	"context"
 	gosql "database/sql"
+	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
+	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -76,7 +78,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 						if cv != endCV {
 							return nil, false
 						}
-						return migration.NewTenantMigration("test", cv, func(
+						return migration.NewTenantMigration("test", cv, migrations.NoPrecondition, func(
 							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
 						) error {
 							canResume := make(chan error)
@@ -410,7 +412,7 @@ func TestPauseMigration(t *testing.T) {
 						if cv != endCV {
 							return nil, false
 						}
-						return migration.NewTenantMigration("test", cv, func(
+						return migration.NewTenantMigration("test", cv, migrations.NoPrecondition, func(
 							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
 						) error {
 							canResume := make(chan error)
@@ -477,4 +479,133 @@ SELECT id
 	close(ev.unblock)
 	require.NoError(t, <-upgrade1Err)
 	require.NoError(t, <-upgrade2Err)
+}
+
+// Test that the precondition prevents migrations from being run.
+func TestPrecondition(t *testing.T) {
+
+	// Start by running v0. We want the precondition of v1 to prevent
+	// us from reaching v1 (or v2). We want the precondition to not be
+	// run when migrating from v1 to v2.
+	next := func(version clusterversion.ClusterVersion) clusterversion.ClusterVersion {
+		version.Internal += 2
+		return version
+	}
+	v0 := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
+	v1 := next(v0)
+	v2 := next(v1)
+	versions := []clusterversion.ClusterVersion{v0, v1, v2}
+	var migrationRun, preconditionRun int64
+	var preconditionErr, migrationErr atomic.Value
+	preconditionErr.Store(true)
+	migrationErr.Store(true)
+	cf := func(run *int64, err *atomic.Value) migration.TenantMigrationFunc {
+		return func(
+			context.Context, clusterversion.ClusterVersion, migration.TenantDeps,
+		) error {
+			atomic.AddInt64(run, 1)
+			if err.Load().(bool) {
+				return errors.New("boom")
+			}
+			return nil
+		}
+	}
+	knobs := base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: 1,
+			BinaryVersionOverride:          v0.Version,
+		},
+		// Inject a migration which would run to upgrade the cluster.
+		// We'll validate that we never create a job for this migration.
+		MigrationManager: &migrationmanager.TestingKnobs{
+			ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
+				start := sort.Search(len(versions), func(i int) bool { return from.Less(versions[i].Version) })
+				end := sort.Search(len(versions), func(i int) bool { return to.Less(versions[i].Version) })
+				return versions[start:end]
+			},
+			RegistryOverride: func(cv clusterversion.ClusterVersion) (migration.Migration, bool) {
+				switch cv {
+				case v1:
+					return migration.NewTenantMigration("v1", cv,
+						migration.PreconditionFunc(cf(&preconditionRun, &preconditionErr)),
+						cf(&migrationRun, &migrationErr),
+					), true
+				case v2:
+					return migration.NewTenantMigration("v2", cv,
+						migrations.NoPrecondition,
+						cf(&migrationRun, &migrationErr),
+					), true
+				default:
+					return nil, false
+				}
+			},
+		},
+	}
+	ctx := context.Background()
+	args := func() base.TestServerArgs {
+		return base.TestServerArgs{
+			Knobs: knobs,
+			Settings: cluster.MakeTestingClusterSettingsWithVersions(
+				v2.Version, // binaryVersion
+				v0.Version, // binaryMinSupportedVersion
+				false,      // initializeVersion
+			),
+		}
+	}
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: args(),
+			1: args(),
+			2: args(),
+		},
+	})
+	checkActiveVersion := func(t *testing.T, exp clusterversion.ClusterVersion) {
+		for i := 0; i < tc.NumServers(); i++ {
+			got := tc.Server(i).ClusterSettings().Version.ActiveVersion(ctx)
+			require.Equalf(t, exp, got, "server %d", i)
+		}
+	}
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := tc.ServerConn(0)
+	{
+		_, err := sqlDB.Exec("SET CLUSTER SETTING version = $1", v2.String())
+		require.Regexp(t, "boom", err)
+		require.Equal(t, int64(1), atomic.LoadInt64(&preconditionRun))
+		require.Equal(t, int64(0), atomic.LoadInt64(&migrationRun))
+		checkActiveVersion(t, v0)
+	}
+	preconditionErr.Store(false)
+	{
+		_, err := sqlDB.Exec("SET CLUSTER SETTING version = $1", v2.String())
+		require.Regexp(t, "boom", err)
+		require.Equal(t, int64(2), atomic.LoadInt64(&preconditionRun))
+		require.Equal(t, int64(1), atomic.LoadInt64(&migrationRun))
+		checkActiveVersion(t, v0)
+	}
+	migrationErr.Store(false)
+	{
+		_, err := sqlDB.Exec("SET CLUSTER SETTING version = $1", v1.String())
+		require.NoError(t, err)
+		require.Equal(t, int64(3), atomic.LoadInt64(&preconditionRun))
+		require.Equal(t, int64(2), atomic.LoadInt64(&migrationRun))
+		checkActiveVersion(t, v1)
+	}
+	preconditionErr.Store(true)
+	migrationErr.Store(true)
+	{
+		_, err := sqlDB.Exec("SET CLUSTER SETTING version = $1", v2.String())
+		require.Regexp(t, "boom", err)
+		// Note that the precondition is no longer run.
+		require.Equal(t, int64(3), atomic.LoadInt64(&preconditionRun))
+		require.Equal(t, int64(3), atomic.LoadInt64(&migrationRun))
+		checkActiveVersion(t, v1)
+	}
+	migrationErr.Store(false)
+	{
+		_, err := sqlDB.Exec("SET CLUSTER SETTING version = $1", v2.String())
+		require.NoError(t, err)
+		require.Equal(t, int64(3), atomic.LoadInt64(&preconditionRun))
+		require.Equal(t, int64(4), atomic.LoadInt64(&migrationRun))
+		checkActiveVersion(t, v2)
+	}
 }

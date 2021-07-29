@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -40,6 +41,7 @@ import (
 // cluster.
 type Manager struct {
 	c        migration.Cluster
+	lm       *lease.Manager
 	ie       sqlutil.InternalExecutor
 	jr       *jobs.Registry
 	codec    keys.SQLCodec
@@ -67,6 +69,7 @@ func (m *Manager) Cluster() migration.Cluster {
 // secondary tenants. The testingKnobs parameter may be nil.
 func NewManager(
 	c migration.Cluster,
+	lm *lease.Manager,
 	ie sqlutil.InternalExecutor,
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
@@ -79,6 +82,7 @@ func NewManager(
 	}
 	return &Manager{
 		c:        c,
+		lm:       lm,
 		ie:       ie,
 		jr:       jr,
 		codec:    codec,
@@ -117,6 +121,10 @@ func (m *Manager) Migrate(
 		if err := validateTargetClusterVersion(ctx, m.c, finalVersion); err != nil {
 			return err
 		}
+	}
+
+	if err := m.checkPreconditions(ctx, clusterVersions); err != nil {
+		return err
 	}
 
 	for _, clusterVersion := range clusterVersions {
@@ -372,4 +380,35 @@ func (m *Manager) listBetween(
 		return m.knobs.ListBetweenOverride(from, to)
 	}
 	return clusterversion.ListBetween(from, to)
+}
+
+// checkPreconditions runs the precondition check for each tenant migration
+// associated with the provided versions.
+func (m *Manager) checkPreconditions(
+	ctx context.Context, versions []clusterversion.ClusterVersion,
+) error {
+	for _, v := range versions {
+		mig, ok := m.GetMigration(v)
+		if !ok {
+			continue
+		}
+		tm, ok := mig.(*migration.TenantMigration)
+		if !ok {
+			continue
+		}
+		if err := tm.Precondition(ctx, v, migration.TenantDeps{
+			DB:               m.c.DB(),
+			Codec:            m.codec,
+			Settings:         m.settings,
+			LeaseManager:     m.lm,
+			InternalExecutor: m.ie,
+		}); err != nil {
+			return errors.Wrapf(
+				err,
+				"verifying precondition for version %s",
+				redact.SafeString(v.PrettyPrint()),
+			)
+		}
+	}
+	return nil
 }
