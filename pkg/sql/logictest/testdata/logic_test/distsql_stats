@@ -1014,6 +1014,31 @@ column_names  has_histogram
 {j}           true
 {s}           true
 
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
+CREATE STATISTICS s FROM multi_col;
+
+# Do not create multi-column stats with an invertable column.
+query TB colnames
+SELECT
+  column_names,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE multi_col]
+ORDER BY
+  column_names::STRING, created
+----
+column_names  has_histogram
+{id}          true
+{j}           true
+{s,j}         false
+{s}           true
+
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = false
+
 # Regression test for #56356. Histograms on all-null columns should not cause
 # an error.
 statement ok

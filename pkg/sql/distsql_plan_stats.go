@@ -126,22 +126,29 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			sampledColumnIDs[streamColIdx] = colID
 		}
 		if s.inverted {
-			// Find the first inverted index on the first column. Although there may be
-			// more, we don't currently have a way of using more than one or deciding which
-			// one is better.
-			// TODO(mjibson): allow multiple inverted indexes on the same column (i.e.,
-			// with different configurations). See #50655.
-			col := s.columns[0]
-			for _, index := range desc.PublicNonPrimaryIndexes() {
-				if index.GetType() == descpb.IndexDescriptor_INVERTED && index.InvertedColumnID() == col {
-					spec.Index = index.IndexDesc()
-					break
+			// Find the first inverted index on the first column for collecting
+			// histograms. Although there may be more than one index, we don't
+			// currently have a way of using more than one or deciding which one
+			// is better.
+			//
+			// We do not generate multi-column stats with histograms, so there
+			// is no need to find an index for multi-column stats here.
+			//
+			// TODO(mjibson): allow multiple inverted indexes on the same column
+			// (i.e., with different configurations). See #50655.
+			if len(s.columns) == 1 {
+				col := s.columns[0]
+				for _, index := range desc.PublicNonPrimaryIndexes() {
+					if index.GetType() == descpb.IndexDescriptor_INVERTED && index.InvertedColumnID() == col {
+						spec.Index = index.IndexDesc()
+						break
+					}
 				}
 			}
-			// Even if spec.Index is nil because there isn't an inverted index on
-			// the requested stats column, we can still proceed. We aren't generating
-			// histograms in that case so we don't need an index descriptor to generate the
-			// inverted index entries.
+			// Even if spec.Index is nil because there isn't an inverted index
+			// on the requested stats column, we can still proceed. We aren't
+			// generating histograms in that case so we don't need an index
+			// descriptor to generate the inverted index entries.
 			invSketchSpecs = append(invSketchSpecs, spec)
 		} else {
 			sketchSpecs = append(sketchSpecs, spec)
