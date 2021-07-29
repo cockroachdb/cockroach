@@ -89,3 +89,8 @@ eval
 ||/ decimal 'NaN'
 ----
 NaN
+
+eval
+OPERATOR(+) 1
+----
+1
