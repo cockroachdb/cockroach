@@ -1196,6 +1196,28 @@ func (c *coster) computeProjectSetCost(projectSet *memo.ProjectSetExpr) memo.Cos
 
 // countSegments calculates the number of segments that will be used to execute
 // the sort. If no input ordering is provided, there's only one segment.
+func (c *coster) countSegmentsHelper(expr memo.RelExpr, rel *props.Relational, order props.OrderingChoice) float64 {
+	if order.Any() {
+		return 1
+	}
+	stats := rel.Stats
+	orderedCols := order.ColSet()
+	orderedStats, ok := stats.ColStats.Lookup(orderedCols)
+	if !ok {
+		orderedStats, ok = c.mem.RequestColStat(expr, orderedCols)
+		if !ok {
+			// I don't think we can ever get here. Since we don't allow the memo
+			// to be optimized twice, the coster should never be used after
+			// logPropsBuilder.clear() is called.
+			panic(errors.AssertionFailedf("could not request the stats for ColSet %v", orderedCols))
+		}
+	}
+
+	return orderedStats.DistinctCount
+}
+
+// countSegments calculates the number of segments that will be used to execute
+// the sort. If no input ordering is provided, there's only one segment.
 func (c *coster) countSegments(sort *memo.SortExpr) float64 {
 	if sort.InputOrdering.Any() {
 		return 1

@@ -152,7 +152,7 @@ scan a@s_idx
 
 # Limit of a limit.
 opt
-SELECT s FROM (SELECT s, i FROM a ORDER BY s LIMIT 10) a ORDER BY s, i LIMIT 1
+select s from (select s, i from a order by s limit 10) a order by s, i limit 1
 ----
 top-k
  ├── columns: s:4  [hidden: i:2]
