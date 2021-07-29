@@ -87,14 +87,16 @@ func (rl *limiter) init(
 	// this file as of 0e70529f84 for a sample implementation.
 	bucket := &tokenBucket{}
 
-	options = append(options, quotapool.OnWait(
-		func(ctx context.Context, poolName string, r quotapool.Request) {
-			rl.metrics.currentBlocked.Inc(1)
-		},
-		func(ctx context.Context, poolName string, r quotapool.Request) {
-			rl.metrics.currentBlocked.Dec(1)
-		},
-	))
+	options = append(options,
+		quotapool.OnWaitStart(
+			func(ctx context.Context, poolName string, r quotapool.Request) {
+				rl.metrics.currentBlocked.Inc(1)
+			}),
+		quotapool.OnWaitFinish(
+			func(ctx context.Context, poolName string, r quotapool.Request, _ time.Time) {
+				rl.metrics.currentBlocked.Dec(1)
+			}),
+	)
 
 	// There is a lot of overlap with quotapool.RateLimiter, but we can't use it
 	// directly without separate synchronization for the Config.

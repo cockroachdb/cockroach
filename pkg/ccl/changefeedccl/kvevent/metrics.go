@@ -27,19 +27,27 @@ var (
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedBufferPushbackNanos = metric.Metadata{
+		Name:        "changefeed.buffer_pushback_nanos",
+		Help:        "Total time spent waiting while the buffer was full",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // Metrics is a metric.Struct for kvfeed metrics.
 type Metrics struct {
-	BufferEntriesIn  *metric.Counter
-	BufferEntriesOut *metric.Counter
+	BufferEntriesIn     *metric.Counter
+	BufferEntriesOut    *metric.Counter
+	BufferPushbackNanos *metric.Counter
 }
 
 // MakeMetrics constructs a Metrics struct with the provided histogram window.
 func MakeMetrics(histogramWindow time.Duration) Metrics {
 	return Metrics{
-		BufferEntriesIn:  metric.NewCounter(metaChangefeedBufferEntriesIn),
-		BufferEntriesOut: metric.NewCounter(metaChangefeedBufferEntriesOut),
+		BufferEntriesIn:     metric.NewCounter(metaChangefeedBufferEntriesIn),
+		BufferEntriesOut:    metric.NewCounter(metaChangefeedBufferEntriesOut),
+		BufferPushbackNanos: metric.NewCounter(metaChangefeedBufferPushbackNanos),
 	}
 }
 
