@@ -44,11 +44,30 @@
 /pkg/sql/sessiondata/        @cockroachdb/sql-experience
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-experience
 
+/pkg/sql/catalog/            @cockroachdb/sql-schema
+/pkg/sql/doctor/             @cockroachdb/sql-schema
+/pkg/sql/gcjob/              @cockroachdb/sql-schema
+/pkg/sql/gcjob_test/         @cockroachdb/sql-schema
+/pkg/sql/privilege/          @cockroachdb/sql-schema
+/pkg/sql/schemachange/       @cockroachdb/sql-schema
+/pkg/sql/schemachanger/      @cockroachdb/sql-schema
+/pkg/sql/alter*.go           @cockroachdb/sql-schema
+/pkg/sql/backfill*.go        @cockroachdb/sql-schema
+/pkg/sql/create*.go          @cockroachdb/sql-schema
+/pkg/sql/database*.go        @cockroachdb/sql-schema
+/pkg/sql/drop*.go            @cockroachdb/sql-schema
+/pkg/sql/grant*.go           @cockroachdb/sql-schema
+/pkg/sql/rename*.go          @cockroachdb/sql-schema
+/pkg/sql/revoke*.go          @cockroachdb/sql-schema
+/pkg/sql/schema*.go          @cockroachdb/sql-schema
+/pkg/sql/zone*.go            @cockroachdb/sql-schema
+
 /pkg/cli/                    @cockroachdb/cli-prs
 # last-rule-wins so bulk i/o takes userfile.go even though cli-prs takes pkg/cli
 /pkg/cli/userfile.go         @cockroachdb/bulk-prs
 /pkg/cli/demo*.go            @cockroachdb/cli-prs @cockroachdb/sql-experience @cockroachdb/server-prs
 /pkg/cli/debug*.go           @cockroachdb/cli-prs @cockroachdb/kv
+/pkg/cli/doctor*.go          @cockroachdb/cli-prs @cockroachdb/sql-schema
 /pkg/cli/import_test.go      @cockroachdb/cli-prs @cockroachdb/bulk-prs
 /pkg/cli/sql*.go             @cockroachdb/cli-prs @cockroachdb/sql-experience
 /pkg/cli/start*.go           @cockroachdb/cli-prs @cockroachdb/server-prs
@@ -105,7 +124,7 @@
 /pkg/ccl/multiregionccl/     @cockroachdb/multiregion
 /pkg/ccl/multitenantccl/     @cockroachdb/unowned
 /pkg/ccl/oidcccl/            @cockroachdb/sql-queries
-/pkg/ccl/partitionccl/       @cockroachdb/sql-schema
+/pkg/ccl/partitionccl/       @cockroachdb/sql-schema @cockroachdb/multiregion
 /pkg/ccl/serverccl/          @cockroachdb/server-prs
 /pkg/ccl/telemetryccl/       @cockroachdb/obs-inf-prs
 /pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries
@@ -176,7 +195,7 @@
 /pkg/internal/team/          @cockroachdb/test-eng
 /pkg/jobs/                   @cockroachdb/sql-schema
 /pkg/keys/                   @cockroachdb/kv
-/pkg/migration/              @cockroachdb/kv
+/pkg/migration/              @cockroachdb/kv @cockroachdb/sql-schema
 /pkg/multitenant             @cockroachdb/unowned
 /pkg/release/                @cockroachdb/dev-inf
 /pkg/roachpb/                @cockroachdb/kv
