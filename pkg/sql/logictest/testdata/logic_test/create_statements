@@ -4574,25 +4574,25 @@ CREATE TABLE pg_catalog.pg_settings (
    pending_restart BOOL NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_shadow (
-   useconfig STRING[] NULL,
-   usecreatedb BOOL NULL,
-   userepl BOOL NULL,
-   usesuper BOOL NULL,
-   usesysid OID NULL,
-   valuntil TIMESTAMPTZ NULL,
-   passwd STRING NULL,
    usename NAME NULL,
-   usebypassrls BOOL NULL
+   usesysid OID NULL,
+   usecreatedb BOOL NULL,
+   usesuper BOOL NULL,
+   userepl BOOL NULL,
+   usebypassrls BOOL NULL,
+   passwd STRING NULL,
+   valuntil TIMESTAMPTZ NULL,
+   useconfig STRING[] NULL
 )  CREATE TABLE pg_catalog.pg_shadow (
-   useconfig STRING[] NULL,
-   usecreatedb BOOL NULL,
-   userepl BOOL NULL,
-   usesuper BOOL NULL,
-   usesysid OID NULL,
-   valuntil TIMESTAMPTZ NULL,
-   passwd STRING NULL,
    usename NAME NULL,
-   usebypassrls BOOL NULL
+   usesysid OID NULL,
+   usecreatedb BOOL NULL,
+   usesuper BOOL NULL,
+   userepl BOOL NULL,
+   usebypassrls BOOL NULL,
+   passwd STRING NULL,
+   valuntil TIMESTAMPTZ NULL,
+   useconfig STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_shdepend (
    dbid OID NULL,
