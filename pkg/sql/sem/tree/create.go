@@ -1545,7 +1545,7 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			// TODO(knz): replace all this with ctx.FormatNode if/when
 			// the start option supports expressions.
 			if ctx.flags.HasFlags(FmtHideConstants) {
-				ctx.WriteByte('_')
+				ctx.WriteByte('0')
 			} else {
 				ctx.Printf("%d", *option.IntVal)
 			}
@@ -1558,7 +1558,7 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			// TODO(knz): replace all this with ctx.FormatNode if/when
 			// the increment option supports expressions.
 			if ctx.flags.HasFlags(FmtHideConstants) {
-				ctx.WriteByte('_')
+				ctx.WriteByte('0')
 			} else {
 				ctx.Printf("%d", *option.IntVal)
 			}
