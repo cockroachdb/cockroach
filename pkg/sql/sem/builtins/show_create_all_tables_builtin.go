@@ -16,7 +16,6 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -49,14 +48,9 @@ const foreignKeyValidationWarning = "-- Validate foreign key constraints. These 
 // the table that uses the sequence).
 // The tables are sorted by table id first to guarantee stable ordering.
 func getTopologicallySortedTableIDs(
-	ctx context.Context,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
-	dbName string,
-	ts string,
-	acc *mon.BoundAccount,
+	ctx context.Context, ie sqlutil.InternalExecutor, dbName string, ts string, acc *mon.BoundAccount,
 ) ([]int64, error) {
-	ids, err := getTableIDs(ctx, ie, txn, ts, dbName, acc)
+	ids, err := getTableIDs(ctx, ie, ts, dbName, acc)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +74,7 @@ func getTopologicallySortedTableIDs(
 		it, err := ie.QueryIteratorEx(
 			ctx,
 			"crdb_internal.show_create_all_tables",
-			txn,
+			nil, /* txn */
 			sessiondata.NoSessionDataOverride,
 			query,
 			tid,
@@ -155,12 +149,7 @@ func getTopologicallySortedTableIDs(
 // getTableIDs returns the set of table ids from
 // crdb_internal.show_create_all_tables for a specified database.
 func getTableIDs(
-	ctx context.Context,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
-	ts string,
-	dbName string,
-	acc *mon.BoundAccount,
+	ctx context.Context, ie sqlutil.InternalExecutor, ts string, dbName string, acc *mon.BoundAccount,
 ) ([]int64, error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
@@ -173,7 +162,7 @@ func getTableIDs(
 	it, err := ie.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
-		txn,
+		nil, /* txn */
 		sessiondata.NoSessionDataOverride,
 		query,
 		dbName,
@@ -246,7 +235,7 @@ func topologicalSort(
 // getCreateStatement gets the create statement to recreate a table (ignoring fks)
 // for a given table id in a database.
 func getCreateStatement(
-	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, id int64, ts string, dbName string,
+	ctx context.Context, ie sqlutil.InternalExecutor, id int64, ts string, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT
@@ -258,7 +247,7 @@ func getCreateStatement(
 	row, err := ie.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
-		txn,
+		nil, /* txn */
 		sessiondata.NoSessionDataOverride,
 		query,
 		id,
@@ -275,7 +264,6 @@ func getCreateStatement(
 func getAlterStatements(
 	ctx context.Context,
 	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
 	id int64,
 	ts string,
 	dbName string,
@@ -291,7 +279,7 @@ func getAlterStatements(
 	row, err := ie.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
-		txn,
+		nil, /* txn */
 		sessiondata.NoSessionDataOverride,
 		query,
 		id,

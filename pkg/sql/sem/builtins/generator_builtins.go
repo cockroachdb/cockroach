@@ -1691,7 +1691,6 @@ const (
 // crdb_internal.show_create_all_tables(dbName).
 type showCreateAllTablesGenerator struct {
 	ie        sqlutil.InternalExecutor
-	txn       *kv.Txn
 	timestamp string
 	ids       []int64
 	dbName    string
@@ -1714,7 +1713,7 @@ func (s *showCreateAllTablesGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *showCreateAllTablesGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	// Note: All the table ids are accumulated in ram before the generator
 	// starts generating values.
 	// This is reasonable under the assumption that:
@@ -1727,7 +1726,7 @@ func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) e
 	// We also account for the memory in the BoundAccount memory monitor in
 	// showCreateAllTablesGenerator.
 	ids, err := getTopologicallySortedTableIDs(
-		ctx, s.ie, txn, s.dbName, s.timestamp, &s.acc,
+		ctx, s.ie, s.dbName, s.timestamp, &s.acc,
 	)
 	if err != nil {
 		return err
@@ -1735,7 +1734,6 @@ func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) e
 
 	s.ids = ids
 
-	s.txn = txn
 	s.idx = -1
 	s.phase = create
 	return nil
@@ -1753,7 +1751,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 		}
 
 		createStmt, err := getCreateStatement(
-			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName,
+			ctx, s.ie, s.ids[s.idx], s.timestamp, s.dbName,
 		)
 		if err != nil {
 			return false, err
@@ -1799,7 +1797,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 			statementReturnType = alterValidateFKStatements
 		}
 		alterStmt, err := getAlterStatements(
-			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName, statementReturnType,
+			ctx, s.ie, s.ids[s.idx], s.timestamp, s.dbName, statementReturnType,
 		)
 		if err != nil {
 			return false, err
