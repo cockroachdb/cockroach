@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -151,6 +152,28 @@ func newCSVWriterProcessor(
 		input:       input,
 		output:      output,
 	}
+
+	if parallelizedExport.Get(&flowCtx.Cfg.Settings.SV) {
+		c.batchCh = make(chan *[]string)
+
+		// Handing batches of 1k rows from the string serializer to the writer should
+		// minimize the chan overhead, but we may want to lower more closely comply
+		// with small requested file row/byte sizes.
+		batchRows := 1000
+		if spec.ChunkRows > 0 && spec.ChunkRows < int64(batchRows) {
+			batchRows = int(spec.ChunkRows)
+		} else if spec.ChunkSize > 0 && spec.ChunkSize < 1<<20 {
+			batchRows = 10
+		}
+
+		c.batchPool = sync.Pool{
+			New: func() interface{} {
+				batch := make([]string, batchRows*len(input.OutputTypes()))
+				return &batch
+			},
+		}
+	}
+
 	semaCtx := tree.MakeSemaContext()
 	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx()); err != nil {
 		return nil, err
@@ -165,7 +188,9 @@ type csvWriter struct {
 	input       execinfra.RowSource
 	out         execinfra.ProcOutputHelper
 	output      execinfra.RowReceiver
-	ch          chan [][]string
+	// batchCh carries batches of stringified rows, flattened from [][]string.
+	batchCh   chan *[]string
+	batchPool sync.Pool
 }
 
 var _ execinfra.Processor = &csvWriter{}
@@ -187,9 +212,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 	defer span.Finish()
 
 	var err error
-
-	if parallelizedExport.Get(&sp.flowCtx.Cfg.Settings.SV) {
-		sp.ch = make(chan [][]string)
+	if sp.batchCh != nil {
 		grp := ctxgroup.WithContext(ctx)
 		grp.GoCtx(sp.writeFiles)
 		grp.GoCtx(sp.stringify)
@@ -337,7 +360,7 @@ func (sp *csvWriter) singleThreadRun(ctx context.Context) error {
 // stringify converts incoming rows from sql datums to the strings that will be
 // in each cell of a csv, sending produced [][]string batches to sp.ch.
 func (sp *csvWriter) stringify(ctx context.Context) error {
-	defer close(sp.ch)
+	defer close(sp.batchCh)
 
 	typs := sp.input.OutputTypes()
 	sp.input.Start(ctx)
@@ -352,23 +375,12 @@ func (sp *csvWriter) stringify(ctx context.Context) error {
 	f := tree.NewFmtCtx(tree.FmtExport)
 	defer f.Close()
 
-	// Handing batches of 1k rows from the string serializer to the writer should
-	// minimize the chan overhead, but we may want to lower more closely comply
-	// with small requested file row/byte sizes.
-	batchSize := 1000
-	if sp.spec.ChunkRows > 0 && sp.spec.ChunkRows < int64(batchSize) {
-		batchSize = int(sp.spec.ChunkRows)
-	} else if sp.spec.ChunkSize > 0 && sp.spec.ChunkSize < 1<<20 {
-		batchSize = 10
-	}
-
 	before := timeutil.Now()
 
 	done := false
 	for {
-		// TODO(dt): pool these.
-		batch := make([][]string, 0, batchSize)
-
+		batch := *sp.batchPool.Get().(*[]string)
+		var batchPos int
 		for {
 			row, err := input.NextRow()
 			if err != nil {
@@ -378,12 +390,11 @@ func (sp *csvWriter) stringify(ctx context.Context) error {
 				done = true
 				break
 			}
-			strs := make([]string, len(typs))
 
 			for i, ed := range row {
 				if ed.IsNull() {
 					if sp.spec.Options.NullEncoding != nil {
-						strs[i] = nullsAs
+						batch[batchPos+i] = nullsAs
 						continue
 					} else {
 						return errors.New("NULL value encountered during EXPORT, " +
@@ -394,21 +405,23 @@ func (sp *csvWriter) stringify(ctx context.Context) error {
 					return err
 				}
 				ed.Datum.Format(f)
-				strs[i] = f.String()
+				batch[batchPos+i] = f.String()
 				f.Reset()
 			}
-			batch = append(batch, strs)
+			batchPos += len(row)
 
-			if len(batch) == batchSize {
+			if batchPos == len(batch) {
 				break
 			}
 		}
 
+		batch = batch[:batchPos]
+
 		if len(batch) > 0 {
-			sp.ch <- batch
+			sp.batchCh <- &batch
 			if log.V(1) {
 				now := timeutil.Now()
-				log.VEventf(ctx, 1, "accumulated %d rows in %02.fs", len(batch), now.Sub(before).Seconds())
+				log.VEventf(ctx, 1, "accumulated %d rows in %02.fs", len(batch)/len(typs), now.Sub(before).Seconds())
 				before = now
 			}
 		}
@@ -446,17 +459,21 @@ func (sp *csvWriter) writeFiles(ctx context.Context) error {
 			select {
 			case <-ctxDone:
 				return ctx.Err()
-			case batch := <-sp.ch:
-				if batch == nil {
+			case batchPtr := <-sp.batchCh:
+				if batchPtr == nil {
 					flush = true
 					break
 				}
-				for i := range batch {
-					if err := writer.Write(batch[i]); err != nil {
+				batch := *batchPtr
+				rowWidth := len(sp.input.OutputTypes())
+				for rowStart := 0; rowStart < len(batch); rowStart += rowWidth {
+					if err := writer.Write(batch[rowStart : rowStart+rowWidth]); err != nil {
 						return err
 					}
 				}
-				rows += len(batch)
+				rows += len(batch) / rowWidth
+				batch = batch[:cap(batch)]
+				sp.batchPool.Put(&batch)
 				// If the bytes.Buffer sink exceeds the target size of a CSV file, we
 				// flush before exporting any additional rows.
 				if int64(writer.buf.Len()) >= sp.spec.ChunkSize {
