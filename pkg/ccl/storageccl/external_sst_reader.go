@@ -91,7 +91,7 @@ func ExternalSSTReader(
 	}
 
 	var reader sstable.ReadableFile = raw
-	var memSize int64
+	memSize := remoteReaderMemoryOverhead
 
 	if encryption != nil {
 		r, memSz, err := decryptingReader(raw, encryption.Key)
@@ -104,11 +104,12 @@ func ExternalSSTReader(
 	} else {
 		// We only explicitly buffer the suffix of the file when not decrypting as
 		// the decrypting reader has its own internal block buffer.
-		if err := raw.readAndCacheSuffix(remoteSSTSuffixCacheSize.Get(&e.Settings().SV)); err != nil {
+		suffixSize := remoteSSTSuffixCacheSize.Get(&e.Settings().SV)
+		if err := raw.readAndCacheSuffix(suffixSize); err != nil {
 			f.Close()
 			return nil, 0, err
 		}
-		memSize = remoteReaderMemoryOverhead
+		memSize += suffixSize
 	}
 
 	iter, err := storage.NewSSTIterator(reader)
