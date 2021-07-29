@@ -36,7 +36,6 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ apd.Context
-	_ coldataext.Datum
 	_ duration.Duration
 	_ pgdate.Date
 )
@@ -2156,7 +2155,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(ctx context.Context, c
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := currRowVal.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, h.offset)
+	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -2217,7 +2216,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(ctx context.Context, c
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
 
-				cmpResult = cmpVal.(*coldataext.Datum).CompareDatum(col, seekVal)
+				cmpResult = coldataext.CompareDatum(cmpVal, col, seekVal)
 
 				if cmpResult >= 0 {
 					return idx
@@ -3252,7 +3251,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(ctx context.Context, 
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := currRowVal.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, h.offset)
+	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -3286,7 +3285,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(ctx context.Context, 
 				}
 				cmpVal := col.Get(vecIdx)
 
-				cmpResult = cmpVal.(*coldataext.Datum).CompareDatum(col, seekVal)
+				cmpResult = coldataext.CompareDatum(cmpVal, col, seekVal)
 
 				if cmpResult <= 0 {
 					return idx
@@ -4690,7 +4689,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(ctx context.Context, cur
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := currRowVal.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, h.offset)
+	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -4751,7 +4750,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(ctx context.Context, cur
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
 
-				cmpResult = cmpVal.(*coldataext.Datum).CompareDatum(col, seekVal)
+				cmpResult = coldataext.CompareDatum(cmpVal, col, seekVal)
 
 				if cmpResult > 0 {
 					return idx
@@ -5939,7 +5938,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(ctx context.Context, cu
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := currRowVal.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, h.offset)
+	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -5973,7 +5972,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(ctx context.Context, cu
 				}
 				cmpVal := col.Get(vecIdx)
 
-				cmpResult = cmpVal.(*coldataext.Datum).CompareDatum(col, seekVal)
+				cmpResult = coldataext.CompareDatum(cmpVal, col, seekVal)
 
 				if cmpResult < 0 {
 					return idx
@@ -7224,7 +7223,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(ctx context.Context, c
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := currRowVal.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, h.offset)
+	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -7285,7 +7284,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(ctx context.Context, c
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
 
-				cmpResult = cmpVal.(*coldataext.Datum).CompareDatum(col, seekVal)
+				cmpResult = coldataext.CompareDatum(cmpVal, col, seekVal)
 
 				if cmpResult >= 0 {
 					return idx
@@ -8320,7 +8319,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(ctx context.Context, 
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := currRowVal.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, h.offset)
+	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -8354,7 +8353,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(ctx context.Context, 
 				}
 				cmpVal := col.Get(vecIdx)
 
-				cmpResult = cmpVal.(*coldataext.Datum).CompareDatum(col, seekVal)
+				cmpResult = coldataext.CompareDatum(cmpVal, col, seekVal)
 
 				if cmpResult <= 0 {
 					return idx
@@ -9758,7 +9757,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(ctx context.Context, cur
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := currRowVal.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, h.offset)
+	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -9819,7 +9818,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(ctx context.Context, cur
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
 
-				cmpResult = cmpVal.(*coldataext.Datum).CompareDatum(col, seekVal)
+				cmpResult = coldataext.CompareDatum(cmpVal, col, seekVal)
 
 				if cmpResult > 0 {
 					return idx
@@ -11007,7 +11006,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(ctx context.Context, cu
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := currRowVal.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, h.offset)
+	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -11041,7 +11040,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(ctx context.Context, cu
 				}
 				cmpVal := col.Get(vecIdx)
 
-				cmpResult = cmpVal.(*coldataext.Datum).CompareDatum(col, seekVal)
+				cmpResult = coldataext.CompareDatum(cmpVal, col, seekVal)
 
 				if cmpResult < 0 {
 					return idx

@@ -35,7 +35,7 @@ import (
 var (
 	_ apd.Context
 	_ duration.Duration
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ json.JSON
 )
 
@@ -2720,7 +2720,7 @@ func cmpInDatum(
 		i := (lo + hi) / 2
 		var cmpResult int
 
-		cmpResult = targetElem.(*coldataext.Datum).CompareDatum(targetCol, filterRow[i])
+		cmpResult = coldataext.CompareDatum(targetElem, targetCol, filterRow[i])
 
 		if cmpResult == 0 {
 			return siTrue

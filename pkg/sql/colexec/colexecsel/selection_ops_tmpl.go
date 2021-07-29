@@ -22,7 +22,6 @@ package colexecsel
 import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
@@ -41,7 +40,6 @@ import (
 var (
 	_ apd.Context
 	_ duration.Duration
-	_ coldataext.Datum
 	_ json.JSON
 )
 

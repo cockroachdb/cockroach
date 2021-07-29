@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -30,7 +31,7 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
-	_ coldataext.Datum
+	_ = coldataext.Hash
 	_ json.JSON
 )
 
@@ -1044,7 +1045,7 @@ func rehash(
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
-						b := v.(*coldataext.Datum).Hash(datumAlloc)
+						b := coldataext.Hash(v.(tree.Datum), datumAlloc)
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
@@ -1064,7 +1065,7 @@ func rehash(
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
-						b := v.(*coldataext.Datum).Hash(datumAlloc)
+						b := coldataext.Hash(v.(tree.Datum), datumAlloc)
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
@@ -1085,7 +1086,7 @@ func rehash(
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
-						b := v.(*coldataext.Datum).Hash(datumAlloc)
+						b := coldataext.Hash(v.(tree.Datum), datumAlloc)
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
@@ -1102,7 +1103,7 @@ func rehash(
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
-						b := v.(*coldataext.Datum).Hash(datumAlloc)
+						b := coldataext.Hash(v.(tree.Datum), datumAlloc)
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 

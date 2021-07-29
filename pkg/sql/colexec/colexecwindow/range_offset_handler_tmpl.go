@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -44,7 +43,6 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ apd.Context
-	_ coldataext.Datum
 	_ duration.Duration
 	_ pgdate.Date
 )

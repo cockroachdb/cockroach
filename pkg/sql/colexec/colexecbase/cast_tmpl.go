@@ -49,7 +49,7 @@ import (
 // Workaround for bazel auto-generated code. goimports does not automatically
 // pick up the right packages when run within the bazel sandbox.
 var (
-	_ coldataext.Datum
+	_ = coldataext.PerformCast
 	_ duration.Duration
 	_ json.JSON
 	_ = lex.DecodeRawBytesToByteArrayAuto

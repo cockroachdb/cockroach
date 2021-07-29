@@ -3020,7 +3020,7 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 								{
 									var cmpResult int
 
-									cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+									cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 									unique = cmpResult != 0
 								}
@@ -3052,7 +3052,7 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+							cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 							unique = cmpResult != 0
 						}
@@ -3106,7 +3106,7 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 								{
 									var cmpResult int
 
-									cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+									cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 									unique = cmpResult != 0
 								}
@@ -3139,7 +3139,7 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 						{
 							var cmpResult int
 
-							cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+							cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 							unique = cmpResult != 0
 						}

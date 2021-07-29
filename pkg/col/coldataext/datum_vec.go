@@ -24,14 +24,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Datum wraps a tree.Datum. This is the struct that datumVec.Get() returns.
-type Datum struct {
-	tree.Datum
-}
-
-var _ coldata.Datum = &Datum{}
-var _ tree.Datum = &Datum{}
-
 // datumVec is a vector of tree.Datums of the same type.
 type datumVec struct {
 	// t is the type of the tree.Datums that datumVec stores.
@@ -56,38 +48,24 @@ func newDatumVec(t *types.T, n int, evalCtx *tree.EvalContext) coldata.DatumVec 
 	}
 }
 
-// BinFn evaluates the provided binary function between the receiver and other.
-// other can either be nil, tree.Datum, or *Datum.
-func (d *Datum) BinFn(
-	binFn tree.TwoArgFn, evalCtx *tree.EvalContext, other interface{},
-) (tree.Datum, error) {
-	return binFn(evalCtx, d.Datum, maybeUnwrapDatum(other))
-}
-
 // CompareDatum returns the comparison between d and other. The other is
 // assumed to be tree.Datum. dVec is the datumVec that stores either d or other
 // (it doesn't matter which one because it is used only to supply the eval
 // context).
 // Note that the method is named differently from "Compare" so that we do not
 // overload tree.Datum.Compare method.
-func (d *Datum) CompareDatum(dVec, other interface{}) int {
-	return d.Datum.Compare(dVec.(*datumVec).evalCtx, maybeUnwrapDatum(other))
-}
-
-// Cast returns the result of casting d to the type toType. dVec is the
-// datumVec that stores d and is used to supply the eval context.
-func (d *Datum) Cast(dVec interface{}, toType *types.T) (tree.Datum, error) {
-	return PerformCast(dVec, d.Datum, toType)
+func CompareDatum(d, dVec, other interface{}) int {
+	return d.(tree.Datum).Compare(dVec.(*datumVec).evalCtx, maybeUnwrapDatum(other))
 }
 
 // PerformCast returns the result of casting d to the type toType. dVec is a
 // datumVec that is used to supply the eval context.
-func PerformCast(dVec interface{}, d tree.Datum, toType *types.T) (tree.Datum, error) {
-	return tree.PerformCast(dVec.(*datumVec).evalCtx, d, toType)
+func PerformCast(d, dVec interface{}, toType *types.T) (tree.Datum, error) {
+	return tree.PerformCast(dVec.(*datumVec).evalCtx, d.(tree.Datum), toType)
 }
 
 // Hash returns the hash of the datum as a byte slice.
-func (d *Datum) Hash(da *rowenc.DatumAlloc) []byte {
+func Hash(d tree.Datum, da *rowenc.DatumAlloc) []byte {
 	ed := rowenc.EncDatum{Datum: maybeUnwrapDatum(d)}
 	// We know that we have tree.Datum, so there will definitely be no need to
 	// decode ed for fingerprinting, so we pass in nil memory account.
@@ -101,19 +79,10 @@ func (d *Datum) Hash(da *rowenc.DatumAlloc) []byte {
 	return b
 }
 
-// Size returns a lower bound on the total size of the receiver in bytes,
-// including memory that is pointed at (even if shared between Datum
-// instances) but excluding allocation overhead.
-//
-// It is assumed that d was obtained via datumVec.Get().
-func (d *Datum) Size() uintptr {
-	return d.Datum.Size()
-}
-
 // Get implements coldata.DatumVec interface.
 func (dv *datumVec) Get(i int) coldata.Datum {
 	dv.maybeSetDNull(i)
-	return &Datum{Datum: dv.data[i]}
+	return dv.data[i]
 }
 
 // Set implements coldata.DatumVec interface.
@@ -244,13 +213,12 @@ func (dv *datumVec) maybeSetDNull(i int) {
 
 // maybeUnwrapDatum possibly unwraps tree.Datum from inside of Datum. It also
 // checks whether v is nil and returns tree.DNull if it is.
+// TODO: comment and rename.
 func maybeUnwrapDatum(v coldata.Datum) tree.Datum {
 	if v == nil {
 		return tree.DNull
 	}
-	if datum, ok := v.(*Datum); ok {
-		return datum.Datum
-	} else if datum, ok := v.(tree.Datum); ok {
+	if datum, ok := v.(tree.Datum); ok {
 		return datum
 	}
 	colexecerror.InternalError(errors.AssertionFailedf("unexpected value: %v", v))

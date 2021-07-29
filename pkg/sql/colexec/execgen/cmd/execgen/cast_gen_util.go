@@ -366,7 +366,7 @@ func getDatumToNativeCastFunc(
 	return func(to, from, fromCol, toType string) string {
 		convStr := `
 		{
-			_castedDatum, err := %[2]s.(*coldataext.Datum).Cast(%[3]s, %[4]s)
+			_castedDatum, err := coldataext.PerformCast(%[2]s, %[3]s, %[4]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
@@ -380,7 +380,7 @@ func getDatumToNativeCastFunc(
 func datumToDatum(to, from, fromCol, toType string) string {
 	convStr := `
 		{
-			_castedDatum, err := %[2]s.(*coldataext.Datum).Cast(%[3]s, %[4]s)
+			_castedDatum, err := coldataext.PerformCast(%[2]s, %[3]s, %[4]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}

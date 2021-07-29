@@ -573,7 +573,7 @@ if %[2]s != nil {
 		return fmt.Sprintf(`
 		var %[1]s uintptr
 		if %[2]s != nil {
-			%[1]s = %[2]s.(*coldataext.Datum).Size()
+			%[1]s = %[2]s.(tree.Datum).Size()
 		}`, target, value)
 	default:
 		return fmt.Sprintf(`var %s uintptr`, target)

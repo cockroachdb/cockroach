@@ -22,7 +22,6 @@ package colexecproj
 import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -298,12 +297,11 @@ func GetProjection_CONST_SIDEConstOperator(
 								// {{if _IS_CONST_LEFT}}
 								// {{if eq $leftFamilyStr "typeconv.DatumVecCanonicalTypeFamily"}}
 								// {{/*
-								//     Binary operations are evaluated using coldataext.Datum.BinFn
-								//     method which requires that we have *coldataext.Datum on the
-								//     left, so we create that at the operator construction time to
-								//     avoid runtime conversion.
+								//     Binary operations are evaluated using coldataext.BinFn method
+								//     which requires that we have tree.Datum on the left, so we create
+								//     that at the operator construction time to avoid runtime conversion.
 								// */}}
-								constArg: &coldataext.Datum{Datum: c.(tree.Datum)},
+								constArg: c.(tree.Datum),
 								// {{else}}
 								constArg: c.(_L_GO_TYPE),
 								// {{end}}
@@ -311,10 +309,10 @@ func GetProjection_CONST_SIDEConstOperator(
 								// {{if eq $rightFamilyStr "typeconv.DatumVecCanonicalTypeFamily"}}
 								// {{/*
 								//     Binary operations with a datum-backed value on the right side
-								//     require that we have *coldataext.Datum on the right (this is
-								//     what we get in non-constant case).
+								//     require that we have tree.Datum on the right (this is what we
+								//     get in non-constant case).
 								// */}}
-								constArg: &coldataext.Datum{Datum: c.(tree.Datum)},
+								constArg: c.(tree.Datum),
 								// {{else}}
 								constArg: c.(_R_GO_TYPE),
 								// {{end}}
