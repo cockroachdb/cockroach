@@ -3447,7 +3447,7 @@ objoid      classoid    objsubid  description
 4294967087  4294967138  0         sequences (see also information_schema.sequences)
 4294967086  4294967138  0         pg_sequences is very similar as pg_sequence.
 4294967085  4294967138  0         session variables (incomplete)
-4294967084  4294967138  0         pg_shadow was created for compatibility and is currently unimplemented
+4294967084  4294967138  0         pg_shadow lists properties for roles that are marked as rolcanlogin in pg_authid
 4294967081  4294967138  0         shared dependencies (empty - not implemented)
 4294967083  4294967138  0         shared object comments
 4294967080  4294967138  0         pg_shmem_allocations was created for compatibility and is currently unimplemented
@@ -4785,3 +4785,37 @@ SELECT sequenceowner, cache_size FROM pg_sequences WHERE sequencename = 'serial'
 ----
 sequenceowner  cache_size
 anyuser        10
+
+# Test that pg_shadow doesn't include roles that can't login
+query B colnames
+SELECT (count(1) = 0) AS PASSED
+FROM pg_shadow
+WHERE EXISTS (
+  SELECT 1 FROM pg_authid WHERE oid = usesysid AND NOT rolcanlogin
+)
+----
+passed
+true
+
+# Test pg_shadow contents
+query TOBBBBTTT colnames
+SELECT * FROM pg_shadow ORDER BY usename;
+----
+usename                       usesysid    usecreatedb  usesuper  userepl  usebypassrls  passwd    valuntil                       useconfig
+admin                         2310524507  true         true      false    false         ********  NULL                           NULL
+anyuser                       2525089181  false        false     false    false         ********  NULL                           NULL
+role_test_login               2531829827  false        false     false    false         ********  NULL                           NULL
+role_test_nodate              1492950893  false        false     false    false         ********  NULL                           NULL
+role_test_with_date           1212615927  false        false     false    false         ********  2021-01-01 00:00:00 +0000 UTC  NULL
+role_test_with_date_timezone  1682504215  false        false     false    false         ********  2020-12-31 22:00:00 +0000 UTC  NULL
+root                          1546506610  true         true      false    false         ********  NULL                           NULL
+testuser                      2264919399  false        false     false    false         ********  NULL                           NULL
+
+# Testing oids references the same roles in pg_shadow and pg_authid
+query B colnames
+SELECT bool_and(usename = rolname) PASSED
+FROM pg_shadow
+JOIN pg_authid ON usesysid = oid
+----
+passed
+true
