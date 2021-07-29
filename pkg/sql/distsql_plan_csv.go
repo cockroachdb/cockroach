@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
 )
@@ -101,6 +102,12 @@ func (c *callbackResultWriter) SetError(err error) {
 
 func (c *callbackResultWriter) Err() error {
 	return c.err
+}
+
+func getLastImportSummary(job *jobs.Job) roachpb.BulkOpSummary {
+	progress := job.Progress()
+	importProgress := progress.GetImport()
+	return importProgress.Summary
 }
 
 func makeImportReaderSpecs(
@@ -203,6 +210,17 @@ func DistIngest(
 		return roachpb.BulkOpSummary{}, err
 	}
 
+	// accumulatedBulkSummary accumulates the BulkOpSummary returned from each
+	// processor in their progress updates. It stores stats about the amount of
+	// data written since the last time we update the job progress.
+	accumulatedBulkSummary := struct {
+		syncutil.Mutex
+		roachpb.BulkOpSummary
+	}{}
+	accumulatedBulkSummary.Lock()
+	accumulatedBulkSummary.BulkOpSummary = getLastImportSummary(job)
+	accumulatedBulkSummary.Unlock()
+
 	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime, execCtx.User())
 
 	p := planCtx.NewPhysicalPlan()
@@ -263,6 +281,11 @@ func DistIngest(
 					prog.ReadProgress[i] = fileProgress
 					overall += fileProgress
 				}
+
+				accumulatedBulkSummary.Lock()
+				prog.Summary.Add(accumulatedBulkSummary.BulkOpSummary)
+				accumulatedBulkSummary.Reset()
+				accumulatedBulkSummary.Unlock()
 				return overall / float32(len(from))
 			},
 		)
@@ -276,6 +299,10 @@ func DistIngest(
 			for i, v := range meta.BulkProcessorProgress.CompletedFraction {
 				atomic.StoreUint32(&fractionProgress[i], math.Float32bits(v))
 			}
+
+			accumulatedBulkSummary.Lock()
+			accumulatedBulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
+			accumulatedBulkSummary.Unlock()
 
 			if alwaysFlushProgress {
 				return updateJobProgress()

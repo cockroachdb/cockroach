@@ -78,6 +78,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/tracing",
