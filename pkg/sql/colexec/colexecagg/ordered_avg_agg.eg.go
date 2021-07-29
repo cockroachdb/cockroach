@@ -79,10 +79,10 @@ type avgInt16OrderedAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull     uint64
+	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt16OrderedAgg{}
@@ -117,7 +117,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -130,7 +130,7 @@ func (a *avgInt16OrderedAgg) Compute(
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -151,7 +151,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -162,7 +162,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -195,7 +195,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -208,7 +208,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -221,7 +221,7 @@ func (a *avgInt16OrderedAgg) Compute(
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -241,7 +241,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -251,7 +251,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -283,7 +283,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -304,7 +304,7 @@ func (a *avgInt16OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -319,7 +319,7 @@ func (a *avgInt16OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgInt16OrderedAggAlloc struct {
@@ -354,10 +354,10 @@ type avgInt32OrderedAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull     uint64
+	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt32OrderedAgg{}
@@ -392,7 +392,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -405,7 +405,7 @@ func (a *avgInt32OrderedAgg) Compute(
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -426,7 +426,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -437,7 +437,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -470,7 +470,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -483,7 +483,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -496,7 +496,7 @@ func (a *avgInt32OrderedAgg) Compute(
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -516,7 +516,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -526,7 +526,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -558,7 +558,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -579,7 +579,7 @@ func (a *avgInt32OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -594,7 +594,7 @@ func (a *avgInt32OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgInt32OrderedAggAlloc struct {
@@ -629,10 +629,10 @@ type avgInt64OrderedAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull     uint64
+	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt64OrderedAgg{}
@@ -667,7 +667,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -680,7 +680,7 @@ func (a *avgInt64OrderedAgg) Compute(
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -701,7 +701,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -712,7 +712,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -745,7 +745,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -758,7 +758,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -771,7 +771,7 @@ func (a *avgInt64OrderedAgg) Compute(
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -791,7 +791,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -801,7 +801,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -833,7 +833,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -854,7 +854,7 @@ func (a *avgInt64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -869,7 +869,7 @@ func (a *avgInt64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgInt64OrderedAggAlloc struct {
@@ -904,9 +904,9 @@ type avgDecimalOrderedAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &avgDecimalOrderedAgg{}
@@ -938,7 +938,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -951,7 +951,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -971,7 +971,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -982,7 +982,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -1014,7 +1014,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -1027,7 +1027,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -1040,7 +1040,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1059,7 +1059,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1069,7 +1069,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -1100,7 +1100,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -1121,7 +1121,7 @@ func (a *avgDecimalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -1136,7 +1136,7 @@ func (a *avgDecimalOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgDecimalOrderedAggAlloc struct {
@@ -1171,9 +1171,9 @@ type avgFloat64OrderedAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []float64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &avgFloat64OrderedAgg{}
@@ -1205,7 +1205,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum / float64(a.curCount)
@@ -1214,7 +1214,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 							a.curSum = zeroFloat64Value
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1231,7 +1231,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1242,7 +1242,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum / float64(a.curCount)
@@ -1267,7 +1267,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -1280,7 +1280,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum / float64(a.curCount)
@@ -1289,7 +1289,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 							a.curSum = zeroFloat64Value
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1305,7 +1305,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1315,7 +1315,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum / float64(a.curCount)
@@ -1339,7 +1339,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -1360,7 +1360,7 @@ func (a *avgFloat64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curSum / float64(a.curCount)
@@ -1371,7 +1371,7 @@ func (a *avgFloat64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroFloat64Value
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgFloat64OrderedAggAlloc struct {
@@ -1406,9 +1406,9 @@ type avgIntervalOrderedAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []duration.Duration
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &avgIntervalOrderedAgg{}
@@ -1440,7 +1440,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
@@ -1449,7 +1449,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 							a.curSum = zeroIntervalValue
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1461,7 +1461,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						v := col.Get(i)
 						a.curSum = a.curSum.Add(v)
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1472,7 +1472,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
@@ -1492,7 +1492,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						v := col.Get(i)
 						a.curSum = a.curSum.Add(v)
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -1505,7 +1505,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
@@ -1514,7 +1514,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 							a.curSum = zeroIntervalValue
 							a.curCount = 0
 
-							a.foundNonNullForCurrentGroup = false
+							a.numNonNull = 0
 						}
 						a.isFirstGroup = false
 					}
@@ -1525,7 +1525,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						v := col.Get(i)
 						a.curSum = a.curSum.Add(v)
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -1535,7 +1535,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
@@ -1554,7 +1554,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						v := col.Get(i)
 						a.curSum = a.curSum.Add(v)
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -1575,7 +1575,7 @@ func (a *avgIntervalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curSum.Div(int64(a.curCount))
@@ -1586,7 +1586,7 @@ func (a *avgIntervalOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroIntervalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgIntervalOrderedAggAlloc struct {
