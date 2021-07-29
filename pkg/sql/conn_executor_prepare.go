@@ -268,7 +268,7 @@ func (ex *connExecutor) populatePrepared(
 		return 0, err
 	}
 	if asOf != nil {
-		p.semaCtx.AsOfSystemTime = asOf
+		p.extendedEvalCtx.AsOfSystemTime = asOf
 		if asOf.BoundedStaleness {
 			return 0, unimplemented.NewWithIssuef(
 				67562,
