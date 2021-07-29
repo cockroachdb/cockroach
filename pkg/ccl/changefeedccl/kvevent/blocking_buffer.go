@@ -39,13 +39,20 @@ type blockingBuffer struct {
 // It will grow the bound account to buffer more messages but will block if it
 // runs out of space. If ever any entry exceeds the allocatable size of the
 // account, an error will be returned when attempting to buffer it.
-func NewMemBuffer(acc mon.BoundAccount, metrics *Metrics) Buffer {
+func NewMemBuffer(acc mon.BoundAccount, metrics *Metrics, opts ...quotapool.Option) Buffer {
 	bb := &blockingBuffer{
 		signalCh: make(chan struct{}, 1),
 	}
 	bb.acc = acc
 	bb.metrics = metrics
-	bb.qp = quotapool.New("changefeed", &bb.blockingBufferQuotaPool)
+
+	opts = append(opts,
+		quotapool.OnWaitFinish(
+			func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) {
+				metrics.BufferPushbackNanos.Inc(timeutil.Since(start).Nanoseconds())
+			}))
+
+	bb.qp = quotapool.New("changefeed", &bb.blockingBufferQuotaPool, opts...)
 	return bb
 }
 
@@ -192,10 +199,9 @@ func (b *blockingBufferQuotaPool) release(e *bufferEntry) {
 type bufferEntry struct {
 	e Event
 
-	alloc int64 // bytes allocated from the quotapool
-	err   error // error populated from under the quotapool
-
-	next *bufferEntry // linked-list element
+	alloc int64        // bytes allocated from the quotapool
+	err   error        // error populated from under the quotapool
+	next  *bufferEntry // linked-list element
 }
 
 var bufferEntryPool = sync.Pool{
