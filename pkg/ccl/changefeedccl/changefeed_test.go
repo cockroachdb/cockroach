@@ -1512,19 +1512,18 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
 }
 
-func TestChangefeedFailOnRBRChange(t *testing.T) {
+func TestChangefeedWorksOnRBRChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rbrErrorRegex := regexp.MustCompile(`CHANGEFEED cannot target REGIONAL BY ROW tables: rbr`)
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+	testFnJSON := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
-		t.Run("regional by row change fails changefeed", func(t *testing.T) {
+		t.Run("regional by row change works", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
-			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr `)
+			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr`)
 			defer closeFeed(t, rbr)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (1, 2)`)
 			assertPayloads(t, rbr, []string{
@@ -1532,9 +1531,37 @@ func TestChangefeedFailOnRBRChange(t *testing.T) {
 				`rbr: [1]->{"after": {"a": 1, "b": 2}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
-			requireErrorSoon(context.Background(), t, rbr, rbrErrorRegex)
+			assertPayloads(t, rbr, []string{
+				`rbr: ["us-east-1", 0]->{"after": {"a": 0, "b": null, "crdb_region": "us-east-1"}}`,
+				`rbr: ["us-east-1", 1]->{"after": {"a": 1, "b": 2, "crdb_region": "us-east-1"}}`,
+			})
 		})
 	}
+	testFnAvro := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		schemaReg := cdctest.StartTestSchemaRegistry()
+		defer schemaReg.Close()
+
+		t.Run("regional by row change works", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT)`)
+			defer sqlDB.Exec(t, `DROP TABLE rbr`)
+			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
+			rbr := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR rbr WITH format=experimental_avro, confluent_schema_registry='%s'", schemaReg.URL()))
+			defer closeFeed(t, rbr)
+			sqlDB.Exec(t, `INSERT INTO rbr VALUES (1, 2)`)
+			assertPayloads(t, rbr, []string{
+				`rbr: {"a":{"long":0}}->{"after":{"rbr":{"a":{"long":0},"b":null}}}`,
+				`rbr: {"a":{"long":1}}->{"after":{"rbr":{"a":{"long":1},"b":{"long":2}}}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
+			assertPayloads(t, rbr, []string{
+				`rbr: {"a":{"long":0},"crdb_region":{"string":"us-east-1"}}->{"after":{"rbr":{"a":{"long":0},"b":null,"crdb_region":{"string":"us-east-1"}}}}`,
+				`rbr: {"a":{"long":1},"crdb_region":{"string":"us-east-1"}}->{"after":{"rbr":{"a":{"long":1},"b":{"long":2},"crdb_region":{"string":"us-east-1"}}}}`,
+			})
+		})
+	}
+
 	withTestServerRegion := func(args *base.TestServerArgs) {
 		args.Locality.Tiers = append(args.Locality.Tiers, roachpb.Tier{
 			Key:   "region",
@@ -1551,11 +1578,8 @@ func TestChangefeedFailOnRBRChange(t *testing.T) {
 		feedTestNoTenants,
 		withArgsFn(withTestServerRegion),
 	}
-	t.Run(`sinkless`, sinklessTest(testFn, opts...))
-	t.Run(`enterprise`, enterpriseTest(testFn, opts...))
-	t.Run(`cloudstorage`, cloudStorageTest(testFn, opts...))
-	t.Run(`kafka`, kafkaTest(testFn, opts...))
-	t.Run(`webhook`, webhookTest(testFn, opts...))
+	RunRandomSinkTest(t, "format=json", testFnJSON, opts...)
+	t.Run("kafka/format=avro", kafkaTest(testFnAvro, opts...))
 }
 
 func TestChangefeedStopOnSchemaChange(t *testing.T) {
@@ -2487,15 +2511,6 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `CHANGEFEED cannot target views: vw`,
 		`EXPERIMENTAL CHANGEFEED FOR vw`,
-	)
-
-	// Regional by row tables are not currently supported
-	sqlDB.Exec(t, fmt.Sprintf(`ALTER DATABASE defaultdb PRIMARY REGION "%s"`, testServerRegion))
-	sqlDB.Exec(t, `CREATE TABLE test_cdc_rbr_fails (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `ALTER TABLE test_cdc_rbr_fails SET LOCALITY REGIONAL BY ROW`)
-	sqlDB.ExpectErr(
-		t, `CHANGEFEED cannot target REGIONAL BY ROW tables: test_cdc_rbr_fails`,
-		`CREATE CHANGEFEED FOR test_cdc_rbr_fails`,
 	)
 
 	// Backup has the same bad error message #28170.

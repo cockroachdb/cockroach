@@ -508,6 +508,23 @@ func sinklessTestWithOptions(testFn cdcTestFn, opts feedTestOptions) func(*testi
 	}
 }
 
+// RunRandomSink runs the testFn against one of a number of possible
+// sinks. Sinkless is not included in the possible sinks.
+func RunRandomSinkTest(t *testing.T, desc string, testFn cdcTestFn, testOpts ...feedTestOption) {
+	// TODO(ssd): It would be nice if explicitly selecting a test
+	// via -run/TESTS= would force it to always run.
+	switch p := rand.Float32(); {
+	case p < 0.20:
+		t.Run(fmt.Sprintf("enterprise/%s", desc), enterpriseTest(testFn, testOpts...))
+	case p < 0.40:
+		t.Run(fmt.Sprintf("cloudstorage/%s", desc), cloudStorageTest(testFn, testOpts...))
+	case p < 0.60:
+		t.Run(fmt.Sprintf("webhook/%s", desc), webhookTest(testFn, testOpts...))
+	default: // Run kafka a bit more often
+		t.Run(fmt.Sprintf("kafka/%s", desc), kafkaTest(testFn, testOpts...))
+	}
+}
+
 func enterpriseTest(testFn cdcTestFn, testOpts ...feedTestOption) func(*testing.T) {
 	return enterpriseTestWithOptions(testFn, makeOptions(testOpts...))
 }
