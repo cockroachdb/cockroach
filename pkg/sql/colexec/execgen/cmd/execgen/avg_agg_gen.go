@@ -30,7 +30,7 @@ type avgTmplInfo struct {
 	RetGoType      string
 	RetVecMethod   string
 
-	addOverload assignFunc
+	avgOverload assignFunc
 }
 
 func (a avgTmplInfo) AssignAdd(targetElem, leftElem, rightElem, _, _, _ string) string {
@@ -41,7 +41,19 @@ func (a avgTmplInfo) AssignAdd(targetElem, leftElem, rightElem, _, _, _ string) 
 	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
 		overloadBase: newBinaryOverloadBase(tree.Plus),
 	}}
-	return a.addOverload(lawo, targetElem, leftElem, rightElem, "", "", "")
+	return a.avgOverload(lawo, targetElem, leftElem, rightElem, "", "", "")
+}
+
+func (a avgTmplInfo) AssignSubtract(
+	targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string,
+) string {
+	// Note that we need to create lastArgWidthOverload only in order to tell
+	// the resolved overload to use Minus overload in particular, so all other
+	// fields remain unset.
+	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
+		overloadBase: newBinaryOverloadBase(tree.Minus),
+	}}
+	return a.avgOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
 }
 
 func (a avgTmplInfo) AssignDivInt64(targetElem, leftElem, rightElem, _, _, _ string) string {
@@ -69,6 +81,7 @@ func (a avgTmplInfo) AssignDivInt64(targetElem, leftElem, rightElem, _, _, _ str
 var (
 	_ = avgTmplInfo{}.AssignAdd
 	_ = avgTmplInfo{}.AssignDivInt64
+	_ = avgTmplInfo{}.AssignSubtract
 )
 
 // avgAggTypeTmplInfo is similar to lastArgTypeOverload and provides a way to
@@ -107,9 +120,13 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	s = assignDivRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignDivInt64", 6))
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
 	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAdd", 6))
+	assignSubtractRe := makeFunctionRegex("_ASSIGN_SUBTRACT", 6)
+	s = assignSubtractRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignSubtract", 6))
 
 	accumulateAvg := makeFunctionRegex("_ACCUMULATE_AVG", 5)
 	s = accumulateAvg.ReplaceAllString(s, `{{template "accumulateAvg" buildDict "Global" . "HasNulls" $4 "HasSel" $5}}`)
+	removeRow := makeFunctionRegex("_REMOVE_ROW", 4)
+	s = removeRow.ReplaceAllString(s, `{{template "removeRow" buildDict "Global" . "HasNulls" $4}}`)
 
 	s = replaceManipulationFuncs(s)
 
@@ -149,7 +166,7 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 					InputVecMethod: toVecMethod(inputTypeFamily, inputTypeWidth),
 					RetGoType:      toPhysicalRepresentation(retTypeFamily, retTypeWidth),
 					RetVecMethod:   toVecMethod(retTypeFamily, retTypeWidth),
-					addOverload:    getSumAddOverload(inputTypeFamily),
+					avgOverload:    getSumAddOverload(inputTypeFamily),
 				}})
 		}
 		tmplInfos = append(tmplInfos, tmplInfo)
