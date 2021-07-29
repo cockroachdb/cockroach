@@ -91,7 +91,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	m := c.NewMonitor(ctx)
 	// If the consistency check "fails to fail", the verbose logging will help
 	// determine why.
-	c.Start(ctx, nodes, option.StartArgs("--args='--vmodule=consistency_queue=5,replica_consistency=5,queue=5'"))
+	c.Start(ctx, nodes, option.StartArgs("--args", "--vmodule=consistency_queue=5,replica_consistency=5,queue=5"))
 	m.Go(func(ctx context.Context) error {
 		select {
 		case <-time.After(5 * time.Minute):
