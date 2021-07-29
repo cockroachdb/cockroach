@@ -276,7 +276,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		}
 		// TODO(pbardea): When memory monitoring is added, send the currently
 		// accumulated iterators on the channel if we run into memory pressure.
-		iter, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
+		iter, _, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
 		if err != nil {
 			return err
 		}

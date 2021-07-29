@@ -540,7 +540,7 @@ func makeIters(
 			return nil, nil, errors.Wrapf(err, "making external storage")
 		}
 
-		iters[i], err = storageccl.ExternalSSTReader(ctx, dirStorage[i], file.Path, nil)
+		iters[i], _, err = storageccl.ExternalSSTReader(ctx, dirStorage[i], file.Path, nil /* encryption */)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "fetching sst reader")
 		}
