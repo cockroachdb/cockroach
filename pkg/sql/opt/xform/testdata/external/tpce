@@ -3391,9 +3391,15 @@ project
  │    │    ├── limit hint: 20.00
  │    │    └── inner-join (cross)
  │    │         ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:17!null tt_name:18!null s_symb:22!null s_name:25!null
- │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │    │         ├── key: (1)
  │    │         ├── fd: ()-->(6,22,25), (1)-->(2,4,5,7,9-11), (17)-->(18), (4)==(17), (17)==(4)
+ │    │         ├── scan security
+ │    │         │    ├── columns: s_symb:22!null s_name:25!null
+ │    │         │    ├── constraint: /22: [/'SYMB' - /'SYMB']
+ │    │         │    ├── cardinality: [0 - 1]
+ │    │         │    ├── key: ()
+ │    │         │    └── fd: ()-->(22,25)
  │    │         ├── inner-join (lookup trade_type)
  │    │         │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:17!null tt_name:18!null
  │    │         │    ├── key columns: [4] = [17]
@@ -3406,12 +3412,6 @@ project
  │    │         │    │    ├── key: (1)
  │    │         │    │    └── fd: ()-->(6), (1)-->(2,4,5,7,9-11)
  │    │         │    └── filters (true)
- │    │         ├── scan security
- │    │         │    ├── columns: s_symb:22!null s_name:25!null
- │    │         │    ├── constraint: /22: [/'SYMB' - /'SYMB']
- │    │         │    ├── cardinality: [0 - 1]
- │    │         │    ├── key: ()
- │    │         │    └── fd: ()-->(22,25)
  │    │         └── filters (true)
  │    └── 20
  └── projections
