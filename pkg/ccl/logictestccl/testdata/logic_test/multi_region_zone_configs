@@ -1625,3 +1625,105 @@ TABLE tbl11  ALTER TABLE tbl11 CONFIGURE ZONE USING
 
 query error pq: crdb_internal\.reset_multi_region_zone_configs_for_table\(\): error resolving referenced table ID 1: relation "\[1\]" does not exist
 SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table(1)
+
+subtest reset_multi_region_zone_configs_database
+
+statement ok
+CREATE DATABASE "rebuild_zc_db" primary region "ca-central-1" regions "ap-southeast-2", "us-east-1";
+USE "rebuild_zc_db"
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
+----
+DATABASE rebuild_zc_db ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
+ range_min_bytes = 134217728,
+ range_max_bytes = 536870912,
+ gc.ttlseconds = 90000,
+ num_replicas = 5,
+ num_voters = 3,
+ constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+ voter_constraints = '[+region=ca-central-1]',
+ lease_preferences = '[[+region=ca-central-1]]'
+
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "rebuild_zc_db" CONFIGURE ZONE USING num_replicas = 10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
+----
+DATABASE rebuild_zc_db ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
+ range_min_bytes = 134217728,
+ range_max_bytes = 536870912,
+ gc.ttlseconds = 90000,
+ num_replicas = 10,
+ num_voters = 3,
+ constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+ voter_constraints = '[+region=ca-central-1]',
+ lease_preferences = '[[+region=ca-central-1]]'
+
+let $rebuild_db_id
+select id from crdb_internal.databases where name = 'rebuild_zc_db'
+
+statement ok
+SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_database($rebuild_db_id)
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
+----
+DATABASE rebuild_zc_db ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
+ range_min_bytes = 134217728,
+ range_max_bytes = 536870912,
+ gc.ttlseconds = 90000,
+ num_replicas = 5,
+ num_voters = 3,
+ constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+ voter_constraints = '[+region=ca-central-1]',
+ lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "rebuild_zc_db" CONFIGURE ZONE DISCARD;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
+----
+RANGE default ALTER RANGE default CONFIGURE ZONE USING
+ range_min_bytes = 134217728,
+ range_max_bytes = 536870912,
+ gc.ttlseconds = 90000,
+ num_replicas = 3,
+ constraints = '[]',
+ lease_preferences = '[]'
+
+statement ok
+SELECT crdb_internal.reset_multi_region_zone_configs_for_database($rebuild_db_id)
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
+----
+DATABASE rebuild_zc_db ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
+ range_min_bytes = 134217728,
+ range_max_bytes = 536870912,
+ gc.ttlseconds = 90000,
+ num_replicas = 5,
+ num_voters = 3,
+ constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+ voter_constraints = '[+region=ca-central-1]',
+ lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+let $null_table_id
+SELECT table_id FROM crdb_internal.tables WHERE schema_name = 'crdb_internal' AND name = 'tables'
+
+# Validate that builtin errors if called on a table id
+query error pq: crdb_internal\.reset_multi_region_zone_configs_for_database\(\): database "\[4294967249\]" does not exist
+SELECT crdb_internal.reset_multi_region_zone_configs_for_database($null_table_id)

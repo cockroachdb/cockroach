@@ -288,6 +288,14 @@ func (so *importSequenceOperators) ResetMultiRegionZoneConfigsForTable(
 	return errors.WithStack(errSequenceOperators)
 }
 
+// ResetMultiRegionZoneConfigsForDatabase is part of the tree.EvalDatabase
+// interface.
+func (so *importSequenceOperators) ResetMultiRegionZoneConfigsForDatabase(
+	_ context.Context, _ int64,
+) error {
+	return errors.WithStack(errSequenceOperators)
+}
+
 // ParseQualifiedTableName implements the tree.EvalDatabase interface.
 func (so *importSequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	name, err := parser.ParseTableName(sql)
