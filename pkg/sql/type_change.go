@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -34,8 +35,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -791,6 +795,49 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 		query.WriteString(fmt.Sprintf("SELECT %s FROM [%d as t] WHERE", columns, ID))
 		firstClause := true
 		validationQueryConstructed := false
+
+		for _, idx := range desc.AllIndexes() {
+			if pred := idx.GetPredicate(); pred != "" {
+				foundUsage, err := findUsagesOfEnumValue(pred, member, typeDesc.ID)
+				if err != nil {
+					return err
+				}
+				if foundUsage {
+					return pgerror.Newf(pgcode.DependentObjectsStillExist,
+						"could not remove enum value %q as it is being used in a predicate of index %s",
+						member.LogicalRepresentation, &tree.TableIndexName{
+							Table: tree.MakeUnqualifiedTableName(tree.Name(desc.GetName())),
+							Index: tree.UnrestrictedName(idx.GetName()),
+						})
+				}
+			}
+			keyColumns := make([]catalog.Column, 0, idx.NumKeyColumns())
+			for i := 0; i < idx.NumKeyColumns(); i++ {
+				col, err := desc.FindColumnWithID(idx.GetKeyColumnID(i))
+				if err != nil {
+					return errors.AssertionFailedf(
+						"failed to find column with id %s (%d) in %s (%d)",
+						idx.GetKeyColumnName(i), idx.GetKeyColumnID(i), desc.GetName(), desc.GetID(),
+					)
+				}
+				keyColumns = append(keyColumns, col)
+			}
+			foundUsage, err := findUsagesOfEnumValueInPartitioning(
+				idx.GetPartitioning(), t.execCfg.Codec, keyColumns, desc, idx, member, nil, typeDesc,
+			)
+			if err != nil {
+				return err
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in the partitioning of index %s",
+					member.LogicalRepresentation, &tree.TableIndexName{
+						Table: tree.MakeUnqualifiedTableName(tree.Name(desc.GetName())),
+						Index: tree.UnrestrictedName(idx.GetName()),
+					})
+			}
+		}
+
 		for _, col := range desc.PublicColumns() {
 			// If this column has a default expression, check if it uses the enum member being dropped.
 			if col.HasDefault() {
@@ -900,6 +947,111 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	}
 
 	return t.canRemoveEnumValueFromArrayUsages(ctx, arrayTypeDesc, member, txn, descsCol)
+}
+
+func findUsagesOfEnumValueInPartitioning(
+	partitioning catalog.Partitioning,
+	codec keys.SQLCodec,
+	columns []catalog.Column,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	member *descpb.TypeDescriptor_EnumMember,
+	fakePrefixDatums []tree.Datum,
+	typ *typedesc.Mutable,
+) (foundUsage bool, _ error) {
+	if partitioning == nil || partitioning.NumColumns() == 0 {
+		return false, nil
+	}
+
+	var colsToCheck util.FastIntSet
+	for i, c := range columns[:partitioning.NumColumns()] {
+		typT := c.GetType()
+		if !typT.UserDefined() {
+			continue
+		}
+		id, err := typedesc.UserDefinedTypeOIDToID(typT.Oid())
+		if err != nil {
+			return false, errors.WithAssertionFailure(err)
+		}
+		if id != typ.GetID() {
+			continue
+		}
+		colsToCheck.Add(i)
+	}
+	makeFakeDatums := func(n int) []tree.Datum {
+		ret := fakePrefixDatums
+		for i := 0; i < n; i++ {
+			ret = append(ret, tree.DNull)
+		}
+		return ret
+	}
+	// Note that we do not currently support indexing on array types so we don't
+	// need to check for arrays of the enums.
+	maybeFindUsageInValues := func(values [][]byte) (err error) {
+		if colsToCheck.Empty() {
+			return
+		}
+		for _, v := range values {
+			foundUsage, err = findUsageOfEnumValueInEncodedPartitioningValue(
+				codec, table, index, partitioning, v, fakePrefixDatums, colsToCheck, foundUsage, member,
+			)
+			if foundUsage {
+				err = iterutil.StopIteration()
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := partitioning.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) (err error) {
+		if err = maybeFindUsageInValues(values); err != nil {
+			return err
+		}
+		foundUsage, err = findUsagesOfEnumValueInPartitioning(
+			subPartitioning, codec, columns[partitioning.NumColumns():],
+			table, index, member, makeFakeDatums(partitioning.NumColumns()), typ)
+		if err != nil && foundUsage {
+			err = iterutil.StopIteration()
+		}
+		return err
+	}); err != nil || foundUsage {
+		return foundUsage, err
+	}
+	if err := partitioning.ForEachRange(func(name string, from, to []byte) (err error) {
+		return maybeFindUsageInValues([][]byte{from, to})
+	}); err != nil || foundUsage {
+		return foundUsage, err
+	}
+	return false, nil
+}
+
+func findUsageOfEnumValueInEncodedPartitioningValue(
+	codec keys.SQLCodec,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	partitioning catalog.Partitioning,
+	v []byte,
+	fakePrefixDatums []tree.Datum,
+	colsToCheck util.FastIntSet,
+	foundUsage bool,
+	member *descpb.TypeDescriptor_EnumMember,
+) (bool, error) {
+	var d rowenc.DatumAlloc
+	tuple, _, err := rowenc.DecodePartitionTuple(
+		&d, codec, table, index, partitioning, v, fakePrefixDatums,
+	)
+	if err != nil {
+		return false, err
+	}
+	colsToCheck.ForEach(func(i int) {
+		foundUsage = foundUsage ||
+			bytes.Equal(
+				member.PhysicalRepresentation,
+				tuple.Datums[i].(*tree.DEnum).PhysicalRep,
+			)
+	})
+	return foundUsage, nil
 }
 
 // canRemoveEnumValueFromArrayUsages returns an error if the enum member is used
