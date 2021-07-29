@@ -358,7 +358,7 @@ func (c datumCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
 		datumVecVariableName := getDatumVecVariableName(leftCol, rightCol)
 		return fmt.Sprintf(`
-			%s = %s.(*coldataext.Datum).CompareDatum(%s, %s)
+			%s = coldataext.CompareDatum(%s, %s, %s)
 		`, targetElem, leftElem, datumVecVariableName, rightElem)
 	}
 }

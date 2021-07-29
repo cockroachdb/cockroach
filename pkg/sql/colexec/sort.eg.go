@@ -28,7 +28,7 @@ import (
 // Workaround for bazel auto-generated code. goimports does not automatically
 // pick up the right packages when run within the bazel sandbox.
 var (
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ tree.AggType
 )
 
@@ -1259,7 +1259,7 @@ func (s *sortDatumAscWithNullsOp) Less(i, j int) bool {
 	{
 		var cmpResult int
 
-		cmpResult = arg1.(*coldataext.Datum).CompareDatum(s.sortCol, arg2)
+		cmpResult = coldataext.CompareDatum(arg1, s.sortCol, arg2)
 
 		lt = cmpResult < 0
 	}
@@ -2115,7 +2115,7 @@ func (s *sortDatumDescWithNullsOp) Less(i, j int) bool {
 	{
 		var cmpResult int
 
-		cmpResult = arg1.(*coldataext.Datum).CompareDatum(s.sortCol, arg2)
+		cmpResult = coldataext.CompareDatum(arg1, s.sortCol, arg2)
 
 		lt = cmpResult > 0
 	}
@@ -2861,7 +2861,7 @@ func (s *sortDatumAscOp) Less(i, j int) bool {
 	{
 		var cmpResult int
 
-		cmpResult = arg1.(*coldataext.Datum).CompareDatum(s.sortCol, arg2)
+		cmpResult = coldataext.CompareDatum(arg1, s.sortCol, arg2)
 
 		lt = cmpResult < 0
 	}
@@ -3607,7 +3607,7 @@ func (s *sortDatumDescOp) Less(i, j int) bool {
 	{
 		var cmpResult int
 
-		cmpResult = arg1.(*coldataext.Datum).CompareDatum(s.sortCol, arg2)
+		cmpResult = coldataext.CompareDatum(arg1, s.sortCol, arg2)
 
 		lt = cmpResult > 0
 	}

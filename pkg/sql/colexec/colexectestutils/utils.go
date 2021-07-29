@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -748,8 +747,6 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 		vec.JSON().Set(idx, j)
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch v := val.(type) {
-		case *coldataext.Datum:
-			vec.Datum().Set(idx, v)
 		case tree.Datum:
 			vec.Datum().Set(idx, v)
 		case string:
@@ -1201,7 +1198,7 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 				}
 				val = reflect.ValueOf(j)
 			} else if family == typeconv.DatumVecCanonicalTypeFamily {
-				val = reflect.ValueOf(vec.Datum().Get(tupleIdx).(*coldataext.Datum).Datum)
+				val = reflect.ValueOf(vec.Datum().Get(tupleIdx).(tree.Datum))
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(tupleIdx)
 			}
@@ -1338,13 +1335,8 @@ func tupleEquals(expected Tuple, actual Tuple, evalCtx *tree.EvalContext) bool {
 			}
 			// Special case for datum-backed types.
 			if d1, ok := actual[i].(tree.Datum); ok {
-				if d, ok := d1.(*coldataext.Datum); ok {
-					d1 = d.Datum
-				}
 				var d2 tree.Datum
 				switch d := expected[i].(type) {
-				case *coldataext.Datum:
-					d2 = d.Datum
 				case tree.Datum:
 					d2 = d
 				case string:

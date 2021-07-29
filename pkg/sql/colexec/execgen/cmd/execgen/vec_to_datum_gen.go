@@ -102,7 +102,7 @@ var vecToDatumConversionTmpls = map[types.Family]string{
 	types.TimestampFamily:                `%[1]s := %[3]s.NewDTimestamp(tree.DTimestamp{Time: %[2]s})`,
 	types.TimestampTZFamily:              `%[1]s := %[3]s.NewDTimestampTZ(tree.DTimestampTZ{Time: %[2]s})`,
 	types.IntervalFamily:                 `%[1]s := %[3]s.NewDInterval(tree.DInterval{Duration: %[2]s})`,
-	typeconv.DatumVecCanonicalTypeFamily: `%[1]s := %[2]s.(*coldataext.Datum).Datum`,
+	typeconv.DatumVecCanonicalTypeFamily: `%[1]s := %[2]s.(tree.Datum)`,
 }
 
 const vecToDatumTmpl = "pkg/sql/colconv/vec_to_datum_tmpl.go"

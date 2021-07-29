@@ -2463,7 +2463,7 @@ func (p partitionerDatum) partitionWithOrder(
 							{
 								var cmpResult int
 
-								cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+								cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 								unique = cmpResult != 0
 							}
@@ -2494,7 +2494,7 @@ func (p partitionerDatum) partitionWithOrder(
 					{
 						var cmpResult int
 
-						cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+						cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 						unique = cmpResult != 0
 					}
@@ -2561,7 +2561,7 @@ func (p partitionerDatum) partition(colVec coldata.Vec, outputCol []bool, n int)
 							{
 								var cmpResult int
 
-								cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+								cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 								unique = cmpResult != 0
 							}
@@ -2594,7 +2594,7 @@ func (p partitionerDatum) partition(colVec coldata.Vec, outputCol []bool, n int)
 					{
 						var cmpResult int
 
-						cmpResult = v.(*coldataext.Datum).CompareDatum(col, lastVal)
+						cmpResult = coldataext.CompareDatum(v, col, lastVal)
 
 						unique = cmpResult != 0
 					}

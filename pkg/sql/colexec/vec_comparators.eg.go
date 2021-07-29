@@ -25,7 +25,7 @@ import (
 // Workaround for bazel auto-generated code. goimports does not automatically
 // pick up the right packages when run within the bazel sandbox.
 var (
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ tree.AggType
 )
 
@@ -520,7 +520,7 @@ func (c *DatumVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 
-	cmp = left.(*coldataext.Datum).CompareDatum(c.vecs[vecIdx1], right)
+	cmp = coldataext.CompareDatum(left, c.vecs[vecIdx1], right)
 
 	return cmp
 }

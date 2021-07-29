@@ -769,7 +769,7 @@ func (j jsonDatumCustomizer) getBinOpAssignFunc() assignFunc {
 		// JSON path (stored at "_path") is non-nil.
 		getJSONFetchPath := func(handleNonNilPath string) string {
 			return fmt.Sprintf(`
-_path, _err := tree.GetJSONPath(%[3]s, *tree.MustBeDArray(%[4]s.(*coldataext.Datum).Datum))
+_path, _err := tree.GetJSONPath(%[3]s, *tree.MustBeDArray(%[4]s.(tree.Datum)))
 if _err != nil {
     colexecerror.ExpectedError(_err)
 }
@@ -952,17 +952,15 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 // be used to do any setup (like converting non-datum element to its datum
 // equivalent)
 // - targetElem - same as targetElem parameter in assignFunc signature
-// - leftColdataExtDatum - the variable name of the left datum element that
-// must be of *coldataext.Datum type
-// - rightDatumElem - the variable name of the right datum element which could
-// be *coldataext.Datum, tree.Datum, or nil.
-func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumElem string) string {
+// - leftDatumElem and rightDatumElem - the variable names of the left and right
+// datum elements that must be convertable to tree.Datum type.
+func executeBinOpOnDatums(prelude, targetElem, leftDatumElem, rightDatumElem string) string {
 	codeBlock := fmt.Sprintf(`
 			%s
-			_res, err := %s.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, %s)
+			_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, %s.(tree.Datum), %s.(tree.Datum))
 			if err != nil {
 				colexecerror.ExpectedError(err)
-			}`, prelude, leftColdataExtDatum, rightDatumElem,
+			}`, prelude, leftDatumElem, rightDatumElem,
 	)
 	if regexp.MustCompile(`.*\[.*]`).MatchString(targetElem) {
 		// targetElem is of the form 'vec[i]'.
@@ -990,8 +988,7 @@ func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumEl
 func (c datumCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		return executeBinOpOnDatums(
-			"" /* prelude */, targetElem,
-			leftElem+".(*coldataext.Datum)", rightElem,
+			"" /* prelude */, targetElem, leftElem, rightElem,
 		)
 	}
 }
@@ -1051,26 +1048,16 @@ func (c datumNonDatumCustomizer) getBinOpAssignFunc() assignFunc {
 			op.BinOp, op.lastArgTypeOverload.CanonicalTypeFamily, rightElem, rightDatumElem,
 		)
 		return executeBinOpOnDatums(
-			prelude, targetElem,
-			leftElem+".(*coldataext.Datum)", rightDatumElem,
+			prelude, targetElem, leftElem, rightDatumElem,
 		)
 	}
 }
 
 func (c nonDatumDatumCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
-		const (
-			leftDatumElem       = "_nonDatumArgAsDatum"
-			leftColdataExtDatum = "_nonDatumArgAsColdataExtDatum"
-		)
-		prelude := fmt.Sprintf(`
-			%s
-			%s := &coldataext.Datum{Datum: %s}
-			`,
-			convertNativeToDatum(op.BinOp, c.leftCanonicalTypeFamily, leftElem, leftDatumElem),
-			leftColdataExtDatum, leftDatumElem,
-		)
-		return executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightElem)
+		const leftDatumElem = "_nonDatumArgAsDatum"
+		prelude := convertNativeToDatum(op.BinOp, c.leftCanonicalTypeFamily, leftElem, leftDatumElem)
+		return executeBinOpOnDatums(prelude, targetElem, leftDatumElem, rightElem)
 	}
 }
 
