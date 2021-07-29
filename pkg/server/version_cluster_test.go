@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
+	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -429,11 +430,13 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 				}
 				return migration.NewTenantMigration("testing", clusterversion.ClusterVersion{
 					Version: v1,
-				}, func(
-					ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
-				) error {
-					return nil
-				}), true
+				},
+					migrations.NoPrecondition,
+					func(
+						ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
+					) error {
+						return nil
+					}), true
 			},
 		},
 	}

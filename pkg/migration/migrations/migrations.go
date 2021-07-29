@@ -15,6 +15,8 @@
 package migrations
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 )
@@ -24,6 +26,11 @@ import (
 func GetMigration(key clusterversion.ClusterVersion) (migration.Migration, bool) {
 	m, ok := registry[key]
 	return m, ok
+}
+
+// NoPrecondition is a PreconditionFunc that doesn't check anything.
+func NoPrecondition(context.Context, clusterversion.ClusterVersion, migration.TenantDeps) error {
+	return nil
 }
 
 // registry defines the global mapping between a cluster version and the
@@ -45,41 +52,49 @@ var migrations = []migration.Migration{
 	migration.NewTenantMigration(
 		"add the systems.join_tokens table",
 		toCV(clusterversion.JoinTokensTable),
+		NoPrecondition,
 		joinTokensTableMigration,
 	),
 	migration.NewTenantMigration(
 		"delete the deprecated namespace table descriptor at ID=2",
 		toCV(clusterversion.DeleteDeprecatedNamespaceTableDescriptorMigration),
+		NoPrecondition,
 		deleteDeprecatedNamespaceTableDescriptorMigration,
 	),
 	migration.NewTenantMigration(
 		"fix all descriptors",
 		toCV(clusterversion.FixDescriptors),
+		NoPrecondition,
 		fixDescriptorMigration,
 	),
 	migration.NewTenantMigration(
 		"add the system.sql_statement_stats table",
 		toCV(clusterversion.SQLStatsTable),
+		NoPrecondition,
 		sqlStatementStatsTableMigration,
 	),
 	migration.NewTenantMigration(
 		"add the system.sql_transaction_stats table",
 		toCV(clusterversion.SQLStatsTable),
+		NoPrecondition,
 		sqlTransactionStatsTableMigration,
 	),
 	migration.NewTenantMigration(
 		"add the system.database_role_settings table",
 		toCV(clusterversion.DatabaseRoleSettings),
+		NoPrecondition,
 		databaseRoleSettingsTableMigration,
 	),
 	migration.NewTenantMigration(
 		"add the systems.tenant_usage table",
 		toCV(clusterversion.TenantUsageTable),
+		NoPrecondition,
 		tenantUsageTableMigration,
 	),
 	migration.NewTenantMigration(
 		"add the system.sql_instances table",
 		toCV(clusterversion.SQLInstancesTable),
+		NoPrecondition,
 		sqlInstancesTableMigration,
 	),
 }

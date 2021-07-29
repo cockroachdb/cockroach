@@ -312,6 +312,7 @@ go_test(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/migration",
         "//pkg/migration/migrationmanager",
+        "//pkg/migration/migrations",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/security",
