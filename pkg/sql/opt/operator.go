@@ -174,6 +174,7 @@ var UnaryOpReverseMap = map[Operator]tree.UnaryOperatorSymbol{
 	UnaryComplementOp: tree.UnaryComplement,
 	UnarySqrtOp:       tree.UnarySqrt,
 	UnaryCbrtOp:       tree.UnaryCbrt,
+	UnaryPlusOp:       tree.UnaryPlus,
 }
 
 // AggregateOpReverseMap maps from an optimizer operator type to the name of an

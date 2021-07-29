@@ -610,6 +610,11 @@ define UnaryMinus {
     Input ScalarExpr
 }
 
+[Scalar, Unary, CompositeInsensitive]
+define UnaryPlus {
+    Input ScalarExpr
+}
+
 [Scalar, Unary]
 define UnaryComplement {
     Input ScalarExpr

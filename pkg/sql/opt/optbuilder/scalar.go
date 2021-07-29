@@ -768,6 +768,8 @@ func (b *Builder) constructUnary(
 	un tree.UnaryOperator, input opt.ScalarExpr, typ *types.T,
 ) opt.ScalarExpr {
 	switch un.Symbol {
+	case tree.UnaryPlus:
+		return b.factory.ConstructUnaryPlus(input)
 	case tree.UnaryMinus:
 		return b.factory.ConstructUnaryMinus(input)
 	case tree.UnaryComplement:
