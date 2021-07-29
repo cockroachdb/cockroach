@@ -209,6 +209,7 @@
 /pkg/streaming/              @cockroachdb/bulk-prs
 /pkg/testutils/              @cockroachdb/test-eng
 /pkg/ts/                     @cockroachdb/kv
+/pkg/ts/catalog/             @cockroachdb/obs-inf-prs
 /pkg/util/                   @cockroachdb/unowned
 /pkg/util/log                @cockroachdb/server-prs
 /pkg/util/metric             @cockroachdb/obs-inf-prs
