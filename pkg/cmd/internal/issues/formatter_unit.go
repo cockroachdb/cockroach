@@ -73,14 +73,12 @@ var UnitTestFormatter = IssueFormatter{
 			}
 
 			if len(data.Parameters) != 0 {
-				r.P(func() {
-					r.Escaped("Parameters in this failure:\n")
-					for _, p := range data.Parameters {
-						r.Escaped("\n- ")
-						r.Escaped(p)
-						r.Escaped("\n")
-					}
-				})
+				r.Escaped("Parameters in this failure:\n")
+				for _, p := range data.Parameters {
+					r.Escaped("\n- ")
+					r.Escaped(p)
+					r.Escaped("\n")
+				}
 			}
 		})
 

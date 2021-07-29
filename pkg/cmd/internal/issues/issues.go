@@ -518,9 +518,19 @@ func ReproductionCommandFromString(repro string) func(*Renderer) {
 		return func(*Renderer) {}
 	}
 	return func(r *Renderer) {
-		r.P(func() {
-			r.Escaped("To reproduce, try:\n")
-			r.CodeBlock("bash", repro)
-		})
+		r.Escaped("To reproduce, try:\n")
+		r.CodeBlock("bash", repro)
+	}
+}
+
+// ReproductionAsLink returns a value for the PostRequest.ReproductionCommand field
+// that prints a link to documentation to refer to.
+func ReproductionAsLink(title, href string) func(r *Renderer) {
+	return func(r *Renderer) {
+		// Bit of weird formatting here but apparently markdown links don't work inside
+		// of a line that also has a <p> tag. Putting it on its own line makes it work.
+		r.Escaped("\n\nSee: ")
+		r.A(title, href)
+		r.Escaped("\n\n")
 	}
 }

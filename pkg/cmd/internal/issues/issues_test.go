@@ -47,13 +47,14 @@ func TestPost(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name        string
-		packageName string
-		testName    string
-		message     string
-		artifacts   string
-		author      string
-		reproCmd    string
+		name                 string
+		packageName          string
+		testName             string
+		message              string
+		artifacts            string
+		author               string
+		reproCmd             string
+		reproTitle, reproURL string
 	}{
 		{
 			name:        "failure",
@@ -141,6 +142,15 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 `,
 			author:   "bran",
 			reproCmd: "make test TESTS=TestRandomSyntaxSQLSmith PKG=./pkg/sql/tests 2>&1",
+		},
+		{
+			name:        "failure-with-url",
+			packageName: "github.com/cockroachdb/cockroach/pkg/cmd/roachtest",
+			testName:    "some-roachtest",
+			message:     "boom",
+			author:      "bran",
+			reproURL:    "https://github.com/cockroachdb/cockroach",
+			reproTitle:  "FooBar README",
 		},
 	}
 
@@ -268,13 +278,17 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 					}
 
 					ctx := context.Background()
+					repro := ReproductionCommandFromString(c.reproCmd)
+					if c.reproTitle != "" {
+						repro = ReproductionAsLink(c.reproTitle, c.reproURL)
+					}
 					req := PostRequest{
 						PackageName:         c.packageName,
 						TestName:            c.testName,
 						Message:             c.message,
 						Artifacts:           c.artifacts,
 						AuthorEmail:         c.author,
-						ReproductionCommand: ReproductionCommandFromString(c.reproCmd),
+						ReproductionCommand: repro,
 						ExtraLabels:         []string{"release-blocker"},
 					}
 					require.NoError(t, p.post(ctx, UnitTestFormatter, req))
