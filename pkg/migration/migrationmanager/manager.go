@@ -107,6 +107,13 @@ func (m *Manager) Migrate(
 	log.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)", from, to, clusterVersions)
 
 	for _, clusterVersion := range clusterVersions {
+		// Sanity check that we'll actually be able to perform the real
+		// cluster version bump, cluster-wide, before potentially creating a job
+		// that might be doomed to fail.
+		if err := validateTargetClusterVersion(ctx, m.c, clusterVersion); err != nil {
+			return err
+		}
+
 		log.Infof(ctx, "stepping through %s", clusterVersion)
 		// First, run the actual migration if any.
 		if err := m.runMigration(ctx, user, clusterVersion); err != nil {
@@ -193,47 +200,68 @@ func (m *Manager) Migrate(
 			// version, and by design also supports the actual version (which is
 			// the direct successor of the fence).
 			fenceVersion := migration.FenceVersionFor(ctx, clusterVersion)
-			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &fenceVersion}
-			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			if err := m.c.UntilClusterStable(ctx, func() error {
-				return m.c.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-					_, err := client.BumpClusterVersion(ctx, req)
-					return err
-				})
-			}); err != nil {
+			if err := bumpClusterVersion(ctx, m.c, fenceVersion); err != nil {
 				return err
 			}
 		}
-		{
-			// Now sanity check that we'll actually be able to perform the real
-			// cluster version bump, cluster-wide.
-			req := &serverpb.ValidateTargetClusterVersionRequest{ClusterVersion: &clusterVersion}
-			op := fmt.Sprintf("validate-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			if err := m.c.UntilClusterStable(ctx, func() error {
-				return m.c.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-					_, err := client.ValidateTargetClusterVersion(ctx, req)
-					return err
-				})
-			}); err != nil {
-				return err
-			}
+
+		// Now sanity check that we'll actually be able to perform the real
+		// cluster version bump, cluster-wide.
+		//
+		// TODO(ajwerner): It's not obvious why we're going to validate again given we
+		// are already in the fence version.
+		if err := validateTargetClusterVersion(ctx, m.c, clusterVersion); err != nil {
+			return err
 		}
-		{
-			// Finally, bump the real version cluster-wide.
-			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
-			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			if err := m.c.UntilClusterStable(ctx, func() error {
-				return m.c.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-					_, err := client.BumpClusterVersion(ctx, req)
-					return err
-				})
-			}); err != nil {
-				return err
-			}
+
+		// Finally, bump the real version cluster-wide.
+		if err := bumpClusterVersion(ctx, m.c, clusterVersion); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+// bumpClusterVersion will invoke the BumpClusterVersion rpc on every node
+// until the cluster is stable.
+func bumpClusterVersion(
+	ctx context.Context, c migration.Cluster, clusterVersion clusterversion.ClusterVersion,
+) error {
+	req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
+	op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
+	return forEveryNodeUntilClusterStable(ctx, op, c, func(
+		ctx context.Context, client serverpb.MigrationClient,
+	) error {
+		_, err := client.BumpClusterVersion(ctx, req)
+		return err
+	})
+}
+
+// bumpClusterVersion will invoke the ValidateTargetClusterVersion rpc on
+// every node until the cluster is stable.
+func validateTargetClusterVersion(
+	ctx context.Context, c migration.Cluster, clusterVersion clusterversion.ClusterVersion,
+) error {
+	req := &serverpb.ValidateTargetClusterVersionRequest{ClusterVersion: &clusterVersion}
+	op := fmt.Sprintf("validate-cluster-version=%s", req.ClusterVersion.PrettyPrint())
+	return forEveryNodeUntilClusterStable(ctx, op, c, func(
+		tx context.Context, client serverpb.MigrationClient,
+	) error {
+		_, err := client.ValidateTargetClusterVersion(ctx, req)
+		return err
+	})
+}
+
+func forEveryNodeUntilClusterStable(
+	ctx context.Context,
+	op string,
+	c migration.Cluster,
+	f func(ctx context.Context, client serverpb.MigrationClient) error,
+) error {
+	return c.UntilClusterStable(ctx, func() error {
+		return c.ForEveryNode(ctx, op, f)
+	})
 }
 
 func (m *Manager) runMigration(
@@ -261,6 +289,7 @@ func (m *Manager) getOrCreateMigrationJob(
 	if err := m.c.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		alreadyCompleted, err = migrationjob.CheckIfMigrationCompleted(ctx, txn, m.ie, version)
 		if alreadyCompleted || err != nil {
+			log.Infof(ctx, "already completed or error %v", err)
 			return err
 		}
 		var found bool
