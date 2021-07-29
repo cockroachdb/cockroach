@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	// Imported to allow locality-related table mutations
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -50,7 +51,7 @@ func waitForSchemaChange(
 	t testing.TB, sqlDB *sqlutils.SQLRunner, stmt string, arguments ...interface{},
 ) {
 	sqlDB.Exec(t, stmt, arguments...)
-	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' ORDER BY created DESC LIMIT 1")
 	var jobID string
 	row.Scan(&jobID)
 
@@ -394,6 +395,42 @@ func startTestFullServer(
 	return s, db, cleanup
 }
 
+// startTestCluster starts a 3 node cluster.
+//
+// Note, if a testfeed depends on particular testing knobs, those may
+// need to be applied to each of the servers in the test cluster
+// returned from this function.
+func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB, func()) {
+	ctx := context.Background()
+	knobs := base.TestingKnobs{
+		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	resetFlushFrequency := changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)
+	cluster, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, knobs,
+		multiregionccltestutils.WithUseDatabase("d"),
+	)
+	cleanupAndReset := func() {
+		cleanup()
+		resetFlushFrequency()
+	}
+
+	var err error
+	defer func() {
+		if err != nil {
+			cleanupAndReset()
+			require.NoError(t, err)
+		}
+	}()
+	_, err = db.ExecContext(ctx, serverSetupStatements)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `ALTER DATABASE d PRIMARY REGION "us-east1"`)
+	return cluster, db, cleanupAndReset
+}
+
 func startTestTenant(
 	t testing.TB, options feedTestOptions,
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
@@ -505,6 +542,23 @@ func sinklessTestWithOptions(testFn cdcTestFn, opts feedTestOptions) func(*testi
 		defer cleanup()
 		f := makeSinklessFeedFactory(s, sink)
 		testFn(t, db, f)
+	}
+}
+
+// RunRandomSink runs the testFn against one of a number of possible
+// sinks. Sinkless is not included in the possible sinks.
+func RunRandomSinkTest(t *testing.T, desc string, testFn cdcTestFn, testOpts ...feedTestOption) {
+	// TODO(ssd): It would be nice if explicitly selecting a test
+	// via -run/TESTS= would force it to always run.
+	switch p := rand.Float32(); {
+	case p < 0.20:
+		t.Run(fmt.Sprintf("enterprise/%s", desc), enterpriseTest(testFn, testOpts...))
+	case p < 0.40:
+		t.Run(fmt.Sprintf("cloudstorage/%s", desc), cloudStorageTest(testFn, testOpts...))
+	case p < 0.60:
+		t.Run(fmt.Sprintf("webhook/%s", desc), webhookTest(testFn, testOpts...))
+	default: // Run kafka a bit more often
+		t.Run(fmt.Sprintf("kafka/%s", desc), kafkaTest(testFn, testOpts...))
 	}
 }
 
