@@ -847,3 +847,29 @@ vectorized: true
                       estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                       table: metrics@name_index
                       spans: [/'cpu' - /'cpu']
+
+
+statement ok
+create table order_line (ol_o_id int, ol_i_id int);
+insert into order_line (ol_o_id, ol_i_id) values
+    (19, 6463),
+    (20, 6463),
+    (100, 6463),
+    (101, 6463);
+create index ol_io on order_line (ol_i_id, ol_o_id);
+create table stock (s_i_id int);
+insert into stock (s_i_id) values (6463);
+
+query T kvtrace(Scan,prefix=/Table/56/2/6463/{)
+SELECT
+    s_i_id, ol_o_id
+FROM
+    stock
+INNER LOOKUP JOIN
+    order_line
+ON
+    s_i_id = ol_i_id
+WHERE
+  ol_o_id BETWEEN 20 AND 100
+----
+Scan /Table/56/2/6463/{20-101}

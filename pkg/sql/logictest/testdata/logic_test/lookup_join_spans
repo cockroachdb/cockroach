@@ -481,3 +481,31 @@ WHERE
 ORDER BY value
 ----
 1  2020-01-01 00:00:01 +0000 UTC  1  1  1  NULL  cpu
+
+statement ok
+create table order_line (ol_o_id int, ol_i_id int);
+insert into order_line (ol_o_id, ol_i_id) values
+    (1,6463),
+    (19, 6463),
+    (20, 6463),
+    (100, 6463),
+    (101, 6463),
+    (826, 6463);
+create index ol_io on order_line (ol_i_id, ol_o_id);
+create table stock (s_i_id int);
+insert into stock (s_i_id) values (6463);
+
+query II
+SELECT
+    s_i_id, ol_o_id
+FROM
+    stock
+INNER LOOKUP JOIN
+    order_line
+ON
+    s_i_id = ol_i_id
+WHERE
+  ol_o_id BETWEEN 20 AND 100
+----
+6463  20
+6463  100
