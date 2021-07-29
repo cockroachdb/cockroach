@@ -39,13 +39,23 @@ type blockingBuffer struct {
 // It will grow the bound account to buffer more messages but will block if it
 // runs out of space. If ever any entry exceeds the allocatable size of the
 // account, an error will be returned when attempting to buffer it.
-func NewMemBuffer(acc mon.BoundAccount, metrics *Metrics) Buffer {
+func NewMemBuffer(acc mon.BoundAccount, metrics *Metrics, opts ...quotapool.Option) Buffer {
 	bb := &blockingBuffer{
 		signalCh: make(chan struct{}, 1),
 	}
 	bb.acc = acc
 	bb.metrics = metrics
-	bb.qp = quotapool.New("changefeed", &bb.blockingBufferQuotaPool)
+
+	opts = append(opts,
+		quotapool.OnAcquisition(func(
+			ctx context.Context, poolName string, r quotapool.Request, start time.Time,
+		) {
+			if r.(*bufferEntry).wasBlocked {
+				metrics.BufferPushbackNanos.Inc(timeutil.Since(start).Nanoseconds())
+			}
+		}))
+
+	bb.qp = quotapool.New("changefeed", &bb.blockingBufferQuotaPool, opts...)
 	return bb
 }
 
@@ -111,6 +121,7 @@ func (b *blockingBuffer) AddResolved(
 func (b *blockingBuffer) addEvent(ctx context.Context, e Event, size int) error {
 	be := bufferEntryPool.Get().(*bufferEntry)
 	be.e = e
+	be.wasBlocked = false
 	be.alloc = int64(size)
 
 	// Acquire the quota first.
@@ -192,10 +203,10 @@ func (b *blockingBufferQuotaPool) release(e *bufferEntry) {
 type bufferEntry struct {
 	e Event
 
-	alloc int64 // bytes allocated from the quotapool
-	err   error // error populated from under the quotapool
-
-	next *bufferEntry // linked-list element
+	alloc      int64        // bytes allocated from the quotapool
+	err        error        // error populated from under the quotapool
+	wasBlocked bool         // set if request was blocked acquiring resources.
+	next       *bufferEntry // linked-list element
 }
 
 var bufferEntryPool = sync.Pool{
@@ -227,6 +238,7 @@ func (r *bufferEntry) Acquire(
 
 		// Back off on allocating until we've cleared up half of our usage.
 		res.canAllocateBelow = res.allocated/2 + 1
+		r.wasBlocked = true
 		return false, 0
 	}
 	res.metrics.BufferEntriesIn.Inc(1)
