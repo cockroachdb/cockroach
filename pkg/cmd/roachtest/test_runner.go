@@ -933,12 +933,10 @@ func (r *testRunner) maybePostGithubIssue(
 		Message:         msg,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
-		ReproductionCommand: func(r *issues.Renderer) {
-			r.P(func() {
-				r.Escaped("See the corresponding section in the ")
-				r.A("roachtest README", "https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/roachtest")
-			})
-		},
+		ReproductionCommand: issues.ReproductionAsLink(
+			"roachtest README",
+			"https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/roachtest",
+		),
 	}
 	if err := issues.Post(
 		context.Background(),
