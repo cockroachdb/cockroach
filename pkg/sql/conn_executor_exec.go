@@ -586,7 +586,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		if asOf != nil {
-			p.semaCtx.AsOfSystemTime = asOf
+			p.extendedEvalCtx.AsOfSystemTime = asOf
 			p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
 			ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp)
 		}
@@ -614,7 +614,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
 				return makeErrEvent(err)
 			}
-			p.semaCtx.AsOfSystemTime = asOf
+			p.extendedEvalCtx.AsOfSystemTime = asOf
 		}
 	}
 
