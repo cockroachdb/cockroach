@@ -2521,3 +2521,103 @@ select
       ├── c31:31 = 1 [type=bool, outer=(31), constraints=(/31: [/1 - /1]; tight), fd=()-->(31)]
       ├── c32:32 = 1 [type=bool, outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
       └── c33:33 = 1 [type=bool, outer=(33), constraints=(/33: [/1 - /1]; tight), fd=()-->(33)]
+
+# Regression test for #67573. Do not over-estimate row counts when columns
+# are highly correlated and selected values are very common according to the
+# histograms.
+exec-ddl
+CREATE TABLE ab (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a,b,c)
+)
+----
+
+exec-ddl
+ALTER TABLE ab INJECT STATISTICS '[
+    {
+        "columns": [ "a" ],
+        "created_at": "2021-07-13 14:04:42.014148",
+        "distinct_count": 20000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 60000,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 20000,
+                "num_eq": 20000,
+                "num_range": 20000,
+                "upper_bound": "40000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 100000
+    },
+    {
+        "columns": [ "b" ],
+        "created_at": "2021-07-13 14:04:42.014148",
+        "distinct_count": 7000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 7000,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 7000,
+                "num_eq": 86000,
+                "num_range": 7000,
+                "upper_bound": "10000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 100000
+    },
+    {
+        "columns": [ "a", "b" ],
+        "created_at": "2021-07-13 14:04:42.014148",
+        "distinct_count": 20000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 100000
+    }
+]';
+----
+
+# Make sure the row count for the outer select is less than the row count
+# for the scan.
+norm
+SELECT * FROM ab WHERE a=1 AND b=1
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── stats: [rows=7000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+ │   histogram(1)=  0 7000
+ │                <--- 1 -
+ │   histogram(2)=  0 7000
+ │                <--- 1 -
+ ├── key: (3)
+ ├── fd: ()-->(1,2)
+ ├── scan ab
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── stats: [rows=100000, distinct(1)=20000, null(1)=0, distinct(2)=7000, null(2)=0, distinct(3)=10000, null(3)=0, distinct(1,2)=20000, null(1,2)=0]
+ │    │   histogram(1)=  0 60000 20000  20000
+ │    │                <---- 1 -------- 40000
+ │    │   histogram(2)=  0 7000 7000  86000
+ │    │                <--- 1 ------- 10000
+ │    └── key: (1-3)
+ └── filters
+      ├── a:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── b:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]

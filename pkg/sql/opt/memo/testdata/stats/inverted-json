@@ -397,14 +397,14 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=4e-08]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan t@j_idx
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /4/1
  │         │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
- │         ├── stats: [rows=2e-07, distinct(4)=2e-07, null(4)=0]
+ │         ├── stats: [rows=4e-08, distinct(4)=4e-08, null(4)=0]
  │         │   histogram(4)=
  │         └── key: (1)
  └── filters
@@ -423,14 +423,14 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=4e-08]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan t@j_idx
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /4/1
  │         │    └── spans: ["7a\x00\x02b\x00\x02c\x00\x01\x12d\x00\x01", "7a\x00\x02b\x00\x02c\x00\x01\x12d\x00\x01"]
- │         ├── stats: [rows=2e-07, distinct(4)=2e-07, null(4)=0]
+ │         ├── stats: [rows=4e-08, distinct(4)=4e-08, null(4)=0]
  │         │   histogram(4)=
  │         └── key: (1)
  └── filters
@@ -450,7 +450,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=4e-08]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -465,7 +465,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
  │         │              └── union spans: ["7a\x00\x02d\x00\x01\x12e\x00\x01", "7a\x00\x02d\x00\x01\x12e\x00\x01"]
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=4e-08]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
@@ -473,7 +473,7 @@ select
  │              │    └── spans
  │              │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
  │              │         └── ["7a\x00\x02d\x00\x01\x12e\x00\x01", "7a\x00\x02d\x00\x01\x12e\x00\x01"]
- │              ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0]
+ │              ├── stats: [rows=4e-08, distinct(1)=4e-08, null(1)=0, distinct(4)=4e-08, null(4)=0]
  │              │   histogram(4)=
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
@@ -493,7 +493,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=4e-08]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -522,7 +522,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
  │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12e\x00\x01"]
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=4e-08]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
@@ -532,7 +532,7 @@ select
  │              │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
  │              │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
  │              │         └── ["7a\x00\x02\x00\x03\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12e\x00\x01"]
- │              ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0]
+ │              ├── stats: [rows=4e-08, distinct(1)=4e-08, null(1)=0, distinct(4)=4e-08, null(4)=0]
  │              │   histogram(4)=
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
@@ -553,7 +553,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=4e-08]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -575,7 +575,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
  │         │              └── union spans: ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12e\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12e\x00\x01"]
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=4e-08]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
@@ -584,7 +584,7 @@ select
  │              │         ├── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
  │              │         ├── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
  │              │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12e\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12e\x00\x01"]
- │              ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0]
+ │              ├── stats: [rows=4e-08, distinct(1)=4e-08, null(1)=0, distinct(4)=4e-08, null(4)=0]
  │              │   histogram(4)=
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
@@ -604,7 +604,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=4e-08]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -614,7 +614,7 @@ select
  │         │    └── union spans
  │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
  │         │         └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=4e-08]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
@@ -622,7 +622,7 @@ select
  │              │    └── spans
  │              │         ├── ["7a\x00\x018", "7a\x00\x018"]
  │              │         └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
- │              ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0]
+ │              ├── stats: [rows=4e-08, distinct(1)=4e-08, null(1)=0, distinct(4)=4e-08, null(4)=0]
  │              │   histogram(4)=
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
@@ -642,7 +642,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=4e-08]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -652,7 +652,7 @@ select
  │         │    └── union spans
  │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
  │         │         └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=4e-08]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
@@ -660,7 +660,7 @@ select
  │              │    └── spans
  │              │         ├── ["7a\x00\x019", "7a\x00\x019"]
  │              │         └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
- │              ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0]
+ │              ├── stats: [rows=4e-08, distinct(1)=4e-08, null(1)=0, distinct(4)=4e-08, null(4)=0]
  │              │   histogram(4)=
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
