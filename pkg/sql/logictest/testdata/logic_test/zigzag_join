@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 
 statement ok
-CREATE TABLE a (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b));
+CREATE TABLE a (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b), INDEX bc_idx(b,c));
 INSERT INTO a SELECT a,a,a%3,'foo' FROM generate_series(1,10) AS g(a) ;
 SET enable_zigzag_join = true
 
@@ -59,8 +59,8 @@ statement ok
 DROP INDEX a@a_idx;
 DROP INDEX a@b_idx;
 CREATE INDEX c_idx ON a(c);
-CREATE INDEX a_idx_2 ON a(a);
-CREATE INDEX b_idx_2 ON a(b);
+CREATE INDEX a_idx ON a(a);
+CREATE INDEX b_idx ON a(b);
 SELECT n,a,b FROM a WHERE a = 4 AND b = 1;
 
 # Regression test for 48003 ("non-values node passed as fixed value to zigzag
@@ -190,3 +190,63 @@ query IT
 SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 16  [{"a": {"b": [1, [2]]}}, "d"]
+
+# Zigzag hinting tests, functional tests in opt.xform coster tests, syntax tests
+# in parser select_clauses.
+
+statement error index "foo" not found
+SELECT * FROM a@{FORCE_ZIGZAG=foo} WHERE a = 3 AND b = 7
+
+# c_idx can't be used to zigzag so this is an error.
+statement error could not produce a query plan conforming to the FORCE_ZIGZAG hint
+SELECT * FROM a@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=c_idx} WHERE a = 3 AND b = 7
+
+# Need two equalities to plan a zigzag.
+statement error could not produce a query plan conforming to the FORCE_ZIGZAG hint
+SELECT * FROM a@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3
+
+# Need two suitable indexes to plan a zigzag.
+statement error could not produce a query plan conforming to the FORCE_ZIGZAG hint
+SELECT * FROM a@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=bc_idx} WHERE a = 3 AND b = 7
+
+# Basic form w/o indexes.
+statement ok
+SELECT * FROM a@{FORCE_ZIGZAG} WHERE a = 3 AND b = 7
+
+# Consider this an error, certainly its a typo.
+statement error FORCE_ZIGZAG hints not distinct
+SELECT * FROM a@{FORCE_ZIGZAG,FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7
+
+# Dupes are an error.
+statement error FORCE_ZIGZAG index duplicated
+SELECT * FROM a@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7
+
+# Full indexes specified.
+statement ok
+SELECT * FROM a@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7
+
+statement ok
+DROP INDEX a@c_idx
+
+# Check error if no index.
+statement error could not produce a query plan conforming to the FORCE_ZIGZAG hint
+SELECT * FROM a@{FORCE_ZIGZAG} WHERE a = 3 AND c = 'foo'
+
+# Dupes are an error.
+statement error FORCE_ZIGZAG index duplicated
+SELECT * FROM a@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[1]} WHERE a = 3 AND b = 7
+
+# Full indexes specified. 6 is a_idx and 7 is b_idx.
+statement ok
+SELECT * FROM a@{FORCE_ZIGZAG=[6],FORCE_ZIGZAG=[7]} WHERE a = 3 AND b = 7
+
+# Combining name and id is allowed.
+statement ok
+SELECT * FROM a@{FORCE_ZIGZAG=[6],FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7
+
+# Duplicate name and id is not allowed.
+statement error FORCE_ZIGZAG index duplicated
+SELECT * FROM a@{FORCE_ZIGZAG=[6],FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7
+
+statement error FORCE_ZIGZAG cannot be specified in conjunction with NO_ZIGZAG_JOIN
+SELECT * FROM a@{FORCE_ZIGZAG,NO_ZIGZAG_JOIN} WHERE a = 3 AND b = 7

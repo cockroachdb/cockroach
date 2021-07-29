@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -354,14 +355,19 @@ type ScanFlags struct {
 
 	// ForceIndex forces the use of a specific index (specified in Index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
-	ForceIndex bool
-	Direction  tree.Direction
-	Index      int
+	ForceIndex  bool
+	ForceZigzag bool
+	Direction   tree.Direction
+	Index       int
+
+	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
+	// ForceZigzag must also be true.
+	ZigzagIndexes util.FastIntSet
 }
 
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {
-	return !sf.NoIndexJoin && !sf.NoZigzagJoin && !sf.ForceIndex
+	return *sf == ScanFlags{}
 }
 
 // JoinFlags stores restrictions on the join execution method, derived from
