@@ -780,7 +780,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FOREIGN FROM FULL FUNCTION FUNCTIONS
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG FOREIGN FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
@@ -9767,6 +9767,22 @@ index_flags_param:
     /* SKIP DOC */
     $$.val = &tree.IndexFlags{IgnoreForeignKeys: true}
   }
+|
+  FORCE_ZIGZAG
+  {
+     $$.val = &tree.IndexFlags{ForceZigzag: true}
+  }
+|
+  FORCE_ZIGZAG '=' index_name
+  {
+     $$.val = &tree.IndexFlags{ZigzagIndexes: []tree.UnrestrictedName{tree.UnrestrictedName($3)}}
+  }
+|
+  FORCE_ZIGZAG '=' '[' iconst64 ']'
+  {
+    /* SKIP DOC */
+     $$.val = &tree.IndexFlags{ZigzagIndexIDs: []tree.IndexID{tree.IndexID($4.int64())}}
+  }
 
 index_flags_param_list:
   index_flags_param
@@ -9827,6 +9843,7 @@ opt_index_flags:
 //   '{' NO_INDEX_JOIN [, ...] '}'
 //   '{' NO_ZIGZAG_JOIN [, ...] '}'
 //   '{' IGNORE_FOREIGN_KEYS [, ...] '}'
+//   '{' FORCE_ZIGZAG = <idxname> [, ...]  '}'
 //
 // Join types:
 //   { INNER | { LEFT | RIGHT | FULL } [OUTER] } [ { HASH | MERGE | LOOKUP | INVERTED } ]
@@ -13187,6 +13204,7 @@ unreserved_keyword:
 | FOLLOWING
 | FORCE
 | FORCE_INDEX
+| FORCE_ZIGZAG
 | FUNCTION
 | FUNCTIONS
 | GENERATED
