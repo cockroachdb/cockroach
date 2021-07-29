@@ -20,13 +20,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -397,11 +399,6 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	// GOTRACEBACK=all, as it is on CI.
 	defer log.DisableTracebacks()()
 
-	exits := make(chan exit.Code, 100)
-
-	log.SetExitFunc(true /* hideStack */, func(i exit.Code) { exits <- i })
-	defer log.ResetExitFunc()
-
 	v0, v1 := v0v1()
 	v0s := v0.String()
 	v1s := v1.String()
@@ -419,6 +416,25 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: 1,
 			BinaryVersionOverride:          v0,
+		},
+		// Inject a migration which would run to upgrade the cluster.
+		// We'll validate that we never create a job for this migration.
+		MigrationManager: &migrationmanager.TestingKnobs{
+			ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
+				return []clusterversion.ClusterVersion{to}
+			},
+			RegistryOverride: func(cv clusterversion.ClusterVersion) (migration.Migration, bool) {
+				if !cv.Version.Equal(v1) {
+					return nil, false
+				}
+				return migration.NewTenantMigration("testing", clusterversion.ClusterVersion{
+					Version: v1,
+				}, func(
+					ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
+				) error {
+					return nil
+				}), true
+			},
 		},
 	}
 	tc := setupMixedCluster(t, knobs, versions, "")
@@ -446,10 +462,16 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 			}
 
 			if !testutils.IsError(err, fmt.Sprintf("binary version %s less than target cluster version", v0s)) {
-				t.Fatal(i, err)
+				t.Error(i, err)
 			}
 			return nil
 		})
+	}
+
+	// Ensure that no migration jobs got created.
+	{
+		sqlutils.MakeSQLRunner(tc.ServerConn(0)).CheckQueryResults(
+			t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'MIGRATION'", [][]string{})
 	}
 
 	// Check that we can still talk to the first three nodes.
