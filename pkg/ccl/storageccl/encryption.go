@@ -186,7 +186,7 @@ func (e *encWriter) flush() error {
 // and reading the IV from a prefix of the file. See comments on EncryptFile
 // for intended usage, and see DecryptFile
 func DecryptFile(ciphertext, key []byte) ([]byte, error) {
-	r, err := decryptingReader(bytes.NewReader(ciphertext), key)
+	r, _, err := decryptingReader(bytes.NewReader(ciphertext), key)
 	if err != nil {
 		return nil, err
 	}
@@ -209,10 +209,12 @@ type readerAndReaderAt interface {
 	io.ReaderAt
 }
 
-func decryptingReader(ciphertext readerAndReaderAt, key []byte) (sstable.ReadableFile, error) {
+func decryptingReader(
+	ciphertext readerAndReaderAt, key []byte,
+) (sstable.ReadableFile, int64, error) {
 	gcm, err := aesgcm(key)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	header := make([]byte, headerSize)
@@ -221,15 +223,15 @@ func decryptingReader(ciphertext readerAndReaderAt, key []byte) (sstable.Readabl
 	// Verify that the read data does indeed look like an encrypted file and has
 	// a encoding version we can decode.
 	if !AppearsEncrypted(header) {
-		return nil, errors.New("file does not appear to be encrypted")
+		return nil, 0, errors.New("file does not appear to be encrypted")
 	}
 	if readHeaderErr != nil {
-		return nil, errors.Wrap(readHeaderErr, "invalid encryption header")
+		return nil, 0, errors.Wrap(readHeaderErr, "invalid encryption header")
 	}
 
 	version := header[len(encryptionPreamble)]
 	if version < encryptionVersionIVPrefix || version > encryptionVersionChunk {
-		return nil, errors.Errorf("unexpected encryption scheme/config version %d", version)
+		return nil, 0, errors.Errorf("unexpected encryption scheme/config version %d", version)
 	}
 	iv := header[len(encryptionPreamble)+1:]
 
@@ -239,16 +241,19 @@ func decryptingReader(ciphertext readerAndReaderAt, key []byte) (sstable.Readabl
 	if version == encryptionVersionIVPrefix {
 		buf, err := ioutil.ReadAll(ciphertext)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		buf, err = gcm.Open(buf[:0], iv, buf, nil)
-		return vfs.NewMemFile(buf), errors.Wrap(err, "failed to decrypt — maybe incorrect key")
+		memSize := int64(len(buf))
+		return vfs.NewMemFile(buf), memSize, errors.Wrap(err, "failed to decrypt — maybe incorrect key")
 	}
 	buf := make([]byte, nonceSize, encryptionChunkSizeV2+tagSize+nonceSize)
 	ivScratch := buf[:nonceSize]
 	buf = buf[nonceSize:]
 	r := &decryptReader{g: gcm, fileIV: iv, ivScratch: ivScratch, ciphertext: ciphertext, buf: buf, chunk: -1}
-	return r, err
+	// Estimate the memory overhead of this reader in terms of chunk size.
+	memSize := int64(encryptionChunkSizeV2) * 3
+	return r, memSize, err
 }
 
 // fill loads the requested chunk into the buffer.

@@ -37,6 +37,11 @@ var remoteSSTSuffixCacheSize = settings.RegisterByteSizeSetting(
 	64<<10,
 )
 
+// remoteReaderMemoryOverhead is a conservative estimation of the amount of
+// memory a chunked remote SST reader uses. It is used for memory accounting.
+// It was determined experimentally.
+const remoteReaderMemoryOverhead int64 = 4 << 20 // 4 MiB
+
 // ExternalSSTReader returns opens an SST in external storage, optionally
 // decrypting with the supplied parameters, and returns iterator over it.
 func ExternalSSTReader(
@@ -44,7 +49,7 @@ func ExternalSSTReader(
 	e cloud.ExternalStorage,
 	basename string,
 	encryption *roachpb.FileEncryptionOptions,
-) (storage.SimpleMVCCIterator, error) {
+) (storage.SimpleMVCCIterator, int64, error) {
 	// Do an initial read of the file, from the beginning, to get the file size as
 	// this is used e.g. to read the trailer.
 	var f io.ReadCloser
@@ -56,22 +61,24 @@ func ExternalSSTReader(
 		f, sz, err = e.ReadFileAt(ctx, basename, 0)
 		return err
 	}); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if !remoteSSTs.Get(&e.Settings().SV) {
 		content, err := ioutil.ReadAll(f)
 		f.Close()
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if encryption != nil {
 			content, err = DecryptFile(content, encryption.Key)
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 		}
-		return storage.NewMemSSTIterator(content, false)
+		iter, err := storage.NewMemSSTIterator(content, false)
+		memSz := int64(len(content))
+		return iter, memSz, err
 	}
 
 	raw := &sstReader{
@@ -84,30 +91,33 @@ func ExternalSSTReader(
 	}
 
 	var reader sstable.ReadableFile = raw
+	var memSize int64
 
 	if encryption != nil {
-		r, err := decryptingReader(raw, encryption.Key)
+		r, memSz, err := decryptingReader(raw, encryption.Key)
 		if err != nil {
 			f.Close()
-			return nil, err
+			return nil, 0, err
 		}
 		reader = r
+		memSize = memSz
 	} else {
 		// We only explicitly buffer the suffix of the file when not decrypting as
 		// the decrypting reader has its own internal block buffer.
 		if err := raw.readAndCacheSuffix(remoteSSTSuffixCacheSize.Get(&e.Settings().SV)); err != nil {
 			f.Close()
-			return nil, err
+			return nil, 0, err
 		}
+		memSize = remoteReaderMemoryOverhead
 	}
 
 	iter, err := storage.NewSSTIterator(reader)
 	if err != nil {
 		reader.Close()
-		return nil, err
+		return nil, 0, err
 	}
 
-	return iter, nil
+	return iter, memSize, nil
 }
 
 type sstReader struct {
