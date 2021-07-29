@@ -3,7 +3,7 @@ INSERT INTO a VALUES (1)
 ----
 INSERT INTO a VALUES (1)
 INSERT INTO a VALUES ((1)) -- fully parenthesized
-INSERT INTO a VALUES (_) -- literals removed
+INSERT INTO a VALUES (0) -- literals removed
 INSERT INTO _ VALUES (1) -- identifiers removed
 
 parse
@@ -11,7 +11,7 @@ EXPLAIN INSERT INTO a VALUES (1)
 ----
 EXPLAIN INSERT INTO a VALUES (1)
 EXPLAIN INSERT INTO a VALUES ((1)) -- fully parenthesized
-EXPLAIN INSERT INTO a VALUES (_) -- literals removed
+EXPLAIN INSERT INTO a VALUES (0) -- literals removed
 EXPLAIN INSERT INTO _ VALUES (1) -- identifiers removed
 
 parse
@@ -19,7 +19,7 @@ INSERT INTO a.b VALUES (1)
 ----
 INSERT INTO a.b VALUES (1)
 INSERT INTO a.b VALUES ((1)) -- fully parenthesized
-INSERT INTO a.b VALUES (_) -- literals removed
+INSERT INTO a.b VALUES (0) -- literals removed
 INSERT INTO _._ VALUES (1) -- identifiers removed
 
 parse
@@ -27,7 +27,7 @@ INSERT INTO a VALUES (1, 2)
 ----
 INSERT INTO a VALUES (1, 2)
 INSERT INTO a VALUES ((1), (2)) -- fully parenthesized
-INSERT INTO a VALUES (_, _) -- literals removed
+INSERT INTO a VALUES (0, 0) -- literals removed
 INSERT INTO _ VALUES (1, 2) -- identifiers removed
 
 parse
@@ -35,7 +35,7 @@ INSERT INTO a VALUES (1, DEFAULT)
 ----
 INSERT INTO a VALUES (1, DEFAULT)
 INSERT INTO a VALUES ((1), (DEFAULT)) -- fully parenthesized
-INSERT INTO a VALUES (_, DEFAULT) -- literals removed
+INSERT INTO a VALUES (0, DEFAULT) -- literals removed
 INSERT INTO _ VALUES (1, DEFAULT) -- identifiers removed
 
 parse
@@ -43,7 +43,7 @@ INSERT INTO a VALUES (1, 2), (3, 4)
 ----
 INSERT INTO a VALUES (1, 2), (3, 4)
 INSERT INTO a VALUES ((1), (2)), ((3), (4)) -- fully parenthesized
-INSERT INTO a VALUES (_, _), (__more1__) -- literals removed
+INSERT INTO a VALUES (0, 0), (__more1__) -- literals removed
 INSERT INTO _ VALUES (1, 2), (3, 4) -- identifiers removed
 
 parse
@@ -51,7 +51,7 @@ INSERT INTO a VALUES (0), (0), (0), (0), (0), (0)
 ----
 INSERT INTO a VALUES (0), (0), (0), (0), (0), (0)
 INSERT INTO a VALUES ((0)), ((0)), ((0)), ((0)), ((0)), ((0)) -- fully parenthesized
-INSERT INTO a VALUES (_), (__more5__) -- literals removed
+INSERT INTO a VALUES (0), (__more5__) -- literals removed
 INSERT INTO _ VALUES (0), (0), (0), (0), (0), (0) -- identifiers removed
 
 parse
@@ -59,7 +59,7 @@ INSERT INTO a VALUES (0, 0, 0, 0, 0, 0)
 ----
 INSERT INTO a VALUES (0, 0, 0, 0, 0, 0)
 INSERT INTO a VALUES ((0), (0), (0), (0), (0), (0)) -- fully parenthesized
-INSERT INTO a VALUES (_, _, __more4__) -- literals removed
+INSERT INTO a VALUES (0, 0, __more4__) -- literals removed
 INSERT INTO _ VALUES (0, 0, 0, 0, 0, 0) -- identifiers removed
 
 parse
@@ -67,7 +67,7 @@ INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0])
 ----
 INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0])
 INSERT INTO a VALUES ((ARRAY[(0), (0), (0), (0), (0), (0), (0)])) -- fully parenthesized
-INSERT INTO a VALUES (ARRAY[_, _, __more5__]) -- literals removed
+INSERT INTO a VALUES (ARRAY[0, 0, __more5__]) -- literals removed
 INSERT INTO _ VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0]) -- identifiers removed
 
 parse
@@ -77,7 +77,7 @@ INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ----
 INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) -- normalized!
 INSERT INTO a VALUES ((ARRAY[(0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0)])) -- fully parenthesized
-INSERT INTO a VALUES (ARRAY[_, _, __more30__]) -- literals removed
+INSERT INTO a VALUES (ARRAY[0, 0, __more30__]) -- literals removed
 INSERT INTO _ VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) -- identifiers removed
 
 parse
@@ -85,7 +85,7 @@ INSERT INTO a VALUES (-2, +3)
 ----
 INSERT INTO a VALUES (-2, 3) -- normalized!
 INSERT INTO a VALUES ((-2), (3)) -- fully parenthesized
-INSERT INTO a VALUES (_, _) -- literals removed
+INSERT INTO a VALUES (0, 0) -- literals removed
 INSERT INTO _ VALUES (-2, 3) -- identifiers removed
 
 parse
@@ -93,7 +93,7 @@ INSERT INTO a VALUES (a + 1, 2 * 3)
 ----
 INSERT INTO a VALUES (a + 1, 2 * 3)
 INSERT INTO a VALUES (((a) + (1)), ((2) * (3))) -- fully parenthesized
-INSERT INTO a VALUES (a + _, _ * _) -- literals removed
+INSERT INTO a VALUES (a + 0, 0 * 0) -- literals removed
 INSERT INTO _ VALUES (_ + 1, 2 * 3) -- identifiers removed
 
 parse
@@ -101,7 +101,7 @@ INSERT INTO a(a, b) VALUES (1, 2)
 ----
 INSERT INTO a(a, b) VALUES (1, 2)
 INSERT INTO a(a, b) VALUES ((1), (2)) -- fully parenthesized
-INSERT INTO a(a, b) VALUES (_, _) -- literals removed
+INSERT INTO a(a, b) VALUES (0, 0) -- literals removed
 INSERT INTO _(_, _) VALUES (1, 2) -- identifiers removed
 
 parse
@@ -133,7 +133,7 @@ INSERT INTO a VALUES (1) RETURNING a, b
 ----
 INSERT INTO a VALUES (1) RETURNING a, b
 INSERT INTO a VALUES ((1)) RETURNING (a), (b) -- fully parenthesized
-INSERT INTO a VALUES (_) RETURNING a, b -- literals removed
+INSERT INTO a VALUES (0) RETURNING a, b -- literals removed
 INSERT INTO _ VALUES (1) RETURNING _, _ -- identifiers removed
 
 parse
@@ -141,7 +141,7 @@ INSERT INTO a VALUES (1, 2) RETURNING 1, 2
 ----
 INSERT INTO a VALUES (1, 2) RETURNING 1, 2
 INSERT INTO a VALUES ((1), (2)) RETURNING (1), (2) -- fully parenthesized
-INSERT INTO a VALUES (_, _) RETURNING _, _ -- literals removed
+INSERT INTO a VALUES (0, 0) RETURNING 0, 0 -- literals removed
 INSERT INTO _ VALUES (1, 2) RETURNING 1, 2 -- identifiers removed
 
 parse
@@ -149,7 +149,7 @@ INSERT INTO a VALUES (1, 2) RETURNING a + b, c
 ----
 INSERT INTO a VALUES (1, 2) RETURNING a + b, c
 INSERT INTO a VALUES ((1), (2)) RETURNING ((a) + (b)), (c) -- fully parenthesized
-INSERT INTO a VALUES (_, _) RETURNING a + b, c -- literals removed
+INSERT INTO a VALUES (0, 0) RETURNING a + b, c -- literals removed
 INSERT INTO _ VALUES (1, 2) RETURNING _ + _, _ -- identifiers removed
 
 parse
@@ -157,7 +157,7 @@ INSERT INTO a VALUES (1, 2) RETURNING NOTHING
 ----
 INSERT INTO a VALUES (1, 2) RETURNING NOTHING
 INSERT INTO a VALUES ((1), (2)) RETURNING NOTHING -- fully parenthesized
-INSERT INTO a VALUES (_, _) RETURNING NOTHING -- literals removed
+INSERT INTO a VALUES (0, 0) RETURNING NOTHING -- literals removed
 INSERT INTO _ VALUES (1, 2) RETURNING NOTHING -- identifiers removed
 
 error

@@ -3,7 +3,7 @@ SELECT 1 + 1
 ----
 SELECT 1 + 1
 SELECT ((1) + (1)) -- fully parenthesized
-SELECT _ + _ -- literals removed
+SELECT 0 + 0 -- literals removed
 SELECT 1 + 1 -- identifiers removed
 
 parse
@@ -11,7 +11,7 @@ SELECT +1
 ----
 SELECT 1 -- normalized!
 SELECT (1) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT 1 -- identifiers removed
 
 parse
@@ -19,7 +19,7 @@ SELECT - - 5
 ----
 SELECT 5 -- normalized!
 SELECT (5) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT 5 -- identifiers removed
 
 parse
@@ -27,7 +27,7 @@ SELECT - + 5
 ----
 SELECT -5 -- normalized!
 SELECT (-5) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT -5 -- identifiers removed
 
 parse
@@ -35,7 +35,7 @@ SELECT -1
 ----
 SELECT -1
 SELECT (-1) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT -1 -- identifiers removed
 
 parse
@@ -43,7 +43,7 @@ SELECT .1
 ----
 SELECT .1
 SELECT (.1) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT .1 -- identifiers removed
 
 parse
@@ -51,7 +51,7 @@ SELECT 1.2e1
 ----
 SELECT 1.2e1
 SELECT (1.2e1) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT 1.2e1 -- identifiers removed
 
 parse
@@ -59,7 +59,7 @@ SELECT 1.2e+1
 ----
 SELECT 1.2e+1
 SELECT (1.2e+1) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT 1.2e+1 -- identifiers removed
 
 parse
@@ -67,7 +67,7 @@ SELECT 1.2e-1
 ----
 SELECT 1.2e-1
 SELECT (1.2e-1) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT 1.2e-1 -- identifiers removed
 
 error
@@ -84,7 +84,7 @@ SELECT *,-/* comment */-5
 ----
 SELECT *, 5 -- normalized!
 SELECT (*), (5) -- fully parenthesized
-SELECT *, _ -- literals removed
+SELECT *, 0 -- literals removed
 SELECT *, 5 -- identifiers removed
 
 parse
@@ -93,7 +93,7 @@ SELECT -
 ----
 SELECT 5 -- normalized!
 SELECT (5) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT 5 -- identifiers removed
 
 parse
@@ -101,7 +101,7 @@ SELECT -0.-/*test*/-1
 ----
 SELECT -0. - -1 -- normalized!
 SELECT ((-0.) - (-1)) -- fully parenthesized
-SELECT _ - _ -- literals removed
+SELECT 0 - 0 -- literals removed
 SELECT -0. - -1 -- identifiers removed
 
 parse
@@ -149,7 +149,7 @@ SELECT (ARRAY['a', 'b'])[2]
 ----
 SELECT (ARRAY['a', 'b'])[2]
 SELECT ((((ARRAY[('a'), ('b')])))[(2)]) -- fully parenthesized
-SELECT (ARRAY[_, _])[_] -- literals removed
+SELECT (ARRAY[_, _])[0] -- literals removed
 SELECT (ARRAY['a', 'b'])[2] -- identifiers removed
 
 parse
@@ -157,7 +157,7 @@ SELECT (ARRAY (VALUES (1), (2)))[1]
 ----
 SELECT (ARRAY (VALUES (1), (2)))[1]
 SELECT ((((ARRAY ((VALUES ((1)), ((2)))))))[(1)]) -- fully parenthesized
-SELECT (ARRAY (VALUES (_), (__more1__)))[_] -- literals removed
+SELECT (ARRAY (VALUES (0), (__more1__)))[0] -- literals removed
 SELECT (ARRAY (VALUES (1), (2)))[1] -- identifiers removed
 
 parse
@@ -173,7 +173,7 @@ SELECT (ARRAY (1, 2))[1]
 ----
 SELECT (ARRAY[1, 2])[1] -- normalized!
 SELECT ((((ARRAY[(1), (2)])))[(1)]) -- fully parenthesized
-SELECT (ARRAY[_, _])[_] -- literals removed
+SELECT (ARRAY[0, 0])[0] -- literals removed
 SELECT (ARRAY[1, 2])[1] -- identifiers removed
 
 error
@@ -205,7 +205,7 @@ SELECT 1 IN (b)
 ----
 SELECT 1 IN (b,) -- normalized!
 SELECT ((1) IN (((b),))) -- fully parenthesized
-SELECT _ IN (b,) -- literals removed
+SELECT 0 IN (b,) -- literals removed
 SELECT 1 IN (_,) -- identifiers removed
 
 parse
@@ -221,7 +221,7 @@ SELECT ROW(1)
 ----
 SELECT (1,) -- normalized!
 SELECT (((1),)) -- fully parenthesized
-SELECT (_,) -- literals removed
+SELECT (0,) -- literals removed
 SELECT (1,) -- identifiers removed
 
 parse
@@ -229,7 +229,7 @@ SELECT (ROW(1) AS a)
 ----
 SELECT ((1,) AS a) -- normalized!
 SELECT ((((1),) AS a)) -- fully parenthesized
-SELECT ((_,) AS a) -- literals removed
+SELECT ((0,) AS a) -- literals removed
 SELECT ((1,) AS _) -- identifiers removed
 
 parse
@@ -237,7 +237,7 @@ SELECT (SELECT 1)
 ----
 SELECT (SELECT 1)
 SELECT ((SELECT (1))) -- fully parenthesized
-SELECT (SELECT _) -- literals removed
+SELECT (SELECT 0) -- literals removed
 SELECT (SELECT 1) -- identifiers removed
 
 parse
@@ -245,7 +245,7 @@ SELECT ((SELECT 1))
 ----
 SELECT ((SELECT 1))
 SELECT (((SELECT (1)))) -- fully parenthesized
-SELECT ((SELECT _)) -- literals removed
+SELECT ((SELECT 0)) -- literals removed
 SELECT ((SELECT 1)) -- identifiers removed
 
 parse
@@ -253,7 +253,7 @@ SELECT (SELECT ARRAY['a', 'b'])[2]
 ----
 SELECT (SELECT ARRAY['a', 'b'])[2]
 SELECT (((SELECT (ARRAY[('a'), ('b')])))[(2)]) -- fully parenthesized
-SELECT (SELECT ARRAY[_, _])[_] -- literals removed
+SELECT (SELECT ARRAY[_, _])[0] -- literals removed
 SELECT (SELECT ARRAY['a', 'b'])[2] -- identifiers removed
 
 parse
@@ -261,7 +261,7 @@ SELECT ((SELECT ARRAY['a', 'b']))[2]
 ----
 SELECT ((SELECT ARRAY['a', 'b']))[2]
 SELECT ((((SELECT (ARRAY[('a'), ('b')]))))[(2)]) -- fully parenthesized
-SELECT ((SELECT ARRAY[_, _]))[_] -- literals removed
+SELECT ((SELECT ARRAY[_, _]))[0] -- literals removed
 SELECT ((SELECT ARRAY['a', 'b']))[2] -- identifiers removed
 
 parse
@@ -269,7 +269,7 @@ SELECT ((((VALUES (1)))))
 ----
 SELECT ((((VALUES (1)))))
 SELECT (((((VALUES ((1))))))) -- fully parenthesized
-SELECT ((((VALUES (_))))) -- literals removed
+SELECT ((((VALUES (0))))) -- literals removed
 SELECT ((((VALUES (1))))) -- identifiers removed
 
 parse
@@ -277,7 +277,7 @@ SELECT EXISTS (SELECT 1)
 ----
 SELECT EXISTS (SELECT 1)
 SELECT (EXISTS (SELECT (1))) -- fully parenthesized
-SELECT EXISTS (SELECT _) -- literals removed
+SELECT EXISTS (SELECT 0) -- literals removed
 SELECT EXISTS (SELECT 1) -- identifiers removed
 
 error
@@ -293,7 +293,7 @@ SELECT (VALUES (1))
 ----
 SELECT (VALUES (1))
 SELECT ((VALUES ((1)))) -- fully parenthesized
-SELECT (VALUES (_)) -- literals removed
+SELECT (VALUES (0)) -- literals removed
 SELECT (VALUES (1)) -- identifiers removed
 
 parse
@@ -301,7 +301,7 @@ SELECT (1, 2, 3)
 ----
 SELECT (1, 2, 3)
 SELECT (((1), (2), (3))) -- fully parenthesized
-SELECT (_, _, __more1__) -- literals removed
+SELECT (0, 0, __more1__) -- literals removed
 SELECT (1, 2, 3) -- identifiers removed
 
 parse
@@ -309,7 +309,7 @@ SELECT ((1, 2, 3) AS a, b, c)
 ----
 SELECT ((1, 2, 3) AS a, b, c)
 SELECT ((((1), (2), (3)) AS a, b, c)) -- fully parenthesized
-SELECT ((_, _, __more1__) AS a, b) -- literals removed
+SELECT ((0, 0, __more1__) AS a, b) -- literals removed
 SELECT ((1, 2, 3) AS _, _, _) -- identifiers removed
 
 parse
@@ -317,7 +317,7 @@ SELECT ((1, 2, 3))
 ----
 SELECT ((1, 2, 3))
 SELECT (((((1), (2), (3))))) -- fully parenthesized
-SELECT ((_, _, __more1__)) -- literals removed
+SELECT ((0, 0, __more1__)) -- literals removed
 SELECT ((1, 2, 3)) -- identifiers removed
 
 parse
@@ -325,7 +325,7 @@ SELECT ((1, 2, 3) AS a, b, c)
 ----
 SELECT ((1, 2, 3) AS a, b, c)
 SELECT ((((1), (2), (3)) AS a, b, c)) -- fully parenthesized
-SELECT ((_, _, __more1__) AS a, b) -- literals removed
+SELECT ((0, 0, __more1__) AS a, b) -- literals removed
 SELECT ((1, 2, 3) AS _, _, _) -- identifiers removed
 
 parse
@@ -333,7 +333,7 @@ SELECT (((1, 2, 3) AS a, b, c)).a
 ----
 SELECT (((1, 2, 3) AS a, b, c)).a
 SELECT ((((((1), (2), (3)) AS a, b, c))).a) -- fully parenthesized
-SELECT (((_, _, __more1__) AS a, b)).a -- literals removed
+SELECT (((0, 0, __more1__) AS a, b)).a -- literals removed
 SELECT (((1, 2, 3) AS _, _, _))._ -- identifiers removed
 
 parse
@@ -341,7 +341,7 @@ SELECT (((1, 2, 3) AS a, b, c)).*
 ----
 SELECT (((1, 2, 3) AS a, b, c)).*
 SELECT ((((((1), (2), (3)) AS a, b, c))).*) -- fully parenthesized
-SELECT (((_, _, __more1__) AS a, b)).* -- literals removed
+SELECT (((0, 0, __more1__) AS a, b)).* -- literals removed
 SELECT (((1, 2, 3) AS _, _, _)).* -- identifiers removed
 
 parse
@@ -397,7 +397,7 @@ SELECT 0x1
 ----
 SELECT 0x1
 SELECT (0x1) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT 0x1 -- identifiers removed
 
 parse
@@ -840,7 +840,7 @@ SELECT CAST(1 AS "timestamp")
 ----
 SELECT CAST(1 AS TIMESTAMP) -- normalized!
 SELECT (CAST((1) AS TIMESTAMP)) -- fully parenthesized
-SELECT CAST(_ AS TIMESTAMP) -- literals removed
+SELECT CAST(0 AS TIMESTAMP) -- literals removed
 SELECT CAST(1 AS TIMESTAMP) -- identifiers removed
 
 parse
@@ -1223,7 +1223,7 @@ SELECT 1:::REGTYPE
 ----
 SELECT 1:::REGTYPE
 SELECT ((1):::REGTYPE) -- fully parenthesized
-SELECT _:::REGTYPE -- literals removed
+SELECT 0:::REGTYPE -- literals removed
 SELECT 1:::REGTYPE -- identifiers removed
 
 parse
@@ -1231,7 +1231,7 @@ SELECT 1:::REGPROC
 ----
 SELECT 1:::REGPROC
 SELECT ((1):::REGPROC) -- fully parenthesized
-SELECT _:::REGPROC -- literals removed
+SELECT 0:::REGPROC -- literals removed
 SELECT 1:::REGPROC -- identifiers removed
 
 parse
@@ -1239,7 +1239,7 @@ SELECT 1:::REGPROCEDURE
 ----
 SELECT 1:::REGPROCEDURE
 SELECT ((1):::REGPROCEDURE) -- fully parenthesized
-SELECT _:::REGPROCEDURE -- literals removed
+SELECT 0:::REGPROCEDURE -- literals removed
 SELECT 1:::REGPROCEDURE -- identifiers removed
 
 parse
@@ -1247,7 +1247,7 @@ SELECT 1:::REGCLASS
 ----
 SELECT 1:::REGCLASS
 SELECT ((1):::REGCLASS) -- fully parenthesized
-SELECT _:::REGCLASS -- literals removed
+SELECT 0:::REGCLASS -- literals removed
 SELECT 1:::REGCLASS -- identifiers removed
 
 parse
@@ -1255,7 +1255,7 @@ SELECT 1:::REGNAMESPACE
 ----
 SELECT 1:::REGNAMESPACE
 SELECT ((1):::REGNAMESPACE) -- fully parenthesized
-SELECT _:::REGNAMESPACE -- literals removed
+SELECT 0:::REGNAMESPACE -- literals removed
 SELECT 1:::REGNAMESPACE -- identifiers removed
 
 parse
@@ -1295,7 +1295,7 @@ SELECT 0xf0 FROM t
 ----
 SELECT 0xf0 FROM t
 SELECT (0xf0) FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT 0 FROM t -- literals removed
 SELECT 0xf0 FROM _ -- identifiers removed
 
 parse
@@ -1303,7 +1303,7 @@ SELECT 0xF0 FROM t
 ----
 SELECT 0xF0 FROM t
 SELECT (0xF0) FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT 0 FROM t -- literals removed
 SELECT 0xF0 FROM _ -- identifiers removed
 
 error
@@ -1338,7 +1338,7 @@ SELECT CAST(1 AS STRING)
 ----
 SELECT CAST(1 AS STRING)
 SELECT (CAST((1) AS STRING)) -- fully parenthesized
-SELECT CAST(_ AS STRING) -- literals removed
+SELECT CAST(0 AS STRING) -- literals removed
 SELECT CAST(1 AS STRING) -- identifiers removed
 
 parse
@@ -1346,7 +1346,7 @@ SELECT CAST(1 AS _int8)
 ----
 SELECT CAST(1 AS INT8[]) -- normalized!
 SELECT (CAST((1) AS INT8[])) -- fully parenthesized
-SELECT CAST(_ AS INT8[]) -- literals removed
+SELECT CAST(0 AS INT8[]) -- literals removed
 SELECT CAST(1 AS INT8[]) -- identifiers removed
 
 parse
@@ -1354,7 +1354,7 @@ SELECT CAST(1 AS "_int8")
 ----
 SELECT CAST(1 AS INT8[]) -- normalized!
 SELECT (CAST((1) AS INT8[])) -- fully parenthesized
-SELECT CAST(_ AS INT8[]) -- literals removed
+SELECT CAST(0 AS INT8[]) -- literals removed
 SELECT CAST(1 AS INT8[]) -- identifiers removed
 
 parse
@@ -1372,7 +1372,7 @@ SELECT ANNOTATE_TYPE(1, STRING)
 ----
 SELECT ANNOTATE_TYPE(1, STRING)
 SELECT (ANNOTATE_TYPE((1), STRING)) -- fully parenthesized
-SELECT ANNOTATE_TYPE(_, STRING) -- literals removed
+SELECT ANNOTATE_TYPE(0, STRING) -- literals removed
 SELECT ANNOTATE_TYPE(1, STRING) -- identifiers removed
 
 parse
@@ -1380,7 +1380,7 @@ SELECT (1 + 2).*
 ----
 SELECT (1 + 2).*
 SELECT ((((1) + (2))).*) -- fully parenthesized
-SELECT (_ + _).* -- literals removed
+SELECT (0 + 0).* -- literals removed
 SELECT (1 + 2).* -- identifiers removed
 
 parse
@@ -1388,7 +1388,7 @@ SELECT (1 + 2).@1
 ----
 SELECT (1 + 2).@1
 SELECT ((((1) + (2))).@1) -- fully parenthesized
-SELECT (_ + _).@1 -- literals removed
+SELECT (0 + 0).@1 -- literals removed
 SELECT (1 + 2).@1 -- identifiers removed
 
 
@@ -1397,7 +1397,7 @@ SELECT (1 + 2).col
 ----
 SELECT (1 + 2).col
 SELECT ((((1) + (2))).col) -- fully parenthesized
-SELECT (_ + _).col -- literals removed
+SELECT (0 + 0).col -- literals removed
 SELECT (1 + 2)._ -- identifiers removed
 
 error
@@ -1697,7 +1697,7 @@ SELECT 1+COALESCE(NULL, 'a', x)-ARRAY[3.14]
 ----
 SELECT (1 + COALESCE(NULL, 'a', x)) - ARRAY[3.14] -- normalized!
 SELECT ((((1) + (COALESCE((NULL), ('a'), (x))))) - (ARRAY[(3.14)])) -- fully parenthesized
-SELECT (_ + COALESCE(_, _, x)) - ARRAY[_] -- literals removed
+SELECT (0 + COALESCE(_, _, x)) - ARRAY[0] -- literals removed
 SELECT (1 + COALESCE(NULL, 'a', _)) - ARRAY[3.14] -- identifiers removed
 
 parse
@@ -1705,7 +1705,7 @@ SELECT 1 OPERATOR(+) 2, 1 OPERATOR(pg_catalog.+) 2
 ----
 SELECT 1 OPERATOR(+) 2, 1 OPERATOR(+) 2 -- normalized!
 SELECT ((1) OPERATOR(+) (2)), ((1) OPERATOR(+) (2)) -- fully parenthesized
-SELECT _ OPERATOR(+) _, _ OPERATOR(+) _ -- literals removed
+SELECT 0 OPERATOR(+) 0, 0 OPERATOR(+) 0 -- literals removed
 SELECT 1 OPERATOR(+) 2, 1 OPERATOR(+) 2 -- identifiers removed
 
 parse
@@ -1713,7 +1713,7 @@ SELECT 1 OPERATOR(<<) 2, 1 OPERATOR(pg_catalog.<<) 2
 ----
 SELECT 1 OPERATOR(<<) 2, 1 OPERATOR(<<) 2 -- normalized!
 SELECT ((1) OPERATOR(<<) (2)), ((1) OPERATOR(<<) (2)) -- fully parenthesized
-SELECT _ OPERATOR(<<) _, _ OPERATOR(<<) _ -- literals removed
+SELECT 0 OPERATOR(<<) 0, 0 OPERATOR(<<) 0 -- literals removed
 SELECT 1 OPERATOR(<<) 2, 1 OPERATOR(<<) 2 -- identifiers removed
 
 parse
@@ -1721,7 +1721,7 @@ SELECT OPERATOR(+) 1, OPERATOR(-) 1, OPERATOR(~) 1, OPERATOR(|/) 1, OPERATOR(||/
 ----
 SELECT OPERATOR(+)1, OPERATOR(-)(1), OPERATOR(~)1, OPERATOR(|/)1, OPERATOR(||/)1 -- normalized!
 SELECT (OPERATOR(+)(1)), (OPERATOR(-)((1))), (OPERATOR(~)(1)), (OPERATOR(|/)(1)), (OPERATOR(||/)(1)) -- fully parenthesized
-SELECT OPERATOR(+)_, OPERATOR(-)(_), OPERATOR(~)_, OPERATOR(|/)_, OPERATOR(||/)_ -- literals removed
+SELECT OPERATOR(+)0, OPERATOR(-)(0), OPERATOR(~)0, OPERATOR(|/)0, OPERATOR(||/)0 -- literals removed
 SELECT OPERATOR(+)1, OPERATOR(-)(1), OPERATOR(~)1, OPERATOR(|/)1, OPERATOR(||/)1 -- identifiers removed
 
 parse
@@ -1729,7 +1729,7 @@ SELECT OPERATOR ( ~ ) 1 COLLATE ident AS ILIKE FROM ident
 ----
 SELECT OPERATOR(~)1 COLLATE ident AS ilike FROM ident -- normalized!
 SELECT (OPERATOR(~)((1) COLLATE ident)) AS ilike FROM ident -- fully parenthesized
-SELECT OPERATOR(~)_ COLLATE ident AS ilike FROM ident -- literals removed
+SELECT OPERATOR(~)0 COLLATE ident AS ilike FROM ident -- literals removed
 SELECT OPERATOR(~)1 COLLATE ident AS _ FROM _ -- identifiers removed
 
 error

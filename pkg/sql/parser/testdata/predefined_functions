@@ -27,7 +27,7 @@ SELECT current_timestamp(6)
 ----
 SELECT current_timestamp(6)
 SELECT (current_timestamp((6))) -- fully parenthesized
-SELECT current_timestamp(_) -- literals removed
+SELECT current_timestamp(0) -- literals removed
 SELECT current_timestamp(6) -- identifiers removed
 
 parse
@@ -43,7 +43,7 @@ SELECT current_time(6)
 ----
 SELECT current_time(6)
 SELECT (current_time((6))) -- fully parenthesized
-SELECT current_time(_) -- literals removed
+SELECT current_time(0) -- literals removed
 SELECT current_time(6) -- identifiers removed
 
 parse
@@ -131,7 +131,7 @@ SELECT SUBSTRING('RoacH' from 2 for 3)
 ----
 SELECT substring('RoacH', 2, 3) -- normalized!
 SELECT (substring(('RoacH'), (2), (3))) -- fully parenthesized
-SELECT substring(_, _, _) -- literals removed
+SELECT substring(_, 0, 0) -- literals removed
 SELECT substring('RoacH', 2, 3) -- identifiers removed
 
 parse
@@ -139,7 +139,7 @@ SELECT SUBSTRING('RoacH' for 2 from 3)
 ----
 SELECT substring('RoacH', 3, 2) -- normalized!
 SELECT (substring(('RoacH'), (3), (2))) -- fully parenthesized
-SELECT substring(_, _, _) -- literals removed
+SELECT substring(_, 0, 0) -- literals removed
 SELECT substring('RoacH', 3, 2) -- identifiers removed
 
 parse
@@ -147,7 +147,7 @@ SELECT SUBSTRING('RoacH' from 2)
 ----
 SELECT substring('RoacH', 2) -- normalized!
 SELECT (substring(('RoacH'), (2))) -- fully parenthesized
-SELECT substring(_, _) -- literals removed
+SELECT substring(_, 0) -- literals removed
 SELECT substring('RoacH', 2) -- identifiers removed
 
 parse
@@ -155,7 +155,7 @@ SELECT SUBSTRING('RoacH' for 3)
 ----
 SELECT substring('RoacH', 1, 3) -- normalized!
 SELECT (substring(('RoacH'), (1), (3))) -- fully parenthesized
-SELECT substring(_, _, _) -- literals removed
+SELECT substring(_, _, 0) -- literals removed
 SELECT substring('RoacH', 1, 3) -- identifiers removed
 
 parse
@@ -196,7 +196,7 @@ SELECT OVERLAY('w33333rce' PLACING 'resou' FROM 3)
 ----
 SELECT overlay('w33333rce', 'resou', 3) -- normalized!
 SELECT (overlay(('w33333rce'), ('resou'), (3))) -- fully parenthesized
-SELECT overlay(_, _, _) -- literals removed
+SELECT overlay(_, _, 0) -- literals removed
 SELECT overlay('w33333rce', 'resou', 3) -- identifiers removed
 
 parse
@@ -204,7 +204,7 @@ SELECT OVERLAY('w33333rce' PLACING 'resou' FROM 3 FOR 5)
 ----
 SELECT overlay('w33333rce', 'resou', 3, 5) -- normalized!
 SELECT (overlay(('w33333rce'), ('resou'), (3), (5))) -- fully parenthesized
-SELECT overlay(_, _, _, _) -- literals removed
+SELECT overlay(_, _, 0, 0) -- literals removed
 SELECT overlay('w33333rce', 'resou', 3, 5) -- identifiers removed
 
 parse

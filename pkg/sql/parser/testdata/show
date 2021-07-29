@@ -470,7 +470,7 @@ SHOW JOB 1234
 ----
 SHOW JOBS VALUES (1234) -- normalized!
 SHOW JOBS VALUES ((1234)) -- fully parenthesized
-SHOW JOBS VALUES (_) -- literals removed
+SHOW JOBS VALUES (0) -- literals removed
 SHOW JOBS VALUES (1234) -- identifiers removed
 
 parse
@@ -478,7 +478,7 @@ EXPLAIN SHOW JOB 1234
 ----
 EXPLAIN SHOW JOBS VALUES (1234) -- normalized!
 EXPLAIN SHOW JOBS VALUES ((1234)) -- fully parenthesized
-EXPLAIN SHOW JOBS VALUES (_) -- literals removed
+EXPLAIN SHOW JOBS VALUES (0) -- literals removed
 EXPLAIN SHOW JOBS VALUES (1234) -- identifiers removed
 
 parse
@@ -518,7 +518,7 @@ SHOW CHANGEFEED JOB 1234
 ----
 SHOW CHANGEFEED JOBS VALUES (1234) -- normalized!
 SHOW CHANGEFEED JOBS VALUES ((1234)) -- fully parenthesized
-SHOW CHANGEFEED JOBS VALUES (_) -- literals removed
+SHOW CHANGEFEED JOBS VALUES (0) -- literals removed
 SHOW CHANGEFEED JOBS VALUES (1234) -- identifiers removed
 
 parse
@@ -526,7 +526,7 @@ EXPLAIN SHOW CHANGEFEED JOB 1234
 ----
 EXPLAIN SHOW CHANGEFEED JOBS VALUES (1234) -- normalized!
 EXPLAIN SHOW CHANGEFEED JOBS VALUES ((1234)) -- fully parenthesized
-EXPLAIN SHOW CHANGEFEED JOBS VALUES (_) -- literals removed
+EXPLAIN SHOW CHANGEFEED JOBS VALUES (0) -- literals removed
 EXPLAIN SHOW CHANGEFEED JOBS VALUES (1234) -- identifiers removed
 
 parse
@@ -847,7 +847,7 @@ SHOW RANGE FROM TABLE t FOR ROW (1, 2)
 ----
 SHOW RANGE FROM TABLE t FOR ROW (1, 2)
 SHOW RANGE FROM TABLE t FOR ROW ((1), (2)) -- fully parenthesized
-SHOW RANGE FROM TABLE t FOR ROW (_, _) -- literals removed
+SHOW RANGE FROM TABLE t FOR ROW (0, 0) -- literals removed
 SHOW RANGE FROM TABLE _ FOR ROW (1, 2) -- identifiers removed
 
 parse
@@ -855,7 +855,7 @@ SHOW RANGE FROM TABLE d.t FOR ROW (1, 2)
 ----
 SHOW RANGE FROM TABLE d.t FOR ROW (1, 2)
 SHOW RANGE FROM TABLE d.t FOR ROW ((1), (2)) -- fully parenthesized
-SHOW RANGE FROM TABLE d.t FOR ROW (_, _) -- literals removed
+SHOW RANGE FROM TABLE d.t FOR ROW (0, 0) -- literals removed
 SHOW RANGE FROM TABLE _._ FOR ROW (1, 2) -- identifiers removed
 
 parse
@@ -863,7 +863,7 @@ SHOW RANGE FROM INDEX d.t@i FOR ROW (1, 2)
 ----
 SHOW RANGE FROM INDEX d.t@i FOR ROW (1, 2)
 SHOW RANGE FROM INDEX d.t@i FOR ROW ((1), (2)) -- fully parenthesized
-SHOW RANGE FROM INDEX d.t@i FOR ROW (_, _) -- literals removed
+SHOW RANGE FROM INDEX d.t@i FOR ROW (0, 0) -- literals removed
 SHOW RANGE FROM INDEX _._@_ FOR ROW (1, 2) -- identifiers removed
 
 parse
@@ -871,7 +871,7 @@ SHOW RANGE FROM INDEX t@i FOR ROW (1, 2)
 ----
 SHOW RANGE FROM INDEX t@i FOR ROW (1, 2)
 SHOW RANGE FROM INDEX t@i FOR ROW ((1), (2)) -- fully parenthesized
-SHOW RANGE FROM INDEX t@i FOR ROW (_, _) -- literals removed
+SHOW RANGE FROM INDEX t@i FOR ROW (0, 0) -- literals removed
 SHOW RANGE FROM INDEX _@_ FOR ROW (1, 2) -- identifiers removed
 
 parse
@@ -879,7 +879,7 @@ SHOW RANGE FROM INDEX i FOR ROW (1, 2)
 ----
 SHOW RANGE FROM INDEX i FOR ROW (1, 2)
 SHOW RANGE FROM INDEX i FOR ROW ((1), (2)) -- fully parenthesized
-SHOW RANGE FROM INDEX i FOR ROW (_, _) -- literals removed
+SHOW RANGE FROM INDEX i FOR ROW (0, 0) -- literals removed
 SHOW RANGE FROM INDEX _ FOR ROW (1, 2) -- identifiers removed
 
 parse

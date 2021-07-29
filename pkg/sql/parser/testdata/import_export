@@ -147,6 +147,6 @@ EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, su
 ----
 EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10
 EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH delimiter = ('|') FROM SELECT (a), ((sum)((b))) FROM c WHERE ((d) = (1)) ORDER BY ((sum)((b))) DESC LIMIT (10) -- fully parenthesized
-EXPORT INTO CSV _ WITH delimiter = _ FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- literals removed
-EXPORT INTO CSV '_' WITH delimiter = '_' FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPORT INTO CSV _ WITH delimiter = _ FROM SELECT a, sum(b) FROM c WHERE d = 0 ORDER BY sum(b) DESC LIMIT 0 -- literals removed
+EXPORT INTO CSV '_' WITH delimiter = '_' FROM SELECT a, sum(b) FROM c WHERE d = 0 ORDER BY sum(b) DESC LIMIT 0 -- UNEXPECTED REPARSED AST WITHOUT LITERALS
 EXPORT INTO CSV 's3://my/path/%part%.csv' WITH _ = '|' FROM SELECT _, sum(_) FROM _ WHERE _ = 1 ORDER BY sum(_) DESC LIMIT 10 -- identifiers removed

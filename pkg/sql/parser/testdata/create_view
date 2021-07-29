@@ -27,7 +27,7 @@ CREATE VIEW a AS SELECT b.* FROM b LIMIT 5
 ----
 CREATE VIEW a AS SELECT b.* FROM b LIMIT 5
 CREATE VIEW a AS SELECT (b.*) FROM b LIMIT (5) -- fully parenthesized
-CREATE VIEW a AS SELECT b.* FROM b LIMIT _ -- literals removed
+CREATE VIEW a AS SELECT b.* FROM b LIMIT 0 -- literals removed
 CREATE VIEW _ AS SELECT _.* FROM _ LIMIT 5 -- identifiers removed
 
 parse
@@ -35,7 +35,7 @@ CREATE VIEW a AS (SELECT c, d FROM b WHERE c > 0 ORDER BY c)
 ----
 CREATE VIEW a AS (SELECT c, d FROM b WHERE c > 0 ORDER BY c)
 CREATE VIEW a AS (SELECT (c), (d) FROM b WHERE ((c) > (0)) ORDER BY (c)) -- fully parenthesized
-CREATE VIEW a AS (SELECT c, d FROM b WHERE c > _ ORDER BY c) -- literals removed
+CREATE VIEW a AS (SELECT c, d FROM b WHERE c > 0 ORDER BY c) -- literals removed
 CREATE VIEW _ AS (SELECT _, _ FROM _ WHERE _ > 0 ORDER BY _) -- identifiers removed
 
 parse
@@ -51,7 +51,7 @@ CREATE VIEW a AS VALUES (1, 'one'), (2, 'two')
 ----
 CREATE VIEW a AS VALUES (1, 'one'), (2, 'two')
 CREATE VIEW a AS VALUES ((1), ('one')), ((2), ('two')) -- fully parenthesized
-CREATE VIEW a AS VALUES (_, _), (__more1__) -- literals removed
+CREATE VIEW a AS VALUES (0, _), (__more1__) -- literals removed
 CREATE VIEW _ AS VALUES (1, 'one'), (2, 'two') -- identifiers removed
 
 parse
@@ -59,7 +59,7 @@ CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')
 ----
 CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')
 CREATE VIEW a (x, y) AS VALUES ((1), ('one')), ((2), ('two')) -- fully parenthesized
-CREATE VIEW a (x, y) AS VALUES (_, _), (__more1__) -- literals removed
+CREATE VIEW a (x, y) AS VALUES (0, _), (__more1__) -- literals removed
 CREATE VIEW _ (_, _) AS VALUES (1, 'one'), (2, 'two') -- identifiers removed
 
 parse

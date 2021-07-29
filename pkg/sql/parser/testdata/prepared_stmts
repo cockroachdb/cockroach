@@ -3,7 +3,7 @@ PREPARE a AS SELECT 1
 ----
 PREPARE a AS SELECT 1
 PREPARE a AS SELECT (1) -- fully parenthesized
-PREPARE a AS SELECT _ -- literals removed
+PREPARE a AS SELECT 0 -- literals removed
 PREPARE _ AS SELECT 1 -- identifiers removed
 
 parse
@@ -11,7 +11,7 @@ PREPARE a AS EXPLAIN SELECT 1
 ----
 PREPARE a AS EXPLAIN SELECT 1
 PREPARE a AS EXPLAIN SELECT (1) -- fully parenthesized
-PREPARE a AS EXPLAIN SELECT _ -- literals removed
+PREPARE a AS EXPLAIN SELECT 0 -- literals removed
 PREPARE _ AS EXPLAIN SELECT 1 -- identifiers removed
 
 parse
@@ -35,7 +35,7 @@ PREPARE a AS INSERT INTO a VALUES (1)
 ----
 PREPARE a AS INSERT INTO a VALUES (1)
 PREPARE a AS INSERT INTO a VALUES ((1)) -- fully parenthesized
-PREPARE a AS INSERT INTO a VALUES (_) -- literals removed
+PREPARE a AS INSERT INTO a VALUES (0) -- literals removed
 PREPARE _ AS INSERT INTO _ VALUES (1) -- identifiers removed
 
 parse
@@ -51,7 +51,7 @@ PREPARE a AS UPDATE a SET b = 1
 ----
 PREPARE a AS UPDATE a SET b = 1
 PREPARE a AS UPDATE a SET b = (1) -- fully parenthesized
-PREPARE a AS UPDATE a SET b = _ -- literals removed
+PREPARE a AS UPDATE a SET b = 0 -- literals removed
 PREPARE _ AS UPDATE _ SET _ = 1 -- identifiers removed
 
 parse
@@ -67,7 +67,7 @@ PREPARE a AS UPSERT INTO a VALUES (1)
 ----
 PREPARE a AS UPSERT INTO a VALUES (1)
 PREPARE a AS UPSERT INTO a VALUES ((1)) -- fully parenthesized
-PREPARE a AS UPSERT INTO a VALUES (_) -- literals removed
+PREPARE a AS UPSERT INTO a VALUES (0) -- literals removed
 PREPARE _ AS UPSERT INTO _ VALUES (1) -- identifiers removed
 
 parse
@@ -133,7 +133,7 @@ PREPARE a AS CANCEL QUERIES SELECT 1
 ----
 PREPARE a AS CANCEL QUERIES SELECT 1
 PREPARE a AS CANCEL QUERIES SELECT (1) -- fully parenthesized
-PREPARE a AS CANCEL QUERIES SELECT _ -- literals removed
+PREPARE a AS CANCEL QUERIES SELECT 0 -- literals removed
 PREPARE _ AS CANCEL QUERIES SELECT 1 -- identifiers removed
 
 parse
@@ -149,7 +149,7 @@ PREPARE a AS CANCEL QUERIES IF EXISTS SELECT 1
 ----
 PREPARE a AS CANCEL QUERIES IF EXISTS SELECT 1
 PREPARE a AS CANCEL QUERIES IF EXISTS SELECT (1) -- fully parenthesized
-PREPARE a AS CANCEL QUERIES IF EXISTS SELECT _ -- literals removed
+PREPARE a AS CANCEL QUERIES IF EXISTS SELECT 0 -- literals removed
 PREPARE _ AS CANCEL QUERIES IF EXISTS SELECT 1 -- identifiers removed
 
 parse
@@ -165,7 +165,7 @@ PREPARE a AS CANCEL SESSIONS SELECT 1
 ----
 PREPARE a AS CANCEL SESSIONS SELECT 1
 PREPARE a AS CANCEL SESSIONS SELECT (1) -- fully parenthesized
-PREPARE a AS CANCEL SESSIONS SELECT _ -- literals removed
+PREPARE a AS CANCEL SESSIONS SELECT 0 -- literals removed
 PREPARE _ AS CANCEL SESSIONS SELECT 1 -- identifiers removed
 
 parse
@@ -181,7 +181,7 @@ PREPARE a AS CANCEL SESSIONS IF EXISTS SELECT 1
 ----
 PREPARE a AS CANCEL SESSIONS IF EXISTS SELECT 1
 PREPARE a AS CANCEL SESSIONS IF EXISTS SELECT (1) -- fully parenthesized
-PREPARE a AS CANCEL SESSIONS IF EXISTS SELECT _ -- literals removed
+PREPARE a AS CANCEL SESSIONS IF EXISTS SELECT 0 -- literals removed
 PREPARE _ AS CANCEL SESSIONS IF EXISTS SELECT 1 -- identifiers removed
 
 parse
@@ -197,7 +197,7 @@ PREPARE a AS CANCEL JOBS SELECT 1
 ----
 PREPARE a AS CANCEL JOBS SELECT 1
 PREPARE a AS CANCEL JOBS SELECT (1) -- fully parenthesized
-PREPARE a AS CANCEL JOBS SELECT _ -- literals removed
+PREPARE a AS CANCEL JOBS SELECT 0 -- literals removed
 PREPARE _ AS CANCEL JOBS SELECT 1 -- identifiers removed
 
 parse
@@ -213,7 +213,7 @@ PREPARE a AS PAUSE JOBS SELECT 1
 ----
 PREPARE a AS PAUSE JOBS SELECT 1
 PREPARE a AS PAUSE JOBS SELECT (1) -- fully parenthesized
-PREPARE a AS PAUSE JOBS SELECT _ -- literals removed
+PREPARE a AS PAUSE JOBS SELECT 0 -- literals removed
 PREPARE _ AS PAUSE JOBS SELECT 1 -- identifiers removed
 
 parse
@@ -229,7 +229,7 @@ PREPARE a AS RESUME JOBS SELECT 1
 ----
 PREPARE a AS RESUME JOBS SELECT 1
 PREPARE a AS RESUME JOBS SELECT (1) -- fully parenthesized
-PREPARE a AS RESUME JOBS SELECT _ -- literals removed
+PREPARE a AS RESUME JOBS SELECT 0 -- literals removed
 PREPARE _ AS RESUME JOBS SELECT 1 -- identifiers removed
 
 parse
@@ -294,7 +294,7 @@ EXECUTE a (1)
 ----
 EXECUTE a (1)
 EXECUTE a ((1)) -- fully parenthesized
-EXECUTE a (_) -- literals removed
+EXECUTE a (0) -- literals removed
 EXECUTE _ (1) -- identifiers removed
 
 parse
@@ -302,7 +302,7 @@ EXECUTE a (1, 1)
 ----
 EXECUTE a (1, 1)
 EXECUTE a ((1), (1)) -- fully parenthesized
-EXECUTE a (_, _) -- literals removed
+EXECUTE a (0, 0) -- literals removed
 EXECUTE _ (1, 1) -- identifiers removed
 
 parse
@@ -310,7 +310,7 @@ EXECUTE a (1, 1) DISCARD ROWS
 ----
 EXECUTE a (1, 1) DISCARD ROWS
 EXECUTE a ((1), (1)) DISCARD ROWS -- fully parenthesized
-EXECUTE a (_, _) DISCARD ROWS -- literals removed
+EXECUTE a (0, 0) DISCARD ROWS -- literals removed
 EXECUTE _ (1, 1) DISCARD ROWS -- identifiers removed
 
 parse
@@ -318,7 +318,7 @@ EXECUTE a (1 + 1)
 ----
 EXECUTE a (1 + 1)
 EXECUTE a (((1) + (1))) -- fully parenthesized
-EXECUTE a (_ + _) -- literals removed
+EXECUTE a (0 + 0) -- literals removed
 EXECUTE _ (1 + 1) -- identifiers removed
 
 parse

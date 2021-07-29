@@ -60,7 +60,7 @@ INSERT INTO [123 AS t] VALUES (1)
 ----
 INSERT INTO [123 AS t] VALUES (1)
 INSERT INTO [123 AS t] VALUES ((1)) -- fully parenthesized
-INSERT INTO [123 AS t] VALUES (_) -- literals removed
+INSERT INTO [123 AS t] VALUES (0) -- literals removed
 INSERT INTO [123 AS _] VALUES (1) -- identifiers removed
 
 parse
@@ -68,7 +68,7 @@ INSERT INTO [123(1, 2) AS t] VALUES (1, 2)
 ----
 INSERT INTO [123(1, 2) AS t] VALUES (1, 2)
 INSERT INTO [123(1, 2) AS t] VALUES ((1), (2)) -- fully parenthesized
-INSERT INTO [123(1, 2) AS t] VALUES (_, _) -- literals removed
+INSERT INTO [123(1, 2) AS t] VALUES (0, 0) -- literals removed
 INSERT INTO [123(1, 2) AS _] VALUES (1, 2) -- identifiers removed
 
 parse
@@ -76,7 +76,7 @@ INSERT INTO [123 AS t](col1, col2) VALUES (1, 2)
 ----
 INSERT INTO [123 AS t](col1, col2) VALUES (1, 2)
 INSERT INTO [123 AS t](col1, col2) VALUES ((1), (2)) -- fully parenthesized
-INSERT INTO [123 AS t](col1, col2) VALUES (_, _) -- literals removed
+INSERT INTO [123 AS t](col1, col2) VALUES (0, 0) -- literals removed
 INSERT INTO [123 AS _](_, _) VALUES (1, 2) -- identifiers removed
 
 parse
@@ -84,7 +84,7 @@ UPSERT INTO [123 AS t] VALUES (1)
 ----
 UPSERT INTO [123 AS t] VALUES (1)
 UPSERT INTO [123 AS t] VALUES ((1)) -- fully parenthesized
-UPSERT INTO [123 AS t] VALUES (_) -- literals removed
+UPSERT INTO [123 AS t] VALUES (0) -- literals removed
 UPSERT INTO [123 AS _] VALUES (1) -- identifiers removed
 
 parse
@@ -92,7 +92,7 @@ UPDATE [123 AS t] SET b = 3
 ----
 UPDATE [123 AS t] SET b = 3
 UPDATE [123 AS t] SET b = (3) -- fully parenthesized
-UPDATE [123 AS t] SET b = _ -- literals removed
+UPDATE [123 AS t] SET b = 0 -- literals removed
 UPDATE [123 AS _] SET _ = 3 -- identifiers removed
 
 parse
@@ -100,7 +100,7 @@ UPDATE [123 AS t]@idx SET b = 3
 ----
 UPDATE [123 AS t]@idx SET b = 3
 UPDATE [123 AS t]@idx SET b = (3) -- fully parenthesized
-UPDATE [123 AS t]@idx SET b = _ -- literals removed
+UPDATE [123 AS t]@idx SET b = 0 -- literals removed
 UPDATE [123 AS _]@_ SET _ = 3 -- identifiers removed
 
 parse

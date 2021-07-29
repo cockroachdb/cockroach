@@ -75,7 +75,7 @@ DELETE FROM a WHERE a = b RETURNING 1, 2
 ----
 DELETE FROM a WHERE a = b RETURNING 1, 2
 DELETE FROM a WHERE ((a) = (b)) RETURNING (1), (2) -- fully parenthesized
-DELETE FROM a WHERE a = b RETURNING _, _ -- literals removed
+DELETE FROM a WHERE a = b RETURNING 0, 0 -- literals removed
 DELETE FROM _ WHERE _ = _ RETURNING 1, 2 -- identifiers removed
 
 parse

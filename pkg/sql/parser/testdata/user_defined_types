@@ -27,7 +27,7 @@ SELECT 1 IS OF (my.type, int4.type)
 ----
 SELECT 1 IS OF (my.type, int4.type)
 SELECT ((1) IS OF (my.type, int4.type)) -- fully parenthesized
-SELECT _ IS OF (my.type, int4.type) -- literals removed
+SELECT 0 IS OF (my.type, int4.type) -- literals removed
 SELECT 1 IS OF (_._, _._) -- identifiers removed
 
 parse
@@ -62,7 +62,7 @@ SELECT CAST(1.2 + 2.3 AS notatype)
 ----
 SELECT CAST(1.2 + 2.3 AS notatype)
 SELECT (CAST(((1.2) + (2.3)) AS notatype)) -- fully parenthesized
-SELECT CAST(_ + _ AS notatype) -- literals removed
+SELECT CAST(0 + 0 AS notatype) -- literals removed
 SELECT CAST(1.2 + 2.3 AS _) -- identifiers removed
 
 parse
@@ -70,7 +70,7 @@ SELECT ANNOTATE_TYPE(1.2 + 2.3, notatype)
 ----
 SELECT ANNOTATE_TYPE(1.2 + 2.3, notatype)
 SELECT (ANNOTATE_TYPE(((1.2) + (2.3)), notatype)) -- fully parenthesized
-SELECT ANNOTATE_TYPE(_ + _, notatype) -- literals removed
+SELECT ANNOTATE_TYPE(0 + 0, notatype) -- literals removed
 SELECT ANNOTATE_TYPE(1.2 + 2.3, _) -- identifiers removed
 
 parse
@@ -88,7 +88,7 @@ SELECT 1::notatype
 ----
 SELECT 1::notatype
 SELECT ((1)::notatype) -- fully parenthesized
-SELECT _::notatype -- literals removed
+SELECT 0::notatype -- literals removed
 SELECT 1::_ -- identifiers removed
 
 parse
@@ -96,7 +96,7 @@ SELECT 1::schem.typ
 ----
 SELECT 1::schem.typ
 SELECT ((1)::schem.typ) -- fully parenthesized
-SELECT _::schem.typ -- literals removed
+SELECT 0::schem.typ -- literals removed
 SELECT 1::_._ -- identifiers removed
 
 parse
@@ -104,7 +104,7 @@ SELECT 1::int4.typ
 ----
 SELECT 1::int4.typ
 SELECT ((1)::int4.typ) -- fully parenthesized
-SELECT _::int4.typ -- literals removed
+SELECT 0::int4.typ -- literals removed
 SELECT 1::_._ -- identifiers removed
 
 parse
@@ -112,7 +112,7 @@ SELECT 1::db.schem.typ
 ----
 SELECT 1::db.schem.typ
 SELECT ((1)::db.schem.typ) -- fully parenthesized
-SELECT _::db.schem.typ -- literals removed
+SELECT 0::db.schem.typ -- literals removed
 SELECT 1::_._._ -- identifiers removed
 
 parse
@@ -120,7 +120,7 @@ SELECT 1::db.int4.typ[]
 ----
 SELECT 1::db.int4.typ[]
 SELECT ((1)::db.int4.typ[]) -- fully parenthesized
-SELECT _::db.int4.typ[] -- literals removed
+SELECT 0::db.int4.typ[] -- literals removed
 SELECT 1::_._._[] -- identifiers removed
 
 parse
@@ -128,7 +128,7 @@ SELECT 1::db.int4.typ array [1]
 ----
 SELECT 1::db.int4.typ[] -- normalized!
 SELECT ((1)::db.int4.typ[]) -- fully parenthesized
-SELECT _::db.int4.typ[] -- literals removed
+SELECT 0::db.int4.typ[] -- literals removed
 SELECT 1::_._._[] -- identifiers removed
 
 parse
@@ -136,7 +136,7 @@ SELECT 1::int4.typ array [1]
 ----
 SELECT 1::int4.typ[] -- normalized!
 SELECT ((1)::int4.typ[]) -- fully parenthesized
-SELECT _::int4.typ[] -- literals removed
+SELECT 0::int4.typ[] -- literals removed
 SELECT 1::_._[] -- identifiers removed
 
 parse
@@ -144,7 +144,7 @@ SELECT 1::db.int4.typ array
 ----
 SELECT 1::db.int4.typ[] -- normalized!
 SELECT ((1)::db.int4.typ[]) -- fully parenthesized
-SELECT _::db.int4.typ[] -- literals removed
+SELECT 0::db.int4.typ[] -- literals removed
 SELECT 1::_._._[] -- identifiers removed
 
 parse

@@ -3,7 +3,7 @@ SET a = 3
 ----
 SET a = 3
 SET a = (3) -- fully parenthesized
-SET a = _ -- literals removed
+SET a = 0 -- literals removed
 SET a = 3 -- identifiers removed
 
 parse
@@ -11,7 +11,7 @@ EXPLAIN SET a = 3
 ----
 EXPLAIN SET a = 3
 EXPLAIN SET a = (3) -- fully parenthesized
-EXPLAIN SET a = _ -- literals removed
+EXPLAIN SET a = 0 -- literals removed
 EXPLAIN SET a = 3 -- identifiers removed
 
 parse
@@ -36,7 +36,7 @@ SET a = 3, 4
 ----
 SET a = 3, 4
 SET a = (3), (4) -- fully parenthesized
-SET a = _, _ -- literals removed
+SET a = 0, 0 -- literals removed
 SET a = 3, 4 -- identifiers removed
 
 parse
@@ -52,7 +52,7 @@ SET a = 3.0
 ----
 SET a = 3.0
 SET a = (3.0) -- fully parenthesized
-SET a = _ -- literals removed
+SET a = 0 -- literals removed
 SET a = 3.0 -- identifiers removed
 
 parse
@@ -213,7 +213,7 @@ SET CLUSTER SETTING a = 3
 ----
 SET CLUSTER SETTING a = 3
 SET CLUSTER SETTING a = (3) -- fully parenthesized
-SET CLUSTER SETTING a = _ -- literals removed
+SET CLUSTER SETTING a = 0 -- literals removed
 SET CLUSTER SETTING a = 3 -- identifiers removed
 
 parse
@@ -221,7 +221,7 @@ EXPLAIN SET CLUSTER SETTING a = 3
 ----
 EXPLAIN SET CLUSTER SETTING a = 3
 EXPLAIN SET CLUSTER SETTING a = (3) -- fully parenthesized
-EXPLAIN SET CLUSTER SETTING a = _ -- literals removed
+EXPLAIN SET CLUSTER SETTING a = 0 -- literals removed
 EXPLAIN SET CLUSTER SETTING a = 3 -- identifiers removed
 
 parse
@@ -245,7 +245,7 @@ SET CLUSTER SETTING a = 3.0
 ----
 SET CLUSTER SETTING a = 3.0
 SET CLUSTER SETTING a = (3.0) -- fully parenthesized
-SET CLUSTER SETTING a = _ -- literals removed
+SET CLUSTER SETTING a = 0 -- literals removed
 SET CLUSTER SETTING a = 3.0 -- identifiers removed
 
 parse
@@ -278,7 +278,7 @@ SET CLUSTER SETTING a TO 1
 ----
 SET CLUSTER SETTING a = 1 -- normalized!
 SET CLUSTER SETTING a = (1) -- fully parenthesized
-SET CLUSTER SETTING a = _ -- literals removed
+SET CLUSTER SETTING a = 0 -- literals removed
 SET CLUSTER SETTING a = 1 -- identifiers removed
 
 
@@ -296,7 +296,7 @@ SET ROW (1, true, NULL)
 ----
 SET ROW (1, true, NULL)
 SET ROW ((1), (true), (NULL)) -- fully parenthesized
-SET ROW (_, _, _) -- literals removed
+SET ROW (0, _, _) -- literals removed
 SET ROW (1, true, NULL) -- identifiers removed
 
 
@@ -329,7 +329,7 @@ SET TIME ZONE -7
 ----
 SET timezone = -7 -- normalized!
 SET timezone = (-7) -- fully parenthesized
-SET timezone = _ -- literals removed
+SET timezone = 0 -- literals removed
 SET timezone = -7 -- identifiers removed
 
 parse
@@ -337,7 +337,7 @@ SET TIME ZONE -7.3
 ----
 SET timezone = -7.3 -- normalized!
 SET timezone = (-7.3) -- fully parenthesized
-SET timezone = _ -- literals removed
+SET timezone = 0 -- literals removed
 SET timezone = -7.3 -- identifiers removed
 
 parse

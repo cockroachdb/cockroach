@@ -9,7 +9,7 @@ SELECT 1 FROM t -- hello world
 ----
 SELECT 1 FROM t -- normalized!
 SELECT (1) FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT 0 FROM t -- literals removed
 SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -17,7 +17,7 @@ SELECT /* hello world */ 1 FROM t
 ----
 SELECT 1 FROM t -- normalized!
 SELECT (1) FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT 0 FROM t -- literals removed
 SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -25,7 +25,7 @@ SELECT /* hello */ 1 FROM /* world */ t
 ----
 SELECT 1 FROM t -- normalized!
 SELECT (1) FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT 0 FROM t -- literals removed
 SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -97,7 +97,7 @@ SELECT 1 FROM t
 ----
 SELECT 1 FROM t
 SELECT (1) FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT 0 FROM t -- literals removed
 SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -105,7 +105,7 @@ SELECT 1, 2 FROM t
 ----
 SELECT 1, 2 FROM t
 SELECT (1), (2) FROM t -- fully parenthesized
-SELECT _, _ FROM t -- literals removed
+SELECT 0, 0 FROM t -- literals removed
 SELECT 1, 2 FROM _ -- identifiers removed
 
 parse
@@ -154,7 +154,7 @@ SELECT 1 FROM t t1
 ----
 SELECT 1 FROM t AS t1 -- normalized!
 SELECT (1) FROM t AS t1 -- fully parenthesized
-SELECT _ FROM t AS t1 -- literals removed
+SELECT 0 FROM t AS t1 -- literals removed
 SELECT 1 FROM _ AS _ -- identifiers removed
 
 parse
@@ -162,7 +162,7 @@ SELECT 1 FROM t t1 (c1, c2)
 ----
 SELECT 1 FROM t AS t1 (c1, c2) -- normalized!
 SELECT (1) FROM t AS t1 (c1, c2) -- fully parenthesized
-SELECT _ FROM t AS t1 (c1, c2) -- literals removed
+SELECT 0 FROM t AS t1 (c1, c2) -- literals removed
 SELECT 1 FROM _ AS _ (_, _) -- identifiers removed
 
 
@@ -211,7 +211,7 @@ SELECT 0.1 FROM t
 ----
 SELECT 0.1 FROM t
 SELECT (0.1) FROM t -- fully parenthesized
-SELECT _ FROM t -- literals removed
+SELECT 0 FROM t -- literals removed
 SELECT 0.1 FROM _ -- identifiers removed
 
 parse
@@ -243,7 +243,7 @@ SELECT a.b[1] FROM t
 ----
 SELECT a.b[1] FROM t
 SELECT ((a.b)[(1)]) FROM t -- fully parenthesized
-SELECT a.b[_] FROM t -- literals removed
+SELECT a.b[0] FROM t -- literals removed
 SELECT _._[1] FROM _ -- identifiers removed
 
 parse
@@ -251,7 +251,7 @@ SELECT a.b[1 + 1:4][3] FROM t
 ----
 SELECT a.b[1 + 1:4][3] FROM t
 SELECT ((a.b)[((1) + (1)):(4)][(3)]) FROM t -- fully parenthesized
-SELECT a.b[_ + _:_][_] FROM t -- literals removed
+SELECT a.b[0 + 0:0][0] FROM t -- literals removed
 SELECT _._[1 + 1:4][3] FROM _ -- identifiers removed
 
 parse
@@ -259,7 +259,7 @@ SELECT a.b[:4][3] FROM t
 ----
 SELECT a.b[:4][3] FROM t
 SELECT ((a.b)[:(4)][(3)]) FROM t -- fully parenthesized
-SELECT a.b[:_][_] FROM t -- literals removed
+SELECT a.b[:0][0] FROM t -- literals removed
 SELECT _._[:4][3] FROM _ -- identifiers removed
 
 parse
@@ -267,7 +267,7 @@ SELECT a.b[1 + 1:][3] FROM t
 ----
 SELECT a.b[1 + 1:][3] FROM t
 SELECT ((a.b)[((1) + (1)):][(3)]) FROM t -- fully parenthesized
-SELECT a.b[_ + _:][_] FROM t -- literals removed
+SELECT a.b[0 + 0:][0] FROM t -- literals removed
 SELECT _._[1 + 1:][3] FROM _ -- identifiers removed
 
 parse
@@ -275,7 +275,7 @@ SELECT a.b[:][3] FROM t
 ----
 SELECT a.b[:][3] FROM t
 SELECT ((a.b)[:][(3)]) FROM t -- fully parenthesized
-SELECT a.b[:][_] FROM t -- literals removed
+SELECT a.b[:][0] FROM t -- literals removed
 SELECT _._[:][3] FROM _ -- identifiers removed
 
 parse
@@ -429,7 +429,7 @@ SELECT a FROM t WHERE b = - 2
 ----
 SELECT a FROM t WHERE b = -2 -- normalized!
 SELECT (a) FROM t WHERE ((b) = (-2)) -- fully parenthesized
-SELECT a FROM t WHERE b = _ -- literals removed
+SELECT a FROM t WHERE b = 0 -- literals removed
 SELECT _ FROM _ WHERE _ = -2 -- identifiers removed
 
 parse
@@ -606,7 +606,7 @@ SELECT a FROM (SELECT 1 FROM t)
 ----
 SELECT a FROM (SELECT 1 FROM t)
 SELECT (a) FROM ((SELECT (1) FROM t)) -- fully parenthesized
-SELECT a FROM (SELECT _ FROM t) -- literals removed
+SELECT a FROM (SELECT 0 FROM t) -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) -- identifiers removed
 
 parse
@@ -614,7 +614,7 @@ SELECT a FROM (SELECT 1 FROM t) AS bar
 ----
 SELECT a FROM (SELECT 1 FROM t) AS bar
 SELECT (a) FROM ((SELECT (1) FROM t)) AS bar -- fully parenthesized
-SELECT a FROM (SELECT _ FROM t) AS bar -- literals removed
+SELECT a FROM (SELECT 0 FROM t) AS bar -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) AS _ -- identifiers removed
 
 parse
@@ -622,7 +622,7 @@ SELECT a FROM (SELECT 1 FROM t) AS bar (bar1)
 ----
 SELECT a FROM (SELECT 1 FROM t) AS bar (bar1)
 SELECT (a) FROM ((SELECT (1) FROM t)) AS bar (bar1) -- fully parenthesized
-SELECT a FROM (SELECT _ FROM t) AS bar (bar1) -- literals removed
+SELECT a FROM (SELECT 0 FROM t) AS bar (bar1) -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) AS _ (_) -- identifiers removed
 
 parse
@@ -630,7 +630,7 @@ SELECT a FROM (SELECT 1 FROM t) AS bar (bar1, bar2, bar3)
 ----
 SELECT a FROM (SELECT 1 FROM t) AS bar (bar1, bar2, bar3)
 SELECT (a) FROM ((SELECT (1) FROM t)) AS bar (bar1, bar2, bar3) -- fully parenthesized
-SELECT a FROM (SELECT _ FROM t) AS bar (bar1, bar2, bar3) -- literals removed
+SELECT a FROM (SELECT 0 FROM t) AS bar (bar1, bar2, bar3) -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) AS _ (_, _, _) -- identifiers removed
 
 parse
@@ -638,7 +638,7 @@ SELECT a FROM (SELECT 1 FROM t) WITH ORDINALITY
 ----
 SELECT a FROM (SELECT 1 FROM t) WITH ORDINALITY
 SELECT (a) FROM ((SELECT (1) FROM t)) WITH ORDINALITY -- fully parenthesized
-SELECT a FROM (SELECT _ FROM t) WITH ORDINALITY -- literals removed
+SELECT a FROM (SELECT 0 FROM t) WITH ORDINALITY -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) WITH ORDINALITY -- identifiers removed
 
 parse
@@ -646,7 +646,7 @@ SELECT a FROM (SELECT 1 FROM t) WITH ORDINALITY AS bar
 ----
 SELECT a FROM (SELECT 1 FROM t) WITH ORDINALITY AS bar
 SELECT (a) FROM ((SELECT (1) FROM t)) WITH ORDINALITY AS bar -- fully parenthesized
-SELECT a FROM (SELECT _ FROM t) WITH ORDINALITY AS bar -- literals removed
+SELECT a FROM (SELECT 0 FROM t) WITH ORDINALITY AS bar -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) WITH ORDINALITY AS _ -- identifiers removed
 
 parse
@@ -662,7 +662,7 @@ SELECT a FROM generate_series(1, 32)
 ----
 SELECT a FROM ROWS FROM (generate_series(1, 32)) -- normalized!
 SELECT (a) FROM ROWS FROM (((generate_series)((1), (32)))) -- fully parenthesized
-SELECT a FROM ROWS FROM (generate_series(_, _)) -- literals removed
+SELECT a FROM ROWS FROM (generate_series(0, 0)) -- literals removed
 SELECT _ FROM ROWS FROM (generate_series(1, 32)) -- identifiers removed
 
 parse
@@ -670,7 +670,7 @@ SELECT a FROM generate_series(1, 32) AS s (x)
 ----
 SELECT a FROM ROWS FROM (generate_series(1, 32)) AS s (x) -- normalized!
 SELECT (a) FROM ROWS FROM (((generate_series)((1), (32)))) AS s (x) -- fully parenthesized
-SELECT a FROM ROWS FROM (generate_series(_, _)) AS s (x) -- literals removed
+SELECT a FROM ROWS FROM (generate_series(0, 0)) AS s (x) -- literals removed
 SELECT _ FROM ROWS FROM (generate_series(1, 32)) AS _ (_) -- identifiers removed
 
 parse
@@ -678,7 +678,7 @@ SELECT a FROM generate_series(1, 32) WITH ORDINALITY AS s (x)
 ----
 SELECT a FROM ROWS FROM (generate_series(1, 32)) WITH ORDINALITY AS s (x) -- normalized!
 SELECT (a) FROM ROWS FROM (((generate_series)((1), (32)))) WITH ORDINALITY AS s (x) -- fully parenthesized
-SELECT a FROM ROWS FROM (generate_series(_, _)) WITH ORDINALITY AS s (x) -- literals removed
+SELECT a FROM ROWS FROM (generate_series(0, 0)) WITH ORDINALITY AS s (x) -- literals removed
 SELECT _ FROM ROWS FROM (generate_series(1, 32)) WITH ORDINALITY AS _ (_) -- identifiers removed
 
 
@@ -703,7 +703,7 @@ SELECT a FROM t1, LATERAL ROWS FROM (generate_series(1, t1.x))
 ----
 SELECT a FROM t1, LATERAL ROWS FROM (generate_series(1, t1.x))
 SELECT (a) FROM t1, LATERAL ROWS FROM (((generate_series)((1), (t1.x)))) -- fully parenthesized
-SELECT a FROM t1, LATERAL ROWS FROM (generate_series(_, t1.x)) -- literals removed
+SELECT a FROM t1, LATERAL ROWS FROM (generate_series(0, t1.x)) -- literals removed
 SELECT _ FROM _, LATERAL ROWS FROM (generate_series(1, _._)) -- identifiers removed
 
 parse
@@ -711,7 +711,7 @@ SELECT a FROM LATERAL generate_series(1, 32)
 ----
 SELECT a FROM LATERAL ROWS FROM (generate_series(1, 32)) -- normalized!
 SELECT (a) FROM LATERAL ROWS FROM (((generate_series)((1), (32)))) -- fully parenthesized
-SELECT a FROM LATERAL ROWS FROM (generate_series(_, _)) -- literals removed
+SELECT a FROM LATERAL ROWS FROM (generate_series(0, 0)) -- literals removed
 SELECT _ FROM LATERAL ROWS FROM (generate_series(1, 32)) -- identifiers removed
 
 
@@ -784,7 +784,7 @@ SELECT a FROM t WHERE EXISTS (SELECT 1 FROM t)
 ----
 SELECT a FROM t WHERE EXISTS (SELECT 1 FROM t)
 SELECT (a) FROM t WHERE (EXISTS (SELECT (1) FROM t)) -- fully parenthesized
-SELECT a FROM t WHERE EXISTS (SELECT _ FROM t) -- literals removed
+SELECT a FROM t WHERE EXISTS (SELECT 0 FROM t) -- literals removed
 SELECT _ FROM _ WHERE EXISTS (SELECT 1 FROM _) -- identifiers removed
 
 parse
@@ -872,7 +872,7 @@ SELECT a FROM t WHERE a = ANY (SELECT 1)
 ----
 SELECT a FROM t WHERE a = ANY (SELECT 1)
 SELECT (a) FROM t WHERE ((a) = ANY ((SELECT (1)))) -- fully parenthesized
-SELECT a FROM t WHERE a = ANY (SELECT _) -- literals removed
+SELECT a FROM t WHERE a = ANY (SELECT 0) -- literals removed
 SELECT _ FROM _ WHERE _ = ANY (SELECT 1) -- identifiers removed
 
 parse
@@ -1341,7 +1341,7 @@ SELECT (a.b) FROM t WHERE (b.c) = 2
 ----
 SELECT (a.b) FROM t WHERE (b.c) = 2
 SELECT (((a.b))) FROM t WHERE ((((b.c))) = (2)) -- fully parenthesized
-SELECT (a.b) FROM t WHERE (b.c) = _ -- literals removed
+SELECT (a.b) FROM t WHERE (b.c) = 0 -- literals removed
 SELECT (_._) FROM _ WHERE (_._) = 2 -- identifiers removed
 
 error
@@ -1470,7 +1470,7 @@ SELECT 1 FROM t GROUP BY a
 ----
 SELECT 1 FROM t GROUP BY a
 SELECT (1) FROM t GROUP BY (a) -- fully parenthesized
-SELECT _ FROM t GROUP BY a -- literals removed
+SELECT 0 FROM t GROUP BY a -- literals removed
 SELECT 1 FROM _ GROUP BY _ -- identifiers removed
 
 parse
@@ -1478,7 +1478,7 @@ SELECT 1 FROM t GROUP BY a, b
 ----
 SELECT 1 FROM t GROUP BY a, b
 SELECT (1) FROM t GROUP BY (a), (b) -- fully parenthesized
-SELECT _ FROM t GROUP BY a, b -- literals removed
+SELECT 0 FROM t GROUP BY a, b -- literals removed
 SELECT 1 FROM _ GROUP BY _, _ -- identifiers removed
 
 parse
@@ -1486,7 +1486,7 @@ SELECT 1 FROM t GROUP BY ()
 ----
 SELECT 1 FROM t GROUP BY ()
 SELECT (1) FROM t GROUP BY (()) -- fully parenthesized
-SELECT _ FROM t GROUP BY () -- literals removed
+SELECT 0 FROM t GROUP BY () -- literals removed
 SELECT 1 FROM _ GROUP BY () -- identifiers removed
 
 parse
@@ -1542,7 +1542,7 @@ SELECT a FROM t WINDOW w AS (PARTITION BY b, 1 + 2)
 ----
 SELECT a FROM t WINDOW w AS (PARTITION BY b, 1 + 2)
 SELECT (a) FROM t WINDOW w AS (PARTITION BY (b), ((1) + (2))) -- fully parenthesized
-SELECT a FROM t WINDOW w AS (PARTITION BY b, _ + _) -- literals removed
+SELECT a FROM t WINDOW w AS (PARTITION BY b, 0 + 0) -- literals removed
 SELECT _ FROM _ WINDOW _ AS (PARTITION BY _, 1 + 2) -- identifiers removed
 
 parse
@@ -1558,7 +1558,7 @@ SELECT a FROM t WINDOW w AS (ORDER BY c, 1 + 2)
 ----
 SELECT a FROM t WINDOW w AS (ORDER BY c, 1 + 2)
 SELECT (a) FROM t WINDOW w AS (ORDER BY (c), ((1) + (2))) -- fully parenthesized
-SELECT a FROM t WINDOW w AS (ORDER BY c, _ + _) -- literals removed
+SELECT a FROM t WINDOW w AS (ORDER BY c, 0 + 0) -- literals removed
 SELECT _ FROM _ WINDOW _ AS (ORDER BY _, 1 + 2) -- identifiers removed
 
 parse
@@ -1574,7 +1574,7 @@ SELECT avg(1) OVER w FROM t
 ----
 SELECT avg(1) OVER w FROM t
 SELECT ((avg)((1)) OVER w) FROM t -- fully parenthesized
-SELECT avg(_) OVER w FROM t -- literals removed
+SELECT avg(0) OVER w FROM t -- literals removed
 SELECT avg(1) OVER _ FROM _ -- identifiers removed
 
 parse
@@ -1582,7 +1582,7 @@ SELECT avg(1) OVER () FROM t
 ----
 SELECT avg(1) OVER () FROM t
 SELECT ((avg)((1)) OVER ()) FROM t -- fully parenthesized
-SELECT avg(_) OVER () FROM t -- literals removed
+SELECT avg(0) OVER () FROM t -- literals removed
 SELECT avg(1) OVER () FROM _ -- identifiers removed
 
 parse
@@ -1590,7 +1590,7 @@ SELECT avg(1) OVER (w) FROM t
 ----
 SELECT avg(1) OVER (w) FROM t
 SELECT ((avg)((1)) OVER (w)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (w) FROM t -- literals removed
+SELECT avg(0) OVER (w) FROM t -- literals removed
 SELECT avg(1) OVER (_) FROM _ -- identifiers removed
 
 parse
@@ -1598,7 +1598,7 @@ SELECT avg(1) OVER (PARTITION BY b) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b) FROM t
 SELECT ((avg)((1)) OVER (PARTITION BY (b))) FROM t -- fully parenthesized
-SELECT avg(_) OVER (PARTITION BY b) FROM t -- literals removed
+SELECT avg(0) OVER (PARTITION BY b) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _) FROM _ -- identifiers removed
 
 parse
@@ -1606,7 +1606,7 @@ SELECT avg(1) OVER (ORDER BY c) FROM t
 ----
 SELECT avg(1) OVER (ORDER BY c) FROM t
 SELECT ((avg)((1)) OVER (ORDER BY (c))) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ORDER BY c) FROM t -- literals removed
+SELECT avg(0) OVER (ORDER BY c) FROM t -- literals removed
 SELECT avg(1) OVER (ORDER BY _) FROM _ -- identifiers removed
 
 parse
@@ -1614,7 +1614,7 @@ SELECT avg(1) OVER (PARTITION BY b ORDER BY c) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c) FROM t
 SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c))) FROM t -- fully parenthesized
-SELECT avg(_) OVER (PARTITION BY b ORDER BY c) FROM t -- literals removed
+SELECT avg(0) OVER (PARTITION BY b ORDER BY c) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ ORDER BY _) FROM _ -- identifiers removed
 
 parse
@@ -1622,7 +1622,7 @@ SELECT avg(1) OVER (w PARTITION BY b ORDER BY c) FROM t
 ----
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c) FROM t
 SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c))) FROM t -- fully parenthesized
-SELECT avg(_) OVER (w PARTITION BY b ORDER BY c) FROM t -- literals removed
+SELECT avg(0) OVER (w PARTITION BY b ORDER BY c) FROM t -- literals removed
 SELECT avg(1) OVER (_ PARTITION BY _ ORDER BY _) FROM _ -- identifiers removed
 
 parse
@@ -1630,7 +1630,7 @@ SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1638,7 +1638,7 @@ SELECT avg(1) OVER (ROWS 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ROWS 1 PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (ROWS (1) PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS _ PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS 0 PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS 1 PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1646,7 +1646,7 @@ SELECT avg(1) OVER (ROWS CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (ROWS CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (ROWS CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -1654,7 +1654,7 @@ SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND _ PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 0 PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1662,7 +1662,7 @@ SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -1670,7 +1670,7 @@ SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1678,7 +1678,7 @@ SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FR
 ----
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1686,7 +1686,7 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN _ PRECEDING AND _ PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN 0 PRECEDING AND 0 PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1694,7 +1694,7 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN _ PRECEDING AND CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN 0 PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -1702,7 +1702,7 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN _ PRECEDING AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN 0 PRECEDING AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1710,7 +1710,7 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN _ PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN 0 PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1718,7 +1718,7 @@ SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -1726,7 +1726,7 @@ SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN CURRENT ROW AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN CURRENT ROW AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN CURRENT ROW AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1734,7 +1734,7 @@ SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1742,7 +1742,7 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) FOLLOWING AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN _ FOLLOWING AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN 0 FOLLOWING AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1750,7 +1750,7 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) FOLLOWING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS BETWEEN _ FOLLOWING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS BETWEEN 0 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1758,7 +1758,7 @@ SELECT avg(1) OVER (w ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (w ROWS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (w ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (w ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (w ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1766,7 +1766,7 @@ SELECT avg(1) OVER (PARTITION BY b ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b ROWS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (PARTITION BY (b) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (PARTITION BY b ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (PARTITION BY b ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1774,7 +1774,7 @@ SELECT avg(1) OVER (ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (ORDER BY (c) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ORDER BY _ ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1782,7 +1782,7 @@ SELECT avg(1) OVER (PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ ORDER BY _ ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1790,7 +1790,7 @@ SELECT avg(1) OVER (w PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (w PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (w PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ PARTITION BY _ ORDER BY _ ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1798,7 +1798,7 @@ SELECT avg(1) OVER (RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (RANGE UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1806,7 +1806,7 @@ SELECT avg(1) OVER (RANGE 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (RANGE 1 PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (RANGE (1) PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE _ PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE 0 PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE 1 PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1814,7 +1814,7 @@ SELECT avg(1) OVER (RANGE CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (RANGE CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (RANGE CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -1822,7 +1822,7 @@ SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND _ PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 0 PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1830,7 +1830,7 @@ SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -1838,7 +1838,7 @@ SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1846,7 +1846,7 @@ SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) F
 ----
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1854,7 +1854,7 @@ SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN _ PRECEDING AND _ PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN 0 PRECEDING AND 0 PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1862,7 +1862,7 @@ SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN _ PRECEDING AND CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN 0 PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -1870,7 +1870,7 @@ SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN _ PRECEDING AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN 0 PRECEDING AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1878,7 +1878,7 @@ SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN _ PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN 0 PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1886,7 +1886,7 @@ SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -1894,7 +1894,7 @@ SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN CURRENT ROW AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN CURRENT ROW AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN CURRENT ROW AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1902,7 +1902,7 @@ SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1910,7 +1910,7 @@ SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) FOLLOWING AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN _ FOLLOWING AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN 0 FOLLOWING AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1918,7 +1918,7 @@ SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) FOLLOWING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (RANGE BETWEEN _ FOLLOWING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (RANGE BETWEEN 0 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -1926,7 +1926,7 @@ SELECT avg(1) OVER (w RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (w RANGE UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (w RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (w RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (w RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1934,7 +1934,7 @@ SELECT avg(1) OVER (PARTITION BY b RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b RANGE UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (PARTITION BY (b) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (PARTITION BY b RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (PARTITION BY b RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1942,7 +1942,7 @@ SELECT avg(1) OVER (ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (ORDER BY (c) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ORDER BY _ RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1950,7 +1950,7 @@ SELECT avg(1) OVER (PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ ORDER BY _ RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1958,7 +1958,7 @@ SELECT avg(1) OVER (w PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM 
 ----
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (w PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (w PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ PARTITION BY _ ORDER BY _ RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1966,7 +1966,7 @@ SELECT avg(1) OVER (GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1974,7 +1974,7 @@ SELECT avg(1) OVER (GROUPS 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS 1 PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS (1) PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS _ PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS 0 PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS 1 PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1982,7 +1982,7 @@ SELECT avg(1) OVER (GROUPS CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (GROUPS CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (GROUPS CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -1990,7 +1990,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND _ PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 0 PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -1998,7 +1998,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -2006,7 +2006,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -2014,7 +2014,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) 
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -2022,7 +2022,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN _ PRECEDING AND _ PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN 0 PRECEDING AND 0 PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -2030,7 +2030,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN _ PRECEDING AND CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN 0 PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -2038,7 +2038,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN _ PRECEDING AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -2046,7 +2046,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN _ PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN 0 PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -2054,7 +2054,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -2062,7 +2062,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN CURRENT ROW AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN CURRENT ROW AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN CURRENT ROW AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -2070,7 +2070,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -2078,7 +2078,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) FOLLOWING AND (1) FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN _ FOLLOWING AND _ FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN 0 FOLLOWING AND 0 FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -2086,7 +2086,7 @@ SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
 SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) FOLLOWING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (GROUPS BETWEEN _ FOLLOWING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
+SELECT avg(0) OVER (GROUPS BETWEEN 0 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
 parse
@@ -2094,7 +2094,7 @@ SELECT avg(1) OVER (w GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (w GROUPS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (w GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (w GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (w GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -2102,7 +2102,7 @@ SELECT avg(1) OVER (PARTITION BY b GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b GROUPS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (PARTITION BY (b) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (PARTITION BY b GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (PARTITION BY b GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -2110,7 +2110,7 @@ SELECT avg(1) OVER (ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (ORDER BY (c) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ORDER BY _ GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -2118,7 +2118,7 @@ SELECT avg(1) OVER (PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ ORDER BY _ GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -2126,7 +2126,7 @@ SELECT avg(1) OVER (w PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM
 ----
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
 SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (w PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
+SELECT avg(0) OVER (w PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ PARTITION BY _ ORDER BY _ GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
 parse
@@ -2134,7 +2134,7 @@ SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM t
 SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM _ -- identifiers removed
 
 parse
@@ -2142,7 +2142,7 @@ SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t
 ----
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t
 SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM _ -- identifiers removed
 
 parse
@@ -2150,7 +2150,7 @@ SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t
 ----
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t
 SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES)) FROM t -- fully parenthesized
-SELECT avg(_) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t -- literals removed
+SELECT avg(0) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM _ -- identifiers removed
 
 error
@@ -2214,7 +2214,7 @@ SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c) FROM t
 ----
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c) FROM t
 SELECT ((percentile_disc)((0.50)) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthesized
-SELECT percentile_disc(_) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
+SELECT percentile_disc(0) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY _) FROM _ -- identifiers removed
 
 parse
@@ -2222,7 +2222,7 @@ SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c DESC) FROM t
 ----
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c DESC) FROM t
 SELECT ((percentile_disc)((0.50)) WITHIN GROUP (ORDER BY (c) DESC)) FROM t -- fully parenthesized
-SELECT percentile_disc(_) WITHIN GROUP (ORDER BY c DESC) FROM t -- literals removed
+SELECT percentile_disc(0) WITHIN GROUP (ORDER BY c DESC) FROM t -- literals removed
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY _ DESC) FROM _ -- identifiers removed
 
 parse
@@ -2230,7 +2230,7 @@ SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY c) FROM t
 ----
 SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY c) FROM t
 SELECT ((percentile_cont)((0.50)) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthesized
-SELECT percentile_cont(_) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
+SELECT percentile_cont(0) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
 SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY _) FROM _ -- identifiers removed
 
 parse
@@ -2238,7 +2238,7 @@ SELECT percentile_disc(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t
 ----
 SELECT percentile_disc(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t
 SELECT ((percentile_disc)((ARRAY[(0.95), (0.90)])) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthesized
-SELECT percentile_disc(ARRAY[_, _]) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
+SELECT percentile_disc(ARRAY[0, 0]) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
 SELECT percentile_disc(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY _) FROM _ -- identifiers removed
 
 parse
@@ -2246,7 +2246,7 @@ SELECT percentile_cont(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t
 ----
 SELECT percentile_cont(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t
 SELECT ((percentile_cont)((ARRAY[(0.95), (0.90)])) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthesized
-SELECT percentile_cont(ARRAY[_, _]) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
+SELECT percentile_cont(ARRAY[0, 0]) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
 SELECT percentile_cont(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY _) FROM _ -- identifiers removed
 
 error
@@ -2262,7 +2262,7 @@ SELECT avg(1) FILTER (WHERE a > b)
 ----
 SELECT avg(1) FILTER (WHERE a > b)
 SELECT ((avg)((1)) FILTER (WHERE ((a) > (b)))) -- fully parenthesized
-SELECT avg(_) FILTER (WHERE a > b) -- literals removed
+SELECT avg(0) FILTER (WHERE a > b) -- literals removed
 SELECT avg(1) FILTER (WHERE _ > _) -- identifiers removed
 
 parse
@@ -2270,7 +2270,7 @@ SELECT avg(1) FILTER (WHERE a > b) OVER (ORDER BY c)
 ----
 SELECT avg(1) FILTER (WHERE a > b) OVER (ORDER BY c)
 SELECT ((avg)((1)) FILTER (WHERE ((a) > (b))) OVER (ORDER BY (c))) -- fully parenthesized
-SELECT avg(_) FILTER (WHERE a > b) OVER (ORDER BY c) -- literals removed
+SELECT avg(0) FILTER (WHERE a > b) OVER (ORDER BY c) -- literals removed
 SELECT avg(1) FILTER (WHERE _ > _) OVER (ORDER BY _) -- identifiers removed
 
 parse
@@ -2278,7 +2278,7 @@ SELECT a FROM t UNION SELECT 1 FROM t
 ----
 SELECT a FROM t UNION SELECT 1 FROM t
 SELECT (a) FROM t UNION SELECT (1) FROM t -- fully parenthesized
-SELECT a FROM t UNION SELECT _ FROM t -- literals removed
+SELECT a FROM t UNION SELECT 0 FROM t -- literals removed
 SELECT _ FROM _ UNION SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -2286,7 +2286,7 @@ SELECT a FROM t UNION SELECT 1 FROM t UNION SELECT 1 FROM t
 ----
 SELECT a FROM t UNION SELECT 1 FROM t UNION SELECT 1 FROM t
 SELECT (a) FROM t UNION SELECT (1) FROM t UNION SELECT (1) FROM t -- fully parenthesized
-SELECT a FROM t UNION SELECT _ FROM t UNION SELECT _ FROM t -- literals removed
+SELECT a FROM t UNION SELECT 0 FROM t UNION SELECT 0 FROM t -- literals removed
 SELECT _ FROM _ UNION SELECT 1 FROM _ UNION SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -2294,7 +2294,7 @@ SELECT a FROM t UNION ALL SELECT 1 FROM t
 ----
 SELECT a FROM t UNION ALL SELECT 1 FROM t
 SELECT (a) FROM t UNION ALL SELECT (1) FROM t -- fully parenthesized
-SELECT a FROM t UNION ALL SELECT _ FROM t -- literals removed
+SELECT a FROM t UNION ALL SELECT 0 FROM t -- literals removed
 SELECT _ FROM _ UNION ALL SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -2302,7 +2302,7 @@ SELECT a FROM t UNION DISTINCT SELECT 1 FROM t
 ----
 SELECT a FROM t UNION SELECT 1 FROM t -- normalized!
 SELECT (a) FROM t UNION SELECT (1) FROM t -- fully parenthesized
-SELECT a FROM t UNION SELECT _ FROM t -- literals removed
+SELECT a FROM t UNION SELECT 0 FROM t -- literals removed
 SELECT _ FROM _ UNION SELECT 1 FROM _ -- identifiers removed
 
 
@@ -2311,7 +2311,7 @@ SELECT a FROM t EXCEPT SELECT 1 FROM t
 ----
 SELECT a FROM t EXCEPT SELECT 1 FROM t
 SELECT (a) FROM t EXCEPT SELECT (1) FROM t -- fully parenthesized
-SELECT a FROM t EXCEPT SELECT _ FROM t -- literals removed
+SELECT a FROM t EXCEPT SELECT 0 FROM t -- literals removed
 SELECT _ FROM _ EXCEPT SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -2319,7 +2319,7 @@ SELECT a FROM t EXCEPT ALL SELECT 1 FROM t
 ----
 SELECT a FROM t EXCEPT ALL SELECT 1 FROM t
 SELECT (a) FROM t EXCEPT ALL SELECT (1) FROM t -- fully parenthesized
-SELECT a FROM t EXCEPT ALL SELECT _ FROM t -- literals removed
+SELECT a FROM t EXCEPT ALL SELECT 0 FROM t -- literals removed
 SELECT _ FROM _ EXCEPT ALL SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -2327,7 +2327,7 @@ SELECT a FROM t EXCEPT DISTINCT SELECT 1 FROM t
 ----
 SELECT a FROM t EXCEPT SELECT 1 FROM t -- normalized!
 SELECT (a) FROM t EXCEPT SELECT (1) FROM t -- fully parenthesized
-SELECT a FROM t EXCEPT SELECT _ FROM t -- literals removed
+SELECT a FROM t EXCEPT SELECT 0 FROM t -- literals removed
 SELECT _ FROM _ EXCEPT SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -2335,7 +2335,7 @@ SELECT a FROM t INTERSECT SELECT 1 FROM t
 ----
 SELECT a FROM t INTERSECT SELECT 1 FROM t
 SELECT (a) FROM t INTERSECT SELECT (1) FROM t -- fully parenthesized
-SELECT a FROM t INTERSECT SELECT _ FROM t -- literals removed
+SELECT a FROM t INTERSECT SELECT 0 FROM t -- literals removed
 SELECT _ FROM _ INTERSECT SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -2343,7 +2343,7 @@ SELECT a FROM t INTERSECT ALL SELECT 1 FROM t
 ----
 SELECT a FROM t INTERSECT ALL SELECT 1 FROM t
 SELECT (a) FROM t INTERSECT ALL SELECT (1) FROM t -- fully parenthesized
-SELECT a FROM t INTERSECT ALL SELECT _ FROM t -- literals removed
+SELECT a FROM t INTERSECT ALL SELECT 0 FROM t -- literals removed
 SELECT _ FROM _ INTERSECT ALL SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -2351,7 +2351,7 @@ SELECT a FROM t INTERSECT DISTINCT SELECT 1 FROM t
 ----
 SELECT a FROM t INTERSECT SELECT 1 FROM t -- normalized!
 SELECT (a) FROM t INTERSECT SELECT (1) FROM t -- fully parenthesized
-SELECT a FROM t INTERSECT SELECT _ FROM t -- literals removed
+SELECT a FROM t INTERSECT SELECT 0 FROM t -- literals removed
 SELECT _ FROM _ INTERSECT SELECT 1 FROM _ -- identifiers removed
 
 parse
@@ -2616,7 +2616,7 @@ SELECT a FROM t FETCH FIRST 3 ROWS ONLY
 ----
 SELECT a FROM t LIMIT 3 -- normalized!
 SELECT (a) FROM t LIMIT (3) -- fully parenthesized
-SELECT a FROM t LIMIT _ -- literals removed
+SELECT a FROM t LIMIT 0 -- literals removed
 SELECT _ FROM _ LIMIT 3 -- identifiers removed
 
 parse
@@ -2624,7 +2624,7 @@ SELECT a FROM t FETCH NEXT 3 ROWS ONLY
 ----
 SELECT a FROM t LIMIT 3 -- normalized!
 SELECT (a) FROM t LIMIT (3) -- fully parenthesized
-SELECT a FROM t LIMIT _ -- literals removed
+SELECT a FROM t LIMIT 0 -- literals removed
 SELECT _ FROM _ LIMIT 3 -- identifiers removed
 
 parse
@@ -2632,7 +2632,7 @@ SELECT a FROM t FETCH FIRST ROW ONLY
 ----
 SELECT a FROM t LIMIT 1 -- normalized!
 SELECT (a) FROM t LIMIT (1) -- fully parenthesized
-SELECT a FROM t LIMIT _ -- literals removed
+SELECT a FROM t LIMIT 0 -- literals removed
 SELECT _ FROM _ LIMIT 1 -- identifiers removed
 
 parse
@@ -2640,7 +2640,7 @@ SELECT a FROM t FETCH FIRST (2 * a) ROWS ONLY
 ----
 SELECT a FROM t LIMIT (2 * a) -- normalized!
 SELECT (a) FROM t LIMIT ((((2) * (a)))) -- fully parenthesized
-SELECT a FROM t LIMIT (_ * a) -- literals removed
+SELECT a FROM t LIMIT (0 * a) -- literals removed
 SELECT _ FROM _ LIMIT (2 * _) -- identifiers removed
 
 parse
@@ -2648,7 +2648,7 @@ SELECT a FROM t OFFSET b FETCH FIRST (2 * a) ROWS ONLY
 ----
 SELECT a FROM t LIMIT (2 * a) OFFSET b -- normalized!
 SELECT (a) FROM t LIMIT ((((2) * (a)))) OFFSET (b) -- fully parenthesized
-SELECT a FROM t LIMIT (_ * a) OFFSET b -- literals removed
+SELECT a FROM t LIMIT (0 * a) OFFSET b -- literals removed
 SELECT _ FROM _ LIMIT (2 * _) OFFSET _ -- identifiers removed
 
 parse
@@ -2656,7 +2656,7 @@ SELECT a FROM t FETCH FIRST (2 * a) ROWS ONLY OFFSET b ROWS
 ----
 SELECT a FROM t LIMIT (2 * a) OFFSET b -- normalized!
 SELECT (a) FROM t LIMIT ((((2) * (a)))) OFFSET (b) -- fully parenthesized
-SELECT a FROM t LIMIT (_ * a) OFFSET b -- literals removed
+SELECT a FROM t LIMIT (0 * a) OFFSET b -- literals removed
 SELECT _ FROM _ LIMIT (2 * _) OFFSET _ -- identifiers removed
 
 parse
@@ -2672,7 +2672,7 @@ SELECT a FROM t FETCH FIRST +3 ROWS ONLY OFFSET +3 ROWS
 ----
 SELECT a FROM t LIMIT 3 OFFSET 3 -- normalized!
 SELECT (a) FROM t LIMIT (3) OFFSET (3) -- fully parenthesized
-SELECT a FROM t LIMIT _ OFFSET _ -- literals removed
+SELECT a FROM t LIMIT 0 OFFSET 0 -- literals removed
 SELECT _ FROM _ LIMIT 3 OFFSET 3 -- identifiers removed
 
 parse
@@ -2680,7 +2680,7 @@ SELECT a FROM t FETCH FIRST -3 ROWS ONLY OFFSET -3 ROWS
 ----
 SELECT a FROM t LIMIT -3 OFFSET -3 -- normalized!
 SELECT (a) FROM t LIMIT (-3) OFFSET (-3) -- fully parenthesized
-SELECT a FROM t LIMIT _ OFFSET _ -- literals removed
+SELECT a FROM t LIMIT 0 OFFSET 0 -- literals removed
 SELECT _ FROM _ LIMIT -3 OFFSET -3 -- identifiers removed
 
 parse
@@ -2688,7 +2688,7 @@ SELECT a FROM t FETCH FIRST +3.0 ROWS ONLY OFFSET +3.0 ROWS
 ----
 SELECT a FROM t LIMIT 3.0 OFFSET 3.0 -- normalized!
 SELECT (a) FROM t LIMIT (3.0) OFFSET (3.0) -- fully parenthesized
-SELECT a FROM t LIMIT _ OFFSET _ -- literals removed
+SELECT a FROM t LIMIT 0 OFFSET 0 -- literals removed
 SELECT _ FROM _ LIMIT 3.0 OFFSET 3.0 -- identifiers removed
 
 parse
@@ -2696,7 +2696,7 @@ SELECT a FROM t FETCH FIRST -3.0 ROWS ONLY OFFSET -3.0 ROWS
 ----
 SELECT a FROM t LIMIT -3.0 OFFSET -3.0 -- normalized!
 SELECT (a) FROM t LIMIT (-3.0) OFFSET (-3.0) -- fully parenthesized
-SELECT a FROM t LIMIT _ OFFSET _ -- literals removed
+SELECT a FROM t LIMIT 0 OFFSET 0 -- literals removed
 SELECT _ FROM _ LIMIT -3.0 OFFSET -3.0 -- identifiers removed
 
 
@@ -2730,7 +2730,7 @@ SELECT * FROM (VALUES (1, 2)) AS foo
 ----
 SELECT * FROM (VALUES (1, 2)) AS foo
 SELECT (*) FROM ((VALUES ((1), (2)))) AS foo -- fully parenthesized
-SELECT * FROM (VALUES (_, _)) AS foo -- literals removed
+SELECT * FROM (VALUES (0, 0)) AS foo -- literals removed
 SELECT * FROM (VALUES (1, 2)) AS _ -- identifiers removed
 
 parse
@@ -2738,7 +2738,7 @@ SELECT * FROM (VALUES (1, 2)) AS foo (a, b)
 ----
 SELECT * FROM (VALUES (1, 2)) AS foo (a, b)
 SELECT (*) FROM ((VALUES ((1), (2)))) AS foo (a, b) -- fully parenthesized
-SELECT * FROM (VALUES (_, _)) AS foo (a, b) -- literals removed
+SELECT * FROM (VALUES (0, 0)) AS foo (a, b) -- literals removed
 SELECT * FROM (VALUES (1, 2)) AS _ (_, _) -- identifiers removed
 
 parse
@@ -2763,7 +2763,7 @@ SELECT 1 FOR UPDATE
 ----
 SELECT 1 FOR UPDATE
 SELECT (1) FOR UPDATE -- fully parenthesized
-SELECT _ FOR UPDATE -- literals removed
+SELECT 0 FOR UPDATE -- literals removed
 SELECT 1 FOR UPDATE -- identifiers removed
 
 parse
@@ -2771,7 +2771,7 @@ SELECT 1 FOR NO KEY UPDATE
 ----
 SELECT 1 FOR NO KEY UPDATE
 SELECT (1) FOR NO KEY UPDATE -- fully parenthesized
-SELECT _ FOR NO KEY UPDATE -- literals removed
+SELECT 0 FOR NO KEY UPDATE -- literals removed
 SELECT 1 FOR NO KEY UPDATE -- identifiers removed
 
 parse
@@ -2779,7 +2779,7 @@ SELECT 1 FOR SHARE
 ----
 SELECT 1 FOR SHARE
 SELECT (1) FOR SHARE -- fully parenthesized
-SELECT _ FOR SHARE -- literals removed
+SELECT 0 FOR SHARE -- literals removed
 SELECT 1 FOR SHARE -- identifiers removed
 
 parse
@@ -2787,7 +2787,7 @@ SELECT 1 FOR KEY SHARE
 ----
 SELECT 1 FOR KEY SHARE
 SELECT (1) FOR KEY SHARE -- fully parenthesized
-SELECT _ FOR KEY SHARE -- literals removed
+SELECT 0 FOR KEY SHARE -- literals removed
 SELECT 1 FOR KEY SHARE -- identifiers removed
 
 parse
@@ -2795,7 +2795,7 @@ SELECT 1 FOR UPDATE OF a
 ----
 SELECT 1 FOR UPDATE OF a
 SELECT (1) FOR UPDATE OF a -- fully parenthesized
-SELECT _ FOR UPDATE OF a -- literals removed
+SELECT 0 FOR UPDATE OF a -- literals removed
 SELECT 1 FOR UPDATE OF _ -- identifiers removed
 
 parse
@@ -2803,7 +2803,7 @@ SELECT 1 FOR NO KEY UPDATE OF a, b
 ----
 SELECT 1 FOR NO KEY UPDATE OF a, b
 SELECT (1) FOR NO KEY UPDATE OF a, b -- fully parenthesized
-SELECT _ FOR NO KEY UPDATE OF a, b -- literals removed
+SELECT 0 FOR NO KEY UPDATE OF a, b -- literals removed
 SELECT 1 FOR NO KEY UPDATE OF _, _ -- identifiers removed
 
 parse
@@ -2811,7 +2811,7 @@ SELECT 1 FOR UPDATE SKIP LOCKED
 ----
 SELECT 1 FOR UPDATE SKIP LOCKED
 SELECT (1) FOR UPDATE SKIP LOCKED -- fully parenthesized
-SELECT _ FOR UPDATE SKIP LOCKED -- literals removed
+SELECT 0 FOR UPDATE SKIP LOCKED -- literals removed
 SELECT 1 FOR UPDATE SKIP LOCKED -- identifiers removed
 
 parse
@@ -2819,7 +2819,7 @@ SELECT 1 FOR NO KEY UPDATE OF a, b NOWAIT
 ----
 SELECT 1 FOR NO KEY UPDATE OF a, b NOWAIT
 SELECT (1) FOR NO KEY UPDATE OF a, b NOWAIT -- fully parenthesized
-SELECT _ FOR NO KEY UPDATE OF a, b NOWAIT -- literals removed
+SELECT 0 FOR NO KEY UPDATE OF a, b NOWAIT -- literals removed
 SELECT 1 FOR NO KEY UPDATE OF _, _ NOWAIT -- identifiers removed
 
 parse
@@ -2827,7 +2827,7 @@ SELECT 1 ORDER BY 1 FOR UPDATE
 ----
 SELECT 1 ORDER BY 1 FOR UPDATE
 SELECT (1) ORDER BY (1) FOR UPDATE -- fully parenthesized
-SELECT _ ORDER BY _ FOR UPDATE -- literals removed
+SELECT 0 ORDER BY 0 FOR UPDATE -- literals removed
 SELECT 1 ORDER BY 1 FOR UPDATE -- identifiers removed
 
 parse
@@ -2835,7 +2835,7 @@ SELECT 1 LIMIT 1 FOR UPDATE
 ----
 SELECT 1 LIMIT 1 FOR UPDATE
 SELECT (1) LIMIT (1) FOR UPDATE -- fully parenthesized
-SELECT _ LIMIT _ FOR UPDATE -- literals removed
+SELECT 0 LIMIT 0 FOR UPDATE -- literals removed
 SELECT 1 LIMIT 1 FOR UPDATE -- identifiers removed
 
 parse
@@ -2843,7 +2843,7 @@ SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE
 ----
 SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE
 SELECT (1) ORDER BY (1) LIMIT (1) FOR UPDATE -- fully parenthesized
-SELECT _ ORDER BY _ LIMIT _ FOR UPDATE -- literals removed
+SELECT 0 ORDER BY 0 LIMIT 0 FOR UPDATE -- literals removed
 SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE -- identifiers removed
 
 parse
@@ -2851,7 +2851,7 @@ SELECT 1 ORDER BY 1 FOR UPDATE LIMIT 1
 ----
 SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE -- normalized!
 SELECT (1) ORDER BY (1) LIMIT (1) FOR UPDATE -- fully parenthesized
-SELECT _ ORDER BY _ LIMIT _ FOR UPDATE -- literals removed
+SELECT 0 ORDER BY 0 LIMIT 0 FOR UPDATE -- literals removed
 SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE -- identifiers removed
 
 parse
@@ -2859,7 +2859,7 @@ SELECT 1 FOR READ ONLY
 ----
 SELECT 1 -- normalized!
 SELECT (1) -- fully parenthesized
-SELECT _ -- literals removed
+SELECT 0 -- literals removed
 SELECT 1 -- identifiers removed
 
 parse
@@ -2867,7 +2867,7 @@ SELECT 1 FOR UPDATE FOR UPDATE
 ----
 SELECT 1 FOR UPDATE FOR UPDATE
 SELECT (1) FOR UPDATE FOR UPDATE -- fully parenthesized
-SELECT _ FOR UPDATE FOR UPDATE -- literals removed
+SELECT 0 FOR UPDATE FOR UPDATE -- literals removed
 SELECT 1 FOR UPDATE FOR UPDATE -- identifiers removed
 
 parse
@@ -2875,7 +2875,7 @@ SELECT 1 FOR SHARE OF a FOR KEY SHARE SKIP LOCKED
 ----
 SELECT 1 FOR SHARE OF a FOR KEY SHARE SKIP LOCKED
 SELECT (1) FOR SHARE OF a FOR KEY SHARE SKIP LOCKED -- fully parenthesized
-SELECT _ FOR SHARE OF a FOR KEY SHARE SKIP LOCKED -- literals removed
+SELECT 0 FOR SHARE OF a FOR KEY SHARE SKIP LOCKED -- literals removed
 SELECT 1 FOR SHARE OF _ FOR KEY SHARE SKIP LOCKED -- identifiers removed
 
 

@@ -547,7 +547,7 @@ CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3)
 ----
 CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > 3) -- normalized!
 CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE ((c) > (3))) -- fully parenthesized
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > _) -- literals removed
+CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > 0) -- literals removed
 CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_) WHERE _ > 3) -- identifiers removed
 
 parse
@@ -563,7 +563,7 @@ CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1
 ----
 CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) -- normalized!
 CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthesized
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (0))) -- literals removed
 CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
 parse
@@ -587,7 +587,7 @@ CREATE TABLE a (b INT8 DEFAULT 1)
 ----
 CREATE TABLE a (b INT8 DEFAULT 1)
 CREATE TABLE a (b INT8 DEFAULT (1)) -- fully parenthesized
-CREATE TABLE a (b INT8 DEFAULT _) -- literals removed
+CREATE TABLE a (b INT8 DEFAULT 0) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT 1) -- identifiers removed
 
 parse
@@ -595,7 +595,7 @@ CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT 1)
 ----
 CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT 1)
 CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT (1)) -- fully parenthesized
-CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT _) -- literals removed
+CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT 0) -- literals removed
 CREATE TABLE _ (_ INT8 CONSTRAINT _ DEFAULT 1) -- identifiers removed
 
 parse
@@ -623,7 +623,7 @@ CREATE TABLE a (a INT8 CHECK (a > 0))
 ----
 CREATE TABLE a (a INT8 CHECK (a > 0))
 CREATE TABLE a (a INT8 CHECK (((a) > (0)))) -- fully parenthesized
-CREATE TABLE a (a INT8 CHECK (a > _)) -- literals removed
+CREATE TABLE a (a INT8 CHECK (a > 0)) -- literals removed
 CREATE TABLE _ (_ INT8 CHECK (_ > 0)) -- identifiers removed
 
 parse
@@ -631,7 +631,7 @@ CREATE TABLE a (a INT8 CONSTRAINT positive CHECK (a > 0))
 ----
 CREATE TABLE a (a INT8 CONSTRAINT positive CHECK (a > 0))
 CREATE TABLE a (a INT8 CONSTRAINT positive CHECK (((a) > (0)))) -- fully parenthesized
-CREATE TABLE a (a INT8 CONSTRAINT positive CHECK (a > _)) -- literals removed
+CREATE TABLE a (a INT8 CONSTRAINT positive CHECK (a > 0)) -- literals removed
 CREATE TABLE _ (_ INT8 CONSTRAINT _ CHECK (_ > 0)) -- identifiers removed
 
 parse
@@ -639,7 +639,7 @@ CREATE TABLE a (a INT8 DEFAULT 1 CHECK (a > 0))
 ----
 CREATE TABLE a (a INT8 DEFAULT 1 CHECK (a > 0))
 CREATE TABLE a (a INT8 DEFAULT (1) CHECK (((a) > (0)))) -- fully parenthesized
-CREATE TABLE a (a INT8 DEFAULT _ CHECK (a > _)) -- literals removed
+CREATE TABLE a (a INT8 DEFAULT 0 CHECK (a > 0)) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT 1 CHECK (_ > 0)) -- identifiers removed
 
 parse
@@ -647,7 +647,7 @@ CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 1 CHECK (a > 0))
 ----
 CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 1 CHECK (a > 0))
 CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT (1) CHECK (((a) > (0)))) -- fully parenthesized
-CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT _ CHECK (a > _)) -- literals removed
+CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 0 CHECK (a > 0)) -- literals removed
 CREATE TABLE _ (_ INT8 CONSTRAINT _ DEFAULT 1 CHECK (_ > 0)) -- identifiers removed
 
 parse
@@ -655,7 +655,7 @@ CREATE TABLE a (a INT8 DEFAULT 1 CONSTRAINT positive CHECK (a > 0))
 ----
 CREATE TABLE a (a INT8 DEFAULT 1 CONSTRAINT positive CHECK (a > 0))
 CREATE TABLE a (a INT8 DEFAULT (1) CONSTRAINT positive CHECK (((a) > (0)))) -- fully parenthesized
-CREATE TABLE a (a INT8 DEFAULT _ CONSTRAINT positive CHECK (a > _)) -- literals removed
+CREATE TABLE a (a INT8 DEFAULT 0 CONSTRAINT positive CHECK (a > 0)) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT 1 CONSTRAINT _ CHECK (_ > 0)) -- identifiers removed
 
 parse
@@ -663,7 +663,7 @@ CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 1 CONSTRAINT positive CHECK (a > 0
 ----
 CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 1 CONSTRAINT positive CHECK (a > 0))
 CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT (1) CONSTRAINT positive CHECK (((a) > (0)))) -- fully parenthesized
-CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT _ CONSTRAINT positive CHECK (a > _)) -- literals removed
+CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 0 CONSTRAINT positive CHECK (a > 0)) -- literals removed
 CREATE TABLE _ (_ INT8 CONSTRAINT _ DEFAULT 1 CONSTRAINT _ CHECK (_ > 0)) -- identifiers removed
 
 parse
@@ -671,7 +671,7 @@ CREATE TABLE a (a INT8 CONSTRAINT one CHECK (a > 0) CONSTRAINT two CHECK (a < 10
 ----
 CREATE TABLE a (a INT8 CONSTRAINT one CHECK (a > 0) CONSTRAINT two CHECK (a < 10))
 CREATE TABLE a (a INT8 CONSTRAINT one CHECK (((a) > (0))) CONSTRAINT two CHECK (((a) < (10)))) -- fully parenthesized
-CREATE TABLE a (a INT8 CONSTRAINT one CHECK (a > _) CONSTRAINT two CHECK (a < _)) -- literals removed
+CREATE TABLE a (a INT8 CONSTRAINT one CHECK (a > 0) CONSTRAINT two CHECK (a < 0)) -- literals removed
 CREATE TABLE _ (_ INT8 CONSTRAINT _ CHECK (_ > 0) CONSTRAINT _ CHECK (_ < 10)) -- identifiers removed
 
 parse
@@ -679,7 +679,7 @@ CREATE TABLE a (b INT, CHECK (b > 0) NOT VALID)
 ----
 CREATE TABLE a (b INT8, CHECK (b > 0)) -- normalized!
 CREATE TABLE a (b INT8, CHECK (((b) > (0)))) -- fully parenthesized
-CREATE TABLE a (b INT8, CHECK (b > _)) -- literals removed
+CREATE TABLE a (b INT8, CHECK (b > 0)) -- literals removed
 CREATE TABLE _ (_ INT8, CHECK (_ > 0)) -- identifiers removed
 
 
@@ -1570,7 +1570,7 @@ CREATE TABLE a (b INT8, INDEX (b) WHERE b > 3)
 ----
 CREATE TABLE a (b INT8, INDEX (b) WHERE b > 3)
 CREATE TABLE a (b INT8, INDEX (b) WHERE ((b) > (3))) -- fully parenthesized
-CREATE TABLE a (b INT8, INDEX (b) WHERE b > _) -- literals removed
+CREATE TABLE a (b INT8, INDEX (b) WHERE b > 0) -- literals removed
 CREATE TABLE _ (_ INT8, INDEX (_) WHERE _ > 3) -- identifiers removed
 
 parse
@@ -1578,7 +1578,7 @@ CREATE TABLE a (b INT8, INVERTED INDEX (b) WHERE b > 3)
 ----
 CREATE TABLE a (b INT8, INVERTED INDEX (b) WHERE b > 3)
 CREATE TABLE a (b INT8, INVERTED INDEX (b) WHERE ((b) > (3))) -- fully parenthesized
-CREATE TABLE a (b INT8, INVERTED INDEX (b) WHERE b > _) -- literals removed
+CREATE TABLE a (b INT8, INVERTED INDEX (b) WHERE b > 0) -- literals removed
 CREATE TABLE _ (_ INT8, INVERTED INDEX (_) WHERE _ > 3) -- identifiers removed
 
 parse
@@ -1762,7 +1762,7 @@ CREATE TABLE a (b INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAUL
 ----
 CREATE TABLE a (b INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))
 CREATE TABLE a (b INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN ((1), (DEFAULT)), PARTITION p2 VALUES IN ((((1), (2))), (((3), (4))))) -- fully parenthesized
-CREATE TABLE a (b INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (_, DEFAULT), PARTITION p2 VALUES IN ((_, _), (_, _))) -- literals removed
+CREATE TABLE a (b INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (0, DEFAULT), PARTITION p2 VALUES IN ((0, 0), (0, 0))) -- literals removed
 CREATE TABLE _ (_ INT8) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1, DEFAULT), PARTITION _ VALUES IN ((1, 2), (3, 4))) -- identifiers removed
 
 parse
@@ -1770,7 +1770,7 @@ CREATE TABLE a (b INT8) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (1, DE
 ----
 CREATE TABLE a (b INT8) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))
 CREATE TABLE a (b INT8) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN ((1), (DEFAULT)), PARTITION p2 VALUES IN ((((1), (2))), (((3), (4))))) -- fully parenthesized
-CREATE TABLE a (b INT8) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (_, DEFAULT), PARTITION p2 VALUES IN ((_, _), (_, _))) -- literals removed
+CREATE TABLE a (b INT8) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (0, DEFAULT), PARTITION p2 VALUES IN ((0, 0), (0, 0))) -- literals removed
 CREATE TABLE _ (_ INT8) PARTITION ALL BY LIST (_) (PARTITION _ VALUES IN (1, DEFAULT), PARTITION _ VALUES IN ((1, 2), (3, 4))) -- identifiers removed
 
 parse
@@ -1786,7 +1786,7 @@ CREATE TABLE a (b INT8, c INT8, d INT8) PARTITION BY LIST (b) (
 ----
 CREATE TABLE a (b INT8, c INT8, d INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1) PARTITION BY LIST (c) (PARTITION p1_1 VALUES IN (3), PARTITION p1_2 VALUES IN (4, 5)), PARTITION p2 VALUES IN (6) PARTITION BY RANGE (c) (PARTITION p2_1 VALUES FROM (7) TO (8) PARTITION BY LIST (d) (PARTITION p2_1_1 VALUES IN (8)))) -- normalized!
 CREATE TABLE a (b INT8, c INT8, d INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN ((1)) PARTITION BY LIST (c) (PARTITION p1_1 VALUES IN ((3)), PARTITION p1_2 VALUES IN ((4), (5))), PARTITION p2 VALUES IN ((6)) PARTITION BY RANGE (c) (PARTITION p2_1 VALUES FROM ((7)) TO ((8)) PARTITION BY LIST (d) (PARTITION p2_1_1 VALUES IN ((8))))) -- fully parenthesized
-CREATE TABLE a (b INT8, c INT8, d INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (_) PARTITION BY LIST (c) (PARTITION p1_1 VALUES IN (_), PARTITION p1_2 VALUES IN (_, _)), PARTITION p2 VALUES IN (_) PARTITION BY RANGE (c) (PARTITION p2_1 VALUES FROM (_) TO (_) PARTITION BY LIST (d) (PARTITION p2_1_1 VALUES IN (_)))) -- literals removed
+CREATE TABLE a (b INT8, c INT8, d INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (0) PARTITION BY LIST (c) (PARTITION p1_1 VALUES IN (0), PARTITION p1_2 VALUES IN (0, 0)), PARTITION p2 VALUES IN (0) PARTITION BY RANGE (c) (PARTITION p2_1 VALUES FROM (0) TO (0) PARTITION BY LIST (d) (PARTITION p2_1_1 VALUES IN (0)))) -- literals removed
 CREATE TABLE _ (_ INT8, _ INT8, _ INT8) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1) PARTITION BY LIST (_) (PARTITION _ VALUES IN (3), PARTITION _ VALUES IN (4, 5)), PARTITION _ VALUES IN (6) PARTITION BY RANGE (_) (PARTITION _ VALUES FROM (7) TO (8) PARTITION BY LIST (_) (PARTITION _ VALUES IN (8)))) -- identifiers removed
 
 parse
@@ -1797,7 +1797,7 @@ CREATE TABLE a (b INT) PARTITION BY RANGE (b) (
 ----
 CREATE TABLE a (b INT8) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (1), PARTITION p2 VALUES FROM (2, maxvalue) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (maxvalue)) -- normalized!
 CREATE TABLE a (b INT8) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM ((minvalue)) TO ((1)), PARTITION p2 VALUES FROM ((2), (maxvalue)) TO ((4), (4)), PARTITION p3 VALUES FROM ((4), (4)) TO ((maxvalue))) -- fully parenthesized
-CREATE TABLE a (b INT8) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (_), PARTITION p2 VALUES FROM (_, maxvalue) TO (_, _), PARTITION p3 VALUES FROM (_, _) TO (maxvalue)) -- literals removed
+CREATE TABLE a (b INT8) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (0), PARTITION p2 VALUES FROM (0, maxvalue) TO (0, 0), PARTITION p3 VALUES FROM (0, 0) TO (maxvalue)) -- literals removed
 CREATE TABLE _ (_ INT8) PARTITION BY RANGE (_) (PARTITION _ VALUES FROM (_) TO (1), PARTITION _ VALUES FROM (2, _) TO (4, 4), PARTITION _ VALUES FROM (4, 4) TO (_)) -- identifiers removed
 
 parse
@@ -1808,7 +1808,7 @@ CREATE TABLE a (b INT) PARTITION ALL BY RANGE (b) (
 ----
 CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (1), PARTITION p2 VALUES FROM (2, maxvalue) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (maxvalue)) -- normalized!
 CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM ((minvalue)) TO ((1)), PARTITION p2 VALUES FROM ((2), (maxvalue)) TO ((4), (4)), PARTITION p3 VALUES FROM ((4), (4)) TO ((maxvalue))) -- fully parenthesized
-CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (_), PARTITION p2 VALUES FROM (_, maxvalue) TO (_, _), PARTITION p3 VALUES FROM (_, _) TO (maxvalue)) -- literals removed
+CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (0), PARTITION p2 VALUES FROM (0, maxvalue) TO (0, 0), PARTITION p3 VALUES FROM (0, 0) TO (maxvalue)) -- literals removed
 CREATE TABLE _ (_ INT8) PARTITION ALL BY RANGE (_) (PARTITION _ VALUES FROM (_) TO (1), PARTITION _ VALUES FROM (2, _) TO (4, 4), PARTITION _ VALUES FROM (4, 4) TO (_)) -- identifiers removed
 
 
@@ -1817,7 +1817,7 @@ CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e 
 ----
 CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))
 CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN ((1))) -- fully parenthesized
-CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (_)) -- literals removed
+CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (0)) -- literals removed
 CREATE TABLE _ () INTERLEAVE IN PARENT _ (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
 
 parse
@@ -1825,7 +1825,7 @@ CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (1)
 ----
 CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (1))
 CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN ((1))) -- fully parenthesized
-CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (_)) -- literals removed
+CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (0)) -- literals removed
 CREATE TABLE IF NOT EXISTS _ () PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
 
 parse
@@ -1833,7 +1833,7 @@ CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
 ----
 CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
 CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthesized
-CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (0))) -- literals removed
 CREATE TABLE _ (INDEX (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
 parse
@@ -1841,7 +1841,7 @@ CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN 
 ----
 CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
 CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthesized
-CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (0))) -- literals removed
 CREATE TABLE _ (INVERTED INDEX (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
 parse
@@ -1849,7 +1849,7 @@ CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
 ----
 CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
 CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthesized
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (0))) -- literals removed
 CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
 parse
@@ -1857,7 +1857,7 @@ CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
 ----
 CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
 CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1))) -- fully parenthesized
-CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_)) -- literals removed
+CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (0)) -- literals removed
 CREATE INDEX ON _ (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
 
 parse
@@ -1865,7 +1865,7 @@ CREATE INVERTED INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
 ----
 CREATE INVERTED INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
 CREATE INVERTED INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1))) -- fully parenthesized
-CREATE INVERTED INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_)) -- literals removed
+CREATE INVERTED INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (0)) -- literals removed
 CREATE INVERTED INDEX ON _ (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
 
 parse
@@ -1873,7 +1873,7 @@ CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES 
 ----
 CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))
 CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN ((1))) -- fully parenthesized
-CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (_)) -- literals removed
+CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (0)) -- literals removed
 CREATE INDEX IF NOT EXISTS _ ON _ (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
 
 parse
@@ -1881,7 +1881,7 @@ ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))
 ----
 ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))
 ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN ((1))) -- fully parenthesized
-ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN (_)) -- literals removed
+ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN (0)) -- literals removed
 ALTER TABLE _ PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
 
 parse
@@ -1889,7 +1889,7 @@ ALTER TABLE a PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (1))
 ----
 ALTER TABLE a PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (1))
 ALTER TABLE a PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN ((1))) -- fully parenthesized
-ALTER TABLE a PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (_)) -- literals removed
+ALTER TABLE a PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (0)) -- literals removed
 ALTER TABLE _ PARTITION ALL BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
 
 parse
@@ -1897,7 +1897,7 @@ ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))
 ----
 ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))
 ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN ((1))) -- fully parenthesized
-ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN (_)) -- literals removed
+ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN (0)) -- literals removed
 ALTER INDEX _@_ PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
 
 parse
@@ -1937,7 +1937,7 @@ CREATE TABLE a AS SELECT * FROM b LIMIT 3
 ----
 CREATE TABLE a AS SELECT * FROM b LIMIT 3
 CREATE TABLE a AS SELECT (*) FROM b LIMIT (3) -- fully parenthesized
-CREATE TABLE a AS SELECT * FROM b LIMIT _ -- literals removed
+CREATE TABLE a AS SELECT * FROM b LIMIT 0 -- literals removed
 CREATE TABLE _ AS SELECT * FROM _ LIMIT 3 -- identifiers removed
 
 parse
@@ -1945,7 +1945,7 @@ CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b LIMIT 3
 ----
 CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b LIMIT 3
 CREATE TABLE IF NOT EXISTS a AS SELECT (*) FROM b LIMIT (3) -- fully parenthesized
-CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b LIMIT _ -- literals removed
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b LIMIT 0 -- literals removed
 CREATE TABLE IF NOT EXISTS _ AS SELECT * FROM _ LIMIT 3 -- identifiers removed
 
 parse
@@ -1953,7 +1953,7 @@ CREATE TABLE a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 ----
 CREATE TABLE a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE a AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE a AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE a AS VALUES (_, 0), (__more2__) -- literals removed
 CREATE TABLE _ AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -1961,7 +1961,7 @@ CREATE TABLE IF NOT EXISTS a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 ----
 CREATE TABLE IF NOT EXISTS a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE IF NOT EXISTS a AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE IF NOT EXISTS a AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE IF NOT EXISTS a AS VALUES (_, 0), (__more2__) -- literals removed
 CREATE TABLE IF NOT EXISTS _ AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -1969,7 +1969,7 @@ CREATE TABLE a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
 ----
 CREATE TABLE a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE a (str, num) AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE a (str, num) AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE a (str, num) AS VALUES (_, 0), (__more2__) -- literals removed
 CREATE TABLE _ (_, _) AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -1977,7 +1977,7 @@ CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('one', 1), ('two', 2), ('thre
 ----
 CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES (_, 0), (__more2__) -- literals removed
 CREATE TABLE IF NOT EXISTS _ (_, _) AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -2001,7 +2001,7 @@ CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5
 ----
 CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5
 CREATE TABLE a AS SELECT (*) FROM b UNION VALUES (('one'), (1)) ORDER BY (c) LIMIT (5) -- fully parenthesized
-CREATE TABLE a AS SELECT * FROM b UNION VALUES (_, _) ORDER BY c LIMIT _ -- literals removed
+CREATE TABLE a AS SELECT * FROM b UNION VALUES (_, 0) ORDER BY c LIMIT 0 -- literals removed
 CREATE TABLE _ AS SELECT * FROM _ UNION VALUES ('one', 1) ORDER BY _ LIMIT 5 -- identifiers removed
 
 parse
@@ -2009,7 +2009,7 @@ CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY
 ----
 CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5
 CREATE TABLE IF NOT EXISTS a AS SELECT (*) FROM b UNION VALUES (('one'), (1)) ORDER BY (c) LIMIT (5) -- fully parenthesized
-CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES (_, _) ORDER BY c LIMIT _ -- literals removed
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES (_, 0) ORDER BY c LIMIT 0 -- literals removed
 CREATE TABLE IF NOT EXISTS _ AS SELECT * FROM _ UNION VALUES ('one', 1) ORDER BY _ LIMIT 5 -- identifiers removed
 
 parse
@@ -2231,7 +2231,7 @@ CREATE TABLE arr_t (i STRING DEFAULT (('{' || 'a' || '}')::STRING[])[1]::STRING)
 ----
 CREATE TABLE arr_t (i STRING DEFAULT ((('{' || 'a') || '}')::STRING[])[1]::STRING) -- normalized!
 CREATE TABLE arr_t (i STRING DEFAULT ((((((((((('{') || ('a'))) || ('}'))))::STRING[])))[(1)])::STRING)) -- fully parenthesized
-CREATE TABLE arr_t (i STRING DEFAULT (((_ || _) || _)::STRING[])[_]::STRING) -- literals removed
+CREATE TABLE arr_t (i STRING DEFAULT (((_ || _) || _)::STRING[])[0]::STRING) -- literals removed
 CREATE TABLE _ (_ STRING DEFAULT ((('{' || 'a') || '}')::STRING[])[1]::STRING) -- identifiers removed
 
 parse
@@ -2239,7 +2239,7 @@ CREATE TABLE arr_t (i INT8 DEFAULT (('{' || '1' || '}')::INT8[])[1])
 ----
 CREATE TABLE arr_t (i INT8 DEFAULT ((('{' || '1') || '}')::INT8[])[1]) -- normalized!
 CREATE TABLE arr_t (i INT8 DEFAULT (((((((((('{') || ('1'))) || ('}'))))::INT8[])))[(1)])) -- fully parenthesized
-CREATE TABLE arr_t (i INT8 DEFAULT (((_ || _) || _)::INT8[])[_]) -- literals removed
+CREATE TABLE arr_t (i INT8 DEFAULT (((_ || _) || _)::INT8[])[0]) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT ((('{' || '1') || '}')::INT8[])[1]) -- identifiers removed
 
 parse
@@ -2247,7 +2247,7 @@ CREATE TABLE arr_t (i INT8 DEFAULT (ARRAY[1, 2, 3]::int[])[2])
 ----
 CREATE TABLE arr_t (i INT8 DEFAULT (ARRAY[1, 2, 3]::INT8[])[2]) -- normalized!
 CREATE TABLE arr_t (i INT8 DEFAULT (((((ARRAY[(1), (2), (3)])::INT8[])))[(2)])) -- fully parenthesized
-CREATE TABLE arr_t (i INT8 DEFAULT (ARRAY[_, _, __more1__]::INT8[])[_]) -- literals removed
+CREATE TABLE arr_t (i INT8 DEFAULT (ARRAY[0, 0, __more1__]::INT8[])[0]) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT (ARRAY[1, 2, 3]::INT8[])[2]) -- identifiers removed
 
 parse
@@ -2258,5 +2258,5 @@ CREATE TABLE operator_tbl (
 ----
 CREATE TABLE operator_tbl (a INT8 DEFAULT 1 OPERATOR(+) 2, b INT8 DEFAULT 1 OPERATOR(+) 2) -- normalized!
 CREATE TABLE operator_tbl (a INT8 DEFAULT ((1) OPERATOR(+) (2)), b INT8 DEFAULT ((1) OPERATOR(+) (2))) -- fully parenthesized
-CREATE TABLE operator_tbl (a INT8 DEFAULT _ OPERATOR(+) _, b INT8 DEFAULT _ OPERATOR(+) _) -- literals removed
+CREATE TABLE operator_tbl (a INT8 DEFAULT 0 OPERATOR(+) 0, b INT8 DEFAULT 0 OPERATOR(+) 0) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT 1 OPERATOR(+) 2, _ INT8 DEFAULT 1 OPERATOR(+) 2) -- identifiers removed

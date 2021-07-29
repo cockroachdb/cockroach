@@ -35,6 +35,9 @@ func (ctx *FmtCtx) formatNodeOrHideConstants(n NodeFormatter) {
 		case *Placeholder:
 			// Placeholders should be printed as placeholder markers.
 			// Deliberately empty so we format as normal.
+		case *NumVal:
+			ctx.WriteByte('0')
+			return
 		case Datum, Constant:
 			ctx.WriteByte('_')
 			return
