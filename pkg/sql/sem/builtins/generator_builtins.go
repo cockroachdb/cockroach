@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -1690,12 +1689,11 @@ const (
 // showCreateAllTablesGenerator supports the execution of
 // crdb_internal.show_create_all_tables(dbName).
 type showCreateAllTablesGenerator struct {
-	ie        sqlutil.InternalExecutor
-	txn       *kv.Txn
-	timestamp string
-	ids       []int64
-	dbName    string
-	acc       mon.BoundAccount
+	ie     sqlutil.InternalExecutor
+	txn    *kv.Txn
+	ids    []int64
+	dbName string
+	acc    mon.BoundAccount
 
 	// The following variables are updated during
 	// calls to Next() and change throughout the lifecycle of
@@ -1727,7 +1725,7 @@ func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) e
 	// We also account for the memory in the BoundAccount memory monitor in
 	// showCreateAllTablesGenerator.
 	ids, err := getTopologicallySortedTableIDs(
-		ctx, s.ie, txn, s.dbName, s.timestamp, &s.acc,
+		ctx, s.ie, txn, s.dbName, &s.acc,
 	)
 	if err != nil {
 		return err
@@ -1753,7 +1751,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 		}
 
 		createStmt, err := getCreateStatement(
-			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName,
+			ctx, s.ie, s.txn, s.ids[s.idx], s.dbName,
 		)
 		if err != nil {
 			return false, err
@@ -1799,7 +1797,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 			statementReturnType = alterValidateFKStatements
 		}
 		alterStmt, err := getAlterStatements(
-			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName, statementReturnType,
+			ctx, s.ie, s.txn, s.ids[s.idx], s.dbName, statementReturnType,
 		)
 		if err != nil {
 			return false, err
@@ -1836,15 +1834,9 @@ func makeShowCreateAllTablesGenerator(
 	ctx *tree.EvalContext, args tree.Datums,
 ) (tree.ValueGenerator, error) {
 	dbName := string(tree.MustBeDString(args[0]))
-	tsI, err := tree.MakeDTimestamp(timeutil.Now(), time.Microsecond)
-	if err != nil {
-		return nil, err
-	}
-	ts := tsI.String()
 	return &showCreateAllTablesGenerator{
-		timestamp: ts,
-		dbName:    dbName,
-		ie:        ctx.InternalExecutor.(sqlutil.InternalExecutor),
-		acc:       ctx.Mon.MakeBoundAccount(),
+		dbName: dbName,
+		ie:     ctx.InternalExecutor.(sqlutil.InternalExecutor),
+		acc:    ctx.Mon.MakeBoundAccount(),
 	}, nil
 }
