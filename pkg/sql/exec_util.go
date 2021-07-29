@@ -1163,6 +1163,11 @@ type BackupRestoreTestingKnobs struct {
 	// RunAfterExportingSpanEntry allows blocking the BACKUP job after a single
 	// span has been exported.
 	RunAfterExportingSpanEntry func(ctx context.Context)
+
+	// RestoreMemMonitor is used to overwrite the monitor used by restore during
+	// testing. It is typically
+	// This is typically the bulk mem monitor if not specified here.
+	RestoreMemMonitor *mon.BytesMonitor
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
