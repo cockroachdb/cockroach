@@ -75,8 +75,8 @@ x y
 query II colnames
 SELECT * FROM v7 ORDER BY x LIMIT 1
 ----
-x y
-2 98
+x  y
+3  97
 
 query II
 SELECT * FROM v2 ORDER BY x DESC LIMIT 1
@@ -106,7 +106,7 @@ SELECT x FROM v7
 query I
 SELECT x FROM v7 ORDER BY x LIMIT 1
 ----
-2
+3
 
 query I
 SELECT y FROM v7
@@ -117,7 +117,7 @@ SELECT y FROM v7
 query I
 SELECT y FROM v7 ORDER BY x LIMIT 1
 ----
-98
+97
 
 query IIII rowsort
 SELECT * FROM v1 AS v1 INNER JOIN v2 AS v2 ON v1.a = v2.x
@@ -166,8 +166,8 @@ x y
 query II colnames
 SELECT * FROM test.v7 ORDER BY x LIMIT 1
 ----
-x y
-2 98
+x  y
+3  97
 
 statement ok
 CREATE VIEW v1 AS SELECT x, y FROM test.v2

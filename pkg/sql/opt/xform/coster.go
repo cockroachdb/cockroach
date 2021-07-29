@@ -560,17 +560,17 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 }
 
 func (c *coster) computeTopKCost(topk *memo.TopKExpr, required *physical.Required) memo.Cost {
-
 	rel := topk.Relational()
-	inputRowCount := topk.Child(0).(memo.RelExpr).Relational().Stats.RowCount
+	inputRowCount := topk.Input.Relational().Stats.RowCount
 	outputRowCount := rel.Stats.RowCount
 
 	// Add the cost of sorting.
-	// Start with a cost of storing each row; TopK sort only stores K rows in a max heap.
+	// Start with a cost of storing each row; TopK sort only stores K rows in a
+	// max heap.
 	cost := memo.Cost(cpuCostFactor * float64(rel.OutputCols.Len()) * outputRowCount)
 
-	// TODO(harding) Do we need to account for buffering rows and spilling to disk
-	// if K is larger than what can fit in memory?
+	// Add buffering cost for the output rows.
+	cost += c.rowBufferCost(outputRowCount)
 
 	// In the worst case, there are O(N*log(K)) comparisons to compare each row in
 	// the input to the top of the max heap and sift the max heap if each row

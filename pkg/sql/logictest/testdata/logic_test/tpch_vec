@@ -550,26 +550,25 @@ EXPLAIN (VEC) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_
 │
 └ Node 1
   └ *colexec.limitOp
-    └ *colexec.topKSorter
-      └ *colexecsel.selEQFloat64Float64Op
-        └ *colexec.hashAggregator
-          └ *colexecjoin.hashJoiner
-            ├ *rowexec.joinReader
-            │ └ *colexecjoin.hashJoiner
-            │   ├ *rowexec.joinReader
-            │   │ └ *colexecsel.selSuffixBytesBytesConstOp
-            │   │   └ *colexecsel.selEQInt64Int64ConstOp
-            │   │     └ *colfetcher.ColBatchScan
-            │   └ *colexecjoin.hashJoiner
-            │     ├ *colfetcher.ColBatchScan
-            │     └ *colexecjoin.hashJoiner
-            │       ├ *colfetcher.ColBatchScan
-            │       └ *colexecsel.selEQBytesBytesConstOp
-            │         └ *colfetcher.ColBatchScan
+    └ *colexecsel.selEQFloat64Float64Op
+      └ *colexec.hashAggregator
+        └ *colexecjoin.hashJoiner
+          ├ *rowexec.joinReader
+          │ └ *colexecjoin.hashJoiner
+          │   ├ *rowexec.joinReader
+          │   │ └ *colexecsel.selSuffixBytesBytesConstOp
+          │   │   └ *colexecsel.selEQInt64Int64ConstOp
+          │   │     └ *colfetcher.ColBatchScan
+          │   └ *colexecjoin.hashJoiner
+          │     ├ *colfetcher.ColBatchScan
+          │     └ *colexecjoin.hashJoiner
+          │       ├ *colfetcher.ColBatchScan
+          │       └ *colexecsel.selEQBytesBytesConstOp
+          │         └ *colfetcher.ColBatchScan
+          └ *rowexec.joinReader
             └ *rowexec.joinReader
-              └ *rowexec.joinReader
-                └ *colexecsel.selEQBytesBytesConstOp
-                  └ *colfetcher.ColBatchScan
+              └ *colexecsel.selEQBytesBytesConstOp
+                └ *colfetcher.ColBatchScan
 
 # Query 3
 query T
@@ -577,8 +576,8 @@ EXPLAIN (VEC) SELECT l_orderkey, sum(l_extendedprice * (1 - l_discount)) AS reve
 ----
 │
 └ Node 1
-  └ *colexec.limitOp
-    └ *colexec.topKSorter
+  └ *colexec.sortOp
+    └ *colexec.limitOp
       └ *colexec.hashAggregator
         └ *rowexec.joinReader
           └ *colexecjoin.hashJoiner
@@ -739,8 +738,8 @@ EXPLAIN (VEC) SELECT c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) 
 ----
 │
 └ Node 1
-  └ *colexec.limitOp
-    └ *colexec.topKSorter
+  └ *colexec.sortOp
+    └ *colexec.limitOp
       └ *colexec.hashAggregator
         └ *colexecproj.projMultFloat64Float64Op
           └ *colexecproj.projMinusFloat64ConstFloat64Op
@@ -886,8 +885,8 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
 ----
 │
 └ Node 1
-  └ *colexec.limitOp
-    └ *colexec.topKSorter
+  └ *colexec.sortOp
+    └ *colexec.limitOp
       └ *colexec.hashAggregator
         └ *colexecjoin.hashJoiner
           ├ *colexecjoin.mergeJoinInnerOp
@@ -978,8 +977,8 @@ EXPLAIN (VEC) SELECT s_name, count(*) AS numwait FROM supplier, lineitem l1, ord
 ----
 │
 └ Node 1
-  └ *colexec.limitOp
-    └ *colexec.topKSorter
+  └ *colexec.sortOp
+    └ *colexec.limitOp
       └ *colexec.hashAggregator
         └ *rowexec.joinReader
           └ *rowexec.joinReader

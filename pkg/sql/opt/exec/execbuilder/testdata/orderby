@@ -43,16 +43,19 @@ EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 distribution: local
 vectorized: true
 ·
-• limit
-│ count: 2
+• sort
+│ order: +b
 │
-└── • sort
-    │ order: +b
+└── • limit
+    │ count: 2
     │
-    └── • scan
-          missing stats
-          table: t@primary
-          spans: FULL SCAN
+    └── • sort
+        │ order
+        │
+        └── • scan
+              missing stats
+              table: t@primary
+              spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
@@ -60,27 +63,31 @@ EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 distribution: local
 vectorized: true
 ·
-• limit
+• sort
 │ columns: (c, b)
+│ ordering: +b
 │ estimated row count: 2 (missing stats)
-│ count: 2
+│ order: +b
 │
-└── • sort
+└── • limit
     │ columns: (b, c)
-    │ ordering: +b
-    │ estimated row count: 300 (missing stats)
-    │ order: +b
+    │ estimated row count: 2 (missing stats)
+    │ count: 2
     │
-    └── • distinct
+    └── • sort
         │ columns: (b, c)
-        │ estimated row count: 300 (missing stats)
-        │ distinct on: b, c
+        │ order
         │
-        └── • scan
-              columns: (b, c)
-              estimated row count: 1,000 (missing stats)
-              table: t@primary
-              spans: FULL SCAN
+        └── • distinct
+            │ columns: (b, c)
+            │ estimated row count: 300 (missing stats)
+            │ distinct on: b, c
+            │
+            └── • scan
+                  columns: (b, c)
+                  estimated row count: 1,000 (missing stats)
+                  table: t@primary
+                  spans: FULL SCAN
 
 query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC

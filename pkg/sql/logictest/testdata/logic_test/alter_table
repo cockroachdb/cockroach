@@ -35,7 +35,7 @@ WHERE job_type = 'SCHEMA CHANGE'
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
+SCHEMA CHANGE  updating version for users table  root  succeeded  1  ·
 
 statement error pgcode 42P07 duplicate index name: "foo"
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -80,8 +80,8 @@ WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  waiting for GC TTL  0.00
-SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   NULL                0.00
+SCHEMA CHANGE  updating version for users table         root  succeeded  NULL  1.00
+SCHEMA CHANGE  updating version for role options table  root  succeeded  NULL  1.00
 
 query IIII colnames,rowsort
 SELECT * FROM t
@@ -201,8 +201,8 @@ WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE  root  running    waiting for GC TTL  0  ·
-SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  NULL                1  ·
+SCHEMA CHANGE  updating version for users table         root  succeeded  NULL  1  ·
+SCHEMA CHANGE  updating version for role options table  root  succeeded  NULL  1  ·
 
 query TTBITTBB colnames
 SHOW INDEXES FROM t
@@ -286,8 +286,8 @@ WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@t_f_idx  root  running    waiting for GC TTL  0  ·
-SCHEMA CHANGE     DROP INDEX test.public.t@t_f_idx         root  succeeded  NULL                1  ·
+SCHEMA CHANGE  updating version for users table         root  succeeded  NULL  1  ·
+SCHEMA CHANGE  updating version for role options table  root  succeeded  NULL  1  ·
 
 statement ok
 ALTER TABLE t DROP COLUMN f

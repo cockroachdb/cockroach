@@ -679,8 +679,8 @@ INSERT INTO t_39827 VALUES ('hello'), ('world'), ('a'), ('foo');
 query T
 SELECT a FROM t_39827 ORDER BY a LIMIT 2
 ----
-a
-foo
+hello
+world
 
 # Regression test for #40227, an issue with flat bytes implementation.
 statement ok

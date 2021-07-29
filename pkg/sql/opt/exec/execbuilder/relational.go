@@ -1486,41 +1486,32 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 
 // buildTopK builds a plan for a TopKOp, which is like a combined SortOp and LimitOp
 func (b *Builder) buildTopK(e memo.RelExpr) (execPlan, error) {
-	input, err := b.buildRelational(e.Child(0).(memo.RelExpr))
+	inputExpr := e.Child(0).(memo.RelExpr)
+	input, err := b.buildRelational(inputExpr)
 	if err != nil {
 		return execPlan{}, err
 	}
 	ordering := e.ProvidedPhysical().Ordering
-	inputOrdering := e.Child(0).(memo.RelExpr).ProvidedPhysical().Ordering
-	alreadyOrderedPrefix := 0
-	for i := range inputOrdering {
-		if i == len(ordering) {
-			return execPlan{}, errors.AssertionFailedf("sort ordering already provided by input")
-		}
-		if inputOrdering[i] != ordering[i] {
-			break
-		}
-		alreadyOrderedPrefix = i + 1
-	}
 
-	expr, err := b.buildScalar(nil, e.Child(1).(opt.ScalarExpr))
+	limit, err := b.buildScalar(nil, e.Child(1).(opt.ScalarExpr))
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	// TODO(harding): Eventually we should build a topk node to pass down to the exec engines.
+	// TODO(harding): Eventually we should build a topk node to pass down to the
+	// exec engines.
 	// Construct sort first.
 	node, err := b.factory.ConstructSort(
 		input.root,
 		exec.OutputOrdering(input.sqlOrdering(ordering)),
-		alreadyOrderedPrefix,
+		0,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	// Construct the limit, using the sort as the child.
-	node, err = b.factory.ConstructLimit(node, expr, nil)
+	node, err = b.factory.ConstructLimit(node, limit, nil)
 	if err != nil {
 		return execPlan{}, err
 	}

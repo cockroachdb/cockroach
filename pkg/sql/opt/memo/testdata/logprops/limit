@@ -284,6 +284,7 @@ sort
       │    │              └── const: 1 [type=int]
       │    ├── top-k
       │    │    ├── columns: t2.a:11(int!null) t2.b:12(int!null) t2.c:13(int!null) t3.a:16(int!null) t3.b:17(int!null) t3.c:18(int!null)
+      │    │    ├── ordering: +(12|17)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(11-13,16-18), (16)==(11), (13)==(18), (18)==(13), (12)==(17), (17)==(12), (11)==(16)
@@ -325,11 +326,13 @@ sort
            └── const: 1 [as="?column?":22, type=int]
 
 # TopK is applied as an exploration rule, so we can't test using build.
+# TODO(harding) use expr here. See expr_gen.go:Build() comment for examples.
 opt
 SELECT * FROM xyzs ORDER BY y LIMIT 1
 ----
 top-k
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ ├── ordering: +2
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)

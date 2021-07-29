@@ -258,7 +258,7 @@ vectorized: true
         │ count: 10
         │
         └── • sort
-            │ order: -v
+            │ order
             │
             └── • scan
                   missing stats

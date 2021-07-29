@@ -152,10 +152,11 @@ scan a@s_idx
 
 # Limit of a limit.
 opt
-select s from (select s, i from a order by s limit 10) a order by s, i limit 1
+SELECT s FROM (SELECT s, i FROM a ORDER BY s LIMIT 10) a ORDER BY s, i LIMIT 1
 ----
 top-k
  ├── columns: s:4  [hidden: i:2]
+ ├── ordering: +4,+2
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,4)
@@ -201,6 +202,7 @@ SELECT s FROM a ORDER BY f LIMIT 1
 ----
 top-k
  ├── columns: s:4  [hidden: f:3]
+ ├── ordering: +3
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3,4)
@@ -329,6 +331,7 @@ sort
  ├── ordering: +2,+3
  └── top-k
       ├── columns: k:1 u:2!null v:3
+      ├── ordering: +2,+3
       ├── cardinality: [0 - 5]
       ├── select
       │    ├── columns: k:1 u:2!null v:3
@@ -693,7 +696,7 @@ GenerateConstrainedScans (no changes)
 GenerateZigzagJoins (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
-TopK (higher cost)
+GenerateTopK (higher cost)
 --------------------------------------------------------------------------------
    explain
     ├── columns: info:7
@@ -701,11 +704,11 @@ TopK (higher cost)
   + └── top-k
          ├── columns: a:1!null b:2 c:3 d:4
   -      ├── internal-ordering: -2
+  +      ├── ordering: -2
          ├── cardinality: [0 - 5]
          ├── key: (1)
          ├── fd: (1)-->(2-4), (2-4)~~>(1)
-  -      ├── ordering: -2
-  +      ├── ordering: -2 [actual: ]
+         ├── ordering: -2
          ├── select
          │    ├── columns: a:1!null b:2 c:3 d:4
          │    ├── cardinality: [0 - 11]
@@ -835,6 +838,7 @@ sort
  ├── ordering: +2
  └── top-k
       ├── columns: k:1 u:2 v:3
+      ├── ordering: +2
       ├── cardinality: [0 - 5]
       ├── volatile
       ├── scan kuv
@@ -1197,6 +1201,7 @@ sort
  ├── ordering: +6,+7
  └── top-k
       ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
+      ├── ordering: +6,+7
       ├── cardinality: [0 - 10]
       ├── union-all
       │    ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
@@ -1457,6 +1462,7 @@ sort
  ├── ordering: +5
  └── top-k
       ├── columns: id:1!null latitude:4!null longitude:5
+      ├── ordering: +5
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(4,5)
@@ -1615,14 +1621,15 @@ scalar-group-by
            └── data1:6
 
 # ---------------------------------------------------
-# TopK
+# GenerateTopK
 # ---------------------------------------------------
 
-opt expect=TopK
+opt expect=GenerateTopK
 SELECT * FROM a ORDER BY i LIMIT 1
 ----
 top-k
  ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── ordering: +2
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
@@ -1632,7 +1639,7 @@ top-k
  │    └── fd: (1)-->(2-5)
  └── 1
 
-opt expect=TopK
+opt expect=GenerateTopK
 SELECT * FROM a ORDER BY i LIMIT 10
 ----
 sort
@@ -1643,6 +1650,7 @@ sort
  ├── ordering: +2
  └── top-k
       ├── columns: k:1!null i:2 f:3 s:4 j:5
+      ├── ordering: +2
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2-5)
@@ -1652,7 +1660,7 @@ sort
       │    └── fd: (1)-->(2-5)
       └── 10
 
-memo expect=TopK
+memo expect=GenerateTopK
 SELECT * FROM a ORDER BY k LIMIT 1
 ----
 memo (optimized, ~3KB, required=[presentation: k:1,i:2,f:3,s:4,j:5])
@@ -1669,7 +1677,8 @@ memo (optimized, ~3KB, required=[presentation: k:1,i:2,f:3,s:4,j:5])
  │         └── cost: 1126.01
  └── G3: (const 1)
 
-opt expect-not=TopK
+# GenerateTopK is not triggered when the limit is not constant
+opt expect-not=GenerateTopK
 SELECT * FROM a ORDER BY i LIMIT (SELECT COUNT(*) FROM a WHERE i < 10)
 ----
 limit
@@ -1703,21 +1712,57 @@ limit
            └── aggregations
                 └── count-rows [as=count_rows:15]
 
-opt expect=TopK
+# Nested GenerateTopK expressions
+opt expect=GenerateTopK
 SELECT * FROM (SELECT s,i FROM a ORDER BY f LIMIT 5) ORDER BY i LIMIT 2
 ----
 project
  ├── columns: s:4 i:2
  ├── cardinality: [0 - 2]
- ├── ordering: +2 [actual: ]
+ ├── ordering: +2
  └── top-k
       ├── columns: i:2 f:3 s:4
+      ├── ordering: +2
       ├── cardinality: [0 - 2]
-      ├── ordering: +2 [actual: ]
+      ├── ordering: +2
       ├── top-k
       │    ├── columns: i:2 f:3 s:4
+      │    ├── ordering: +3
       │    ├── cardinality: [0 - 5]
       │    ├── scan a@s_idx
       │    │    └── columns: i:2 f:3 s:4
       │    └── 5
       └── 2
+
+# GenerateTopK is not triggered when the limit is a negative integer
+opt expect-not=GenerateTopK
+SELECT * FROM a ORDER BY i LIMIT -1
+----
+limit
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── sort
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── ordering: +2
+ │    ├── limit hint: 1.00
+ │    └── scan a
+ │         ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-5)
+ └── -1
+
+# GenerateTopK is not triggered when there is no ordering
+opt expect-not=GenerateTopK
+SELECT * FROM a LIMIT 10
+----
+scan a
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── limit: 10
+ ├── key: (1)
+ └── fd: (1)-->(2-5)

@@ -328,9 +328,7 @@ vectorized: true
         │
         └── • sort
             │ columns: (x, v)
-            │ ordering: -v
-            │ estimated row count: 1,000 (missing stats)
-            │ order: -v
+            │ order
             │
             └── • scan
                   columns: (x, v)
@@ -404,8 +402,7 @@ vectorized: true
         │ count: 1
         │
         └── • sort
-            │ estimated row count: 2
-            │ order: +column2
+            │ order
             │
             └── • values
                   size: 2 columns, 2 rows
@@ -428,8 +425,7 @@ vectorized: true
         │ count: 1
         │
         └── • sort
-            │ estimated row count: 2
-            │ order: +column2
+            │ order
             │
             └── • values
                   size: 2 columns, 2 rows
@@ -452,8 +448,7 @@ vectorized: true
         │ count: 1
         │
         └── • sort
-            │ estimated row count: 2
-            │ order: +column2
+            │ order
             │
             └── • values
                   size: 2 columns, 2 rows
@@ -490,9 +485,7 @@ vectorized: true
             │
             └── • sort
                 │ columns: (length, "?column?", column12)
-                │ ordering: +column12
-                │ estimated row count: 1,000 (missing stats)
-                │ order: +column12
+                │ order
                 │
                 └── • render
                     │ columns: (length, "?column?", column12)

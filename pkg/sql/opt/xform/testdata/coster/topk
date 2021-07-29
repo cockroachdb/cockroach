@@ -15,6 +15,7 @@ sort
  ├── ordering: +2
  └── top-k
       ├── columns: k:1!null i:2
+      ├── ordering: +2
       ├── cardinality: [0 - 10]
       ├── stats: [rows=10]
       ├── cost: 1108.33928

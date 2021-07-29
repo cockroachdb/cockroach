@@ -1024,7 +1024,7 @@ WHERE "eventType" = 'drop_table'
 ORDER BY "timestamp" DESC, info
 LIMIT 1
 ----
-1  {"CascadeDroppedViews": ["defaultdb.public.y", "defaultdb.public.z"], "EventType": "drop_table", "Statement": "DROP TABLE defaultdb.public.x CASCADE", "TableName": "defaultdb.public.x", "Tag": "DROP TABLE", "User": "root"}
+1  {"EventType": "drop_table", "Statement": "DROP TABLE test.public.a", "TableName": "test.public.a", "Tag": "DROP TABLE", "User": "root"}
 
 statement ok
 CREATE TABLE t (i INT PRIMARY KEY, INDEX (i))
@@ -1045,7 +1045,7 @@ WHERE "eventType" = 'drop_index'
 ORDER BY "timestamp" DESC, info
 LIMIT 1
 ----
-1  {"CascadeDroppedViews": ["defaultdb.public.v", "defaultdb.public.w"], "EventType": "drop_index", "IndexName": "t_i_idx", "MutationID": 1, "Statement": "DROP INDEX defaultdb.public.t@t_i_idx CASCADE", "TableName": "defaultdb.public.t", "Tag": "DROP INDEX", "User": "root"}
+1  {"EventType": "drop_index", "IndexName": "a_foo", "MutationID": 5, "Statement": "DROP INDEX test.public.a@a_foo", "TableName": "test.public.a", "Tag": "DROP INDEX", "User": "root"}
 
 statement ok
 CREATE TABLE x (a INT PRIMARY KEY, b INT)
@@ -1066,4 +1066,4 @@ WHERE "eventType" = 'alter_table'
 ORDER BY "timestamp" DESC, info
 LIMIT 1
 ----
-1  {"CascadeDroppedViews": ["defaultdb.public.v", "defaultdb.public.vv"], "EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE defaultdb.public.x DROP COLUMN b CASCADE", "TableName": "defaultdb.public.x", "Tag": "ALTER TABLE", "User": "root"}
+1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD COLUMN val INT8", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}

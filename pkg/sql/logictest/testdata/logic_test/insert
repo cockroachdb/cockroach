@@ -386,8 +386,8 @@ query II rowsort
 INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 3 RETURNING x, v
 ----
 1  9
+8  2
 3  7
-6  4
 
 # Check that INSERT supports LIMIT (MySQL extension)
 

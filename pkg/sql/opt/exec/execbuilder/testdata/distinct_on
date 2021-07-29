@@ -635,9 +635,7 @@ vectorized: true
 │
 └── • sort
     │ columns: (x, y)
-    │ ordering: +y
-    │ estimated row count: 10 (missing stats)
-    │ order: +y
+    │ order
     │
     └── • filter
         │ columns: (x, y)
@@ -671,9 +669,7 @@ vectorized: true
         │
         └── • sort
             │ columns: (x, y)
-            │ ordering: +y
-            │ estimated row count: 10 (missing stats)
-            │ order: +y
+            │ order
             │
             └── • filter
                 │ columns: (x, y)

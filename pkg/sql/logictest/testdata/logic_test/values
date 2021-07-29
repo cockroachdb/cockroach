@@ -37,9 +37,9 @@ VALUES (1), (2, 3)
 query I
 VALUES (1), (1), (2), (3) ORDER BY 1 DESC LIMIT 3
 ----
-3
-2
 1
+1
+2
 
 query error pgcode 42703 column "z" does not exist
 VALUES (1), (1), (2), (3) ORDER BY z

@@ -24,7 +24,6 @@ func TopKCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) b
 	// line, taken from limitOrOffsetCanProvideOrdering, does this. Please confirm
 	// that this is expected behavior for topk sort.
 	return required.Intersects(expr.Private().(*props.OrderingChoice))
-
 }
 
 func TopKBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
@@ -32,5 +31,5 @@ func TopKBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Or
 	// for the output of topk, but I'm not certain this is what's supposed to be
 	// returned by .*BuildProvided or that it's what I actually implemented
 	// here...
-	return trimProvided(expr.ProvidedPhysical().Ordering, required, &expr.Relational().FuncDeps)
+	return trimProvided(expr.(*memo.TopKExpr).Ordering.ToOrdering(), required, &expr.Relational().FuncDeps)
 }

@@ -202,8 +202,8 @@ DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC LIMIT 2 RETURNING v,
 query II
 DELETE FROM unindexed ORDER BY v LIMIT 2 RETURNING k,v
 ----
-3  7
 1  9
+3  7
 
 # Check DELETE with LIMIT clause (MySQL extension)
 

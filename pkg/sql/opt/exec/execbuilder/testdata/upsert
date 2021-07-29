@@ -29,9 +29,7 @@ vectorized: true
         │
         └── • sort
             │ columns: (k, v)
-            │ ordering: -v
-            │ estimated row count: 1,000 (missing stats)
-            │ order: -v
+            │ order
             │
             └── • scan
                   columns: (k, v)
@@ -62,9 +60,7 @@ vectorized: true
         │
         └── • sort
             │ columns: (k, v)
-            │ ordering: -v
-            │ estimated row count: 1,000 (missing stats)
-            │ order: -v
+            │ order
             │
             └── • scan
                   columns: (k, v)
@@ -95,9 +91,7 @@ vectorized: true
         │
         └── • sort
             │ columns: (k, v)
-            │ ordering: -v
-            │ estimated row count: 1,000 (missing stats)
-            │ order: -v
+            │ order
             │
             └── • scan
                   columns: (k, v)
@@ -146,9 +140,7 @@ vectorized: true
                 │
                 └── • sort
                     │ columns: (k, v)
-                    │ ordering: -v
-                    │ estimated row count: 1,000 (missing stats)
-                    │ order: -v
+                    │ order
                     │
                     └── • scan
                           columns: (k, v)
