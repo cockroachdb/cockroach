@@ -518,10 +518,8 @@ func ReproductionCommandFromString(repro string) func(*Renderer) {
 		return func(*Renderer) {}
 	}
 	return func(r *Renderer) {
-		r.P(func() {
-			r.Escaped("To reproduce, try:\n")
-			r.CodeBlock("bash", repro)
-		})
+		r.Escaped("To reproduce, try:\n")
+		r.CodeBlock("bash", repro)
 	}
 }
 
