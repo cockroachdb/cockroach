@@ -356,6 +356,24 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: `requested pattern "table-stat-added" not permitted`,
 			},
 		},
+		"/cockroach.roachpb.Internal/TokenBucket": {
+			{
+				req:    &roachpb.TokenBucketRequest{TenantID: tenID.ToUint64()},
+				expErr: noError,
+			},
+			{
+				req:    &roachpb.TokenBucketRequest{TenantID: roachpb.SystemTenantID.ToUint64()},
+				expErr: `token bucket request for tenant system not permitted`,
+			},
+			{
+				req:    &roachpb.TokenBucketRequest{TenantID: 13},
+				expErr: `token bucket request for tenant 13 not permitted`,
+			},
+			{
+				req:    &roachpb.TokenBucketRequest{},
+				expErr: `token bucket request with unspecified tenant not permitted`,
+			},
+		},
 		"/cockroach.rpc.Heartbeat/Ping": {
 			{req: &PingRequest{}, expErr: noError},
 		},

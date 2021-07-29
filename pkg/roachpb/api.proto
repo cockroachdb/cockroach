@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
+import "errorspb/errors.proto";
 import "kv/kvserver/concurrency/lock/locking.proto";
 import "kv/kvserver/readsummary/rspb/summary.proto";
 import "roachpb/data.proto";
@@ -2258,6 +2259,8 @@ message GossipSubscriptionEvent {
 }
 
 message TokenBucketRequest {
+  uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID"];
+
   message Consumption {
     double r_u = 1;
     uint64 read_requests = 2;
@@ -2275,6 +2278,11 @@ message TokenBucketRequest {
 
 message TokenBucketResponse {
   // TODO(radu): add fields.
+
+  // If non-empty, the other fields will be empty. This field stores any error
+  // that occurs on the server, allowing us to differentiate between those and
+  // RPC errors.
+  errorspb.EncodedError error = 1 [(gogoproto.nullable) = false];
 }
 
 

@@ -81,6 +81,7 @@ func RegisterTests(r registry.Registry) {
 	registerRestoreNodeShutdown(r)
 	registerRestore(r)
 	registerRoachmart(r)
+	registerRoachtest(r)
 	registerRubyPG(r)
 	registerSchemaChangeBulkIngest(r)
 	registerSchemaChangeDatabaseVersionUpgrade(r)

@@ -64,6 +64,8 @@ type testRunner struct {
 		// the registry uses for running tests. It implies skipClusterWipeOnAttach.
 		skipClusterStopOnAttach bool
 		skipClusterWipeOnAttach bool
+		// disableIssue disables posting GitHub issues for test failures.
+		disableIssue bool
 	}
 
 	status struct {
@@ -105,6 +107,7 @@ func newTestRunner(cr *clusterRegistry, buildVersion version.Version) *testRunne
 		buildVersion: buildVersion,
 	}
 	r.config.skipClusterWipeOnAttach = !clusterWipe
+	r.config.disableIssue = disableIssue
 	r.workersMu.workers = make(map[string]*workerStatus)
 	return r
 }
@@ -468,10 +471,10 @@ func (r *testRunner) runWorker(
 			artifactsDir = filepath.Join(base, runSuffix)
 			logPath = filepath.Join(artifactsDir, "test.log")
 
-			// Map artifacts/TestFoo/** => TestFoo/**, i.e. collect the artifacts
+			// Map artifacts/TestFoo/run_?/** => TestFoo/run_?/**, i.e. collect the artifacts
 			// for this test exactly as they are laid out on disk (when the time
 			// comes).
-			artifactsSpec = fmt.Sprintf("%s/** => %s", base, escapedTestName)
+			artifactsSpec = fmt.Sprintf("%s/%s/** => %s/%s", base, runSuffix, escapedTestName, runSuffix)
 		}
 		testL, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {
@@ -497,7 +500,7 @@ func (r *testRunner) runWorker(
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
 		var success bool
-		success, err = r.runTest(ctx, t, testToRun.runNum, c, testRunnerLogPath, stdout, testL)
+		success, err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, testRunnerLogPath, stdout, testL)
 		if err != nil {
 			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
 			// Mark the test as failed if it isn't already.
@@ -607,6 +610,7 @@ func (r *testRunner) runTest(
 	ctx context.Context,
 	t *testImpl,
 	runNum int,
+	runCount int,
 	c *clusterImpl,
 	testRunnerLogPath string,
 	stdout io.Writer,
@@ -616,10 +620,14 @@ func (r *testRunner) runTest(
 		return false, fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.Spec().(*registry.TestSpec).Skip)
 	}
 
+	runID := t.Name()
+	if runCount > 1 {
+		runID += fmt.Sprintf("#%d", runNum)
+	}
 	if teamCity {
-		shout(ctx, l, stdout, "##teamcity[testStarted name='%s' flowId='%s']", t.Name(), t.Name())
+		shout(ctx, l, stdout, "##teamcity[testStarted name='%s' flowId='%s']", t.Name(), runID)
 	} else {
-		shout(ctx, l, stdout, "=== RUN   %s", t.Name())
+		shout(ctx, l, stdout, "=== RUN   %s", runID)
 	}
 
 	r.status.Lock()
@@ -653,8 +661,7 @@ func (r *testRunner) runTest(
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-					t.Name(), teamCityEscape(output), t.Name(),
-				)
+					t.Name(), teamCityEscape(output), runID)
 
 				// Copy a snapshot of the testrunner's log to the test's artifacts dir
 				// so that we collect it below.
@@ -664,7 +671,7 @@ func (r *testRunner) runTest(
 				}
 			}
 
-			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
+			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
 
 			issueOutput := output
 			if t.timedOut() {
@@ -672,13 +679,13 @@ func (r *testRunner) runTest(
 			}
 			r.maybePostGithubIssue(ctx, l, t, stdout, issueOutput)
 		} else {
-			shout(ctx, l, stdout, "--- PASS: %s (%s)", t.Name(), durationStr)
+			shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 			// TeamCity regards the test as successful.
 		}
 
 		if teamCity {
-			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), t.Name())
+			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), runID)
 
 			// Zip the artifacts. This improves the TeamCity UX where we can navigate
 			// through zip files just fine, but we can't download subtrees of the
@@ -882,9 +889,13 @@ func (r *testRunner) runTest(
 }
 
 func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
-	// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 	opts := issues.DefaultOptionsFromEnv()
-	return opts.CanPost() && opts.IsReleaseBranch() && t.Spec().(*registry.TestSpec).Run != nil && t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
+	return !r.config.disableIssue &&
+		opts.CanPost() &&
+		opts.IsReleaseBranch() &&
+		t.Spec().(*registry.TestSpec).Run != nil &&
+		// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
+		t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
 }
 
 func (r *testRunner) maybePostGithubIssue(
