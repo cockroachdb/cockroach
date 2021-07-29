@@ -27,7 +27,7 @@ func (p *planner) SetTransaction(ctx context.Context, n *tree.SetTransaction) (p
 		if err != nil {
 			return nil, err
 		}
-		p.semaCtx.AsOfSystemTime = &asOf
+		p.extendedEvalCtx.AsOfSystemTime = &asOf
 		asOfTs = asOf.Timestamp
 	}
 	if n.Modes.Deferrable == tree.Deferrable {

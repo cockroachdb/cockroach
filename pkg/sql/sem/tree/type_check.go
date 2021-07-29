@@ -47,15 +47,6 @@ type SemaContext struct {
 	// TypeResolver manages resolving type names into *types.T's.
 	TypeResolver TypeReferenceResolver
 
-	// AsOfSystemTime denotes the explicit AS OF SYSTEM TIME timestamp for the
-	// query, if any. If the query is not an AS OF SYSTEM TIME query,
-	// AsOfSystemTime is nil.
-	// TODO(knz): we may want to support table readers at arbitrary
-	// timestamps, so that each FROM clause can have its own
-	// timestamp. In that case, the timestamp would not be set
-	// globally for the entire txn and this field would not be needed.
-	AsOfSystemTime *AsOfSystemTime
-
 	// TableNameResolver is used to resolve the fully qualified
 	// name of a table given its ID.
 	TableNameResolver QualifiedNameResolver

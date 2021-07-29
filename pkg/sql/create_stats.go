@@ -512,7 +512,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		evalCtx.Txn = txn
 
 		if details.AsOf != nil {
-			p.SemaCtx().AsOfSystemTime = &tree.AsOfSystemTime{Timestamp: *details.AsOf}
+			p.ExtendedEvalContext().AsOfSystemTime = &tree.AsOfSystemTime{Timestamp: *details.AsOf}
 			p.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
 			txn.SetFixedTimestamp(ctx, *details.AsOf)
 		}
