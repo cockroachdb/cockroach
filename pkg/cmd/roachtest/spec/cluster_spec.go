@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -51,6 +52,8 @@ type ClusterSpec struct {
 	// FileSystem determines the underlying FileSystem
 	// to be used. The default is ext4.
 	FileSystem fileSystemType
+
+	RandomlyUseZfs bool
 }
 
 // MakeClusterSpec makes a ClusterSpec.
@@ -201,6 +204,11 @@ func (s *ClusterSpec) Args(extra ...string) ([]string, error) {
 			)
 		}
 		args = append(args, "--filesystem=zfs")
+	} else if s.RandomlyUseZfs && s.Cloud == GCE {
+		rng, _ := randutil.NewPseudoRand()
+		if rng.Float64() <= 0.2 {
+			args = append(args, "--filesystem=zfs")
+		}
 	}
 
 	if s.Geo {
