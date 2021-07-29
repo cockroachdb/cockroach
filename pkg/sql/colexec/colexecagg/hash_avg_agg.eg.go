@@ -79,10 +79,10 @@ type avgInt16HashAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull     uint64
+	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt16HashAgg{}
@@ -122,7 +122,7 @@ func (a *avgInt16HashAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -143,7 +143,7 @@ func (a *avgInt16HashAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -160,7 +160,7 @@ func (a *avgInt16HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -174,7 +174,7 @@ func (a *avgInt16HashAgg) Flush(outputIdx int) {
 func (a *avgInt16HashAgg) Reset() {
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgInt16HashAggAlloc struct {
@@ -209,10 +209,10 @@ type avgInt32HashAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull     uint64
+	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt32HashAgg{}
@@ -252,7 +252,7 @@ func (a *avgInt32HashAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -273,7 +273,7 @@ func (a *avgInt32HashAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -290,7 +290,7 @@ func (a *avgInt32HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -304,7 +304,7 @@ func (a *avgInt32HashAgg) Flush(outputIdx int) {
 func (a *avgInt32HashAgg) Reset() {
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgInt32HashAggAlloc struct {
@@ -339,10 +339,10 @@ type avgInt64HashAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull     uint64
+	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt64HashAgg{}
@@ -382,7 +382,7 @@ func (a *avgInt64HashAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -403,7 +403,7 @@ func (a *avgInt64HashAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -420,7 +420,7 @@ func (a *avgInt64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -434,7 +434,7 @@ func (a *avgInt64HashAgg) Flush(outputIdx int) {
 func (a *avgInt64HashAgg) Reset() {
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgInt64HashAggAlloc struct {
@@ -469,9 +469,9 @@ type avgDecimalHashAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &avgDecimalHashAgg{}
@@ -507,7 +507,7 @@ func (a *avgDecimalHashAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -527,7 +527,7 @@ func (a *avgDecimalHashAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -544,7 +544,7 @@ func (a *avgDecimalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -558,7 +558,7 @@ func (a *avgDecimalHashAgg) Flush(outputIdx int) {
 func (a *avgDecimalHashAgg) Reset() {
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgDecimalHashAggAlloc struct {
@@ -593,9 +593,9 @@ type avgFloat64HashAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []float64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &avgFloat64HashAgg{}
@@ -628,7 +628,7 @@ func (a *avgFloat64HashAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -645,7 +645,7 @@ func (a *avgFloat64HashAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -662,7 +662,7 @@ func (a *avgFloat64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curSum / float64(a.curCount)
@@ -672,7 +672,7 @@ func (a *avgFloat64HashAgg) Flush(outputIdx int) {
 func (a *avgFloat64HashAgg) Reset() {
 	a.curSum = zeroFloat64Value
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgFloat64HashAggAlloc struct {
@@ -707,9 +707,9 @@ type avgIntervalHashAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []duration.Duration
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &avgIntervalHashAgg{}
@@ -737,7 +737,7 @@ func (a *avgIntervalHashAgg) Compute(
 						v := col.Get(i)
 						a.curSum = a.curSum.Add(v)
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			} else {
@@ -749,7 +749,7 @@ func (a *avgIntervalHashAgg) Compute(
 						v := col.Get(i)
 						a.curSum = a.curSum.Add(v)
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
+						a.numNonNull++
 					}
 				}
 			}
@@ -766,7 +766,7 @@ func (a *avgIntervalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curSum.Div(int64(a.curCount))
@@ -776,7 +776,7 @@ func (a *avgIntervalHashAgg) Flush(outputIdx int) {
 func (a *avgIntervalHashAgg) Reset() {
 	a.curSum = zeroIntervalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgIntervalHashAggAlloc struct {

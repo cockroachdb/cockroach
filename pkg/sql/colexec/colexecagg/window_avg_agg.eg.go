@@ -79,10 +79,10 @@ type avgInt16WindowAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull     uint64
+	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt16WindowAgg{}
@@ -124,7 +124,7 @@ func (a *avgInt16WindowAgg) Compute(
 				}
 
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -146,7 +146,7 @@ func (a *avgInt16WindowAgg) Compute(
 				}
 
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	}
@@ -160,7 +160,7 @@ func (a *avgInt16WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -174,7 +174,7 @@ func (a *avgInt16WindowAgg) Flush(outputIdx int) {
 func (a *avgInt16WindowAgg) Reset() {
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgInt16WindowAggAlloc struct {
@@ -198,6 +198,67 @@ func (a *avgInt16WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *avgInt16WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "overloadHelper".
+	_overloadHelper := a.overloadHelper
+	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Int16(), vec.Nulls()
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+
+					tmpDec := &_overloadHelper.TmpDec1
+					tmpDec.SetInt64(int64(v))
+					if _, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, tmpDec); err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+
+					tmpDec := &_overloadHelper.TmpDec1
+					tmpDec.SetInt64(int64(v))
+					if _, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, tmpDec); err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	}
+	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
+}
+
 type avgInt32WindowAgg struct {
 	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
@@ -209,10 +270,10 @@ type avgInt32WindowAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull     uint64
+	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt32WindowAgg{}
@@ -254,7 +315,7 @@ func (a *avgInt32WindowAgg) Compute(
 				}
 
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -276,7 +337,7 @@ func (a *avgInt32WindowAgg) Compute(
 				}
 
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	}
@@ -290,7 +351,7 @@ func (a *avgInt32WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -304,7 +365,7 @@ func (a *avgInt32WindowAgg) Flush(outputIdx int) {
 func (a *avgInt32WindowAgg) Reset() {
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgInt32WindowAggAlloc struct {
@@ -328,6 +389,67 @@ func (a *avgInt32WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *avgInt32WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "overloadHelper".
+	_overloadHelper := a.overloadHelper
+	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Int32(), vec.Nulls()
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+
+					tmpDec := &_overloadHelper.TmpDec1
+					tmpDec.SetInt64(int64(v))
+					if _, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, tmpDec); err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+
+					tmpDec := &_overloadHelper.TmpDec1
+					tmpDec.SetInt64(int64(v))
+					if _, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, tmpDec); err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	}
+	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
+}
+
 type avgInt64WindowAgg struct {
 	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
@@ -339,10 +461,10 @@ type avgInt64WindowAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull     uint64
+	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt64WindowAgg{}
@@ -384,7 +506,7 @@ func (a *avgInt64WindowAgg) Compute(
 				}
 
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -406,7 +528,7 @@ func (a *avgInt64WindowAgg) Compute(
 				}
 
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	}
@@ -420,7 +542,7 @@ func (a *avgInt64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -434,7 +556,7 @@ func (a *avgInt64WindowAgg) Flush(outputIdx int) {
 func (a *avgInt64WindowAgg) Reset() {
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgInt64WindowAggAlloc struct {
@@ -458,6 +580,67 @@ func (a *avgInt64WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *avgInt64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "overloadHelper".
+	_overloadHelper := a.overloadHelper
+	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Int64(), vec.Nulls()
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+
+					tmpDec := &_overloadHelper.TmpDec1
+					tmpDec.SetInt64(int64(v))
+					if _, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, tmpDec); err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+
+					tmpDec := &_overloadHelper.TmpDec1
+					tmpDec.SetInt64(int64(v))
+					if _, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, tmpDec); err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	}
+	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
+}
+
 type avgDecimalWindowAgg struct {
 	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
@@ -469,9 +652,9 @@ type avgDecimalWindowAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &avgDecimalWindowAgg{}
@@ -509,7 +692,7 @@ func (a *avgDecimalWindowAgg) Compute(
 				}
 
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -530,7 +713,7 @@ func (a *avgDecimalWindowAgg) Compute(
 				}
 
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	}
@@ -544,7 +727,7 @@ func (a *avgDecimalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
@@ -558,7 +741,7 @@ func (a *avgDecimalWindowAgg) Flush(outputIdx int) {
 func (a *avgDecimalWindowAgg) Reset() {
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgDecimalWindowAggAlloc struct {
@@ -582,6 +765,62 @@ func (a *avgDecimalWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *avgDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Decimal(), vec.Nulls()
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+
+					_, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, &v)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+
+					_, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, &v)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	}
+	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
+}
+
 type avgFloat64WindowAgg struct {
 	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
@@ -593,9 +832,9 @@ type avgFloat64WindowAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []float64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &avgFloat64WindowAgg{}
@@ -630,7 +869,7 @@ func (a *avgFloat64WindowAgg) Compute(
 				}
 
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -648,7 +887,7 @@ func (a *avgFloat64WindowAgg) Compute(
 				}
 
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	}
@@ -662,7 +901,7 @@ func (a *avgFloat64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curSum / float64(a.curCount)
@@ -672,7 +911,7 @@ func (a *avgFloat64WindowAgg) Flush(outputIdx int) {
 func (a *avgFloat64WindowAgg) Reset() {
 	a.curSum = zeroFloat64Value
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgFloat64WindowAggAlloc struct {
@@ -696,6 +935,56 @@ func (a *avgFloat64WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *avgFloat64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	var oldCurSumSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Float64(), vec.Nulls()
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+
+					a.curSum = float64(a.curSum) - float64(v)
+				}
+
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+
+					a.curSum = float64(a.curSum) - float64(v)
+				}
+
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	}
+	var newCurSumSize uintptr
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
+}
+
 type avgIntervalWindowAgg struct {
 	unorderedAggregateFuncBase
 	// curSum keeps track of the sum of elements belonging to the current group,
@@ -707,9 +996,9 @@ type avgIntervalWindowAgg struct {
 	curCount int64
 	// col points to the statically-typed output vector.
 	col []duration.Duration
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &avgIntervalWindowAgg{}
@@ -739,7 +1028,7 @@ func (a *avgIntervalWindowAgg) Compute(
 				v := col.Get(i)
 				a.curSum = a.curSum.Add(v)
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -752,7 +1041,7 @@ func (a *avgIntervalWindowAgg) Compute(
 				v := col.Get(i)
 				a.curSum = a.curSum.Add(v)
 				a.curCount++
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	}
@@ -766,7 +1055,7 @@ func (a *avgIntervalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
-	if !a.foundNonNullForCurrentGroup {
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curSum.Div(int64(a.curCount))
@@ -776,7 +1065,7 @@ func (a *avgIntervalWindowAgg) Flush(outputIdx int) {
 func (a *avgIntervalWindowAgg) Reset() {
 	a.curSum = zeroIntervalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type avgIntervalWindowAggAlloc struct {
@@ -798,4 +1087,44 @@ func (a *avgIntervalWindowAggAlloc) newAggFunc() AggregateFunc {
 	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
+}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *avgIntervalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	var oldCurSumSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Interval(), vec.Nulls()
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+				a.curSum = a.curSum.Sub(v)
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+				a.curSum = a.curSum.Sub(v)
+				a.curCount--
+				a.numNonNull--
+			}
+		}
+	}
+	var newCurSumSize uintptr
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
 }
