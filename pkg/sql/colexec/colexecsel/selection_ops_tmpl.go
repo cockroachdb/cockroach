@@ -41,7 +41,7 @@ import (
 var (
 	_ apd.Context
 	_ duration.Duration
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ json.JSON
 )
 

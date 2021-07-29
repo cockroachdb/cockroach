@@ -42,7 +42,7 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ duration.Duration
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ sqltelemetry.EnumTelemetryType
 	_ telemetry.Counter
 )

@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
@@ -652,7 +651,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 			newVarLengthDatumSize += int64(tree.SizeOfDecimal(&d))
 		}
 		for _, datumVec := range h.datumVecs {
-			datumSize := datumVec.Get(rowIdx).(*coldataext.Datum).Size()
+			datumSize := datumVec.Get(rowIdx).(tree.Datum).Size()
 			newVarLengthDatumSize += int64(datumSize) + memsize.DatumOverhead
 		}
 		h.Allocator.AdjustMemoryUsage(newVarLengthDatumSize - h.varSizeDatumSizes[rowIdx])

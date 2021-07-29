@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -36,8 +37,9 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
-	_ coldataext.Datum
+	_ = coldataext.Hash
 	_ json.JSON
+	_ tree.Datum
 )
 
 // {{/*

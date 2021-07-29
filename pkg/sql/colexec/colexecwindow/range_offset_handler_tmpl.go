@@ -44,7 +44,7 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ apd.Context
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ duration.Duration
 	_ pgdate.Date
 )

@@ -39,7 +39,7 @@ import (
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
 	_ apd.Context
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ duration.Duration
 	_ tree.AggType
 	_ json.JSON

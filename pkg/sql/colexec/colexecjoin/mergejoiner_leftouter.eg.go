@@ -33,7 +33,7 @@ import (
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
 	_ apd.Context
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ duration.Duration
 	_ tree.AggType
 	_ json.JSON
@@ -2287,7 +2287,7 @@ EqLoop:
 							rSelIdx = rSel[curRIdx]
 							rVal = rKeys.Get(rSelIdx)
 
-							cmp = lVal.(*coldataext.Datum).CompareDatum(lKeys, rVal)
+							cmp = coldataext.CompareDatum(lVal, lKeys, rVal)
 
 						}
 
@@ -2315,7 +2315,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -2342,7 +2342,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newRVal.(*coldataext.Datum).CompareDatum(rKeys, rVal)
+										cmpResult = coldataext.CompareDatum(newRVal, rKeys, rVal)
 
 										match = cmpResult == 0
 									}
@@ -2397,7 +2397,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -4680,7 +4680,7 @@ EqLoop:
 							rSelIdx = curRIdx
 							rVal = rKeys.Get(rSelIdx)
 
-							cmp = lVal.(*coldataext.Datum).CompareDatum(lKeys, rVal)
+							cmp = coldataext.CompareDatum(lVal, lKeys, rVal)
 
 						}
 
@@ -4708,7 +4708,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -4735,7 +4735,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newRVal.(*coldataext.Datum).CompareDatum(rKeys, rVal)
+										cmpResult = coldataext.CompareDatum(newRVal, rKeys, rVal)
 
 										match = cmpResult == 0
 									}
@@ -4790,7 +4790,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -7073,7 +7073,7 @@ EqLoop:
 							rSelIdx = rSel[curRIdx]
 							rVal = rKeys.Get(rSelIdx)
 
-							cmp = lVal.(*coldataext.Datum).CompareDatum(lKeys, rVal)
+							cmp = coldataext.CompareDatum(lVal, lKeys, rVal)
 
 						}
 
@@ -7101,7 +7101,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -7128,7 +7128,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newRVal.(*coldataext.Datum).CompareDatum(rKeys, rVal)
+										cmpResult = coldataext.CompareDatum(newRVal, rKeys, rVal)
 
 										match = cmpResult == 0
 									}
@@ -7183,7 +7183,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -9466,7 +9466,7 @@ EqLoop:
 							rSelIdx = curRIdx
 							rVal = rKeys.Get(rSelIdx)
 
-							cmp = lVal.(*coldataext.Datum).CompareDatum(lKeys, rVal)
+							cmp = coldataext.CompareDatum(lVal, lKeys, rVal)
 
 						}
 
@@ -9494,7 +9494,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}
@@ -9521,7 +9521,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newRVal.(*coldataext.Datum).CompareDatum(rKeys, rVal)
+										cmpResult = coldataext.CompareDatum(newRVal, rKeys, rVal)
 
 										match = cmpResult == 0
 									}
@@ -9576,7 +9576,7 @@ EqLoop:
 									{
 										var cmpResult int
 
-										cmpResult = newLVal.(*coldataext.Datum).CompareDatum(lKeys, lVal)
+										cmpResult = coldataext.CompareDatum(newLVal, lKeys, lVal)
 
 										match = cmpResult == 0
 									}

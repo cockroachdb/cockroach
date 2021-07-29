@@ -21,7 +21,6 @@ package colexec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -137,7 +136,7 @@ func _COMPUTE_IS_NULL(
 	if nulls.NullAt(i) {
 		projCol[i] = !o.negate
 	} else {
-		projCol[i] = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+		projCol[i] = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 	}
 	// {{else}}
 	// {{if .HasNulls}}
@@ -250,7 +249,7 @@ func _MAYBE_SELECT(
 	// {{if .IsTuple}}
 	selectTuple := nulls.NullAt(i) != o.negate
 	if !selectTuple {
-		selectTuple = isTupleNull(datums.Get(i).(*coldataext.Datum).Datum, o.negate)
+		selectTuple = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 	}
 	if selectTuple {
 		sel[idx] = i

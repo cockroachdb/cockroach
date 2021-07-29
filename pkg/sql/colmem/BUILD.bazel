@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
-        "//pkg/col/coldataext",
         "//pkg/col/typeconv",
         "//pkg/sql/colexecerror",
         "//pkg/sql/memsize",
