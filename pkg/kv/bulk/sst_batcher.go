@@ -353,14 +353,19 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		}
 	}
 
+	b.rowCounter.DataSize += b.sstWriter.DataSize
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
-	b.totalRows.DataSize += b.sstWriter.DataSize
 	return nil
 }
 
 // Close closes the underlying SST builder.
 func (b *SSTBatcher) Close() {
 	b.sstWriter.Close()
+}
+
+// GetBatchSummary returns this batcher's total added rows/bytes/etc.
+func (b *SSTBatcher) GetBatchSummary() roachpb.BulkOpSummary {
+	return b.rowCounter.BulkOpSummary
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
