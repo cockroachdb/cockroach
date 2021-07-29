@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -624,8 +625,11 @@ type clusterImpl struct {
 	// l is the logger used to log various cluster operations.
 	// DEPRECATED for use outside of cluster methods: Use a test's t.L() instead.
 	// This is generally set to the current test's logger.
-	l          *logger.Logger
-	expiration time.Time
+	l *logger.Logger
+	// localCertsDir is a local copy of the certs for this cluster. If this is empty,
+	// the cluster is running in insecure mode.
+	localCertsDir string
+	expiration    time.Time
 	// encryptDefault is true if the cluster should default to having encryption
 	// at rest enabled. The default only applies if encryption is not explicitly
 	// enabled or disabled by options passed to Start.
@@ -1749,7 +1753,36 @@ func (c *clusterImpl) StartE(ctx context.Context, opts ...option.Option) error {
 			}
 		}
 	}
-	return execCmd(ctx, c.l, args...)
+	if err := execCmd(ctx, c.l, args...); err != nil {
+		return err
+	}
+	if argExists(args, "--secure") {
+		var err error
+		c.localCertsDir, err = ioutil.TempDir("", "roachtest-certs")
+		if err != nil {
+			return err
+		}
+		// `roachprod get` behaves differently with `--local` depending on whether
+		// the target dir exists. With `--local`, it'll put the files into the
+		// existing dir. Without `--local`, it'll create a new subdir to house the
+		// certs. Bypass that distinction (which should be fixed independently, but
+		// that might cause fallout) by using a non-existing dir here.
+		c.localCertsDir = filepath.Join(c.localCertsDir, "certs")
+		// Get the certs from the first node.
+		if err := c.Get(ctx, c.l, "./certs", c.localCertsDir, c.Node(1)); err != nil {
+			return err
+		}
+		// Need to prevent world readable files or lib/pq will complain.
+		if err := filepath.Walk(c.localCertsDir, func(path string, info fs.FileInfo, err error) error {
+			if info.IsDir() {
+				return nil
+			}
+			return os.Chmod(path, 0600)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Start is like StartE() except that it will fatal the test on error.
@@ -1979,6 +2012,9 @@ func (c *clusterImpl) pgURLErr(
 	if external {
 		args = append(args, `--external`)
 	}
+	if c.localCertsDir != "" {
+		args = append(args, "--secure", "--certs-dir", c.localCertsDir)
+	}
 	nodes := c.MakeNodes(node)
 	args = append(args, nodes)
 	cmd := execCmdEx(ctx, c.l, args...)
@@ -2018,23 +2054,6 @@ func (c *clusterImpl) ExternalPGUrl(
 	ctx context.Context, node option.NodeListOption,
 ) ([]string, error) {
 	return c.pgURLErr(ctx, node, true /* external */)
-}
-
-// ExternalPGUrlSecure returns the external Postgres endpoint for the specified
-// nodes.
-func (c *clusterImpl) ExternalPGUrlSecure(
-	ctx context.Context, node option.NodeListOption, user string, certsDir string, port int,
-) ([]string, error) {
-	urlTemplate := "postgres://%s@%s:%d?sslcert=%s/client.%s.crt&sslkey=%s/client.%s.key&sslrootcert=%s/ca.crt&sslmode=require"
-	ips, err := c.ExternalIP(ctx, node)
-	if err != nil {
-		return nil, err
-	}
-	var urls []string
-	for _, ip := range ips {
-		urls = append(urls, fmt.Sprintf(urlTemplate, user, ip, port, certsDir, user, certsDir, user, certsDir))
-	}
-	return urls, nil
 }
 
 func addrToAdminUIAddr(c *clusterImpl, addr string) (string, error) {
@@ -2215,21 +2234,6 @@ func (c *clusterImpl) Conn(ctx context.Context, node int) *gosql.DB {
 // ConnE returns a SQL connection to the specified node.
 func (c *clusterImpl) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
 	urls, err := c.ExternalPGUrl(ctx, c.Node(node))
-	if err != nil {
-		return nil, err
-	}
-	db, err := gosql.Open("postgres", urls[0])
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
-}
-
-// ConnSecure returns a secure SQL connection to the specified node.
-func (c *clusterImpl) ConnSecure(
-	ctx context.Context, node int, user string, certsDir string, port int,
-) (*gosql.DB, error) {
-	urls, err := c.ExternalPGUrlSecure(ctx, c.Node(node), user, certsDir, port)
 	if err != nil {
 		return nil, err
 	}

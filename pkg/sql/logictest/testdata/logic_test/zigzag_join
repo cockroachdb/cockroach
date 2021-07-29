@@ -31,7 +31,13 @@ SELECT * FROM a WHERE a = 5 AND b = 2 AND c = 'foo'
 ----
 5  5  2  foo
 
-# Turn off zigzag joins and verify output.
+# Turn off zigzag joins and verify output. First with a hint, then with the
+# session variable.
+query III rowsort
+SELECT n,a,b FROM a@{NO_ZIGZAG_JOIN} WHERE a = 4 AND b = 1
+----
+4  4  1
+
 statement ok
 SET enable_zigzag_join = false
 

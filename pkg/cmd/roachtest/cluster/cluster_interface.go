@@ -66,17 +66,11 @@ type Cluster interface {
 
 	InternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error)
 	ExternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error)
-	ExternalPGUrlSecure(
-		ctx context.Context, node option.NodeListOption, user string, certsDir string, port int,
-	) ([]string, error)
 
 	// SQL clients to nodes.
 
 	Conn(ctx context.Context, node int) *gosql.DB
 	ConnE(ctx context.Context, node int) (*gosql.DB, error)
-	ConnSecure(
-		ctx context.Context, node int, user string, certsDir string, port int,
-	) (*gosql.DB, error)
 
 	// URLs for the Admin UI.
 

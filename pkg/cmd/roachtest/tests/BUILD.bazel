@@ -101,6 +101,7 @@ go_library(
         "scrub.go",
         "secondary_indexes.go",
         "sequelize.go",
+        "smoketest_secure.go",
         "split.go",
         "sqlalchemy.go",
         "sqlalchemy_blocklist.go",

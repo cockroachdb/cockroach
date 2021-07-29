@@ -38,6 +38,7 @@ type Builder struct {
 	catalog          cat.Catalog
 	e                opt.Expr
 	disableTelemetry bool
+	semaCtx          *tree.SemaContext
 	evalCtx          *tree.EvalContext
 
 	// subqueries accumulates information about subqueries that are part of scalar
@@ -93,6 +94,10 @@ type Builder struct {
 	// containsFullIndexScan is set to true if the statement contains a secondary
 	// index scan.
 	ContainsFullIndexScan bool
+
+	// containsBoundedStalenessScan is true if the query uses bounded
+	// staleness and contains a scan.
+	containsBoundedStalenessScan bool
 }
 
 // New constructs an instance of the execution node builder using the
@@ -111,6 +116,7 @@ func New(
 	mem *memo.Memo,
 	catalog cat.Catalog,
 	e opt.Expr,
+	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	allowAutoCommit bool,
 ) *Builder {
@@ -120,6 +126,7 @@ func New(
 		mem:                    mem,
 		catalog:                catalog,
 		e:                      e,
+		semaCtx:                semaCtx,
 		evalCtx:                evalCtx,
 		allowAutoCommit:        allowAutoCommit,
 		initialAllowAutoCommit: allowAutoCommit,
@@ -221,6 +228,12 @@ func (b *Builder) findBuiltWithExpr(id opt.WithID) *builtWithExpr {
 		}
 	}
 	return nil
+}
+
+// boundedStaleness returns true if this query uses bounded staleness.
+func (b *Builder) boundedStaleness() bool {
+	return b.semaCtx != nil && b.semaCtx.AsOfSystemTime != nil &&
+		b.semaCtx.AsOfSystemTime.BoundedStaleness
 }
 
 // mdVarContainer is an IndexedVarContainer implementation used by BuildScalar -
