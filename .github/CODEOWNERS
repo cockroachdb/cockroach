@@ -90,6 +90,7 @@
 /pkg/ccl/backupccl/          @cockroachdb/bulk-prs
 /pkg/ccl/importccl/          @cockroachdb/bulk-prs
 /pkg/ccl/storageccl/         @cockroachdb/bulk-prs
+/pkg/cloud/                  @cockroachdb/bulk-prs
 /pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-prs
 
 /pkg/geo/                    @cockroachdb/geospatial

@@ -83,6 +83,7 @@ go_test(
     embed = [":pgwire"],
     deps = [
         "//pkg/base",
+        "//pkg/cloud/impl:cloudimpl",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/security",
@@ -105,7 +106,6 @@ go_test(
         "//pkg/sql/sqlutil",
         "//pkg/sql/tests",
         "//pkg/sql/types",
-        "//pkg/storage/cloudimpl",
         "//pkg/testutils",
         "//pkg/testutils/pgtest",
         "//pkg/testutils/serverutils",
