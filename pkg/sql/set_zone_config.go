@@ -942,6 +942,43 @@ func validateZoneAttrsAndLocalities(
 // MultitenancyZoneCfgIssueNo points to the multitenancy zone config issue number.
 const MultitenancyZoneCfgIssueNo = 49854
 
+type zoneConfigUpdate struct {
+	id    descpb.ID
+	value []byte
+}
+
+func prepareZoneConfigWrites(
+	execCfg *ExecutorConfig,
+	targetID descpb.ID,
+	table catalog.TableDescriptor,
+	zone *zonepb.ZoneConfig,
+	hasNewSubzones bool,
+) (_ *zoneConfigUpdate, err error) {
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
+	}
+	if len(zone.Subzones) > 0 {
+		st := execCfg.Settings
+		zone.SubzoneSpans, err = GenerateSubzoneSpans(
+			st, execCfg.ClusterID(), execCfg.Codec, table, zone.Subzones, hasNewSubzones)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// To keep the Subzone and SubzoneSpan arrays consistent
+		zone.SubzoneSpans = nil
+	}
+	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
+		return &zoneConfigUpdate{id: targetID}, nil
+	}
+	buf, err := protoutil.Marshal(zone)
+	if err != nil {
+		return nil, pgerror.Newf(pgcode.CheckViolation,
+			"could not marshal zone config: %v", err)
+	}
+	return &zoneConfigUpdate{id: targetID, value: buf}, nil
+}
+
 func writeZoneConfig(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -951,33 +988,22 @@ func writeZoneConfig(
 	execCfg *ExecutorConfig,
 	hasNewSubzones bool,
 ) (numAffected int, err error) {
-	if !execCfg.Codec.ForSystemTenant() {
-		return 0, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
-	}
-	if len(zone.Subzones) > 0 {
-		st := execCfg.Settings
-		zone.SubzoneSpans, err = GenerateSubzoneSpans(
-			st, execCfg.ClusterID(), execCfg.Codec, table, zone.Subzones, hasNewSubzones)
-		if err != nil {
-			return 0, err
-		}
-	} else {
-		// To keep the Subzone and SubzoneSpan arrays consistent
-		zone.SubzoneSpans = nil
-	}
-
-	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
-		return execCfg.InternalExecutor.Exec(ctx, "delete-zone", txn,
-			"DELETE FROM system.zones WHERE id = $1", targetID)
-	}
-
-	buf, err := protoutil.Marshal(zone)
+	update, err := prepareZoneConfigWrites(execCfg, targetID, table, zone, hasNewSubzones)
 	if err != nil {
-		return 0, pgerror.Newf(pgcode.CheckViolation,
-			"could not marshal zone config: %v", err)
+		return 0, err
+	}
+	return writeZoneConfigUpdate(ctx, txn, execCfg, update)
+}
+
+func writeZoneConfigUpdate(
+	ctx context.Context, txn *kv.Txn, execCfg *ExecutorConfig, update *zoneConfigUpdate,
+) (numAffected int, _ error) {
+	if update.value == nil {
+		return execCfg.InternalExecutor.Exec(ctx, "delete-zone", txn,
+			"DELETE FROM system.zones WHERE id = $1", update.id)
 	}
 	return execCfg.InternalExecutor.Exec(ctx, "update-zone", txn,
-		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", targetID, buf)
+		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", update.id, update.value)
 }
 
 // getZoneConfigRaw looks up the zone config with the given ID. Unlike
