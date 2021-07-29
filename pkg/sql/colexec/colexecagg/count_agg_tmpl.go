@@ -23,7 +23,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 )
 
@@ -63,7 +62,6 @@ func (a *count_COUNTKIND_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	// {{if not (eq .CountKind "Rows")}}
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
@@ -138,10 +136,6 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 		}
 	}
 	// {{end}}
-	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
-	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
-	}
 }
 
 func (a *count_COUNTKIND_AGGKINDAgg) Flush(outputIdx int) {
@@ -169,6 +163,27 @@ func (a *count_COUNTKIND_AGGKINDAgg) Reset() {
 	// {{end}}
 	a.curAgg = 0
 }
+
+// {{if and (eq "_AGGKIND" "Window") (not (eq .CountKind "Rows"))}}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *count_COUNTKIND_AGGKINDAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	nulls := vecs[inputIdxs[0]].Nulls()
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+			_REMOVE_ROW(a, nulls, i, true)
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+			_REMOVE_ROW(a, nulls, i, false)
+		}
+	}
+}
+
+// {{end}}
 
 type count_COUNTKIND_AGGKINDAggAlloc struct {
 	aggAllocBase
@@ -227,5 +242,24 @@ func _ACCUMULATE_COUNT(
 	a.curAgg += y
 	// {{end}}
 
+	// {{/*
+} // */}}
+
+// {{/*
+// _REMOVE_ROW removes the value of the ith row from the output for the
+// current aggregation.
+func _REMOVE_ROW(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS bool) { // */}}
+	// {{define "removeRow"}}
+	var y int64
+	// {{if .ColWithNulls}}
+	y = int64(0)
+	if !nulls.NullAt(i) {
+		y = 1
+	}
+	// {{else}}
+	y = int64(1)
+	// {{end}}
+	a.curAgg -= y
+	// {{end}}
 	// {{/*
 } // */}}

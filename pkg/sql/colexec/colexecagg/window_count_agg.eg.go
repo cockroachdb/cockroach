@@ -42,7 +42,6 @@ func (a *countRowsWindowAgg) SetOutput(vec coldata.Vec) {
 func (a *countRowsWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	var oldCurAggSize uintptr
 	// Unnecessary memory accounting can have significant overhead for window
 	// aggregate functions because Compute is called at least once for every row.
 	// For this reason, we do not use PerformOperation here.
@@ -53,10 +52,6 @@ func (a *countRowsWindowAgg) Compute(
 			y = int64(1)
 			a.curAgg += y
 		}
-	}
-	var newCurAggSize uintptr
-	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -115,7 +110,6 @@ func (a *countWindowAgg) SetOutput(vec coldata.Vec) {
 func (a *countWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	var oldCurAggSize uintptr
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
@@ -141,10 +135,6 @@ func (a *countWindowAgg) Compute(
 			a.curAgg += y
 		}
 	}
-	var newCurAggSize uintptr
-	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
-	}
 }
 
 func (a *countWindowAgg) Flush(outputIdx int) {
@@ -153,6 +143,32 @@ func (a *countWindowAgg) Flush(outputIdx int) {
 
 func (a *countWindowAgg) Reset() {
 	a.curAgg = 0
+}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *countWindowAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	nulls := vecs[inputIdxs[0]].Nulls()
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var y int64
+			y = int64(0)
+			if !nulls.NullAt(i) {
+				y = 1
+			}
+			a.curAgg -= y
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var y int64
+			y = int64(1)
+			a.curAgg -= y
+		}
+	}
 }
 
 type countWindowAggAlloc struct {
