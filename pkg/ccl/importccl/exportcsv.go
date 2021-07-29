@@ -189,8 +189,9 @@ type csvWriter struct {
 	out         execinfra.ProcOutputHelper
 	output      execinfra.RowReceiver
 	// batchCh carries batches of stringified rows, flattened from [][]string.
-	batchCh   chan *[]string
-	batchPool sync.Pool
+	batchCh       chan *[]string
+	batchPool     sync.Pool
+	batchMemLimit int64
 }
 
 var _ execinfra.Processor = &csvWriter{}
@@ -213,10 +214,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 	var err error
 	if sp.batchCh != nil {
-		grp := ctxgroup.WithContext(ctx)
-		grp.GoCtx(sp.writeFiles)
-		grp.GoCtx(sp.stringify)
-		err = grp.Wait()
+		err = sp.runPipelined(ctx)
 	} else {
 		err = sp.singleThreadRun(ctx)
 	}
@@ -224,6 +222,23 @@ func (sp *csvWriter) Run(ctx context.Context) {
 	// TODO(dt): pick up tracing info in trailing meta
 	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
+}
+
+func (sp *csvWriter) runPipelined(ctx context.Context) error {
+
+	acct := sp.flowCtx.EvalCtx.Mon.MakeBoundAccount()
+	defer acct.Close(ctx)
+
+	sp.batchMemLimit = 8 << 20
+	const inFlightBatches = 2
+	if err := acct.Grow(ctx, sp.batchMemLimit*inFlightBatches); err != nil {
+		return errors.Wrap(err, "not enough available memory to run EXPORT")
+	}
+
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(sp.writeFiles)
+	grp.GoCtx(sp.stringify)
+	return grp.Wait()
 }
 
 func (sp *csvWriter) singleThreadRun(ctx context.Context) error {
@@ -358,7 +373,7 @@ func (sp *csvWriter) singleThreadRun(ctx context.Context) error {
 }
 
 // stringify converts incoming rows from sql datums to the strings that will be
-// in each cell of a csv, sending produced [][]string batches to sp.ch.
+// in each cell of a csv, sending produced [][]string batches to sp.batchCh.
 func (sp *csvWriter) stringify(ctx context.Context) error {
 	defer close(sp.batchCh)
 
@@ -381,6 +396,7 @@ func (sp *csvWriter) stringify(ctx context.Context) error {
 	for {
 		batch := *sp.batchPool.Get().(*[]string)
 		var batchPos int
+		var batchMemSize int
 		for {
 			row, err := input.NextRow()
 			if err != nil {
@@ -395,6 +411,7 @@ func (sp *csvWriter) stringify(ctx context.Context) error {
 				if ed.IsNull() {
 					if sp.spec.Options.NullEncoding != nil {
 						batch[batchPos+i] = nullsAs
+						batchMemSize += len(nullsAs)
 						continue
 					} else {
 						return errors.New("NULL value encountered during EXPORT, " +
@@ -406,11 +423,12 @@ func (sp *csvWriter) stringify(ctx context.Context) error {
 				}
 				ed.Datum.Format(f)
 				batch[batchPos+i] = f.String()
+				batchMemSize += len(batch[batchPos+i])
 				f.Reset()
 			}
 			batchPos += len(row)
 
-			if batchPos == len(batch) {
+			if batchPos == len(batch) || int64(batchMemSize) >= sp.batchMemLimit {
 				break
 			}
 		}
@@ -421,7 +439,7 @@ func (sp *csvWriter) stringify(ctx context.Context) error {
 			sp.batchCh <- &batch
 			if log.V(1) {
 				now := timeutil.Now()
-				log.VEventf(ctx, 1, "accumulated %d rows in %02.fs", len(batch)/len(typs), now.Sub(before).Seconds())
+				log.VEventf(ctx, 1, "accumulated %d rows / %db in %02.fs", len(batch)/len(typs), batchMemSize, now.Sub(before).Seconds())
 				before = now
 			}
 		}
@@ -432,8 +450,8 @@ func (sp *csvWriter) stringify(ctx context.Context) error {
 	return nil
 }
 
-// writeFiles reads batches of stringified rows off sp.ch and writes them to the
-// csv file, optionally compressing them as well.
+// writeFiles reads batches of stringified rows off sp.batchCh and writes them
+// to the csv file, optionally compressing them as well.
 func (sp *csvWriter) writeFiles(ctx context.Context) error {
 	ctxDone := ctx.Done()
 	writer := newCSVExporter(sp.spec)
