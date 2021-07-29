@@ -15,14 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/migration/migrationutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 )
 
 func databaseRoleSettingsTableMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
-	return startupmigrations.CreateSystemTable(
-		ctx, d.DB, d.Codec, d.Settings, systemschema.DatabaseRoleSettingsTable,
-	)
+	return migrationutils.CreateSystemTable(ctx, d.DB, d.Codec, systemschema.DatabaseRoleSettingsTable)
 }

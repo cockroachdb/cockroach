@@ -1,0 +1,68 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "migrationschemautils",
+    srcs = ["schema_changes.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrationschemautils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/startupmigrations",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "migrationschemautils_test",
+    srcs = ["create_system_table_test.go"],
+    embed = [":migrationschemautils"],
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_library(
+    name = "migrationutils",
+    srcs = ["migration_utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrationutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "migrationutils_test",
+    srcs = ["create_system_table_test.go"],
+    embed = [":migrationutils"],
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

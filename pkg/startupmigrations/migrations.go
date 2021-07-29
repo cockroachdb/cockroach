@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/migration/migrationutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -304,14 +305,16 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 
 func staticIDs(
 	ids ...descpb.ID,
-) func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
-	return func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) { return ids, nil }
+) func(ctx context.Context, db migrationutils.DB, codec keys.SQLCodec) ([]descpb.ID, error) {
+	return func(ctx context.Context, db migrationutils.DB, codec keys.SQLCodec) ([]descpb.ID, error) {
+		return ids, nil
+	}
 }
 
 func databaseIDs(
 	names ...string,
-) func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
-	return func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
+) func(ctx context.Context, db migrationutils.DB, codec keys.SQLCodec) ([]descpb.ID, error) {
+	return func(ctx context.Context, db migrationutils.DB, codec keys.SQLCodec) ([]descpb.ID, error) {
 		var ids []descpb.ID
 		for _, name := range names {
 			kv, err := db.Get(ctx, catalogkeys.MakeDatabaseNameKey(codec, name))
@@ -359,7 +362,7 @@ type migrationDescriptor struct {
 	// descriptors that were added by this migration. This is needed to automate
 	// certain tests, which check the number of ranges/descriptors present on
 	// server bootup.
-	newDescriptorIDs func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error)
+	newDescriptorIDs func(ctx context.Context, db migrationutils.DB, codec keys.SQLCodec) ([]descpb.ID, error)
 }
 
 func init() {
@@ -375,7 +378,7 @@ func init() {
 }
 
 type runner struct {
-	db          DB
+	db          migrationutils.DB
 	codec       keys.SQLCodec
 	sqlExecutor *sql.InternalExecutor
 	settings    *cluster.Settings
@@ -416,21 +419,12 @@ type leaseManager interface {
 	TimeRemaining(l *leasemanager.Lease) time.Duration
 }
 
-// DB is defined just to allow us to use a fake client.DB when testing this
-// package.
-type DB interface {
-	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]kv.KeyValue, error)
-	Get(ctx context.Context, key interface{}) (kv.KeyValue, error)
-	Put(ctx context.Context, key, value interface{}) error
-	Txn(ctx context.Context, retryable func(ctx context.Context, txn *kv.Txn) error) error
-}
-
 // Manager encapsulates the necessary functionality for handling migrations
 // of data in the cluster.
 type Manager struct {
 	stopper      *stop.Stopper
 	leaseManager leaseManager
-	db           DB
+	db           migrationutils.DB
 	codec        keys.SQLCodec
 	sqlExecutor  *sql.InternalExecutor
 	testingKnobs MigrationManagerTestingKnobs
@@ -475,7 +469,7 @@ func NewManager(
 // lifecycle is tightly controlled.
 func ExpectedDescriptorIDs(
 	ctx context.Context,
-	db DB,
+	db migrationutils.DB,
 	codec keys.SQLCodec,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
@@ -664,7 +658,7 @@ func (m *Manager) shouldRunMigration(
 }
 
 func getCompletedMigrations(
-	ctx context.Context, db DB, codec keys.SQLCodec,
+	ctx context.Context, db migrationutils.DB, codec keys.SQLCodec,
 ) (map[string]struct{}, error) {
 	if log.V(1) {
 		log.Info(ctx, "trying to get the list of completed migrations")
@@ -686,36 +680,7 @@ func migrationKey(codec keys.SQLCodec, migration migrationDescriptor) roachpb.Ke
 }
 
 func createSystemTable(ctx context.Context, r runner, desc catalog.TableDescriptor) error {
-	return CreateSystemTable(ctx, r.db, r.codec, r.settings, desc)
-}
-
-// CreateSystemTable is a function to inject a new system table. If the table
-// already exists, ths function is a no-op.
-func CreateSystemTable(
-	ctx context.Context,
-	db DB,
-	codec keys.SQLCodec,
-	settings *cluster.Settings,
-	desc catalog.TableDescriptor,
-) error {
-	// We install the table at the KV layer so that we can choose a known ID in
-	// the reserved ID space. (The SQL layer doesn't allow this.)
-	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		b := txn.NewBatch()
-		tKey := catalogkeys.MakePublicObjectNameKey(codec, desc.GetParentID(), desc.GetName())
-		b.CPut(tKey, desc.GetID(), nil)
-		b.CPut(catalogkeys.MakeDescMetadataKey(codec, desc.GetID()), desc.DescriptorProto(), nil)
-		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
-			return err
-		}
-		return txn.Run(ctx, b)
-	})
-	// CPuts only provide idempotent inserts if we ignore the errors that arise
-	// when the condition isn't met.
-	if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
-		return nil
-	}
-	return err
+	return migrationutils.CreateSystemTable(ctx, r.db, r.codec, desc)
 }
 
 func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {

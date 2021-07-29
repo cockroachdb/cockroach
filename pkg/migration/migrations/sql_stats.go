@@ -15,22 +15,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/migration/migrationutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 )
 
 func sqlStatementStatsTableMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
-	return startupmigrations.CreateSystemTable(
-		ctx, d.DB, d.Codec, d.Settings, systemschema.StatementStatisticsTable,
-	)
+	return migrationutils.CreateSystemTable(ctx, d.DB, d.Codec, systemschema.StatementStatisticsTable)
 }
 
 func sqlTransactionStatsTableMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
-	return startupmigrations.CreateSystemTable(
-		ctx, d.DB, d.Codec, d.Settings, systemschema.TransactionStatisticsTable,
-	)
+	return migrationutils.CreateSystemTable(ctx, d.DB, d.Codec, systemschema.TransactionStatisticsTable)
 }
