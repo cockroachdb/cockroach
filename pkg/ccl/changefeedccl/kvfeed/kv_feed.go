@@ -125,15 +125,6 @@ func (e schemaChangeDetectedError) Error() string {
 	return fmt.Sprintf("schema change detected at %v", e.ts)
 }
 
-type unsupportedSchemaChangeDetected struct {
-	desc string
-	ts   hlc.Timestamp
-}
-
-func (e unsupportedSchemaChangeDetected) Error() string {
-	return fmt.Sprintf("unsupported schema change %s detected at %s", e.desc, e.ts.AsOfSystemTime())
-}
-
 type kvFeed struct {
 	spans               []roachpb.Span
 	checkpoint          []roachpb.Span
@@ -206,17 +197,7 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		boundaryType := jobspb.ResolvedSpan_BACKFILL
 		if f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop {
 			boundaryType = jobspb.ResolvedSpan_EXIT
-		} else if events, err := f.tableFeed.Peek(ctx, highWater.Next()); err == nil && isRegionalByRowChange(events) {
-			// NOTE(ssd): The user is unlikely to see this
-			// error. The schemafeed will fail with an
-			// non-retriable error, meaning we likely
-			// return right after runUntilTableEvent
-			// above.
-			return unsupportedSchemaChangeDetected{
-				desc: "SET REGIONAL BY ROW",
-				ts:   highWater.Next(),
-			}
-		} else if err == nil && isPrimaryKeyChange(events) {
+		} else if events, err := f.tableFeed.Peek(ctx, highWater.Next()); err == nil && isPrimaryKeyChange(events) {
 			boundaryType = jobspb.ResolvedSpan_RESTART
 		} else if err != nil {
 			return err
@@ -241,15 +222,6 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 func isPrimaryKeyChange(events []schemafeed.TableEvent) bool {
 	for _, ev := range events {
 		if schemafeed.IsPrimaryIndexChange(ev) {
-			return true
-		}
-	}
-	return false
-}
-
-func isRegionalByRowChange(events []schemafeed.TableEvent) bool {
-	for _, ev := range events {
-		if schemafeed.IsRegionalByRowChange(ev) {
 			return true
 		}
 	}

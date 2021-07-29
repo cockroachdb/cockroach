@@ -143,6 +143,7 @@ go_test(
         "//pkg/ccl/importccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/multiregionccl",
+        "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
