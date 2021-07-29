@@ -556,20 +556,18 @@ var applyZoneConfigForMultiRegionTableOptionRemoveGlobalZoneConfig = func(
 	return false, zc, nil
 }
 
-// ApplyZoneConfigForMultiRegionTable applies zone config settings based
-// on the options provided.
-func ApplyZoneConfigForMultiRegionTable(
+func prepareZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	regionConfig multiregion.RegionConfig,
 	table catalog.TableDescriptor,
 	opts ...applyZoneConfigForMultiRegionTableOption,
-) error {
+) (*zoneConfigUpdate, error) {
 	tableID := table.GetID()
 	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	newZoneConfig := *zonepb.NewZoneConfig()
 	if currentZoneConfig != nil {
@@ -584,7 +582,7 @@ func ApplyZoneConfigForMultiRegionTable(
 			table,
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		hasNewSubzones = newHasNewSubzones || hasNewSubzones
 		newZoneConfig = modifiedNewZoneConfig
@@ -604,49 +602,47 @@ func ApplyZoneConfigForMultiRegionTable(
 	rewriteZoneConfig := !newZoneConfigIsEmpty
 	deleteZoneConfig := newZoneConfigIsEmpty && !currentZoneConfigIsEmpty
 
-	if rewriteZoneConfig {
-		if err := newZoneConfig.Validate(); err != nil {
-			return pgerror.Newf(
-				pgcode.CheckViolation,
-				"could not validate zone config: %v",
-				err,
-			)
-		}
-		if err := newZoneConfig.ValidateTandemFields(); err != nil {
-			return pgerror.Newf(
-				pgcode.CheckViolation,
-				"could not validate zone config: %v",
-				err,
-			)
-		}
-
-		// If we have fields that are not the default value, write in a new zone configuration
-		// value.
-		if _, err = writeZoneConfig(
-			ctx,
-			txn,
-			tableID,
-			table,
-			&newZoneConfig,
-			execCfg,
-			hasNewSubzones,
-		); err != nil {
-			return err
-		}
-	} else if deleteZoneConfig {
-		// Delete the zone configuration if it exists but the new zone config is
-		// blank.
-		if _, err = execCfg.InternalExecutor.Exec(
-			ctx,
-			"delete-zone-multiregion-table",
-			txn,
-			"DELETE FROM system.zones WHERE id = $1",
-			tableID,
-		); err != nil {
-			return err
-		}
+	if deleteZoneConfig {
+		return &zoneConfigUpdate{id: tableID}, nil
 	}
-	return nil
+	if !rewriteZoneConfig {
+		return nil, nil
+	}
+	if err := newZoneConfig.Validate(); err != nil {
+		return nil, pgerror.Newf(
+			pgcode.CheckViolation,
+			"could not validate zone config: %v",
+			err,
+		)
+	}
+	if err := newZoneConfig.ValidateTandemFields(); err != nil {
+		return nil, pgerror.Newf(
+			pgcode.CheckViolation,
+			"could not validate zone config: %v",
+			err,
+		)
+	}
+	return prepareZoneConfigWrites(
+		execCfg, tableID, table, &newZoneConfig, hasNewSubzones,
+	)
+}
+
+// ApplyZoneConfigForMultiRegionTable applies zone config settings based
+// on the options provided.
+func ApplyZoneConfigForMultiRegionTable(
+	ctx context.Context,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	regionConfig multiregion.RegionConfig,
+	table catalog.TableDescriptor,
+	opts ...applyZoneConfigForMultiRegionTableOption,
+) error {
+	update, err := prepareZoneConfigForMultiRegionTable(ctx, txn, execCfg, regionConfig, table, opts...)
+	if update == nil || err != nil {
+		return err
+	}
+	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, update)
+	return err
 }
 
 // ApplyZoneConfigFromDatabaseRegionConfig applies a zone configuration to the
