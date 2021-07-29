@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1056,6 +1057,15 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 				return
 			}
 
+			// Check if we have zigzag hints.
+			if scanPrivate.Flags.ForceZigzag {
+				indexes := util.MakeFastIntSet(leftIndex.Ordinal(), rightIndex.Ordinal())
+				forceIndexes := scanPrivate.Flags.ZigzagIndexes
+				if !forceIndexes.SubsetOf(indexes) {
+					return
+				}
+			}
+
 			zigzagJoin := memo.ZigzagJoinExpr{
 				On: innerFilters,
 				ZigzagJoinPrivate: memo.ZigzagJoinPrivate{
@@ -1352,6 +1362,11 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		}
 		getVals(spanExpr)
 		if len(vals) < 2 {
+			return
+		}
+
+		// Check if we have zigzag hints.
+		if !scanPrivate.Flags.ZigzagIndexes.Empty() && !scanPrivate.Flags.ZigzagIndexes.Contains(index.Ordinal()) {
 			return
 		}
 
