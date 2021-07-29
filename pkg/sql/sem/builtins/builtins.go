@@ -3125,6 +3125,19 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"cardinality": makeBuiltin(arrayProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"input", types.AnyArray}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				return tree.NewDInt(tree.DInt(arr.Len())), nil
+			},
+			Info:       "Calculates the number of elements contained in `input`",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"array_lower": makeBuiltin(arrayProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
