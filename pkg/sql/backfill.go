@@ -90,6 +90,14 @@ var columnBackfillBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt, /* validateFn */
 )
 
+// backfillCheckpointInterval is the duration between backfill detail updates.
+var backfillCheckpointInterval = settings.RegisterDurationSetting(
+	"bulkio.backfill.checkpoint_interval",
+	"the amount of time between backfill checkpoint updates",
+	30*time.Second,
+	settings.NonNegativeDuration,
+)
+
 var _ sort.Interface = columnsByID{}
 var _ sort.Interface = indexesByID{}
 
@@ -1217,7 +1225,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 
 	// Setup periodic job details update.
 	stopJobDetailsUpdate := make(chan struct{})
-	detailsDuration := 10 * time.Second
+	detailsDuration := backfillCheckpointInterval.Get(&sc.settings.SV)
 	g.GoCtx(func(ctx context.Context) error {
 		tick := time.NewTicker(detailsDuration)
 		defer tick.Stop()
