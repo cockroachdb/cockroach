@@ -130,14 +130,7 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		func(ef exec.ExplainFactory) (exec.Plan, error) {
 			// Create a separate builder for the explain query.
 			explainBld := New(
-				ef,
-				b.optimizer,
-				b.mem,
-				b.catalog,
-				explain.Input,
-				b.semaCtx,
-				b.evalCtx,
-				b.initialAllowAutoCommit,
+				ef, b.optimizer, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit,
 			)
 			explainBld.disableTelemetry = true
 			return explainBld.Build()
