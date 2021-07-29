@@ -232,8 +232,8 @@ func (b *Builder) findBuiltWithExpr(id opt.WithID) *builtWithExpr {
 
 // boundedStaleness returns true if this query uses bounded staleness.
 func (b *Builder) boundedStaleness() bool {
-	return b.semaCtx != nil && b.semaCtx.AsOfSystemTime != nil &&
-		b.semaCtx.AsOfSystemTime.BoundedStaleness
+	return b.evalCtx != nil && b.evalCtx.AsOfSystemTime != nil &&
+		b.evalCtx.AsOfSystemTime.BoundedStaleness
 }
 
 // mdVarContainer is an IndexedVarContainer implementation used by BuildScalar -

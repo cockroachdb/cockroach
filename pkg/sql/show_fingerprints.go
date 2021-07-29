@@ -150,7 +150,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	// If were'in in an AOST context, propagate it to the inner statement so that
 	// the inner statement gets planned with planner.avoidCachedDescriptors set,
 	// like the outter one.
-	if params.p.semaCtx.AsOfSystemTime != nil {
+	if params.p.EvalContext().AsOfSystemTime != nil {
 		ts := params.p.txn.ReadTimestamp()
 		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
 	}
