@@ -314,7 +314,7 @@ func TestSetAccountingHelper(t *testing.T) {
 					coldata.SetValueAt(batch.ColVec(vecIdx), converter(datum), rowIdx)
 				}
 			}
-			helper.AccountForSet(batch, rowIdx)
+			helper.AccountForSet(rowIdx)
 		}
 
 		// At this point, we have set all rows in the batch and performed the

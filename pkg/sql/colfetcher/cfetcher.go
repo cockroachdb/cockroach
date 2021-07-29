@@ -1115,7 +1115,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			if err := rf.fillNulls(); err != nil {
 				return nil, err
 			}
-			rf.accountingHelper.AccountForSet(rf.machine.batch, rf.machine.rowIdx)
+			rf.accountingHelper.AccountForSet(rf.machine.rowIdx)
 			rf.machine.rowIdx++
 			rf.shiftState()
 
@@ -1150,6 +1150,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateEmitLastBatch:
 			rf.machine.state[0] = stateFinished
 			rf.finalizeBatch()
+			rf.accountingHelper.Close()
 			return rf.machine.batch, nil
 
 		case stateFinished:
