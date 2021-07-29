@@ -76,7 +76,7 @@ require (
 	github.com/golang/glog v0.0.0-20210429001901-424d2337a529 // indirect
 	github.com/golang/mock v1.5.0
 	github.com/golang/protobuf v1.5.2
-	github.com/golang/snappy v0.0.3
+	github.com/golang/snappy v0.0.4
 	github.com/google/btree v1.0.0
 	github.com/google/flatbuffers v1.11.0
 	github.com/google/go-cmp v0.5.5
@@ -106,7 +106,7 @@ require (
 	github.com/lib/pq v1.8.0
 	github.com/lib/pq/auth/kerberos v0.0.0-20200720160335-984a6aa1ca46
 	github.com/lightstep/lightstep-tracer-go v0.24.0
-	github.com/linkedin/goavro/v2 v2.9.8
+	github.com/linkedin/goavro/v2 v2.10.0
 	github.com/lufia/iostat v1.0.0
 	github.com/lusis/slack-test v0.0.0-20190426140909-c40012f20018 // indirect
 	github.com/maruel/panicparse v1.1.2-0.20180806203336-f20d4c4d746f

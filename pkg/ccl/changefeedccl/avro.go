@@ -428,9 +428,10 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				LogicalType: `time-micros`,
 			},
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
-				// The avro library requires us to return this as a time.Duration.
-				duration := time.Duration(*d.(*tree.DTime)) * time.Microsecond
-				return duration, nil
+				// Time of day is stored in microseconds since midnight,
+				// which is also the avro format
+				time := d.(*tree.DTime)
+				return int64(*time), nil
 			},
 			func(x interface{}) (tree.Datum, error) {
 				// The avro library hands this back as a time.Duration.
