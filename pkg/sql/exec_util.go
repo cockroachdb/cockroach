@@ -2576,11 +2576,13 @@ func (m *sessionDataMutator) initSequenceCache() {
 // SetIntervalStyle sets the IntervalStyle for the given session.
 func (m *sessionDataMutator) SetIntervalStyle(style duration.IntervalStyle) {
 	m.data.DataConversionConfig.IntervalStyle = style
+	m.paramStatusUpdater.BufferParamStatusUpdate("IntervalStyle", strings.ToLower(style.String()))
 }
 
 // SetDateStyle sets the DateStyle for the given session.
 func (m *sessionDataMutator) SetDateStyle(style pgdate.DateStyle) {
 	m.data.DataConversionConfig.DateStyle = style
+	m.paramStatusUpdater.BufferParamStatusUpdate("DateStyle", style.SQLString())
 }
 
 // SetIntervalStyleEnabled sets the IntervalStyleEnabled for the given session.
