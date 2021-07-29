@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cloudimpl",
+    srcs = ["external_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cloud/impl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cloud/amazon",
+        "//pkg/cloud/azure",
+        "//pkg/cloud/gcp",
+        "//pkg/cloud/httpsink",
+        "//pkg/cloud/nodelocal",
+        "//pkg/cloud/nullsink",
+        "//pkg/cloud/userfile",
+    ],
+)

@@ -26,6 +26,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/cloud",
         "//pkg/col/coldata",
         "//pkg/gossip",
         "//pkg/jobs",
@@ -50,7 +51,6 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",
-        "//pkg/storage/cloud",
         "//pkg/storage/fs",
         "//pkg/util",
         "//pkg/util/admission",

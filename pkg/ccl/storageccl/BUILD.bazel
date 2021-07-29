@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/cloud",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver",
@@ -24,7 +25,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/sem/builtins",
         "//pkg/storage",
-        "//pkg/storage/cloud",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
@@ -50,6 +50,7 @@ go_test(
     embed = [":storageccl"],
     deps = [
         "//pkg/base",
+        "//pkg/cloud/impl:cloudimpl",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb:with-mocks",
@@ -58,7 +59,6 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/storage",
-        "//pkg/storage/cloudimpl",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
