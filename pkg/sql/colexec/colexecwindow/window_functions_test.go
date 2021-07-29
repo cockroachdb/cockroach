@@ -1190,7 +1190,15 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			}
 		} else if fun.AggregateFunc != nil {
 			var argIdxs []int
-			if *fun.AggregateFunc != execinfrapb.CountRows {
+			switch *fun.AggregateFunc {
+			case execinfrapb.CountRows:
+				// CountRows has a specialized implementation.
+				return NewCountRowsOperator(
+					args,
+					NormalizeWindowFrame(nil),
+					&execinfrapb.Ordering{Columns: orderingCols},
+				)
+			default:
 				// Supported aggregate functions other than CountRows take one argument.
 				argIdxs = []int{arg1ColIdx}
 			}

@@ -5,6 +5,7 @@ go_library(
     name = "colexecwindow",
     srcs = [
         "buffered_window.go",
+        "count_rows_aggregator.go",
         "partitioner.go",
         "window_functions_util.go",
         ":gen-exec",  # keep
