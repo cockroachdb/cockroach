@@ -499,29 +499,15 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 
 		// NB: we make no attempt to deal with column direction here, that is sorted
 		// out later in the span builder.
-		var inequalityInfo multiSpanGeneratorInequalityColInfo
-		if lval, err := getInfo(t.Left.(tree.TypedExpr)); err != nil {
+
+		lval, err := getInfo(t.Left.(tree.TypedExpr))
+		if err != nil {
 			return err
-		} else if lval != nil {
-			if t.Operator.Symbol == tree.LT || t.Operator.Symbol == tree.LE {
-				inequalityInfo.start = lval
-				inequalityInfo.startInclusive = t.Operator.Symbol == tree.LE
-			} else {
-				inequalityInfo.end = lval
-				inequalityInfo.endInclusive = t.Operator.Symbol == tree.GE
-			}
 		}
 
-		if rval, err := getInfo(t.Right.(tree.TypedExpr)); err != nil {
+		rval, err := getInfo(t.Right.(tree.TypedExpr))
+		if err != nil {
 			return err
-		} else if rval != nil {
-			if t.Operator.Symbol == tree.LT || t.Operator.Symbol == tree.LE {
-				inequalityInfo.end = rval
-				inequalityInfo.endInclusive = t.Operator.Symbol == tree.LE
-			} else {
-				inequalityInfo.start = rval
-				inequalityInfo.startInclusive = t.Operator.Symbol == tree.GE
-			}
 		}
 
 		idxOrd, ok := g.tableOrdToIndexOrd.Get(tabOrd)
@@ -529,14 +515,47 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 			return errors.AssertionFailedf("table column %d not found in index", tabOrd)
 		}
 
+		// Make sure slice has room for new entry.
+		if len(g.indexColInfos) <= idxOrd {
+			g.indexColInfos = g.indexColInfos[:idxOrd+1]
+		}
+
 		if inequality {
+			// If we have two inequalities we might already have an info, ie if we
+			// have a < 10 and a > 0 we'll have two invocations of fillInIndexColInfo
+			// for each comparison and they need to update the same info.
+			colInfo := g.indexColInfos[idxOrd]
+			var inequalityInfo multiSpanGeneratorInequalityColInfo
+			if colInfo != nil {
+				inequalityInfo, ok = colInfo.(multiSpanGeneratorInequalityColInfo)
+				if !ok {
+					return errors.AssertionFailedf("unexpected colinfo type (%d): %T", idxOrd, colInfo)
+				}
+			}
+
+			if lval != nil {
+				if t.Operator.Symbol == tree.LT || t.Operator.Symbol == tree.LE {
+					inequalityInfo.start = lval
+					inequalityInfo.startInclusive = t.Operator.Symbol == tree.LE
+				} else {
+					inequalityInfo.end = lval
+					inequalityInfo.endInclusive = t.Operator.Symbol == tree.GE
+				}
+			}
+
+			if rval != nil {
+				if t.Operator.Symbol == tree.LT || t.Operator.Symbol == tree.LE {
+					inequalityInfo.end = rval
+					inequalityInfo.endInclusive = t.Operator.Symbol == tree.LE
+				} else {
+					inequalityInfo.start = rval
+					inequalityInfo.startInclusive = t.Operator.Symbol == tree.GE
+				}
+			}
 			info = inequalityInfo
 			g.inequalityColIdx = idxOrd
 		}
 
-		if len(g.indexColInfos) <= idxOrd {
-			g.indexColInfos = g.indexColInfos[:idxOrd+1]
-		}
 		g.indexColInfos[idxOrd] = info
 		g.indexOrds.Add(idxOrd)
 

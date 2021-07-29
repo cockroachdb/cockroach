@@ -847,3 +847,97 @@ vectorized: true
                       estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                       table: metrics@name_index
                       spans: [/'cpu' - /'cpu']
+
+
+# Regression test for issue #68200.  This ensures that we properly construct the
+# span to account for both ends of the inequality.
+statement ok
+CREATE TABLE order_line (ol_o_id INT8, ol_i_id INT8);
+INSERT
+INTO
+  order_line (ol_o_id, ol_i_id)
+VALUES
+  (19, 6463), (20, 6463), (100, 6463), (101, 6463);
+CREATE INDEX ol_io ON order_line (ol_i_id, ol_o_id);
+CREATE TABLE stock (s_i_id INT8);
+INSERT INTO stock (s_i_id) VALUES (6463)
+
+query T kvtrace(Scan,prefix=/Table/56/2/6463/{)
+SELECT
+  s_i_id, ol_o_id
+FROM
+  stock INNER LOOKUP JOIN order_line ON s_i_id = ol_i_id
+WHERE
+  ol_o_id BETWEEN 20 AND 100
+----
+Scan /Table/56/2/6463/{20-101}
+
+query T
+EXPLAIN (VERBOSE)
+SELECT
+  s_i_id, ol_o_id
+FROM
+  stock INNER LOOKUP JOIN order_line ON s_i_id = ol_i_id
+WHERE
+  ol_o_id BETWEEN 20 AND 100
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (s_i_id, ol_o_id)
+│ estimated row count: 7,939 (missing stats)
+│
+└── • lookup join (inner)
+    │ columns: (s_i_id, ol_o_id, ol_i_id)
+    │ estimated row count: 7,939 (missing stats)
+    │ table: order_line@ol_io
+    │ lookup condition: (s_i_id = ol_i_id) AND ((ol_o_id >= 20) AND (ol_o_id <= 100))
+    │
+    └── • scan
+          columns: (s_i_id)
+          estimated row count: 1,000 (missing stats)
+          table: stock@primary
+          spans: FULL SCAN
+
+# Make sure we don't confuse logic to handle constants and inequalities.
+query T
+EXPLAIN (VERBOSE)
+SELECT
+  s_i_id, ol_o_id
+FROM
+  stock INNER LOOKUP JOIN order_line ON s_i_id = ol_i_id
+WHERE
+  ol_o_id IN (19, 20, 21) AND ol_o_id >= 20
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (s_i_id, ol_o_id)
+│ estimated row count: 196 (missing stats)
+│
+└── • project
+    │ columns: (s_i_id, ol_o_id, ol_i_id)
+    │ estimated row count: 196 (missing stats)
+    │
+    └── • lookup join (inner)
+        │ columns: (s_i_id, "lookup_join_const_col_@5", ol_o_id, ol_i_id)
+        │ table: order_line@ol_io
+        │ equality: (s_i_id, lookup_join_const_col_@5) = (ol_i_id,ol_o_id)
+        │
+        └── • cross join (inner)
+            │ columns: (s_i_id, "lookup_join_const_col_@5")
+            │ estimated row count: 2,000 (missing stats)
+            │
+            ├── • scan
+            │     columns: (s_i_id)
+            │     estimated row count: 1,000 (missing stats)
+            │     table: stock@primary
+            │     spans: FULL SCAN
+            │
+            └── • values
+                  columns: ("lookup_join_const_col_@5")
+                  size: 1 column, 2 rows
+                  row 0, expr 0: 20
+                  row 1, expr 0: 21
