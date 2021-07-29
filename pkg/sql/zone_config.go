@@ -357,7 +357,7 @@ func resolveSubzone(
 	return index, partitionName, nil
 }
 
-func deleteRemovedPartitionZoneConfigs(
+func prepareRemovedPartitionZoneConfigs(
 	ctx context.Context,
 	txn *kv.Txn,
 	tableDesc catalog.TableDescriptor,
@@ -365,7 +365,7 @@ func deleteRemovedPartitionZoneConfigs(
 	oldPart catalog.Partitioning,
 	newPart catalog.Partitioning,
 	execCfg *ExecutorConfig,
-) error {
+) (*zoneConfigUpdate, error) {
 	newNames := map[string]struct{}{}
 	_ = newPart.ForEachPartitionName(func(newName string) error {
 		newNames[newName] = struct{}{}
@@ -379,11 +379,11 @@ func deleteRemovedPartitionZoneConfigs(
 		return nil
 	})
 	if len(removedNames) == 0 {
-		return nil
+		return nil, nil
 	}
 	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableDesc.GetID())
 	if err != nil {
-		return err
+		return nil, err
 	} else if zone == nil {
 		zone = zonepb.NewZoneConfig()
 	}
@@ -391,6 +391,24 @@ func deleteRemovedPartitionZoneConfigs(
 		zone.DeleteSubzone(uint32(indexID), n)
 	}
 	hasNewSubzones := false
-	_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, hasNewSubzones)
+	return prepareZoneConfigWrites(execCfg, tableDesc.GetID(), tableDesc, zone, hasNewSubzones)
+}
+
+func deleteRemovedPartitionZoneConfigs(
+	ctx context.Context,
+	txn *kv.Txn,
+	tableDesc catalog.TableDescriptor,
+	indexID descpb.IndexID,
+	oldPart catalog.Partitioning,
+	newPart catalog.Partitioning,
+	execCfg *ExecutorConfig,
+) error {
+	update, err := prepareRemovedPartitionZoneConfigs(
+		ctx, txn, tableDesc, indexID, oldPart, newPart, execCfg,
+	)
+	if update == nil || err != nil {
+		return err
+	}
+	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, update)
 	return err
 }
