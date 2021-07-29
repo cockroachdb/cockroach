@@ -775,7 +775,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FOREIGN FROM FULL FUNCTION FUNCTIONS
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG FOREIGN FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
@@ -9568,6 +9568,16 @@ index_flags_param:
     /* SKIP DOC */
     $$.val = &tree.IndexFlags{IgnoreForeignKeys: true}
   }
+|
+  FORCE_ZIGZAG
+  {
+     $$.val = &tree.IndexFlags{ForceZigzag: true}
+  }
+|
+  FORCE_ZIGZAG '=' index_name
+  {
+     $$.val = &tree.IndexFlags{ZigzagIndices: []tree.UnrestrictedName{tree.UnrestrictedName($3)}}
+  }
 
 index_flags_param_list:
   index_flags_param
@@ -12982,6 +12992,7 @@ unreserved_keyword:
 | FOLLOWING
 | FORCE
 | FORCE_INDEX
+| FORCE_ZIGZAG
 | FUNCTION
 | FUNCTIONS
 | GENERATED

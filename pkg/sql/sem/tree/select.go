@@ -270,6 +270,8 @@ type IndexID uint32
 //  - NO_INDEX_JOIN
 //  - NO_ZIGZAG_JOIN
 //  - IGNORE_FOREIGN_KEYS
+//  - FORCE_ZIGZAG
+//  - FORCE_ZIGZAG=idx1*
 // It is used optionally after a table name in SELECT statements.
 type IndexFlags struct {
 	Index   UnrestrictedName
@@ -288,6 +290,13 @@ type IndexFlags struct {
 	// IgnoreUniqueWithoutIndexKeys disables optimizations based on unique without
 	// index constraints.
 	IgnoreUniqueWithoutIndexKeys bool
+	ForceZigzag                  bool
+	// ZigzagIndices forces a zigzag plan, with (optionally) particular indices.
+	// There are three possibilities:
+	// 1) nil means no hint, business as usual
+	// 2) empty slice means force a Zigzag join but any index will do
+	// 3) non-empty slice means Zigzag plan must use the indices provided
+	ZigzagIndices []UnrestrictedName
 }
 
 // ForceIndex returns true if a forced index was specified, either using a name
@@ -333,6 +342,18 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 		result.IndexID = other.IndexID
 	}
 
+	if other.ForceZigzag {
+		if ih.ForceZigzag {
+			return errors.New("FORCE_ZIGZAG specified multiple times")
+		}
+		result.ForceZigzag = true
+	}
+
+	// We can have N zigzag indices (in theory, we only support 2 now).
+	if len(other.ZigzagIndices) > 0 {
+		result.ZigzagIndices = append(result.ZigzagIndices, other.ZigzagIndices...)
+	}
+
 	// We only set at the end to avoid a partially changed structure in one of the
 	// error cases above.
 	*ih = result
@@ -349,6 +370,13 @@ func (ih *IndexFlags) Check() error {
 	if ih.Direction != 0 && !ih.ForceIndex() {
 		return errors.New("ASC/DESC must be specified in conjunction with an index")
 	}
+	if ih.ForceZigzag && ih.NoIndexJoin {
+		return errors.New("FORCE_ZIGZAG cannot be specified in conjunction with NO_INDEX_JOIN")
+	}
+	if ih.ForceZigzag && ih.ForceIndex() {
+		return errors.New("FORCE_ZIGZAG cannot be specified in conjunction with FORCE_INDEX")
+	}
+
 	return nil
 }
 
@@ -399,6 +427,20 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 		if ih.IgnoreUniqueWithoutIndexKeys {
 			sep()
 			ctx.WriteString("IGNORE_UNIQUE_WITHOUT_INDEX_KEYS")
+		}
+
+		if ih.ForceZigzag || len(ih.ZigzagIndices) > 0 {
+			sep()
+			if len(ih.ZigzagIndices) == 0 {
+				ctx.WriteString("FORCE_ZIGZAG")
+			} else {
+				for i, idx := range ih.ZigzagIndices {
+					ctx.Printf("FORCE_ZIGZAG=%s", idx)
+					if i+1 < len(ih.ZigzagIndices) {
+						sep()
+					}
+				}
+			}
 		}
 		ctx.WriteString("}")
 	}

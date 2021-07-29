@@ -341,3 +341,135 @@ project
  │                   └── b
  └── projections
       └── a + 1
+
+
+exec-ddl
+CREATE TABLE zigzag (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b), UNIQUE INDEX c_idx(b,c), INDEX ba_idx(b));
+----
+
+# Verify naked hint.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup t.public.zigzag)
+ ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ ├── cost: 28.4722162
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── prune: (1,4)
+ ├── interesting orderings: (+1 opt(2,3)) (+4,+1 opt(2,3))
+ ├── inner-join (zigzag t.public.zigzag@a_idx t.public.zigzag@b_idx)
+ │    ├── columns: t.public.zigzag.n:1(int!null) t.public.zigzag.a:2(int!null) t.public.zigzag.b:3(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ │    ├── cost: 22.9427027
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── eq [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         │    ├── variable: t.public.zigzag.a:2 [type=int]
+ │         │    └── const: 3 [type=int]
+ │         └── eq [type=bool, outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ │              ├── variable: t.public.zigzag.b:3 [type=int]
+ │              └── const: 7 [type=int]
+ └── filters (true)
+
+
+# Verify plan with one index.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup t.public.zigzag)
+ ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ ├── cost: 28.4722162
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── prune: (1,4)
+ ├── interesting orderings: (+1 opt(2,3)) (+4,+1 opt(2,3))
+ ├── inner-join (zigzag t.public.zigzag@a_idx t.public.zigzag@b_idx)
+ │    ├── columns: t.public.zigzag.n:1(int!null) t.public.zigzag.a:2(int!null) t.public.zigzag.b:3(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ │    ├── cost: 22.9427027
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── eq [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         │    ├── variable: t.public.zigzag.a:2 [type=int]
+ │         │    └── const: 3 [type=int]
+ │         └── eq [type=bool, outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ │              ├── variable: t.public.zigzag.b:3 [type=int]
+ │              └── const: 7 [type=int]
+ └── filters (true)
+
+
+# Verify plan with other index.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup t.public.zigzag)
+ ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ ├── cost: 28.4722162
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── prune: (1,4)
+ ├── interesting orderings: (+1 opt(2,3)) (+4,+1 opt(2,3))
+ ├── inner-join (zigzag t.public.zigzag@a_idx t.public.zigzag@b_idx)
+ │    ├── columns: t.public.zigzag.n:1(int!null) t.public.zigzag.a:2(int!null) t.public.zigzag.b:3(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ │    ├── cost: 22.9427027
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── eq [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         │    ├── variable: t.public.zigzag.a:2 [type=int]
+ │         │    └── const: 3 [type=int]
+ │         └── eq [type=bool, outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ │              ├── variable: t.public.zigzag.b:3 [type=int]
+ │              └── const: 7 [type=int]
+ └── filters (true)
+
+
+# Verify plan with both indexes hinted.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup t.public.zigzag)
+ ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ ├── cost: 28.4722162
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── prune: (1,4)
+ ├── interesting orderings: (+1 opt(2,3)) (+4,+1 opt(2,3))
+ ├── inner-join (zigzag t.public.zigzag@a_idx t.public.zigzag@b_idx)
+ │    ├── columns: t.public.zigzag.n:1(int!null) t.public.zigzag.a:2(int!null) t.public.zigzag.b:3(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── stats: [rows=0.910810811, distinct(2)=0.910810811, null(2)=0, distinct(3)=0.910810811, null(3)=0, distinct(2,3)=0.910810811, null(2,3)=0]
+ │    ├── cost: 22.9427027
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── eq [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         │    ├── variable: t.public.zigzag.a:2 [type=int]
+ │         │    └── const: 3 [type=int]
+ │         └── eq [type=bool, outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ │              ├── variable: t.public.zigzag.b:3 [type=int]
+ │              └── const: 7 [type=int]
+ └── filters (true)

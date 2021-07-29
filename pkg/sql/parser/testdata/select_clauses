@@ -401,6 +401,30 @@ SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
                                        ^
 
 error
+SELECT a FROM foo@{FORCE_ZIGZAG,NO_INDEX_JOIN}
+----
+at or near "}": syntax error: FORCE_ZIGZAG cannot be specified in conjunction with NO_INDEX_JOIN
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_ZIGZAG,NO_INDEX_JOIN}
+                                             ^
+
+error
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_INDEX=a}
+----
+at or near "}": syntax error: FORCE_ZIGZAG cannot be specified in conjunction with FORCE_INDEX
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_INDEX=a}
+                                             ^
+
+error
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_ZIGZAG}
+----
+at or near "}": syntax error: FORCE_ZIGZAG specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_ZIGZAG}
+                                            ^
+
+error
 SELECT a FROM foo@{ASC}
 ----
 at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
@@ -415,6 +439,22 @@ at or near "}": syntax error: ASC/DESC must be specified in conjunction with an 
 DETAIL: source SQL:
 SELECT a FROM foo@{DESC}
                        ^
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=a,IGNORE_FOREIGN_KEYS}
+----
+SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a} -- normalized!
+SELECT ('a') FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a} -- fully parenthesized
+SELECT _ FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a} -- literals removed
+SELECT 'a' FROM _@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=a,FORCE_ZIGZAG=b,IGNORE_FOREIGN_KEYS}
+----
+SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a,FORCE_ZIGZAG=b} -- normalized!
+SELECT ('a') FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a,FORCE_ZIGZAG=b} -- fully parenthesized
+SELECT _ FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a,FORCE_ZIGZAG=b} -- literals removed
+SELECT 'a' FROM _@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a,FORCE_ZIGZAG=b} -- identifiers removed
 
 parse
 SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'
