@@ -68,6 +68,7 @@ type SyncedCluster struct {
 	// all other fields are populated in newCluster.
 	Nodes          []int
 	Secure         bool
+	CertsDir       string
 	Env            string
 	Args           []string
 	Tag            string
@@ -894,6 +895,7 @@ rm -fr certs
 mkdir -p certs
 %[1]s cert create-ca --certs-dir=certs --ca-key=certs/ca.key
 %[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key
+%[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key
 %[1]s cert create-node localhost %[2]s --certs-dir=certs --ca-key=certs/ca.key
 tar cvf certs.tar certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "))

@@ -71,11 +71,9 @@ func runConnectionLatencyTest(
 		}
 		urlString = strings.Join(urls, " ")
 
+		// NB: certs for `testuser` are created by `roachprod start --secure`.
 		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs -e "CREATE USER testuser CREATEDB"`)
 		require.NoError(t, err)
-		err = c.RunE(ctx, c.All(),
-			fmt.Sprintf(`./cockroach cert create-client testuser --certs-dir %s --ca-key=%s/ca.key`,
-				certsDir, certsDir))
 		require.NoError(t, err)
 		err = c.RunE(ctx, c.Node(1), "./workload init connectionlatency --user testuser --secure")
 		require.NoError(t, err)

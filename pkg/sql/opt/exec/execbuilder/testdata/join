@@ -2033,7 +2033,25 @@ CREATE TABLE zigzag (
   INDEX c_idx(c)
 )
 
-# No zigzag join should be planned if enable_zigzag_join is false.
+# No zigzag join should be planned if there is a hint or enable_zigzag_join is
+# false.
+query T
+EXPLAIN SELECT a,b,c FROM zigzag@{NO_ZIGZAG_JOIN} WHERE b = 5 AND c = 6.0
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: c = 6.0
+│
+└── • index join
+    │ table: zigzag@primary
+    │
+    └── • scan
+          missing stats
+          table: zigzag@b_idx
+          spans: [/5 - /5]
+
 statement ok
 SET enable_zigzag_join = false
 

@@ -510,6 +510,7 @@ func (b *Builder) buildScan(
 	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
 	if indexFlags != nil {
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
+		private.Flags.NoZigzagJoin = indexFlags.NoZigzagJoin
 		if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 			idx := -1
 			for i := 0; i < tab.IndexCount(); i++ {
@@ -537,6 +538,10 @@ func (b *Builder) buildScan(
 	}
 	if locking.isSet() {
 		private.Locking = locking.get()
+	}
+	if b.semaCtx.AsOfSystemTime != nil && b.semaCtx.AsOfSystemTime.BoundedStaleness {
+		private.Flags.NoIndexJoin = true
+		private.Flags.NoZigzagJoin = true
 	}
 
 	b.addCheckConstraintsForTable(tabMeta)
@@ -1181,7 +1186,6 @@ func (b *Builder) buildFromWithLateral(
 // validateAsOf ensures that any AS OF SYSTEM TIME timestamp is consistent with
 // that of the root statement.
 func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
-	// TODO(#67558): prohibit bounded staleness in subqueries.
 	asOf, err := tree.EvalAsOfTimestamp(
 		b.ctx,
 		asOfClause,

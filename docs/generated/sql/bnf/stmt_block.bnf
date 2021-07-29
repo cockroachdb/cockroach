@@ -976,6 +976,7 @@ unreserved_keyword ::=
 	| 'NO'
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
+	| 'NO_ZIGZAG_JOIN'
 	| 'NOCREATEDB'
 	| 'NOCREATELOGIN'
 	| 'NOCANCELQUERY'
@@ -2752,6 +2753,7 @@ materialize_clause ::=
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
+	| 'NO_ZIGZAG_JOIN'
 
 opt_asc_desc ::=
 	'ASC'

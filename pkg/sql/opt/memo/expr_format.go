@@ -397,9 +397,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("limit: %s", private.HardLimit)
 		}
 		if !private.Flags.Empty() {
+			var b strings.Builder
+			b.WriteString("flags:")
 			if private.Flags.NoIndexJoin {
-				tp.Childf("flags: no-index-join")
-			} else if private.Flags.ForceIndex {
+				b.WriteString(" no-index-join")
+			}
+			if private.Flags.ForceIndex {
 				idx := md.Table(private.Table).Index(private.Flags.Index)
 				dir := ""
 				switch private.Flags.Direction {
@@ -409,8 +412,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				case tree.Descending:
 					dir = ",rev"
 				}
-				tp.Childf("flags: force-index=%s%s", idx.Name(), dir)
+				b.WriteString(fmt.Sprintf(" force-index=%s%s", idx.Name(), dir))
 			}
+			if private.Flags.NoZigzagJoin {
+				b.WriteString(" no-zigzag-join")
+			}
+			tp.Child(b.String())
 		}
 		if private.Locking != nil {
 			strength := ""

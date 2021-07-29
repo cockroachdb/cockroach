@@ -96,6 +96,7 @@ var (
 	nodeArgs          []string
 	tag               string
 	external          = false
+	certsDir          string
 	adminurlOpen      = false
 	adminurlPath      = ""
 	adminurlIPs       = false
@@ -181,6 +182,7 @@ Available clusters:
 	}
 	c.Nodes = nodes
 	c.Secure = secure
+	c.CertsDir = certsDir
 	c.Env = strings.Join(nodeEnv, " ")
 	c.Args = nodeArgs
 	if tag != "" {
@@ -1943,6 +1945,8 @@ func main() {
 
 	pgurlCmd.Flags().BoolVar(
 		&external, "external", false, "return pgurls for external connections")
+	pgurlCmd.Flags().StringVar(
+		&certsDir, "certs-dir", "./certs", "cert dir to use for secure connections")
 
 	pprofCmd.Flags().DurationVar(
 		&pprofOptions.duration, "duration", 30*time.Second, "Duration of profile to capture")

@@ -5232,7 +5232,7 @@ CREATE TABLE zz_redundant (
 
 # Simple zigzag case - where all requested columns are in the indexes being
 # joined.
-opt
+opt expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----
 inner-join (zigzag pqr@q pqr@r)
@@ -5245,7 +5245,7 @@ inner-join (zigzag pqr@q pqr@r)
       ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
 
-opt
+opt expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r IS NULL
 ----
 inner-join (zigzag pqr@q pqr@r)
@@ -5258,7 +5258,7 @@ inner-join (zigzag pqr@q pqr@r)
       ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       └── r:3 IS NULL [outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
 
-memo
+memo expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----
 memo (optimized, ~13KB, required=[presentation: q:2,r:3])
@@ -5305,7 +5305,7 @@ memo (optimized, ~13KB, required=[presentation: q:2,r:3])
  └── G17: (const 2)
 
 # Case where the fixed columns are extracted from a complicated expression.
-opt
+opt expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND ((r < 1 AND r > 1) OR (r >= 2 AND r <= 2))
 ----
 inner-join (zigzag pqr@q pqr@r)
@@ -5320,7 +5320,7 @@ inner-join (zigzag pqr@q pqr@r)
 
 # Nested zigzag case - zigzag join needs to be wrapped in a lookup join to
 # satisfy required columns.
-opt
+opt expect=GenerateZigzagJoins
 SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
 ----
 inner-join (lookup pqr)
@@ -5339,7 +5339,7 @@ inner-join (lookup pqr)
  │         └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
  └── filters (true)
 
-memo
+memo expect=GenerateZigzagJoins
 SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
 ----
 memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
@@ -5391,7 +5391,7 @@ memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
  └── G19: (const 2)
 
 # Zigzag with fixed columns of different types.
-opt
+opt expect=GenerateZigzagJoins
 SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
 ----
 inner-join (zigzag pqr@q pqr@s)
@@ -5404,7 +5404,7 @@ inner-join (zigzag pqr@q pqr@s)
       ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
-memo
+memo expect=GenerateZigzagJoins
 SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
 ----
 memo (optimized, ~11KB, required=[presentation: q:2,s:4])
@@ -5445,7 +5445,7 @@ memo (optimized, ~11KB, required=[presentation: q:2,s:4])
 # Zigzag with implicit equality column in addition to primary key:
 # indexes on (r,s) and (t,s) should be chosen even though s is not being fixed
 # in the ON clause.
-opt
+opt expect=GenerateZigzagJoins
 SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
 ----
 inner-join (zigzag pqr@rs pqr@ts)
@@ -5458,7 +5458,7 @@ inner-join (zigzag pqr@rs pqr@ts)
       ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
       └── t:5 = 'foo' [outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
 
-memo
+memo expect=GenerateZigzagJoins
 SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
 ----
 memo (optimized, ~13KB, required=[presentation: r:3,t:5])
@@ -5505,7 +5505,7 @@ memo (optimized, ~13KB, required=[presentation: r:3,t:5])
  └── G17: (const 'foo')
 
 # Zigzag with choice between indexes for multiple equality predicates.
-opt
+opt expect=GenerateZigzagJoins
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
 inner-join (zigzag pqr@q pqr@s)
@@ -5519,6 +5519,25 @@ inner-join (zigzag pqr@q pqr@s)
       ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
       └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Zigzag join should not be produced when there is a NO_ZIGZAG_JOIN hint.
+opt expect-not=GenerateZigzagJoins
+SELECT q,r FROM pqr@{NO_ZIGZAG_JOIN} WHERE q = 1 AND r = 2
+----
+select
+ ├── columns: q:2!null r:3!null
+ ├── fd: ()-->(2,3)
+ ├── index-join pqr
+ │    ├── columns: q:2 r:3
+ │    ├── fd: ()-->(2)
+ │    └── scan pqr@q
+ │         ├── columns: p:1!null q:2!null
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── flags: no-zigzag-join
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── filters
+      └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
 
 # Tests for zigzag joins over partial indexes.
 
@@ -6250,6 +6269,37 @@ index-join b
            │         └── ["7c\x00\x01*\x04\x00", "7c\x00\x01*\x04\x00"]
            ├── locking: for-update
            ├── volatile
+           ├── key: (1)
+           └── fd: (1)-->(9)
+
+# Zigzag join should not be produced when there is a NO_ZIGZAG_JOIN hint.
+opt expect-not=GenerateInvertedIndexZigzagJoins
+SELECT k FROM b@{NO_ZIGZAG_JOIN} WHERE j @> '{"a": "b", "c": "d"}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      ├── key: (1)
+      └── scan b@j_inv_idx
+           ├── columns: k:1!null j_inverted_key:9!null
+           ├── inverted constraint: /9/1
+           │    └── spans
+           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+           ├── flags: no-zigzag-join
            ├── key: (1)
            └── fd: (1)-->(9)
 
