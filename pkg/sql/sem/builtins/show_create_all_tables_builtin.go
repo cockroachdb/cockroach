@@ -53,10 +53,9 @@ func getTopologicallySortedTableIDs(
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	dbName string,
-	ts string,
 	acc *mon.BoundAccount,
 ) ([]int64, error) {
-	ids, err := getTableIDs(ctx, ie, txn, ts, dbName, acc)
+	ids, err := getTableIDs(ctx, ie, txn, dbName, acc)
 	if err != nil {
 		return nil, err
 	}
@@ -74,9 +73,8 @@ func getTopologicallySortedTableIDs(
 		query := fmt.Sprintf(`
 		SELECT dependson_id
 		FROM %s.crdb_internal.backward_dependencies
-		AS OF SYSTEM TIME %s
 		WHERE descriptor_id = $1
-		`, dbName, ts)
+		`, dbName)
 		it, err := ie.QueryIteratorEx(
 			ctx,
 			"crdb_internal.show_create_all_tables",
@@ -158,18 +156,16 @@ func getTableIDs(
 	ctx context.Context,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
-	ts string,
 	dbName string,
 	acc *mon.BoundAccount,
 ) ([]int64, error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
 		FROM %s.crdb_internal.create_statements
-		AS OF SYSTEM TIME %s
 		WHERE database_name = $1 
 		AND is_virtual = FALSE
 		AND is_temporary = FALSE
-		`, dbName, ts)
+		`, dbName)
 	it, err := ie.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
@@ -246,15 +242,14 @@ func topologicalSort(
 // getCreateStatement gets the create statement to recreate a table (ignoring fks)
 // for a given table id in a database.
 func getCreateStatement(
-	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, id int64, ts string, dbName string,
+	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT
 			create_nofks
 		FROM %s.crdb_internal.create_statements
-		AS OF SYSTEM TIME %s
 		WHERE descriptor_id = $1
-	`, dbName, ts)
+	`, dbName)
 	row, err := ie.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
@@ -277,7 +272,6 @@ func getAlterStatements(
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	id int64,
-	ts string,
 	dbName string,
 	statementType string,
 ) (tree.Datum, error) {
@@ -285,9 +279,8 @@ func getAlterStatements(
 		SELECT
 			%s
 		FROM %s.crdb_internal.create_statements
-		AS OF SYSTEM TIME %s
 		WHERE descriptor_id = $1
-	`, statementType, dbName, ts)
+	`, statementType, dbName)
 	row, err := ie.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",

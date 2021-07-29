@@ -369,3 +369,45 @@ query T
 SELECT crdb_internal.show_create_all_tables('test_sequence')
 ----
 CREATE SEQUENCE public.s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 123 START 1;
+
+# Ensure that the builtin can be run in unused and used transactions.
+
+statement ok
+USE test_schema;
+
+query T
+BEGIN;
+SELECT crdb_internal.show_create_all_tables('test_schema');
+COMMIT;
+----
+CREATE TABLE sc1.t (
+    x INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (x, rowid)
+);
+CREATE TABLE sc2.t (
+    x INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (x, rowid)
+);
+
+query T
+BEGIN;
+SELECT * FROM sc1.t;
+SELECT crdb_internal.show_create_all_tables('test_schema');
+COMMIT;
+----
+CREATE TABLE sc1.t (
+    x INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (x, rowid)
+);
+CREATE TABLE sc2.t (
+    x INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (x, rowid)
+);
