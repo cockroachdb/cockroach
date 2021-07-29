@@ -1486,64 +1486,32 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 
 // buildTopK builds a plan for a TopKOp, which is like a combined SortOp and LimitOp
 func (b *Builder) buildTopK(e memo.RelExpr) (execPlan, error) {
-<<<<<<< HEAD
 	inputExpr := e.Child(0).(memo.RelExpr)
 	input, err := b.buildRelational(inputExpr)
-=======
-	input, err := b.buildRelational(e.Child(0).(memo.RelExpr))
->>>>>>> dc25e06ddaae338378b90bebeb8d873f8459a2fb
 	if err != nil {
 		return execPlan{}, err
 	}
 	ordering := e.ProvidedPhysical().Ordering
-<<<<<<< HEAD
 
 	limit, err := b.buildScalar(nil, e.Child(1).(opt.ScalarExpr))
-=======
-	inputOrdering := e.Child(0).(memo.RelExpr).ProvidedPhysical().Ordering
-	alreadyOrderedPrefix := 0
-	for i := range inputOrdering {
-		if i == len(ordering) {
-			return execPlan{}, errors.AssertionFailedf("sort ordering already provided by input")
-		}
-		if inputOrdering[i] != ordering[i] {
-			break
-		}
-		alreadyOrderedPrefix = i + 1
-	}
-
-	expr, err := b.buildScalar(nil, e.Child(1).(opt.ScalarExpr))
->>>>>>> dc25e06ddaae338378b90bebeb8d873f8459a2fb
 	if err != nil {
 		return execPlan{}, err
 	}
 
-<<<<<<< HEAD
 	// TODO(harding): Eventually we should build a topk node to pass down to the
 	// exec engines.
-=======
-	// TODO(harding): Eventually we should build a topk node to pass down to the exec engines.
->>>>>>> dc25e06ddaae338378b90bebeb8d873f8459a2fb
 	// Construct sort first.
 	node, err := b.factory.ConstructSort(
 		input.root,
 		exec.OutputOrdering(input.sqlOrdering(ordering)),
-<<<<<<< HEAD
 		0,
-=======
-		alreadyOrderedPrefix,
->>>>>>> dc25e06ddaae338378b90bebeb8d873f8459a2fb
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	// Construct the limit, using the sort as the child.
-<<<<<<< HEAD
 	node, err = b.factory.ConstructLimit(node, limit, nil)
-=======
-	node, err = b.factory.ConstructLimit(node, expr, nil)
->>>>>>> dc25e06ddaae338378b90bebeb8d873f8459a2fb
 	if err != nil {
 		return execPlan{}, err
 	}
