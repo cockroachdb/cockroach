@@ -155,6 +155,37 @@ func (a *countWindowAgg) Reset() {
 	a.curAgg = 0
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *countWindowAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	var oldCurAggSize uintptr
+	nulls := vecs[inputIdxs[0]].Nulls()
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var y int64
+			y = int64(0)
+			if !nulls.NullAt(i) {
+				y = 1
+			}
+			a.curAgg -= y
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var y int64
+			y = int64(1)
+			a.curAgg -= y
+		}
+	}
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
 type countWindowAggAlloc struct {
 	aggAllocBase
 	aggFuncs []countWindowAgg

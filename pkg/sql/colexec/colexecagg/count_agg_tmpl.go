@@ -170,6 +170,32 @@ func (a *count_COUNTKIND_AGGKINDAgg) Reset() {
 	a.curAgg = 0
 }
 
+// {{if and (eq "_AGGKIND" "Window") (not (eq .CountKind "Rows"))}}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *count_COUNTKIND_AGGKINDAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
+	nulls := vecs[inputIdxs[0]].Nulls()
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+			_REMOVE_ROW(a, nulls, i, true)
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+			_REMOVE_ROW(a, nulls, i, false)
+		}
+	}
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+// {{end}}
+
 type count_COUNTKIND_AGGKINDAggAlloc struct {
 	aggAllocBase
 	aggFuncs []count_COUNTKIND_AGGKINDAgg
@@ -227,5 +253,25 @@ func _ACCUMULATE_COUNT(
 	a.curAgg += y
 	// {{end}}
 
+	// {{/*
+} // */}}
+
+// {{/*
+// _REMOVE_ROW removes the value of the ith row from the output for the
+// current aggregation. If this is the first row of the current aggregation, and
+// no non-nulls have yet been found, then the output is set to null.
+func _REMOVE_ROW(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS bool) { // */}}
+	// {{define "removeRow"}}
+	var y int64
+	// {{if .ColWithNulls}}
+	y = int64(0)
+	if !nulls.NullAt(i) {
+		y = 1
+	}
+	// {{else}}
+	y = int64(1)
+	// {{end}}
+	a.curAgg -= y
+	// {{end}}
 	// {{/*
 } // */}}

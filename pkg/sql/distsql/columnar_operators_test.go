@@ -1181,7 +1181,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						}
 						if strings.Contains(err.Error(), "integer out of range") &&
 							fun.AggregateFunc != nil && *fun.AggregateFunc == execinfrapb.SumInt {
-							// The columnar implementations of this window function uses the
+							// The columnar implementation of this window function uses the
 							// sliding window optimization, but the row engine version
 							// doesn't. As a result, in some cases the row engine will
 							// overflow while the vectorized engine doesn't.
