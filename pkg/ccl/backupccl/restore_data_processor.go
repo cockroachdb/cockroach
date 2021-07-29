@@ -69,6 +69,11 @@ type restoreDataProcessor struct {
 	// progress updates are accumulated on this channel. It is populated by the
 	// concurrent workers and sent down the flow by the processor.
 	progCh chan RestoreProgress
+
+	// Memory accumulators that reserve the memory usage of the restore processor
+	// stages.
+	iterMem   *memoryAccumulator
+	bufferMem *memoryAccumulator
 }
 
 var _ execinfra.Processor = &restoreDataProcessor{}
@@ -109,6 +114,13 @@ func newRestoreDataProcessor(
 ) (execinfra.Processor, error) {
 	sv := &flowCtx.Cfg.Settings.SV
 
+	memMonitor := flowCtx.Cfg.RestoreMemMonitor
+	if knobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+		if knobs.RestoreMemMonitor != nil {
+			memMonitor = knobs.RestoreMemMonitor
+		}
+	}
+
 	rd := &restoreDataProcessor{
 		flowCtx:    flowCtx,
 		input:      input,
@@ -118,6 +130,8 @@ func newRestoreDataProcessor(
 		metaCh:     make(chan *execinfrapb.ProducerMetadata, 1),
 		numWorkers: int(numRestoreWorkers.Get(sv)),
 		flushBytes: storageccl.MaxIngestBatchSize(flowCtx.Cfg.Settings),
+		iterMem:    newMemoryAccumulator(memMonitor),
+		bufferMem:  newMemoryAccumulator(memMonitor),
 	}
 
 	var err error
@@ -249,6 +263,7 @@ func (rd *restoreDataProcessor) openSSTs(
 	// iterator is sufficient.
 	var iters []storage.SimpleMVCCIterator
 	var dirs []cloud.ExternalStorage
+	var allocs int64
 
 	// If we bail early and haven't handed off responsibility of the dirs/iters to
 	// the channel, close anything that we had open.
@@ -266,9 +281,10 @@ func (rd *restoreDataProcessor) openSSTs(
 
 	// sendIters sends all of the currently accumulated iterators over the
 	// channel.
-	sendIters := func(itersToSend []storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage) error {
+	sendIters := func(itersToSend []storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage, allocsToSend int64) error {
 		multiIter := storage.MakeMultiIterator(itersToSend)
 
+		// cleanup closes over the sendIters parameters.
 		cleanup := func() {
 			multiIter.Close()
 			for _, iter := range itersToSend {
@@ -280,6 +296,7 @@ func (rd *restoreDataProcessor) openSSTs(
 					log.Warningf(ctx, "close export storage failed %v", err)
 				}
 			}
+			rd.iterMem.release(allocsToSend)
 		}
 
 		mSST := mergedSST{
@@ -294,8 +311,10 @@ func (rd *restoreDataProcessor) openSSTs(
 			return ctx.Err()
 		}
 
+		// Reset the iterators and the external storages.
 		iters = make([]storage.SimpleMVCCIterator, 0)
 		dirs = make([]cloud.ExternalStorage, 0)
+		allocs = 0
 		return nil
 	}
 
@@ -312,18 +331,51 @@ func (rd *restoreDataProcessor) openSSTs(
 
 		// TODO(pbardea): When memory monitoring is added, send the currently
 		// accumulated iterators on the channel if we run into memory pressure.
-		iter, _, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
+		iter, memSize, err := storageccl.ExternalSSTReader(ctx, dir, file.Path,
+			rd.spec.Encryption)
 		if err != nil {
 			return err
 		}
+		if err := rd.iterMem.request(ctx, memSize); err != nil {
+			if len(iters) == 0 {
+				// We did not have sufficient memory to make any progress.
+				return err
+			}
+			if err := sendIters(iters, dirs, allocs); err != nil {
+				return err
+			}
+		}
 		iters = append(iters, iter)
+		allocs += memSize
 	}
 
-	return sendIters(iters, dirs)
+	return sendIters(iters, dirs, allocs)
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(ssts chan mergedSST) error {
+	// Reserve enough memory up-front so that one worker will always have enough
+	// memory to make progress.
+	if err := rd.bufferMem.request(rd.Ctx, rd.flushBytes); err != nil {
+		return err
+	}
+	rd.bufferMem.release(rd.flushBytes)
+
 	return ctxgroup.GroupWorkers(rd.Ctx, rd.numWorkers, func(ctx context.Context, _ int) error {
+		// TODO(pbardea): The workers may grab memory before opening the iterators.
+		// This happens since the workers reserve their memory before reading from
+		// the channel. The difficulty with reserving the memory after reading from
+		// the channel is that we then have to manage a todo channel so the worker
+		// can put the entry it has read back on the queue when there isn't
+		// sufficient memory for the worker to proceed.
+		ctxDone := ctx.Done()
+
+		// Reserve the memory for the worker up front.
+		if err := rd.bufferMem.request(ctx, rd.flushBytes); err != nil {
+			log.Warningf(ctx, "RESTORE worker stopped due to lack of memory: %+v", err)
+			return nil
+		}
+		defer rd.bufferMem.release(rd.flushBytes)
+
 		for {
 			done, err := func() (done bool, _ error) {
 				sstIter, ok := <-ssts
@@ -339,7 +391,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ssts chan mergedSST) error {
 
 				select {
 				case rd.progCh <- makeProgressUpdate(summary, sstIter.entry, rd.spec.PKIDs):
-				case <-ctx.Done():
+				case <-ctxDone:
 					return done, ctx.Err()
 				}
 
@@ -506,6 +558,8 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 				sst.cleanup()
 			}
 		}
+		rd.iterMem.close(rd.Ctx)
+		rd.bufferMem.close(rd.Ctx)
 	}
 }
 
