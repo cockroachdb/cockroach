@@ -42,26 +42,67 @@ type TenantMigrationFunc func(context.Context, clusterversion.ClusterVersion, Te
 // sql. It includes the system tenant.
 type TenantMigration struct {
 	migration
-	fn TenantMigrationFunc
+	fn           TenantMigrationFunc
+	precondition TenantMigrationFunc
+}
+
+var _ Migration = (*TenantMigration)(nil)
+
+type TenantMigrationOption interface {
+	apply(tenantMigration *TenantMigration)
+}
+
+type tenantMigrationOptionFunc func(*TenantMigration)
+
+func (f tenantMigrationOptionFunc) apply(m *TenantMigration) { f(m) }
+
+// Precondition is a function run without isolation before attempting an
+// upgrade that includes this migration. It is used to verify that the
+// required conditions for the migration to succeed are met. This can allow
+// users to fix any problems before "crossing the rubicon" and no longer
+// being able to upgrade.
+func Precondition(precondition TenantMigrationFunc) TenantMigrationOption {
+	return tenantMigrationOptionFunc(func(m *TenantMigration) {
+		m.precondition = precondition
+	})
 }
 
 // NewTenantMigration constructs a TenantMigration.
 func NewTenantMigration(
-	description string, cv clusterversion.ClusterVersion, fn TenantMigrationFunc,
+	description string,
+	cv clusterversion.ClusterVersion,
+	fn TenantMigrationFunc,
+	options ...TenantMigrationOption,
 ) *TenantMigration {
-	return &TenantMigration{
+	m := &TenantMigration{
 		migration: migration{
 			description: description,
 			cv:          cv,
 		},
 		fn: fn,
 	}
+	for _, o := range options {
+		o.apply(m)
+	}
+	return m
 }
 
 // Run kickstarts the actual migration process for tenant-level migrations.
 func (m *TenantMigration) Run(
 	ctx context.Context, cv clusterversion.ClusterVersion, d TenantDeps,
-) (err error) {
+) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s", cv), nil)
 	return m.fn(ctx, cv, d)
+}
+
+// Precondition runs the precondition check if there is one and reports
+// any errors.
+func (m *TenantMigration) Precondition(
+	ctx context.Context, cv clusterversion.ClusterVersion, d TenantDeps,
+) error {
+	if m.precondition == nil {
+		return nil
+	}
+	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s,precondition", cv), nil)
+	return m.precondition(ctx, cv, d)
 }
