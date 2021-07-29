@@ -373,7 +373,7 @@ func (j *Job) FractionProgressed(
 
 // paused sets the status of the tracked job to paused. It is called by the
 // registry adoption loop by the node currently running a job to move it from
-// pauseRequested to paused.
+// PauseRequested to paused.
 func (j *Job) paused(
 	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
 ) error {
@@ -472,11 +472,11 @@ type onPauseRequestFunc func(
 	ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress,
 ) error
 
-// pauseRequested sets the status of the tracked job to pause-requested. It does
+// PauseRequested sets the status of the tracked job to pause-requested. It does
 // not directly pause the job; it expects the node that runs the job will
 // actively cancel it when it notices that it is in state StatusPauseRequested
 // and will move it to state StatusPaused.
-func (j *Job) pauseRequested(ctx context.Context, txn *kv.Txn, fn onPauseRequestFunc) error {
+func (j *Job) PauseRequested(ctx context.Context, txn *kv.Txn, fn onPauseRequestFunc) error {
 	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		// Don't allow 19.2-style schema change jobs to undergo changes in job state
 		// before they undergo a migration to make them properly runnable in 20.1 and
