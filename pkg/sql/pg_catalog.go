@@ -3194,12 +3194,47 @@ var pgCatalogRulesTable = virtualSchemaTable{
 }
 
 var pgCatalogShadowTable = virtualSchemaTable{
-	comment: "pg_shadow was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogShadow,
+	comment: `pg_shadow lists properties for roles that are marked as rolcanlogin in pg_authid
+https://www.postgresql.org/docs/13/view-pg-shadow.html`,
+	schema: vtable.PgCatalogShadow,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+		h := makeOidHasher()
+		return forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+			noLogin, err := options.noLogin()
+			if err != nil {
+				return err
+			}
+			if noLogin {
+				return nil
+			}
+
+			isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
+			createDB, err := options.createDB()
+			if err != nil {
+				return err
+			}
+			rolValidUntil, err := options.validUntil(p)
+			if err != nil {
+				return err
+			}
+			isSuper, err := userIsSuper(ctx, p, username)
+			if err != nil {
+				return err
+			}
+
+			return addRow(
+				tree.NewDName(username.Normalized()), // usename
+				h.UserOid(username),                  // usesysid
+				tree.MakeDBool(isRoot || createDB),   // usecreatedb
+				tree.MakeDBool(isRoot || isSuper),    // usesuper
+				tree.DBoolFalse,                      // userepl
+				tree.DBoolFalse,                      // usebypassrls
+				passwdStarString,                     // passwd
+				rolValidUntil,                        // valuntil
+				settings,                             // useconfig
+			)
+		})
 	},
-	unimplemented: true,
 }
 
 var pgCatalogPublicationTable = virtualSchemaTable{
