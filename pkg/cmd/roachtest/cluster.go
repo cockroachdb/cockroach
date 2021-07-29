@@ -872,11 +872,24 @@ func (f *clusterFactory) newCluster(
 			l.Close()
 			return c, nil
 		}
-		l.PrintfCtx(ctx, "Cleaning up in case it was partially created.")
-		c.Destroy(ctx, closeLogger, l)
-		if i > maxAttempts {
+		if strings.Contains(cluster.GetStderr(err), "already exists") {
+			// If the cluster couldn't be created because it existed already, bail.
+			// In reality when this is hit is when running with the `local` flag
+			// or a destroy from the previous iteration failed.
 			return nil, err
 		}
+		l.PrintfCtx(ctx, "cluster creation failed, cleaning up in case it was partially created: %s", err)
+		// Set the alloc to nil so that Destroy won't release it.
+		// This is ugly, but given that the alloc is created very far away from this code
+		// (when selecting the test) it's the best we can do for now.
+		c.destroyState.alloc = nil
+		c.Destroy(ctx, closeLogger, l)
+		if i > maxAttempts {
+			// Here we have to release the alloc, as we are giving up.
+			c.destroyState.alloc.Release()
+			return nil, err
+		}
+		// Try again to create the cluster.
 	}
 }
 
@@ -1486,7 +1499,13 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 			} else {
 				l.PrintfCtx(ctx, "destroying cluster %s... done", c)
 			}
-			c.destroyState.alloc.Release()
+			if c.destroyState.alloc != nil {
+				// We should usually have an alloc here, but if we're getting into this
+				// code path while retrying cluster creation, we don't want the alloc
+				// to be released (as we're going to retry cluster creation) and it will
+				// be nil here.
+				c.destroyState.alloc.Release()
+			}
 		} else {
 			l.PrintfCtx(ctx, "wiping cluster %s", c)
 			c.status("wiping cluster")

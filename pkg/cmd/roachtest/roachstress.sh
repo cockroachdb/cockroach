@@ -10,7 +10,17 @@ set -euo pipefail
 # It's best practice to invoke this script with "caffeinate" on OSX and/or linux
 # to avoid computer going to standby.
 
-if [ "${GCE_PROJECT-cockroach-ephemeral}" == "cockroach-ephemeral" ]; then
+
+# Read user input.
+read -r -e -i "${TEST-}" -p "Test regexp: " TEST
+read -r -e -i "${COUNT-10}" -p "Count: " COUNT
+read -r -e -i "${LOCAL-n}" -p "Local: " LOCAL
+case $LOCAL in
+  [Nn]* | false | "") LOCAL="";;
+  *) LOCAL=".local";;
+esac
+
+if [ -z "${LOCAL}" ] && [ "${GCE_PROJECT-cockroach-ephemeral}" == "cockroach-ephemeral" ]; then
   cat <<EOF
 Please do not use roachstress on the cockroach-ephemeral project.
 This may compete over quota with scheduled roachtest builds.
@@ -30,22 +40,18 @@ abase="artifacts/${sha}"
 # Locations of the binaries.
 rt="${abase}/roachtest"
 rp="${abase}/roachprod"
-wl="${abase}/workload"
-cr="${abase}/cockroach"
+wl="${abase}/workload${LOCAL}"
+cr="${abase}/cockroach${LOCAL}"
 
 # This is the artifacts dir we'll pass to the roachtest invocation. It's
 # disambiguated by a timestamp because one often ends up invoking roachtest on
 # the same SHA multiple times and artifacts shouldn't mix.
 a="${abase}/$(date '+%H%M%S')"
 
-# Read user input.
-read -e -i "${TEST-}" -p "Test regexp: " TEST
-read -e -i "${COUNT-10}" -p "Count: " COUNT
-
 short="short"
 if [ ! -f "${cr}" ]; then
   yn=""
-  read -e -i "${SHORT-y}" -p "Build cockroach without the UI: " yn
+  read -r -e -i "${SHORT-y}" -p "Build cockroach without the UI: " yn
   case $yn in
     [Nn]* | false | "") short=""
   esac
@@ -54,24 +60,42 @@ fi
 mkdir -p "${a}"
 
 if [ ! -f "${cr}" ]; then
-  ./build/builder.sh mkrelease amd64-linux-gnu "build${short}"
-  mv "cockroach${short}-linux-2.6.32-gnu-amd64" "${cr}"
+  if [ -z "${LOCAL}" ]; then
+    ./build/builder.sh mkrelease amd64-linux-gnu "build${short}"
+    cp "cockroach${short}-linux-2.6.32-gnu-amd64" "${cr}"
+  else
+    make "build${short}"
+    cp "cockroach${short}" "${cr}"
+  fi
 fi
 
 if [ ! -f "${rt}" ]; then
-  ./build/builder.sh mkrelease amd64-linux-gnu bin/workload
-  mv -f bin.docker_amd64/workload "${wl}"
+  if [ -z "${LOCAL}" ]; then
+    ./build/builder.sh mkrelease amd64-linux-gnu bin/workload
+    cp bin.docker_amd64/workload "${wl}"
+  else
+    make bin/workload
+    cp bin/workload "${wl}"
+  fi
   make bin/roach{prod,test}
-  mv -f bin/roachprod "${rp}"
-  mv -f bin/roachtest "${rt}"
+  cp bin/roachprod "${rp}"
+  cp bin/roachtest "${rt}"
 fi
+
+args=(
+  "run" "${TEST}"
+  "--port" "$((8080+RANDOM % 1000))"
+  "--roachprod" "${rp}"
+  "--workload" "${wl}"
+  "--cockroach" "${cr}"
+  "--artifacts" "${a}"
+  "--count" "${COUNT}"
+)
+if [ -n "${LOCAL}" ]; then
+  args+=("--local")
+fi
+args+=("$@")
 
 # Run roachtest. Use a random port so that multiple
 # tests can be stressed from the same workstation.
-"${rt}" run "${TEST}" \
-  --port "$((8080+$RANDOM % 1000))" \
-  --roachprod "${rp}" \
-  --workload "${wl}" \
-  --cockroach "${cr}" \
-  --artifacts "${a}" \
-  --count "${COUNT}"
+"${rt}" "${args[@]}"
