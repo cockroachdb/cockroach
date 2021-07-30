@@ -260,3 +260,46 @@ func TestContentionEvent_SafeFormat(t *testing.T) {
 	const exp = redact.RedactableString(`conflicted with ‹51b5ef6a-f18f-4e85-bc3f-c44e33f2bb27› on ‹"foo"› for 0.000s`)
 	require.Equal(t, exp, redact.Sprint(ce))
 }
+
+func TestTenantConsumptionAddSub(t *testing.T) {
+	a := TenantConsumption{
+		RU:                1,
+		ReadRequests:      2,
+		ReadBytes:         3,
+		WriteRequests:     4,
+		WriteBytes:        5,
+		SQLPodsCPUSeconds: 6,
+	}
+	var b TenantConsumption
+	for i := 0; i < 10; i++ {
+		b.Add(&a)
+	}
+	if exp := (TenantConsumption{
+		RU:                10,
+		ReadRequests:      20,
+		ReadBytes:         30,
+		WriteRequests:     40,
+		WriteBytes:        50,
+		SQLPodsCPUSeconds: 60,
+	}); b != exp {
+		t.Errorf("expected\n%#v\ngot\n%#v", exp, b)
+	}
+
+	c := b
+	c.Sub(&a)
+	if exp := (TenantConsumption{
+		RU:                9,
+		ReadRequests:      18,
+		ReadBytes:         27,
+		WriteRequests:     36,
+		WriteBytes:        45,
+		SQLPodsCPUSeconds: 54,
+	}); c != exp {
+		t.Errorf("expected\n%#v\ngot\n%#v", exp, c)
+	}
+	// Verify that fields never go below 0.
+	c.Sub(&b)
+	if exp := (TenantConsumption{}); c != exp {
+		t.Errorf("expected\n%#v\ngot\n%#v", exp, c)
+	}
+}

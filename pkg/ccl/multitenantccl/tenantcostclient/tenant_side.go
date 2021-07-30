@@ -64,10 +64,10 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context, stopper *stop.S
 				TenantID: c.tenantID.ToUint64(),
 				// TODO(radu): populate instance ID.
 				InstanceID: 1,
-				ConsumptionSinceLastRequest: roachpb.TokenBucketRequest_Consumption{
+				ConsumptionSinceLastRequest: roachpb.TenantConsumption{
 					// Report a dummy 1 RU consumption each time.
-					RU:               1,
-					SQLPodCPUSeconds: 1,
+					RU:                1,
+					SQLPodsCPUSeconds: 1,
 				},
 			}
 			_, err := c.provider.TokenBucket(ctx, &req)
