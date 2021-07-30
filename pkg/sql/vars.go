@@ -1435,6 +1435,24 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(copyPartitioningWhenDeinterleavingTable.Get(sv))
 		},
 	},
+
+	`experimental_propagate_input_ordering`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_propagate_input_ordering`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`experimental_propagate_input_ordering`, s)
+			if err != nil {
+				return err
+			}
+			m.SetExperimentalPropagateInputOrdering(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.ExperimentalPropagateInputOrdering)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(experimentalPropagateInputOrdering.Get(sv))
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
