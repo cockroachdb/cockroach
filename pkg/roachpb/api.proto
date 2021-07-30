@@ -2267,18 +2267,22 @@ message GossipSubscriptionEvent {
   kv.kvpb.Error error = 4;
 }
 
-message TokenBucketRequest {
-  message Consumption {
-    double r_u = 1;
-    uint64 read_requests = 2;
-    uint64 read_bytes = 3;
-    uint64 write_requests = 4;
-    uint64 write_bytes = 5;
-    double sql_pod_cpu_seconds = 6 [(gogoproto.customname) = "SQLPodCPUSeconds"];
-  }
+// TenantConsumption contains information about resource utilization by a
+// tenant, which directly factors into their bill.
+message TenantConsumption {
+  double r_u = 1;
+  uint64 read_requests = 2;
+  uint64 read_bytes = 3;
+  uint64 write_requests = 4;
+  uint64 write_bytes = 5;
+  double sql_pods_cpu_seconds = 6 [(gogoproto.customname) = "SQLPodsCPUSeconds"];
+}
 
+// TokenBucketRequest is used by tenants to obtain Request Units and report
+// consumption.
+message TokenBucketRequest {
   // Consumption that occurred since this node's last request.
-  Consumption consumption_since_last_request = 1 [(gogoproto.nullable) = false];
+  TenantConsumption consumption_since_last_request = 1 [(gogoproto.nullable) = false];
 
   uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID"];
 

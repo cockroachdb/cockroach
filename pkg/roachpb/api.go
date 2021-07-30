@@ -1547,3 +1547,41 @@ func (c *ContentionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
 func (c *ContentionEvent) String() string {
 	return redact.StringWithoutMarkers(c)
 }
+
+// Add consumption from the given structure.
+func (c *TenantConsumption) Add(other *TenantConsumption) {
+	c.RU += other.RU
+	c.ReadRequests += other.ReadRequests
+	c.ReadBytes += other.ReadBytes
+	c.WriteRequests += other.WriteRequests
+	c.WriteBytes += other.WriteBytes
+	c.SQLPodsCPUSeconds += other.SQLPodsCPUSeconds
+}
+
+// Sub subtracts consumption, making sure no fields become negative.
+func (c *TenantConsumption) Sub(other *TenantConsumption) {
+	c.RU -= other.RU
+	if c.RU < 0 {
+		c.RU = 0
+	}
+	c.ReadRequests -= other.ReadRequests
+	if c.ReadRequests < 0 {
+		c.ReadRequests = 0
+	}
+	c.ReadBytes -= other.ReadBytes
+	if c.ReadBytes < 0 {
+		c.ReadBytes = 0
+	}
+	c.WriteRequests -= other.WriteRequests
+	if c.WriteRequests < 0 {
+		c.WriteRequests = 0
+	}
+	c.WriteBytes -= other.WriteBytes
+	if c.WriteBytes < 0 {
+		c.WriteBytes = 0
+	}
+	c.SQLPodsCPUSeconds -= other.SQLPodsCPUSeconds
+	if c.SQLPodsCPUSeconds < 0 {
+		c.SQLPodsCPUSeconds = 0
+	}
+}
