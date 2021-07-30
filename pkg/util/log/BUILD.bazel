@@ -136,6 +136,7 @@ go_test(
         "helpers_test.go",
         "http_sink_test.go",
         "intercept_test.go",
+        "log_decoder_test.go",
         "main_test.go",
         "redact_test.go",
         "secondary_log_test.go",

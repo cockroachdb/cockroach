@@ -1,0 +1,53 @@
+subtest detect_v1_format
+
+log
+I210621 19:01:01.426193 1 util/log/sync_buffer.go:195 ⋮ [config] file created at: 2021/06/21 19:01:01
+I210621 19:01:01.426200 1 util/log/sync_buffer.go:195 ⋮ [config] running on machine:
+I210621 19:01:01.426205 1 util/log/sync_buffer.go:195 ⋮ [config] binary: CockroachDB CCL v20.2.7 (x86_64-apple-darwin14, built 2021/03/29 17:56:44, go1.13.14)
+I210621 19:01:01.426208 1 util/log/sync_buffer.go:195 ⋮ [config] arguments:
+I210609 21:45:59.308670 1 util/log/sync_buffer.go:195 ⋮ [config] log format (utf8=✓): crdb-v1
+I210621 19:01:01.426216 1 util/log/sync_buffer.go:195 ⋮ [config] line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=✓
+----
+crdb-v1
+
+subtest end
+
+subtest detect_v2_format
+
+log
+I210816 21:25:47.681121 1 util/log/file_sync_buffer.go:238 ⋮ [config]   file created at: 2021/08/16 21:25:47
+I210816 21:25:47.681129 1 util/log/file_sync_buffer.go:238 ⋮ [config]   running on machine:
+I210816 21:25:47.681135 1 util/log/file_sync_buffer.go:238 ⋮ [config]   binary: CockroachDB CCL v21.2.0-alpha.00000000-3306-g39d59f1fc9-dirty (x86_64-apple-darwin20.6.0, built , go1.16.6)
+I210816 21:25:47.681140 1 util/log/file_sync_buffer.go:238 ⋮ [config]   arguments: []
+I210609 21:45:59.308670 1 util/log/file_sync_buffer.go:238 ⋮ [config]   log format (utf8=✓): crdb-v2
+I210816 21:25:47.681152 1 util/log/file_sync_buffer.go:238 ⋮ [config]   line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid [chan@]file:line redactionmark \[tags\] [counter] msg
+----
+crdb-v2
+
+subtest end
+
+subtest default_to_v1_format
+
+log
+I210621 19:01:01.426193 1 util/log/sync_buffer.go:195 ⋮ [config] file created at: 2021/06/21 19:01:01
+I210621 19:01:01.426200 1 util/log/sync_buffer.go:195 ⋮ [config] running on machine:
+I210621 19:01:01.426205 1 util/log/sync_buffer.go:195 ⋮ [config] binary: CockroachDB CCL v20.2.7 (x86_64-apple-darwin14, built 2021/03/29 17:56:44, go1.13.14)
+I210621 19:01:01.426208 1 util/log/sync_buffer.go:195 ⋮ [config] arguments:
+I210621 19:01:01.426216 1 util/log/sync_buffer.go:195 ⋮ [config] line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=✓
+----
+crdb-v1
+
+subtest end
+
+subtest default_to_v2_format
+
+log
+I210816 21:25:47.681121 1 util/log/file_sync_buffer.go:238 ⋮ [config]   file created at: 2021/08/16 21:25:47
+I210816 21:25:47.681129 1 util/log/file_sync_buffer.go:238 ⋮ [config]   running on machine:
+I210816 21:25:47.681135 1 util/log/file_sync_buffer.go:238 ⋮ [config]   binary: CockroachDB CCL v21.2.0-alpha.00000000-3306-g39d59f1fc9-dirty (x86_64-apple-darwin20.6.0, built , go1.16.6)
+I210816 21:25:47.681140 1 util/log/file_sync_buffer.go:238 ⋮ [config]   arguments: []
+I210816 21:25:47.681152 1 util/log/file_sync_buffer.go:238 ⋮ [config]   line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid [chan@]file:line redactionmark \[tags\] [counter] msg
+----
+crdb-v2
+
+subtest end
