@@ -64,6 +64,7 @@ for f in `ls /usr/local/go/bin`; do
 done
 
 # Install Bazelisk.
+# Keep this in sync with `build/bazelbuilder/Dockerfile`.
 curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/bazelisk-linux-amd64 > /tmp/bazelisk
 sha256sum -c - <<EOF
 4cb534c52cdd47a6223d4596d530e7c9c785438ab3b0a49ff347e991c210b2cd /tmp/bazelisk
