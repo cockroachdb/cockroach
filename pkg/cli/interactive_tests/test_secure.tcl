@@ -24,7 +24,9 @@ end_test
 
 proc start_secure_server {argv certs_dir extra} {
     report "BEGIN START SECURE SERVER"
-    system "$argv start-single-node --host=localhost --socket-dir=. --certs-dir=$certs_dir --pid-file=server_pid -s=path=logs/db --background $extra >>expect-cmd.log 2>&1;
+    # We add some arbitrary env vars here to check env var
+    # exposure in one of the sub tests below.
+    system "env AWS_ACCESS_KEY=supersecret TERM=mycoolterm GODEBUG=mycooldebugvar $argv start-single-node --host=localhost --socket-dir=. --certs-dir=$certs_dir --pid-file=server_pid -s=path=logs/db --background $extra >>expect-cmd.log 2>&1;
             $argv sql --certs-dir=$certs_dir -e 'select 1'"
     report "END START SECURE SERVER"
 }
@@ -36,6 +38,16 @@ proc stop_secure_server {argv certs_dir} {
 }
 
 start_secure_server $argv $certs_dir ""
+
+start_test "Check that the env vars are properly reported in the log file."
+# NB: this grep checks the aws access key was redacted.
+system "grep AWS_ACCESS_KEY='\\.\\.\\.' logs/db/logs/cockroach.log"
+system "grep GODEBUG=mycooldebugvar logs/db/logs/cockroach.log"
+# NB: this grep checks the value of the TERM var was enclosed
+# in redaction markers.
+system "grep TERM=..*mycoolterm logs/db/logs/cockroach.log"
+end_test
+
 
 start_test "Check 'node ls' works with certificates."
 send "$argv node ls --certs-dir=$certs_dir\r"
@@ -175,6 +187,23 @@ send "$python $pyfile cookie_root.txt 'https://localhost:8080/_admin/v1/settings
 eexpect "cluster.organization"
 eexpect $prompt
 end_test
+
+start_test "Check that env vars are reported in the node report"
+send "$python $pyfile cookie_root.txt 'https://localhost:8080/_status/nodes/1'> logs/db/node.txt\r"
+eexpect $prompt
+system "grep AWS_ACCESS_KEY='\\.\\.\\.' logs/db/node.txt"
+system "grep GODEBUG=mycooldebugvar logs/db/node.txt"
+system "grep TERM=mycoolterm logs/db/node.txt"
+end_test
+
+start_test "Check that env vars are NOT reported in the diagnostic report"
+send "$python $pyfile cookie_root.txt 'https://localhost:8080/_status/diagnostics/1'> logs/db/diag.txt\r"
+eexpect $prompt
+system "if grep AWS_ACCESS_KEY logs/db/diag.txt; then echo FAIL; fi"
+system "if grep TERM logs/db/diag.txt; then echo FAIL; fi"
+system "if grep GODEBUG logs/db/diag.txt; then echo FAIL; fi"
+end_test
+
 
 # Now test the cookies with non-TLS http.
 stop_secure_server $argv $certs_dir
