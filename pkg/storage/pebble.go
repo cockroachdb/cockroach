@@ -1788,6 +1788,7 @@ func pebbleExportToSst(
 			StartTime:                           options.StartTS,
 			EndTime:                             options.EndTS,
 			EnableWriteIntentAggregation:        true,
+			MaxAllowedIterations:                options.MaxAllowerdIterations,
 		})
 	defer iter.Close()
 	var curKey roachpb.Key // only used if exportAllRevisions
@@ -1797,6 +1798,12 @@ func pebbleExportToSst(
 	for iter.SeekGE(options.StartKey); ; {
 		ok, err := iter.Valid()
 		if err != nil {
+			if resourceError := (*ResourceLimitError)(nil); errors.As(err, &resourceError) {
+				// Allowed resource quota exhausted, return resume key for next attempt.
+				resumeKey = resourceError.ResumeKey.Key
+				resumeTS = resourceError.ResumeKey.Timestamp
+				break
+			}
 			// This is an underlying iterator error, return it to the caller to deal
 			// with.
 			return roachpb.BulkOpSummary{}, MVCCKey{}, err
