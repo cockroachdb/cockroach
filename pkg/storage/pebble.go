@@ -2013,11 +2013,11 @@ func pebbleExportToSst(
 	var resumeKey roachpb.Key
 	var resumeTS hlc.Timestamp
 	paginated := options.TargetSize > 0
+	trackKeyBoundary := paginated || options.ResourceLimiter != nil
+	firstIteration := true
 	for iter.SeekGE(options.StartKey); ; {
 		ok, err := iter.Valid()
 		if err != nil {
-			// This is an underlying iterator error, return it to the caller to deal
-			// with.
 			return roachpb.BulkOpSummary{}, MVCCKey{}, err
 		}
 		if !ok {
@@ -2034,8 +2034,35 @@ func pebbleExportToSst(
 
 		unsafeValue := iter.UnsafeValue()
 		isNewKey := !options.ExportAllRevisions || !unsafeKey.Key.Equal(curKey)
-		if paginated && options.ExportAllRevisions && isNewKey {
+		if trackKeyBoundary && options.ExportAllRevisions && isNewKey {
 			curKey = append(curKey[:0], unsafeKey.Key...)
+		}
+
+		if options.ResourceLimiter != nil {
+			// Don't check resources on first iteration to ensure we can make some progress regardless
+			// of starvation. Otherwise operations could spin indefinitely.
+			if firstIteration {
+				firstIteration = false
+			} else {
+				// In happy day case we want to only stop at key boundaries as it allows callers to use
+				// produced sst's directly. But if we can't find key boundary within reasonable number of
+				// iterations we would split mid key.
+				// To achieve that we use soft and hard thresholds in limiter. Once soft limit is reached
+				// we would start searching for key boundary and return as soon as it is reached. If we
+				// can't find it before hard limit is reached and caller requested mid key stop we would
+				// immediately return.
+				limit := options.ResourceLimiter.IsExhausted()
+				// We can stop at key once any threshold is reached or force stop at hard limit if midkey
+				// split is allowed.
+				if limit >= ResourceLimitReachedSoft && isNewKey || limit == ResourceLimitReachedHard && options.StopMidKey {
+					// Reached iteration limit, stop with resume span
+					resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
+					if !isNewKey {
+						resumeTS = unsafeKey.Timestamp
+					}
+					break
+				}
+			}
 		}
 
 		// Skip tombstone (len=0) records when start time is zero (non-incremental)
