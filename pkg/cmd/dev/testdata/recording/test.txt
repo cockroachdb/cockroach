@@ -1,3 +1,18 @@
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
 bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --test_output errors
 ----
 ----
@@ -5,6 +20,21 @@ bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev /
 
 Executed 1 out of 1 test: 1 test passes.
 ----
+----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
 bazel query kind(go_test,  //pkg/util/tracing/...)
@@ -20,6 +50,21 @@ Executed 0 out of 1 test: 1 test passes.
 ----
 ----
 
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
 bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output errors
 ----
 ----
@@ -27,6 +72,21 @@ bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev /
 
 Executed 1 out of 1 test: 1 test passes.
 ----
+----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
 bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output all --test_arg -test.v
@@ -42,6 +102,21 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
 bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experimental_remote_downloader=grpc://127.0.0.1:9092 //pkg/util/tracing:tracing_test --test_filter='TestStartChild*' --test_output errors
 ----
 ----
@@ -51,6 +126,21 @@ Executed 0 out of 1 test: 1 test passes.
 ----
 ----
 
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
 bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/util/tracing:tracing_test --nocache_test_results --test_filter='TestStartChild*' --test_output errors
 ----
 ----
@@ -58,6 +148,21 @@ bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev /
 
 Executed 1 out of 1 test: 1 test passes.
 ----
+----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
 bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev @com_github_cockroachdb_stress//:stress
@@ -81,6 +186,21 @@ bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev /
 
 Executed 1 out of 1 test: 1 test passes.
 ----
+----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
 bazel build --color=yes --experimental_convenience_symlinks=ignore --config=dev @com_github_cockroachdb_stress//:stress
@@ -110,6 +230,21 @@ SUCCESS
 
 Executed 1 out of 1 test: 1 test passes.
 ----
+----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
 bazel test --color=yes --experimental_convenience_symlinks=ignore --config=dev //pkg/testutils:testutils_test --test_timeout=10 --test_output errors

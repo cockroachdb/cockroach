@@ -127,6 +127,7 @@ func TestDatadriven(t *testing.T) {
 			dev := makeDevCmd()
 			dev.exec = devExec
 			dev.os = devOS
+			require.NoError(t, setupPath(dev))
 
 			if !verbose {
 				dev.cli.SetErr(ioutil.Discard)

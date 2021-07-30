@@ -158,6 +158,33 @@ func (e *Exec) CommandContextNoRecord(ctx context.Context, name string, args ...
 	return err
 }
 
+// LookPath wraps around exec.LookPath, which searches for an executable named
+// file in the directories named by the PATH environment variable.
+func (e *Exec) LookPath(path string) (string, error) {
+	command := fmt.Sprintf("which %s", path)
+	e.logger.Print(command)
+
+	var fullPath string
+	if e.Recorder == nil || e.Recorder.Recording() {
+		// Do the real thing.
+		var err error
+		fullPath, err = exec.LookPath(path)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if e.Recorder == nil {
+		return fullPath, nil
+	}
+
+	if e.Recording() {
+		return fullPath, e.record(command, fullPath)
+	}
+	ret, err := e.replay(command)
+	return ret, err
+}
+
 func (e *Exec) commandContextImpl(
 	ctx context.Context, stdin io.Reader, silent bool, name string, args ...string,
 ) ([]byte, error) {
