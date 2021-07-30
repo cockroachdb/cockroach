@@ -387,6 +387,12 @@ type ExportOptions struct {
 	// would stop immediately when targetSize is reached and return the next versions
 	// timestamp in resumeTs so that subsequent operation can pass it to firstKeyTs.
 	StopMidKey bool
+	// MaxAllowerdIterations limits number of iterations that storage would perform
+	// while colllecting matching values to export. This limit could only be used
+	// together with StopMidKey as it could break iteration over data on any version
+	// and even on a key and timestamp that would not be included in the resulting
+	// export.
+	MaxAllowerdIterations int64
 	// If UseTBI is true, the backing MVCCIncrementalIterator will initialize a
 	// time-bound iterator along with its regular iterator. The TBI will be used
 	// as an optimization to skip over swaths of uninteresting keys i.e. keys
