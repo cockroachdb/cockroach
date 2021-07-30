@@ -35,7 +35,7 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 	defer cancel()
 	const (
 		tenantHTTPPort = 8081
-		tenantSQLPort  = 36258
+		tenantSQLPort  = 30258
 	)
 	const tenantNode = 1
 	tenant := createTenantNode(tenantCtx, t, c, "./cockroach", kvAddrs,
