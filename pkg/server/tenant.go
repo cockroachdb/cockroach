@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -192,13 +193,7 @@ func StartTenant(
 	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
 	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 
-	provider := args.tenantConnect
-	// TODO(radu): allow injecting a different provider through testing knobs.
-	costController, err := NewTenantSideCostController(ctx, args.TenantID, provider)
-	if err != nil {
-		return nil, "", "", err
-	}
-	if err := costController.Start(ctx, args.stopper); err != nil {
+	if err := args.costController.Start(ctx, args.stopper); err != nil {
 		return nil, "", "", err
 	}
 
@@ -262,6 +257,16 @@ func makeTenantSQLServerArgs(
 	resolver := kvtenant.AddressResolver(tenantConnect)
 	nodeDialer := nodedialer.New(rpcContext, resolver)
 
+	provider := kvtenant.TokenBucketProvider(tenantConnect)
+	if tenantKnobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs); ok &&
+		tenantKnobs.OverrideTokenBucketProvider != nil {
+		provider = tenantKnobs.OverrideTokenBucketProvider(provider)
+	}
+	costController, err := NewTenantSideCostController(st, sqlCfg.TenantID, provider)
+	if err != nil {
+		return sqlServerArgs{}, err
+	}
+
 	dsCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:        baseCfg.AmbientCtx,
 		Settings:          st,
@@ -271,6 +276,7 @@ func makeTenantSQLServerArgs(
 		RPCContext:        rpcContext,
 		NodeDialer:        nodeDialer,
 		RangeDescriptorDB: tenantConnect,
+		BatchInterceptor:  costController,
 		TestingKnobs:      dsKnobs,
 	}
 	ds := kvcoord.NewDistSender(dsCfg)
@@ -386,13 +392,14 @@ func makeTenantSQLServerArgs(
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
 		regionsServer:            tenantConnect,
+		costController:           costController,
 	}, nil
 }
 
 // NewTenantSideCostController is a hook for CCL code which implements the
 // controller.
 var NewTenantSideCostController = func(
-	ctx context.Context, tenantID roachpb.TenantID, provider kvtenant.TokenBucketProvider,
+	st *cluster.Settings, tenantID roachpb.TenantID, provider kvtenant.TokenBucketProvider,
 ) (multitenant.TenantSideCostController, error) {
 	// Return a no-op implementation.
 	return noopTenantSideCostController{}, nil
@@ -402,6 +409,17 @@ var NewTenantSideCostController = func(
 // TenantSideCostController.
 type noopTenantSideCostController struct{}
 
+var _ multitenant.TenantSideCostController = noopTenantSideCostController{}
+
 func (noopTenantSideCostController) Start(ctx context.Context, stopper *stop.Stopper) error {
 	return nil
+}
+
+func (noopTenantSideCostController) OnRequestWait(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) error {
+	return nil
+}
+
+func (noopTenantSideCostController) OnResponse(ctx context.Context, br *roachpb.BatchResponse) {
 }

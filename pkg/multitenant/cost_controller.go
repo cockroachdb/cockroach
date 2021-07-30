@@ -13,6 +13,7 @@ package multitenant
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -21,4 +22,22 @@ import (
 // tenantcostclient CCL package.
 type TenantSideCostController interface {
 	Start(ctx context.Context, stopper *stop.Stopper) error
+
+	TenantSideBatchInterceptor
+}
+
+// TenantSideBatchInterceptor intercepts batch requests and responses,
+// accounting for resource usage and potentially throttling requests.
+//
+// The TenantSideBatchInterceptor is installed in the DistSender.
+type TenantSideBatchInterceptor interface {
+	// OnRequestWait accounts for portion of the cost that can be determined
+	// upfront. It can block to delay the request as needed, depending on the
+	// current allowed rate of resource usage.
+	OnRequestWait(ctx context.Context, ba *roachpb.BatchRequest) error
+
+	// OnResponse accounts for the portion of the cost that can only be determined
+	// after-the-fact. It does not block, but it can push the rate limiting into
+	// "debt", causing future requests to be blocked.
+	OnResponse(ctx context.Context, br *roachpb.BatchResponse)
 }
