@@ -1702,6 +1702,8 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
 	nTuples := coldata.BatchSize() * 4
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -1722,7 +1724,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 		leftSource, rightSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-		testDiskAcc,
+		testDiskAcc, &evalCtx,
 	)
 	if err != nil {
 		t.Fatal("error in merge join op constructor", err)
@@ -1773,6 +1775,8 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	for _, numInputBatches := range []int{1, 2, 16} {
@@ -1793,7 +1797,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 					leftSource, rightSource, typs, typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					testDiskAcc,
+					testDiskAcc, &evalCtx,
 				)
 				if err != nil {
 					t.Fatal("error in merge join op constructor", err)
@@ -1830,6 +1834,8 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	for _, groupSize := range []int{coldata.BatchSize() / 8, coldata.BatchSize() / 4, coldata.BatchSize() / 2} {
@@ -1869,7 +1875,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
-						testDiskAcc,
+						testDiskAcc, &evalCtx,
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
@@ -1978,6 +1984,8 @@ func TestMergeJoinerRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	for _, numInputBatches := range []int{1, 2, 16, 256} {
@@ -1997,7 +2005,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-						testDiskAcc,
+						testDiskAcc, &evalCtx,
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
