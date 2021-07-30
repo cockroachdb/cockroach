@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,7 +45,13 @@ type Sink interface {
 	Dial() error
 	// EmitRow enqueues a row message for asynchronous delivery on the sink. An
 	// error may be returned if a previously enqueued message has failed.
-	EmitRow(ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp) error
+	EmitRow(
+		ctx context.Context,
+		topic TopicDescriptor,
+		key, value []byte,
+		updated hlc.Timestamp,
+		alloc kvevent.Alloc,
+	) error
 	// EmitResolvedTimestamp enqueues a resolved timestamp message for
 	// asynchronous delivery on every topic that has been seen by EmitRow. An
 	// error may be returned if a previously enqueued message has failed.
@@ -65,7 +71,6 @@ func getSink(
 	feedCfg jobspb.ChangefeedDetails,
 	timestampOracle timestampLowerBoundOracle,
 	user security.SQLUsername,
-	acc mon.BoundAccount,
 	jobID jobspb.JobID,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
@@ -80,13 +85,13 @@ func getSink(
 		case u.Scheme == changefeedbase.SinkSchemeNull:
 			return makeNullSink(sinkURL{URL: u})
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
-			return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts, acc)
+			return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts)
 		case isWebhookSink(u):
-			return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts, defaultWorkerCount(), acc, defaultRetryConfig())
+			return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts, defaultWorkerCount(), defaultRetryConfig())
 		case isCloudStorageSink(u):
 			return makeCloudStorageSink(
 				ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,
-				feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user, acc,
+				feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user,
 			)
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets)
@@ -181,9 +186,13 @@ type errorWrapperSink struct {
 
 // EmitRow implements Sink interface.
 func (s errorWrapperSink) EmitRow(
-	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topicDescr TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	r kvevent.Alloc,
 ) error {
-	if err := s.wrapped.EmitRow(ctx, topicDescr, key, value, updated); err != nil {
+	if err := s.wrapped.EmitRow(ctx, topicDescr, key, value, updated, r); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -247,8 +256,14 @@ type bufferSink struct {
 
 // EmitRow implements the Sink interface.
 func (s *bufferSink) EmitRow(
-	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	r kvevent.Alloc,
 ) error {
+	defer r.Release(ctx)
+
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
@@ -331,8 +346,14 @@ func (n *nullSink) pace(ctx context.Context) error {
 
 // EmitRow implements Sink interface.
 func (n *nullSink) EmitRow(
-	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	r kvevent.Alloc,
 ) error {
+	defer r.Release(ctx)
+
 	if err := n.pace(ctx); err != nil {
 		return err
 	}
