@@ -66,8 +66,6 @@ table_name NOT IN (
 	-- allowlisted tables that don't need to be in debug zip
 	'backward_dependencies',
 	'builtin_functions',
-	'create_statements',
-	'create_type_statements',
 	'databases',
 	'forward_dependencies',
 	'index_columns',
@@ -103,7 +101,10 @@ ORDER BY name ASC`)
 
 	var exp []string
 	exp = append(exp, debugZipTablesPerNode...)
-	exp = append(exp, debugZipTablesPerCluster...)
+	for _, t := range debugZipTablesPerCluster {
+		t = strings.TrimPrefix(t, `"".`)
+		exp = append(exp, t)
+	}
 	sort.Strings(exp)
 
 	assert.Equal(t, exp, tables)
@@ -319,10 +320,14 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `rpc error: ...`)
 
 	// The number of memory profiles previously collected is not deterministic.
-	re = regexp.MustCompile(`(?m)requesting heap files for node 1\.\.\..*found$`)
-	out = re.ReplaceAllString(out, `requesting heap files for node 1... ? found`)
-	re = regexp.MustCompile(`(?m)\^writing.*memprof*$`)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ heap profiles found$`)
+	out = re.ReplaceAllString(out, `[node ?] ? heap profiles found`)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving (memprof|memstats).*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] writing profile.*$` + "\n")
+	out = re.ReplaceAllString(out, ``)
+
+	//out = strings.ReplaceAll(out, "\n\n", "\n")
 	return out
 }
 
