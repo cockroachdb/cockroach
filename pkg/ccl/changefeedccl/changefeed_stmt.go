@@ -543,6 +543,20 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 				`unknown %s: %s`, opt, v)
 		}
 	}
+	{
+		const opt = changefeedbase.OptOnError
+		switch v := changefeedbase.OnErrorType(details.Opts[opt]); v {
+		case ``, changefeedbase.OptOnErrorFail:
+			details.Opts[opt] = string(changefeedbase.OptOnErrorFail)
+		case changefeedbase.OptOnErrorPause:
+			// No-op.
+		default:
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`unknown %s: %s, valid values are '%s' and '%s'`, opt, v,
+				changefeedbase.OptOnErrorPause,
+				changefeedbase.OptOnErrorFail)
+		}
+	}
 	return details, nil
 }
 
@@ -599,6 +613,55 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
+	err := b.resumeWithRetries(ctx, jobExec, jobID, details, progress, execCfg)
+	if err != nil {
+		return b.handleChangefeedError(ctx, err, details, jobExec)
+	}
+	return nil
+}
+
+func (b *changefeedResumer) handleChangefeedError(
+	ctx context.Context,
+	changefeedErr error,
+	details jobspb.ChangefeedDetails,
+	jobExec sql.JobExecContext,
+) error {
+	switch onError := changefeedbase.OnErrorType(details.Opts[changefeedbase.OptOnError]); onError {
+	// default behavior
+	case changefeedbase.OptOnErrorFail:
+		return changefeedErr
+	// pause instead of failing
+	case changefeedbase.OptOnErrorPause:
+		// note: we only want the job to pause here if a failure happens, not a
+		// user-initiated cancellation. if the job has been canceled, the ctx
+		// will handle it and the pause will return an error.
+		return b.job.PauseRequested(ctx, jobExec.ExtendedEvalContext().Txn, func(ctx context.Context,
+			planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
+			err := b.OnPauseRequest(ctx, jobExec, txn, progress)
+			if err != nil {
+				return err
+			}
+			// directly update running status to avoid the running/reverted job status check
+			progress.RunningStatus = fmt.Sprintf("job failed (%v) but is being paused because of %s=%s", changefeedErr,
+				changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
+			log.Warningf(ctx, "job failed (%v) but is being paused because of %s=%s", changefeedErr,
+				changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
+			return nil
+		})
+	default:
+		return errors.Errorf("unrecognized option value: %s=%s",
+			changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
+	}
+}
+
+func (b *changefeedResumer) resumeWithRetries(
+	ctx context.Context,
+	jobExec sql.JobExecContext,
+	jobID jobspb.JobID,
+	details jobspb.ChangefeedDetails,
+	progress jobspb.Progress,
+	execCfg *sql.ExecutorConfig,
+) error {
 	// We'd like to avoid failing a changefeed unnecessarily, so when an error
 	// bubbles up to this level, we'd like to "retry" the flow if possible. This
 	// could be because the sink is down or because a cockroach node has crashed
@@ -665,8 +728,6 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 			progress = reloadedJob.Progress()
 		}
 	}
-	// We only hit this if `r.Next()` returns false, which right now only happens
-	// on context cancellation.
 	return errors.Wrap(err, `ran out of retries`)
 }
 

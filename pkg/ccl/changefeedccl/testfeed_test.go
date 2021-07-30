@@ -259,7 +259,7 @@ func (f *jobFeed) jobFailed() {
 		// Already failed/done.
 		return
 	}
-	f.mu.terminalErr = f.fetchTerminalJobErr()
+	f.mu.terminalErr = f.FetchTerminalJobErr()
 	close(f.shutdown)
 }
 
@@ -274,7 +274,13 @@ func (f *jobFeed) JobID() jobspb.JobID {
 	return f.jobID
 }
 
-func (f *jobFeed) waitForStatus(statusPred func(status jobs.Status) bool) error {
+func (f *jobFeed) status() (status string, err error) {
+	err = f.db.QueryRowContext(context.Background(),
+		`SELECT status FROM system.jobs WHERE id = $1`, f.jobID).Scan(&status)
+	return
+}
+
+func (f *jobFeed) WaitForStatus(statusPred func(status jobs.Status) bool) error {
 	if f.jobID == jobspb.InvalidJobID {
 		// Job may not have been started.
 		return nil
@@ -282,8 +288,8 @@ func (f *jobFeed) waitForStatus(statusPred func(status jobs.Status) bool) error 
 	// Wait for the job status predicate to become true.
 	return testutils.SucceedsSoonError(func() error {
 		var status string
-		if err := f.db.QueryRowContext(context.Background(),
-			`SELECT status FROM system.jobs WHERE id = $1`, f.jobID).Scan(&status); err != nil {
+		var err error
+		if status, err = f.status(); err != nil {
 			return err
 		}
 		if statusPred(jobs.Status(status)) {
@@ -300,13 +306,16 @@ func (f *jobFeed) Pause() error {
 	if err != nil {
 		return err
 	}
-	return f.waitForStatus(func(s jobs.Status) bool { return s == jobs.StatusPaused })
+	return f.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusPaused })
 }
 
 // Resume implements the TestFeed interface.
 func (f *jobFeed) Resume() error {
 	_, err := f.db.Exec(`RESUME JOB $1`, f.jobID)
-	return err
+	if err != nil {
+		return err
+	}
+	return f.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusRunning })
 }
 
 // Details implements FeedJob interface.
@@ -324,8 +333,8 @@ func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
 	return payload.GetChangefeed(), nil
 }
 
-// fetchTerminalJobErr retrieves the error message from changefeed job.
-func (f *jobFeed) fetchTerminalJobErr() error {
+// FetchTerminalJobErr retrieves the error message from changefeed job.
+func (f *jobFeed) FetchTerminalJobErr() error {
 	var errStr string
 	if err := f.db.QueryRow(
 		`SELECT error FROM [SHOW JOBS] WHERE job_id=$1`, f.jobID,
