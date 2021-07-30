@@ -1,0 +1,139 @@
+statement ok
+SET experimental_propagate_input_ordering=true;
+
+query T
+explain (opt, verbose)
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) SELECT * FROM tmp;
+----
+sort
+ ├── columns: i:3  [hidden: order_column2:4]
+ ├── immutable
+ ├── stats: [rows=10]
+ ├── cost: 1.5576049
+ ├── fd: (3)-->(4)
+ ├── ordering: +4,+3
+ ├── prune: (3,4)
+ └── project
+      ├── columns: i:3 order_column2:4
+      ├── immutable
+      ├── stats: [rows=10]
+      ├── cost: 0.44
+      ├── fd: (3)-->(4)
+      ├── prune: (3,4)
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── immutable
+      │    ├── stats: [rows=10]
+      │    ├── cost: 0.13
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── stats: [rows=1]
+      │    │    ├── cost: 0.02
+      │    │    ├── key: ()
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 10) [immutable]
+      └── projections
+           ├── generate_series:1 [as=i:3, outer=(1)]
+           └── generate_series:1 % 5 [as=order_column2:4, outer=(1), immutable]
+
+query I
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) SELECT * FROM tmp;
+----
+5
+10
+1
+6
+2
+7
+3
+8
+4
+9
+
+query T
+EXPLAIN (OPT, VERBOSE)
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) SELECT * FROM tmp;
+----
+sort
+ ├── columns: i:3  [hidden: order_column2:4]
+ ├── immutable
+ ├── stats: [rows=10]
+ ├── cost: 1.5576049
+ ├── fd: (3)-->(4)
+ ├── ordering: +4,+3
+ ├── prune: (3,4)
+ └── project
+      ├── columns: i:3 order_column2:4
+      ├── immutable
+      ├── stats: [rows=10]
+      ├── cost: 0.44
+      ├── fd: (3)-->(4)
+      ├── prune: (3,4)
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── immutable
+      │    ├── stats: [rows=10]
+      │    ├── cost: 0.13
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── stats: [rows=1]
+      │    │    ├── cost: 0.02
+      │    │    ├── key: ()
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 10) [immutable]
+      └── projections
+           ├── generate_series:1 [as=i:3, outer=(1)]
+           └── generate_series:1 % 5 [as=order_column2:4, outer=(1), immutable]
+
+query I
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) SELECT * FROM tmp;
+----
+5
+10
+1
+6
+2
+7
+3
+8
+4
+9
+
+# Do not preserve the subquery ordering because the parent scope has its own
+# ordering.
+query I
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC)
+SELECT * FROM tmp ORDER BY i DESC;
+----
+10
+9
+8
+7
+6
+5
+4
+3
+2
+1
+
+# Do not preserve the subquery ordering because the parent scope has its own
+# ordering.
+query I
+WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC)
+SELECT * FROM tmp ORDER BY i DESC;
+----
+10
+9
+8
+7
+6
+5
+4
+3
+2
+1
+
+statement ok
+RESET experimental_propagate_input_ordering;
