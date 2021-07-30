@@ -37,6 +37,14 @@ func (s *instance) TokenBucketRequest(
 		}
 	}
 
+	metrics := s.metrics.getTenantMetrics(tenantID)
+	// Use a per-tenant mutex to serialize operations to the bucket. The
+	// transactions will need to be serialized anyway, so this avoids more
+	// expensive restarts. It also guarantees that the metric updates happen in
+	// the same order with the system table changes.
+	metrics.mutex.Lock()
+	defer metrics.mutex.Unlock()
+
 	result := &roachpb.TokenBucketResponse{}
 	var consumption roachpb.TokenBucketRequest_Consumption
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -80,14 +88,11 @@ func (s *instance) TokenBucketRequest(
 	}
 
 	// Report current consumption.
-	// TODO(radu): there is a possible race here, where two different requests
-	// update the metrics in opposite order.
-	m := s.metrics.getTenantMetrics(tenantID)
-	m.totalRU.Update(consumption.RU)
-	m.totalReadRequests.Update(int64(consumption.ReadRequests))
-	m.totalReadBytes.Update(int64(consumption.ReadBytes))
-	m.totalWriteRequests.Update(int64(consumption.WriteRequests))
-	m.totalWriteBytes.Update(int64(consumption.WriteBytes))
-	m.totalSQLPodsCPUSeconds.Update(consumption.SQLPodCPUSeconds)
+	metrics.totalRU.Update(consumption.RU)
+	metrics.totalReadRequests.Update(int64(consumption.ReadRequests))
+	metrics.totalReadBytes.Update(int64(consumption.ReadBytes))
+	metrics.totalWriteRequests.Update(int64(consumption.WriteRequests))
+	metrics.totalWriteBytes.Update(int64(consumption.WriteBytes))
+	metrics.totalSQLPodsCPUSeconds.Update(consumption.SQLPodCPUSeconds)
 	return result
 }

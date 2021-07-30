@@ -106,6 +106,10 @@ type tenantMetrics struct {
 	totalWriteRequests     *aggmetric.Gauge
 	totalWriteBytes        *aggmetric.Gauge
 	totalSQLPodsCPUSeconds *aggmetric.GaugeFloat64
+
+	// Mutex is used to atomically update metrics together with a corresponding
+	// change to the system table.
+	mutex *syncutil.Mutex
 }
 
 // getTenantMetrics returns the metrics for a tenant.
@@ -122,6 +126,7 @@ func (m *Metrics) getTenantMetrics(tenantID roachpb.TenantID) tenantMetrics {
 			totalWriteRequests:     m.TotalWriteRequests.AddChild(tid),
 			totalWriteBytes:        m.TotalWriteBytes.AddChild(tid),
 			totalSQLPodsCPUSeconds: m.TotalSQLPodsCPUSeconds.AddChild(tid),
+			mutex:                  &syncutil.Mutex{},
 		}
 		m.mu.tenantMetrics[tenantID] = tm
 	}
