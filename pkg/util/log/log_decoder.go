@@ -35,34 +35,23 @@ func NewEntryDecoder(in io.Reader, editMode EditSensitiveData) (EntryDecoder, er
 // NewEntryDecoderWithFormat is like NewEntryDecoder but the caller can specify the format of the log file.
 // The header lines do not need to be searched for the log entry format when 'logFormat' is non-empty.
 func NewEntryDecoderWithFormat(
-	in io.Reader, editMode EditSensitiveData, logFormat string,
+	in io.Reader, editMode EditSensitiveData, format string,
 ) (EntryDecoder, error) {
 	var d EntryDecoder
-	var format string
 
 	// If the log format has not been specified, get the format from the first few header lines of the log file.
-	if logFormat == "" {
-		var buf bytes.Buffer
-		rest := bufio.NewReader(in)
-		r := io.TeeReader(rest, &buf)
-		{
-			const headerBytes = 8096
-			header := make([]byte, headerBytes)
-			n, err := r.Read(header)
-			if err != nil {
-				return nil, err
-			}
-			header = header[:n]
-			logFormat, err = getLogFormat(header)
-			if err != nil {
-				return nil, errors.Wrap(err, "decoding format")
-			}
+	if format == "" {
+		var read io.Reader
+		var err error
+		read, format, err = ReadFormatFromLogFile(in)
+		if err != nil {
+			return nil, err
 		}
-		in = io.MultiReader(&buf, rest)
+		in = io.MultiReader(read, in)
 	}
-	f, ok := formatParsers[logFormat]
+	f, ok := formatParsers[format]
 	if !ok {
-		return nil, errors.Newf("unknown log file format: %s", logFormat)
+		return nil, errors.Newf("unknown log file format: %s", format)
 	}
 	format = f
 
@@ -92,18 +81,57 @@ func NewEntryDecoderWithFormat(
 	return d, nil
 }
 
+// ReadFormatFromLogFile attempts to read the format from the header data of
+// in. It returns the data consumed from input in the read return value.
+func ReadFormatFromLogFile(in io.Reader) (read io.Reader, format string, err error) {
+	var buf bytes.Buffer
+	rest := bufio.NewReader(in)
+	r := io.TeeReader(rest, &buf)
+	const headerBytes = 8096
+	header := make([]byte, headerBytes)
+	n, err := r.Read(header)
+	if err != nil {
+		return nil, "", err
+	}
+	header = header[:n]
+	format, err = getLogFormat(header)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "decoding format")
+	}
+	return &buf, format, nil
+}
+
 // getLogFormat retrieves the log format recorded at the top of a log.
 func getLogFormat(data []byte) (string, error) {
 	var re = regexp.MustCompile(
 		`(?m)^` +
-			/* Prefix */ `(?:.*\[config\]   log format \(utf8=.+\): )` +
+			/* Prefix */ `(?:.*\[config\][ ]+log format \(utf8=.+\): )` +
 			/* Format */ `(.*)$`,
 	)
-
-	m := re.FindSubmatch(data)
-	if m == nil {
-		return "", errors.New("failed to extract log file format from the log")
+	if m := re.FindSubmatch(data); m != nil {
+		return string(m[1]), nil
 	}
 
-	return string(m[1]), nil
+	// If the log format is not specified in the log, determine the format from the log structure.
+
+	// If the absence of a counter in an entry is not represented by two ASCII spaces, the format must be crdb-v1.
+	// If detected, determine that the log is crdb-v1 formatted.
+	if re = regexp.MustCompile(
+		`(?m)^` +
+			/* crdb-v1 Indicator */ `(?:.*\[config\] [a-zA-Z].*)$`,
+	); re.Match(data) {
+		return "crdb-v1", nil
+	}
+
+	// If the absence of a counter in an entry is represented by two ASCII spaces and there is a continuation marker,
+	// the format must be crdb-v2.
+	// If detected, determine that the log is crdb-v2 formatted.
+	if re = regexp.MustCompile(
+		`(?m)^` +
+			/* crdb-v2 Indicator */ `(?:.*\[config\]   [a-zA-Z].*)$`,
+	); re.Match(data) {
+		return "crdb-v2", nil
+	}
+
+	return "", errors.New("failed to extract log file format from the log")
 }
