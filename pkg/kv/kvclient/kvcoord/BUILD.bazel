@@ -41,6 +41,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvclient/rangecache:with-mocks",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/multitenant",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

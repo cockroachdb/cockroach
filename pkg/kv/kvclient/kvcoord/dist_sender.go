@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -266,6 +267,11 @@ type DistSender struct {
 	// testing.
 	clusterID *base.ClusterIDContainer
 
+	// batchInterceptor is set for tenants; when set, all BatchRequests and
+	// BatchResponses are passed through this interceptor, which can potentially
+	// throttle requests.
+	batchInterceptor multitenant.TenantSideBatchInterceptor
+
 	// disableFirstRangeUpdates disables updates of the first range via
 	// gossip. Used by tests which want finer control of the contents of the
 	// range cache.
@@ -318,6 +324,11 @@ type DistSenderConfig struct {
 	FirstRangeProvider FirstRangeProvider
 	RangeDescriptorDB  rangecache.RangeDescriptorDB
 
+	// BatchInterceptor is set for tenants; when set, all BatchRequests and
+	// BatchResponses are passed through this interceptor, which can potentially
+	// throttle requests.
+	BatchInterceptor multitenant.TenantSideBatchInterceptor
+
 	TestingKnobs ClientTestingKnobs
 }
 
@@ -327,10 +338,11 @@ type DistSenderConfig struct {
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig) *DistSender {
 	ds := &DistSender{
-		st:        cfg.Settings,
-		clock:     cfg.Clock,
-		nodeDescs: cfg.NodeDescs,
-		metrics:   makeDistSenderMetrics(),
+		st:               cfg.Settings,
+		clock:            cfg.Clock,
+		nodeDescs:        cfg.NodeDescs,
+		metrics:          makeDistSenderMetrics(),
+		batchInterceptor: cfg.BatchInterceptor,
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
@@ -705,6 +717,12 @@ func (ds *DistSender) Send(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
 	defer sp.Finish()
 
+	if ds.batchInterceptor != nil {
+		if err := ds.batchInterceptor.OnRequestWait(ctx, &ba); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+	}
+
 	splitET := false
 	var require1PC bool
 	lastReq := ba.Requests[len(ba.Requests)-1].GetInner()
@@ -796,6 +814,10 @@ func (ds *DistSender) Send(
 		lastHeader := rplChunks[len(rplChunks)-1].BatchResponse_Header
 		lastHeader.CollectedSpans = reply.CollectedSpans
 		reply.BatchResponse_Header = lastHeader
+
+		if ds.batchInterceptor != nil {
+			ds.batchInterceptor.OnResponse(ctx, reply)
+		}
 	}
 
 	return reply, nil

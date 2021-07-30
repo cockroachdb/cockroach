@@ -1,10 +1,11 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tenantcostmodel",
     srcs = [
         "model.go",
         "settings.go",
+        "test_utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel",
     visibility = ["//visibility:public"],
@@ -12,4 +13,10 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/settings",
     ],
+)
+
+go_test(
+    name = "tenantcostmodel_test",
+    srcs = ["test_utils_test.go"],
+    deps = [":tenantcostmodel"],
 )
