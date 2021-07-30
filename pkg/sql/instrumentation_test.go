@@ -39,11 +39,11 @@ func TestSampledStatsCollection(t *testing.T) {
 		t, db, "test", "x INT", 10, sqlutils.ToRowFn(sqlutils.RowIdxFn),
 	)
 
-	getStmtStats := func(t *testing.T, server serverutils.TestServerInterface, stmt string, implicitTxn bool) (*stmtStats, roachpb.StmtID) {
+	getStmtStats := func(t *testing.T, server serverutils.TestServerInterface, stmt string, implicitTxn bool, database string) (*stmtStats, roachpb.StmtID) {
 		t.Helper()
 		applicationStats := server.SQLServer().(*Server).sqlStats.getStatsForApplication("")
 		require.NotNil(t, applicationStats, "could not find app stats for default app")
-		stats, id := applicationStats.getStatsForStmt(stmt, implicitTxn, nil /* err */, false /* createIfNonexistent */)
+		stats, id := applicationStats.getStatsForStmt(stmt, implicitTxn, database, nil /* err */, false /* createIfNonexistent */)
 		require.NotNil(t, stats, "could not find stmt stats for %s", implicitTxn)
 		return stats, id
 	}
@@ -73,7 +73,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		toggleSampling(true)
 		queryDB(t, db, selectOrderBy)
 
-		stats, _ := getStmtStats(t, s, selectOrderBy, true /* implicitTxn */)
+		stats, _ := getStmtStats(t, s, selectOrderBy, true /* implicitTxn */, "defaultdb")
 
 		stats.mu.Lock()
 		defer stats.mu.Unlock()
@@ -100,8 +100,8 @@ func TestSampledStatsCollection(t *testing.T) {
 		toggleSampling(true)
 		doTxn(t)
 
-		aggStats, aggID := getStmtStats(t, s, aggregation, false /* implicitTxn */)
-		selectStats, selectID := getStmtStats(t, s, selectOrderBy, false /* implicitTxn */)
+		aggStats, aggID := getStmtStats(t, s, aggregation, false /* implicitTxn */, "defaultdb")
+		selectStats, selectID := getStmtStats(t, s, selectOrderBy, false /* implicitTxn */, "defaultdb")
 
 		aggStats.mu.Lock()
 		defer aggStats.mu.Unlock()
