@@ -361,6 +361,7 @@ go_test(
         "//pkg/ts/tspb",
         "//pkg/util",
         "//pkg/util/caller",
+        "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

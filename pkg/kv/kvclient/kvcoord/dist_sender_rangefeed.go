@@ -187,7 +187,8 @@ func (ds *DistSender) partialRangeFeed(
 					// errors that should not show up again.
 					continue
 				case roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
-					roachpb.RangeFeedRetryError_REASON_RANGE_MERGED:
+					roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+					roachpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER:
 					// Evict the decriptor from the cache.
 					rangeInfo.token.Evict(ctx)
 					return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
