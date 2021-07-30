@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"path/filepath"
 	"testing"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -34,6 +36,36 @@ import (
 )
 
 const all, latest = true, false
+
+func makeKVT(key roachpb.Key, value []byte, ts hlc.Timestamp) MVCCKeyValue {
+	return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value}
+}
+
+func makeKVTxn(
+	key roachpb.Key, val []byte, ts hlc.Timestamp,
+) (roachpb.Transaction, roachpb.Value, roachpb.Intent) {
+	txnID := uuid.MakeV4()
+	txnMeta := enginepb.TxnMeta{
+		Key:            key,
+		ID:             txnID,
+		Epoch:          1,
+		WriteTimestamp: ts,
+	}
+	return roachpb.Transaction{
+			TxnMeta:       txnMeta,
+			ReadTimestamp: ts,
+		}, roachpb.Value{
+			RawBytes: val,
+		}, roachpb.MakeIntent(&txnMeta, key)
+}
+
+func intents(intents ...roachpb.Intent) []roachpb.Intent {
+	return intents
+}
+
+func kvs(kvs ...MVCCKeyValue) []MVCCKeyValue {
+	return kvs
+}
 
 func iterateExpectErr(
 	e Engine,
@@ -393,16 +425,11 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
 	)
 
-	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) MVCCKeyValue {
-		return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value}
-	}
-
 	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
 	kv2_4_4 := makeKVT(testKey2, testValue4, ts4)
 	kv1_3Deleted := makeKVT(testKey1, nil, ts3)
-	kvs := func(kvs ...MVCCKeyValue) []MVCCKeyValue { return kvs }
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -533,33 +560,12 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
 	)
 
-	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) MVCCKeyValue {
-		return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value}
-	}
-	makeTxn := func(key roachpb.Key, val []byte, ts hlc.Timestamp) (roachpb.Transaction, roachpb.Value, roachpb.Intent) {
-		txnID := uuid.MakeV4()
-		txnMeta := enginepb.TxnMeta{
-			Key:            key,
-			ID:             txnID,
-			Epoch:          1,
-			WriteTimestamp: ts,
-		}
-		return roachpb.Transaction{
-				TxnMeta:       txnMeta,
-				ReadTimestamp: ts,
-			}, roachpb.Value{
-				RawBytes: val,
-			}, roachpb.MakeIntent(&txnMeta, key)
-	}
-	intents := func(intents ...roachpb.Intent) []roachpb.Intent { return intents }
-
 	// Keys are named as kv<key>_<value>_<ts>.
 	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
 	kv1_4_4 := makeKVT(testKey1, testValue4, ts4)
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
 	kv1Deleted3 := makeKVT(testKey1, nil, ts3)
-	kvs := func(kvs ...MVCCKeyValue) []MVCCKeyValue { return kvs }
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name+"-latest", func(t *testing.T) {
@@ -594,11 +600,11 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, latest, kvs(kv1Deleted3, kv2_2_2)))
 
 			// Exercise intent handling.
-			txn1, txn1Val, intentErr1 := makeTxn(testKey1, testValue4, ts4)
+			txn1, txn1Val, intentErr1 := makeKVTxn(testKey1, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
-			txn2, txn2Val, intentErr2 := makeTxn(testKey2, testValue4, ts4)
+			txn2, txn2Val, intentErr2 := makeKVTxn(testKey2, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, txn2Val, &txn2); err != nil {
 				t.Fatal(err)
 			}
@@ -662,11 +668,11 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, all, kvs(kv1Deleted3, kv1_2_2, kv2_2_2)))
 
 			// Exercise intent handling.
-			txn1, txn1Val, intentErr1 := makeTxn(testKey1, testValue4, ts4)
+			txn1, txn1Val, intentErr1 := makeKVTxn(testKey1, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
-			txn2, txn2Val, intentErr2 := makeTxn(testKey2, testValue4, ts4)
+			txn2, txn2Val, intentErr2 := makeKVTxn(testKey2, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, txn2Val, &txn2); err != nil {
 				t.Fatal(err)
 			}
@@ -1071,30 +1077,37 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 		t.Run(fmt.Sprintf("%s-%s", testCase.start, testCase.end), func(t *testing.T) {
 			defer leaktest.AfterTest(t)()
 
-			var expectedKVs []MVCCKeyValue
-			iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
-			defer iter.Close()
-			iter.SeekGE(MVCCKey{Key: localMax})
-			for {
-				ok, err := iter.Valid()
-				if err != nil {
-					t.Fatal(err)
-				} else if !ok {
-					break
-				}
-				ts := iter.Key().Timestamp
-				if (ts.Less(testCase.end) || testCase.end == ts) && testCase.start.Less(ts) {
-					expectedKVs = append(expectedKVs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
-				}
-				iter.Next()
-			}
-			if len(expectedKVs) < 1 {
-				t.Fatalf("source of truth had no expected KVs; likely a bug in the test itself")
-			}
+			expectedKVs := collectMatchingWithMVCCIterator(t, eng, testCase.start, testCase.end)
 
 			assertEqualKVs(eng, keys.LocalMax, keys.MaxKey, testCase.start, testCase.end, latest, expectedKVs)(t)
 		})
 	}
+}
+
+func collectMatchingWithMVCCIterator(
+	t *testing.T, eng Engine, start, end hlc.Timestamp,
+) []MVCCKeyValue {
+	var expectedKVs []MVCCKeyValue
+	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: localMax})
+	for {
+		ok, err := iter.Valid()
+		if err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+		ts := iter.Key().Timestamp
+		if (ts.Less(end) || end == ts) && start.Less(ts) {
+			expectedKVs = append(expectedKVs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+		}
+		iter.Next()
+	}
+	if len(expectedKVs) < 1 {
+		t.Fatalf("source of truth had no expected KVs; likely a bug in the test itself")
+	}
+	return expectedKVs
 }
 
 func runIncrementalBenchmark(
@@ -1153,4 +1166,215 @@ func BenchmarkMVCCIncrementalIterator(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestMVCCIterationLimit verifies that iterating a dataset with iteration count limit is set
+// to ensure that resuming on a key returned in error will guarantee that the data is complete
+// and that we always make a progress despite no data being returned.
+func TestMVCCIterationLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	const numKeys = 1000
+	const numBatches = 10
+	const batchTimeSpan = 10
+	const valueSize = 8
+
+	const batchSize = numKeys / numBatches
+	const largeIterationLimit = 100
+
+	eng, err := loadTestData(filepath.Join(dir, "mvcc_data"),
+		numKeys, numBatches, batchTimeSpan, valueSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eng.Close()
+
+	const startBatch = 5
+	const stopBatch = 9 /* exclusive */
+
+	for _, s := range []struct {
+		name                 string
+		iteratorLimit        int64
+		start, end           hlc.Timestamp
+		minResume, maxResume int
+		useTbi               bool
+	}{
+		// Non TBI iteration over full range and limit of one should stop after every value except the last one.
+		{"full_time_range", 1,
+			hlc.Timestamp{}, hlc.Timestamp{WallTime: math.MaxInt64},
+			numKeys - 1, numKeys, false},
+		// Non TBI iteration over time constrained range should still go through remaining keys and produce additional seeks.
+		{"partial_time_range", 1,
+			hlc.Timestamp{WallTime: startBatch * batchTimeSpan}, hlc.Timestamp{WallTime: stopBatch * batchTimeSpan},
+			batchSize*(stopBatch-startBatch) - 1, numKeys, false},
+		// With a non 1 limit, sanity check that we respect an upper limit which reduces proportionally to iteration limit count.
+		{"partial_time_range", largeIterationLimit,
+			hlc.Timestamp{WallTime: startBatch * batchTimeSpan}, hlc.Timestamp{WallTime: stopBatch * batchTimeSpan},
+			batchSize*(stopBatch-startBatch)/largeIterationLimit - 1, numKeys / largeIterationLimit, false},
+		// TBI iteration for the full range is not different from the non TBI since we need to go through all keys.
+		{"full_time_range", 1,
+			hlc.Timestamp{}, hlc.Timestamp{WallTime: math.MaxInt64},
+			numKeys - 1, numKeys, true},
+		// For partial time range, we expect TBI to skip extra hops over the values outside time range.
+		// We don't put additional con
+		{"partial_time_range", 1,
+			hlc.Timestamp{WallTime: startBatch * batchTimeSpan}, hlc.Timestamp{WallTime: stopBatch * batchTimeSpan},
+			batchSize*(stopBatch-startBatch) - 1, numKeys, true},
+		// For TBI we expect keys outside of time range to be skipped and we also don't account for TBI iteration.
+		{"partial_time_range", largeIterationLimit,
+			hlc.Timestamp{WallTime: startBatch * batchTimeSpan}, hlc.Timestamp{WallTime: stopBatch * batchTimeSpan},
+			batchSize*(stopBatch-startBatch)/largeIterationLimit - 1, numKeys / largeIterationLimit, true},
+	} {
+		t.Run(fmt.Sprintf("%s_iterLimit=%d_useTbi=%t", s.name, s.iteratorLimit, s.useTbi), func(t *testing.T) {
+			expectedKVs := collectMatchingWithMVCCIterator(t, eng, s.start, s.end)
+			assertIteratedKVsWithResume(t, eng, expectedKVs, s.minResume, s.maxResume, s.iteratorLimit, s.start, s.end, s.useTbi)
+		})
+	}
+}
+
+func TestIntentCollectionRespectsIterationLimits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	const numKeys = 100
+	const numBatches = 2
+	const batchTimeSpan = 10
+	const valueSize = 8
+	const batchSize = numKeys / numBatches
+
+	eng, err := loadTestData(filepath.Join(dir, "mvcc_data"),
+		numKeys, numBatches, batchTimeSpan, valueSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eng.Close()
+
+	// Insert intents into the time interval greater than all batches timestamps.
+	intentCount, err := generateSparseIntents(eng, batchSize, numBatches, batchTimeSpan, valueSize)
+	require.NoError(t, err, "Failed to insert intents")
+	// Check that intent reporting is stopped by iteration limits before we collect all intents.
+	assertIntentCount(t, eng, batchSize, intentCount, hlc.Timestamp{}, hlc.Timestamp{WallTime: math.MaxInt64})
+}
+
+// generateSparseIntents generates intents in the same way as loadTestData but it would
+// add only half keys to ensure there's a mix of values and intents. Base batch should
+// be higher than existing data to avoid intents in the past as it is used to calculate
+// timestamp for new keys.
+func generateSparseIntents(
+	eng Engine, batchSize, baseBatchIndex, batchTimeSpan, valueBytes int,
+) (int, error) {
+	ctx := context.Background()
+	rng := rand.New(rand.NewSource(1449168817))
+
+	minWallTime := int64((baseBatchIndex + 1) * batchTimeSpan)
+	batch := eng.NewBatch()
+	intentCount := 0
+	for i := 0; i < batchSize; i += 2 {
+		key := encoding.EncodeUvarintAscending([]byte("key-"), uint64(i))
+		timestamp := hlc.Timestamp{WallTime: minWallTime + rand.Int63n(int64(batchTimeSpan))}
+		txn, val, _ := makeKVTxn(key, randutil.RandBytes(rng, valueBytes), timestamp)
+		if err := MVCCPut(ctx, batch, nil, txn.TxnMeta.Key, txn.ReadTimestamp, val, &txn); err != nil {
+			return 0, err
+		}
+		intentCount++
+	}
+	if err := batch.Commit(false /* sync */); err != nil {
+		return 0, err
+	}
+	batch.Close()
+	if err := eng.Flush(); err != nil {
+		return 0, err
+	}
+	return intentCount, nil
+}
+
+// assertIntentCount iterates over engine data and asserts that iterator
+// would stop once resource limit is reached in presence of multiple intents.
+// It also asserts that intents are collected despite error.
+func assertIntentCount(
+	t *testing.T, eng Engine, totalKeys int64, totalIntents int, start, end hlc.Timestamp,
+) {
+	iter := NewMVCCIncrementalIterator(eng, MVCCIncrementalIterOptions{
+		EnableTimeBoundIteratorOptimization: false,
+		EndKey:                              keys.MaxKey,
+		StartTime:                           start,
+		EndTime:                             end,
+		EnableWriteIntentAggregation:        true,
+		MaximumAllowedIterations:            totalKeys / 2,
+	})
+	defer iter.Close()
+
+	var err error
+	for iter.SeekGE(MVCCKey{Key: keys.LocalMax}); ; {
+		var ok bool
+		ok, err = iter.Valid()
+		if !ok {
+			break
+		}
+		iter.Next()
+	}
+	resourceError := (*ResourceLimitError)(nil)
+	require.True(t, errors.As(err, &resourceError), "Wrong type of error returned")
+	require.Greater(t, iter.NumCollectedIntents(), 0, "Intent collection should be stopped by limit")
+	require.Less(t, iter.NumCollectedIntents(), totalIntents, "Intent collection should be stopped by limit")
+}
+
+// assertIteratedKVsWithResume iterates over engine data with requested limit, resumes on
+// resource errors. Asserts than all data was returned and iteration was broken down into
+// multiple attempts.
+func assertIteratedKVsWithResume(
+	t *testing.T,
+	eng Engine,
+	expectedKVs []MVCCKeyValue,
+	minResume, maxResume int,
+	iteratorLimit int64,
+	start, end hlc.Timestamp,
+	useTbi bool,
+) {
+	// Run iterator from the beginning resuming on errors.
+	expectedIndex := 0
+	resumedCount := 0
+	resume := MVCCKey{Key: keys.LocalMax}
+iterationLoop:
+	for {
+		iter := NewMVCCIncrementalIterator(eng, MVCCIncrementalIterOptions{
+			EnableTimeBoundIteratorOptimization: useTbi,
+			EndKey:                              keys.MaxKey,
+			StartTime:                           start,
+			EndTime:                             end,
+			EnableWriteIntentAggregation:        false,
+			MaximumAllowedIterations:            iteratorLimit,
+		})
+		for iter.SeekGE(resume); ; {
+			ok, err := iter.Valid()
+			if err != nil {
+				if resourceError := (*ResourceLimitError)(nil); errors.As(err, &resourceError) {
+					resume = resourceError.ResumeKey
+					resumedCount++
+					require.Less(t, resumedCount, maxResume, "Iterator resumed to many times")
+					break
+				} else {
+					t.Fatalf("Got unexpected iterator error %v", err)
+				}
+			} else if !ok {
+				iter.Close()
+				break iterationLoop
+			}
+			require.Less(t, expectedIndex, len(expectedKVs), "Too many items returned by iterator")
+			require.Equal(t, expectedKVs[expectedIndex].Key, iter.Key(),
+				"Unexpected value at index %d, resumed times %d", expectedIndex, resumedCount)
+			expectedIndex++
+			iter.Next()
+		}
+		iter.Close()
+	}
+	require.Equal(t, len(expectedKVs), expectedIndex, "Number of iterated values")
+	require.GreaterOrEqual(t, resumedCount, minResume, "Iterator resume attempts")
 }

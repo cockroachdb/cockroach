@@ -560,10 +560,11 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 
 	var batch Batch
 	var minWallTime int64
+	batchSize := len(keys) / numBatches
 	for i, key := range keys {
-		if scaled := len(keys) / numBatches; (i % scaled) == 0 {
+		if (i % batchSize) == 0 {
 			if i > 0 {
-				log.Infof(ctx, "committing (%d/~%d)", i/scaled, numBatches)
+				log.Infof(ctx, "committing (%d/~%d)", i/batchSize, numBatches)
 				if err := batch.Commit(false /* sync */); err != nil {
 					return nil, err
 				}
@@ -573,7 +574,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 				}
 			}
 			batch = eng.NewBatch()
-			minWallTime = sstTimestamps[i/scaled]
+			minWallTime = sstTimestamps[i/batchSize]
 		}
 		timestamp := hlc.Timestamp{WallTime: minWallTime + rand.Int63n(int64(batchTimeSpan))}
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))

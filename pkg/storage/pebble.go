@@ -1829,8 +1829,16 @@ func pebbleExportToSst(
 	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; {
 		ok, err := iter.Valid()
 		if err != nil {
-			// This is an underlying iterator error, return it to the caller to deal
-			// with.
+			// TODO(oleg): this could only be enabled once we have mid key
+			// interrupts on timestamp.
+			//if resourceError := (*ResourceLimitError)(nil); errors.As(err, &resourceError) {
+			//	// Resources were exhausted, we should return resume key for next attempt.
+			//	resumeKey = resourceError.ResumeKey.Key
+			//	resumeTs = resourceError.ResumeKey.Timestamp
+			//	break
+			//}
+			// Otherwise this is an underlying iterator error, return it to the caller
+			// to deal with.
 			return roachpb.BulkOpSummary{}, nil, err
 		}
 		if !ok {

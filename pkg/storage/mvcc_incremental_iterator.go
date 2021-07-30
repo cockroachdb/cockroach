@@ -11,6 +11,8 @@
 package storage
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -28,6 +30,8 @@ import (
 // encountered:
 //   1. An inline value (non-user data)
 //   2. An intent whose timestamp lies within the time bounds
+//   3. Iterator hits a limit on number of Next calls on underlying
+//      iterator (if limit was requested).
 //
 // Note: The endTime is inclusive to be consistent with the non-incremental
 // iterator, where reads at a given timestamp return writes at that
@@ -92,6 +96,10 @@ type MVCCIncrementalIterator struct {
 	enableWriteIntentAggregation bool
 	// Optional collection of intents created on demand when first intent encountered.
 	intents []roachpb.Intent
+
+	// Underlying iteration limiting.
+	maximumAllowedIterations int64
+	iteratorAdvanceCount     int64
 }
 
 var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
@@ -112,6 +120,13 @@ type MVCCIncrementalIterOptions struct {
 	// would be free to decide if it wants to keep collecting entries and intents or
 	// skip entries.
 	EnableWriteIntentAggregation bool
+	// If non zero iterator would only advance or seek up to a certain number of times
+	// before bailing out with ResourceLimitError. When using the feature it is
+	// important to use resume key from the error to ensure forward progress could
+	// be made as advancing up to the first key could already exhaust the limit.
+	// Resume key is not necessarily a valid iteration key as we could stop in between
+	// eligible keys.
+	MaximumAllowedIterations int64
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -152,6 +167,7 @@ func NewMVCCIncrementalIterator(
 		endTime:                      opts.EndTime,
 		timeBoundIter:                timeBoundIter,
 		enableWriteIntentAggregation: opts.EnableWriteIntentAggregation,
+		maximumAllowedIterations:     opts.MaximumAllowedIterations,
 	}
 }
 
@@ -175,9 +191,8 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 		}
 	}
 	i.iter.SeekGE(startKey)
-	if ok, err := i.iter.Valid(); !ok {
-		i.err = err
-		i.valid = false
+	i.iteratorAdvanceCount++
+	if !i.checkValidAndSaveErr() {
 		return
 	}
 	i.err = nil
@@ -198,6 +213,7 @@ func (i *MVCCIncrementalIterator) Close() {
 // key.
 func (i *MVCCIncrementalIterator) Next() {
 	i.iter.Next()
+	i.iteratorAdvanceCount++
 	if !i.checkValidAndSaveErr() {
 		return
 	}
@@ -221,6 +237,7 @@ func (i *MVCCIncrementalIterator) checkValidAndSaveErr() bool {
 // key if the iterator is currently located at the last version for a key.
 func (i *MVCCIncrementalIterator) NextKey() {
 	i.iter.NextKey()
+	i.iteratorAdvanceCount++
 	if !i.checkValidAndSaveErr() {
 		return
 	}
@@ -286,6 +303,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			// expensive than a Next call.
 			seekKey := MakeMVCCMetadataKey(tbiKey)
 			i.iter.SeekGE(seekKey)
+			i.iteratorAdvanceCount++
 			if !i.checkValidAndSaveErr() {
 				return
 			}
@@ -366,11 +384,20 @@ func (i *MVCCIncrementalIterator) advance() {
 			return
 		}
 
+		// If we reached requested iteration limit here, stop iteration with an error and
+		// provide a resume key.
+		if i.maximumAllowedIterations > 0 && i.iteratorAdvanceCount > i.maximumAllowedIterations {
+			i.err = &ResourceLimitError{Limit: i.maximumAllowedIterations, ResumeKey: i.Key()}
+			i.valid = false
+			return
+		}
+
 		// We have encountered an intent but it does not lie in the timestamp span
 		// (startTime, endTime] so we do not throw an error, and attempt to move to
 		// the next valid KV.
 		if i.meta.Txn != nil {
 			i.iter.Next()
+			i.iteratorAdvanceCount++
 			if !i.checkValidAndSaveErr() {
 				return
 			}
@@ -390,10 +417,8 @@ func (i *MVCCIncrementalIterator) advance() {
 			// done.
 			break
 		}
-
-		if ok, err := i.iter.Valid(); !ok {
-			i.err = err
-			i.valid = false
+		i.iteratorAdvanceCount++
+		if !i.checkValidAndSaveErr() {
 			return
 		}
 	}
@@ -438,9 +463,8 @@ func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 	for {
 		i.iter.Next()
-		if ok, err := i.iter.Valid(); !ok {
-			i.err = err
-			i.valid = false
+		i.iteratorAdvanceCount++
+		if !i.checkValidAndSaveErr() {
 			return
 		}
 
@@ -477,4 +501,19 @@ func (i *MVCCIncrementalIterator) TryGetIntentError() error {
 	return &roachpb.WriteIntentError{
 		Intents: i.intents,
 	}
+}
+
+// ResourceLimitError is returned by MVCCIncrementalIterator when iterator reaches
+// maximum number of iterations in the underlying storage iterator. Error will
+// provide used Limit as well as ResumeKey that could be used to resume iteration
+// on the subsequent attempt.
+type ResourceLimitError struct {
+	Limit     int64
+	ResumeKey MVCCKey
+}
+
+var _ error = &ResourceLimitError{}
+
+func (e *ResourceLimitError) Error() string {
+	return fmt.Sprintf("iteration count exhausted limit %d", e.Limit)
 }
