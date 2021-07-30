@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/errors"
 )
 
 // TableDescriptorPollInterval controls how fast table descriptors are polled. A
@@ -138,4 +139,22 @@ var MinHighWaterMarkCheckpointAdvance = settings.RegisterDurationSetting(
 		"advances, as long as the rate of checkpointing keeps up with the rate of frontier changes",
 	0,
 	settings.NonNegativeDuration,
+)
+
+// EventMemoryMultiplier is the multiplier for the amount of memory needed to process an event.
+//
+// Memory accounting is hard.  Furthermore, during the lifetime of the event, the
+// amount of resources used to process such event varies. So, instead of coming up
+// with complex schemes to accurately measure and adjust current memory usage,
+// we'll request the amount of memory multiplied by this fudge factor.
+var EventMemoryMultiplier = settings.RegisterFloatSetting(
+	"changefeed.event_memory_multiplier",
+	"the amount of memory required to process an event is multiplied by this factor",
+	3,
+	func(v float64) error {
+		if v < 1 {
+			return errors.New("changefeed.event_memory_multiplier must be at least 1")
+		}
+		return nil
+	},
 )
