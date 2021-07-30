@@ -136,14 +136,18 @@ func (p *scanRequestScanner) exportSpan(
 		bufferDuration += afterBuffer.Sub(afterScan)
 		if res.ResumeSpan != nil {
 			consumed := roachpb.Span{Key: remaining.Key, EndKey: res.ResumeSpan.Key}
-			if err := sink.AddResolved(ctx, consumed, ts, jobspb.ResolvedSpan_NONE); err != nil {
+			if err := sink.Add(
+				ctx, kvevent.MakeResolvedEvent(consumed, ts, jobspb.ResolvedSpan_NONE),
+			); err != nil {
 				return err
 			}
 		}
 		remaining = res.ResumeSpan
 	}
 	// p.metrics.PollRequestNanosHist.RecordValue(scanDuration.Nanoseconds())
-	if err := sink.AddResolved(ctx, span, ts, jobspb.ResolvedSpan_NONE); err != nil {
+	if err := sink.Add(
+		ctx, kvevent.MakeResolvedEvent(span, ts, jobspb.ResolvedSpan_NONE),
+	); err != nil {
 		return err
 	}
 	if log.V(2) {
@@ -222,7 +226,7 @@ func slurpScanResponse(
 				// change. This is handled in kvsToRows.
 				prevVal = kv.Value
 			}
-			if err = sink.AddKV(ctx, kv, prevVal, ts); err != nil {
+			if err = sink.Add(ctx, kvevent.MakeKVEvent(kv, prevVal, ts)); err != nil {
 				return errors.Wrapf(err, `buffering changes for %s`, span)
 			}
 		}
