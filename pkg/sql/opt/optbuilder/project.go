@@ -24,6 +24,11 @@ import (
 // different set of columns than its input. Either way, it updates
 // projectionsScope.group with the output memo group ID.
 func (b *Builder) constructProjectForScope(inScope, projectionsScope *scope) {
+	if b.evalCtx.SessionData.PropagateInputOrdering && len(projectionsScope.ordering) == 0 {
+		// Preserve the input ordering.
+		projectionsScope.copyOrdering(inScope)
+	}
+
 	// Don't add an unnecessary "pass through" project.
 	if projectionsScope.hasSameColumns(inScope) {
 		projectionsScope.expr = inScope.expr

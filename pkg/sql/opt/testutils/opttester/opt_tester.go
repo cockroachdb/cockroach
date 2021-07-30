@@ -173,6 +173,10 @@ type Flags struct {
 	// SessionData.PreferLookupJoinsForFKs.
 	PreferLookupJoinsForFKs bool
 
+	// PropagateInputOrdering is the default value for
+	// SessionData.PropagateInputOrdering
+	PropagateInputOrdering bool
+
 	// Locality specifies the location of the planning node as a set of user-
 	// defined key/value pairs, ordered from most inclusive to least inclusive.
 	// If there are no tiers, then the node's location is not known. Examples:
@@ -477,6 +481,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	ot.evalCtx.SessionData.ReorderJoinsLimit = ot.Flags.JoinLimit
 	ot.evalCtx.SessionData.PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
+	ot.evalCtx.SessionData.PropagateInputOrdering = ot.Flags.PropagateInputOrdering
 
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
@@ -987,6 +992,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "query-args":
 		f.QueryArgs = arg.Vals
+
+	case "preserve-input-order":
+		f.PropagateInputOrdering = true
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
