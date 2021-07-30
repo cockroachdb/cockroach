@@ -429,6 +429,12 @@ var copyPartitioningWhenDeinterleavingTable = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var experimentalPropagateInputOrdering = settings.RegisterBoolSetting(
+	`sql.defaults.experimental_propagate_input_ordering`,
+	`default value for experimental_propagate_input_ordering session variable`,
+	false,
+)
+
 // settingWorkMemBytes is a cluster setting that determines the maximum amount
 // of RAM that a processor can use.
 var settingWorkMemBytes = settings.RegisterByteSizeSetting(
@@ -2589,6 +2595,10 @@ func (m *sessionDataMutator) SetCopyPartitioningWhenDeinterleavingTable(b bool) 
 
 func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
 	m.data.ExperimentalComputedColumnRewrites = val
+}
+
+func (m *sessionDataMutator) SetExperimentalPropagateInputOrdering(b bool) {
+	m.data.ExperimentalPropagateInputOrdering = b
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
