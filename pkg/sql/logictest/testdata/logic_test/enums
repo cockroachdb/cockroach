@@ -1530,3 +1530,16 @@ query T
 SELECT typname FROM pg_type WHERE oid = $oid
 ----
 typ2
+
+subtest drop_enum_value_index_predicate
+
+statement ok
+SET enable_drop_enum_value = true;
+
+statement ok
+DROP TYPE IF EXISTS enum_for_predicate;
+CREATE TYPE enum_for_predicate AS ENUM ('a', 'b');
+CREATE TABLE uses_in_index_predicate (i INT PRIMARY KEY, t enum_for_predicate, INDEX (t) WHERE (t = 'a'))
+
+statement error pgcode 2BP01 could not remove enum value "a" as it is being used in a predicate of index uses_in_index_predicate@uses_in_index_predicate_t_idx
+ALTER TYPE enum_for_predicate DROP VALUE 'a'
