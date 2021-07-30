@@ -1,5 +1,9 @@
 dev build cockroach-short
 ----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel build --color=yes --experimental_convenience_symlinks=ignore //pkg/cmd/cockroach-short --config=dev
 bazel info workspace --color=no --config=dev
 mkdir go/src/github.com/cockroachdb/cockroach/bin
@@ -9,6 +13,10 @@ ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroac
 
 dev build cockroach-short --cpus=12
 ----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel build --color=yes --experimental_convenience_symlinks=ignore --local_cpu_resources=12 //pkg/cmd/cockroach-short --config=dev
 bazel info workspace --color=no --config=dev
 mkdir go/src/github.com/cockroachdb/cockroach/bin
@@ -18,6 +26,10 @@ ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroac
 
 dev build --debug cockroach-short
 ----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel build --color=yes --experimental_convenience_symlinks=ignore //pkg/cmd/cockroach-short --config=dev
 bazel info workspace --color=no --config=dev
 mkdir go/src/github.com/cockroachdb/cockroach/bin
@@ -27,6 +39,10 @@ ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroac
 
 dev build cockroach-short --remote-cache 127.0.0.1:9090
 ----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel build --color=yes --experimental_convenience_symlinks=ignore --remote_local_fallback --remote_cache=grpc://127.0.0.1:9090 --experimental_remote_downloader=grpc://127.0.0.1:9090 //pkg/cmd/cockroach-short --config=dev
 bazel info workspace --color=no --config=dev
 mkdir go/src/github.com/cockroachdb/cockroach/bin
@@ -36,6 +52,10 @@ ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroac
 
 dev build --skip-dev-config cockroach-short
 ----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel build --color=yes --experimental_convenience_symlinks=ignore //pkg/cmd/cockroach-short
 bazel info workspace --color=no
 mkdir go/src/github.com/cockroachdb/cockroach/bin

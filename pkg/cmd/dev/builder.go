@@ -61,7 +61,7 @@ func (d *dev) ensureDockerVolume(ctx context.Context, volume string) error {
 func (d *dev) getDockerRunArgs(
 	ctx context.Context, volume string, tty bool,
 ) (args []string, err error) {
-	err = ensureBinaryInPath("docker")
+	err = d.ensureBinaryInPath("docker")
 	if err != nil {
 		return
 	}
