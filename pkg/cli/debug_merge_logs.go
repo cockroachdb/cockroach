@@ -502,6 +502,14 @@ func (s *fileLogStream) open() bool {
 	if s.f, s.err = os.Open(s.fi.path); s.err != nil {
 		return false
 	}
+	if s.format == "" {
+		if _, s.format, s.err = log.ReadFormatFromLogFile(s.f); s.err != nil {
+			return false
+		}
+		if _, s.err = s.f.Seek(0, io.SeekStart); s.err != nil {
+			return false
+		}
+	}
 	if s.err = seekToFirstAfterFrom(s.f, s.from, s.editMode, s.format); s.err != nil {
 		return false
 	}
