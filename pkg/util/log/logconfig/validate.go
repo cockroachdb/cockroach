@@ -61,9 +61,10 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		CommonSinkConfig: CommonSinkConfig{
 			Format: func() *string { s := DefaultHTTPFormat; return &s }(),
 		},
-		UnsafeTLS: &bf,
-		Method:    func() *HTTPSinkMethod { m := HTTPSinkMethod(http.MethodPost); return &m }(),
-		Timeout:   func() *time.Duration { d := time.Duration(0); return &d }(),
+		UnsafeTLS:         &bf,
+		DisableKeepAlives: &bf,
+		Method:            func() *HTTPSinkMethod { m := HTTPSinkMethod(http.MethodPost); return &m }(),
+		Timeout:           func() *time.Duration { d := time.Duration(0); return &d }(),
 	}
 
 	propagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)

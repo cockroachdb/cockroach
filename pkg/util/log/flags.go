@@ -348,11 +348,15 @@ func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
 		return nil, err
 	}
-	httpSink := newHTTPSink(*c.Address, httpSinkOptions{
-		method:    string(*c.Method),
-		unsafeTLS: *c.UnsafeTLS,
-		timeout:   *c.Timeout,
+	httpSink, err := newHTTPSink(*c.Address, httpSinkOptions{
+		method:            string(*c.Method),
+		unsafeTLS:         *c.UnsafeTLS,
+		timeout:           *c.Timeout,
+		disableKeepAlives: *c.DisableKeepAlives,
 	})
+	if err != nil {
+		return nil, err
+	}
 	info.sink = httpSink
 	return info, nil
 }
