@@ -28,8 +28,9 @@ type Buffer interface {
 
 // Reader is the read portion of the Buffer interface.
 type Reader interface {
-	// Get retrieves an entry from the buffer.
-	Get(ctx context.Context) (Event, error)
+	// Get retrieves an entry from the buffer and returns that event along with the
+	// Resource associated with this event.
+	Get(ctx context.Context) (Event, Resource, error)
 }
 
 // Writer is the write portion of the Buffer interface.
@@ -63,6 +64,7 @@ type Event struct {
 	resolved           *jobspb.ResolvedSpan
 	backfillTimestamp  hlc.Timestamp
 	bufferGetTimestamp time.Time
+	approxSize         int
 }
 
 // Type returns the event's Type.
@@ -79,10 +81,7 @@ func (b *Event) Type() Type {
 
 // ApproximateSize returns events approximate size in bytes.
 func (b *Event) ApproximateSize() int {
-	if b.kv.Key != nil {
-		return b.kv.Size() + b.prevVal.Size()
-	}
-	return b.resolved.Size()
+	return b.approxSize
 }
 
 // KV is populated if this event returns true for IsKV().
@@ -161,6 +160,7 @@ func makeResolvedEvent(
 			Timestamp:    ts,
 			BoundaryType: boundaryType,
 		},
+		approxSize: span.Size() + ts.Size() + 4,
 	}
 }
 
@@ -171,5 +171,6 @@ func makeKVEvent(
 		kv:                kv,
 		prevVal:           prevVal,
 		backfillTimestamp: backfillTimestamp,
+		approxSize:        kv.Size() + prevVal.Size() + backfillTimestamp.Size(),
 	}
 }

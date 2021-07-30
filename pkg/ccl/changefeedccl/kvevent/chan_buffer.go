@@ -65,12 +65,12 @@ func (b *chanBuffer) addEvent(ctx context.Context, e Event) error {
 
 // Get returns an entry from the buffer. They are handed out in an order that
 // (if it is maintained all the way to the sink) meets our external guarantees.
-func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
+func (b *chanBuffer) Get(ctx context.Context) (Event, Resource, error) {
 	select {
 	case <-ctx.Done():
-		return Event{}, ctx.Err()
+		return Event{}, NoResource, ctx.Err()
 	case e := <-b.entriesCh:
 		e.bufferGetTimestamp = timeutil.Now()
-		return e, nil
+		return e, NoResource, nil
 	}
 }

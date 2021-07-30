@@ -107,8 +107,9 @@ func TestBlockingBuffer(t *testing.T) {
 
 	// Keep consuming events until we get pushback metrics updated.
 	for metrics.BufferPushbackNanos.Count() == 0 {
-		_, err := buf.Get(context.Background())
+		_, r, err := buf.Get(context.Background())
 		require.NoError(t, err)
+		r.Release()
 	}
 	stopProducers()
 }

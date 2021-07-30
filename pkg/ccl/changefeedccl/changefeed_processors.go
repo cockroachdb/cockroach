@@ -240,17 +240,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	kvFeedMemMon.Start(ctx, pool, mon.BoundAccount{})
 	ca.kvFeedMemMon = kvFeedMemMon
 
-	// NB: sink uses pool bound account, and not kvFeedMemMon.
-	// This is because if we use shared kvFeedMemMon budget, it is possible that that budget
-	// will be exhausted by kvfeed (e.g. because of a down or slow sink); Then, when sink
-	// is no longer unavailable, we will proceed with the message, but once it gets to the sink,
-	// we won't be able to allocate additional memory because more events could have been added
-	// to KVFeed buffer.  Basically, the problem is that the ingress rate of messages into kvfeed
-	// buffer is different from the eggress rate from the sink.
-	// TODO(yevgeniy): The real solution is to have the sink pushback.
 	ca.sink, err = getSink(
 		ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), pool.MakeBoundAccount(), ca.spec.JobID)
+		ca.spec.User(), ca.spec.JobID)
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
@@ -479,14 +471,11 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 // kvFeed, sends off this event to the event consumer, and flushes the sink
 // if necessary.
 func (ca *changeAggregator) tick() error {
-	// TODO(yevgeniy): Getting an event from producer decreases the amount of
-	//  memory tracked by kvFeedMonitor.  We should "transfer" that memory
-	//  to the consumer below, and keep track of changes to the memory usage when
-	//  we convert feed event to datums; and then when we encode those datums.
-	event, err := ca.eventProducer.GetEvent(ca.Ctx)
+	event, resource, err := ca.eventProducer.GetEvent(ca.Ctx)
 	if err != nil {
 		return err
 	}
+	defer resource.Release()
 
 	if event.BufferGetTimestamp() == (time.Time{}) {
 		// We could gracefully handle this instead of panic'ing, but
@@ -502,7 +491,7 @@ func (ca *changeAggregator) tick() error {
 	forceFlush := false
 	switch event.Type() {
 	case kvevent.TypeKV:
-		if err := ca.eventConsumer.ConsumeEvent(ca.Ctx, event); err != nil {
+		if err := ca.eventConsumer.ConsumeEvent(ca.Ctx, event, resource.Move()); err != nil {
 			return err
 		}
 	case kvevent.TypeResolved:
@@ -586,7 +575,7 @@ func (ca *changeAggregator) ConsumerClosed() {
 
 type kvEventProducer interface {
 	// GetEvent returns the next kv event.
-	GetEvent(ctx context.Context) (kvevent.Event, error)
+	GetEvent(ctx context.Context) (kvevent.Event, kvevent.Resource, error)
 }
 
 type bufEventProducer struct {
@@ -596,13 +585,13 @@ type bufEventProducer struct {
 var _ kvEventProducer = &bufEventProducer{}
 
 // GetEvent implements kvEventProducer interface
-func (p *bufEventProducer) GetEvent(ctx context.Context) (kvevent.Event, error) {
+func (p *bufEventProducer) GetEvent(ctx context.Context) (kvevent.Event, kvevent.Resource, error) {
 	return p.Get(ctx)
 }
 
 type kvEventConsumer interface {
 	// ConsumeEvent responsible for consuming kv event.
-	ConsumeEvent(ctx context.Context, event kvevent.Event) error
+	ConsumeEvent(ctx context.Context, event kvevent.Event, resource kvevent.Resource) error
 }
 
 type kvEventToRowConsumer struct {
@@ -650,7 +639,12 @@ type tableDescriptorTopic struct {
 var _ TopicDescriptor = &tableDescriptorTopic{}
 
 // ConsumeEvent implements kvEventConsumer interface
-func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
+func (c *kvEventToRowConsumer) ConsumeEvent(
+	ctx context.Context, ev kvevent.Event, resource kvevent.Resource,
+) error {
+	// Release resources if we encounter an error.
+	defer resource.Release()
+
 	if ev.Type() != kvevent.TypeKV {
 		return errors.AssertionFailedf("expected kv ev, got %v", ev.Type())
 	}
@@ -690,7 +684,8 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		}
 	}
 	if err := c.sink.EmitRow(
-		ctx, tableDescriptorTopic{r.tableDesc}, keyCopy, valueCopy, r.updated,
+		ctx, tableDescriptorTopic{r.tableDesc},
+		keyCopy, valueCopy, resource.Move(), r.updated,
 	); err != nil {
 		return err
 	}
@@ -842,7 +837,11 @@ func (n noTopic) GetVersion() descpb.DescriptorVersion {
 }
 
 // ConsumeEvent implements kvEventConsumer interface.
-func (c *nativeKVConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
+func (c *nativeKVConsumer) ConsumeEvent(
+	ctx context.Context, ev kvevent.Event, resource kvevent.Resource,
+) error {
+	defer resource.Release()
+
 	if ev.Type() != kvevent.TypeKV {
 		return errors.AssertionFailedf("expected kv ev, got %v", ev.Type())
 	}
@@ -853,7 +852,7 @@ func (c *nativeKVConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) e
 		return err
 	}
 
-	return c.sink.EmitRow(ctx, &noTopic{}, keyBytes, valBytes, val.Timestamp)
+	return c.sink.EmitRow(ctx, &noTopic{}, keyBytes, valBytes, resource.Move(), val.Timestamp)
 }
 
 const (
@@ -1076,10 +1075,8 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
 	var err error
-	// TODO(yevgeniy): Evaluate if we should introduce changefeed specific monitor.
-	mm := cf.flowCtx.Cfg.BackfillerMonitor
 	cf.sink, err = getSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
-		cf.spec.User(), mm.MakeBoundAccount(), cf.spec.JobID)
+		cf.spec.User(), cf.spec.JobID)
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)

@@ -480,10 +480,11 @@ func copyFromSourceToSinkUntilTableEvent(
 		}
 	)
 	for {
-		e, err := source.Get(ctx)
+		e, r, err := source.Get(ctx)
 		if err != nil {
 			return err
 		}
+		r.Release()
 		if err := checkForScanBoundary(e.Timestamp()); err != nil {
 			return err
 		}

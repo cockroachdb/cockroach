@@ -12,7 +12,6 @@ import (
 	"context"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -71,27 +70,32 @@ func (b *blockingBuffer) pop() (e *bufferEntry, closed bool) {
 }
 
 // Get implements kvevent.Reader interface.
-func (b *blockingBuffer) Get(ctx context.Context) (ev Event, err error) {
+func (b *blockingBuffer) Get(ctx context.Context) (ev Event, resource Resource, err error) {
 	for {
 		got, closed := b.pop()
 		if closed {
-			return Event{}, nil
+			return Event{}, NoResource, nil
 		}
 
 		if got != nil {
 			e := got.e
 			e.bufferGetTimestamp = timeutil.Now()
-			b.qp.Update(func(r quotapool.Resource) (shouldNotify bool) {
-				res := r.(*blockingBufferQuotaPool)
-				res.release(got)
-				return true
-			})
-			return e, nil
+			resource := &callbackResource{
+				cb: func() {
+					b.qp.Update(func(r quotapool.Resource) (shouldNotify bool) {
+						res := r.(*blockingBufferQuotaPool)
+						res.release(got)
+						return true
+					})
+				},
+			}
+
+			return e, resource, nil
 		}
 
 		select {
 		case <-ctx.Done():
-			return Event{}, ctx.Err()
+			return Event{}, NoResource, ctx.Err()
 		case <-b.signalCh:
 		}
 	}
@@ -101,9 +105,8 @@ func (b *blockingBuffer) Get(ctx context.Context) (ev Event, err error) {
 func (b *blockingBuffer) AddKV(
 	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
 ) error {
-	size := kv.Size() + prevVal.Size() + backfillTimestamp.Size() + int(unsafe.Sizeof(bufferEntry{}))
 	e := makeKVEvent(kv, prevVal, backfillTimestamp)
-	return b.addEvent(ctx, e, size)
+	return b.addEvent(ctx, e)
 }
 
 // AddResolved implements kvevent.Writer interface.
@@ -113,16 +116,21 @@ func (b *blockingBuffer) AddResolved(
 	ts hlc.Timestamp,
 	boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) error {
-	size := span.Size() + ts.Size() + 4 + int(unsafe.Sizeof(bufferEntry{}))
 	e := makeResolvedEvent(span, ts, boundaryType)
-	return b.addEvent(ctx, e, size)
+	return b.addEvent(ctx, e)
 }
 
-func (b *blockingBuffer) addEvent(ctx context.Context, e Event, size int) error {
+// Memory accounting is hard.  Furthermore, during the lifetime of the event, the
+// amount of resources used to process such event varies. So, instead of coming up
+// with complex schemes to accurate measure and adjust current memory usage, we'll request
+// the amount of memory multiplied by this fudge factor.
+const eventMemoryUsedMultiplier = 2
+
+func (b *blockingBuffer) addEvent(ctx context.Context, e Event) error {
 	be := bufferEntryPool.Get().(*bufferEntry)
 	be.e = e
 	be.wasBlocked = false
-	be.alloc = int64(size)
+	be.alloc = int64(eventMemoryUsedMultiplier * e.approxSize)
 
 	// Acquire the quota first.
 	err := b.qp.Acquire(ctx, be)

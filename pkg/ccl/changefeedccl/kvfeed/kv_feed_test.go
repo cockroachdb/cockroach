@@ -141,8 +141,9 @@ func TestKVFeed(t *testing.T) {
 		})
 		testG.GoCtx(func(ctx context.Context) error {
 			for events := 0; events < tc.expEvents; events++ {
-				_, err := buf.Get(ctx)
+				_, r, err := buf.Get(ctx)
 				assert.NoError(t, err)
+				r.Release()
 			}
 			return nil
 		})
