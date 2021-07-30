@@ -8,5 +8,8 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/settings"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
+    ],
 )

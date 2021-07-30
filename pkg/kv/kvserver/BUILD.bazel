@@ -144,6 +144,7 @@ go_library(
         "//pkg/kv/kvserver/txnrecovery",
         "//pkg/kv/kvserver/txnwait",
         "//pkg/multitenant",
+        "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
