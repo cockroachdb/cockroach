@@ -95,6 +95,7 @@ func TestKVFeed(t *testing.T) {
 		expEvents int
 		expErrRE  string
 	}
+	st := cluster.MakeTestingClusterSettings()
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
 		buf := kvevent.MakeChanBuffer()
@@ -104,7 +105,7 @@ func TestKVFeed(t *testing.T) {
 		)
 		metrics := kvevent.MakeMetrics(time.Minute)
 		bufferFactory := func() kvevent.Buffer {
-			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), &metrics)
+			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), &st.SV, &metrics)
 		}
 		scans := make(chan physicalConfig)
 		sf := scannerFunc(func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
@@ -141,8 +142,9 @@ func TestKVFeed(t *testing.T) {
 		})
 		testG.GoCtx(func(ctx context.Context) error {
 			for events := 0; events < tc.expEvents; events++ {
-				_, err := buf.Get(ctx)
+				_, sr, err := buf.Get(ctx)
 				assert.NoError(t, err)
+				sr.Release()
 			}
 			return nil
 		})
