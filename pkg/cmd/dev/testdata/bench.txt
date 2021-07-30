@@ -1,9 +1,17 @@
 dev bench pkg/util/...
 ----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 git grep -l ^func Benchmark -- pkg/util/*_test.go
 bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/util:util_test -- -test.bench=.
 bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/util/uuid:uuid_test -- -test.bench=.
 
 dev bench pkg/sql/parser --filter=BenchmarkParse
 ----
+getenv PATH
+which cc
+readlink /usr/local/opt/ccache/libexec/cc
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/sql/parser:parser_test -- -test.bench=BenchmarkParse

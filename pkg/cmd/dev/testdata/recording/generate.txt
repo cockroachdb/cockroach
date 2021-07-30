@@ -1,7 +1,21 @@
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
 bazel info workspace --color=no --config=dev
 ----
 go/src/github.com/cockroachdb/cockroach
 
 go/src/github.com/cockroachdb/cockroach/build/bazelutil/bazel-generate.sh
 ----
-

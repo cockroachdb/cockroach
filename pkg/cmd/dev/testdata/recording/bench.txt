@@ -1,3 +1,18 @@
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+----
+
 git grep -l ^func Benchmark -- pkg/util/*_test.go
 ----
 pkg/util/topk_test.go
@@ -9,6 +24,21 @@ bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test -
 ----
 
 bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/util/uuid:uuid_test -- -test.bench=.
+----
+
+getenv PATH
+----
+/usr/local/opt/ccache/libexec:/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
+
+which cc
+----
+/usr/local/opt/ccache/libexec/cc
+
+readlink /usr/local/opt/ccache/libexec/cc
+----
+../bin/ccache
+
+export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin
 ----
 
 bazel run --color=yes --experimental_convenience_symlinks=ignore --config=test --config=dev //pkg/sql/parser:parser_test -- -test.bench=BenchmarkParse
