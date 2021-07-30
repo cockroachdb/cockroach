@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -60,7 +61,9 @@ Query Buffer
   \| CMD            run an external command and run its output as SQL statements.
 
 Connection
-  \c, \connect [DB] connect to a new database
+  \c, \connect {[DB] [USER] [HOST] [PORT] | [URL]}
+                    connect to a server or print the current connection URL.
+                    (Omitted values reuse previous parameters. Use '-' to skip a field.)
 
 Input/Output
   \echo [STRING]    write the provided string to standard output.
@@ -867,6 +870,7 @@ func (c *cliState) refreshDatabaseName() string {
 
 	// Preserve the current database name in case of reconnects.
 	c.conn.SetCurrentDatabase(dbName)
+	c.iCtx.dbName = dbName
 
 	return dbName
 }
@@ -1157,12 +1161,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
 
 	case `\connect`, `\c`:
-		if len(cmd) == 2 {
-			c.concatLines = `USE ` + cmd[1]
-			return cliRunStatement
-
-		}
-		return c.invalidSyntax(errState, `%s. Try \? for help`, c.lastInputLine)
+		return c.handleConnect(cmd[1:], loopState, errState)
 
 	case `\x`:
 		format := clisqlexec.TableDisplayRecords
@@ -1198,6 +1197,140 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	}
 
 	return loopState
+}
+
+func (c *cliState) handleConnect(
+	cmd []string, loopState, errState cliStateEnum,
+) (resState cliStateEnum) {
+	firstArgIsURL := len(cmd) > 0 &&
+		(strings.HasPrefix(cmd[0], "postgres://") ||
+			strings.HasPrefix(cmd[0], "postgresql://"))
+	if len(cmd) == 1 && !firstArgIsURL && strings.TrimSpace(cmd[0]) != "-" {
+		// Special case: just a database name.
+		// Handled entirely locally with the existing connection.
+		c.concatLines = `USE ` + cmd[0]
+		return cliRunStatement
+	}
+
+	if err := c.handleConnectInternal(cmd, firstArgIsURL); err != nil {
+		fmt.Fprintln(c.iCtx.stderr, err)
+		c.exitErr = err
+		return errState
+	}
+	return loopState
+}
+
+func (c *cliState) handleConnectInternal(cmd []string, firstArgIsURL bool) error {
+	if len(cmd) == 1 && firstArgIsURL {
+		// Note: we use a custom URL parser here to inherit the complex
+		// custom logic from crdb's own handling of --url in `cockroach
+		// sql`.
+		parseURL := c.sqlCtx.ParseURL
+		if parseURL == nil {
+			parseURL = pgurl.Parse
+		}
+		purl, err := parseURL(cmd[0])
+		if err != nil {
+			return err
+		}
+		return c.switchToURL(purl)
+	}
+
+	// currURL is the previous connection URL up to this point.
+	currURL, err := pgurl.Parse(c.conn.GetURL())
+	if err != nil {
+		return errors.Wrap(err, "parsing current connection URL")
+	}
+
+	// Reuse the current database from the session if known
+	// (debug mode disabled, database in prompt), otherwise
+	// from the current URL.
+	dbName := c.iCtx.dbName
+	if dbName == "" {
+		dbName = currURL.GetDatabase()
+	}
+
+	// Extract the current config.
+	_, prevhost, prevport := currURL.GetNetworking()
+	tlsUsed, mode, caCertPath := currURL.GetTLSOptions()
+
+	// newURL will be our new connection URL past this point.
+	newURL := pgurl.New()
+	// Populate the main fields from the current URL.
+	newURL.
+		WithDefaultHost(prevhost).
+		WithDefaultPort(prevport).
+		WithDefaultDatabase(dbName).
+		WithDefaultUsername(currURL.GetUsername())
+	if tlsUsed {
+		newURL.WithTransport(pgurl.TransportTLS(mode, caCertPath))
+	}
+
+	// Parse the arguments to \connect:
+	// it accepts newdb, user, host, port in that order.
+	// Each field can be marked as "-" to reuse the current defaults.
+	switch len(cmd) {
+	case 4:
+		if cmd[3] != "-" {
+			if err := newURL.SetOption("port", cmd[3]); err != nil {
+				return err
+			}
+		}
+		fallthrough
+	case 3:
+		if cmd[2] != "-" {
+			if err := newURL.SetOption("host", cmd[2]); err != nil {
+				return err
+			}
+		}
+		fallthrough
+	case 2:
+		if cmd[1] != "-" {
+			if err := newURL.SetOption("user", cmd[1]); err != nil {
+				return err
+			}
+		}
+		fallthrough
+	case 1:
+		if cmd[0] != "-" {
+			if err := newURL.SetOption("database", cmd[0]); err != nil {
+				return err
+			}
+		}
+	case 0:
+		// Just print the current connection settings.
+		dbName := c.iCtx.dbName
+		if dbName == "" {
+			dbName = currURL.GetDatabase()
+		}
+		fmt.Fprintf(c.iCtx.stdout, "Connection string: %s\n", currURL.ToPQ())
+		fmt.Fprintf(c.iCtx.stdout, "You are connected to database %q as user %q.\n", dbName, currURL.GetUsername())
+		return nil
+
+	default:
+		return errors.Newf(`unknown syntax: \c %s`, strings.Join(cmd, " "))
+	}
+
+	if err := newURL.Validate(); err != nil {
+		return errors.Wrap(err, "validating the new URL")
+	}
+
+	return c.switchToURL(newURL)
+}
+
+func (c *cliState) switchToURL(newURL *pgurl.URL) error {
+	fmt.Fprintln(c.iCtx.stdout, "using new connection URL:", newURL)
+
+	// Ensure the new connection will prompt for a password if the
+	// server requires one.
+	usePw, pwSet, _ := newURL.GetAuthnPassword()
+
+	if err := c.conn.Close(); err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "warning: error while closing connection: %v\n", err)
+	}
+	c.conn.SetURL(newURL.ToPQ().String())
+	c.conn.SetMissingPassword(!usePw || !pwSet)
+	return nil
 }
 
 const maxRecursionLevels = 10
@@ -1440,6 +1573,11 @@ func (c *cliState) doDecidePath() cliStateEnum {
 }
 
 // NewShell instantiates a cliState.
+//
+// In simple uses of the SQL shell (e.g. in the standalone
+// cockroach-sql), the urlParser argument can be set to pgurl.Parse;
+// however CockroachDB's own CLI package has a more advanced URL
+// parser that is used instead.
 func NewShell(
 	cliCtx *clicfg.Context,
 	sqlConnCtx *clisqlclient.Context,
