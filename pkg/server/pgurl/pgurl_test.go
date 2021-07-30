@@ -68,10 +68,13 @@ func TestOptions(t *testing.T) {
 	u := New()
 
 	// Check that AddOptions processes the options as per Parse().
-	err := u.AddOptions(url.Values{"user": []string{"foo"}})
+	err := u.AddOptions(url.Values{"user": []string{"foo"}, "database": []string{"bar"}})
 	require.NoError(t, err)
 	require.Equal(t, u.GetUsername(), "foo")
+	require.Equal(t, u.GetDatabase(), "bar")
 	_, ok := u.extraOptions["user"]
+	require.Equal(t, ok, false)
+	_, ok = u.extraOptions["database"]
 	require.Equal(t, ok, false)
 
 	// Check that non-special options remain in extraOptions.
