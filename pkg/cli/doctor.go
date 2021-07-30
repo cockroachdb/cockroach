@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"context"
 	"database/sql/driver"
+	"encoding/base64"
 	hx "encoding/hex"
 	"fmt"
 	"io"
@@ -342,23 +343,34 @@ func fromZipDir(
 			return errors.Errorf("failed to parse descriptor id %s: %v", fields[idCol], err)
 		}
 
-		hexDescCol := cols.get("hex_descriptor")
-		if hexDescCol == len(cols)-1 {
-			// TODO(knz): This assignment is for compatibility with
-			// previous-version zip files, which were capturing the
-			// descriptor data using the "escape" byte encoding, thereby
-			// introducing spaces and breaking the alignment between
-			// "fields" and "cols".
-			// Until we drop compatibility with those previous versions,
-			// we need to realign the column index with the field,
-			// with knowledge that the hex column was the last one.
-			// This logic can be dropped at some later release.
-			hexDescCol = len(fields) - 1
+		var descBytes []byte
+		if hexDescCol := cols.get("hex_descriptor"); hexDescCol >= 0 {
+			if hexDescCol == len(cols)-1 {
+				// TODO(knz): This assignment is for compatibility with
+				// previous-version zip files, which were capturing the
+				// descriptor data using the "escape" byte encoding, thereby
+				// introducing spaces and breaking the alignment between
+				// "fields" and "cols".
+				// Until we drop compatibility with those previous versions,
+				// we need to realign the column index with the field,
+				// with knowledge that the hex column was the last one.
+				// This logic can be dropped at some later release.
+				hexDescCol = len(fields) - 1
+			}
+			descBytes, err = hx.DecodeString(fields[hexDescCol])
+			if err != nil {
+				return errors.Errorf("failed to decode hex descriptor %d: %v", i, err)
+			}
+		} else {
+			// No hex_descriptor column: descriptor is encoded as base64.
+			// TODO(knz): Remove the other branch when only base64 columns are supported.
+			descCol := cols.get("descriptor")
+			descBytes, err = base64.StdEncoding.DecodeString(fields[descCol])
+			if err != nil {
+				return errors.Errorf("failed to decode base64 descriptor %d: %v", i, err)
+			}
 		}
-		descBytes, err := hx.DecodeString(fields[hexDescCol])
-		if err != nil {
-			return errors.Errorf("failed to decode hex descriptor %d (%q): %v", i, fields[hexDescCol], err)
-		}
+
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		descTable = append(descTable, doctor.DescriptorTableRow{ID: int64(i), DescBytes: descBytes, ModTime: ts})
 		return nil
@@ -431,37 +443,60 @@ func fromZipDir(
 		}
 		md.ID = jobspb.JobID(id)
 
-		hexPayloadCol := cols.get("hex_payload")
-		if hexPayloadCol == len(cols)-2 {
-			// TODO(knz): This assignment is for compatibility with
-			// previous-version zip files, which were capturing the
-			// descriptor data using the "escape" byte encoding, thereby
-			// introducing spaces and breaking the alignment between
-			// "fields" and "cols".
-			// Until we drop compatibility with those previous versions,
-			// we need to realign the column index with the field,
-			// with knowledge that the hex column was the next-to-last one.
-			// This logic can be dropped at some later release.
-			hexPayloadCol = len(fields) - 2
+		var payloadBytes []byte
+		if hexPayloadCol := cols.get("hex_payload"); hexPayloadCol >= 0 {
+			if hexPayloadCol == len(cols)-2 {
+				// TODO(knz): This assignment is for compatibility with
+				// previous-version zip files, which were capturing the
+				// descriptor data using the "escape" byte encoding, thereby
+				// introducing spaces and breaking the alignment between
+				// "fields" and "cols".
+				// Until we drop compatibility with those previous versions,
+				// we need to realign the column index with the field,
+				// with knowledge that the hex column was the next-to-last one.
+				// This logic can be dropped at some later release.
+				hexPayloadCol = len(fields) - 2
+			}
+			payloadBytes, err = hx.DecodeString(fields[hexPayloadCol])
+			if err != nil {
+				return errors.Errorf("job %d: failed to decode hex payload: %v", id, err)
+			}
+		} else {
+			// No hex_payload column: payload is encoded as base64.
+			// TODO(knz): Remove the other branch when only base64 columns are supported.
+			payloadCol := cols.get("payload")
+			payloadBytes, err = base64.StdEncoding.DecodeString(fields[payloadCol])
+			if err != nil {
+				return errors.Errorf("job %d: failed to decode base64 payload: %v", id, err)
+			}
 		}
-		payloadBytes, err := hx.DecodeString(fields[hexPayloadCol])
-		if err != nil {
-			return errors.Errorf("job %d: failed to decode hex payload: %v", id, err)
-		}
+
 		md.Payload = &jobspb.Payload{}
 		if err := protoutil.Unmarshal(payloadBytes, md.Payload); err != nil {
 			return errors.Wrap(err, "failed unmarshalling job payload")
 		}
-		hexProgressCol := cols.get("hex_progress")
-		if hexProgressCol == len(cols)-1 {
-			// TODO(knz): See comment above.
-			// This logic can be dropped at some later release.
-			hexProgressCol = len(fields) - 1
+
+		var progressBytes []byte
+		if hexProgressCol := cols.get("hex_progress"); hexProgressCol >= 0 {
+			if hexProgressCol == len(cols)-1 {
+				// TODO(knz): See comment above.
+				// This logic can be dropped at some later release.
+				hexProgressCol = len(fields) - 1
+			}
+			progressBytes, err = hx.DecodeString(fields[hexProgressCol])
+			if err != nil {
+				return errors.Errorf("job %d: failed to decode hex progress: %v", id, err)
+			}
+		} else {
+			// No hex_progress column: progress is encoded as base64.
+			// TODO(knz): Remove the other branch when only base64 columns are supported.
+			progressCol := cols.get("progress")
+			progressBytes, err = base64.StdEncoding.DecodeString(fields[progressCol])
+			if err != nil {
+				return errors.Errorf("job %d: failed to decode base64 payload: %v", id, err)
+			}
 		}
-		progressBytes, err := hx.DecodeString(fields[hexProgressCol])
-		if err != nil {
-			return errors.Errorf("job %d: failed to decode hex progress: %v", id, err)
-		}
+
 		md.Progress = &jobspb.Progress{}
 		if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
 			return errors.Wrap(err, "failed unmarshalling job progress")

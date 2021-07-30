@@ -80,8 +80,17 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.cluster_transactions",
 
 	"crdb_internal.jobs",
-	"system.jobs",       // get the raw, restorable jobs records too.
-	"system.descriptor", // descriptors also contain job-like mutation state.
+	// Get the raw, restorable jobs records too.
+	"system.jobs",
+	// As well as the remaining columns (created_by etc).
+	// See comment on customQuery in zip.go about why we also need this.
+	//
+	// TODO(knz): This can be removed (to keep just system.jobs) once
+	// the table retrieval format preserves column structure.
+	"system.jobs_full",
+
+	// Descriptors also contain job-like mutation state.
+	"system.descriptor",
 	"system.namespace",
 	"system.scheduled_jobs",
 

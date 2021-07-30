@@ -36,6 +36,9 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null --timeout=.5s
 [cluster] retrieving SQL data for system.jobs... writing output: debug/system.jobs.txt...
 [cluster] retrieving SQL data for system.jobs: last request failed: pq: query execution canceled due to statement timeout
 [cluster] retrieving SQL data for system.jobs: creating error output: debug/system.jobs.txt.err.txt... done
+[cluster] retrieving SQL data for system.jobs_full... writing output: debug/system.jobs_full.txt...
+[cluster] retrieving SQL data for system.jobs_full: last request failed: pq: query execution canceled due to statement timeout
+[cluster] retrieving SQL data for system.jobs_full: creating error output: debug/system.jobs_full.txt.err.txt... done
 [cluster] retrieving SQL data for system.descriptor... writing output: debug/system.descriptor.txt...
 [cluster] retrieving SQL data for system.descriptor: last request failed: pq: query execution canceled due to statement timeout
 [cluster] retrieving SQL data for system.descriptor: creating error output: debug/system.descriptor.txt.err.txt... done
