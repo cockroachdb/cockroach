@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -70,8 +69,9 @@ type hashAggregator struct {
 	colexecop.InitHelper
 	colexecop.CloserHelper
 
-	allocator *colmem.Allocator
-	spec      *execinfrapb.AggregatorSpec
+	hashTableAllocator *colmem.Allocator
+	accountingHelper   colmem.SetAccountingHelper
+	spec               *execinfrapb.AggregatorSpec
 
 	aggHelper          aggregatorHelper
 	inputTypes         []*types.T
@@ -138,7 +138,12 @@ type hashAggregator struct {
 	// populating the output.
 	curOutputBucketIdx int
 
-	output coldata.Batch
+	maxOutputBatchMemSize int64
+	// maxCapacity if non-zero indicates the target capacity of the output
+	// batch. It is set when, after setting a row, we realize that the output
+	// batch has exceeded the memory limit.
+	maxCapacity int
+	output      coldata.Batch
 
 	aggFnsAlloc *colexecagg.AggregateFuncsAlloc
 	hashAlloc   aggBucketAlloc
@@ -165,7 +170,10 @@ const hashAggregatorAllocSize = 128
 // the disk-backed operator. Pass in nil in order to not track all input
 // tuples.
 func NewHashAggregator(
-	args *colexecagg.NewAggregatorArgs, newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
+	args *colexecagg.NewAggregatorArgs,
+	newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
+	outputUnlimitedAllocator *colmem.Allocator,
+	maxOutputBatchMemSize int64,
 ) (colexecop.ResettableOperator, error) {
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 		args, args.Spec.Aggregations, hashAggregatorAllocSize, colexecagg.HashAggKind,
@@ -181,18 +189,20 @@ func NewHashAggregator(
 		maxBuffered = coldata.MaxBatchSize
 	}
 	hashAgg := &hashAggregator{
-		OneInputNode:       colexecop.NewOneInputNode(args.Input),
-		allocator:          args.Allocator,
-		spec:               args.Spec,
-		state:              hashAggregatorBuffering,
-		inputTypes:         args.InputTypes,
-		outputTypes:        args.OutputTypes,
-		inputArgsConverter: inputArgsConverter,
-		maxBuffered:        maxBuffered,
-		toClose:            toClose,
-		aggFnsAlloc:        aggFnsAlloc,
-		hashAlloc:          aggBucketAlloc{allocator: args.Allocator},
+		OneInputNode:          colexecop.NewOneInputNode(args.Input),
+		hashTableAllocator:    args.Allocator,
+		spec:                  args.Spec,
+		state:                 hashAggregatorBuffering,
+		inputTypes:            args.InputTypes,
+		outputTypes:           args.OutputTypes,
+		inputArgsConverter:    inputArgsConverter,
+		maxBuffered:           maxBuffered,
+		toClose:               toClose,
+		maxOutputBatchMemSize: maxOutputBatchMemSize,
+		aggFnsAlloc:           aggFnsAlloc,
+		hashAlloc:             aggBucketAlloc{allocator: args.Allocator},
 	}
+	hashAgg.accountingHelper.Init(outputUnlimitedAllocator, args.OutputTypes, nil /* notNeededVecIdxs */)
 	hashAgg.bufferingState.tuples = colexecutils.NewAppendOnlyBufferedBatch(args.Allocator, args.InputTypes, nil /* colsToStore */)
 	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
 	hashAgg.aggHelper = newAggregatorHelper(args, &hashAgg.datumAlloc, true /* isHashAgg */, hashAgg.maxBuffered)
@@ -213,7 +223,7 @@ func (op *hashAggregator) Init(ctx context.Context) {
 	const hashTableNumBuckets = 256
 	op.ht = colexechash.NewHashTable(
 		op.Ctx,
-		op.allocator,
+		op.hashTableAllocator,
 		hashTableLoadFactor,
 		hashTableNumBuckets,
 		op.inputTypes,
@@ -291,27 +301,26 @@ func (op *hashAggregator) Next() coldata.Batch {
 		case hashAggregatorOutputting:
 			// Note that ResetMaybeReallocate truncates the requested capacity
 			// at coldata.BatchSize(), so we can just try asking for
-			// len(op.buckets) capacity. Note that in hashAggregatorOutputting
-			// state we always have at least 1 bucket.
-			//
-			// For now, we don't enforce any footprint-based memory limit.
-			// TODO(yuzefovich): refactor this.
-			const maxBatchMemSize = math.MaxInt64
-			op.output, _ = op.allocator.ResetMaybeReallocate(
-				op.outputTypes, op.output, len(op.buckets), maxBatchMemSize,
+			// len(op.buckets) capacity.
+			op.output, _ = op.accountingHelper.ResetMaybeReallocate(
+				op.outputTypes, op.output, len(op.buckets), op.maxOutputBatchMemSize,
 			)
 			curOutputIdx := 0
-			op.allocator.PerformOperation(op.output.ColVecs(), func() {
-				for curOutputIdx < op.output.Capacity() && op.curOutputBucketIdx < len(op.buckets) {
-					bucket := op.buckets[op.curOutputBucketIdx]
-					for fnIdx, fn := range bucket.fns {
-						fn.SetOutput(op.output.ColVec(fnIdx))
-						fn.Flush(curOutputIdx)
-					}
-					curOutputIdx++
-					op.curOutputBucketIdx++
+			for curOutputIdx < op.output.Capacity() &&
+				op.curOutputBucketIdx < len(op.buckets) &&
+				(op.maxCapacity == 0 || curOutputIdx < op.maxCapacity) {
+				bucket := op.buckets[op.curOutputBucketIdx]
+				for fnIdx, fn := range bucket.fns {
+					fn.SetOutput(op.output.ColVec(fnIdx))
+					fn.Flush(curOutputIdx)
 				}
-			})
+				op.accountingHelper.AccountForSet(curOutputIdx)
+				curOutputIdx++
+				op.curOutputBucketIdx++
+				if op.maxCapacity == 0 && op.accountingHelper.Allocator.Used() >= op.maxOutputBatchMemSize {
+					op.maxCapacity = curOutputIdx
+				}
+			}
 			if op.curOutputBucketIdx >= len(op.buckets) {
 				op.state = hashAggregatorDone
 			}
@@ -537,6 +546,7 @@ func (op *hashAggregator) Close() error {
 	if !op.CloserHelper.Close() {
 		return nil
 	}
+	op.accountingHelper.Close()
 	var retErr error
 	if op.inputTrackingState.tuples != nil {
 		retErr = op.inputTrackingState.tuples.Close(op.EnsureCtx())

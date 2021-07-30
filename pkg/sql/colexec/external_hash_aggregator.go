@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -42,13 +43,15 @@ func NewExternalHashAggregator(
 	newAggArgs *colexecagg.NewAggregatorArgs,
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	diskAcc *mon.BoundAccount,
+	outputUnlimitedAllocator *colmem.Allocator,
+	maxOutputBatchMemSize int64,
 ) colexecop.Operator {
 	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecop.ResettableOperator {
 		newAggArgs := *newAggArgs
 		newAggArgs.Input = partitionedInputs[0]
 		// We don't need to track the input tuples when we have already spilled.
 		// TODO(yuzefovich): it might be worth increasing the number of buckets.
-		op, err := NewHashAggregator(&newAggArgs, nil /* newSpillingQueueArgs */)
+		op, err := NewHashAggregator(&newAggArgs, nil /* newSpillingQueueArgs */, outputUnlimitedAllocator, maxOutputBatchMemSize)
 		if err != nil {
 			colexecerror.InternalError(err)
 		}
