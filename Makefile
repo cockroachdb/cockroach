@@ -319,12 +319,8 @@ $(info $(yellow)Warning: 'ccache' not found, consider installing it for faster b
 endif
 
 # Warn maintainers if bazel is not found.
-#
-# TODO(irfansharif): Assert here instead, on a fixed version of bazel (3.7.0). Something like:
-#
-#   $(error $(yellow)'bazel' not found (`brew install bazel` for macs)$(term-reset))
 ifeq (, $(shell which bazel))
-$(info $(yellow)Warning: 'bazel' not found (`brew install bazel` for macs)$(term-reset))
+$(info $(yellow)Warning: 'bazel' not found (`brew install bazelisk` for macs)$(term-reset))
 endif
 
 # Force vendor directory to rebuild.
