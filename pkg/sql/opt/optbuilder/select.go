@@ -77,9 +77,9 @@ func (b *Builder) buildDataSource(
 		if cte := inScope.resolveCTE(tn); cte != nil {
 			locking.ignoreLockingForCTE()
 			outScope = inScope.push()
-			inCols := make(opt.ColList, len(cte.cols))
-			outCols := make(opt.ColList, len(cte.cols))
-			outScope.cols = nil
+			inCols := make(opt.ColList, len(cte.cols), len(cte.cols)+len(inScope.ordering))
+			outCols := make(opt.ColList, len(cte.cols), len(cte.cols)+len(inScope.ordering))
+			outScope.cols, outScope.extraCols = nil, nil
 			for i, col := range cte.cols {
 				id := col.ID
 				c := b.factory.Metadata().ColumnMeta(id)
@@ -87,6 +87,34 @@ func (b *Builder) buildDataSource(
 				newCol.table = *tn
 				inCols[i] = id
 				outCols[i] = newCol.id
+			}
+
+			if b.evalCtx.SessionData.PropagateInputOrdering && len(inScope.ordering) > 0 {
+				var oldToNew opt.ColMap
+				for i := range inCols {
+					oldToNew.Set(int(inCols[i]), int(outCols[i]))
+				}
+				outScope.ordering = make(opt.Ordering, len(inScope.ordering))
+				for i, col := range inScope.ordering {
+					var newID int
+					var ok bool
+					if newID, ok = oldToNew.Get(int(col.ID())); !ok {
+						c := b.factory.Metadata().ColumnMeta(col.ID())
+						outScope.extraCols = append(outScope.extraCols,
+							scopeColumn{
+								name: scopeColName(tree.Name("order_" + c.Alias)),
+								typ:  c.Type,
+							},
+						)
+						newCol := &outScope.extraCols[len(outScope.extraCols)-1]
+						b.populateSynthesizedColumn(newCol, nil)
+						newCol.table = *tn
+						newID = int(newCol.id)
+						inCols = append(inCols, col.ID())
+						outCols = append(outCols, newCol.id)
+					}
+					outScope.ordering[i] = opt.MakeOrderingColumn(opt.ColumnID(newID), col.Descending())
+				}
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
