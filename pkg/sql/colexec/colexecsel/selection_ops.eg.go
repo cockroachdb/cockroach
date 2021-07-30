@@ -34,7 +34,7 @@ import (
 var (
 	_ apd.Context
 	_ duration.Duration
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ json.JSON
 )
 
@@ -9718,7 +9718,7 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult == 0
 					}
@@ -9742,7 +9742,7 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult == 0
 					}
@@ -9763,7 +9763,7 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult == 0
 					}
@@ -9784,7 +9784,7 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult == 0
 					}
@@ -9842,7 +9842,7 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult == 0
 					}
@@ -9868,7 +9868,7 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult == 0
 					}
@@ -9890,7 +9890,7 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult == 0
 					}
@@ -9913,7 +9913,7 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult == 0
 					}
@@ -19596,7 +19596,7 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult != 0
 					}
@@ -19620,7 +19620,7 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult != 0
 					}
@@ -19641,7 +19641,7 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult != 0
 					}
@@ -19662,7 +19662,7 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult != 0
 					}
@@ -19720,7 +19720,7 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult != 0
 					}
@@ -19746,7 +19746,7 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult != 0
 					}
@@ -19768,7 +19768,7 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult != 0
 					}
@@ -19791,7 +19791,7 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult != 0
 					}
@@ -29474,7 +29474,7 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult < 0
 					}
@@ -29498,7 +29498,7 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult < 0
 					}
@@ -29519,7 +29519,7 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult < 0
 					}
@@ -29540,7 +29540,7 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult < 0
 					}
@@ -29598,7 +29598,7 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult < 0
 					}
@@ -29624,7 +29624,7 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult < 0
 					}
@@ -29646,7 +29646,7 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult < 0
 					}
@@ -29669,7 +29669,7 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult < 0
 					}
@@ -39352,7 +39352,7 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult <= 0
 					}
@@ -39376,7 +39376,7 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult <= 0
 					}
@@ -39397,7 +39397,7 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult <= 0
 					}
@@ -39418,7 +39418,7 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult <= 0
 					}
@@ -39476,7 +39476,7 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult <= 0
 					}
@@ -39502,7 +39502,7 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult <= 0
 					}
@@ -39524,7 +39524,7 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult <= 0
 					}
@@ -39547,7 +39547,7 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult <= 0
 					}
@@ -49230,7 +49230,7 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult > 0
 					}
@@ -49254,7 +49254,7 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult > 0
 					}
@@ -49275,7 +49275,7 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult > 0
 					}
@@ -49296,7 +49296,7 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult > 0
 					}
@@ -49354,7 +49354,7 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult > 0
 					}
@@ -49380,7 +49380,7 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult > 0
 					}
@@ -49402,7 +49402,7 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult > 0
 					}
@@ -49425,7 +49425,7 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult > 0
 					}
@@ -59108,7 +59108,7 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult >= 0
 					}
@@ -59132,7 +59132,7 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult >= 0
 					}
@@ -59153,7 +59153,7 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult >= 0
 					}
@@ -59174,7 +59174,7 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg.(*coldataext.Datum).CompareDatum(col, p.constArg)
+						cmpResult = coldataext.CompareDatum(arg, col, p.constArg)
 
 						cmp = cmpResult >= 0
 					}
@@ -59232,7 +59232,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult >= 0
 					}
@@ -59258,7 +59258,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult >= 0
 					}
@@ -59280,7 +59280,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult >= 0
 					}
@@ -59303,7 +59303,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 					{
 						var cmpResult int
 
-						cmpResult = arg1.(*coldataext.Datum).CompareDatum(col1, arg2)
+						cmpResult = coldataext.CompareDatum(arg1, col1, arg2)
 
 						cmp = cmpResult >= 0
 					}

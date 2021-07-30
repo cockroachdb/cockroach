@@ -882,7 +882,7 @@ func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id jobspb.Jo
 	if pr, ok := resumer.(PauseRequester); ok {
 		onPauseRequested = pr.OnPauseRequest
 	}
-	return job.pauseRequested(ctx, txn, onPauseRequested)
+	return job.PauseRequested(ctx, txn, onPauseRequested)
 }
 
 // Succeeded marks the job with id as succeeded.

@@ -35,7 +35,7 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ json.JSON
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 )
 
 // Remove unused warning.
@@ -1613,7 +1613,7 @@ func (a *minDatumHashAgg) Compute(
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
@@ -1637,7 +1637,7 @@ func (a *minDatumHashAgg) Compute(
 							{
 								var cmpResult int
 
-								cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
+								cmpResult = coldataext.CompareDatum(candidate, col, a.curAgg)
 
 								cmp = cmpResult < 0
 							}
@@ -1665,7 +1665,7 @@ func (a *minDatumHashAgg) Compute(
 							{
 								var cmpResult int
 
-								cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
+								cmpResult = coldataext.CompareDatum(candidate, col, a.curAgg)
 
 								cmp = cmpResult < 0
 							}
@@ -1683,7 +1683,7 @@ func (a *minDatumHashAgg) Compute(
 
 	var newCurAggSize uintptr
 	if a.curAgg != nil {
-		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		newCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
@@ -1702,7 +1702,7 @@ func (a *minDatumHashAgg) Flush(outputIdx int) {
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
@@ -3306,7 +3306,7 @@ func (a *maxDatumHashAgg) Compute(
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
@@ -3330,7 +3330,7 @@ func (a *maxDatumHashAgg) Compute(
 							{
 								var cmpResult int
 
-								cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
+								cmpResult = coldataext.CompareDatum(candidate, col, a.curAgg)
 
 								cmp = cmpResult > 0
 							}
@@ -3358,7 +3358,7 @@ func (a *maxDatumHashAgg) Compute(
 							{
 								var cmpResult int
 
-								cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
+								cmpResult = coldataext.CompareDatum(candidate, col, a.curAgg)
 
 								cmp = cmpResult > 0
 							}
@@ -3376,7 +3376,7 @@ func (a *maxDatumHashAgg) Compute(
 
 	var newCurAggSize uintptr
 	if a.curAgg != nil {
-		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		newCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
@@ -3395,7 +3395,7 @@ func (a *maxDatumHashAgg) Flush(outputIdx int) {
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))

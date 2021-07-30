@@ -26,7 +26,7 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ tree.AggType
 )
 
@@ -8740,7 +8740,7 @@ func (ht *HashTable) checkColDeleting(
 											{
 												var cmpResult int
 
-												cmpResult = probeVal.(*coldataext.Datum).CompareDatum(probeKeys, buildVal)
+												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
 
 												unique = cmpResult != 0
 											}
@@ -8798,7 +8798,7 @@ func (ht *HashTable) checkColDeleting(
 											{
 												var cmpResult int
 
-												cmpResult = probeVal.(*coldataext.Datum).CompareDatum(probeKeys, buildVal)
+												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
 
 												unique = cmpResult != 0
 											}
@@ -8858,7 +8858,7 @@ func (ht *HashTable) checkColDeleting(
 											{
 												var cmpResult int
 
-												cmpResult = probeVal.(*coldataext.Datum).CompareDatum(probeKeys, buildVal)
+												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
 
 												unique = cmpResult != 0
 											}
@@ -8915,7 +8915,7 @@ func (ht *HashTable) checkColDeleting(
 											{
 												var cmpResult int
 
-												cmpResult = probeVal.(*coldataext.Datum).CompareDatum(probeKeys, buildVal)
+												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
 
 												unique = cmpResult != 0
 											}
@@ -8978,7 +8978,7 @@ func (ht *HashTable) checkColDeleting(
 											{
 												var cmpResult int
 
-												cmpResult = probeVal.(*coldataext.Datum).CompareDatum(probeKeys, buildVal)
+												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
 
 												unique = cmpResult != 0
 											}
@@ -9036,7 +9036,7 @@ func (ht *HashTable) checkColDeleting(
 											{
 												var cmpResult int
 
-												cmpResult = probeVal.(*coldataext.Datum).CompareDatum(probeKeys, buildVal)
+												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
 
 												unique = cmpResult != 0
 											}
@@ -9096,7 +9096,7 @@ func (ht *HashTable) checkColDeleting(
 											{
 												var cmpResult int
 
-												cmpResult = probeVal.(*coldataext.Datum).CompareDatum(probeKeys, buildVal)
+												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
 
 												unique = cmpResult != 0
 											}
@@ -9153,7 +9153,7 @@ func (ht *HashTable) checkColDeleting(
 											{
 												var cmpResult int
 
-												cmpResult = probeVal.(*coldataext.Datum).CompareDatum(probeKeys, buildVal)
+												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
 
 												unique = cmpResult != 0
 											}

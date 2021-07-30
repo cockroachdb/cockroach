@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -34,7 +33,6 @@ var (
 	_ duration.Duration
 	_ json.JSON
 	_ colexecerror.StorageError
-	_ coldataext.Datum
 )
 
 func newAnyNotNullOrderedAggAlloc(
@@ -2167,7 +2165,7 @@ func (a *anyNotNullDatumOrderedAgg) Compute(
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
@@ -2303,7 +2301,7 @@ func (a *anyNotNullDatumOrderedAgg) Compute(
 
 	var newCurAggSize uintptr
 	if a.curAgg != nil {
-		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		newCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
@@ -2326,7 +2324,7 @@ func (a *anyNotNullDatumOrderedAgg) Flush(outputIdx int) {
 
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+		oldCurAggSize = a.curAgg.(tree.Datum).Size()
 	}
 	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil

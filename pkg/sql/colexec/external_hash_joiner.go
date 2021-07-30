@@ -133,7 +133,7 @@ func NewExternalHashJoiner(
 		diskBackedSortMerge, err := colexecjoin.NewMergeJoinOp(
 			unlimitedAllocator, memoryLimit, args.DiskQueueCfg, fdSemaphore, spec.JoinType,
 			leftPartitionSorter, rightPartitionSorter, spec.Left.SourceTypes,
-			spec.Right.SourceTypes, leftOrdering, rightOrdering, diskAcc,
+			spec.Right.SourceTypes, leftOrdering, rightOrdering, diskAcc, flowCtx.EvalCtx,
 		)
 		if err != nil {
 			colexecerror.InternalError(err)

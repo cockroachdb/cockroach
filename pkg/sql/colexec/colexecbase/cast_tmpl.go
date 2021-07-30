@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -49,7 +48,6 @@ import (
 // Workaround for bazel auto-generated code. goimports does not automatically
 // pick up the right packages when run within the bazel sandbox.
 var (
-	_ coldataext.Datum
 	_ duration.Duration
 	_ json.JSON
 	_ = lex.DecodeRawBytesToByteArrayAuto
@@ -106,6 +104,7 @@ func GetCastOperator(
 	resultIdx int,
 	fromType *types.T,
 	toType *types.T,
+	evalCtx *tree.EvalContext,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	base := castOpBase{
@@ -113,6 +112,7 @@ func GetCastOperator(
 		allocator:                allocator,
 		colIdx:                   colIdx,
 		outputIdx:                resultIdx,
+		evalCtx:                  evalCtx,
 	}
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{castOpBase: base}, nil
@@ -227,6 +227,7 @@ type castOpBase struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	evalCtx   *tree.EvalContext
 }
 
 func (c *castOpBase) Reset(ctx context.Context) {
@@ -353,22 +354,22 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 		if sel != nil {
 			if inputVec.Nulls().MaybeHasNulls() {
 				for scratchIdx, outputIdx := range sel[:n] {
-					setNativeToDatumCast(outputCol, outputNulls, scratch, scratchIdx, outputIdx, toType, true, false)
+					setNativeToDatumCast(outputCol, outputNulls, scratch, scratchIdx, outputIdx, toType, c.evalCtx, true, false)
 				}
 			} else {
 				for scratchIdx, outputIdx := range sel[:n] {
-					setNativeToDatumCast(outputCol, outputNulls, scratch, scratchIdx, outputIdx, toType, false, false)
+					setNativeToDatumCast(outputCol, outputNulls, scratch, scratchIdx, outputIdx, toType, c.evalCtx, false, false)
 				}
 			}
 		} else {
 			_ = scratch[n-1]
 			if inputVec.Nulls().MaybeHasNulls() {
 				for idx := 0; idx < n; idx++ {
-					setNativeToDatumCast(outputCol, outputNulls, scratch, idx, idx, toType, true, true)
+					setNativeToDatumCast(outputCol, outputNulls, scratch, idx, idx, toType, c.evalCtx, true, true)
 				}
 			} else {
 				for idx := 0; idx < n; idx++ {
-					setNativeToDatumCast(outputCol, outputNulls, scratch, idx, idx, toType, false, true)
+					setNativeToDatumCast(outputCol, outputNulls, scratch, idx, idx, toType, c.evalCtx, false, true)
 				}
 			}
 		}
@@ -388,6 +389,7 @@ func setNativeToDatumCast(
 	scratchIdx int,
 	outputIdx int,
 	toType *types.T,
+	evalCtx *tree.EvalContext,
 	hasNulls bool,
 	scratchBCE bool,
 ) {
@@ -399,7 +401,7 @@ func setNativeToDatumCast(
 		outputNulls.SetNull(outputIdx)
 		continue
 	}
-	res, err := coldataext.PerformCast(outputCol, converted, toType)
+	res, err := tree.PerformCast(evalCtx, converted, toType)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -457,18 +459,18 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, true, true)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, true, true)
 				} else {
-					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, true, false)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, true, false)
 				}
 			} else {
 				// We need to make sure that there are no left over null values
 				// in the output vector.
 				outputNulls.UnsetNulls()
 				if sel != nil {
-					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, false, true)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, false, true)
 				} else {
-					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, false, false)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, false, false)
 				}
 			}
 			// {{/*
@@ -533,9 +535,12 @@ func castTuples(
 	toType *types.T,
 	n int,
 	sel []int,
+	evalCtx *tree.EvalContext,
 	hasNulls bool,
 	hasSel bool,
 ) {
+	// Silence unused warning.
+	_ = evalCtx
 	if !hasSel {
 		// {{if $fromInfo.Sliceable}}
 		_ = inputCol.Get(n - 1)
@@ -561,7 +566,7 @@ func castTuples(
 		}
 		v := inputCol.Get(tupleIdx)
 		var r _TO_GO_TYPE
-		_CAST(r, v, inputCol, toType)
+		_CAST(r, v, evalCtx, toType)
 		if !hasSel {
 			// {{if .Sliceable}}
 			//gcassert:bce

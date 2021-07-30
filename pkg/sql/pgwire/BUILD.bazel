@@ -18,7 +18,6 @@ go_library(
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/col/coldata",
-        "//pkg/col/coldataext",
         "//pkg/security",
         "//pkg/server/telemetry",
         "//pkg/settings",

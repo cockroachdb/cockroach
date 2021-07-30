@@ -26,7 +26,7 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 	_ tree.AggType
 )
 
@@ -393,7 +393,7 @@ func valuesDiffer(
 			{
 				var cmpResult int
 
-				cmpResult = arg1.(*coldataext.Datum).CompareDatum(aCol, arg2)
+				cmpResult = coldataext.CompareDatum(arg1, aCol, arg2)
 
 				unique = cmpResult != 0
 			}

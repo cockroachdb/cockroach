@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -666,7 +665,7 @@ func ColVecToDatumAndDeselect(
 							continue
 						}
 						v := typedCol.Get(srcIdx)
-						_converted := v.(*coldataext.Datum).Datum
+						_converted := v.(tree.Datum)
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}
@@ -1010,7 +1009,7 @@ func ColVecToDatumAndDeselect(
 							srcIdx = sel[idx]
 						}
 						v := typedCol.Get(srcIdx)
-						_converted := v.(*coldataext.Datum).Datum
+						_converted := v.(tree.Datum)
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}
@@ -1433,7 +1432,7 @@ func ColVecToDatum(
 								continue
 							}
 							v := typedCol.Get(srcIdx)
-							_converted := v.(*coldataext.Datum).Datum
+							_converted := v.(tree.Datum)
 							converted[destIdx] = _converted
 						}
 					}
@@ -1859,7 +1858,7 @@ func ColVecToDatum(
 								continue
 							}
 							v := typedCol.Get(srcIdx)
-							_converted := v.(*coldataext.Datum).Datum
+							_converted := v.(tree.Datum)
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}
@@ -2205,7 +2204,7 @@ func ColVecToDatum(
 								srcIdx = sel[idx]
 							}
 							v := typedCol.Get(srcIdx)
-							_converted := v.(*coldataext.Datum).Datum
+							_converted := v.(tree.Datum)
 							converted[destIdx] = _converted
 						}
 					}
@@ -2551,7 +2550,7 @@ func ColVecToDatum(
 								srcIdx = idx
 							}
 							v := typedCol.Get(srcIdx)
-							_converted := v.(*coldataext.Datum).Datum
+							_converted := v.(tree.Datum)
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}
