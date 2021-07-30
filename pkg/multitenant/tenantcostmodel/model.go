@@ -112,14 +112,6 @@ func (bri RequestInfo) IsWrite() (isWrite bool, writeBytes int64) {
 	return true, bri.writeBytes
 }
 
-// TestingRequestInfo creates a RequestInfo for testing purposes.
-func TestingRequestInfo(isWrite bool, writeBytes int64) RequestInfo {
-	if !isWrite {
-		return RequestInfo{writeBytes: -1}
-	}
-	return RequestInfo{writeBytes: writeBytes}
-}
-
 // ResponseInfo captures the BatchResponse information that is used (together
 // with the cost model) to determine the portion of the cost that can only be
 // calculated after-the-fact. Specifically: the read size (if the request is a
@@ -140,9 +132,4 @@ func MakeResponseInfo(br *roachpb.BatchResponse) ResponseInfo {
 // ReadBytes returns the bytes read, or 0 if the request was a write.
 func (bri ResponseInfo) ReadBytes() int64 {
 	return bri.readBytes
-}
-
-// TestingResponseInfo creates a ResponseInfo for testing purposes.
-func TestingResponseInfo(readBytes int64) ResponseInfo {
-	return ResponseInfo{readBytes: readBytes}
 }
