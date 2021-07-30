@@ -152,6 +152,15 @@ func (r *Replica) RangeFeed(
 	}
 
 	if err := r.ensureClosedTimestampStarted(ctx); err != nil {
+		if errors.HasType(err.GoError(), (*contextutil.TimeoutError)(nil)) {
+			if err := stream.Send(&roachpb.RangeFeedEvent{Error: &roachpb.RangeFeedError{
+				Error: *roachpb.NewError(&roachpb.RangeFeedRetryError{
+					Reason: roachpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER,
+				}),
+			}}); err != nil {
+				return roachpb.NewError(err)
+			}
+		}
 		return err
 	}
 

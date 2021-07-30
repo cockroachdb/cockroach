@@ -64,6 +64,12 @@ func (t *TimeoutError) Cause() error {
 	return t.cause
 }
 
+// Build a fake timeout error for tests
+func MockTimeoutError() *TimeoutError {
+	t := &TimeoutError{operation: "op", duration: time.Second * 0, cause: errors.New("cause")}
+	return t
+}
+
 // encodeTimeoutError serializes a TimeoutError.
 // We cannot include the operation in the safe strings because
 // we currently have plenty of uses where the operation is constructed
