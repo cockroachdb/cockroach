@@ -11,16 +11,18 @@ package kvevent
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+type eventResourceTuple struct {
+	e Event
+	r Resource
+}
 
 // chanBuffer mediates between the changed data KVFeed and the rest of the
 // changefeed pipeline (which is backpressured all the way to the sink).
 type chanBuffer struct {
-	entriesCh chan Event
+	entriesCh chan eventResourceTuple
 }
 
 // MakeChanBuffer returns an Buffer backed by an unbuffered channel.
@@ -29,48 +31,35 @@ type chanBuffer struct {
 // backfill is terrible. Probably some of that is due to every KV being sent
 // on a channel. This should all get benchmarked and tuned.
 func MakeChanBuffer() Buffer {
-	return &chanBuffer{entriesCh: make(chan Event)}
+	return &chanBuffer{entriesCh: make(chan eventResourceTuple)}
 }
 
-// AddKV inserts a changed KV into the buffer. Individual keys must be added in
-// increasing mvcc order.
-func (b *chanBuffer) AddKV(
-	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
-) error {
-	return b.addEvent(ctx, makeKVEvent(kv, prevVal, backfillTimestamp))
-}
-
-// AddResolved inserts a Resolved timestamp notification in the buffer.
-func (b *chanBuffer) AddResolved(
-	ctx context.Context,
-	span roachpb.Span,
-	ts hlc.Timestamp,
-	boundaryType jobspb.ResolvedSpan_BoundaryType,
-) error {
-	return b.addEvent(ctx, makeResolvedEvent(span, ts, boundaryType))
+// Add implements Writer interface.
+func (b *chanBuffer) Add(ctx context.Context, event Event, resource Resource) error {
+	return b.addEvent(ctx, event, resource)
 }
 
 func (b *chanBuffer) Close(_ context.Context) {
 	close(b.entriesCh)
 }
 
-func (b *chanBuffer) addEvent(ctx context.Context, e Event) error {
+func (b *chanBuffer) addEvent(ctx context.Context, e Event, r Resource) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case b.entriesCh <- e:
+	case b.entriesCh <- eventResourceTuple{e, r}:
 		return nil
 	}
 }
 
 // Get returns an entry from the buffer. They are handed out in an order that
 // (if it is maintained all the way to the sink) meets our external guarantees.
-func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
+func (b *chanBuffer) Get(ctx context.Context) (Event, Resource, error) {
 	select {
 	case <-ctx.Done():
-		return Event{}, ctx.Err()
-	case e := <-b.entriesCh:
-		e.bufferGetTimestamp = timeutil.Now()
-		return e, nil
+		return Event{}, NoResource, ctx.Err()
+	case er := <-b.entriesCh:
+		er.e.bufferGetTimestamp = timeutil.Now()
+		return er.e, er.r, nil
 	}
 }

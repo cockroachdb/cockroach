@@ -19,10 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/stretchr/testify/require"
 )
@@ -55,16 +53,6 @@ func setupWebhookSinkWithDetails(
 		return nil, err
 	}
 
-	// unlimited memory for testing purposes only
-	memMon := mon.NewUnlimitedMonitor(context.Background(),
-		"test mon",
-		mon.MemoryResource,
-		nil,  /* curCount */
-		nil,  /* maxHist */
-		1000, /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
-	)
-
 	defaultRetryCfg := defaultRetryConfig()
 	// speed up test by using faster backoff times
 	shortRetryCfg := retry.Options{
@@ -72,7 +60,7 @@ func setupWebhookSinkWithDetails(
 		InitialBackoff: 5 * time.Millisecond,
 	}
 
-	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, details.Opts, parallelism, memMon.MakeBoundAccount(), shortRetryCfg)
+	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, details.Opts, parallelism, shortRetryCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -89,11 +77,15 @@ func testSendAndReceiveRows(t *testing.T, sinkSrc Sink, sinkDest *cdctest.MockWe
 	ctx := context.Background()
 
 	// test an insert row entry
+	r := makeResource(0)
 	require.NoError(t, sinkSrc.EmitRow(ctx, nil, []byte("[1001]"),
-		[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
+		[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"),
+		r.acquireResource(), hlc.Timestamp{}))
 	require.NoError(t, sinkSrc.EmitRow(ctx, nil, []byte("[1001]"),
-		[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1002},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
+		[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1002},\"key\":[1001],\"topic:\":\"foo\"}"),
+		r.acquireResource(), hlc.Timestamp{}))
 	require.NoError(t, sinkSrc.Flush(ctx))
+	require.EqualValues(t, 0, r.used())
 
 	require.Equal(t,
 		"{\"payload\":[{\"after\":{\"col1\":\"val1\",\"rowid\":1002},\"key\":[1001],\"topic:\":\"foo\"}]}", sinkDest.Latest(),
@@ -101,7 +93,10 @@ func testSendAndReceiveRows(t *testing.T, sinkSrc Sink, sinkDest *cdctest.MockWe
 		"{\"payload\":[{\"after\":{\"col1\":\"val1\",\"rowid\":1002},\"key\":[1001],\"topic:\":\"foo\"}]}")
 
 	// test a delete row entry
-	require.NoError(t, sinkSrc.EmitRow(ctx, nil, []byte("[1002]"), []byte("{\"after\":null,\"key\":[1002],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
+	require.NoError(t, sinkSrc.EmitRow(ctx, nil,
+		[]byte("[1002]"), []byte("{\"after\":null,\"key\":[1002],\"topic:\":\"foo\"}"),
+		r.acquireResource(),
+		hlc.Timestamp{}))
 	require.NoError(t, sinkSrc.Flush(ctx))
 
 	require.Equal(t,
@@ -159,7 +154,8 @@ func TestWebhookSink(t *testing.T) {
 
 		// now sink's client accepts no custom certs, should reject the server's cert and fail
 		require.NoError(t, sinkSrcNoCert.EmitRow(context.Background(), nil, []byte("[1001]"),
-			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"),
+			makeResource(), hlc.Timestamp{}))
 
 		require.EqualError(t, sinkSrcNoCert.Flush(context.Background()),
 			fmt.Sprintf(`Post "%s": x509: certificate signed by unknown authority`, sinkDest.URL()))
@@ -176,7 +172,8 @@ func TestWebhookSink(t *testing.T) {
 		// sink should throw an error if server is unreachable
 		sinkDest.Close()
 		require.NoError(t, sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"),
-			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"),
+			makeResource(), hlc.Timestamp{}))
 
 		err = sinkSrc.Flush(context.Background())
 		require.Error(t, err)
@@ -233,7 +230,8 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 		sinkSrcNoCreds, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism)
 		require.NoError(t, err)
 		require.NoError(t, sinkSrcNoCreds.EmitRow(context.Background(), nil, []byte("[1001]"),
-			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"),
+			makeResource(), hlc.Timestamp{}))
 
 		require.EqualError(t, sinkSrcNoCreds.Flush(context.Background()), "401 Unauthorized: ")
 
@@ -245,7 +243,8 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NoError(t, sinkSrcWrongCreds.EmitRow(context.Background(), nil, []byte("[1001]"),
-			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"),
+			makeResource(), hlc.Timestamp{}))
 
 		require.EqualError(t, sinkSrcWrongCreds.Flush(context.Background()), "401 Unauthorized: ")
 
@@ -326,7 +325,8 @@ func TestWebhookSinkRetriesRequests(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NoError(t, sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"),
-			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"),
+			makeResource(), hlc.Timestamp{}))
 
 		require.EqualError(t, sinkSrc.Flush(context.Background()), "500 Internal Server Error: ")
 
@@ -376,7 +376,8 @@ func TestWebhookSinkShutsDownOnError(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NoError(t, sinkSrc.EmitRow(ctx, nil, []byte("[1001]"),
-			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), hlc.Timestamp{}))
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"),
+			makeResource(), hlc.Timestamp{}))
 		// error should be propagated immediately in the next call
 		require.EqualError(t, sinkSrc.Flush(ctx), "500 Internal Server Error: ")
 

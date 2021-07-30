@@ -83,7 +83,7 @@ func TestBlockingBuffer(t *testing.T) {
 		waited.Signal()
 	}
 
-	buf := kvevent.NewMemBuffer(ba, &metrics, quotapool.OnWaitStart(notifyWait))
+	buf := kvevent.NewMemBuffer(ba, 1.0, &metrics, quotapool.OnWaitStart(notifyWait))
 	defer buf.Close(context.Background())
 
 	producerCtx, stopProducers := context.WithCancel(context.Background())
@@ -96,7 +96,7 @@ func TestBlockingBuffer(t *testing.T) {
 	wg.GoCtx(func(ctx context.Context) error {
 		rnd, _ := randutil.NewTestPseudoRand()
 		for {
-			err := buf.AddKV(ctx, makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{})
+			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}), kvevent.NoResource)
 			if err != nil {
 				return nil
 			}
@@ -107,8 +107,9 @@ func TestBlockingBuffer(t *testing.T) {
 
 	// Keep consuming events until we get pushback metrics updated.
 	for metrics.BufferPushbackNanos.Count() == 0 {
-		_, err := buf.Get(context.Background())
+		_, r, err := buf.Get(context.Background())
 		require.NoError(t, err)
+		r.Release()
 	}
 	stopProducers()
 }

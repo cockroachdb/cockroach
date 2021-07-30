@@ -104,7 +104,7 @@ func TestKVFeed(t *testing.T) {
 		)
 		metrics := kvevent.MakeMetrics(time.Minute)
 		bufferFactory := func() kvevent.Buffer {
-			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), &metrics)
+			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), 1.0, &metrics)
 		}
 		scans := make(chan physicalConfig)
 		sf := scannerFunc(func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
@@ -141,8 +141,9 @@ func TestKVFeed(t *testing.T) {
 		})
 		testG.GoCtx(func(ctx context.Context) error {
 			for events := 0; events < tc.expEvents; events++ {
-				_, err := buf.Get(ctx)
+				_, r, err := buf.Get(ctx)
 				assert.NoError(t, err)
+				r.Release()
 			}
 			return nil
 		})

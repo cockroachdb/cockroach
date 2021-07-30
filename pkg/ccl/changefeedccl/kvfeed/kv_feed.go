@@ -86,7 +86,12 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	bf := func() kvevent.Buffer {
-		return kvevent.NewErrorWrapperEventBuffer(kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), cfg.Metrics))
+		return kvevent.NewErrorWrapperEventBuffer(
+			kvevent.NewMemBuffer(
+				cfg.MM.MakeBoundAccount(),
+				changefeedbase.EventMemoryMultiplier.Get(&cfg.Settings.SV),
+				cfg.Metrics,
+			))
 	}
 
 	f := newKVFeed(
@@ -226,7 +231,11 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		if f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyNoBackfill ||
 			boundaryType == jobspb.ResolvedSpan_RESTART {
 			for _, sp := range f.spans {
-				if err := f.sink.AddResolved(ctx, sp, highWater, boundaryType); err != nil {
+				if err := f.sink.Add(
+					ctx,
+					kvevent.MakeResolvedEvent(sp, highWater, boundaryType),
+					kvevent.NoResource,
+				); err != nil {
 					return err
 				}
 			}
@@ -459,31 +468,30 @@ func copyFromSourceToSinkUntilTableEvent(
 				return false, false, nil
 			}
 		}
-		addEntry = func(e kvevent.Event) error {
+		addEntry = func(e kvevent.Event, r kvevent.Resource) error {
 			switch e.Type() {
 			case kvevent.TypeKV:
-				return sink.AddKV(ctx, e.KV(), e.PrevValue(), e.BackfillTimestamp())
+				return sink.Add(ctx, e, r)
 			case kvevent.TypeResolved:
 				// TODO(ajwerner): technically this doesn't need to happen for most
 				// events - we just need to make sure we forward for events which are
 				// at scanBoundary.Prev(). We may not yet know about that scanBoundary.
 				// The logic currently doesn't make this clean.
+				defer r.Release()
 				resolved := e.Resolved()
 				if _, err := frontier.Forward(resolved.Span, resolved.Timestamp); err != nil {
 					return err
 				}
-				return sink.AddResolved(ctx, resolved.Span, resolved.Timestamp, jobspb.ResolvedSpan_NONE)
+				return sink.Add(ctx, e, r.Move())
 			default:
 				log.Fatal(ctx, "unknown event type")
 				return nil
 			}
 		}
 	)
-	for {
-		e, err := source.Get(ctx)
-		if err != nil {
-			return err
-		}
+
+	copyEvent := func(e kvevent.Event, r kvevent.Resource) error {
+		defer r.Release()
 		if err := checkForScanBoundary(e.Timestamp()); err != nil {
 			return err
 		}
@@ -497,9 +505,17 @@ func copyFromSourceToSinkUntilTableEvent(
 			return scanBoundary
 		}
 		if skipEntry {
-			continue
+			return nil
 		}
-		if err := addEntry(e); err != nil {
+		return addEntry(e, r.Move())
+	}
+
+	for {
+		e, r, err := source.Get(ctx)
+		if err != nil {
+			return err
+		}
+		if err := copyEvent(e, r); err != nil {
 			return err
 		}
 	}
