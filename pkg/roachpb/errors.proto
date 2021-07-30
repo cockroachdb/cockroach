@@ -462,6 +462,8 @@ message RangeFeedRetryError {
     // The consumer was processing events too slowly to keep up with live raft
     // events.
     REASON_SLOW_CONSUMER = 5;
+    // No leaseholder exists or could be created, so closed timestamps won't be emitted.
+    REASON_NO_LEASEHOLDER = 6;
   }
   optional Reason reason = 1 [(gogoproto.nullable) = false];
 }
