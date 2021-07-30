@@ -217,9 +217,7 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 		}
 	}
 	i.iter.SeekGE(startKey)
-	if ok, err := i.iter.Valid(); !ok {
-		i.err = err
-		i.valid = false
+	if !i.checkValidAndSaveErr() {
 		return
 	}
 	i.err = nil
@@ -463,10 +461,7 @@ func (i *MVCCIncrementalIterator) advance() {
 			// done.
 			break
 		}
-
-		if ok, err := i.iter.Valid(); !ok {
-			i.err = err
-			i.valid = false
+		if !i.checkValidAndSaveErr() {
 			return
 		}
 	}
@@ -511,9 +506,7 @@ func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 	for {
 		i.iter.Next()
-		if ok, err := i.iter.Valid(); !ok {
-			i.err = err
-			i.valid = false
+		if !i.checkValidAndSaveErr() {
 			return
 		}
 
