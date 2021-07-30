@@ -924,14 +924,6 @@ func (sc *SchemaChanger) truncateIndexes(
 	return nil
 }
 
-type backfillType int
-
-const (
-	_ backfillType = iota
-	columnBackfill
-	indexBackfill
-)
-
 // getJobIDForMutationWithDescriptor returns a job id associated with a mutation given
 // a table descriptor. Unlike getJobIDForMutation this doesn't need transaction.
 // TODO (lucy): This is not a good way to look up all schema change jobs
@@ -1274,19 +1266,17 @@ func (sc *SchemaChanger) distIndexBackfill(
 	return nil
 }
 
-// distBackfill runs (or continues) a backfill for the first mutation
+// distColumnBackfill runs (or continues) a backfill for the first mutation
 // enqueued on the SchemaChanger's table descriptor that passes the input
 // MutationFilter.
 //
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely, so it makes its own.
-func (sc *SchemaChanger) distBackfill(
+func (sc *SchemaChanger) distColumnBackfill(
 	ctx context.Context,
 	version descpb.DescriptorVersion,
-	backfillType backfillType,
 	backfillChunkSize int64,
 	filter backfill.MutationFilter,
-	targetSpans []roachpb.Span,
 ) error {
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
@@ -1972,9 +1962,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 ) error {
 	log.Infof(ctx, "clearing and backfilling columns")
 
-	if err := sc.distBackfill(
-		ctx, version, columnBackfill, columnBackfillBatchSize.Get(&sc.settings.SV),
-		backfill.ColumnMutationFilter, nil); err != nil {
+	if err := sc.distColumnBackfill(
+		ctx, version, columnBackfillBatchSize.Get(&sc.settings.SV),
+		backfill.ColumnMutationFilter); err != nil {
 		return err
 	}
 	log.Info(ctx, "finished clearing and backfilling columns")
