@@ -11,10 +11,14 @@
 package storage
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,6 +36,11 @@ import (
 // time bounds are handled according to the provided
 // MVCCIncrementalIterIntentPolicy. By default, an error will be
 // returned.
+//
+// If iteration resource limit is requested, iterator would return an error as
+// soon as limit is reached. The error will contain a resume key which could be
+// outside of requested boundaries and should be used to resume iteration on
+// subsequent requests.
 //
 // Note: The endTime is inclusive to be consistent with the non-incremental
 // iterator, where reads at a given timestamp return writes at that
@@ -94,6 +103,76 @@ type MVCCIncrementalIterator struct {
 
 	// Optional collection of intents created on demand when first intent encountered.
 	intents []roachpb.Intent
+
+	// Limit iterator resources. Safe to leave as nil to use unbounded resources.
+	limiter ResourceLimiter
+}
+
+// ResourceCheckEveryNIterations defines for how many iterations we could cache
+// current time when performing iteration wall clock time limiting.
+const ResourceCheckEveryNIterations = 100
+
+// ResourceLimiterOptions is defining limits for resource limiter to restrict number
+// of iterations.
+type ResourceLimiterOptions struct {
+	MaxRunTime time.Duration
+}
+
+// ResourceLimiter provides an optional facility to stop mvcc iterator without
+// waiting for the next value to be returned.
+type ResourceLimiter interface {
+	// IsExhausted returns true when limited resource is exhausted. Iterator is
+	// checking the exhaustion status of resource limiter every time it advances
+	// to the next underlying key value pair.
+	IsExhausted() bool
+	// Report provides an explanation string which resource was exhausted and could
+	// be used for logging and error messages.
+	Report() string
+}
+
+// TimeResourceLimiter provides limiter based on wall clock time.
+type TimeResourceLimiter struct {
+	// Iteration time limit
+	maxRunTime time.Duration
+	startTime  time.Time
+	ts         timeutil.TimeSource
+
+	// Check throttling to decrease time query usage.
+	checkThrottle int
+}
+
+var _ ResourceLimiter = &TimeResourceLimiter{}
+
+// NewResourceLimiter create new default resource limiter. Current implementation is wall clock time based.
+// Timer starts as soon as limiter is created.
+// If no limits are specified in opts nil is returned.
+func NewResourceLimiter(opts ResourceLimiterOptions, ts timeutil.TimeSource) ResourceLimiter {
+	if opts.MaxRunTime == 0 {
+		return nil
+	}
+	return &TimeResourceLimiter{maxRunTime: opts.MaxRunTime, startTime: ts.Now(), ts: ts}
+}
+
+// IsExhausted implements ResourceLimiter interface.
+func (l *TimeResourceLimiter) IsExhausted() bool {
+	if l == nil {
+		return false
+	}
+	if l.checkThrottle >= ResourceCheckEveryNIterations && l.maxRunTime > 0 {
+		// Check if we exhausted allocated time.
+		now := l.ts.Now()
+		if now.Sub(l.startTime) > l.maxRunTime {
+			return true
+		}
+		l.checkThrottle = 0
+	}
+	l.checkThrottle++
+	return false
+}
+
+// Report implements ResourceLimiter interface.
+func (l *TimeResourceLimiter) Report() string {
+	return fmt.Sprintf("iteration exhausted time limit of %v", l.maxRunTime)
 }
 
 var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
@@ -153,6 +232,14 @@ type MVCCIncrementalIterOptions struct {
 
 	IntentPolicy MVCCIncrementalIterIntentPolicy
 	InlinePolicy MVCCIncrementalIterInlinePolicy
+
+	// If non nil iterator would only advance or seek up to a certain number of times
+	// before bailing out with ResourceLimitError. When using the feature it is
+	// important to use resume key from the error to ensure forward progress could
+	// be made as advancing up to the first key could already exhaust the limit.
+	// Resume key is not necessarily a valid iteration key as we could stop in between
+	// eligible keys.
+	Limiter ResourceLimiter
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -194,6 +281,7 @@ func NewMVCCIncrementalIterator(
 		timeBoundIter: timeBoundIter,
 		intentPolicy:  opts.IntentPolicy,
 		inlinePolicy:  opts.InlinePolicy,
+		limiter:       opts.Limiter,
 	}
 }
 
@@ -217,9 +305,7 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 		}
 	}
 	i.iter.SeekGE(startKey)
-	if ok, err := i.iter.Valid(); !ok {
-		i.err = err
-		i.valid = false
+	if !i.checkValidAndSaveErr() {
 		return
 	}
 	i.err = nil
@@ -423,6 +509,16 @@ func (i *MVCCIncrementalIterator) advance() {
 			return
 		}
 
+		// If we reached requested iteration limit here, stop iteration with an error and
+		// provide a resume key.
+		// TODO(oleg): we need to ensure that we make progress before bailing out, resume
+		// key should always be > start key
+		if i.limiter != nil && i.limiter.IsExhausted() {
+			i.err = &ResourceLimitError{Message: i.limiter.Report(), ResumeKey: i.Key()}
+			i.valid = false
+			return
+		}
+
 		// If we have an inline value and the policy was to error, we
 		// would have errored in the call above. If our policy is to
 		// emit inline values, we don't want to advance past it. Inline
@@ -463,10 +559,7 @@ func (i *MVCCIncrementalIterator) advance() {
 			// done.
 			break
 		}
-
-		if ok, err := i.iter.Valid(); !ok {
-			i.err = err
-			i.valid = false
+		if !i.checkValidAndSaveErr() {
 			return
 		}
 	}
@@ -511,9 +604,7 @@ func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 	for {
 		i.iter.Next()
-		if ok, err := i.iter.Valid(); !ok {
-			i.err = err
-			i.valid = false
+		if !i.checkValidAndSaveErr() {
 			return
 		}
 
@@ -550,4 +641,19 @@ func (i *MVCCIncrementalIterator) TryGetIntentError() error {
 	return &roachpb.WriteIntentError{
 		Intents: i.intents,
 	}
+}
+
+// ResourceLimitError is returned by MVCCIncrementalIterator when iterator reaches
+// maximum number of iterations in the underlying storage iterator. Error will
+// provide used Limit as well as ResumeKey that could be used to resume iteration
+// on the subsequent attempt.
+type ResourceLimitError struct {
+	Message   string
+	ResumeKey MVCCKey
+}
+
+var _ error = &ResourceLimitError{}
+
+func (e *ResourceLimitError) Error() string {
+	return e.Message
 }
