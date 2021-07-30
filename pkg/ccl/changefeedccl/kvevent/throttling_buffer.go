@@ -26,13 +26,14 @@ func NewThrottlingBuffer(b Buffer, throttle *cdcutils.Throttler) Buffer {
 }
 
 // Get implements kvevent.Reader interface.
-func (b *throttlingBuffer) Get(ctx context.Context) (Event, error) {
-	evt, err := b.Buffer.Get(ctx)
+func (b *throttlingBuffer) Get(ctx context.Context) (Event, Resource, error) {
+	evt, resource, err := b.Buffer.Get(ctx)
 	if err != nil {
-		return Event{}, err
+		return evt, resource, err
 	}
+	defer resource.Release()
 	if err := b.throttle.AcquireMessageQuota(ctx, evt.ApproximateSize()); err != nil {
-		return Event{}, err
+		return Event{}, NoResource, err
 	}
-	return evt, nil
+	return evt, resource.Move(), nil
 }

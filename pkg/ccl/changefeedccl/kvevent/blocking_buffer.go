@@ -12,23 +12,21 @@ import (
 	"context"
 	"sync"
 	"time"
-	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // blockingBuffer is an implementation of Buffer which allocates memory
 // from a mon.BoundAccount and blocks if no resources are available.
 type blockingBuffer struct {
 	blockingBufferQuotaPool
-	signalCh chan struct{}
-	mu       struct {
+	signalCh      chan struct{}
+	memMultiplier float64
+	mu            struct {
 		syncutil.Mutex
 		closed bool
 		queue  bufferEntryQueue
@@ -39,12 +37,15 @@ type blockingBuffer struct {
 // It will grow the bound account to buffer more messages but will block if it
 // runs out of space. If ever any entry exceeds the allocatable size of the
 // account, an error will be returned when attempting to buffer it.
-func NewMemBuffer(acc mon.BoundAccount, metrics *Metrics, opts ...quotapool.Option) Buffer {
+func NewMemBuffer(
+	acc mon.BoundAccount, mm float64, metrics *Metrics, opts ...quotapool.Option,
+) Buffer {
 	bb := &blockingBuffer{
 		signalCh: make(chan struct{}, 1),
 	}
 	bb.acc = acc
 	bb.metrics = metrics
+	bb.memMultiplier = mm
 
 	opts = append(opts,
 		quotapool.OnWaitFinish(
@@ -68,57 +69,43 @@ func (b *blockingBuffer) pop() (e *bufferEntry, closed bool) {
 }
 
 // Get implements kvevent.Reader interface.
-func (b *blockingBuffer) Get(ctx context.Context) (ev Event, err error) {
+func (b *blockingBuffer) Get(ctx context.Context) (ev Event, resource Resource, err error) {
 	for {
 		got, closed := b.pop()
 		if closed {
-			return Event{}, nil
+			return Event{}, NoResource, nil
 		}
 
 		if got != nil {
+			b.metrics.BufferEntriesOut.Inc(1)
 			e := got.e
 			e.bufferGetTimestamp = timeutil.Now()
-			b.qp.Update(func(r quotapool.Resource) (shouldNotify bool) {
-				res := r.(*blockingBufferQuotaPool)
-				res.release(got)
-				return true
-			})
-			return e, nil
+			return e, &bufferEntryAlloc{got}, nil
 		}
 
 		select {
 		case <-ctx.Done():
-			return Event{}, ctx.Err()
+			return Event{}, NoResource, ctx.Err()
 		case <-b.signalCh:
 		}
 	}
 }
 
-// AddKV implements kvevent.Writer interface.
-func (b *blockingBuffer) AddKV(
-	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
-) error {
-	size := kv.Size() + prevVal.Size() + backfillTimestamp.Size() + int(unsafe.Sizeof(bufferEntry{}))
-	e := makeKVEvent(kv, prevVal, backfillTimestamp)
-	return b.addEvent(ctx, e, size)
+// Add implements Writer interface.
+func (b *blockingBuffer) Add(ctx context.Context, e Event, resource Resource) error {
+	if resource != NoResource {
+		// We really should only see NoResource here because no resources have
+		// been allocated yet.
+		return errors.AssertionFailedf("unexpected resource type")
+	}
+	return b.addEvent(ctx, e)
 }
 
-// AddResolved implements kvevent.Writer interface.
-func (b *blockingBuffer) AddResolved(
-	ctx context.Context,
-	span roachpb.Span,
-	ts hlc.Timestamp,
-	boundaryType jobspb.ResolvedSpan_BoundaryType,
-) error {
-	size := span.Size() + ts.Size() + 4 + int(unsafe.Sizeof(bufferEntry{}))
-	e := makeResolvedEvent(span, ts, boundaryType)
-	return b.addEvent(ctx, e, size)
-}
-
-func (b *blockingBuffer) addEvent(ctx context.Context, e Event, size int) error {
+func (b *blockingBuffer) addEvent(ctx context.Context, e Event) error {
 	be := bufferEntryPool.Get().(*bufferEntry)
 	be.e = e
-	be.alloc = int64(size)
+	be.qp = b.qp
+	be.alloc = int64(b.memMultiplier * float64(e.approxSize))
 
 	// Acquire the quota first.
 	err := b.qp.Acquire(ctx, be)
@@ -190,7 +177,6 @@ func (b *blockingBufferQuotaPool) release(e *bufferEntry) {
 	b.allocated -= e.alloc
 	*e = bufferEntry{}
 	bufferEntryPool.Put(e)
-	b.metrics.BufferEntriesOut.Inc(1)
 }
 
 // bufferEntry forms a linked list of elements in the buffer.
@@ -199,10 +185,37 @@ func (b *blockingBufferQuotaPool) release(e *bufferEntry) {
 type bufferEntry struct {
 	e Event
 
-	alloc int64        // bytes allocated from the quotapool
-	err   error        // error populated from under the quotapool
-	next  *bufferEntry // linked-list element
+	alloc int64                   // bytes allocated from the quotapool
+	qp    *quotapool.AbstractPool // pool for this allocation
+	err   error                   // error populated from under the quotapool
+	next  *bufferEntry            // linked-list element
 }
+
+// bufferEntryAlloc is a Resource associated with buffer entry allocation.
+type bufferEntryAlloc struct {
+	alloc *bufferEntry
+}
+
+func (a *bufferEntryAlloc) Release() {
+	if a.alloc != nil {
+		a.alloc.qp.Update(func(r quotapool.Resource) (shouldNotify bool) {
+			qp := r.(*blockingBufferQuotaPool)
+			qp.release(a.alloc)
+			return true
+		})
+	}
+}
+
+func (a *bufferEntryAlloc) Move() Resource {
+	if a.alloc == nil {
+		panic("cannot move already moved resource")
+	}
+	moved := &bufferEntryAlloc{a.alloc}
+	a.alloc = nil
+	return moved
+}
+
+var _ Resource = (*bufferEntryAlloc)(nil)
 
 var bufferEntryPool = sync.Pool{
 	New: func() interface{} {
