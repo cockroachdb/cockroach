@@ -282,21 +282,20 @@ func newInternalPlanner(
 	opts ...InternalPlannerParamsOption,
 ) (*planner, func()) {
 	// Default parameters which may be override by the supplied options.
-	params := &internalPlannerParams{
-		// The table collection used by the internal planner does not rely on the
-		// deprecatedDatabaseCache and there are no subscribers to the
-		// deprecatedDatabaseCache, so we can leave it uninitialized.
-		// Furthermore, we're not concerned about the efficiency of querying tables
-		// with user-defined types, hence the nil hydratedTables.
-		collection: descs.NewCollection(
+	params := &internalPlannerParams{}
+	for _, opt := range opts {
+		opt(params)
+	}
+	callerSuppliedDescsCollection := params.collection != nil
+	// We're not concerned about the efficiency of querying tables
+	// with user-defined types, hence the nil hydratedTables.
+	if !callerSuppliedDescsCollection {
+		params.collection = descs.NewCollection(
 			execCfg.Settings,
 			execCfg.LeaseManager,
 			nil, // hydratedTables
 			execCfg.VirtualSchemas,
-		),
-	}
-	for _, opt := range opts {
-		opt(params)
+		)
 	}
 
 	// We need a context that outlives all the uses of the planner (since the
@@ -385,15 +384,16 @@ func newInternalPlanner(
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create
 		// the context as explained at the top of the method.
-
-		// The collection will accumulate descriptors read during planning as well
-		// as type descriptors read during execution on the local node. Many users
-		// of the internal planner do set the `skipCache` flag on the resolver but
-		// this is not respected by type resolution underneath execution. That
-		// subtle details means that the type descriptor used by execution may be
-		// stale, but that must be okay. Correctness concerns aside, we must release
-		// the leases to ensure that we don't leak a descriptor lease.
-		p.Descriptors().ReleaseAll(ctx)
+		if !callerSuppliedDescsCollection {
+			// The collection will accumulate descriptors read during planning as well
+			// as type descriptors read during execution on the local node. Many users
+			// of the internal planner do set the `skipCache` flag on the resolver but
+			// this is not respected by type resolution underneath execution. That
+			// subtle details means that the type descriptor used by execution may be
+			// stale, but that must be okay. Correctness concerns aside, we must release
+			// the leases to ensure that we don't leak a descriptor lease.
+			p.Descriptors().ReleaseAll(ctx)
+		}
 
 		// Stop the memory monitor.
 		plannerMon.Stop(ctx)
