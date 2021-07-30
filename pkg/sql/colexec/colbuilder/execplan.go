@@ -1136,7 +1136,7 @@ func NewColOperator(
 				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0].Root, inputs[1].Root, leftTypes, rightTypes,
 				core.MergeJoiner.LeftOrdering.Columns, core.MergeJoiner.RightOrdering.Columns,
-				diskAccount,
+				diskAccount, evalCtx,
 			)
 			if err != nil {
 				return r, err
@@ -1196,7 +1196,7 @@ func NewColOperator(
 						// We must cast to the expected argument type.
 						castIdx := len(typs)
 						input, err = colexecbase.GetCastOperator(
-							streamingAllocator, input, int(idx), castIdx, typs[idx], expectedType,
+							streamingAllocator, input, int(idx), castIdx, typs[idx], expectedType, evalCtx,
 						)
 						if err != nil {
 							colexecerror.InternalError(errors.AssertionFailedf(
@@ -1469,7 +1469,7 @@ func NewColOperator(
 			if !actual.Identical(expected) {
 				castedIdx := len(typesWithCasts)
 				r.Root, err = colexecbase.GetCastOperator(
-					streamingAllocator, r.Root, i, castedIdx, actual, expected,
+					streamingAllocator, r.Root, i, castedIdx, actual, expected, evalCtx,
 				)
 				if err != nil {
 					return r, errors.AssertionFailedf("unexpectedly couldn't plan a cast although IsCastSupported returned true: %v", err)
@@ -1953,9 +1953,10 @@ func planCastOperator(
 	fromType *types.T,
 	toType *types.T,
 	factory coldata.ColumnFactory,
+	evalCtx *tree.EvalContext,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	outputIdx := len(columnTypes)
-	op, err = colexecbase.GetCastOperator(colmem.NewAllocator(ctx, acc, factory), input, inputIdx, outputIdx, fromType, toType)
+	op, err = colexecbase.GetCastOperator(colmem.NewAllocator(ctx, acc, factory), input, inputIdx, outputIdx, fromType, toType, evalCtx)
 	typs = appendOneType(columnTypes, toType)
 	return op, outputIdx, typs, err
 }
@@ -2017,7 +2018,7 @@ func planProjectionOperators(
 		if err != nil {
 			return nil, 0, nil, err
 		}
-		op, resultIdx, typs, err = planCastOperator(ctx, acc, typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), factory)
+		op, resultIdx, typs, err = planCastOperator(ctx, acc, typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), factory, evalCtx)
 		return op, resultIdx, typs, err
 	case *tree.FuncExpr:
 		var inputCols []int
@@ -2158,7 +2159,7 @@ func planProjectionOperators(
 				// is given). In such case, we need to plan a cast.
 				fromType, toType := typs[thenIdxs[i]], typs[caseOutputIdx]
 				caseOps[i], thenIdxs[i], typs, err = planCastOperator(
-					ctx, acc, typs, caseOps[i], thenIdxs[i], fromType, toType, factory,
+					ctx, acc, typs, caseOps[i], thenIdxs[i], fromType, toType, factory, evalCtx,
 				)
 				if err != nil {
 					return nil, resultIdx, typs, err
@@ -2184,7 +2185,7 @@ func planProjectionOperators(
 			elseIdx := thenIdxs[len(t.Whens)]
 			fromType, toType := typs[elseIdx], typs[caseOutputIdx]
 			elseOp, thenIdxs[len(t.Whens)], typs, err = planCastOperator(
-				ctx, acc, typs, elseOp, elseIdx, fromType, toType, factory,
+				ctx, acc, typs, elseOp, elseIdx, fromType, toType, factory, evalCtx,
 			)
 			if err != nil {
 				return nil, resultIdx, typs, err

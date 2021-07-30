@@ -51,6 +51,7 @@ type testUtils struct {
 	// testAllocator is an Allocator with an unlimited budget for use in tests.
 	testAllocator     *colmem.Allocator
 	testColumnFactory coldata.ColumnFactory
+	evalCtx           *tree.EvalContext
 
 	// testMemMonitor and testMemAcc are a test monitor with an unlimited budget
 	// and a memory account bound to it for use in tests.
@@ -75,6 +76,7 @@ func newTestUtils(ctx context.Context) *testUtils {
 	return &testUtils{
 		testAllocator:     testAllocator,
 		testColumnFactory: testColumnFactory,
+		evalCtx:           &evalCtx,
 		testMemMonitor:    testMemMonitor,
 		testMemAcc:        &memAcc,
 		testDiskMonitor:   testDiskMonitor,

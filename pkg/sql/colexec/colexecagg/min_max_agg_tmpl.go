@@ -43,7 +43,7 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ json.JSON
-	_ coldataext.Datum
+	_ = coldataext.CompareDatum
 )
 
 // Remove unused warning.

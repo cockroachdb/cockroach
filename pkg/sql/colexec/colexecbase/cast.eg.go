@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -42,7 +41,6 @@ import (
 // Workaround for bazel auto-generated code. goimports does not automatically
 // pick up the right packages when run within the bazel sandbox.
 var (
-	_ coldataext.Datum
 	_ duration.Duration
 	_ json.JSON
 	_ = lex.DecodeRawBytesToByteArrayAuto
@@ -75,6 +73,7 @@ func GetCastOperator(
 	resultIdx int,
 	fromType *types.T,
 	toType *types.T,
+	evalCtx *tree.EvalContext,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	base := castOpBase{
@@ -82,6 +81,7 @@ func GetCastOperator(
 		allocator:                allocator,
 		colIdx:                   colIdx,
 		outputIdx:                resultIdx,
+		evalCtx:                  evalCtx,
 	}
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{castOpBase: base}, nil
@@ -816,6 +816,7 @@ type castOpBase struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
+	evalCtx   *tree.EvalContext
 }
 
 func (c *castOpBase) Reset(ctx context.Context) {
@@ -943,12 +944,13 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 			if inputVec.Nulls().MaybeHasNulls() {
 				for scratchIdx, outputIdx := range sel[:n] {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
 						converted := scratch[scratchIdx]
 						if true && converted == tree.DNull {
 							outputNulls.SetNull(outputIdx)
 							continue
 						}
-						res, err := coldataext.PerformCast(outputCol, converted, toType)
+						res, err := tree.PerformCast(evalCtx, converted, toType)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -958,12 +960,13 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 			} else {
 				for scratchIdx, outputIdx := range sel[:n] {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
 						converted := scratch[scratchIdx]
 						if false && converted == tree.DNull {
 							outputNulls.SetNull(outputIdx)
 							continue
 						}
-						res, err := coldataext.PerformCast(outputCol, converted, toType)
+						res, err := tree.PerformCast(evalCtx, converted, toType)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -977,8 +980,9 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 				for idx := 0; idx < n; idx++ {
 					{
 						var (
-							scratchIdx int = idx
-							outputIdx  int = idx
+							scratchIdx int               = idx
+							outputIdx  int               = idx
+							evalCtx    *tree.EvalContext = c.evalCtx
 						)
 						//gcassert:bce
 						converted := scratch[scratchIdx]
@@ -986,7 +990,7 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 							outputNulls.SetNull(outputIdx)
 							continue
 						}
-						res, err := coldataext.PerformCast(outputCol, converted, toType)
+						res, err := tree.PerformCast(evalCtx, converted, toType)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -997,8 +1001,9 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 				for idx := 0; idx < n; idx++ {
 					{
 						var (
-							scratchIdx int = idx
-							outputIdx  int = idx
+							scratchIdx int               = idx
+							outputIdx  int               = idx
+							evalCtx    *tree.EvalContext = c.evalCtx
 						)
 						//gcassert:bce
 						converted := scratch[scratchIdx]
@@ -1006,7 +1011,7 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 							outputNulls.SetNull(outputIdx)
 							continue
 						}
-						res, err := coldataext.PerformCast(outputCol, converted, toType)
+						res, err := tree.PerformCast(evalCtx, converted, toType)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -1054,6 +1059,9 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1073,6 +1081,9 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1101,6 +1112,9 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1120,6 +1134,9 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1178,6 +1195,9 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1197,6 +1217,9 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1225,6 +1248,9 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1244,6 +1270,9 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1302,6 +1331,9 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1321,6 +1353,9 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1349,6 +1384,9 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1368,6 +1406,9 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1426,6 +1467,9 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1445,6 +1489,9 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1473,6 +1520,9 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1492,6 +1542,9 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1550,6 +1603,9 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1564,6 +1620,9 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1587,6 +1646,9 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1601,6 +1663,9 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1659,6 +1724,9 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1692,6 +1760,9 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1734,6 +1805,9 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1767,6 +1841,9 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1844,6 +1921,9 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1877,6 +1957,9 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1919,6 +2002,9 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1952,6 +2038,9 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2029,6 +2118,9 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2056,6 +2148,9 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2092,6 +2187,9 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2119,6 +2217,9 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2185,6 +2286,9 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2207,6 +2311,9 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2238,6 +2345,9 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2260,6 +2370,9 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2321,6 +2434,9 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2340,6 +2456,9 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2368,6 +2487,9 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2387,6 +2509,9 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2445,6 +2570,9 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2459,6 +2587,9 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2482,6 +2613,9 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2496,6 +2630,9 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2549,6 +2686,9 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2563,6 +2703,9 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2586,6 +2729,9 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2600,6 +2746,9 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2653,6 +2802,9 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2669,6 +2821,9 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2694,6 +2849,9 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2710,6 +2868,9 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2765,6 +2926,9 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2785,6 +2949,9 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2814,6 +2981,9 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2834,6 +3004,9 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2893,6 +3066,9 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2909,6 +3085,9 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2934,6 +3113,9 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2950,6 +3132,9 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3005,6 +3190,9 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3025,6 +3213,9 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3054,6 +3245,9 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3074,6 +3268,9 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3133,6 +3330,9 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3147,6 +3347,9 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3170,6 +3373,9 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3184,6 +3390,9 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3237,6 +3446,9 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3253,6 +3465,9 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3278,6 +3493,9 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3294,6 +3512,9 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3349,6 +3570,9 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3369,6 +3593,9 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3398,6 +3625,9 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3418,6 +3648,9 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3477,6 +3710,9 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3493,6 +3729,9 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3518,6 +3757,9 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3534,6 +3776,9 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3589,6 +3834,9 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3609,6 +3857,9 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3638,6 +3889,9 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3658,6 +3912,9 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3717,6 +3974,9 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3737,6 +3997,9 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3766,6 +4029,9 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3786,6 +4052,9 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3845,6 +4114,9 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3861,6 +4133,9 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3886,6 +4161,9 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3902,6 +4180,9 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3957,6 +4238,9 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3977,6 +4261,9 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4006,6 +4293,9 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4026,6 +4316,9 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4085,6 +4378,9 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4101,6 +4397,9 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4126,6 +4425,9 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4142,6 +4444,9 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4197,6 +4502,9 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4213,6 +4521,9 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4238,6 +4549,9 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4254,6 +4568,9 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4309,6 +4626,9 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4331,6 +4651,9 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4362,6 +4685,9 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4384,6 +4710,9 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4445,6 +4774,9 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4464,6 +4796,9 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4492,6 +4827,9 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4511,6 +4849,9 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4569,6 +4910,9 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4588,6 +4932,9 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4616,6 +4963,9 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4635,6 +4985,9 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4693,6 +5046,9 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4712,6 +5068,9 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4740,6 +5099,9 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4759,6 +5121,9 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4817,6 +5182,9 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4837,6 +5205,9 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4866,6 +5237,9 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4886,6 +5260,9 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4945,6 +5322,9 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4965,6 +5345,9 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4994,6 +5377,9 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5014,6 +5400,9 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5073,6 +5462,9 @@ func (c *castDateIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5087,6 +5479,9 @@ func (c *castDateIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5110,6 +5505,9 @@ func (c *castDateIntOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5124,6 +5522,9 @@ func (c *castDateIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5177,6 +5578,9 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5193,6 +5597,9 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5218,6 +5625,9 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5234,6 +5644,9 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5289,6 +5702,9 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5309,6 +5725,9 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5338,6 +5757,9 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5358,6 +5780,9 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5417,6 +5842,9 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5437,6 +5865,9 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -5462,6 +5893,9 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5482,6 +5916,9 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -5537,6 +5974,9 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5557,6 +5997,9 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -5584,6 +6027,9 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5604,6 +6050,9 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -5661,6 +6110,9 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5681,6 +6133,9 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -5706,6 +6161,9 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5726,6 +6184,9 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -5781,6 +6242,9 @@ func (c *castStringStringOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5821,6 +6285,9 @@ func (c *castStringStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -5866,6 +6333,9 @@ func (c *castStringStringOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5906,6 +6376,9 @@ func (c *castStringStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -5981,6 +6454,9 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6001,6 +6477,9 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -6026,6 +6505,9 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6046,6 +6528,9 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -6101,6 +6586,9 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6126,6 +6614,9 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -6156,6 +6647,9 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6181,6 +6675,9 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -6242,6 +6739,9 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6252,7 +6752,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 							var r bool
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6264,6 +6764,9 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6275,7 +6778,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 							var r bool
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6293,6 +6796,9 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6303,7 +6809,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 							var r bool
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6315,6 +6821,9 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6326,7 +6835,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 							var r bool
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6375,6 +6884,9 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6385,7 +6897,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 							var r int16
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6397,6 +6909,9 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6408,7 +6923,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 							var r int16
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6426,6 +6941,9 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6436,7 +6954,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 							var r int16
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6448,6 +6966,9 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6459,7 +6980,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 							var r int16
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6508,6 +7029,9 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6518,7 +7042,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 							var r int32
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6530,6 +7054,9 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6541,7 +7068,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 							var r int32
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6559,6 +7086,9 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6569,7 +7099,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 							var r int32
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6581,6 +7111,9 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6592,7 +7125,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 							var r int32
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6641,6 +7174,9 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6651,7 +7187,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6663,6 +7199,9 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6674,7 +7213,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6692,6 +7231,9 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6702,7 +7244,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6714,6 +7256,9 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6725,7 +7270,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6774,6 +7319,9 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6784,7 +7332,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 							var r float64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6796,6 +7344,9 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6807,7 +7358,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 							var r float64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6825,6 +7376,9 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6835,7 +7389,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 							var r float64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6847,6 +7401,9 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6858,7 +7415,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 							var r float64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6907,6 +7464,9 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6917,7 +7477,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 							var r apd.Decimal
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6929,6 +7489,9 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6940,7 +7503,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 							var r apd.Decimal
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6958,6 +7521,9 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6968,7 +7534,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 							var r apd.Decimal
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -6980,6 +7546,9 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6991,7 +7560,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 							var r apd.Decimal
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7040,6 +7609,9 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7050,7 +7622,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7062,6 +7634,9 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7073,7 +7648,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7091,6 +7666,9 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7101,7 +7679,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7113,6 +7691,9 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7124,7 +7705,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7173,6 +7754,9 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7183,7 +7767,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 							var r time.Time
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7195,6 +7779,9 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7206,7 +7793,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 							var r time.Time
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7224,6 +7811,9 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7234,7 +7824,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 							var r time.Time
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7246,6 +7836,9 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7257,7 +7850,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 							var r time.Time
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7306,6 +7899,9 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7316,7 +7912,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 							var r duration.Duration
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7328,6 +7924,9 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7339,7 +7938,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 							var r duration.Duration
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7357,6 +7956,9 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7367,7 +7969,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 							var r duration.Duration
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7379,6 +7981,9 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7390,7 +7995,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 							var r duration.Duration
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7439,6 +8044,9 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7449,7 +8057,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7461,6 +8069,9 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7471,7 +8082,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7488,6 +8099,9 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7498,7 +8112,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7510,6 +8124,9 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7520,7 +8137,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7568,6 +8185,9 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7578,7 +8198,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7590,6 +8210,9 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7600,7 +8223,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7617,6 +8240,9 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7627,7 +8253,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7639,6 +8265,9 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7649,7 +8278,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7697,6 +8326,9 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7707,7 +8339,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 							var r time.Time
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7719,6 +8351,9 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7730,7 +8365,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 							var r time.Time
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7748,6 +8383,9 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7758,7 +8396,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 							var r time.Time
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7770,6 +8408,9 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7781,7 +8422,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 							var r time.Time
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7830,6 +8471,9 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7840,7 +8484,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7852,6 +8496,9 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7862,7 +8509,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7879,6 +8526,9 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7889,7 +8539,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7901,6 +8551,9 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7911,7 +8564,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 							var r []byte
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7959,6 +8612,9 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7969,7 +8625,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 							var r json.JSON
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -7981,6 +8637,9 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7991,7 +8650,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 							var r json.JSON
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -8008,6 +8667,9 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8018,7 +8680,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 							var r json.JSON
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -8030,6 +8692,9 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -8040,7 +8705,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 							var r json.JSON
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -8087,6 +8752,9 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8097,7 +8765,7 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 							var r interface{}
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -8115,6 +8783,9 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -8125,7 +8796,7 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 							var r interface{}
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -8148,6 +8819,9 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 				outputNulls.UnsetNulls()
 				if sel != nil {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8158,7 +8832,7 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 							var r interface{}
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -8176,6 +8850,9 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 					}
 				} else {
 					{
+						var evalCtx *tree.EvalContext = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -8186,7 +8863,7 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 							var r interface{}
 
 							{
-								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, toType)
+								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}

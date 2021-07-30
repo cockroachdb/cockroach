@@ -115,7 +115,7 @@ func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
 	if toIntWidth == anyWidth {
 		toIntWidth = 64
 	}
-	return func(to, from, fromCol, toType string) string {
+	return func(to, from, evalCtx, toType string) string {
 		// convStr is a format string expecting three arguments:
 		// 1. the code snippet that performs an assigment of int64 local
 		//    variable named '_i' to the result, possibly performing the bounds
@@ -146,7 +146,7 @@ func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
 		}
 		return fmt.Sprintf(
 			convStr,
-			getIntToIntCastFunc(64 /* fromWidth */, toIntWidth)(to, "_i" /* from */, fromCol, toType),
+			getIntToIntCastFunc(64 /* fromWidth */, toIntWidth)(to, "_i" /* from */, evalCtx, toType),
 			from,
 			errOutOfRange,
 		)
@@ -363,31 +363,31 @@ func jsonToString(to, from, _, toType string) string {
 func getDatumToNativeCastFunc(
 	nonDatumPhysicalRepresentation string,
 ) func(string, string, string, string) string {
-	return func(to, from, fromCol, toType string) string {
+	return func(to, from, evalCtx, toType string) string {
 		convStr := `
 		{
-			_castedDatum, err := %[2]s.(*coldataext.Datum).Cast(%[3]s, %[4]s)
+			_castedDatum, err := tree.PerformCast(%[3]s, %[2]s.(tree.Datum), %[4]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
 			%[1]s = converter(_castedDatum).(%[5]s)
 		}
 	`
-		return fmt.Sprintf(convStr, to, from, fromCol, toType, nonDatumPhysicalRepresentation)
+		return fmt.Sprintf(convStr, to, from, evalCtx, toType, nonDatumPhysicalRepresentation)
 	}
 }
 
-func datumToDatum(to, from, fromCol, toType string) string {
+func datumToDatum(to, from, evalCtx, toType string) string {
 	convStr := `
 		{
-			_castedDatum, err := %[2]s.(*coldataext.Datum).Cast(%[3]s, %[4]s)
+			_castedDatum, err := tree.PerformCast(%[3]s, %[2]s.(tree.Datum), %[4]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
 			%[1]s = _castedDatum
 		}
 	`
-	return fmt.Sprintf(convStr, to, from, fromCol, toType)
+	return fmt.Sprintf(convStr, to, from, evalCtx, toType)
 }
 
 // The structs below form 4-leveled hierarchy (similar to two-argument
@@ -499,8 +499,8 @@ func (i castToWidthTmplInfo) TypeName() string {
 	return getTypeName(i.toType)
 }
 
-func (i castToWidthTmplInfo) Cast(to, from, fromCol, toType string) string {
-	return i.CastFn(to, from, fromCol, toType)
+func (i castToWidthTmplInfo) Cast(to, from, evalCtx, toType string) string {
+	return i.CastFn(to, from, evalCtx, toType)
 }
 
 func (i castToWidthTmplInfo) Sliceable() bool {
@@ -523,8 +523,8 @@ func (i castDatumToWidthTmplInfo) TypeName() string {
 	return getTypeName(i.toType)
 }
 
-func (i castDatumToWidthTmplInfo) Cast(to, from, fromCol, toType string) string {
-	return i.CastFn(to, from, fromCol, toType)
+func (i castDatumToWidthTmplInfo) Cast(to, from, evalCtx, toType string) string {
+	return i.CastFn(to, from, evalCtx, toType)
 }
 
 func (i castDatumToWidthTmplInfo) Sliceable() bool {
@@ -535,8 +535,8 @@ func (i castBetweenDatumsTmplInfo) TypeName() string {
 	return datumVecTypeName
 }
 
-func (i castBetweenDatumsTmplInfo) Cast(to, from, fromCol, toType string) string {
-	return datumToDatum(to, from, fromCol, toType)
+func (i castBetweenDatumsTmplInfo) Cast(to, from, evalCtx, toType string) string {
+	return datumToDatum(to, from, evalCtx, toType)
 }
 
 func (i castBetweenDatumsTmplInfo) Sliceable() bool {

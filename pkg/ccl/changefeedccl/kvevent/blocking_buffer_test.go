@@ -10,8 +10,6 @@ package kvevent_test
 
 import (
 	"context"
-	"fmt"
-	"math"
 	"math/rand"
 	"sync"
 	"testing"
@@ -21,65 +19,96 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
-func makeKVs(t *testing.T, count int) []roachpb.KeyValue {
-	kv := func(tableID uint32, k, v string, ts hlc.Timestamp) roachpb.KeyValue {
-		vDatum := tree.DString(k)
-		key, err := rowenc.EncodeTableKey(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
-		require.NoError(t, err)
+func makeKV(t *testing.T, rnd *rand.Rand) roachpb.KeyValue {
+	const tableID = 42
 
-		return roachpb.KeyValue{
-			Key: key,
-			Value: roachpb.Value{
-				RawBytes:  []byte(v),
-				Timestamp: ts,
-			},
-		}
-	}
+	key, err := rowenc.EncodeTableKey(
+		keys.SystemSQLCodec.TablePrefix(tableID),
+		randgen.RandDatumSimple(rnd, types.String),
+		encoding.Ascending,
+	)
+	require.NoError(t, err)
 
-	ret := make([]roachpb.KeyValue, count)
-	for i := 0; i < count; i++ {
-		ret[i] = kv(42, "a", fmt.Sprintf("b-%d", count), hlc.Timestamp{WallTime: int64(count + 1)})
+	return roachpb.KeyValue{
+		Key: key,
+		Value: roachpb.Value{
+			RawBytes:  randutil.RandBytes(rnd, 256),
+			Timestamp: hlc.Timestamp{WallTime: 1},
+		},
 	}
-	return ret
+}
+
+func getBoundAccountWithBudget(budget int64) (account mon.BoundAccount, cleanup func()) {
+	mm := mon.NewMonitorWithLimit(
+		"test-mm", mon.MemoryResource, budget,
+		nil, nil,
+		128 /* small allocation increment */, 100,
+		cluster.MakeTestingClusterSettings())
+	mm.Start(context.Background(), nil, mon.MakeStandaloneBudget(budget))
+	return mm.MakeBoundAccount(), func() { mm.Stop(context.Background()) }
 }
 
 func TestBlockingBuffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	metrics := kvevent.MakeMetrics(time.Minute)
-	settings := cluster.MakeTestingClusterSettings()
-	mm := mon.NewUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource,
-		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
-	)
+	ba, release := getBoundAccountWithBudget(4096)
+	defer release()
 
-	buf := kvevent.NewMemBuffer(mm.MakeBoundAccount(), &metrics)
-	kvCount := rand.Intn(20) + 1
-	kvs := makeKVs(t, kvCount)
-	ctx := context.Background()
+	// Arrange for mem buffer to notify us when it waits for resources.
+	var waitMu syncutil.Mutex
+	waited := sync.NewCond(&waitMu)
+	waitForBlockedBuffer := func() {
+		waitMu.Lock()
+		waited.Wait()
+		waitMu.Unlock()
+	}
+	notifyWait := func(ctx context.Context, poolName string, r quotapool.Request) {
+		waited.Signal()
+	}
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		for _, kv := range kvs {
-			err := buf.AddKV(ctx, kv, roachpb.Value{}, hlc.Timestamp{})
-			require.NoError(t, err)
-		}
-		wg.Done()
+	buf := kvevent.NewMemBuffer(ba, &metrics, quotapool.OnWaitStart(notifyWait))
+	defer buf.Close(context.Background())
+
+	producerCtx, stopProducers := context.WithCancel(context.Background())
+	wg := ctxgroup.WithContext(producerCtx)
+	defer func() {
+		_ = wg.Wait() // Ignore error -- this group returns context cancellation.
 	}()
-	wg.Add(1)
-	go func() {
-		for i := 0; i < kvCount; i++ {
-			_, err := buf.Get(ctx)
-			require.NoError(t, err)
+
+	// Start adding KVs to the buffer until we block.
+	wg.GoCtx(func(ctx context.Context) error {
+		rnd, _ := randutil.NewTestPseudoRand()
+		for {
+			err := buf.AddKV(ctx, makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{})
+			if err != nil {
+				return nil
+			}
 		}
-		wg.Done()
-	}()
-	wg.Wait()
+	})
+
+	waitForBlockedBuffer()
+
+	// Keep consuming events until we get pushback metrics updated.
+	for metrics.BufferPushbackNanos.Count() == 0 {
+		_, err := buf.Get(context.Background())
+		require.NoError(t, err)
+	}
+	stopProducers()
 }

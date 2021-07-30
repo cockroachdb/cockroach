@@ -16,6 +16,9 @@ type EnvelopeType string
 // FormatType configures the encoding format.
 type FormatType string
 
+// OnErrorType configures the job behavior when an error occurs.
+type OnErrorType string
+
 // SchemaChangeEventClass defines a set of schema change event types which
 // trigger the action defined by the SchemaChangeEventPolicy.
 type SchemaChangeEventClass string
@@ -44,6 +47,7 @@ const (
 	OptProtectDataFromGCOnPause = `protect_data_from_gc_on_pause`
 	OptWebhookAuthHeader        = `webhook_auth_header`
 	OptWebhookClientTimeout     = `webhook_client_timeout`
+	OptOnError                  = `on_error`
 
 	// OptSchemaChangeEventClassColumnChange corresponds to all schema change
 	// events which add or remove any column.
@@ -87,6 +91,9 @@ const (
 	OptFormatJSON   FormatType = `json`
 	OptFormatAvro   FormatType = `experimental_avro`
 	OptFormatNative FormatType = `native`
+
+	OptOnErrorFail  OnErrorType = `fail`
+	OptOnErrorPause OnErrorType = `pause`
 
 	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
 	OptKafkaSinkConfig = `kafka_sink_config`
@@ -147,4 +154,5 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptKafkaSinkConfig:          sql.KVStringOptRequireValue,
 	OptWebhookAuthHeader:        sql.KVStringOptRequireValue,
 	OptWebhookClientTimeout:     sql.KVStringOptRequireValue,
+	OptOnError:                  sql.KVStringOptRequireValue,
 }

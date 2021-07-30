@@ -166,7 +166,7 @@ func (c datumCustomizer) getHashAssignFunc() assignFunc {
 		// Note that this overload assumes that there exists
 		//   var datumAlloc *rowenc.DatumAlloc.
 		// in the scope.
-		return fmt.Sprintf(`b := %s.(*coldataext.Datum).Hash(datumAlloc)`, vElem) +
+		return fmt.Sprintf(`b := coldataext.Hash(%s.(tree.Datum), datumAlloc)`, vElem) +
 			fmt.Sprintf(hashByteSliceString, targetElem, "b")
 	}
 }

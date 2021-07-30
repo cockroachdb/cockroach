@@ -101,7 +101,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 		leftMJSource, rightMJSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-		testDiskAcc,
+		testDiskAcc, evalCtx,
 	)
 	if err != nil {
 		t.Fatal("error in merge join op constructor", err)

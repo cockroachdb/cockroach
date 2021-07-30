@@ -351,7 +351,7 @@ type twoArgsResolvedOverloadRightWidthInfo struct {
 
 type assignFunc func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string
 type compareFunc func(targetElem, leftElem, rightElem, leftCol, rightCol string) string
-type castFunc func(to, from, fromCol, toType string) string
+type castFunc func(to, from, evalCtx, toType string) string
 
 // Assign produces a Go source string that assigns the "targetElem" variable to
 // the result of applying the overload to the two inputs, "leftElem" and
@@ -573,7 +573,7 @@ if %[2]s != nil {
 		return fmt.Sprintf(`
 		var %[1]s uintptr
 		if %[2]s != nil {
-			%[1]s = %[2]s.(*coldataext.Datum).Size()
+			%[1]s = %[2]s.(tree.Datum).Size()
 		}`, target, value)
 	default:
 		return fmt.Sprintf(`var %s uintptr`, target)

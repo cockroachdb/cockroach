@@ -11,6 +11,7 @@ package cdctest
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
@@ -67,6 +68,10 @@ type EnterpriseTestFeed interface {
 	Pause() error
 	// Resume restarts the feed from the last changefeed-wide resolved timestamp.
 	Resume() error
+	// WaitForStatus waits for the provided func to return true, or returns an error.
+	WaitForStatus(func(s jobs.Status) bool) error
+	// FetchTerminalJobErr retrieves the error message from changefeed job.
+	FetchTerminalJobErr() error
 	// Details returns changefeed details for this feed.
 	Details() (*jobspb.ChangefeedDetails, error)
 }
