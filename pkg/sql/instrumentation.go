@@ -169,7 +169,7 @@ func (ih *instrumentationHelper) Setup(
 	// We don't know yet if we will hit an error, so we assume we don't. The
 	// worst that can happen is that for statements that always error out, we
 	// will always save the tree plan.
-	stats, _ := appStats.getStatsForStmt(fingerprint, implicitTxn, nil /* error */, false /* createIfNonexistent */)
+	stats, _ := appStats.getStatsForStmt(fingerprint, implicitTxn, p.SessionData().Database, nil /* error */, false /* createIfNonexistent */)
 
 	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(stats)
 
@@ -265,7 +265,7 @@ func (ih *instrumentationHelper) Finish(
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
 	} else {
 		// TODO(radu): this should be unified with other stmt stats accesses.
-		stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
+		stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, p.SessionData().Database, retErr, false)
 		if stmtStats != nil {
 			stmtStats.recordExecStats(queryLevelStats)
 			if collectTxnExecStats || ih.implicitTxn {

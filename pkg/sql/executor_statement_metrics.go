@@ -225,7 +225,7 @@ func (ex *connExecutor) recordStatementSummary(
 		flags.IsSet(planFlagImplicitTxn),
 		flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 		automaticRetryCount, rowsAffected, err,
-		parseLat, planLat, runLat, svcLat, execOverhead, stats,
+		parseLat, planLat, runLat, svcLat, execOverhead, stats, planner,
 	)
 
 	// Do some transaction level accounting for the transaction this statement is

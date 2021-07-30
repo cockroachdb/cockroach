@@ -43,6 +43,7 @@ type stmtKey struct {
 	anonymizedStmt string
 	failed         bool
 	implicitTxn    bool
+	database       string
 }
 
 const invalidStmtID = 0
@@ -94,6 +95,10 @@ type stmtStats struct {
 		// fullScan records whether the last instance of this statement used a
 		// full table index scan.
 		fullScan bool
+
+		// database records the database from the session the statement
+		// was executed from
+		database string
 
 		data roachpb.StatementStatistics
 	}
@@ -195,6 +200,7 @@ func (a *appStats) recordStatement(
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
+	planner *planner,
 ) roachpb.StmtID {
 	createIfNonExistent := true
 	// If the statement is below the latency threshold, or stats aren't being
@@ -207,7 +213,7 @@ func (a *appStats) recordStatement(
 
 	// Get the statistics object.
 	s, stmtID := a.getStatsForStmt(
-		stmt.AnonymizedStr, implicitTxn,
+		stmt.AnonymizedStr, implicitTxn, planner.SessionData().Database,
 		err, createIfNonExistent,
 	)
 
@@ -245,6 +251,7 @@ func (a *appStats) recordStatement(
 	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(stats.bytesRead))
 	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(stats.rowsRead))
 	s.mu.data.LastExecTimestamp = timeutil.Now()
+	s.mu.database = planner.SessionData().Database
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
@@ -262,7 +269,7 @@ func (a *appStats) recordStatement(
 // stat object is returned or not, we always return the correct stmtID
 // for the given stmt.
 func (a *appStats) getStatsForStmt(
-	anonymizedStmt string, implicitTxn bool, err error, createIfNonexistent bool,
+	anonymizedStmt string, implicitTxn bool, database string, err error, createIfNonexistent bool,
 ) (*stmtStats, roachpb.StmtID) {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
@@ -270,6 +277,7 @@ func (a *appStats) getStatsForStmt(
 		anonymizedStmt: anonymizedStmt,
 		failed:         err != nil,
 		implicitTxn:    implicitTxn,
+		database:       database,
 	}
 
 	// We first try and see if we can get by without creating a new entry for this
@@ -622,7 +630,7 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 
 func constructStatementIDFromStmtKey(key stmtKey) roachpb.StmtID {
 	return roachpb.ConstructStatementID(
-		key.anonymizedStmt, key.failed, key.implicitTxn,
+		key.anonymizedStmt, key.failed, key.implicitTxn, key.database,
 	)
 }
 
@@ -708,6 +716,7 @@ func (s *sqlStats) getStmtStats(
 				distSQLUsed := stats.mu.distSQLUsed
 				vectorized := stats.mu.vectorized
 				fullScan := stats.mu.fullScan
+				database := stats.mu.database
 				stats.mu.Unlock()
 
 				k := roachpb.StatementStatisticsKey{
@@ -719,6 +728,7 @@ func (s *sqlStats) getStmtStats(
 					FullScan:    fullScan,
 					Failed:      q.failed,
 					App:         maybeHashedAppName,
+					Database:    database,
 				}
 
 				if scrub {
