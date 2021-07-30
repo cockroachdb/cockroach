@@ -127,13 +127,13 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 	req := roachpb.TokenBucketRequest{
 		TenantID:   uint64(tenantID),
 		InstanceID: args.InstanceID,
-		ConsumptionSinceLastRequest: roachpb.TokenBucketRequest_Consumption{
-			RU:               args.Consumption.RU,
-			ReadRequests:     args.Consumption.ReadReq,
-			ReadBytes:        args.Consumption.ReadBytes,
-			WriteRequests:    args.Consumption.WriteReq,
-			WriteBytes:       args.Consumption.WriteBytes,
-			SQLPodCPUSeconds: args.Consumption.SQLPodsCPUUsage,
+		ConsumptionSinceLastRequest: roachpb.TenantConsumption{
+			RU:                args.Consumption.RU,
+			ReadRequests:      args.Consumption.ReadReq,
+			ReadBytes:         args.Consumption.ReadBytes,
+			WriteRequests:     args.Consumption.WriteReq,
+			WriteBytes:        args.Consumption.WriteBytes,
+			SQLPodsCPUSeconds: args.Consumption.SQLPodsCPUUsage,
 		},
 	}
 	res := ts.tenantUsage.TokenBucketRequest(
