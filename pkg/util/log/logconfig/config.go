@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
-	"github.com/dustin/go-humanize"
-	"gopkg.in/yaml.v2"
+	humanize "github.com/dustin/go-humanize"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // DefaultFileFormat is the entry format for file sinks when not
@@ -422,6 +422,12 @@ type HTTPDefaults struct {
 	// Timeout is the HTTP timeout.
 	// Defaults to 0 for no timeout.
 	Timeout *time.Duration `yaml:",omitempty"`
+
+	// DisableKeepAlives causes the logging sink to re-establish a new
+	// connection for every outgoing log message. This option is
+	// intended for testing only and can cause excessive network
+	// overhead in production systems.
+	DisableKeepAlives *bool `yaml:",omitempty"`
 
 	CommonSinkConfig `yaml:",inline"`
 }

@@ -14,56 +14,49 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/errors"
 )
 
 // TODO: HTTP requests should be bound to context via http.NewRequestWithContext
 // Proper logging context to be decided/designed.
 
-var insecureTransport http.RoundTripper = &http.Transport{
-	// Same as DefaultTransport...
-	Proxy: http.ProxyFromEnvironment,
-	DialContext: (&net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}).DialContext,
-	ForceAttemptHTTP2:     true,
-	MaxIdleConns:          100,
-	IdleConnTimeout:       90 * time.Second,
-	TLSHandshakeTimeout:   10 * time.Second,
-	ExpectContinueTimeout: 1 * time.Second,
-	// ...except insecure TLS.
-	TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-}
-
 type httpSinkOptions struct {
-	unsafeTLS bool
-	timeout   time.Duration
-	method    string
+	unsafeTLS         bool
+	timeout           time.Duration
+	method            string
+	disableKeepAlives bool
 }
 
-func newHTTPSink(url string, opt httpSinkOptions) *httpSink {
+func newHTTPSink(url string, opt httpSinkOptions) (*httpSink, error) {
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.AssertionFailedf("http.DefaultTransport is not a http.Transport: %T", http.DefaultTransport)
+	}
+	transport = transport.Clone()
+	transport.DisableKeepAlives = opt.disableKeepAlives
 	hs := &httpSink{
 		client: http.Client{
-			Transport: http.DefaultTransport,
-			Timeout:   opt.timeout},
+			Transport: transport,
+			Timeout:   opt.timeout,
+		},
 		address:   url,
-		doRequest: doPost}
+		doRequest: doPost,
+	}
 
 	if opt.unsafeTLS {
-		hs.client.Transport = insecureTransport
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	if opt.method == http.MethodGet {
 		hs.doRequest = doGet
 	}
 
-	return hs
+	return hs, nil
 }
 
 type httpSink struct {
