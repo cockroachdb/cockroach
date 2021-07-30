@@ -1075,6 +1075,12 @@ func (r *testRunner) getWork(
 		if err := c.RunL(ctx, l, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
 			return testToRunRes{}, nil, errors.Wrapf(err, "failed to remove perf artifacts dir")
 		}
+		if c.localCertsDir != "" {
+			if err := os.RemoveAll(c.localCertsDir); err != nil {
+				l.Errorf("failed to remove local certs in %s: %s", c.localCertsDir, err)
+			}
+			c.localCertsDir = ""
+		}
 		// Overwrite the spec of the cluster with the one coming from the test. In
 		// particular, this overwrites the reuse policy to reflect what the test
 		// intends to do with it.
