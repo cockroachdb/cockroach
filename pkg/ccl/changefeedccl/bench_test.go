@@ -132,8 +132,13 @@ func makeBenchSink() *benchSink {
 }
 
 func (s *benchSink) EmitRow(
-	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topicDescr TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	r kvevent.Resource,
 ) error {
+	defer r.Release()
 	return s.emit(int64(len(key) + len(value)))
 }
 func (s *benchSink) EmitResolvedTimestamp(ctx context.Context, e Encoder, ts hlc.Timestamp) error {
@@ -241,12 +246,12 @@ func createBenchmarkChangefeed(
 	eventConsumer := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
 		sink, encoder, details, TestingKnobs{})
 	tickFn := func(ctx context.Context) (*jobspb.ResolvedSpan, error) {
-		event, err := buf.Get(ctx)
+		event, sr, err := buf.Get(ctx)
 		if err != nil {
 			return nil, err
 		}
 		if event.Type() == kvevent.TypeKV {
-			if err := eventConsumer.ConsumeEvent(ctx, event); err != nil {
+			if err := eventConsumer.ConsumeEvent(ctx, event, sr); err != nil {
 				return nil, err
 			}
 		}
