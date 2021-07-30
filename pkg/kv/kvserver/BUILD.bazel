@@ -99,6 +99,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/cloud",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
@@ -153,7 +154,6 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
         "//pkg/storage",
-        "//pkg/storage/cloud",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/util",
