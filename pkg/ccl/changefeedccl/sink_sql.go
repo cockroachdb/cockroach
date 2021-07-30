@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -120,8 +121,14 @@ func (s *sqlSink) Dial() error {
 
 // EmitRow implements the Sink interface.
 func (s *sqlSink) EmitRow(
-	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topicDescr TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
+	defer alloc.Release(ctx)
+
 	topic := s.targetNames[topicDescr.GetID()]
 	if _, ok := s.topics[topic]; !ok {
 		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
