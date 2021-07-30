@@ -81,6 +81,10 @@ func (u *URL) parseOptions(extra url.Values) error {
 		}
 	}
 
+	if _, hasDbOpt := q["database"]; hasDbOpt {
+		u.database = getVal(q, "database")
+		delete(q, "database")
+	}
 	if _, hasUserOpt := q["user"]; hasUserOpt {
 		u.username = getVal(q, "user")
 		delete(q, "user")
