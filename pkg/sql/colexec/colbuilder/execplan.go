@@ -848,6 +848,11 @@ func NewColOperator(
 
 			if needHash {
 				opName := "hash-aggregator"
+				outputUnlimitedAllocator := colmem.NewAllocator(
+					ctx,
+					result.createUnlimitedMemAccount(ctx, flowCtx, opName+"-output", spec.ProcessorID),
+					factory,
+				)
 				// We have separate unit tests that instantiate the in-memory
 				// hash aggregators, so we don't need to look at
 				// args.TestingKnobs.DiskSpillingDisabled and always instantiate
@@ -865,16 +870,23 @@ func NewColOperator(
 					)
 					newAggArgs.MemAccount = hashAggregatorUnlimitedMemAccount
 					evalCtx.SingleDatumAggMemAccount = hashAggregatorUnlimitedMemAccount
+					maxOutputBatchMemSize := execinfra.GetWorkMemLimit(flowCtx)
 					// The second argument is nil because we disable the
 					// tracking of the input tuples.
-					result.Root, err = colexec.NewHashAggregator(newAggArgs, nil /* newSpillingQueueArgs */)
+					result.Root, err = colexec.NewHashAggregator(
+						newAggArgs, nil, /* newSpillingQueueArgs */
+						outputUnlimitedAllocator, maxOutputBatchMemSize,
+					)
 				} else {
 					// We will divide the available memory equally between the
 					// two usages - the hash aggregation itself and the input
 					// tuples tracking.
 					totalMemLimit := execinfra.GetWorkMemLimit(flowCtx)
+					// We will give 20% of the hash aggregation budget to the
+					// output batch.
+					maxOutputBatchMemSize := totalMemLimit / 10
 					hashAggregatorMemAccount, hashAggregatorMemMonitorName := result.createMemAccountForSpillStrategyWithLimit(
-						ctx, flowCtx, totalMemLimit/2, opName, spec.ProcessorID,
+						ctx, flowCtx, totalMemLimit/2-maxOutputBatchMemSize, opName, spec.ProcessorID,
 					)
 					spillingQueueMemMonitorName := hashAggregatorMemMonitorName + "-spilling-queue"
 					// We need to create a separate memory account for the
@@ -899,6 +911,8 @@ func NewColOperator(
 							FDSemaphore:        args.FDSemaphore,
 							DiskAcc:            result.createDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID),
 						},
+						outputUnlimitedAllocator,
+						maxOutputBatchMemSize,
 					)
 					if err != nil {
 						return r, err
@@ -930,6 +944,13 @@ func NewColOperator(
 								&newAggArgs,
 								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaOpName, factory),
 								result.createDiskAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID),
+								// Note that here we can use the same allocator
+								// object as we passed to the in-memory hash
+								// aggregator because only one (either in-memory
+								// or external) operator will reach the output
+								// state.
+								outputUnlimitedAllocator,
+								maxOutputBatchMemSize,
 							)
 						},
 						args.TestingKnobs.SpillingCallbackFn,
