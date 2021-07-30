@@ -11,7 +11,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -88,6 +87,12 @@ var debugZipTablesPerCluster = []string{
 	"system.namespace",
 	"system.scheduled_jobs",
 
+	// The synthetic SQL CREATE statements for all tables.
+	// Note the "". to collect across all databases.
+	`"".crdb_internal.create_statements`,
+	// Ditto, for CREATE TYPE.
+	`"".crdb_internal.create_type_statements`,
+
 	"crdb_internal.kv_node_liveness",
 	"crdb_internal.kv_node_status",
 	"crdb_internal.kv_store_status",
@@ -102,7 +107,6 @@ var debugZipTablesPerCluster = []string{
 
 // collectClusterData runs the data collection that only needs to
 // occur once for the entire cluster.
-// Also see collectSchemaData below.
 func (zc *debugZipContext) collectClusterData(
 	ctx context.Context, firstNodeDetails *serverpb.DetailsResponse,
 ) (nodeList []statuspb.NodeStatus, livenessByNodeID nodeLivenesses, err error) {
@@ -166,79 +170,4 @@ func (zc *debugZipContext) collectClusterData(
 	}
 
 	return nodeList, livenessByNodeID, nil
-}
-
-// collectSchemaData collects the SQL logical schema once, for the entire cluster
-// using the first node. This runs at the end, after all the per-node queries have
-// been completed, because it has a higher likelihood to fail.
-func (zc *debugZipContext) collectSchemaData(ctx context.Context) error {
-	// Run the debug doctor code over the schema.
-	{
-		var doctorData bytes.Buffer
-		s := zc.clusterPrinter.start("doctor examining cluster...")
-		descs, ns, jobs, doctorErr := fromCluster(zc.firstNodeSQLConn, zc.timeout)
-		if doctorErr == nil {
-			doctorErr = runDoctor("examine", descs, ns, jobs, &doctorData)
-		}
-		if err := zc.z.createRawOrError(s, reportsPrefix+"/doctor.txt", doctorData.Bytes(), doctorErr); err != nil {
-			return err
-		}
-	}
-
-	// Collect the SQL schema.
-	{
-		var databases *serverpb.DatabasesResponse
-		s := zc.clusterPrinter.start("requesting list of SQL databases")
-		if err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
-			var err error
-			databases, err = zc.admin.Databases(ctx, &serverpb.DatabasesRequest{})
-			return err
-		}); err != nil {
-			if err := zc.z.createError(s, schemaPrefix, err); err != nil {
-				return err
-			}
-		} else {
-			s.done()
-			zc.clusterPrinter.info("%d databases found", len(databases.Databases))
-			var dbEscaper fileNameEscaper
-			for _, dbName := range databases.Databases {
-				dbPrinter := zc.clusterPrinter.withPrefix("database: %s", dbName)
-
-				prefix := schemaPrefix + "/" + dbEscaper.escape(dbName)
-				var database *serverpb.DatabaseDetailsResponse
-				s := dbPrinter.start("requesting database details")
-				requestErr := zc.runZipFn(ctx, s,
-					func(ctx context.Context) error {
-						var err error
-						database, err = zc.admin.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{Database: dbName})
-						return err
-					})
-				if err := zc.z.createJSONOrError(s, prefix+"@details.json", database, requestErr); err != nil {
-					return err
-				}
-				if requestErr != nil {
-					continue
-				}
-
-				dbPrinter.info("%d tables found", len(database.TableNames))
-				var tbEscaper fileNameEscaper
-				for _, tableName := range database.TableNames {
-					tbPrinter := dbPrinter.withPrefix("table: %s", tableName)
-					name := prefix + "/" + tbEscaper.escape(tableName)
-					var table *serverpb.TableDetailsResponse
-					s := tbPrinter.start("requesting table details")
-					requestErr := zc.runZipFn(ctx, s,
-						func(ctx context.Context) error {
-							var err error
-							table, err = zc.admin.TableDetails(ctx, &serverpb.TableDetailsRequest{Database: dbName, Table: tableName})
-							return err
-						})
-					if err := zc.z.createJSONOrError(s, name+".json", table, requestErr); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-	return nil
 }
