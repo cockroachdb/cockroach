@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "azure",
+    srcs = ["azure_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cloud/azure",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/cloud",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
+        "//pkg/util/contextutil",
+        "//pkg/util/tracing",
+        "@com_github_azure_azure_storage_blob_go//azblob",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+    ],
+)
+
+go_test(
+    name = "azure_test",
+    srcs = ["azure_storage_test.go"],
+    embed = [":azure"],
+    deps = [
+        "//pkg/cloud",
+        "//pkg/cloud/cloudtestutils",
+        "//pkg/security",
+        "//pkg/settings/cluster",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
