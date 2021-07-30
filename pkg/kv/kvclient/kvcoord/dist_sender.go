@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -266,6 +268,11 @@ type DistSender struct {
 	// testing.
 	clusterID *base.ClusterIDContainer
 
+	// batchInterceptor is set for tenants; when set, information about all
+	// BatchRequests and BatchResponses are passed through this interceptor, which
+	// can potentially throttle requests.
+	kvInterceptor multitenant.TenantSideKVInterceptor
+
 	// disableFirstRangeUpdates disables updates of the first range via
 	// gossip. Used by tests which want finer control of the contents of the
 	// range cache.
@@ -318,6 +325,11 @@ type DistSenderConfig struct {
 	FirstRangeProvider FirstRangeProvider
 	RangeDescriptorDB  rangecache.RangeDescriptorDB
 
+	// KVInterceptor is set for tenants; when set, information about all
+	// BatchRequests and BatchResponses are passed through this interceptor, which
+	// can potentially throttle requests.
+	KVInterceptor multitenant.TenantSideKVInterceptor
+
 	TestingKnobs ClientTestingKnobs
 }
 
@@ -327,10 +339,11 @@ type DistSenderConfig struct {
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig) *DistSender {
 	ds := &DistSender{
-		st:        cfg.Settings,
-		clock:     cfg.Clock,
-		nodeDescs: cfg.NodeDescs,
-		metrics:   makeDistSenderMetrics(),
+		st:            cfg.Settings,
+		clock:         cfg.Clock,
+		nodeDescs:     cfg.NodeDescs,
+		metrics:       makeDistSenderMetrics(),
+		kvInterceptor: cfg.KVInterceptor,
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
@@ -705,6 +718,13 @@ func (ds *DistSender) Send(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
 	defer sp.Finish()
 
+	if ds.kvInterceptor != nil {
+		info := tenantcostmodel.MakeRequestInfo(&ba)
+		if err := ds.kvInterceptor.OnRequestWait(ctx, info); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+	}
+
 	splitET := false
 	var require1PC bool
 	lastReq := ba.Requests[len(ba.Requests)-1].GetInner()
@@ -796,6 +816,11 @@ func (ds *DistSender) Send(
 		lastHeader := rplChunks[len(rplChunks)-1].BatchResponse_Header
 		lastHeader.CollectedSpans = reply.CollectedSpans
 		reply.BatchResponse_Header = lastHeader
+
+		if ds.kvInterceptor != nil {
+			info := tenantcostmodel.MakeResponseInfo(reply)
+			ds.kvInterceptor.OnResponse(ctx, info)
+		}
 	}
 
 	return reply, nil
