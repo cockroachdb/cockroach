@@ -26,10 +26,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
@@ -70,6 +70,11 @@ func encodePayloadWebhook(value []byte) ([]byte, error) {
 	return j, err
 }
 
+type webhookMessage struct {
+	m []byte
+	a kvevent.Alloc
+}
+
 type webhookSink struct {
 	workerCtx   context.Context
 	url         sinkURL
@@ -78,7 +83,7 @@ type webhookSink struct {
 	client      *httputil.Client
 	workerGroup ctxgroup.Group
 	exitWorkers func()
-	eventsChans []chan []byte
+	eventsChans []chan webhookMessage
 	inflight    *inflightTracker
 	retryCfg    retry.Options
 }
@@ -88,7 +93,6 @@ func makeWebhookSink(
 	u sinkURL,
 	opts map[string]string,
 	parallelism int,
-	acc mon.BoundAccount,
 	retryOptions retry.Options,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
@@ -159,7 +163,7 @@ func makeWebhookSink(
 	sinkURLParsed.RawQuery = params.Encode()
 	sink.url = sinkURL{URL: sinkURLParsed}
 
-	sink.inflight = makeInflightTracker(acc)
+	sink.inflight = makeInflightTracker()
 	return sink, nil
 }
 
@@ -228,10 +232,10 @@ func defaultWorkerCount() int {
 }
 
 func (s *webhookSink) setupWorkers() {
-	s.eventsChans = make([]chan []byte, s.parallelism)
+	s.eventsChans = make([]chan webhookMessage, s.parallelism)
 	s.workerGroup = ctxgroup.WithContext(s.workerCtx)
 	for i := 0; i < s.parallelism; i++ {
-		s.eventsChans[i] = make(chan []byte)
+		s.eventsChans[i] = make(chan webhookMessage)
 		j := i
 		s.workerGroup.GoCtx(func(ctx context.Context) error {
 			s.workerLoop(s.eventsChans[j])
@@ -240,16 +244,16 @@ func (s *webhookSink) setupWorkers() {
 	}
 }
 
-func (s *webhookSink) workerLoop(workerCh chan []byte) {
+func (s *webhookSink) workerLoop(workerCh chan webhookMessage) {
 	for {
 		select {
 		case <-s.workerCtx.Done():
 			return
 		case msg := <-workerCh:
-			err := s.sendMessageWithRetries(s.workerCtx, msg)
+			err := s.sendMessageWithRetries(s.workerCtx, msg.m)
 			s.inflight.maybeSetError(err)
 			// reduce inflight count by one and reduce memory counter
-			s.inflight.FinishRequest(s.workerCtx, int64(len(msg)))
+			s.inflight.FinishRequest(s.workerCtx, msg.a)
 			// shut down all other workers immediately if error encountered
 			if err != nil {
 				s.exitWorkers()
@@ -319,20 +323,13 @@ type inflightTracker struct {
 	// lock used here to allow flush to block any new messages being enqueued
 	// from EmitRow or EmitResolvedTimestamp
 	flushMu syncutil.Mutex
-	// separate lock used to control memory monitor since we need to hold the
-	// while flushing and decrementing the memory counter at the same time
-	memMu struct {
-		syncutil.Mutex
-		mem mon.BoundAccount
-	}
 }
 
-func makeInflightTracker(mem mon.BoundAccount) *inflightTracker {
+func makeInflightTracker() *inflightTracker {
 	inflight := &inflightTracker{
 		inflightGroup: sync.WaitGroup{},
 		errChan:       make(chan error, 1),
 	}
-	inflight.memMu.mem = mem
 	return inflight
 }
 
@@ -361,21 +358,15 @@ func (i *inflightTracker) hasError() error {
 }
 
 // StartRequest enqueues one inflight message to be flushed.
-func (i *inflightTracker) StartRequest(ctx context.Context, bytes int64) error {
+func (i *inflightTracker) StartRequest() {
 	i.flushMu.Lock()
 	defer i.flushMu.Unlock()
 	i.inflightGroup.Add(1)
-	i.memMu.Lock()
-	defer i.memMu.Unlock()
-	err := i.memMu.mem.Grow(ctx, bytes)
-	return err
 }
 
 // FinishRequest tells the inflight tracker one message has been delivered.
-func (i *inflightTracker) FinishRequest(ctx context.Context, bytes int64) {
-	i.memMu.Lock()
-	defer i.memMu.Unlock()
-	i.memMu.mem.Shrink(ctx, bytes)
+func (i *inflightTracker) FinishRequest(ctx context.Context, alloc kvevent.Alloc) {
+	alloc.Release(ctx)
 	i.inflightGroup.Done()
 }
 
@@ -397,16 +388,13 @@ func (i *inflightTracker) Wait(ctx context.Context) error {
 }
 
 func (i *inflightTracker) Close(ctx context.Context) {
-	i.memMu.Lock()
-	defer i.memMu.Unlock()
-	i.memMu.mem.Close(ctx)
 	close(i.errChan)
 }
 
 func (s *webhookSink) EmitRow(
-	ctx context.Context, _ TopicDescriptor, key, value []byte, _ hlc.Timestamp,
+	ctx context.Context, _ TopicDescriptor, key, value []byte, _ hlc.Timestamp, alloc kvevent.Alloc,
 ) error {
-	j, err := encodePayloadWebhook(value)
+	payload, err := encodePayloadWebhook(value)
 	if err != nil {
 		return err
 	}
@@ -417,10 +405,7 @@ func (s *webhookSink) EmitRow(
 		return err
 	}
 
-	err = s.inflight.StartRequest(ctx, int64(len(j)))
-	if err != nil {
-		return err
-	}
+	s.inflight.StartRequest()
 
 	select {
 	// check the webhook sink context in case workers have been terminated
@@ -428,7 +413,7 @@ func (s *webhookSink) EmitRow(
 		return s.workerCtx.Err()
 	case <-ctx.Done():
 		return ctx.Err()
-	case s.eventsChans[s.workerIndex(key)] <- j:
+	case s.eventsChans[s.workerIndex(key)] <- webhookMessage{m: payload, a: alloc}:
 	}
 	return nil
 }
@@ -436,7 +421,7 @@ func (s *webhookSink) EmitRow(
 func (s *webhookSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
-	j, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
+	payload, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
 	if err != nil {
 		return err
 	}
@@ -451,17 +436,14 @@ func (s *webhookSink) EmitResolvedTimestamp(
 	default:
 	}
 
-	err = s.inflight.StartRequest(ctx, int64(len(j)))
-	if err != nil {
-		return err
-	}
+	s.inflight.StartRequest()
 
 	// do worker logic directly here instead (there's no point using workers for
 	// resolved timestamps since there are no keys and everything must be
 	// in order)
-	err = s.sendMessageWithRetries(ctx, j)
+	err = s.sendMessageWithRetries(ctx, payload)
 	s.inflight.maybeSetError(err)
-	s.inflight.FinishRequest(ctx, int64(len(j)))
+	s.inflight.FinishRequest(ctx, kvevent.Alloc{})
 	return err
 }
 
