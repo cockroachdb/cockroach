@@ -387,6 +387,13 @@ type ExportOptions struct {
 	// would stop immediately when targetSize is reached and return the next versions
 	// timestamp in resumeTs so that subsequent operation can pass it to firstKeyTs.
 	StopMidKey bool
+	// ResourceLimiter limits how long iterator could run until it exhausts allocated
+	// resources. Iterator queries limiter in its internal advance loop to break out
+	// of it once resources are exhausted.
+	// This option could only be used together with StopMidKey as it could break
+	// iteration over data on any version and even on a key and timestamp that would
+	// not be included in the resulting export.
+	ResourceLimiter ResourceLimiter
 	// If UseTBI is true, the backing MVCCIncrementalIterator will initialize a
 	// time-bound iterator along with its regular iterator. The TBI will be used
 	// as an optimization to skip over swaths of uninteresting keys i.e. keys
