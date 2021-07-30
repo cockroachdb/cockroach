@@ -122,7 +122,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			[]*types.T{types.Int}, []*types.T{types.Int},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
-			tu.testDiskAcc,
+			tu.testDiskAcc, tu.evalCtx,
 		)
 		if err != nil {
 			t.Fatal(err)
