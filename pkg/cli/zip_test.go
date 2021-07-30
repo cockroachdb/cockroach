@@ -71,8 +71,6 @@ table_name NOT IN (
 	'cluster_contended_indexes',
 	'cluster_contended_tables',
 	'cluster_inflight_traces',
-	'create_statements',
-	'create_type_statements',
 	'cross_db_references',
 	'databases',
 	'forward_dependencies',
@@ -109,7 +107,10 @@ ORDER BY name ASC`)
 
 	var exp []string
 	exp = append(exp, debugZipTablesPerNode...)
-	exp = append(exp, debugZipTablesPerCluster...)
+	for _, t := range debugZipTablesPerCluster {
+		t = strings.TrimPrefix(t, `"".`)
+		exp = append(exp, t)
+	}
 	sort.Strings(exp)
 
 	assert.Equal(t, exp, tables)
