@@ -20,6 +20,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -89,7 +89,6 @@ type kafkaSink struct {
 	// Only synchronized between the client goroutine and the worker goroutine.
 	mu struct {
 		syncutil.Mutex
-		mem      mon.BoundAccount
 		inflight int64
 		flushErr error
 		flushCh  chan struct{}
@@ -184,12 +183,6 @@ func (s *kafkaSink) Dial() error {
 
 // Close implements the Sink interface.
 func (s *kafkaSink) Close() error {
-	defer func() {
-		s.mu.Lock()
-		s.mu.mem.Close(s.ctx)
-		s.mu.Unlock()
-	}()
-
 	close(s.stopWorkerCh)
 	s.worker.Wait()
 	// If we're shutting down, we don't care what happens to the outstanding
@@ -204,7 +197,11 @@ func (s *kafkaSink) Close() error {
 
 // EmitRow implements the Sink interface.
 func (s *kafkaSink) EmitRow(
-	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topicDescr TopicDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
 	topic, isKnownTopic := s.topics[topicDescr.GetID()]
 	if !isKnownTopic {
@@ -212,9 +209,10 @@ func (s *kafkaSink) EmitRow(
 	}
 
 	msg := &sarama.ProducerMessage{
-		Topic: topic,
-		Key:   sarama.ByteEncoder(key),
-		Value: sarama.ByteEncoder(value),
+		Topic:    topic,
+		Key:      sarama.ByteEncoder(key),
+		Value:    sarama.ByteEncoder(value),
+		Metadata: alloc,
 	}
 	return s.emitMessage(ctx, msg)
 }
@@ -305,25 +303,11 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	}
 }
 
-func kafkaMessageBytes(m *sarama.ProducerMessage) (s int64) {
-	if m.Key != nil {
-		s += int64(m.Key.Length())
-	}
-	if m.Value != nil {
-		s += int64(m.Value.Length())
-	}
-	return
-}
-
-func (s *kafkaSink) startInflightMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
+func (s *kafkaSink) startInflightMessage(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.mu.mem.Grow(ctx, kafkaMessageBytes(msg)); err != nil {
-		return err
-	}
 
 	s.mu.inflight++
-
 	if log.V(2) {
 		log.Infof(ctx, "emitting %d inflight records to kafka", s.mu.inflight)
 	}
@@ -331,7 +315,7 @@ func (s *kafkaSink) startInflightMessage(ctx context.Context, msg *sarama.Produc
 }
 
 func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
-	if err := s.startInflightMessage(ctx, msg); err != nil {
+	if err := s.startInflightMessage(ctx); err != nil {
 		return err
 	}
 
@@ -360,9 +344,12 @@ func (s *kafkaSink) workerLoop() {
 			ackMsg, ackError = err.Msg, err.Err
 		}
 
+		if r, ok := ackMsg.Metadata.(kvevent.Alloc); ok {
+			r.Release(s.ctx)
+		}
+
 		s.mu.Lock()
 		s.mu.inflight--
-		s.mu.mem.Shrink(s.ctx, kafkaMessageBytes(ackMsg))
 		if s.mu.flushErr == nil && ackError != nil {
 			s.mu.flushErr = ackError
 		}
@@ -625,11 +612,7 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 }
 
 func makeKafkaSink(
-	ctx context.Context,
-	u sinkURL,
-	targets jobspb.ChangefeedTargets,
-	opts map[string]string,
-	acc mon.BoundAccount,
+	ctx context.Context, u sinkURL, targets jobspb.ChangefeedTargets, opts map[string]string,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
@@ -648,7 +631,6 @@ func makeKafkaSink(
 		bootstrapAddrs: u.Host,
 		topics:         makeTopicsMap(kafkaTopicPrefix, kafkaTopicName, targets),
 	}
-	sink.mu.mem = acc
 
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
 		return nil, errors.Errorf(
