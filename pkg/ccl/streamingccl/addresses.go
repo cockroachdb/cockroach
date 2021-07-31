@@ -30,6 +30,10 @@ func (pa PartitionAddress) URL() (*url.URL, error) {
 	return url.Parse(string(pa))
 }
 
+func (pa PartitionAddress) String() string {
+	return string(pa)
+}
+
 // Topology is a configuration of stream partitions. These are particular to a
 // stream. It specifies the number and addresses of partitions of the stream.
 //
