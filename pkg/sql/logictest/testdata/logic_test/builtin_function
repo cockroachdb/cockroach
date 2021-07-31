@@ -1777,6 +1777,21 @@ SELECT array_length(ARRAY['a'], 2)
 NULL
 
 query I
+SELECT cardinality(ARRAY['a', 'b'])
+----
+2
+
+query I
+SELECT cardinality(ARRAY[]:::int[])
+----
+0
+
+query I
+SELECT cardinality(NULL:::int[])
+----
+NULL
+
+query I
 SELECT array_lower(ARRAY['a', 'b'], 1)
 ----
 1

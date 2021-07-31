@@ -3125,6 +3125,19 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"cardinality": makeBuiltin(arrayProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"input", types.AnyArray}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				return cardinality(arr), nil
+			},
+			Info:       "Calculates the number of elements contained in `input`",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"array_lower": makeBuiltin(arrayProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
@@ -7054,6 +7067,17 @@ func GenerateUniqueID(instanceID int32, timestamp uint64) tree.DInt {
 	// in the timestamp portion of the final value instead of always setting them.
 	id := (timestamp << NodeIDBits) ^ uint64(instanceID)
 	return tree.DInt(id)
+}
+
+func cardinality(arr *tree.DArray) tree.Datum {
+	if arr.ParamTyp.Family() != types.ArrayFamily {
+		return tree.NewDInt(tree.DInt(arr.Len()))
+	}
+	card := 0
+	for _, a := range arr.Array {
+		card += int(tree.MustBeDInt(cardinality(tree.MustBeDArray(a))))
+	}
+	return tree.NewDInt(tree.DInt(card))
 }
 
 func arrayLength(arr *tree.DArray, dim int64) tree.Datum {
