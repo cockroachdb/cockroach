@@ -10,10 +10,10 @@
 
 package util
 
-// CombineUniqueString combines two ordered string slices and returns
-// the result without duplicates.
-func CombineUniqueString(a []string, b []string) []string {
-	res := make([]string, 0, len(a))
+// CombinesUniqueInt64 combine two ordered int64 slices and return the result without
+// duplicates.
+func CombinesUniqueInt64(a []int64, b []int64) []int64 {
+	res := make([]int64, 0, len(a))
 	aIter, bIter := 0, 0
 	for aIter < len(a) && bIter < len(b) {
 		if a[aIter] == b[bIter] {
