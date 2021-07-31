@@ -453,26 +453,35 @@ func AddSSTable(
 				}
 				// This range has split -- we need to split the SST to try again.
 				if m := (*roachpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
-					// TODO(andrei): We just use the first of m.Ranges; presumably we
-					// should be using all of them to avoid further retries.
-					split := m.Ranges()[0].Desc.EndKey.AsRawKey()
-					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
-					left, right, err := createSplitSSTable(ctx, db, item.start, split, item.disallowShadowing, iter, settings)
+					ranges := m.Ranges()
+					splitKeys := make([]roachpb.Key, len(ranges))
+					for i, r := range ranges {
+						splitKeys[i] = r.Desc.EndKey.AsRawKey()
+					}
+					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", splitKeys)
+					splitTables, err := createSplitSSTables(item.start, splitKeys, item.disallowShadowing, iter)
 					if err != nil {
 						return err
 					}
 
-					right.stats, err = storage.ComputeStatsForRange(
-						iter, right.start, right.end, now.UnixNano(),
-					)
-					if err != nil {
-						return err
+					firstTableStats := item.stats
+					for i := range splitTables {
+						if i == 0 {
+							continue
+						}
+						tableStats, err := storage.ComputeStatsForRange(
+							iter, splitTables[i].start, splitTables[i].end, now.UnixNano(),
+						)
+						if err != nil {
+							return err
+						}
+						splitTables[i].stats = tableStats
+						firstTableStats.Subtract(splitTables[i].stats)
 					}
-					left.stats = item.stats
-					left.stats.Subtract(right.stats)
+					splitTables[0].stats = firstTableStats
 
 					// Add more work.
-					work = append([]*sstSpan{left, right}, work...)
+					work = append(splitTables, work...)
 					return nil
 				}
 				// Retry on AmbiguousResult.
@@ -494,49 +503,56 @@ func AddSSTable(
 	return files, nil
 }
 
-// createSplitSSTable is a helper for splitting up SSTs. The iterator
+// createSplitSSTables is a helper for splitting up SSTs. The iterator
 // passed in is over the top level SST passed into AddSSTTable().
-func createSplitSSTable(
-	ctx context.Context,
-	db SSTSender,
-	start, splitKey roachpb.Key,
+func createSplitSSTables(
+	start roachpb.Key,
+	splitKeys []roachpb.Key,
 	disallowShadowing bool,
 	iter storage.SimpleMVCCIterator,
-	settings *cluster.Settings,
-) (*sstSpan, *sstSpan, error) {
+) ([]*sstSpan, error) {
 	sstFile := &storage.MemFile{}
 	w := storage.MakeIngestionSSTWriter(sstFile)
 	defer w.Close()
 
-	split := false
+	doneSplit := false
 	var first, last roachpb.Key
-	var left, right *sstSpan
+	newSSTables := make([]*sstSpan, 0)
+
+	splitKeyIdx := 0
+	splitKey := splitKeys[splitKeyIdx]
 
 	iter.SeekGE(storage.MVCCKey{Key: start})
 	for {
 		if ok, err := iter.Valid(); err != nil {
-			return nil, nil, err
+			return nil, err
 		} else if !ok {
 			break
 		}
 
 		key := iter.UnsafeKey()
 
-		if !split && key.Key.Compare(splitKey) >= 0 {
+		if !doneSplit && key.Key.Compare(splitKey) >= 0 {
 			err := w.Finish()
 
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
-			left = &sstSpan{
+			newTable := &sstSpan{
 				start:             first,
 				end:               last.PrefixEnd(),
 				sstBytes:          sstFile.Data(),
 				disallowShadowing: disallowShadowing,
 			}
+			newSSTables = append(newSSTables, newTable)
 			*sstFile = storage.MemFile{}
 			w = storage.MakeIngestionSSTWriter(sstFile)
-			split = true
+			splitKeyIdx++
+			if splitKeyIdx >= len(splitKeys) {
+				doneSplit = true
+			} else {
+				splitKey = splitKeys[splitKeyIdx]
+			}
 			first = nil
 			last = nil
 		}
@@ -547,7 +563,7 @@ func createSplitSSTable(
 		last = append(last[:0], key.Key...)
 
 		if err := w.Put(key, iter.UnsafeValue()); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		iter.Next()
@@ -555,13 +571,14 @@ func createSplitSSTable(
 
 	err := w.Finish()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	right = &sstSpan{
+	lastTable := &sstSpan{
 		start:             first,
 		end:               last.PrefixEnd(),
 		sstBytes:          sstFile.Data(),
 		disallowShadowing: disallowShadowing,
 	}
-	return left, right, nil
+	newSSTables = append(newSSTables, lastTable)
+	return newSSTables, nil
 }
