@@ -11,10 +11,9 @@ package tenantcostserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver/tenanttokenbucket"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -31,74 +30,69 @@ func (s *instance) TokenBucketRequest(
 			Error: errors.EncodeError(ctx, errors.New("token bucket request for system tenant")),
 		}
 	}
+	instanceID := base.SQLInstanceID(in.InstanceID)
+	if instanceID < 1 {
+		return &roachpb.TokenBucketResponse{
+			Error: errors.EncodeError(ctx, errors.Errorf("invalid instance ID %d", instanceID)),
+		}
+	}
+
+	metrics := s.metrics.getTenantMetrics(tenantID)
+	// Use a per-tenant mutex to serialize operations to the bucket. The
+	// transactions will need to be serialized anyway, so this avoids more
+	// expensive restarts. It also guarantees that the metric updates happen in
+	// the same order with the system table changes.
+	metrics.mutex.Lock()
+	defer metrics.mutex.Unlock()
 
 	result := &roachpb.TokenBucketResponse{}
+	var consumption roachpb.TokenBucketRequest_Consumption
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		state, err := readTenantUsageState(ctx, s.executor, txn, tenantID)
+		*result = roachpb.TokenBucketResponse{}
+
+		h := makeSysTableHelper(ctx, s.executor, txn, tenantID)
+		tenant, instance, err := h.readTenantAndInstanceState(instanceID)
 		if err != nil {
 			return err
 		}
-		state.Seq++
 
-		// Update consumption.
-		state.Consumption.RU += in.ConsumptionSinceLastRequest.RU
-		state.Consumption.ReadRequests += in.ConsumptionSinceLastRequest.ReadRequests
-		state.Consumption.ReadBytes += in.ConsumptionSinceLastRequest.ReadBytes
-		state.Consumption.WriteRequests += in.ConsumptionSinceLastRequest.WriteRequests
-		state.Consumption.WriteBytes += in.ConsumptionSinceLastRequest.WriteBytes
-		state.Consumption.SQLPodCPUSeconds += in.ConsumptionSinceLastRequest.SQLPodCPUSeconds
+		if !tenant.Present {
+			// TODO(radu): initialize tenant state.
+			tenant.FirstInstance = 0
+		}
 
-		*result = state.Bucket.Request(in, timeutil.Now())
+		if !instance.Present {
+			if err := h.accomodateNewInstance(&tenant, &instance); err != nil {
+				return err
+			}
+		}
 
-		if err := updateTenantUsageState(ctx, s.executor, txn, tenantID, state); err != nil {
+		tenant.addConsumption(in.ConsumptionSinceLastRequest)
+
+		// TODO(radu): update shares.
+		*result = tenant.Bucket.Request(in, timeutil.Now())
+
+		if err := h.updateTenantAndInstanceState(tenant, instance); err != nil {
 			return err
 		}
 
-		// Report current consumption.
-		m := s.metrics.getTenantMetrics(tenantID)
-		m.totalRU.Update(state.Consumption.RU)
-		m.totalReadRequests.Update(int64(state.Consumption.ReadRequests))
-		m.totalReadBytes.Update(int64(state.Consumption.ReadBytes))
-		m.totalWriteRequests.Update(int64(state.Consumption.WriteRequests))
-		m.totalWriteBytes.Update(int64(state.Consumption.WriteBytes))
-		m.totalSQLPodsCPUSeconds.Update(state.Consumption.SQLPodCPUSeconds)
-
-		return updateTenantUsageState(ctx, s.executor, txn, tenantID, state)
+		if err := h.maybeCheckInvariants(); err != nil {
+			panic(err)
+		}
+		consumption = tenant.Consumption
+		return nil
 	}); err != nil {
-		*result = roachpb.TokenBucketResponse{
+		return &roachpb.TokenBucketResponse{
 			Error: errors.EncodeError(ctx, err),
 		}
 	}
+
+	// Report current consumption.
+	metrics.totalRU.Update(consumption.RU)
+	metrics.totalReadRequests.Update(int64(consumption.ReadRequests))
+	metrics.totalReadBytes.Update(int64(consumption.ReadBytes))
+	metrics.totalWriteRequests.Update(int64(consumption.WriteRequests))
+	metrics.totalWriteBytes.Update(int64(consumption.WriteBytes))
+	metrics.totalSQLPodsCPUSeconds.Update(consumption.SQLPodCPUSeconds)
 	return result
-}
-
-type tenantUsageState struct {
-	// Seq is a sequence number identifying this state. All state changes are
-	// strictly sequenced, with consecutive sequence numbers.
-	Seq int64
-
-	Bucket tenanttokenbucket.State
-
-	// Current consumption information.
-	Consumption roachpb.TokenBucketRequest_Consumption
-}
-
-// readCurrentBucketState reads the current (last) bucket state. The zero struct
-// is returned if the state is not yet initialized.
-func readTenantUsageState(
-	ctx context.Context, ex *sql.InternalExecutor, txn *kv.Txn, tenantID roachpb.TenantID,
-) (tenantUsageState, error) {
-	// TODO(radu): interact with the system table.
-	return tenantUsageState{}, nil
-}
-
-func updateTenantUsageState(
-	ctx context.Context,
-	ex *sql.InternalExecutor,
-	txn *kv.Txn,
-	tenantID roachpb.TenantID,
-	newState tenantUsageState,
-) error {
-	// TODO(radu): interact with the system table.
-	return nil
 }

@@ -450,6 +450,75 @@ CREATE TABLE system.database_role_settings (
       settings
 		)
 );`
+
+	TenantUsageTableSchema = `
+CREATE TABLE system.tenant_usage (
+  tenant_id INT NOT NULL,
+
+	-- For each tenant, there is a special row with instance_id = 0 which contains
+	-- per-tenant stat. Each SQL instance (pod) also has its own row with
+	-- per-instance state.
+	instance_id INT NOT NULL,
+
+	-- next_instance_id identifies the next live instance ID, with the smallest ID
+	-- larger than this instance_id (or 0 if there is no such ID).
+	-- We are overlaying a circular linked list of all live instances, with
+	-- instance 0 acting as a sentinel (always the head of the list).
+	next_instance_id INT NOT NULL,
+
+	-- -------------------------------------------------------------------
+	--  The following fields are used only for the per-tenant state, when
+	--  instance_id = 0.
+	-- -------------------------------------------------------------------
+
+  -- Bucket configuration.
+  ru_burst_limit FLOAT,
+  ru_refill_rate FLOAT,
+
+  -- Current amount of RUs in the bucket.
+  ru_current FLOAT,
+
+  -- Current sum of the shares values for all instances.
+  current_share_sum FLOAT,
+
+  -- Cumulative usage statistics.
+  total_ru_usage            FLOAT,
+  total_read_requests       INT,
+  total_read_bytes          INT,
+  total_write_requests      INT,
+  total_write_bytes         INT,
+  total_sql_pod_cpu_seconds FLOAT, -- TODO: Maybe milliseconds and INT8?
+
+	-- -------------------------------------------------------------
+	--  The following fields are used for per-instance state, when
+	--  instance_id != 0.
+	-- --------------------------------------------------------------
+
+	-- The lease is a unique identifier for this instance, necessary because
+	-- instance IDs can be reused.
+	instance_lease BYTES,
+
+	-- Last request sequence number. These numbers are provided by the
+	-- instance and are monotonically increasing; used to detect duplicate
+	-- requests and provide idempotency.
+	instance_seq INT,
+
+	-- Current shares value for this instance.
+  instance_shares FLOAT,
+
+	-- Time when we last heard from this instance.
+	instance_last_update TIMESTAMP,
+
+	FAMILY "primary" (
+	  tenant_id, instance_id, next_instance_id,
+	  ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
+	  total_ru_usage, total_read_requests, total_read_bytes, total_write_requests,
+	  total_write_bytes, total_sql_pod_cpu_seconds,
+	  instance_lease, instance_seq, instance_shares, instance_last_update
+	),
+
+  PRIMARY KEY (tenant_id, instance_id)
+)`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -531,7 +600,7 @@ var (
 			{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "parentSchemaID", "name"}, ColumnIDs: []descpb.ColumnID{1, 2, 3}},
 			{Name: "fam_4_id", ID: catconstants.NamespaceTableFamilyID, ColumnNames: []string{"id"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
 		},
-		NextFamilyID: 5,
+		NextFamilyID: catconstants.NamespaceTableFamilyID + 1,
 		PrimaryIndex: descpb.IndexDescriptor{
 			Name:                "primary",
 			ID:                  catconstants.NamespaceTablePrimaryIndexID,
@@ -2110,6 +2179,69 @@ var (
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.DatabaseRoleSettingsTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+	// TenantUsageTable is the descriptor for the tenant_usage table. It is used
+	// to coordinate throttling of tenant SQL pods and to track consumption.
+	TenantUsageTable = makeTable(descpb.TableDescriptor{
+		Name:                    "tenant_usage",
+		ID:                      keys.TenantUsageTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "tenant_id", ID: 1, Type: types.Int, Nullable: false},
+			{Name: "instance_id", ID: 2, Type: types.Int, Nullable: false},
+			{Name: "next_instance_id", ID: 3, Type: types.Int, Nullable: false},
+			{Name: "ru_burst_limit", ID: 4, Type: types.Float, Nullable: true},
+			{Name: "ru_refill_rate", ID: 5, Type: types.Float, Nullable: true},
+			{Name: "ru_current", ID: 6, Type: types.Float, Nullable: true},
+			{Name: "current_share_sum", ID: 7, Type: types.Float, Nullable: true},
+			{Name: "total_ru_usage", ID: 8, Type: types.Float, Nullable: true},
+			{Name: "total_read_requests", ID: 9, Type: types.Int, Nullable: true},
+			{Name: "total_read_bytes", ID: 10, Type: types.Int, Nullable: true},
+			{Name: "total_write_requests", ID: 11, Type: types.Int, Nullable: true},
+			{Name: "total_write_bytes", ID: 12, Type: types.Int, Nullable: true},
+			{Name: "total_sql_pod_cpu_seconds", ID: 13, Type: types.Float, Nullable: true},
+			{Name: "instance_lease", ID: 14, Type: types.Bytes, Nullable: true},
+			{Name: "instance_seq", ID: 15, Type: types.Int, Nullable: true},
+			{Name: "instance_shares", ID: 16, Type: types.Float, Nullable: true},
+			{Name: "instance_last_update", ID: 17, Type: types.Timestamp, Nullable: true},
+		},
+		NextColumnID: 18,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name: "primary",
+				ID:   0,
+				ColumnNames: []string{
+					"tenant_id", "instance_id", "next_instance_id",
+					"ru_burst_limit", "ru_refill_rate", "ru_current", "current_share_sum",
+					"total_ru_usage", "total_read_requests", "total_read_bytes", "total_write_requests",
+					"total_write_bytes", "total_sql_pod_cpu_seconds",
+					"instance_lease", "instance_seq", "instance_shares", "instance_last_update",
+				},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17},
+				DefaultColumnID: 0,
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:           tabledesc.PrimaryKeyIndexName,
+			ID:             1,
+			Unique:         true,
+			KeyColumnNames: []string{"tenant_id", "instance_id"},
+			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+			},
+			KeyColumnIDs: []descpb.ColumnID{1, 2},
+			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+		},
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.TenantUsageTableID], security.NodeUserName(),
+		),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})

@@ -47,16 +47,16 @@ func (s *instance) ReconfigureTokenBucket(
 	if active := *row[0].(*tree.DBool); !active {
 		return errors.Errorf("tenant %q is not active", tenantID)
 	}
-	state, err := readTenantUsageState(ctx, s.executor, txn, tenantID)
+	h := makeSysTableHelper(ctx, s.executor, txn, tenantID)
+	state, err := h.readTenantState()
 	if err != nil {
 		return err
 	}
-	state.Seq++
 	state.Bucket.Reconfigure(
 		availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
 		timeutil.Now(), state.Consumption.RU,
 	)
-	if err := updateTenantUsageState(ctx, s.executor, txn, tenantID, state); err != nil {
+	if err := h.updateTenantState(state); err != nil {
 		return err
 	}
 	return nil

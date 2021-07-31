@@ -1,0 +1,73 @@
+# The tests in this file verify the correct maintenance of next_instance_id.
+
+inspect tenant=5
+----
+empty state
+
+create-tenant tenant=5
+----
+
+inspect tenant=5
+----
+empty state
+
+token-bucket-request tenant=5
+instance_id: 10 
+----
+
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=0  ru-current=0  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+First active instance: 10
+  Instance 10:  lease='\x'  seq=0  shares=0.0  next-instance=0
+
+token-bucket-request tenant=5
+instance_id: 10
+----
+
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=0  ru-current=0  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+First active instance: 10
+  Instance 10:  lease='\x'  seq=0  shares=0.0  next-instance=0
+
+token-bucket-request tenant=5
+instance_id: 20
+----
+
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=0  ru-current=0  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+First active instance: 10
+  Instance 10:  lease='\x'  seq=0  shares=0.0  next-instance=20
+  Instance 20:  lease='\x'  seq=0  shares=0.0  next-instance=0
+
+token-bucket-request tenant=5
+instance_id: 15
+----
+
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=0  ru-current=0  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+First active instance: 10
+  Instance 10:  lease='\x'  seq=0  shares=0.0  next-instance=15
+  Instance 15:  lease='\x'  seq=0  shares=0.0  next-instance=20
+  Instance 20:  lease='\x'  seq=0  shares=0.0  next-instance=0
+
+token-bucket-request tenant=5
+instance_id: 1
+----
+
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=0  ru-current=0  current-share-sum=0
+Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0
+First active instance: 1
+  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=10
+  Instance 10:  lease='\x'  seq=0  shares=0.0  next-instance=15
+  Instance 15:  lease='\x'  seq=0  shares=0.0  next-instance=20
+  Instance 20:  lease='\x'  seq=0  shares=0.0  next-instance=0
