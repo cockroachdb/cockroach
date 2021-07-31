@@ -2259,8 +2259,6 @@ message GossipSubscriptionEvent {
 }
 
 message TokenBucketRequest {
-  uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID"];
-
   message Consumption {
     double r_u = 1;
     uint64 read_requests = 2;
@@ -2272,6 +2270,16 @@ message TokenBucketRequest {
 
   // Consumption that occurred since this node's last request.
   Consumption consumption_since_last_request = 1 [(gogoproto.nullable) = false];
+
+  uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID"];
+
+  // InstanceID is the ID of the SQL pod instance from where the request
+  // originates.
+  uint32 instance_id = 3 [(gogoproto.customname) = "InstanceID"];
+
+  // InstanceLease uniquely identifies the SQL pod instance from where the
+  // request originates, in light of ID reuse.
+  bytes instance_lease = 4;
 
   // TODO(radu): add remaining fields.
 }

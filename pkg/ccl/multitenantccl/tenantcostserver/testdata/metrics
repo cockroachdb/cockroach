@@ -1,7 +1,8 @@
-create-tenant 5
+create-tenant tenant=5
 ----
 
-token-bucket-request 5
+token-bucket-request tenant=5
+instance_id: 1
 consumption:
   ru: 10
   read_req: 20
@@ -20,3 +21,43 @@ tenant_consumption_request_units{tenant_id="5"} 10
 tenant_consumption_sql_pods_cpu_seconds{tenant_id="5"} 60
 tenant_consumption_write_bytes{tenant_id="5"} 50
 tenant_consumption_write_requests{tenant_id="5"} 40
+
+token-bucket-request tenant=5
+instance_id: 1
+consumption:
+  ru: 100
+  read_req: 200
+  read_bytes: 300
+  write_req: 400
+  write_bytes: 500
+  sql_pods_cpu_usage: 600
+----
+
+token-bucket-request tenant=5
+instance_id: 2
+consumption:
+  ru: 1000
+  read_req: 2000
+  read_bytes: 3000
+  write_req: 4000
+  write_bytes: 5000
+  sql_pods_cpu_usage: 6000
+----
+
+inspect tenant=5
+----
+Bucket state: ru-burst-limit=0  ru-refill-rate=0  ru-current=0  current-share-sum=0
+Consumption: ru=1110  reads=2220 req/3330 bytes  writes=4440 req/5550 bytes  pod-cpu-usage: 6660
+First active instance: 1
+  Instance 1:  lease='\x'  seq=0  shares=0.0  next-instance=2
+  Instance 2:  lease='\x'  seq=0  shares=0.0  next-instance=0
+
+metrics
+tenant_id="5"
+----
+tenant_consumption_read_bytes{tenant_id="5"} 3330
+tenant_consumption_read_requests{tenant_id="5"} 2220
+tenant_consumption_request_units{tenant_id="5"} 1110
+tenant_consumption_sql_pods_cpu_seconds{tenant_id="5"} 6660
+tenant_consumption_write_bytes{tenant_id="5"} 5550
+tenant_consumption_write_requests{tenant_id="5"} 4440
