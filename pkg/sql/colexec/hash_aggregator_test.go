@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -142,6 +143,8 @@ func TestHashAggregator(t *testing.T) {
 				OutputTypes:    outputTypes,
 			},
 				nil, /* newSpillingQueueArgs */
+				testAllocator,
+				math.MaxInt64,
 			)
 		})
 	}
@@ -173,7 +176,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 			for _, agg := range []aggType{
 				{
 					new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
-						return NewHashAggregator(args, nil /* newSpillingQueueArgs */)
+						return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
 					},
 					name: "tracking=false",
 				},
@@ -188,7 +191,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 							DiskQueueCfg:       queueCfg,
 							FDSemaphore:        &colexecop.TestingSemaphore{},
 							DiskAcc:            testDiskAcc,
-						})
+						}, testAllocator, math.MaxInt64)
 					},
 					name: "tracking=true",
 				},

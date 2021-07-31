@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -71,7 +72,7 @@ func TestTopKSorter(t *testing.T) {
 	for _, tc := range topKSortTestCases {
 		log.Infof(context.Background(), "%s", tc.description)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.k), nil
+			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.k, execinfra.DefaultMemoryLimit), nil
 		})
 	}
 }

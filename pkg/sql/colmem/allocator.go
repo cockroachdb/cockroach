@@ -151,29 +151,31 @@ func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Bat
 
 // ResetMaybeReallocate returns a batch that is guaranteed to be in a "reset"
 // state (meaning it is ready to be used) and to have the capacity of at least
-// minCapacity. The method will grow the allocated capacity of the batch
-// exponentially (possibly incurring a reallocation), until the batch reaches
+// 1. minDesiredCapacity is a hint about the capacity of the returned batch
+// (subject to the memory limit).
+//
+// The method will grow the allocated capacity of the batch exponentially
+// (possibly incurring a reallocation), until the batch reaches
 // coldata.BatchSize() in capacity or maxBatchMemSize in the memory footprint.
+//
 // NOTE: if the reallocation occurs, then the memory under the old batch is
 // released, so it is expected that the caller will lose the references to the
 // old batch.
-// Note: the method assumes that minCapacity is at least 0 and will clamp
-// minCapacity to be between 1 and coldata.BatchSize() inclusive.
-// TODO(yuzefovich): change the contract so that maxBatchMemSize takes priority
-// over minCapacity.
+// Note: the method assumes that minDesiredCapacity is at least 0 and will clamp
+// minDesiredCapacity to be between 1 and coldata.BatchSize() inclusive.
 func (a *Allocator) ResetMaybeReallocate(
-	typs []*types.T, oldBatch coldata.Batch, minCapacity int, maxBatchMemSize int64,
+	typs []*types.T, oldBatch coldata.Batch, minDesiredCapacity int, maxBatchMemSize int64,
 ) (newBatch coldata.Batch, reallocated bool) {
-	if minCapacity < 0 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid minCapacity %d", minCapacity))
-	} else if minCapacity == 0 {
-		minCapacity = 1
-	} else if minCapacity > coldata.BatchSize() {
-		minCapacity = coldata.BatchSize()
+	if minDesiredCapacity < 0 {
+		colexecerror.InternalError(errors.AssertionFailedf("invalid minDesiredCapacity %d", minDesiredCapacity))
+	} else if minDesiredCapacity == 0 {
+		minDesiredCapacity = 1
+	} else if minDesiredCapacity > coldata.BatchSize() {
+		minDesiredCapacity = coldata.BatchSize()
 	}
 	reallocated = true
 	if oldBatch == nil {
-		newBatch = a.NewMemBatchWithFixedCapacity(typs, minCapacity)
+		newBatch = a.NewMemBatchWithFixedCapacity(typs, minDesiredCapacity)
 	} else {
 		// If old batch is already of the largest capacity, we will reuse it.
 		useOldBatch := oldBatch.Capacity() == coldata.BatchSize()
@@ -181,10 +183,9 @@ func (a *Allocator) ResetMaybeReallocate(
 		var oldBatchMemSize int64
 		if !useOldBatch {
 			// Check if the old batch already reached the maximum memory size,
-			// and use it if so. Note that we must check that the old batch has
-			// enough capacity too.
+			// and use it if so.
 			oldBatchMemSize = GetBatchMemSize(oldBatch)
-			useOldBatch = oldBatchMemSize >= maxBatchMemSize && oldBatch.Capacity() >= minCapacity
+			useOldBatch = oldBatchMemSize >= maxBatchMemSize
 		}
 		if useOldBatch {
 			reallocated = false
@@ -193,8 +194,8 @@ func (a *Allocator) ResetMaybeReallocate(
 		} else {
 			a.ReleaseMemory(oldBatchMemSize)
 			newCapacity := oldBatch.Capacity() * 2
-			if newCapacity < minCapacity {
-				newCapacity = minCapacity
+			if newCapacity < minDesiredCapacity {
+				newCapacity = minDesiredCapacity
 			}
 			if newCapacity > coldata.BatchSize() {
 				newCapacity = coldata.BatchSize()

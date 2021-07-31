@@ -243,8 +243,12 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 			// a selection vector.
 			n := batch.Length()
 			sel := batch.Selection()
+			// We don't limit the batches based on the memory footprint because
+			// we assume that the input is producing reasonably sized batches.
+			const maxBatchMemSize = math.MaxInt64
 			b.currentBatch, _ = b.allocator.ResetMaybeReallocate(
-				b.outputTypes, b.currentBatch, batch.Length(), math.MaxInt64)
+				b.outputTypes, b.currentBatch, batch.Length(), maxBatchMemSize,
+			)
 			b.allocator.PerformOperation(b.currentBatch.ColVecs(), func() {
 				for colIdx, vec := range batch.ColVecs() {
 					if colIdx == b.outputColIdx {

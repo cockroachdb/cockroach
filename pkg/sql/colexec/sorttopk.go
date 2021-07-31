@@ -13,7 +13,6 @@ package colexec
 import (
 	"container/heap"
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -39,13 +38,15 @@ func NewTopKSorter(
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k uint64,
+	maxOutputBatchMemSize int64,
 ) colexecop.ResettableOperator {
 	return &topKSorter{
-		allocator:    allocator,
-		OneInputNode: colexecop.NewOneInputNode(input),
-		inputTypes:   inputTypes,
-		orderingCols: orderingCols,
-		k:            k,
+		allocator:             allocator,
+		OneInputNode:          colexecop.NewOneInputNode(input),
+		inputTypes:            inputTypes,
+		orderingCols:          orderingCols,
+		k:                     k,
+		maxOutputBatchMemSize: maxOutputBatchMemSize,
 	}
 }
 
@@ -92,8 +93,9 @@ type topKSorter struct {
 	// sel is a selection vector which specifies an ordering on topK.
 	sel []int
 	// emitted is the count of rows which have been emitted so far.
-	emitted int
-	output  coldata.Batch
+	emitted               int
+	output                coldata.Batch
+	maxOutputBatchMemSize int64
 
 	exportedFromTopK  int
 	exportedFromBatch int
@@ -232,13 +234,10 @@ func (t *topKSorter) emit() coldata.Batch {
 		// We're done.
 		return coldata.ZeroBatch
 	}
-	if toEmit > coldata.BatchSize() {
-		toEmit = coldata.BatchSize()
+	t.output, _ = t.allocator.ResetMaybeReallocate(t.inputTypes, t.output, toEmit, t.maxOutputBatchMemSize)
+	if toEmit > t.output.Capacity() {
+		toEmit = t.output.Capacity()
 	}
-	// For now, we don't enforce any footprint-based memory limit.
-	// TODO(yuzefovich): refactor this.
-	const maxBatchMemSize = math.MaxInt64
-	t.output, _ = t.allocator.ResetMaybeReallocate(t.inputTypes, t.output, toEmit, maxBatchMemSize)
 	for i := range t.inputTypes {
 		vec := t.output.ColVec(i)
 		// At this point, we have already fully sorted the input. It is ok to do
@@ -304,7 +303,9 @@ func (t *topKSorter) ExportBuffered(colexecop.Operator) coldata.Batch {
 	// Next, we check whether we have exported all tuples from the last read
 	// batch.
 	if t.inputBatch != nil && t.firstUnprocessedTupleIdx+t.exportedFromBatch < t.inputBatch.Length() {
-		colexecutils.MakeWindowIntoBatch(t.windowedBatch, t.inputBatch, t.firstUnprocessedTupleIdx, t.inputTypes)
+		colexecutils.MakeWindowIntoBatch(
+			t.windowedBatch, t.inputBatch, t.firstUnprocessedTupleIdx, t.inputBatch.Length(), t.inputTypes,
+		)
 		t.exportedFromBatch = t.windowedBatch.Length()
 		return t.windowedBatch
 	}

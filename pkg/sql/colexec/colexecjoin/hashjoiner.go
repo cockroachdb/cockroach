@@ -12,6 +12,7 @@ package colexecjoin
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -186,10 +187,6 @@ type hashJoiner struct {
 	// ht holds the HashTable that is populated during the build phase and used
 	// during the probe phase.
 	ht *colexechash.HashTable
-	// memoryLimit is the total amount of RAM available for the hash joiner.
-	// This limits the output batches (and is also the same limit for the size
-	// of the hash table).
-	memoryLimit int64
 	// output stores the resulting output batch that is constructed and returned
 	// for every input batch during the probe phase.
 	output      coldata.Batch
@@ -693,17 +690,28 @@ func (hj *hashJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch {
 }
 
 func (hj *hashJoiner) resetOutput(nResults int) {
-	minCapacity := nResults
-	if minCapacity < 1 {
-		minCapacity = 1
-	}
 	// We're resetting the output meaning that we have already fully built the
 	// hash table from the right input and now are only populating output one
 	// batch at a time. If we were to use a limited allocator, we could hit the
 	// limit here, and it would have been very hard to fall back to disk backed
 	// hash joiner because we might have already emitted partial output.
+	//
+	// We are also consciously not limiting the size of the output batch based
+	// on the memory footprint based on the following reasoning:
+	// 1. the main code-path (congregate()) has already modified the internal
+	// state under the assumption that nResults rows will be emitted with the
+	// next batch
+	// 2. nResults is usually limited by size of the batch coming from the left
+	// input, so we assume that it is of reasonable memory footprint
+	// 3. in emitRight() method, the output batch will never use more memory
+	// than the hash table itself, so if we haven't spilled yet, then the output
+	// batch will be of reasonable size too
+	// 4. when the hashJoiner is used by the external hash joiner as the main
+	// strategy, the hash-based partitioner is responsible for making sure that
+	// partitions fit within memory limit.
+	const maxOutputBatchMemSize = math.MaxInt64
 	hj.output, _ = hj.outputUnlimitedAllocator.ResetMaybeReallocate(
-		hj.outputTypes, hj.output, minCapacity, hj.memoryLimit,
+		hj.outputTypes, hj.output, nResults, maxOutputBatchMemSize,
 	)
 }
 
@@ -798,14 +806,12 @@ func NewHashJoiner(
 	spec HashJoinerSpec,
 	leftSource, rightSource colexecop.Operator,
 	initialNumBuckets uint64,
-	memoryLimit int64,
 ) colexecop.ResettableOperator {
 	return &hashJoiner{
 		joinHelper:                 newJoinHelper(leftSource, rightSource),
 		buildSideAllocator:         buildSideAllocator,
 		outputUnlimitedAllocator:   outputUnlimitedAllocator,
 		spec:                       spec,
-		memoryLimit:                memoryLimit,
 		outputTypes:                spec.JoinType.MakeOutputTypes(spec.Left.SourceTypes, spec.Right.SourceTypes),
 		hashTableInitialNumBuckets: initialNumBuckets,
 	}

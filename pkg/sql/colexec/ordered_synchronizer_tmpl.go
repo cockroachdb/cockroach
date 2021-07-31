@@ -59,7 +59,7 @@ type OrderedSynchronizer struct {
 	colexecop.InitHelper
 	span *tracing.Span
 
-	allocator             *colmem.Allocator
+	accountingHelper      colmem.SetAccountingHelper
 	memoryLimit           int64
 	inputs                []colexecargs.OpWithMetaInfo
 	ordering              colinfo.ColumnOrdering
@@ -77,6 +77,10 @@ type OrderedSynchronizer struct {
 	heap []int
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
+	// maxCapacity if non-zero indicates the target capacity of the output
+	// batch. It is set when, after setting a row, we realize that the output
+	// batch has exceeded the memory limit.
+	maxCapacity int
 	output      coldata.Batch
 	outNulls    []*coldata.Nulls
 	// In order to reduce the number of interface conversions, we will get access
@@ -125,14 +129,15 @@ func NewOrderedSynchronizer(
 	typs []*types.T,
 	ordering colinfo.ColumnOrdering,
 ) *OrderedSynchronizer {
-	return &OrderedSynchronizer{
-		allocator:             allocator,
+	os := &OrderedSynchronizer{
 		memoryLimit:           memoryLimit,
 		inputs:                inputs,
 		ordering:              ordering,
 		typs:                  typs,
 		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
 	}
+	os.accountingHelper.Init(allocator, typs, nil /* notNeededVecIdxs */)
+	return os
 }
 
 // Next is part of the Operator interface.
@@ -151,61 +156,64 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 	}
 	o.resetOutput()
 	outputIdx := 0
-	o.allocator.PerformOperation(o.output.ColVecs(), func() {
-		for outputIdx < o.output.Capacity() {
-			if o.Len() == 0 {
-				// All inputs exhausted.
-				break
-			}
+	for outputIdx < o.output.Capacity() && (o.maxCapacity == 0 || outputIdx < o.maxCapacity) {
+		if o.Len() == 0 {
+			// All inputs exhausted.
+			break
+		}
 
-			minBatch := o.heap[0]
-			// Copy the min row into the output.
-			batch := o.inputBatches[minBatch]
-			srcRowIdx := o.inputIndices[minBatch]
-			if sel := batch.Selection(); sel != nil {
-				srcRowIdx = sel[srcRowIdx]
-			}
-			for i := range o.typs {
-				vec := batch.ColVec(i)
-				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(srcRowIdx) {
-					o.outNulls[i].SetNull(outputIdx)
-				} else {
-					switch o.canonicalTypeFamilies[i] {
-					// {{range .}}
-					case _CANONICAL_TYPE_FAMILY:
-						switch o.typs[i].Width() {
-						// {{range .WidthOverloads}}
-						case _TYPE_WIDTH:
-							srcCol := vec._TYPE()
-							outCol := o.out_TYPECols[o.outColsMap[i]]
-							v := srcCol.Get(srcRowIdx)
-							outCol.Set(outputIdx, v)
-							// {{end}}
-						}
+		minBatch := o.heap[0]
+		// Copy the min row into the output.
+		batch := o.inputBatches[minBatch]
+		srcRowIdx := o.inputIndices[minBatch]
+		if sel := batch.Selection(); sel != nil {
+			srcRowIdx = sel[srcRowIdx]
+		}
+		for i := range o.typs {
+			vec := batch.ColVec(i)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(srcRowIdx) {
+				o.outNulls[i].SetNull(outputIdx)
+			} else {
+				switch o.canonicalTypeFamilies[i] {
+				// {{range .}}
+				case _CANONICAL_TYPE_FAMILY:
+					switch o.typs[i].Width() {
+					// {{range .WidthOverloads}}
+					case _TYPE_WIDTH:
+						srcCol := vec._TYPE()
+						outCol := o.out_TYPECols[o.outColsMap[i]]
+						v := srcCol.Get(srcRowIdx)
+						outCol.Set(outputIdx, v)
 						// {{end}}
-					default:
-						colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", o.typs[i].String()))
 					}
+					// {{end}}
+				default:
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", o.typs[i].String()))
 				}
 			}
-
-			// Advance the input batch, fetching a new batch if necessary.
-			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
-				o.inputIndices[minBatch]++
-			} else {
-				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
-				o.inputIndices[minBatch] = 0
-				o.updateComparators(minBatch)
-			}
-			if o.inputBatches[minBatch].Length() == 0 {
-				heap.Remove(o, 0)
-			} else {
-				heap.Fix(o, 0)
-			}
-
-			outputIdx++
 		}
-	})
+
+		// Advance the input batch, fetching a new batch if necessary.
+		if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
+			o.inputIndices[minBatch]++
+		} else {
+			o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
+			o.inputIndices[minBatch] = 0
+			o.updateComparators(minBatch)
+		}
+		if o.inputBatches[minBatch].Length() == 0 {
+			heap.Remove(o, 0)
+		} else {
+			heap.Fix(o, 0)
+		}
+
+		// Account for the memory of the row we have just set.
+		o.accountingHelper.AccountForSet(outputIdx)
+		outputIdx++
+		if o.maxCapacity == 0 && o.accountingHelper.Allocator.Used() >= o.memoryLimit {
+			o.maxCapacity = outputIdx
+		}
+	}
 
 	o.output.SetLength(outputIdx)
 	return o.output
@@ -213,8 +221,8 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 
 func (o *OrderedSynchronizer) resetOutput() {
 	var reallocated bool
-	o.output, reallocated = o.allocator.ResetMaybeReallocate(
-		o.typs, o.output, 1 /* minCapacity */, o.memoryLimit,
+	o.output, reallocated = o.accountingHelper.ResetMaybeReallocate(
+		o.typs, o.output, 1 /* minDesiredCapacity */, o.memoryLimit,
 	)
 	if reallocated {
 		// {{range .}}
@@ -280,12 +288,14 @@ func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 }
 
 func (o *OrderedSynchronizer) Close() error {
+	o.accountingHelper.Close()
 	for _, input := range o.inputs {
 		input.ToClose.CloseAndLogOnErr(o.EnsureCtx(), "ordered synchronizer")
 	}
 	if o.span != nil {
 		o.span.Finish()
 	}
+	*o = OrderedSynchronizer{}
 	return nil
 }
 

@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -70,7 +71,7 @@ var aggTypes = []aggType{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
 		new: func(args *colexecagg.NewAggregatorArgs) (colexecop.ResettableOperator, error) {
-			return NewHashAggregator(args, nil /* newSpillingQueueArgs */)
+			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
 		},
 		name: "hash",
 	},
