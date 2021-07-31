@@ -14,7 +14,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	enc_hex "encoding/hex"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -71,8 +71,6 @@ table_name NOT IN (
 	'cluster_contended_indexes',
 	'cluster_contended_tables',
 	'cluster_inflight_traces',
-	'create_statements',
-	'create_type_statements',
 	'cross_db_references',
 	'databases',
 	'forward_dependencies',
@@ -101,6 +99,7 @@ ORDER BY name ASC`)
 	tables = append(
 		tables,
 		"system.jobs",
+		"system.jobs_full",
 		"system.descriptor",
 		"system.namespace",
 		"system.scheduled_jobs",
@@ -109,7 +108,10 @@ ORDER BY name ASC`)
 
 	var exp []string
 	exp = append(exp, debugZipTablesPerNode...)
-	exp = append(exp, debugZipTablesPerCluster...)
+	for _, t := range debugZipTablesPerCluster {
+		t = strings.TrimPrefix(t, `"".`)
+		exp = append(exp, t)
+	}
 	sort.Strings(exp)
 
 	assert.Equal(t, exp, tables)
@@ -513,7 +515,7 @@ test/generate_series(1,15000) as t(x).4.txt.err.txt
 }
 
 // This test the operation of zip over secure clusters.
-func TestToHex(t *testing.T) {
+func TestToBase64(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -539,7 +541,7 @@ func TestToHex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	type hexField struct {
+	type b64Field struct {
 		idx int
 		msg protoutil.Message
 	}
@@ -547,18 +549,18 @@ func TestToHex(t *testing.T) {
 	// Negative indices work from the end - this is needed because parsing the
 	// fields is not alway s precise as there can be spaces in the fields but the
 	// hex fields are always in the end of the row and they don't contain spaces.
-	hexFiles := map[string][]hexField{
+	b64Files := map[string][]b64Field{
 		"debug/system.jobs.txt": {
-			{idx: -2, msg: &jobspb.Payload{}},
-			{idx: -1, msg: &jobspb.Progress{}},
+			{idx: 4 /* before: id, status, date, time */, msg: &jobspb.Payload{}},
+			{idx: 5, msg: &jobspb.Progress{}},
 		},
 		"debug/system.descriptor.txt": {
-			{idx: 2, msg: &descpb.Descriptor{}},
+			{idx: 1, msg: &descpb.Descriptor{}},
 		},
 	}
 
 	for _, f := range r.File {
-		fieldsToCheck, ok := hexFiles[f.Name]
+		fieldsToCheck, ok := b64Files[f.Name]
 		if !ok {
 			continue
 		}
@@ -581,14 +583,13 @@ func TestToHex(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Logf("line:\n%s", line)
 
 		fields := strings.Fields(line)
 		for _, hf := range fieldsToCheck {
 			i := hf.idx
-			if i < 0 {
-				i = len(fields) + i
-			}
-			bts, err := enc_hex.DecodeString(fields[i])
+			t.Logf("field column %d, value %q", i, fields[i])
+			bts, err := base64.StdEncoding.DecodeString(fields[i])
 			if err != nil {
 				t.Fatal(err)
 			}

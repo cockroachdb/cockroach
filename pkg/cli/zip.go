@@ -48,8 +48,16 @@ var customQuery = map[string]string{
 		"SELECT * FROM crdb_internal.node_inflight_trace_spans " +
 		"WHERE duration > INTERVAL '10' ORDER BY trace_id ASC, duration DESC" +
 		") SELECT * FROM spans, LATERAL crdb_internal.payloads_for_span(span_id)",
-	"system.jobs":       "SELECT *, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress FROM system.jobs",
-	"system.descriptor": "SELECT *, to_hex(descriptor) AS hex_descriptor FROM system.descriptor",
+
+	// The system.jobs contains a timestamp column before the payload
+	// and progress column. As of this writing, the default formatting
+	// for the timestamp column when it is retrieved is to separate
+	// the date and timestamp parts with a space, which messes up the column
+	// alignment when "debug doctor" wants to parse this data.
+	// TODO(knz): Remove this when the table data is retrieved
+	// using a format that preserves column alignment.
+	"system.jobs":      "SELECT id, status, '---' as unused, payload, progress FROM system.jobs",
+	"system.jobs_full": "TABLE system.jobs",
 }
 
 type debugZipContext struct {
@@ -246,11 +254,6 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 
-	// Collect the SQL schema.
-	if err := zc.collectSchemaData(ctx); err != nil {
-		return err
-	}
-
 	// Add a little helper script to draw attention to the existence of tags in
 	// the profiles.
 	{
@@ -302,8 +305,8 @@ func maybeAddProfileSuffix(name string) string {
 func (zc *debugZipContext) dumpTableDataForZip(
 	zr *zipReporter, conn clisqlclient.Conn, base, table, query string,
 ) error {
-	fullQuery := fmt.Sprintf(`SET statement_timeout = '%s'; %s`, zc.timeout, query)
-	baseName := base + "/" + table
+	fullQuery := fmt.Sprintf(`SET statement_timeout = '%s'; SET bytea_output = 'base64'; %s`, zc.timeout, query)
+	baseName := base + "/" + sanitizeFilename(table)
 
 	s := zr.start("retrieving SQL data for %s", table)
 	const maxRetries = 5
@@ -346,4 +349,8 @@ func (zc *debugZipContext) dumpTableDataForZip(
 		break
 	}
 	return nil
+}
+
+func sanitizeFilename(f string) string {
+	return strings.TrimPrefix(f, `"".`)
 }
