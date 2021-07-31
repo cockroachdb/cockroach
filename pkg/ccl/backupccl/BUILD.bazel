@@ -165,6 +165,7 @@ go_test(
         "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/roachpb:with-mocks",
         "//pkg/scheduledjobs",
         "//pkg/security",
