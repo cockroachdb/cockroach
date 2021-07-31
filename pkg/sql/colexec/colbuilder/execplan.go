@@ -352,6 +352,9 @@ func (r opResult) createDiskBackedSort(
 		// The input is already fully ordered, so there is nothing to sort.
 		return input, nil
 	}
+	totalMemLimit := execinfra.GetWorkMemLimit(flowCtx)
+	spoolMemLimit := totalMemLimit * 4 / 5
+	maxOutputBatchMemSize := totalMemLimit - spoolMemLimit
 	if matchLen > 0 {
 		// The input is already partially ordered. Use a chunks sorter to avoid
 		// loading all the rows into memory.
@@ -359,13 +362,13 @@ func (r opResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			sortChunksMemAccount = streamingMemAccount
 		} else {
-			sortChunksMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategy(
-				ctx, flowCtx, opNamePrefix+"sort-chunks", processorID,
+			sortChunksMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
 			)
 		}
 		inMemorySorter, err = colexec.NewSortChunks(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
-			ordering.Columns, int(matchLen),
+			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
 		)
 	} else if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
 		// There is a limit specified, so we know exactly how many rows the
@@ -381,14 +384,14 @@ func (r opResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			topKSorterMemAccount = streamingMemAccount
 		} else {
-			topKSorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategy(
-				ctx, flowCtx, opNamePrefix+"topk-sort", processorID,
+			topKSorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+				ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
 			)
 		}
 		topK = post.Limit + post.Offset
 		inMemorySorter = colexec.NewTopKSorter(
-			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input, inputTypes,
-			ordering.Columns, topK,
+			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
+			inputTypes, ordering.Columns, topK, maxOutputBatchMemSize,
 		)
 	} else {
 		// No optimizations possible. Default to the standard sort operator.
@@ -396,12 +399,13 @@ func (r opResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			sorterMemAccount = streamingMemAccount
 		} else {
-			sorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategy(
-				ctx, flowCtx, opNamePrefix+"sort-all", processorID,
+			sorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
+				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-all", processorID,
 			)
 		}
 		inMemorySorter, err = colexec.NewSorter(
-			colmem.NewAllocator(ctx, sorterMemAccount, factory), input, inputTypes, ordering.Columns,
+			colmem.NewAllocator(ctx, sorterMemAccount, factory), input,
+			inputTypes, ordering.Columns, maxOutputBatchMemSize,
 		)
 	}
 	if err != nil {
@@ -844,6 +848,11 @@ func NewColOperator(
 
 			if needHash {
 				opName := "hash-aggregator"
+				outputUnlimitedAllocator := colmem.NewAllocator(
+					ctx,
+					result.createUnlimitedMemAccount(ctx, flowCtx, opName+"-output", spec.ProcessorID),
+					factory,
+				)
 				// We have separate unit tests that instantiate the in-memory
 				// hash aggregators, so we don't need to look at
 				// args.TestingKnobs.DiskSpillingDisabled and always instantiate
@@ -861,16 +870,23 @@ func NewColOperator(
 					)
 					newAggArgs.MemAccount = hashAggregatorUnlimitedMemAccount
 					evalCtx.SingleDatumAggMemAccount = hashAggregatorUnlimitedMemAccount
+					maxOutputBatchMemSize := execinfra.GetWorkMemLimit(flowCtx)
 					// The second argument is nil because we disable the
 					// tracking of the input tuples.
-					result.Root, err = colexec.NewHashAggregator(newAggArgs, nil /* newSpillingQueueArgs */)
+					result.Root, err = colexec.NewHashAggregator(
+						newAggArgs, nil, /* newSpillingQueueArgs */
+						outputUnlimitedAllocator, maxOutputBatchMemSize,
+					)
 				} else {
 					// We will divide the available memory equally between the
 					// two usages - the hash aggregation itself and the input
 					// tuples tracking.
 					totalMemLimit := execinfra.GetWorkMemLimit(flowCtx)
+					// We will give 20% of the hash aggregation budget to the
+					// output batch.
+					maxOutputBatchMemSize := totalMemLimit / 10
 					hashAggregatorMemAccount, hashAggregatorMemMonitorName := result.createMemAccountForSpillStrategyWithLimit(
-						ctx, flowCtx, totalMemLimit/2, opName, spec.ProcessorID,
+						ctx, flowCtx, totalMemLimit/2-maxOutputBatchMemSize, opName, spec.ProcessorID,
 					)
 					spillingQueueMemMonitorName := hashAggregatorMemMonitorName + "-spilling-queue"
 					// We need to create a separate memory account for the
@@ -895,6 +911,8 @@ func NewColOperator(
 							FDSemaphore:        args.FDSemaphore,
 							DiskAcc:            result.createDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID),
 						},
+						outputUnlimitedAllocator,
+						maxOutputBatchMemSize,
 					)
 					if err != nil {
 						return r, err
@@ -926,6 +944,13 @@ func NewColOperator(
 								&newAggArgs,
 								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaOpName, factory),
 								result.createDiskAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID),
+								// Note that here we can use the same allocator
+								// object as we passed to the in-memory hash
+								// aggregator because only one (either in-memory
+								// or external) operator will reach the output
+								// state.
+								outputUnlimitedAllocator,
+								maxOutputBatchMemSize,
 							)
 						},
 						args.TestingKnobs.SpillingCallbackFn,
@@ -1056,7 +1081,7 @@ func NewColOperator(
 				inMemoryHashJoiner := colexecjoin.NewHashJoiner(
 					colmem.NewAllocator(ctx, hashJoinerMemAccount, factory),
 					hashJoinerUnlimitedAllocator, hjSpec, inputs[0].Root, inputs[1].Root,
-					colexecjoin.HashJoinerInitialNumBuckets, memoryLimit,
+					colexecjoin.HashJoinerInitialNumBuckets,
 				)
 				if useStreamingMemAccountForBuffering || args.TestingKnobs.DiskSpillingDisabled {
 					// We will not be creating a disk-backed hash joiner because

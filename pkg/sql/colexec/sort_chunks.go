@@ -34,6 +34,7 @@ func NewSortChunks(
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
+	maxOutputBatchMemSize int64,
 ) (colexecop.Operator, error) {
 	if matchLen < 1 || matchLen == len(orderingCols) {
 		colexecerror.InternalError(errors.AssertionFailedf(
@@ -49,7 +50,7 @@ func NewSortChunks(
 	if err != nil {
 		return nil, err
 	}
-	sorter, err := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:])
+	sorter, err := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:], maxOutputBatchMemSize)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +141,9 @@ func (c *sortChunksOp) ExportBuffered(colexecop.Operator) coldata.Batch {
 	// batch that hasn't been "processed" and should be the first to be exported.
 	firstTupleIdx := c.input.exportState.numProcessedTuplesFromBatch
 	if c.input.batch != nil && firstTupleIdx+c.exportedFromBatch < c.input.batch.Length() {
-		colexecutils.MakeWindowIntoBatch(c.windowedBatch, c.input.batch, firstTupleIdx, c.input.inputTypes)
+		colexecutils.MakeWindowIntoBatch(
+			c.windowedBatch, c.input.batch, firstTupleIdx, c.input.batch.Length(), c.input.inputTypes,
+		)
 		c.exportedFromBatch = c.windowedBatch.Length()
 		return c.windowedBatch
 	}

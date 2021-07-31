@@ -599,8 +599,8 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		})
 	}
 
-	// For now, we don't enforce any footprint-based memory limit.
-	// TODO(yuzefovich): refactor this.
+	// We don't impose any memory limits on the scratch batch because we rely on
+	// the inputs to the merge joiner to produce reasonably sized batches.
 	const maxBatchMemSize = math.MaxInt64
 	bufferedGroup.scratchBatch, _ = o.unlimitedAllocator.ResetMaybeReallocate(
 		input.sourceTypes, bufferedGroup.scratchBatch, groupLength, maxBatchMemSize,

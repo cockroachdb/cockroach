@@ -10331,7 +10331,7 @@ func (o *mergeJoinRightSemiOp) build() {
 
 func (o *mergeJoinRightSemiOp) Next() coldata.Batch {
 	o.output, _ = o.unlimitedAllocator.ResetMaybeReallocate(
-		o.outputTypes, o.output, 1 /* minCapacity */, o.memoryLimit,
+		o.outputTypes, o.output, 1 /* minDesiredCapacity */, o.memoryLimit,
 	)
 	o.bufferedGroup.helper.output = o.output
 	for {

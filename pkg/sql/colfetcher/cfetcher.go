@@ -321,18 +321,18 @@ type cFetcher struct {
 
 func (rf *cFetcher) resetBatch() {
 	var reallocated bool
-	var minCapacity int
+	var minDesiredCapacity int
 	if rf.maxCapacity > 0 {
 		// If we have already exceeded the memory limit for the output batch, we
 		// will only be using the same batch from now on.
-		minCapacity = rf.maxCapacity
+		minDesiredCapacity = rf.maxCapacity
 	} else if rf.machine.limitHint > 0 && (rf.estimatedRowCount == 0 || uint64(rf.machine.limitHint) < rf.estimatedRowCount) {
 		// If we have a limit hint, and either
 		//   1) we don't have an estimate, or
 		//   2) we have a soft limit,
 		// use the hint to size the batch. Note that if it exceeds
 		// coldata.BatchSize, ResetMaybeReallocate will chop it down.
-		minCapacity = rf.machine.limitHint
+		minDesiredCapacity = rf.machine.limitHint
 	} else {
 		// Otherwise, use the estimate. Note that if the estimate is not
 		// present, it'll be 0 and ResetMaybeReallocate will allocate the
@@ -342,13 +342,13 @@ func (rf *cFetcher) resetBatch() {
 		// into an int. We have to be careful: if we just cast it directly, a
 		// giant estimate will wrap around and become negative.
 		if rf.estimatedRowCount > uint64(coldata.BatchSize()) {
-			minCapacity = coldata.BatchSize()
+			minDesiredCapacity = coldata.BatchSize()
 		} else {
-			minCapacity = int(rf.estimatedRowCount)
+			minDesiredCapacity = int(rf.estimatedRowCount)
 		}
 	}
 	rf.machine.batch, reallocated = rf.accountingHelper.ResetMaybeReallocate(
-		rf.typs, rf.machine.batch, minCapacity, rf.memoryLimit,
+		rf.typs, rf.machine.batch, minDesiredCapacity, rf.memoryLimit,
 	)
 	if reallocated {
 		rf.machine.colvecs = rf.machine.batch.ColVecs()

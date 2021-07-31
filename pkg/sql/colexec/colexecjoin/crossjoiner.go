@@ -98,15 +98,13 @@ func (c *crossJoiner) Next() coldata.Batch {
 		}
 		return coldata.ZeroBatch
 	}
-	// TODO(yuzefovich): refactor willEmit calculation when ResetMaybeReallocate
-	// is updated.
 	willEmit := c.numTotalOutputTuples - c.numAlreadyEmitted
-	if willEmit > coldata.BatchSize() {
-		willEmit = coldata.BatchSize()
-	}
 	c.output, _ = c.unlimitedAllocator.ResetMaybeReallocate(
 		c.outputTypes, c.output, willEmit, c.maxOutputBatchMemSize,
 	)
+	if willEmit > c.output.Capacity() {
+		willEmit = c.output.Capacity()
+	}
 	if c.joinType.ShouldIncludeLeftColsInOutput() {
 		if c.isLeftAllNulls {
 			setAllNulls(c.output.ColVecs()[:len(c.left.types)], willEmit)
