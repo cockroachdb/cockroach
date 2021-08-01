@@ -29,8 +29,9 @@ import (
 )
 
 const (
+	// Filenames
 	cgroupV1MemStatFilename      = "memory.stat"
-	cgroupV1MemLimitStatKey      = "hierarchical_memory_limit"
+	cgroupV2MemStatFilename      = "memory.stat"
 	cgroupV2MemLimitFilename     = "memory.max"
 	cgroupV1MemUsageFilename     = "memory.usage_in_bytes"
 	cgroupV2MemUsageFilename     = "memory.current"
@@ -40,6 +41,22 @@ const (
 	cgroupV1CPUUserUsageFilename = "cpuacct.usage_user"
 	cgroupV2CPUMaxFilename       = "cpu.max"
 	cgroupV2CPUStatFilename      = "cpu.stat"
+
+	// {memory|cpu}.stat file keys
+	//
+	// key for # of bytes of file-backed memory on inactive LRU list in cgroupv1
+	cgroupV1MemInactiveFileUsageStatKey = "total_inactive_file"
+	// key for # of bytes of file-backed memory on inactive LRU list in cgroupv2
+	cgroupV2MemInactiveFileUsageStatKey = "inactive_file"
+	cgroupV1MemLimitStatKey             = "hierarchical_memory_limit"
+)
+
+var (
+	// TODO(abarganier): Use GetMemoryUsage as heuristic in periodic query dumps
+	_, _, _ = GetMemoryUsage()
+	// TODO(abarganier): Use GetMemoryInactiveFileUsage as heuristic in periodic
+	// query dumps
+	_, _, _ = GetMemoryInactiveFileUsage()
 )
 
 // GetMemoryLimit attempts to retrieve the cgroup memory limit for the current
@@ -48,24 +65,83 @@ func GetMemoryLimit() (limit int64, warnings string, err error) {
 	return getCgroupMemLimit("/")
 }
 
-// GetMemoryUsage attempts to retrieve the cgroup memory usage value for the
-// current process
-//
-//lint:ignore U1001 TODO(abarganier): will use in querydumper once merged
+// GetMemoryUsage attempts to retrieve the cgroup memory usage value (in bytes)
+// for the current process.
 func GetMemoryUsage() (usage int64, warnings string, err error) {
 	return getCgroupMemUsage("/")
 }
 
-// `root` is set to "/" in production code and exists only for testing.
-// cgroup memory usage detection path implemented here as
-// /proc/self/cgroup file -> /proc/self/mountinfo mounts -> cgroup version -> version specific usage check
+// GetMemoryInactiveFileUsage attempts to retrieve the cgroup memory
+// inactive_file value (in bytes) for the current process. This represents the #
+// of bytes of file-backed memory on inactive LRU list.
+//
+// In the eyes of container providers such as Docker, this value can be
+// subtracted from the value returned by GetMemoryUsage to calculate the current
+// memory usage.
+//
+// See: https://docs.docker.com/engine/reference/commandline/stats/#extended-description
+func GetMemoryInactiveFileUsage() (usage int64, warnings string, err error) {
+	return getCgroupMemInactiveFileUsage("/")
+}
+
+// getCgroupMemInactiveFileUsage reads the memory cgroup's current inactive
+// file-backed memory usage (in bytes) on the inactive LRU list for both cgroups
+// v1 and v2. The associated files and keys are:
+// 		cgroupv1: cgroupV1MemInactiveFileUsageStatKey in cgroupV1MemStatFilename
+// 		cgroupv2: cgroupV2MemInactiveFileUsageStatKey in cgroupV2MemStatFilename
+//
+// The `root` parameter is set to "/" in production code and exists only for
+// testing. The cgroup inactive file usage detection path is implemented as:
+//	/proc/self/cgroup file
+// 	|->	/proc/self/mountinfo mounts
+//		|->	cgroup version
+//	 		|->	version specific usage check
+func getCgroupMemInactiveFileUsage(root string) (usage int64, warnings string, err error) {
+	path, err := detectCntrlPath(filepath.Join(root, "/proc/self/cgroup"), "memory")
+	if err != nil {
+		return 0, "", err
+	}
+
+	// If the path is empty, it indicates that no memory controller was detected.
+	if path == "" {
+		return 0, "no cgroup memory controller detected", nil
+	}
+
+	mount, ver, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path, "memory")
+	if err != nil {
+		return 0, "", err
+	}
+
+	switch ver {
+	case 1:
+		usage, warnings, err = detectMemInactiveFileUsageInV1(filepath.Join(root, mount))
+	case 2:
+		usage, warnings, err = detectMemInactiveFileUsageInV2(filepath.Join(root, mount, path))
+	default:
+		usage, err = 0, fmt.Errorf("detected unknown cgroup version index: %d", ver)
+	}
+
+	return usage, warnings, err
+}
+
+// getCgroupMemUsage reads the memory cgroup's current memory usage (in bytes)
+// for both cgroups v1 and v2. The associated files are:
+// 		cgroupv1: cgroupV1MemUsageFilename
+// 		cgroupv2: cgroupV2MemUsageFilename
+//
+// The `root` parameter is set to "/" in production code and exists only for
+// testing. The cgroup memory usage detection path is implemented here as:
+//	/proc/self/cgroup file
+// 	|->	/proc/self/mountinfo mounts
+//		|->	cgroup version
+//	 		|->	version specific usage check
 func getCgroupMemUsage(root string) (usage int64, warnings string, err error) {
 	path, err := detectCntrlPath(filepath.Join(root, "/proc/self/cgroup"), "memory")
 	if err != nil {
 		return 0, "", err
 	}
 
-	// no memory controller detected
+	// If the path is empty, it indicates that no memory controller was detected.
 	if path == "" {
 		return 0, "no cgroup memory controller detected", nil
 	}
@@ -87,16 +163,24 @@ func getCgroupMemUsage(root string) (usage int64, warnings string, err error) {
 	return usage, warnings, err
 }
 
-// `root` is set to "/" in production code and exists only for testing.
-// cgroup memory limit detection path implemented here as
-// /proc/self/cgroup file -> /proc/self/mountinfo mounts -> cgroup version -> version specific limit check
+// getCgroupMemLimit reads the memory cgroup's memory limit (in bytes) for both
+// cgroups v1 and v2. The associated files (and for cgroupv2, keys) are:
+// 		cgroupv1: cgroupV2MemLimitFilename
+// 		cgroupv2: cgroupV1MemLimitStatKey in cgroupV2MemStatFilename
+//
+// The `root` parameter is set to "/" in production code and exists only for
+// testing. The cgroup memory limit detection path is implemented here as:
+//	/proc/self/cgroup file
+// 	|->	/proc/self/mountinfo mounts
+//		|->	cgroup version
+//	 		|->	version specific limit check
 func getCgroupMemLimit(root string) (limit int64, warnings string, err error) {
 	path, err := detectCntrlPath(filepath.Join(root, "/proc/self/cgroup"), "memory")
 	if err != nil {
 		return 0, "", err
 	}
 
-	// no memory controller detected
+	// If the path is empty, it indicates that no memory controller was detected.
 	if path == "" {
 		return 0, "no cgroup memory controller detected", nil
 	}
@@ -246,14 +330,15 @@ func detectCPUUsageInV2(cRoot string) (stime, utime uint64, err error) {
 	return stime, utime, err
 }
 
-// Finds memory limit value for cgroup V1 via looking in
-// [contoller mount path]/memory.stat
+// detectMemLimitInV1 finds the memory limit value for cgroup V1 via looking in
+// [contoller mount path]/memory.stat (cgroupV1MemStatFilename) for the
+// cgroupV1MemLimitStatKey.
 func detectMemLimitInV1(cRoot string) (limit int64, warnings string, err error) {
 	return detectMemStatValue(cRoot, cgroupV1MemStatFilename, cgroupV1MemLimitStatKey, 1)
 }
 
-// Finds memory limit value for cgroup V2 via looking into
-// [controller mount path]/[leaf path]/memory.max
+// detectMemLimitInV2 finds the memory limit value for cgroup V2 via looking in
+// [controller mount path]/[leaf path]/memory.max (cgroupV2MemLimitFilename)
 //
 // TODO(vladdy): this implementation was based on podman+criu environment.
 // It may cover not all the cases when v2 becomes more widely used in container
@@ -262,19 +347,28 @@ func detectMemLimitInV2(cRoot string) (limit int64, warnings string, err error) 
 	return readInt64Value(cRoot, cgroupV2MemLimitFilename, 2)
 }
 
-// Finds memory usage value for cgroup V1 via looking in
-// [contoller mount path]/memory.usage_in_bytes
+// detectMemUsageInV1 finds the memory usage value for cgroup V1 via looking in
+// [contoller mount path]/memory.usage_in_bytes (cgroupV1MemUsageFilename)
 func detectMemUsageInV1(cRoot string) (memUsage int64, warnings string, err error) {
 	return readInt64Value(cRoot, cgroupV1MemUsageFilename, 1)
 }
 
-// Finds memory usage value for cgroup V2 via looking into
-// [controller mount path]/[leaf path]/memory.max
+// detectMemUsageInV2 finds the memory usage value for cgroup V2 via looking in
+// [controller mount path]/[leaf path]/memory.max (cgroupV2MemUsageFilename)
 //
 // TODO(vladdy): this implementation was based on podman+criu environment. It
-// may cover not all the cases when v2 becomes more widely used in container world.
+// may cover not all the cases when v2 becomes more widely used in container
+// world.
 func detectMemUsageInV2(cRoot string) (memUsage int64, warnings string, err error) {
 	return readInt64Value(cRoot, cgroupV2MemUsageFilename, 2)
+}
+
+func detectMemInactiveFileUsageInV1(root string) (int64, string, error) {
+	return detectMemStatValue(root, cgroupV1MemStatFilename, cgroupV1MemInactiveFileUsageStatKey, 1)
+}
+
+func detectMemInactiveFileUsageInV2(root string) (int64, string, error) {
+	return detectMemStatValue(root, cgroupV2MemStatFilename, cgroupV2MemInactiveFileUsageStatKey, 2)
 }
 
 func detectMemStatValue(
@@ -283,7 +377,7 @@ func detectMemStatValue(
 	statFilePath := filepath.Join(cRoot, filename)
 	stat, err := os.Open(statFilePath)
 	if err != nil {
-		return 0, "", errors.Wrapf(err, "can't read mem stats from cgroup v%d from %s", cgVersion, filename)
+		return 0, "", errors.Wrapf(err, "can't read file %s from cgroup v%d", filename, cgVersion)
 	}
 	defer func() {
 		_ = stat.Close()
@@ -299,7 +393,7 @@ func detectMemStatValue(
 		trimmed := string(bytes.TrimSpace(fields[1]))
 		value, err = strconv.ParseInt(trimmed, 10, 64)
 		if err != nil {
-			return 0, "", errors.Wrapf(err, "can't read %q memory stat from cgroup v%d from %s", key, cgVersion, filename)
+			return 0, "", errors.Wrapf(err, "can't read %q memory stat from cgroup v%d in %s", key, cgVersion, filename)
 		}
 
 		return value, "", nil
@@ -440,8 +534,8 @@ func detectCgroupVersion(fields [][]byte, controller string) (_ int, found bool)
 
 	pos++
 
-	// Check for controller specifically in cgroup v1 (it is listed in super options field),
-	// as the value can't be found if it is not enforced
+	// Check for controller specifically in cgroup v1 (it is listed in super
+	// options field), as the value can't be found if it is not enforced.
 	if bytes.Equal(fields[pos], []byte("cgroup")) && bytes.Contains(fields[pos+2], []byte(controller)) {
 		return 1, true
 	} else if bytes.Equal(fields[pos], []byte("cgroup2")) {
