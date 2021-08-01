@@ -152,6 +152,21 @@ func initMutexProfile() {
 	runtime.SetMutexProfileFraction(d)
 }
 
+func initTraceDir(ctx context.Context, dir string) {
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		// This is possible when running with only in-memory stores;
+		// in that case the start-up code sets the output directory
+		// to the current directory (.). If running the process
+		// from a directory which is not writable, we won't
+		// be able to create a sub-directory here.
+		log.Warningf(ctx, "cannot create trace dir; traces will not be dumped: %+v", err)
+		return
+	}
+}
+
 var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
 var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
@@ -1060,6 +1075,7 @@ func setupAndInitializeLoggingAndProfiling(
 	info := build.GetInfo()
 	log.Ops.Infof(ctx, "%s", info.Short())
 
+	initTraceDir(ctx, serverCfg.InflightTraceDirName)
 	initCPUProfile(ctx, serverCfg.CPUProfileDirName, serverCfg.Settings)
 	initBlockProfile()
 	initMutexProfile()

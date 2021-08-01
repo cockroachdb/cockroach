@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -115,6 +116,16 @@ func makeTestSQLConfig(st *cluster.Settings, tenID roachpb.TenantID) SQLConfig {
 	return MakeSQLConfig(tenID, base.DefaultTestTempStorageConfig(st))
 }
 
+func initTraceDir(dir string) error {
+	if dir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return errors.Wrap(err, "cannot create trace dir; traces will not be dumped")
+	}
+	return nil
+}
+
 // makeTestConfigFromParams creates a Config from a TestServerParams.
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	st := params.Settings
@@ -140,6 +151,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality
+	if params.TraceDir != "" {
+		if err := initTraceDir(params.TraceDir); err == nil {
+			cfg.InflightTraceDirName = params.TraceDir
+		}
+	}
 	if knobs := params.Knobs.Store; knobs != nil {
 		if mo := knobs.(*kvserver.StoreTestingKnobs).MaxOffset; mo != 0 {
 			cfg.MaxOffset = MaxOffsetType(mo)

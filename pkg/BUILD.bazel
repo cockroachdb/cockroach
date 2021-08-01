@@ -175,6 +175,7 @@ ALL_TESTS = [
     "//pkg/server/settingswatcher:settingswatcher_test",
     "//pkg/server/status:status_test",
     "//pkg/server/telemetry:telemetry_test",
+    "//pkg/server/tracedumper:tracedumper_test",
     "//pkg/server:server_test",
     "//pkg/settings:settings_test",
     "//pkg/sql/catalog/catalogkeys:catalogkeys_test",

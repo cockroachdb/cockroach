@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "zipper",
+    srcs = ["zipper.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/zipper",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/log",
+        "//pkg/util/memzipper",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

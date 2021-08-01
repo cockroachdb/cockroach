@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -36,8 +35,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A special jobs.Resumer that, instead of finishing
-// the job successfully, forces the job to be paused.
+// A special job Resumer that records a structured span recording during
+// execution.
 var _ jobs.Resumer = &traceSpanResumer{}
 var _ jobs.TraceableJob = &traceSpanResumer{}
 
@@ -67,8 +66,6 @@ func (r *traceSpanResumer) OnFailOrCancel(ctx context.Context, execCtx interface
 
 func TestDebugJobTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	skip.UnderRace(t, "test timing out")
 
 	ctx := context.Background()
 	argsFn := func(args *base.TestServerArgs) {
