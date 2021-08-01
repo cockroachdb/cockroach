@@ -232,13 +232,90 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
+	c.generateLookupJoinsImpl(
+		grp, joinType,
+		input,
+		scanPrivate.Cols,
+		opt.ColSet{}, /* projectedVirtualCols */
+		scanPrivate,
+		on,
+		joinPrivate,
+	)
+}
+
+// GenerateLookupJoinsWithVirtualCols is similar to GenerateLookupJoins but
+// generates lookup joins into indexes that contain virtual columns.
+//
+// In a canonical plan a virtual column is produced with a Project expression on
+// top of a Scan. This is necessary because virtual columns aren't stored in the
+// primary index. When a virtual column is indexed, a lookup join can be
+// generated that both uses the virtual column as a lookup column and produces
+// the column directly from the index without a Project.
+//
+// For example:
+//
+//         Join                       LookupJoin(t@idx)
+//         /   \                           |
+//        /     \            ->            |
+//      Input  Project                   Input
+//               |
+//               |
+//             Scan(t)
+//
+// This function and its associated rule currently require that:
+//
+//   1. The join is an inner join.
+//   2. The right side projects only virtual computed columns.
+//   3. All the projected virtual columns are covered by a single index.
+//
+// It should be possible to support semi- and anti- joins. Left joins may be
+// possible with additional complexity.
+//
+// It should also be possible to support cases where all the virtual columns are
+// not covered by a single index by wrapping the lookup join in a Project that
+// produces the non-covered virtual columns.
+func (c *CustomFuncs) GenerateLookupJoinsWithVirtualCols(
+	grp memo.RelExpr,
+	joinType opt.Operator,
+	input memo.RelExpr,
+	rightCols opt.ColSet,
+	projectedVirtualCols opt.ColSet,
+	scanPrivate *memo.ScanPrivate,
+	on memo.FiltersExpr,
+	joinPrivate *memo.JoinPrivate,
+) {
+	c.generateLookupJoinsImpl(
+		grp, joinType,
+		input,
+		rightCols,
+		projectedVirtualCols,
+		scanPrivate,
+		on,
+		joinPrivate,
+	)
+}
+
+// generateLookupJoinsImpl is the general implementation for generating lookup
+// joins. See GenerateLookupJoins and GenerateLookupJoinsWithVirtualCols for
+// more details.
+func (c *CustomFuncs) generateLookupJoinsImpl(
+	grp memo.RelExpr,
+	joinType opt.Operator,
+	input memo.RelExpr,
+	rightCols opt.ColSet,
+	projectedVirtualCols opt.ColSet,
+	scanPrivate *memo.ScanPrivate,
+	on memo.FiltersExpr,
+	joinPrivate *memo.JoinPrivate,
+) {
+
 	if joinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
 		return
 	}
 	md := c.e.mem.Metadata()
 	inputProps := input.Relational()
 
-	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, rightCols, on)
 	n := len(leftEq)
 	if n == 0 {
 		return
@@ -253,7 +330,18 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	var pkCols opt.ColList
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
-	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
+		// Skip indexes that do no cover all virtual projection columns, if
+		// there are any. This can happen when there are multiple virtual
+		// columns indexed in different indexes.
+		//
+		// TODO(mgartner): It should be possible to plan a lookup join in this
+		// case by producing the covered virtual columns from the lookup join
+		// and producing the rest in a Project that wraps the join.
+		if !projectedVirtualCols.SubsetOf(indexCols) {
+			return
+		}
+
 		// Find the longest prefix of index key columns that are constrained by
 		// an equality with another column or a constant.
 		numIndexKeyCols := index.LaxKeyColumnCount()
@@ -317,11 +405,14 @@ func (c *CustomFuncs) GenerateLookupJoins(
 					shouldBuildMultiSpanLookupJoin = true
 					break
 				}
-				if j == 0 && index.PartitionCount() > 1 {
+				if j == 0 && projectedVirtualCols.Empty() && index.PartitionCount() > 1 {
 					// If this is the first index column and there is more than one
 					// partition, we may be able to build a locality optimized lookup
 					// join. This requires a multi-span lookup join as a starting point.
 					// See GenerateLocalityOptimizedLookupJoin for details.
+					//
+					// Note that we do not currently support locality optimized
+					// lookup joins for indexes on virtual columns.
 					shouldBuildMultiSpanLookupJoin = true
 					break
 				}
@@ -372,7 +463,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			var eqFilters memo.FiltersExpr
 			extractEqualityFilter := func(leftCol, rightCol opt.ColumnID) memo.FiltersItem {
 				return memo.ExtractJoinEqualityFilter(
-					leftCol, rightCol, inputProps.OutputCols, scanPrivate.Cols, on,
+					leftCol, rightCol, inputProps.OutputCols, rightCols, on,
 				)
 			}
 			eqFilters, constFilters, rightSideCols = c.findFiltersForIndexLookup(
@@ -409,13 +500,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols()
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
-		// TODO(mgartner): The right side of the join can "produce" columns held
-		// constant by a partial index predicate, but the lookup joiner does not
-		// currently support this. For now, if constProj is non-empty we
-		// consider the index non-covering.
-		if isCovering && len(constProj) == 0 {
+		isCovering := rightCols.SubsetOf(indexCols)
+		if isCovering {
 			// Case 1 (see function comment).
-			lookupJoin.Cols.UnionWith(scanPrivate.Cols)
+			lookupJoin.Cols.UnionWith(rightCols)
 
 			// If some optional filters were used to build the lookup expression, we
 			// may need to wrap the final expression with a project. We don't need to
@@ -466,7 +554,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// right side in their output columns, so even if the ON filters no
 			// longer reference an un-covered column, they must be fetched (case
 			// 2, see function comment).
-			filterColsFromRight := scanPrivate.Cols.Intersection(onFilters.OuterCols())
+			filterColsFromRight := rightCols.Intersection(onFilters.OuterCols())
 			if filterColsFromRight.SubsetOf(indexCols) {
 				lookupJoin.Cols.UnionWith(filterColsFromRight)
 				c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
@@ -497,7 +585,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		// The lower LookupJoin must return all PK columns (they are needed as key
 		// columns for the index join).
-		lookupJoin.Cols.UnionWith(scanPrivate.Cols.Intersection(indexCols))
+		lookupJoin.Cols.UnionWith(rightCols.Intersection(indexCols))
 		for i := range pkCols {
 			lookupJoin.Cols.Add(pkCols[i])
 		}
@@ -546,7 +634,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		indexJoin.Table = scanPrivate.Table
 		indexJoin.Index = cat.PrimaryIndex
 		indexJoin.KeyCols = pkCols
-		indexJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
+		indexJoin.Cols = rightCols.Union(inputProps.OutputCols)
 		indexJoin.LookupColsAreTableKey = true
 
 		// Create the LookupJoin for the index join in the same group.
