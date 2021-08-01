@@ -208,6 +208,45 @@
     $private
 )
 
+# GenerateLookupJoinsWithVirtualCols is similar to GenerateLookupJoins but
+# applies when the input is a Project that produces virtual computed columns.
+# See the GenerateLookupJoinsWithVirtualCols custom function for more details.
+#
+# TODO(mgartner): Generate lookup joins with virtual columns for semi- and
+# anti-joins. This may also be possible for left joins, but could be tricky.
+#
+# TODO(mgartner): Generate lookup joins with virtual columns and additional
+# filters where the right side is of the form (Project (Select (Scan))). This
+# will enable lookup joins into partial indexes on virtual columns.
+[GenerateLookupJoinsWithVirtualCols, Explore]
+(InnerJoin
+    $left:*
+    $project:(Project
+            (Scan $scanPrivate:*) &
+                (IsCanonicalScan $scanPrivate) &
+                ^(ColsAreEmpty
+                    $virtualCols:(VirtualColumns $scanPrivate)
+                )
+            $projections:*
+        ) &
+        (ColsAreSubset
+            $projectedVirtualCols:(ProjectionCols $projections)
+            $virtualCols
+        )
+    $on:*
+    $private:*
+)
+=>
+(GenerateLookupJoinsWithVirtualCols
+    (OpName)
+    $left
+    (OutputCols $project)
+    $projectedVirtualCols
+    $scanPrivate
+    $on
+    $private
+)
+
 # PushJoinIntoIndexJoin pushes an InnerJoin into an IndexJoin. The IndexJoin is
 # replaced with a LookupJoin, since it now must output columns from the right
 # side of the InnerJoin as well as from the original lookup table. This can

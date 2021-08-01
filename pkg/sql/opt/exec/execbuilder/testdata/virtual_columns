@@ -144,6 +144,53 @@ vectorized: true
           table: t_idx@t_idx_v_idx
           spans: /1-/2
 
+# Covering lookup join.
+query T
+EXPLAIN (VERBOSE) SELECT v, x FROM (VALUES (1), (10), (5)) AS u(x) INNER JOIN t_idx ON u.x = t_idx.v
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (v, x)
+│ estimated row count: 3 (missing stats)
+│ table: t_idx@t_idx_v_idx
+│ equality: (column1) = (v)
+│
+└── • values
+      columns: (column1)
+      size: 1 column, 3 rows
+      row 0, expr 0: 1
+      row 1, expr 0: 10
+      row 2, expr 0: 5
+
+# Non-covering lookup join that requires a second join on the primary index.
+query T
+EXPLAIN (VERBOSE) SELECT a, b, v, x FROM (VALUES (1), (10), (5)) AS u(x) INNER JOIN t_idx ON u.x = t_idx.v
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, v, x)
+│ estimated row count: 3 (missing stats)
+│ table: t_idx@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│
+└── • lookup join (inner)
+    │ columns: (column1, a, v)
+    │ estimated row count: 30 (missing stats)
+    │ table: t_idx@t_idx_v_idx
+    │ equality: (column1) = (v)
+    │
+    └── • values
+          columns: (column1)
+          size: 1 column, 3 rows
+          row 0, expr 0: 1
+          row 1, expr 0: 10
+          row 2, expr 0: 5
+
 subtest Insert
 
 # TODO(radu): we shouldn't need to synthesize v here.
