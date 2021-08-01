@@ -29,8 +29,9 @@ import (
 )
 
 const (
+	// Filenames
 	cgroupV1MemStatFilename      = "memory.stat"
-	cgroupV1MemLimitStatKey      = "hierarchical_memory_limit"
+	cgroupV2MemStatFilename      = "memory.stat"
 	cgroupV2MemLimitFilename     = "memory.max"
 	cgroupV1MemUsageFilename     = "memory.usage_in_bytes"
 	cgroupV2MemUsageFilename     = "memory.current"
@@ -40,6 +41,14 @@ const (
 	cgroupV1CPUUserUsageFilename = "cpuacct.usage_user"
 	cgroupV2CPUMaxFilename       = "cpu.max"
 	cgroupV2CPUStatFilename      = "cpu.stat"
+
+	// {memory|cpu}.stat file keys
+	//
+	// key for # of bytes of file-backed memory on inactive LRU list in cgroupv1
+	cgroupV1MemInactiveFileUsageStatKey = "total_inactive_file"
+	// key for # of bytes of file-backed memory on inactive LRU list in cgroupv2
+	cgroupV2MemInactiveFileUsageStatKey = "inactive_file"
+	cgroupV1MemLimitStatKey             = "hierarchical_memory_limit"
 )
 
 // GetMemoryLimit attempts to retrieve the cgroup memory limit for the current
@@ -49,11 +58,54 @@ func GetMemoryLimit() (limit int64, warnings string, err error) {
 }
 
 // GetMemoryUsage attempts to retrieve the cgroup memory usage value for the
-// current process
+// current process.
 //
 //lint:ignore U1001 TODO(abarganier): will use in querydumper once merged
 func GetMemoryUsage() (usage int64, warnings string, err error) {
 	return getCgroupMemUsage("/")
+}
+
+// GetMemoryInactiveFileUsage attempts to retrieve the cgroup memory
+// inactive_file value for the current process. Represents the # of bytes of
+// file-backed memory on inactive LRU list.
+//
+// In the eyes of container providers such as Docker, this value can be
+// subtracted from the value returned by GetMemoryUsage to calculate the current
+// memory usage in the eyes of the container provider.
+//
+// See: https://docs.docker.com/engine/reference/commandline/stats/#extended-description
+//
+//lint:ignore U1001 TODO(abarganier): will use in querydumper once merged
+func GetMemoryInactiveFileUsage() (usage int64, warnings string, err error) {
+	return getCgroupMemInactiveFileUsage("/")
+}
+
+func getCgroupMemInactiveFileUsage(root string) (usage int64, warnings string, err error) {
+	path, err := detectCntrlPath(filepath.Join(root, "/proc/self/cgroup"), "memory")
+	if err != nil {
+		return 0, "", err
+	}
+
+	// no memory controller detected
+	if path == "" {
+		return 0, "no cgroup memory controller detected", nil
+	}
+
+	mount, ver, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path, "memory")
+	if err != nil {
+		return 0, "", err
+	}
+
+	switch ver {
+	case 1:
+		usage, warnings, err = detectMemInactiveFileUsageInV1(filepath.Join(root, mount))
+	case 2:
+		usage, warnings, err = detectMemInactiveFileUsageInV2(filepath.Join(root, mount, path))
+	default:
+		usage, err = 0, fmt.Errorf("detected unknown cgroup version index: %d", ver)
+	}
+
+	return usage, warnings, err
 }
 
 // `root` is set to "/" in production code and exists only for testing.
@@ -277,13 +329,21 @@ func detectMemUsageInV2(cRoot string) (memUsage int64, warnings string, err erro
 	return readInt64Value(cRoot, cgroupV2MemUsageFilename, 2)
 }
 
+func detectMemInactiveFileUsageInV1(root string) (int64, string, error) {
+	return detectMemStatValue(root, cgroupV1MemStatFilename, cgroupV1MemInactiveFileUsageStatKey, 1)
+}
+
+func detectMemInactiveFileUsageInV2(root string) (int64, string, error) {
+	return detectMemStatValue(root, cgroupV2MemStatFilename, cgroupV2MemInactiveFileUsageStatKey, 2)
+}
+
 func detectMemStatValue(
 	cRoot, filename, key string, cgVersion int,
 ) (value int64, warnings string, err error) {
 	statFilePath := filepath.Join(cRoot, filename)
 	stat, err := os.Open(statFilePath)
 	if err != nil {
-		return 0, "", errors.Wrapf(err, "can't read mem stats from cgroup v%d from %s", cgVersion, filename)
+		return 0, "", errors.Wrapf(err, "can't read file %s from cgroup v%d", filename, cgVersion)
 	}
 	defer func() {
 		_ = stat.Close()
@@ -299,7 +359,7 @@ func detectMemStatValue(
 		trimmed := string(bytes.TrimSpace(fields[1]))
 		value, err = strconv.ParseInt(trimmed, 10, 64)
 		if err != nil {
-			return 0, "", errors.Wrapf(err, "can't read %q memory stat from cgroup v%d from %s", key, cgVersion, filename)
+			return 0, "", errors.Wrapf(err, "can't read %q memory stat from cgroup v%d in %s", key, cgVersion, filename)
 		}
 
 		return value, "", nil
