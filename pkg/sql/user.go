@@ -17,10 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,14 +28,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetUserAuthInfo determines if the given user exists and
-// also returns a password retrieval function.
+// GetUserSessionInitInfo determines if the given user exists and
+// also returns a password retrieval function, other authentication-related
+// information, and default session variable settings that are to be applied
+// before a SQL session is created.
 //
 // The caller is responsible for normalizing the username.
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 //
 // The function is tolerant of unavailable clusters (or unavailable
-// system.user) as follows:
+// system database) as follows:
 //
 // - if the user is root, the user is reported to exist immediately
 //   without querying system.users at all. The password retrieval
@@ -49,20 +51,21 @@ import (
 //   ignored. This ensures that root has a modicum of comfort
 //   logging into an unavailable cluster.
 //
-//   TODO(knz): this does not yet quite work becaus even if the pw
+//   TODO(knz): this does not yet quite work because even if the pw
 //   auth on the UI succeeds writing to system.web_sessions will still
 //   stall on an unavailable cluster and prevent root from logging in.
 //
 // - if the user is another user than root, then the function fails
 //   after a timeout instead of blocking. The timeout is configurable
-//   via the cluster setting.
+//   via the cluster setting server.user_login.timeout. Note that this
+//   is a single timeout for looking up the password, role options, and
+//   default session variable settings.
 //
-// - there is a cache for the the information from system.users and
-//   system.role_options. As long as the lookup succeeded before and there
-//   haven't been any CREATE/ALTER/DROP ROLE commands since, then the cache is
-//   used without a KV lookup.
-//
-func GetUserAuthInfo(
+// - there is a cache for the the information from system.users,
+//   system.role_options, and system.database_role_settings. As long as the
+//   lookup succeeded before and there haven't been any CREATE/ALTER/DROP ROLE
+//   commands since, then the cache is used without a KV lookup.
+func GetUserSessionInitInfo(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	ie *InternalExecutor,
@@ -72,7 +75,7 @@ func GetUserAuthInfo(
 	exists bool,
 	canLogin bool,
 	validUntil *tree.DTimestamp,
-	defaultSettings []authentication.SettingsCacheEntry,
+	defaultSettings []sessioninit.SettingsCacheEntry,
 	pwRetrieveFn func(ctx context.Context) (hashedPassword []byte, err error),
 	err error,
 ) {
@@ -111,11 +114,7 @@ func retrieveSessionInitInfoWithCache(
 	ie *InternalExecutor,
 	username security.SQLUsername,
 	databaseName string,
-) (
-	aInfo authentication.AuthInfo,
-	settingsEntries []authentication.SettingsCacheEntry,
-	err error,
-) {
+) (aInfo sessioninit.AuthInfo, settingsEntries []sessioninit.SettingsCacheEntry, err error) {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
 	// We don't like long timeouts for root.
@@ -132,7 +131,7 @@ func retrieveSessionInitInfoWithCache(
 		}
 	}
 	err = runFn(func(ctx context.Context) (retErr error) {
-		aInfo, retErr = execCfg.AuthenticationInfoCache.GetAuthInfo(
+		aInfo, retErr = execCfg.SessionInitCache.GetAuthInfo(
 			ctx,
 			execCfg.Settings,
 			ie,
@@ -144,11 +143,11 @@ func retrieveSessionInitInfoWithCache(
 		if retErr != nil {
 			return retErr
 		}
-		// Avoid lookingup default settings for root and non-existent users.
+		// Avoid looking up default settings for root and non-existent users.
 		if username.IsRootUser() || !aInfo.UserExists {
 			return nil
 		}
-		settingsEntries, retErr = execCfg.AuthenticationInfoCache.GetDefaultSettings(
+		settingsEntries, retErr = execCfg.SessionInitCache.GetDefaultSettings(
 			ctx,
 			execCfg.Settings,
 			ie,
@@ -171,7 +170,7 @@ func retrieveSessionInitInfoWithCache(
 
 func retrieveAuthInfo(
 	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, username security.SQLUsername,
-) (aInfo authentication.AuthInfo, retErr error) {
+) (aInfo sessioninit.AuthInfo, retErr error) {
 	// Use fully qualified table name to avoid looking up "".system.users.
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
 		`WHERE username=$1`
@@ -180,7 +179,7 @@ func retrieveAuthInfo(
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getHashedPassword, username)
 	if err != nil {
-		return authentication.AuthInfo{}, errors.Wrapf(err, "error looking up user %s", username)
+		return sessioninit.AuthInfo{}, errors.Wrapf(err, "error looking up user %s", username)
 	}
 	if values != nil {
 		aInfo.UserExists = true
@@ -190,7 +189,7 @@ func retrieveAuthInfo(
 	}
 
 	if !aInfo.UserExists {
-		return authentication.AuthInfo{}, nil
+		return sessioninit.AuthInfo{}, nil
 	}
 
 	// None of the rest of the role options are relevant for root.
@@ -209,7 +208,7 @@ func retrieveAuthInfo(
 		username,
 	)
 	if err != nil {
-		return authentication.AuthInfo{}, errors.Wrapf(err, "error looking up user %s", username)
+		return sessioninit.AuthInfo{}, errors.Wrapf(err, "error looking up user %s", username)
 	}
 	// We have to make sure to close the iterator since we might return from
 	// the for loop early (before Next() returns false).
@@ -236,7 +235,7 @@ func retrieveAuthInfo(
 				timeCtx := tree.NewParseTimeContext(timeutil.Now())
 				aInfo.ValidUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
 				if err != nil {
-					return authentication.AuthInfo{}, errors.Wrap(err,
+					return sessioninit.AuthInfo{}, errors.Wrap(err,
 						"error trying to parse timestamp while retrieving password valid until value")
 				}
 			}
@@ -252,13 +251,13 @@ func retrieveDefaultSettings(
 	ie sqlutil.InternalExecutor,
 	username security.SQLUsername,
 	databaseID descpb.ID,
-) (settingsEntries []authentication.SettingsCacheEntry, retErr error) {
+) (settingsEntries []sessioninit.SettingsCacheEntry, retErr error) {
 	// Add an empty slice for all the keys so that something gets cached and
 	// prevents a lookup for the same key from happening later.
-	keys := authentication.GenerateSettingsCacheKeys(databaseID, username)
-	settingsEntries = make([]authentication.SettingsCacheEntry, len(keys))
+	keys := sessioninit.GenerateSettingsCacheKeys(databaseID, username)
+	settingsEntries = make([]sessioninit.SettingsCacheEntry, len(keys))
 	for i, k := range keys {
-		settingsEntries[i] = authentication.SettingsCacheEntry{
+		settingsEntries[i] = sessioninit.SettingsCacheEntry{
 			SettingsCacheKey: k,
 			Settings:         []string{},
 		}
@@ -306,7 +305,7 @@ WHERE
 			fetchedSettings[i] = string(tree.MustBeDString(s))
 		}
 
-		thisKey := authentication.SettingsCacheKey{
+		thisKey := sessioninit.SettingsCacheKey{
 			DatabaseID: fetechedDatabaseID,
 			Username:   fetchedUsername,
 		}
@@ -388,7 +387,7 @@ func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 // bumpUsersTableVersion increases the table version for the
 // users table.
 func (p *planner) bumpUsersTableVersion(ctx context.Context) error {
-	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, authentication.UsersTableName, true, tree.ResolveAnyTableKind)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, sessioninit.UsersTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
 	}
@@ -401,7 +400,7 @@ func (p *planner) bumpUsersTableVersion(ctx context.Context) error {
 // bumpRoleOptionsTableVersion increases the table version for the
 // role_options table.
 func (p *planner) bumpRoleOptionsTableVersion(ctx context.Context) error {
-	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, authentication.RoleOptionsTableName, true, tree.ResolveAnyTableKind)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, sessioninit.RoleOptionsTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
 	}
@@ -414,7 +413,7 @@ func (p *planner) bumpRoleOptionsTableVersion(ctx context.Context) error {
 // bumpDatabaseRoleSettingsTableVersion increases the table version for the
 // database_role_settings table.
 func (p *planner) bumpDatabaseRoleSettingsTableVersion(ctx context.Context) error {
-	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, authentication.DatabaseRoleSettingsTableName, true, tree.ResolveAnyTableKind)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, sessioninit.DatabaseRoleSettingsTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
 	}
