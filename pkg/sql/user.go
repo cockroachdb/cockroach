@@ -81,7 +81,7 @@ func GetUserAuthInfo(
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
 		rootFn := func(ctx context.Context) ([]byte, error) {
-			authInfo, _, err := retrieveAuthInfoWithCache(ctx, execCfg, ie, username, databaseName)
+			authInfo, _, err := retrieveSessionInitInfoWithCache(ctx, execCfg, ie, username, databaseName)
 			return authInfo.HashedPassword, err
 		}
 
@@ -92,7 +92,7 @@ func GetUserAuthInfo(
 
 	// Other users must reach for system.users no matter what, because
 	// only that contains the truth about whether the user exists.
-	authInfo, settingsEntries, err := retrieveAuthInfoWithCache(
+	authInfo, settingsEntries, err := retrieveSessionInitInfoWithCache(
 		ctx, execCfg, ie, username, databaseName,
 	)
 	return authInfo.UserExists,
@@ -105,7 +105,7 @@ func GetUserAuthInfo(
 		err
 }
 
-func retrieveAuthInfoWithCache(
+func retrieveSessionInitInfoWithCache(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	ie *InternalExecutor,
@@ -132,7 +132,23 @@ func retrieveAuthInfoWithCache(
 		}
 	}
 	err = runFn(func(ctx context.Context) (retErr error) {
-		aInfo, settingsEntries, retErr = execCfg.AuthenticationInfoCache.Get(
+		aInfo, retErr = execCfg.AuthenticationInfoCache.GetAuthInfo(
+			ctx,
+			execCfg.Settings,
+			ie,
+			execCfg.DB,
+			execCfg.CollectionFactory,
+			username,
+			retrieveAuthInfo,
+		)
+		if retErr != nil {
+			return retErr
+		}
+		// Avoid lookingup default settings for root and non-existent users.
+		if username.IsRootUser() || !aInfo.UserExists {
+			return nil
+		}
+		settingsEntries, retErr = execCfg.AuthenticationInfoCache.GetDefaultSettings(
 			ctx,
 			execCfg.Settings,
 			ie,
@@ -140,7 +156,7 @@ func retrieveAuthInfoWithCache(
 			execCfg.CollectionFactory,
 			username,
 			databaseName,
-			retrieveAuthInfo,
+			retrieveDefaultSettings,
 		)
 		return retErr
 	})
@@ -154,17 +170,8 @@ func retrieveAuthInfoWithCache(
 }
 
 func retrieveAuthInfo(
-	ctx context.Context,
-	txn *kv.Txn,
-	ie sqlutil.InternalExecutor,
-	username security.SQLUsername,
-	databaseID descpb.ID,
-	fetchDefaultSettings bool,
-) (
-	aInfo authentication.AuthInfo,
-	settingsEntries []authentication.SettingsCacheEntry,
-	retErr error,
-) {
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, username security.SQLUsername,
+) (aInfo authentication.AuthInfo, retErr error) {
 	// Use fully qualified table name to avoid looking up "".system.users.
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
 		`WHERE username=$1`
@@ -173,7 +180,7 @@ func retrieveAuthInfo(
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getHashedPassword, username)
 	if err != nil {
-		return authentication.AuthInfo{}, nil, errors.Wrapf(err, "error looking up user %s", username)
+		return authentication.AuthInfo{}, errors.Wrapf(err, "error looking up user %s", username)
 	}
 	if values != nil {
 		aInfo.UserExists = true
@@ -182,24 +189,13 @@ func retrieveAuthInfo(
 		}
 	}
 
-	// Add an empty slice for all the keys so that something gets cached and
-	// prevents a lookup for the same key from happening later.
-	keys := authentication.GenerateSettingsCacheKeys(databaseID, username)
-	settingsEntries = make([]authentication.SettingsCacheEntry, len(keys))
-	for i, k := range keys {
-		settingsEntries[i] = authentication.SettingsCacheEntry{
-			SettingsCacheKey: k,
-			Settings:         []string{},
-		}
-	}
-
 	if !aInfo.UserExists {
-		return authentication.AuthInfo{}, settingsEntries, nil
+		return authentication.AuthInfo{}, nil
 	}
 
-	// None of the rest of the role options/settings are relevant for root.
+	// None of the rest of the role options are relevant for root.
 	if username.IsRootUser() {
-		return aInfo, settingsEntries, nil
+		return aInfo, nil
 	}
 
 	// Use fully qualified table name to avoid looking up "".system.role_options.
@@ -213,7 +209,7 @@ func retrieveAuthInfo(
 		username,
 	)
 	if err != nil {
-		return authentication.AuthInfo{}, nil, errors.Wrapf(err, "error looking up user %s", username)
+		return authentication.AuthInfo{}, errors.Wrapf(err, "error looking up user %s", username)
 	}
 	// We have to make sure to close the iterator since we might return from
 	// the for loop early (before Next() returns false).
@@ -240,22 +236,45 @@ func retrieveAuthInfo(
 				timeCtx := tree.NewParseTimeContext(timeutil.Now())
 				aInfo.ValidUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
 				if err != nil {
-					return authentication.AuthInfo{}, nil, errors.Wrap(err,
+					return authentication.AuthInfo{}, errors.Wrap(err,
 						"error trying to parse timestamp while retrieving password valid until value")
 				}
 			}
 		}
 	}
 
-	if !fetchDefaultSettings {
-		return aInfo, settingsEntries, nil
+	return aInfo, err
+}
+
+func retrieveDefaultSettings(
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	username security.SQLUsername,
+	databaseID descpb.ID,
+) (settingsEntries []authentication.SettingsCacheEntry, retErr error) {
+	// Add an empty slice for all the keys so that something gets cached and
+	// prevents a lookup for the same key from happening later.
+	keys := authentication.GenerateSettingsCacheKeys(databaseID, username)
+	settingsEntries = make([]authentication.SettingsCacheEntry, len(keys))
+	for i, k := range keys {
+		settingsEntries[i] = authentication.SettingsCacheEntry{
+			SettingsCacheKey: k,
+			Settings:         []string{},
+		}
 	}
 
+	// The default settings are not relevant for root.
+	if username.IsRootUser() {
+		return settingsEntries, nil
+	}
+
+	// Use fully qualified table name to avoid looking up "".system.role_options.
 	const getDefaultSettings = `
 SELECT
   database_id, role_name, settings
 FROM
-  system.database_role_settings
+  system.public.database_role_settings
 WHERE
   (database_id = 0 AND role_name = $1)
   OR (database_id = $2 AND role_name = $1)
@@ -270,12 +289,13 @@ WHERE
 		databaseID,
 	)
 	if err != nil {
-		return authentication.AuthInfo{}, nil, errors.Wrapf(err, "error looking up user %s", username)
+		return nil, errors.Wrapf(err, "error looking up user %s", username)
 	}
 	// We have to make sure to close the iterator since we might return from
 	// the for loop early (before Next() returns false).
 	defer func() { retErr = errors.CombineErrors(retErr, defaultSettingsIt.Close()) }()
 
+	var ok bool
 	for ok, err = defaultSettingsIt.Next(ctx); ok; ok, err = defaultSettingsIt.Next(ctx) {
 		row := defaultSettingsIt.Cur()
 		fetechedDatabaseID := descpb.ID(tree.MustBeDOid(row[0]).DInt)
@@ -299,7 +319,7 @@ WHERE
 		}
 	}
 
-	return aInfo, settingsEntries, err
+	return settingsEntries, err
 }
 
 var userLoginTimeout = settings.RegisterDurationSetting(

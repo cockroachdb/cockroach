@@ -10,7 +10,10 @@
 
 package authentication
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 // UsersTableName represents system.users.
 var UsersTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "users")
@@ -20,3 +23,11 @@ var RoleOptionsTableName = tree.NewTableNameWithSchema("system", tree.PublicSche
 
 // DatabaseRoleSettingsTableName represents system.database_role_settings.
 var DatabaseRoleSettingsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "database_role_settings")
+
+// defaultDatabaseID is used in the settingsCache for entries that should
+// apply to all database.
+const defaultDatabaseID = 0
+
+// defaultUsername is used in the settingsCache for entries that should
+// apply to all roles.
+var defaultUsername = security.MakeSQLUsernameFromPreNormalizedString("")
