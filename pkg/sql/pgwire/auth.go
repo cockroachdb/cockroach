@@ -89,7 +89,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLogin, validUntil, defaultSettings, pwRetrievalFn, err := sql.GetUserAuthInfo(
+	exists, canLogin, validUntil, defaultSettings, pwRetrievalFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		execCfg,
 		authOpt.ie,
@@ -141,7 +141,7 @@ func (c *conn) handleAuthentication(
 	// error (e.g., a setting that no longer exists, or bad input),
 	// log a warning instead of preventing login.
 	// The defaultSettings array is ordered by precedence. This means that if
-	// if SessionDefaults already has an entry for a given setting name, then
+	// SessionDefaults already has an entry for a given setting name, then
 	// it should not be replaced.
 	for _, settingEntry := range defaultSettings {
 		for _, setting := range settingEntry.Settings {
