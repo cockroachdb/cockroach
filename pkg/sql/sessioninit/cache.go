@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package authentication
+package sessioninit
 
 import (
 	"context"
@@ -33,7 +33,7 @@ import (
 var CacheEnabledSettingName = "server.authentication_cache.enabled"
 
 // CacheEnabled is a cluster setting that determines if the
-// AuthInfoCache and associated logic is enabled.
+// sessioninit.Cache and associated logic is enabled.
 var CacheEnabled = settings.RegisterBoolSetting(
 	CacheEnabledSettingName,
 	"enables a cache used during authentication to avoid lookups to system tables "+
@@ -41,9 +41,9 @@ var CacheEnabled = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
-// AuthInfoCache is a shared cache for hashed passwords and other
-// information used during user authentication and session initialization.
-type AuthInfoCache struct {
+// Cache is a shared cache for hashed passwords and other information used
+// during user authentication and session initialization.
+type Cache struct {
 	syncutil.Mutex
 	usersTableVersion          descpb.DescriptorVersion
 	roleOptionsTableVersion    descpb.DescriptorVersion
@@ -80,19 +80,18 @@ type SettingsCacheEntry struct {
 	Settings []string
 }
 
-// NewCache initializes a new AuthInfoCache.
-func NewCache(account mon.BoundAccount) *AuthInfoCache {
-	return &AuthInfoCache{
+// NewCache initializes a new sessioninit.Cache.
+func NewCache(account mon.BoundAccount) *Cache {
+	return &Cache{
 		boundAccount: account,
 	}
 }
 
-// GetAuthInfo consults the AuthInfoCache and returns the AuthInfo and list of
-// SettingsCacheEntry for the provided username and databaseName. If the
-// information is not in the cache, or if the underlying tables have changed
-// since the cache was populated, then the readFromStore callback is used to
-// load new data.
-func (a *AuthInfoCache) GetAuthInfo(
+// GetAuthInfo consults the sessioninit.Cache and returns the AuthInfo for the
+// provided username and databaseName. If the information is not in the cache,
+// or if the underlying tables have changed since the cache was populated,
+// then the readFromSystemTables callback is used to load new data.
+func (a *Cache) GetAuthInfo(
 	ctx context.Context,
 	settings *cluster.Settings,
 	ie sqlutil.InternalExecutor,
@@ -184,7 +183,7 @@ func (a *AuthInfoCache) GetAuthInfo(
 	return aInfo, err
 }
 
-func (a *AuthInfoCache) readAuthInfoFromCache(
+func (a *Cache) readAuthInfoFromCache(
 	ctx context.Context,
 	usersTableVersion descpb.DescriptorVersion,
 	roleOptionsTableVersion descpb.DescriptorVersion,
@@ -203,7 +202,7 @@ func (a *AuthInfoCache) readAuthInfoFromCache(
 // authInfoCache, and returns true if it succeeded. If the underlying system
 // tables have been modified since they were read, the authInfoCache is not
 // updated, and the passed in table descriptor versions are updated.
-func (a *AuthInfoCache) writeAuthInfoBackToCache(
+func (a *Cache) writeAuthInfoBackToCache(
 	ctx context.Context,
 	usersTableVersion *descpb.DescriptorVersion,
 	roleOptionsTableVersion *descpb.DescriptorVersion,
@@ -236,12 +235,12 @@ func (a *AuthInfoCache) writeAuthInfoBackToCache(
 	return true
 }
 
-// GetDefaultSettings consults the AuthInfoCache and returns the list of
+// GetDefaultSettings consults the sessioninit.Cache and returns the list of
 // SettingsCacheEntry for the provided username and databaseName. If the
 // information is not in the cache, or if the underlying tables have changed
-// since the cache was populated, then the readFromStore callback is used to
-// load new data.
-func (a *AuthInfoCache) GetDefaultSettings(
+// since the cache was populated, then the readFromSystemTables callback is
+// used to load new data.
+func (a *Cache) GetDefaultSettings(
 	ctx context.Context,
 	settings *cluster.Settings,
 	ie sqlutil.InternalExecutor,
@@ -338,7 +337,7 @@ func (a *AuthInfoCache) GetDefaultSettings(
 	return settingsEntries, err
 }
 
-func (a *AuthInfoCache) readDefaultSettingsFromCache(
+func (a *Cache) readDefaultSettingsFromCache(
 	ctx context.Context,
 	dbRoleSettingsTableVersion descpb.DescriptorVersion,
 	username security.SQLUsername,
@@ -364,12 +363,12 @@ func (a *AuthInfoCache) readDefaultSettingsFromCache(
 	return sEntries, foundAllDefaultSettings
 }
 
-// writeDefaultSettingsBackToCache tries to put the fetched SettingsCacheentry
+// writeDefaultSettingsBackToCache tries to put the fetched SettingsCacheEntry
 // list into the settingsCache, and returns true if it succeeded. If the
 // underlying system tables have been modified since they were read, the
 // settingsCache is not updated, and the passed in table descriptor version is
 // updated.
-func (a *AuthInfoCache) writeDefaultSettingsBackToCache(
+func (a *Cache) writeDefaultSettingsBackToCache(
 	ctx context.Context,
 	dbRoleSettingsTableVersion *descpb.DescriptorVersion,
 	settingsEntries []SettingsCacheEntry,
@@ -414,7 +413,7 @@ func (a *AuthInfoCache) writeDefaultSettingsBackToCache(
 	}()
 }
 
-func (a *AuthInfoCache) checkStaleness(
+func (a *Cache) checkStaleness(
 	ctx context.Context,
 	usersTableVersion descpb.DescriptorVersion,
 	roleOptionsTableVersion descpb.DescriptorVersion,
