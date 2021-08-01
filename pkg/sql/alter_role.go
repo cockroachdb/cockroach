@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -178,7 +178,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		opName,
 		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", authentication.UsersTableName),
+		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		normalizedUsername,
 	)
 	if err != nil {
@@ -237,7 +237,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
 			// Bump user table versions to force a refresh of AuthInfo cache.
 			if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
 				return err
@@ -287,7 +287,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		optStrs[i] = n.roleOptions[i].String()
 	}
 
-	if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
 		// Bump role_options table versions to force a refresh of AuthInfo cache.
 		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 			return err
@@ -456,11 +456,11 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 
 	var deleteQuery = fmt.Sprintf(
 		`DELETE FROM %s WHERE database_id = $1 AND role_name = $2`,
-		authentication.DatabaseRoleSettingsTableName,
+		sessioninit.DatabaseRoleSettingsTableName,
 	)
 	var upsertQuery = fmt.Sprintf(
 		`UPSERT INTO %s (database_id, role_name, settings) VALUES ($1, $2, $3)`,
-		authentication.DatabaseRoleSettingsTableName,
+		sessioninit.DatabaseRoleSettingsTableName,
 	)
 
 	// Instead of inserting an empty settings array, this function will make
@@ -494,7 +494,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 			return internalExecErr
 		}
 
-		if rowsAffected > 0 && authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		if rowsAffected > 0 && sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
 			// Bump database_role_settings table versions to force a refresh of AuthInfo cache.
 			if err := params.p.bumpDatabaseRoleSettingsTableVersion(params.ctx); err != nil {
 				return err
@@ -569,7 +569,7 @@ func (n *alterRoleSetNode) getRoleName(
 		opName,
 		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", authentication.UsersTableName),
+		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		roleName,
 	)
 	if err != nil {
@@ -600,7 +600,7 @@ func (n *alterRoleSetNode) makeNewSettings(
 ) (hasOldSettings bool, newSettings []string, err error) {
 	var selectQuery = fmt.Sprintf(
 		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,
-		authentication.DatabaseRoleSettingsTableName,
+		sessioninit.DatabaseRoleSettingsTableName,
 	)
 	datums, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx,

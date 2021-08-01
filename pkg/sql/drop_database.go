@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -335,14 +335,14 @@ func (p *planner) removeDbRoleSettings(ctx context.Context, dbID descpb.ID) erro
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
 			`DELETE FROM %s WHERE database_id = $1`,
-			authentication.DatabaseRoleSettingsTableName,
+			sessioninit.DatabaseRoleSettingsTableName,
 		),
 		dbID,
 	)
 	if err != nil {
 		return err
 	}
-	if rowsDeleted > 0 && authentication.CacheEnabled.Get(&p.ExecCfg().Settings.SV) {
+	if rowsDeleted > 0 && sessioninit.CacheEnabled.Get(&p.ExecCfg().Settings.SV) {
 		if err := p.bumpDatabaseRoleSettingsTableVersion(ctx); err != nil {
 			return err
 		}

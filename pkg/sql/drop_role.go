@@ -17,12 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -326,7 +326,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			params.p.txn,
 			fmt.Sprintf(
 				`DELETE FROM %s WHERE username=$1`,
-				authentication.RoleOptionsTableName,
+				sessioninit.RoleOptionsTableName,
 			),
 			normalizedUsername,
 		)
@@ -342,7 +342,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				params.p.txn,
 				fmt.Sprintf(
 					`DELETE FROM %s WHERE role_name = $1`,
-					authentication.DatabaseRoleSettingsTableName,
+					sessioninit.DatabaseRoleSettingsTableName,
 				),
 				normalizedUsername,
 			)
@@ -355,7 +355,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 
 	// Bump role-related table versions to force a refresh of membership/auth
 	// caches.
-	if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
 		if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
 			return err
 		}
