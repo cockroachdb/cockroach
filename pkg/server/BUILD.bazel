@@ -106,6 +106,7 @@ go_library(
         "//pkg/server/status",
         "//pkg/server/status/statuspb:statuspb_go_proto",
         "//pkg/server/telemetry",
+        "//pkg/server/tracedumper",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",

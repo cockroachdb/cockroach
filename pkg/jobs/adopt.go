@@ -13,6 +13,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -52,6 +53,37 @@ const claimQuery = `
  ORDER BY created DESC
     LIMIT $3
 RETURNING id;`
+
+func (r *Registry) maybeDumpTrace(
+	resumerCtx context.Context, resumer Resumer, jobID, traceID int64, jobErr error,
+) {
+	if _, ok := resumer.(TraceableJob); !ok || r.td == nil {
+		return
+	}
+	dumpMode := traceableJobDumpTraceMode.Get(&r.settings.SV)
+	if dumpMode == int64(noDump) {
+		return
+	}
+
+	// Make a new ctx to use in the trace dumper. This is because the resumerCtx
+	// could have been canceled at this point.
+	dumpCtx, _ := r.makeCtx()
+
+	// If the job has failed, and the dump mode is set to anything
+	// except noDump, then we should dump the trace.
+	// The string comparison is unfortunate but is used to differentiate a job
+	// that has failed from a job that has been canceled.
+	if jobErr != nil && !HasErrJobCanceled(jobErr) && resumerCtx.Err() == nil {
+		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, r.ex)
+		return
+	}
+
+	// If the dump mode is set to `dumpOnStop` then we should dump the
+	// trace when the job is any of paused, canceled, succeeded or failed state.
+	if dumpMode == int64(dumpOnStop) {
+		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, r.ex)
+	}
+}
 
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
@@ -293,6 +325,11 @@ func (r *Registry) runJob(
 	// happens during shutdown.
 	if err != nil && ctx.Err() == nil {
 		log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
+	}
+
+	r.maybeDumpTrace(ctx, resumer, int64(job.ID()), int64(span.TraceID()), err)
+	if r.knobs.AfterJobStateMachine != nil {
+		r.knobs.AfterJobStateMachine()
 	}
 	return err
 }

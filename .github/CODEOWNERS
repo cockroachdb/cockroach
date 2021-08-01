@@ -68,6 +68,7 @@
 /pkg/cli/userfile.go         @cockroachdb/bulk-prs
 /pkg/cli/demo*.go            @cockroachdb/cli-prs @cockroachdb/sql-experience @cockroachdb/server-prs
 /pkg/cli/debug*.go           @cockroachdb/cli-prs @cockroachdb/kv
+/pkg/cli/debug_job_trace*.go @cockroachdb/bulk-prs
 /pkg/cli/doctor*.go          @cockroachdb/cli-prs @cockroachdb/sql-schema
 /pkg/cli/import_test.go      @cockroachdb/cli-prs @cockroachdb/bulk-prs
 /pkg/cli/sql*.go             @cockroachdb/cli-prs @cockroachdb/sql-experience
