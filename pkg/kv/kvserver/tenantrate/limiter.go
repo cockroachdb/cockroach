@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
