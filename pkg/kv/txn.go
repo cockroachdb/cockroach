@@ -1036,6 +1036,16 @@ func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
 // successfully, the transaction will have been given a fixed timestamp equal to
 // the timestamp that the read-only request was evaluated at.
 //
+// The method accepts requests with min_timestamp_bound_strict set to either
+// true or false, which dictates whether a bounded staleness read whose
+// min_timestamp_bound cannot be satisfied by the first replica it visits
+// (subject to routing_policy) without blocking should be rejected with a
+// MinTimestampBoundUnsatisfiableError or will be redirected to the leaseholder
+// and permitted to block on conflicting transactions. If the flag is true,
+// blocking is never permitted and callers should be prepared to handle
+// MinTimestampBoundUnsatisfiableErrors. If the flag is false, blocking is
+// permitted and MinTimestampBoundUnsatisfiableErrors will never be returned.
+//
 // The method accepts requests with either a LEASEHOLDER or a NEAREST routing
 // policy, which dictates whether the request uses the leaseholder(s) of its
 // target range(s) to negotiate a timestamp and perform the read or whether it

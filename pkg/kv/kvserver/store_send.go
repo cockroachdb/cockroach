@@ -347,7 +347,9 @@ func (s *Store) maybeThrottleBatch(
 // timestamp.
 //
 // If the local resolved timestamp is below the request's MinTimestampBound,
-// then a MinTimestampBoundUnsatisfiableError will be returned.
+// then a MinTimestampBoundUnsatisfiableError will be returned if the request
+// has its MinTimestampBoundStrict flag set to true. Otherwise, the request's
+// timestamp will be set to the MinTimestampBound and allowed to execute.
 //
 // For more information, see the "Server-side negotiation fast-path" section of
 // docs/RFCS/20210519_bounded_staleness_reads.md.
@@ -402,12 +404,23 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 		}
 	}
 	if resTS.Less(ba.MinTimestampBound) {
-		return ba, roachpb.NewError(roachpb.NewMinTimestampBoundUnsatisfiableError(
-			ba.MinTimestampBound, resTS,
-		))
+		// The local resolved timestamp was below the request's minimum timestamp
+		// bound. If the minimum timestamp bound should be strictly obeyed, reject
+		// the batch. Otherwise, consider the minimum timestamp bound to be the
+		// request timestamp and let the request proceed. On follower replicas, this
+		// may result in the request being redirected (with a NotLeaseholderError)
+		// to the current leaseholder. On the leaseholder, this may result in the
+		// request blocking on conflicting transactions.
+		if ba.MinTimestampBoundStrict {
+			return ba, roachpb.NewError(roachpb.NewMinTimestampBoundUnsatisfiableError(
+				ba.MinTimestampBound, resTS,
+			))
+		}
+		resTS = ba.MinTimestampBound
 	}
 
 	ba.Timestamp = resTS
 	ba.MinTimestampBound = hlc.Timestamp{}
+	ba.MinTimestampBoundStrict = false
 	return ba, nil
 }

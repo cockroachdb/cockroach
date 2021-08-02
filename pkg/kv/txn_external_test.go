@@ -249,6 +249,11 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 // The multiRange=true variant is currently unimplemented, as it is blocked on
 // #67554.
 //
+// The test's strict param dictates whether strict bounded staleness reads are
+// used or not. If set to true, the test is configured to never expect blocking.
+// If set to false, the test is relaxed and we allow bounded staleness reads to
+// block.
+//
 // The test's routeNearest param dictates whether bounded staleness reads are
 // issued with the LEASEHOLDER routing policy to be evaluated on leaseholders,
 // or the NEAREST routing policy to be evaluated on the nearest replicas to the
@@ -258,13 +263,15 @@ func TestTxnNegotiateAndSendDoesNotBlock(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "multiRange", func(t *testing.T, multiRange bool) {
-		testutils.RunTrueAndFalse(t, "routeNearest", func(t *testing.T, routeNearest bool) {
-			testTxnNegotiateAndSendDoesNotBlock(t, multiRange, routeNearest)
+		testutils.RunTrueAndFalse(t, "strict", func(t *testing.T, strict bool) {
+			testutils.RunTrueAndFalse(t, "routeNearest", func(t *testing.T, routeNearest bool) {
+				testTxnNegotiateAndSendDoesNotBlock(t, multiRange, strict, routeNearest)
+			})
 		})
 	})
 }
 
-func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, routeNearest bool) {
+func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, routeNearest bool) {
 	if multiRange {
 		skip.IgnoreLint(t, "unimplemented, blocked on #67554.")
 	}
@@ -344,12 +351,21 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, routeNearest 
 			var lastTxnTS hlc.Timestamp
 			for ; atomic.LoadInt32(&done) == 0; sleep() {
 				if err := store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					// Issue a bounded-staleness read over the keys. Use an error wait
-					// policy so that we'll hear an error (WriteIntentError) under
-					// conditions that would otherwise cause us to block on an intent.
+					// Issue a bounded-staleness read over the keys. If using strict
+					// bounded staleness, use an error wait policy so that we'll hear an
+					// error (WriteIntentError) under conditions that would otherwise
+					// cause us to block on an intent. Otherwise, allow the request to be
+					// redirected to the leaseholder and to block on intents.
 					var ba roachpb.BatchRequest
-					ba.MinTimestampBound = minTSBound
-					ba.WaitPolicy = lock.WaitPolicy_Error
+					if strict {
+						ba.MinTimestampBound = minTSBound
+						ba.MinTimestampBoundStrict = true
+						ba.WaitPolicy = lock.WaitPolicy_Error
+					} else {
+						ba.MinTimestampBound = store.Clock().Now()
+						ba.MinTimestampBoundStrict = false
+						ba.WaitPolicy = lock.WaitPolicy_Block
+					}
 					ba.RoutingPolicy = roachpb.RoutingPolicy_LEASEHOLDER
 					if routeNearest {
 						ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
@@ -398,11 +414,15 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, routeNearest 
 					minTSBound = lastTxnTS
 
 					// Determine whether the read was served by a follower replica or not
-					// and confirm that this matches expectations.
+					// and confirm that this matches expectations. There are some configs
+					// where it would be valid for the request to be served by a follower
+					// or redirected to the leaseholder due to timing, so we make no
+					// assertion.
 					rec := collect()
-					expFollowerRead := store.StoreID() != lh.StoreID && routeNearest
+					expFollowerRead := store.StoreID() != lh.StoreID && strict && routeNearest
 					wasFollowerRead := kv.OnlyFollowerReads(rec)
-					if expFollowerRead != wasFollowerRead {
+					ambiguous := !strict && routeNearest
+					if expFollowerRead != wasFollowerRead && !ambiguous {
 						if expFollowerRead {
 							return errors.Errorf("expected follower read, found leaseholder read: %s", rec)
 						}

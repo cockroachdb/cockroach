@@ -816,6 +816,7 @@ func TestNonBlockingReadsWithServerSideBoundedStalenessNegotiation(t *testing.T)
 			var ba roachpb.BatchRequest
 			ba.RangeID = rangeID
 			ba.MinTimestampBound = minTSBound
+			ba.MinTimestampBoundStrict = true
 			ba.WaitPolicy = lock.WaitPolicy_Error
 			ba.Add(&roachpb.ScanRequest{
 				RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
