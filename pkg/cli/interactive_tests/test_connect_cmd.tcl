@@ -145,5 +145,27 @@ end_test
 send "\\q\r"
 eexpect eof
 
-
 stop_secure_server $argv $certs_dir
+
+# Some more tests with the insecure mode.
+set ::env(COCKROACH_INSECURE) "true"
+start_server $argv
+
+spawn $argv sql
+eexpect root@
+eexpect "defaultdb>"
+
+start_test "Check that the connect cmd can switch dbs in insecure mode"
+send "\\c system\r"
+eexpect root@
+eexpect "system>"
+end_test
+
+start_test "Check that the connect cmd can switch users in insecure mode"
+send "\\c - foo\r"
+eexpect foo@
+eexpect "system>"
+end_test
+
+stop_server $argv
+
