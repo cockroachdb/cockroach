@@ -1258,6 +1258,8 @@ func (c *cliState) handleConnectInternal(cmd []string) error {
 		WithDefaultUsername(currURL.GetUsername())
 	if tlsUsed {
 		newURL.WithTransport(pgurl.TransportTLS(mode, caCertPath))
+	} else {
+		newURL.WithTransport(pgurl.TransportNone())
 	}
 
 	// Parse the arguments to \connect:
