@@ -101,6 +101,23 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
+Query {"String": "SET DateStyle_enabled = true"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"42704"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
 Query {"String": "SET DateStyle = 'YMD, ISO'"}
 ----
 
