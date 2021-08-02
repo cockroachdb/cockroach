@@ -31,28 +31,26 @@ func updateDescriptorGCMutations(
 	log.Infof(ctx, "updating GCMutations for table %d after removing index %d",
 		tableID, garbageCollectedIndexID)
 	// Remove the mutation from the table descriptor.
-	return descs.Txn(
-		ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
-		execCfg.DB, func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-		) error {
-			tbl, err := descsCol.GetMutableTableVersionByID(ctx, tableID, txn)
-			if err != nil {
-				return err
+	return sql.DescsTxn(ctx, execCfg, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		tbl, err := descsCol.GetMutableTableVersionByID(ctx, tableID, txn)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < len(tbl.GCMutations); i++ {
+			other := tbl.GCMutations[i]
+			if other.IndexID == garbageCollectedIndexID {
+				tbl.GCMutations = append(tbl.GCMutations[:i], tbl.GCMutations[i+1:]...)
+				break
 			}
-			for i := 0; i < len(tbl.GCMutations); i++ {
-				other := tbl.GCMutations[i]
-				if other.IndexID == garbageCollectedIndexID {
-					tbl.GCMutations = append(tbl.GCMutations[:i], tbl.GCMutations[i+1:]...)
-					break
-				}
-			}
-			b := txn.NewBatch()
-			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, tbl, b); err != nil {
-				return err
-			}
-			return txn.Run(ctx, b)
-		})
+		}
+		b := txn.NewBatch()
+		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, tbl, b); err != nil {
+			return err
+		}
+		return txn.Run(ctx, b)
+	})
 }
 
 // deleteDatabaseZoneConfig removes the zone config for a given database ID.

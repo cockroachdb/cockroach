@@ -122,3 +122,4 @@ func (t *testServerShim) StartTenant(
 func (t *testServerShim) ScratchRange() (roachpb.Key, error)       { panic(unsupportedShimMethod) }
 func (t *testServerShim) Engines() []storage.Engine                { panic(unsupportedShimMethod) }
 func (t *testServerShim) MetricsRecorder() *status.MetricsRecorder { panic(unsupportedShimMethod) }
+func (t *testServerShim) CollectionFactory() interface{}           { panic(unsupportedShimMethod) }

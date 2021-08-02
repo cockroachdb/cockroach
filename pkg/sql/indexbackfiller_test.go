@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
@@ -472,13 +471,12 @@ INSERT INTO foo VALUES (1), (10), (100);
 		// mutation. Also, create an associated job and set it up to be blocked.
 		s0 := tc.Server(0)
 		lm := s0.LeaseManager().(*lease.Manager)
-		ie := s0.InternalExecutor().(sqlutil.InternalExecutor)
 		settings := s0.ClusterSettings()
 		execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 		jr := s0.JobRegistry().(*jobs.Registry)
 		var j *jobs.Job
 		var table catalog.TableDescriptor
-		require.NoError(t, descs.Txn(ctx, settings, lm, ie, s0.DB(), func(
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
 			mut, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
@@ -530,7 +528,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 
 		// Make the mutation complete, then read the index and validate that it
 		// has the expected contents.
-		require.NoError(t, descs.Txn(ctx, settings, lm, ie, s0.DB(), func(
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			table, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})

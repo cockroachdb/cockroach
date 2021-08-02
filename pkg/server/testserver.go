@@ -1286,6 +1286,11 @@ func (ts *TestServer) MetricsRecorder() *status.MetricsRecorder {
 	return ts.node.recorder
 }
 
+// CollectionFactory is part of the TestServerInterface.
+func (ts *TestServer) CollectionFactory() interface{} {
+	return ts.sqlServer.execCfg.CollectionFactory
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory

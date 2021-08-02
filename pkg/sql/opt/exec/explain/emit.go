@@ -375,7 +375,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		s := stats.(*exec.EstimatedStats)
 
 		// Show the estimated row count (except Values, where it is redundant).
-		if n.op != valuesOp {
+		if n.op != valuesOp && !e.ob.flags.OnlyShape {
 			count := uint64(math.Round(s.RowCount))
 			if s.TableStatsAvailable {
 				if n.op == scanOp && s.TableStatsRowCount != 0 {
