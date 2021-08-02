@@ -133,6 +133,9 @@ type pebbleMVCCScanner struct {
 	// TODO(erikgrinaker): This option exists for backwards compatibility with
 	// 21.2 RPC clients, in 22.1 it should always be enabled.
 	targetBytesAvoidExcess bool
+	// If true, return an empty result if the first result exceeds targetBytes
+	// and targetBytesAvoidExcess is true.
+	targetBytesAllowEmpty bool
 	// Stop adding intents and abort scan once maxIntents threshold is reached.
 	// This limit is only applicable to consistent scans since they return
 	// intents as an error.
@@ -253,10 +256,9 @@ func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, roachpb.Re
 
 	if p.resumeReason != 0 && (p.curExcluded || p.advanceKey()) {
 		var resumeSpan *roachpb.Span
+		// curKey was not added to results, so it needs to be included in the
+		// resume span.
 		if p.reverse {
-			// curKey was not added to results, so it needs to be included in the
-			// resume span.
-			//
 			// NB: this is equivalent to:
 			//  append(roachpb.Key(nil), p.curKey.Key...).Next()
 			// but with half the allocations.
@@ -477,6 +479,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve
 		// it.
+		//
 		// p.intents is a pebble.Batch which grows its byte slice capacity in
 		// chunks to amortize allocations. The memMonitor is under-counting here
 		// by only accounting for the key and value bytes.
@@ -707,7 +710,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(ctx context.Context, rawKey []byte, va
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
-		if p.targetBytes > 0 && p.results.count > 0 {
+		if p.targetBytes > 0 && (p.results.count > 0 || p.targetBytesAllowEmpty) {
 			size := p.results.bytes
 			nextSize := int64(p.results.sizeOf(len(rawKey), len(val)))
 			if size >= p.targetBytes || (p.targetBytesAvoidExcess && size+nextSize > p.targetBytes) {
