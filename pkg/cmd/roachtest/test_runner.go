@@ -944,10 +944,22 @@ func (r *testRunner) maybePostGithubIssue(
 		Message:         msg,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
-		ReproductionCommand: issues.ReproductionAsLink(
-			"roachtest README",
-			"https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/roachtest",
-		),
+		ReproductionCommand: func(renderer *issues.Renderer) {
+			issues.ReproductionAsLink(
+				"roachtest README",
+				"https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/roachtest",
+			)(renderer)
+			issues.ReproductionAsLink(
+				"CI job to stress roachtests",
+				"https://teamcity.cockroachdb.com/buildConfiguration/Cockroach_Nightlies_RoachtestStress",
+			)(renderer)
+			renderer.P(func() {
+				renderer.Escaped("For the CI stress job, click the ellipsis (...) next to the Run button and fill in:\n")
+				renderer.Escaped(fmt.Sprintf("* Changes / Build branch: %s\n", branch))
+				renderer.Escaped(fmt.Sprintf("* Parameters / `env.TESTS`: `^%s$`\n", t.Name()))
+				renderer.Escaped("* Parameters / `env.COUNT`: <number of runs>\n")
+			})
+		},
 	}
 	if err := issues.Post(
 		context.Background(),
@@ -1074,6 +1086,13 @@ func (r *testRunner) getWork(
 		}
 		if err := c.RunL(ctx, l, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
 			return testToRunRes{}, nil, errors.Wrapf(err, "failed to remove perf artifacts dir")
+		}
+		if c.localCertsDir != "" {
+			if err := os.RemoveAll(c.localCertsDir); err != nil {
+				return testToRunRes{}, nil, errors.Wrapf(err,
+					"failed to remove local certs in %s", c.localCertsDir)
+			}
+			c.localCertsDir = ""
 		}
 		// Overwrite the spec of the cluster with the one coming from the test. In
 		// particular, this overwrites the reuse policy to reflect what the test
