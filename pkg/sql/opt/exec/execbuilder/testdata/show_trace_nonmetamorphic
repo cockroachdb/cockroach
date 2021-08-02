@@ -383,3 +383,26 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
 dist sender send  r37: sending batch 4 CPut, 1 EndTxn to (n1,s1):1
 dist sender send  r37: sending batch 5 CPut to (n1,s1):1
 dist sender send  r37: sending batch 1 EndTxn to (n1,s1):1
+
+# make a table with some big strings in it.
+statement ok
+CREATE TABLE blobs (i INT PRIMARY KEY, j STRING, FAMILY (i, j))
+
+# make a table with some big (1mb) strings in it.
+statement ok
+SET TRACING=ON;
+  INSERT INTO blobs SELECT generate_series(1, 24), repeat('0123456789ab', 65536);
+SET TRACING=OFF;
+
+# verify insert of 24 rows paginated into 4 batches since they are .75mb each.
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message     LIKE '%r$rangeid: sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
+----
+dist sender send  r37: sending batch 6 CPut to (n1,s1):1
+dist sender send  r37: sending batch 6 CPut to (n1,s1):1
+dist sender send  r37: sending batch 6 CPut to (n1,s1):1
+dist sender send  r37: sending batch 6 CPut to (n1,s1):1
+dist sender send  r37: sending batch 1 EndTxn to (n1,s1):1
