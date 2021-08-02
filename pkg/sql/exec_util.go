@@ -542,11 +542,20 @@ var dateStyle = settings.RegisterEnumSetting(
 ).WithPublic()
 
 // intervalStyleEnabled controls intervals representation.
-// TODO(#sql-experience): remove session setting in v21.1 and have this
+// TODO(#sql-experience): remove session setting in v22.1 and have this
 // always enabled.
 var intervalStyleEnabled = settings.RegisterBoolSetting(
 	"sql.defaults.intervalstyle.enabled",
-	"default value for enable_intervalstyle session setting",
+	"default value for intervalstyle_enabled session setting",
+	false,
+).WithPublic()
+
+// dateStyleEnabled controls dates representation.
+// TODO(#sql-experience): remove session setting in v22.1 and have this
+// always enabled.
+var dateStyleEnabled = settings.RegisterBoolSetting(
+	"sql.defaults.datestyle.enabled",
+	"default value for datestyle_enabled session setting",
 	false,
 ).WithPublic()
 
@@ -2627,6 +2636,11 @@ func (m *sessionDataMutator) SetDateStyle(style pgdate.DateStyle) {
 // SetIntervalStyleEnabled sets the IntervalStyleEnabled for the given session.
 func (m *sessionDataMutator) SetIntervalStyleEnabled(enabled bool) {
 	m.data.IntervalStyleEnabled = enabled
+}
+
+// SetDateStyleEnabled sets the DateStyleEnabled for the given session.
+func (m *sessionDataMutator) SetDateStyleEnabled(enabled bool) {
+	m.data.DateStyleEnabled = enabled
 }
 
 // SetStubCatalogTablesEnabled sets default value for stub_catalog_tables.
