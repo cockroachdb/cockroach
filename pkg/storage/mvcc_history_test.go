@@ -56,7 +56,7 @@ import (
 // get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]]
 // increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>]
+// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [stricttargetbytes=<bool>]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
@@ -802,6 +802,11 @@ func cmdScan(e *evalCtx) error {
 		var tb int
 		e.scanArg(key, &tb)
 		opts.TargetBytes = int64(tb)
+	}
+	if key := "stricttargetbytes"; e.hasArg(key) {
+		var s bool
+		e.scanArg(key, &s)
+		opts.StrictTargetBytes = s
 	}
 	res, err := MVCCScan(e.ctx, e.engine, key, endKey, ts, opts)
 	// NB: the error is returned below. This ensures the test can

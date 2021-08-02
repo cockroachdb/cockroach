@@ -40,13 +40,14 @@ func ReverseScan(
 	var err error
 
 	opts := storage.MVCCScanOptions{
-		Inconsistent:     h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:              h.Txn,
-		MaxKeys:          h.MaxSpanRequestKeys,
-		MaxIntents:       storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		TargetBytes:      h.TargetBytes,
-		FailOnMoreRecent: args.KeyLocking != lock.None,
-		Reverse:          true,
+		Inconsistent:      h.ReadConsistency != roachpb.CONSISTENT,
+		Txn:               h.Txn,
+		MaxKeys:           h.MaxSpanRequestKeys,
+		MaxIntents:        storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		TargetBytes:       h.TargetBytes,
+		StrictTargetBytes: h.StrictTargetBytes,
+		FailOnMoreRecent:  args.KeyLocking != lock.None,
+		Reverse:           true,
 	}
 
 	switch args.ScanFormat {
