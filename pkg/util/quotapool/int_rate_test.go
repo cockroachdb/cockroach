@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -26,7 +25,6 @@ import (
 
 func TestRateLimiterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 63823, "flaky test")
 
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	mt := timeutil.NewManualTime(t0)
@@ -162,12 +160,13 @@ func TestRateLimiterBasic(t *testing.T) {
 
 		// THis should need to wait one second for the bucket to fill up.
 		go doWait(30)
-		ensureNotDone()
+		timer := ensureNotDone()
 
 		// Adjust the rate and the burst down. This should move the current
 		// capacity down to 0 and lower the burst. It will now take 10 seconds
 		// before the bucket is full.
 		rl.UpdateLimit(1, 10)
+		waitForTimersNotEqual(timer)
 		mt.Advance(9 * time.Second)
 		ensureNotDone()
 		mt.Advance(time.Second)
