@@ -826,8 +826,38 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 statement ok
 SET experimental_enable_expression_indexes=true
 
-# Test that inaccessible columns that represent expression indexes have
-# histograms collected for them.
+# Test that stats are not collected for virtual columns.
+statement ok
+CREATE TABLE virt (
+  a INT,
+  v INT AS (a + 10) VIRTUAL,
+  INDEX (v)
+)
+
+statement ok
+INSERT INTO virt VALUES (1), (2), (3)
+
+statement ok
+CREATE STATISTICS s FROM virt
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE virt]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {rowid}       3          0           true
+
+# Test that stats are not collect for inaccessible virtual columns that
+# represent expression indexes.
 statement ok
 CREATE TABLE expression (
   a INT,
@@ -853,13 +883,11 @@ FROM
 ORDER BY
   column_names::STRING, created
 ----
-statistics_name  column_names                row_count  null_count  has_histogram
-s                {a}                         3          0           true
-s                {b}                         3          0           true
-s                {crdb_internal_idx_expr_1}  3          3           false
-s                {crdb_internal_idx_expr}    3          3           true
-s                {j}                         3          0           false
-s                {rowid}                     3          0           true
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {j}           3          0           false
+s                {rowid}       3          0           true
 
 # Test that non-index columns have histograms collected for them, with
 # up to 2 buckets.
