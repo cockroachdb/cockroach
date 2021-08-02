@@ -49,7 +49,8 @@ func Scan(
 		MaxKeys:                h.MaxSpanRequestKeys,
 		MaxIntents:             storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:            h.TargetBytes,
-		TargetBytesAvoidExcess: avoidExcess,
+		TargetBytesAvoidExcess: h.TargetBytesAllowEmpty || avoidExcess, // AllowEmpty takes precedence
+		TargetBytesAllowEmpty:  h.TargetBytesAllowEmpty,
 		FailOnMoreRecent:       args.KeyLocking != lock.None,
 		Reverse:                false,
 		MemoryAccount:          cArgs.EvalCtx.GetResponseMemoryAccount(),

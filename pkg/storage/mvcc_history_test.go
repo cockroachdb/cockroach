@@ -57,7 +57,7 @@ import (
 // get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]]
 // increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess]
+// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
@@ -822,6 +822,9 @@ func cmdScan(e *evalCtx) error {
 	}
 	if e.hasArg("avoidExcess") {
 		opts.TargetBytesAvoidExcess = true
+	}
+	if e.hasArg("allowEmpty") {
+		opts.TargetBytesAllowEmpty = true
 	}
 	res, err := MVCCScan(e.ctx, e.engine, key, endKey, ts, opts)
 	// NB: the error is returned below. This ensures the test can
