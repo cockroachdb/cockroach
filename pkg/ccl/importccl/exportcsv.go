@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
@@ -172,6 +173,9 @@ func (sp *csvWriter) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "csvWriter")
 	defer span.Finish()
 
+	instanceID := sp.flowCtx.EvalCtx.NodeID.SQLInstanceID()
+	uniqueID := builtins.GenerateUniqueInt(instanceID)
+
 	err := func() error {
 		typs := sp.input.OutputTypes()
 		sp.input.Start(ctx)
@@ -252,12 +256,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			}
 			defer es.Close()
 
-			nodeID, err := sp.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(47970)
-			if err != nil {
-				return err
-			}
-
-			part := fmt.Sprintf("n%d.%d", nodeID, chunk)
+			part := fmt.Sprintf("n%d.%d", uniqueID, chunk)
 			chunk++
 			filename := writer.FileName(sp.spec, part)
 			// Close writer to ensure buffer and any compression footer is flushed.
