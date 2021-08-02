@@ -148,6 +148,13 @@ message ColumnDescriptor {
   // pg_catalog.pg_attribute. A column cannot be both hidden and inaccessible.
   optional bool inaccessible = 17 [(gogoproto.nullable) = false];
 
+  // A generated_always column is created by `GENERATED ALWAYS AS IDENTITY`
+  // token under the `CREATE TABLE` statement.
+  // A generated_always column does not allow explicit insert.
+  // To insert a generated_always column, the INSERT statement
+  // must include the OVERRIDING SYSTEM VALUE clause
+  optional bool generated_always = 18 [(gogoproto.nullable) = false];
+
   reserved 7;
   // Ids of sequences used in this column's DEFAULT expression, in calls to nextval().
   repeated uint32 uses_sequence_ids = 10 [(gogoproto.casttype) = "ID"];

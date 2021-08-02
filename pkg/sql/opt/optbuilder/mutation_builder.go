@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1321,6 +1322,26 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 		"value type %s doesn't match type %s of column %q",
 		typ, col.DatumType(), tree.ErrNameString(colName))
 	err = errors.WithHint(err, "you will need to rewrite or cast the expression")
+	panic(err)
+}
+
+// checkColumnIsGeneratedAlways verifies that if current column
+// was created with the `GENERATED ALWAYS AS IDENTITY` token, which
+// restricts this column from being explicitly written to.
+//
+// If a column is not allowed to be written explicitly, users need to specify
+// the INSERT/UPSERT/UPDATE statement with the OVERRIDING SYSTEM VALUE token
+//
+// TODO(janexing): to implement the OVERRIDING SYSTEM VALUE syntax
+// under `INSERT/UPSERT/UPDATE` statement
+//
+// This is used by the UPDATE, INSERT and UPSERT code.
+func checkColumnIsGeneratedAlways(col *cat.Column) {
+	if !col.IsGeneratedAlways() {
+		return
+	}
+	colName := string(col.ColName())
+	err := sqlerrors.NewGeneratedAlwaysColumnError(colName)
 	panic(err)
 }
 

@@ -49,6 +49,18 @@ func NewNonNullViolationError(columnName string) error {
 	return pgerror.Newf(pgcode.NotNullViolation, "null value in column %q violates not-null constraint", columnName)
 }
 
+// NewGeneratedAlwaysColumnError creates an error for explicitly writing a column
+// created with `GENERATED ALWAYS AS IDENTITY` token.
+func NewGeneratedAlwaysColumnError(columnName string) error {
+	return errors.WithHint(
+		errors.WithDetailf(
+			pgerror.Newf(pgcode.GeneratedAlways, "cannot insert into column %q", columnName),
+			"Column %q is an identity column defined as GENERATED ALWAYS.", columnName,
+		),
+		"Use OVERRIDING SYSTEM VALUE to override.",
+	)
+}
+
 // NewInvalidSchemaDefinitionError creates an error for an invalid schema
 // definition such as a schema definition that doesn't parse.
 func NewInvalidSchemaDefinitionError(err error) error {

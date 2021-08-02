@@ -195,6 +195,9 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		ord := mb.tabID.ColumnOrdinal(targetColID)
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), sourceCol.typ)
 
+		// Check if current column allow explicit write. If not, return error.
+		checkColumnIsGeneratedAlways(mb.tab.Column(ord))
+
 		// Add source column ID to the list of columns to update.
 		mb.updateColIDs[ord] = sourceCol.id
 	}

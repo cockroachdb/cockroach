@@ -246,8 +246,9 @@ func TestMetadataTables(t *testing.T) {
 			types.Int,
 			false, /* nullable */
 			cat.Visible,
-			nil, /* defaultExpr */
-			nil, /* computedExpr */
+			nil,   /* defaultExpr */
+			nil,   /* computedExpr */
+			false, /* generatedAlways */
 		)
 		return c
 	}
