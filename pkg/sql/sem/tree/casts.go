@@ -789,6 +789,9 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			if err != nil {
 				return nil, err
 			}
+			if t == nil {
+				return DNull, nil
+			}
 			g, err := geo.ParseGeographyFromGeoJSON([]byte(*t))
 			if err != nil {
 				return nil, err
@@ -833,6 +836,9 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			t, err := d.AsText()
 			if err != nil {
 				return nil, err
+			}
+			if t == nil {
+				return DNull, nil
 			}
 			g, err := geo.ParseGeometryFromGeoJSON([]byte(*t))
 			if err != nil {

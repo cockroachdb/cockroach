@@ -1132,3 +1132,13 @@ eval
 'hello t'::string::char(100)
 ----
 'hello t'
+
+eval
+'null'::jsonb::geography
+----
+NULL
+
+eval
+'null'::jsonb::geometry
+----
+NULL
