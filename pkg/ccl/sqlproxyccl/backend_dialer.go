@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"time"
 
 	"github.com/jackc/pgproto3/v2"
 )
@@ -23,7 +24,8 @@ import (
 var BackendDial = func(
 	msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 ) (net.Conn, error) {
-	conn, err := net.Dial("tcp", outgoingAddress)
+	// Use a short dial timeout to mitigate network black holes.
+	conn, err := net.DialTimeout("tcp", outgoingAddress, time.Second*5)
 	if err != nil {
 		return nil, newErrorf(
 			codeBackendDown, "unable to reach backend SQL server: %v", err,
