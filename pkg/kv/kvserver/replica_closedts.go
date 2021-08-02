@@ -145,8 +145,10 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	// Update the replica directly since there's no side-transport connection to
-	// the local node.
-	r.sideTransportClosedTimestamp.forward(ctx, target, lai)
+	// the local node. We pass knownApplied = true because we pulled this lease
+	// applied index directly from the applied replica state.
+	const knownApplied = true
+	r.sideTransportClosedTimestamp.forward(ctx, target, lai, knownApplied)
 	res.OK = true
 	res.LAI = lai
 	res.Policy = policy
@@ -172,7 +174,10 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 func (r *Replica) ForwardSideTransportClosedTimestamp(
 	ctx context.Context, closed hlc.Timestamp, lai ctpb.LAI,
 ) {
-	r.sideTransportClosedTimestamp.forward(ctx, closed, lai)
+	// We pass knownApplied = false because we don't know whether this lease
+	// applied index has been applied locally yet.
+	const knownApplied = false
+	r.sideTransportClosedTimestamp.forward(ctx, closed, lai, knownApplied)
 }
 
 // sidetransportAccess encapsulates state related to the closed timestamp's
@@ -195,11 +200,18 @@ type sidetransportAccess struct {
 	receiver sidetransportReceiver
 	mu       struct {
 		syncutil.RWMutex
-		// closedTimestamp is the cached info about the closed timestamp that was
-		// communicated by the side transport. The replica can use it if it has
-		// applied commands up to (and including) lai.
-		closedTimestamp hlc.Timestamp
-		lai             ctpb.LAI
+
+		// cur is the largest closed timestamp communicated by the side transport
+		// whose corresponding lai has definitely been applied by the local replica.
+		// It is used to ensure that even as next increases, the timestamp returned
+		// from get never regresses across sequential calls.
+		cur closedTimestamp
+
+		// next is the largest closed timestamp communicated by the side transport,
+		// along with its corresponding lai. This lai may or may not have already
+		// been applied by the range. When a call to get includes an lai equal to or
+		// greater than lai, next is moved to cur and is cleared.
+		next closedTimestamp
 	}
 }
 
@@ -211,6 +223,37 @@ type sidetransportReceiver interface {
 	HTML() string
 }
 
+// closedTimestamp is a combination of a timestamp and a lease applied index.
+// The timestamp is considered to be locally "closed" when the corresponding
+// lease applied index has been locally applied.
+type closedTimestamp struct {
+	ts  hlc.Timestamp
+	lai ctpb.LAI
+}
+
+// regression returns whether the combination of the two closed timestamps
+// indicate an illegal regression. The closed timestamp is said to regress when
+// its timestamp decreases as its lease applied index increases.
+func (a closedTimestamp) regression(b closedTimestamp) bool {
+	if a.lai == b.lai {
+		return false
+	}
+	if a.lai < b.lai {
+		return b.ts.Less(a.ts)
+	}
+	return a.ts.Less(b.ts)
+}
+
+// merge combines the two closed timestamp sources into the receiver.
+func (a *closedTimestamp) merge(b closedTimestamp) {
+	if a.lai == b.lai {
+		a.ts.Forward(b.ts)
+	} else if a.lai < b.lai {
+		a.ts = b.ts
+		a.lai = b.lai
+	}
+}
+
 func (st *sidetransportAccess) init(receiver sidetransportReceiver, rangeID roachpb.RangeID) {
 	if receiver != nil {
 		// Avoid st.receiver becoming a typed nil.
@@ -219,17 +262,48 @@ func (st *sidetransportAccess) init(receiver sidetransportReceiver, rangeID roac
 	st.rangeID = rangeID
 }
 
-// forward bumps the local closed timestamp info.
-func (st *sidetransportAccess) forward(ctx context.Context, closed hlc.Timestamp, lai ctpb.LAI) {
+// forward bumps the local closed timestamp info using the provided updated.
+// Callers should specify using the knownApplied flag whether they know the
+// lease applied index in the update to be locally applied or not.
+//
+// The method returns the current applied closed timestamp.
+func (st *sidetransportAccess) forward(
+	ctx context.Context, closed hlc.Timestamp, lai ctpb.LAI, knownApplied bool,
+) closedTimestamp {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if st.mu.closedTimestamp.Forward(closed) {
-		if st.mu.lai > lai {
-			log.Fatalf(ctx, "received side-transport notification with higher closed timestamp "+
-				"but lower LAI: r%d current LAI: %d received LAI: %d",
-				st.rangeID, st.mu.lai, lai)
+
+	// Sanity checks.
+	up := closedTimestamp{ts: closed, lai: lai}
+	if st.mu.cur.lai != 0 {
+		st.assertNoRegression(ctx, st.mu.cur, up)
+	}
+	if st.mu.next.lai != 0 {
+		st.assertNoRegression(ctx, st.mu.next, up)
+	}
+
+	if up.lai <= st.mu.cur.lai {
+		// The caller doesn't know that this lai was applied, but we do.
+		knownApplied = true
+	}
+	if knownApplied {
+		// Known applied, so merge into cur and merge + clear next if necessary.
+		if up.lai >= st.mu.next.lai {
+			up.merge(st.mu.next)
+			st.mu.next = closedTimestamp{}
 		}
-		st.mu.lai = lai
+		st.mu.cur.merge(up)
+	} else {
+		// Not known applied, so merge into next.
+		st.mu.next.merge(up)
+	}
+	return st.mu.cur
+}
+
+func (st *sidetransportAccess) assertNoRegression(ctx context.Context, cur, up closedTimestamp) {
+	if cur.regression(up) {
+		log.Fatalf(ctx, "side-transport update saw closed timestamp regression on r%d: "+
+			"(lai=%d, ts=%s) -> (lai=%d, ts=%s)", st.rangeID, cur.lai, cur.ts, up.lai, up.ts)
 	}
 }
 
@@ -239,46 +313,63 @@ func (st *sidetransportAccess) forward(ctx context.Context, closed hlc.Timestamp
 // indicating that any lower or equal closed timestamp suffices; the caller
 // doesn't need the highest closed timestamp necessarily.
 //
-// Returns an empty timestamp if no closed timestamp is known.
+// Returns an empty timestamp if no closed timestamp is known. However, once a
+// closed timestamp is known, an empty timestamp will never again be returned.
+// Furthermore, the returned timestamp will never regress across sequential
+// calls to get.
 //
-// get can be called without holding replica.mu. This means that a caller can
-// pass an appliedLAI that's lower than what a previous caller passed in. That's
-// fine, except the second caller might get an empty result.
+// It is safe for a caller to pass an appliedLAI that's lower than what a
+// previous caller passed in. This means that get can be called without holding
+// the replica.mu.
 func (st *sidetransportAccess) get(
 	ctx context.Context, leaseholder roachpb.NodeID, appliedLAI ctpb.LAI, sufficient hlc.Timestamp,
 ) hlc.Timestamp {
 	st.mu.RLock()
-	closed := st.mu.closedTimestamp
-	lai := st.mu.lai
+	cur, next := st.mu.cur, st.mu.next
 	st.mu.RUnlock()
 
-	// The local replica hasn't caught up to the closed timestamp we have stored,
-	// so what we have stored is not usable. There's no point in going to the
-	// receiver, as that one can only have an even higher LAI.
-	if appliedLAI < lai {
-		return hlc.Timestamp{}
+	// If the current info is enough to satisfy sufficient, we're done.
+	if !sufficient.IsEmpty() && sufficient.LessEq(cur.ts) {
+		return cur.ts
 	}
 
-	// If the local info is enough to satisfy sufficient, we're done.
-	if !sufficient.IsEmpty() && sufficient.LessEq(closed) {
-		return closed
+	// If we know about a larger closed timestamp at a higher lease applied index,
+	// check whether our applied lai is sufficient to promote it to cur.
+	if next.lai != 0 {
+		if next.lai > appliedLAI {
+			// The local replica hasn't caught up to the closed timestamp we have
+			// stored, so what we have stored is not usable. There's no point in going
+			// to the receiver, as that one can only have an even higher LAI.
+			return cur.ts
+		}
+
+		// The local replica has caught up to the closed timestamp we have stored.
+		cur = st.forward(ctx, next.ts, next.lai, true /* knownApplied */)
+		next = closedTimestamp{} // prevent use below
+
+		// Check again if the local, current info is enough to satisfy sufficient.
+		if !sufficient.IsEmpty() && sufficient.LessEq(cur.ts) {
+			return cur.ts
+		}
 	}
 
 	// Check with the receiver.
 
 	// Some tests don't have the receiver set.
 	if st.receiver == nil {
-		return closed
+		return cur.ts
 	}
 
-	receiverClosed, receiverLAI := st.receiver.GetClosedTimestamp(ctx, st.rangeID, leaseholder)
-	if receiverClosed.IsEmpty() || appliedLAI < receiverLAI {
-		return closed
+	recTS, recLAI := st.receiver.GetClosedTimestamp(ctx, st.rangeID, leaseholder)
+	if recTS.LessEq(cur.ts) {
+		// Short-circuit if the receiver doesn't know anything new.
+		return cur.ts
 	}
 
-	// Update the local closed timestamp info.
-	if closed.Forward(receiverClosed) {
-		st.forward(ctx, closed, receiverLAI)
-	}
-	return closed
+	// Otherwise, update the access's local state with the additional information
+	// from the side transport receiver and return the largest closed timestamp
+	// that we know to be applied.
+	knownApplied := recLAI <= appliedLAI
+	cur = st.forward(ctx, recTS, recLAI, knownApplied)
+	return cur.ts
 }
