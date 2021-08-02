@@ -187,6 +187,12 @@ func (w column) IsSystemColumn() bool {
 	return w.desc.SystemColumnKind != descpb.SystemColumnKind_NONE
 }
 
+// IsDisallowedForExplicitWrite returns true iff the column is
+// not allowed for explicit write (write without OVERRIDING SYSTEM VALUE token)
+func (w column) IsDisallowedForExplicitWrite() bool {
+	return w.desc.Disallowexplicitwrite
+}
+
 // columnCache contains precomputed slices of catalog.Column interfaces.
 type columnCache struct {
 	all        []catalog.Column

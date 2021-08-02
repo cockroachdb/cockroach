@@ -133,6 +133,7 @@ var (
 	NotNullViolation             = MakeCode("23502")
 	ForeignKeyViolation          = MakeCode("23503")
 	UniqueViolation              = MakeCode("23505")
+	DisallowExplicitWrite        = MakeCode("23506")
 	CheckViolation               = MakeCode("23514")
 	ExclusionViolation           = MakeCode("23P01")
 	// Section: Class 24 - Invalid Cursor State

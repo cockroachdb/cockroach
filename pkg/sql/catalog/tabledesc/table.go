@@ -66,10 +66,11 @@ func MakeColumnDefDescs(
 	}
 
 	col := &descpb.ColumnDescriptor{
-		Name:     string(d.Name),
-		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey.IsPrimaryKey,
-		Virtual:  d.IsVirtual(),
-		Hidden:   d.Hidden,
+		Name:                  string(d.Name),
+		Nullable:              d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey.IsPrimaryKey,
+		Virtual:               d.IsVirtual(),
+		Hidden:                d.Hidden,
+		Disallowexplicitwrite: d.DisallowExplicitWrite,
 	}
 
 	// Validate and assign column type.

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1321,6 +1322,25 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 		"value type %s doesn't match type %s of column %q",
 		typ, col.DatumType(), tree.ErrNameString(colName))
 	err = errors.WithHint(err, "you will need to rewrite or cast the expression")
+	panic(err)
+}
+
+// checkColumnPermissionForExplicitWrite verifies that a given value is valid
+// to be stored in a column explicitly (without any additional token).
+//
+// If a column is not allowed to be written explicitly, users need to specify
+// the INSERT/UPSERT/UPDATE statement with the OVERRIDING SYSTEM VALUE token
+//
+// TODO(janexing): to implement the OVERRIDING SYSTEM VALUE syntax
+// under INSERT/UPSERT/UPDATE statement
+//
+// This is used by the UPDATE, INSERT and UPSERT code.
+func checkColumnPermissionForExplicitWrite(col *cat.Column) {
+	if !col.IsProhibitFromExplicitlyWrite() {
+		return
+	}
+	colName := string(col.ColName())
+	err := sqlerrors.NewDisallowExplicitWriteError(colName)
 	panic(err)
 }
 
