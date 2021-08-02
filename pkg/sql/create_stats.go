@@ -335,12 +335,25 @@ func createStatsDefaultColumns(
 	// addIndexColumnStatsIfNotExists appends column stats for the given column
 	// ID if they have not already been added. Histogram stats are collected for
 	// every indexed column.
-	addIndexColumnStatsIfNotExists := func(colID descpb.ColumnID, isInverted bool) {
+	addIndexColumnStatsIfNotExists := func(colID descpb.ColumnID, isInverted bool) error {
+		col, err := desc.FindColumnWithID(colID)
+		if err != nil {
+			return err
+		}
+
+		// Do not collect stats for virtual computed columns. DistSQLPlanner
+		// cannot currently collect stats for these columns because it plans
+		// table readers on the table's primary index which does not include
+		// virtual computed columns.
+		if col.IsVirtual() {
+			return nil
+		}
+
 		colList := []descpb.ColumnID{colID}
 
 		// Check for existing stats and remember the requested stats.
 		if !trackStatsIfNotExists(colList) {
-			return
+			return nil
 		}
 
 		colStat := jobspb.CreateStatsDetails_ColStat{
@@ -359,12 +372,18 @@ func createStatsDefaultColumns(
 			colStat.HasHistogram = true
 			colStats = append(colStats, colStat)
 		}
+
+		return nil
 	}
 
 	// Add column stats for the primary key.
-	for i := 0; i < desc.GetPrimaryIndex().NumKeyColumns(); i++ {
+	primaryIdx := desc.GetPrimaryIndex()
+	for i := 0; i < primaryIdx.NumKeyColumns(); i++ {
 		// Generate stats for each column in the primary key.
-		addIndexColumnStatsIfNotExists(desc.GetPrimaryIndex().GetKeyColumnID(i), false /* isInverted */)
+		err := addIndexColumnStatsIfNotExists(primaryIdx.GetKeyColumnID(i), false /* isInverted */)
+		if err != nil {
+			return nil, err
+		}
 
 		// Only collect multi-column stats if enabled.
 		if i == 0 || !multiColEnabled {
@@ -393,7 +412,9 @@ func createStatsDefaultColumns(
 			isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED && colID == idx.InvertedColumnID()
 
 			// Generate stats for each indexed column.
-			addIndexColumnStatsIfNotExists(colID, isInverted)
+			if err := addIndexColumnStatsIfNotExists(colID, isInverted); err != nil {
+				return nil, err
+			}
 
 			// Only collect multi-column stats if enabled.
 			if j == 0 || !multiColEnabled {
@@ -437,7 +458,9 @@ func createStatsDefaultColumns(
 					return nil, err
 				}
 				isInverted := colinfo.ColumnTypeIsInvertedIndexable(col.GetType())
-				addIndexColumnStatsIfNotExists(colID, isInverted)
+				if err := addIndexColumnStatsIfNotExists(colID, isInverted); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -446,6 +469,12 @@ func createStatsDefaultColumns(
 	nonIdxCols := 0
 	for i := 0; i < len(desc.PublicColumns()) && nonIdxCols < maxNonIndexCols; i++ {
 		col := desc.PublicColumns()[i]
+
+		// Do not collect stats for virtual computed columns.
+		if col.IsVirtual() {
+			continue
+		}
+
 		colList := []descpb.ColumnID{col.GetID()}
 
 		if !trackStatsIfNotExists(colList) {

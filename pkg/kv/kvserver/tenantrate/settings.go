@@ -11,8 +11,8 @@
 package tenantrate
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/tenantcostmodel"
 )
 
 // Config contains the configuration of the rate limiter.
