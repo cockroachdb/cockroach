@@ -11,7 +11,8 @@
 package scplan
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/eav/eavquery"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -25,13 +26,6 @@ import (
 type Params struct {
 	// ExecutionPhase indicates the phase that the plan should be constructed for.
 	ExecutionPhase scop.Phase
-	// CreatedDescriptorIDs contains IDs for new descriptors created by the same
-	// schema changer (i.e., earlier in the same transaction). New descriptors
-	// can have most of their schema changes fully executed in the same
-	// transaction.
-	//
-	// This doesn't do anything right now.
-	CreatedDescriptorIDs catalog.DescriptorIDSet
 }
 
 // A Plan is a schema change plan, primarily containing ops to be executed that
@@ -82,7 +76,6 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 				if r := recover(); r != nil {
 					panic(errors.AssertionFailedf("%s: %v", dr.name, r))
 				}
-
 			}()
 			from := r.Entity(dr.from).(*scpb.Node)
 			to := r.Entity(dr.to).(*scpb.Node)
@@ -93,7 +86,10 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 		}
 	}
 
-	stages := buildStages(initial, g, params)
+	stages, err := buildStages(initial, g)
+	if err != nil {
+		return Plan{}, err
+	}
 
 	// TODO(ajwerner): Do a better job allocating phases.
 	// We'll want to make the process of moving things out of public into
@@ -113,7 +109,7 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 	}, nil
 }
 
-func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
+func buildStages(init scpb.State, g *scgraph.Graph) ([]Stage, error) {
 	// TODO(ajwerner): deal with the case where the target status was
 	// fulfilled by something that preceded the initial state.
 	cur := init
@@ -159,36 +155,57 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		}
 		return edges, false
 	}
-	buildStageType := func(edges []*scgraph.OpEdge) (Stage, bool) {
+	splitEdges := func(edges []*scgraph.OpEdge) (revertible, nonRevertible []*scgraph.OpEdge) {
+		sort.SliceStable(edges, func(i, j int) bool {
+			if ir, jr := edges[i].Revertible(), edges[j].Revertible(); ir != jr {
+				return ir
+			}
+			return false
+		})
+		n := sort.Search(len(edges), func(i int) bool {
+			return !edges[i].Revertible()
+		})
+		return edges[:n], edges[n:]
+	}
+	buildStageType := func(edges []*scgraph.OpEdge, allEdges []*scgraph.OpEdge) (_ Stage, didSomething, haveEdges bool) {
 		edges, ok := filterUnsatisfiedEdges(edges)
 		if !ok {
-			return Stage{}, false
+			return Stage{}, false, false
 		}
 		next := append(cur[:0:0], cur...)
-		isStageRevertible := true
+		var stageIsRevertible bool
 		var ops []scop.Op
-		for revertible := 1; revertible >= 0; revertible-- {
-			isStageRevertible = revertible == 1
-			for i, ts := range cur {
-				for _, e := range edges {
-					if e.From() == ts && isStageRevertible == e.Revertible() {
-						next[i] = e.To()
-						ops = append(ops, e.Op()...)
-						break
-					}
+		revertible, nonRevertible := splitEdges(edges)
+		if len(revertible) == 0 {
+			if len(nonRevertible) == 0 {
+				return Stage{}, false, len(edges) > 0
+			}
+			for _, e := range allEdges {
+				if e.Revertible() {
+					return Stage{}, false, len(edges) > 0
 				}
 			}
-			// If we added non-revertible stages
-			// then this stage is done
-			if len(ops) != 0 {
-				break
+			edges, stageIsRevertible = nonRevertible, false
+		} else {
+			edges, stageIsRevertible = revertible, true
+		}
+
+		for i, ts := range cur {
+			for _, e := range edges {
+				if e.From() == ts {
+					next[i] = e.To()
+					ops = append(ops, e.Op()...)
+					break
+				}
 			}
 		}
+
 		return Stage{
-			Before: cur,
-			After:  next,
-			Ops:    scop.MakeOps(ops...),
-		}, true
+			Before:     cur,
+			After:      next,
+			Ops:        scop.MakeOps(ops...),
+			Revertible: stageIsRevertible,
+		}, true, true
 	}
 
 	var stages []Stage
@@ -221,15 +238,22 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		// Greedily attempt to find a stage which can be executed. This is sane
 		// because once a dependency is met, it never becomes unmet.
 		var didSomething bool
+		var somethingToDo bool
 		var s Stage
 		for _, typ := range []scop.Type{
 			scop.MutationType,
 			scop.BackfillType,
 			scop.ValidationType,
 		} {
-			if s, didSomething = buildStageType(opTypes[typ]); didSomething {
+			var haveThings bool
+			s, didSomething, haveThings = buildStageType(opTypes[typ], opEdges)
+			somethingToDo = somethingToDo || haveThings
+			if didSomething {
 				break
 			}
+		}
+		if !didSomething && somethingToDo {
+			return nil, errors.AssertionFailedf("failed to generate stages")
 		}
 		if !didSomething {
 			break
@@ -239,7 +263,7 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		stages = append(stages, s)
 		cur = s.After
 	}
-	return stages
+	return stages, nil
 }
 
 // Check if some route exists from curr to the

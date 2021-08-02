@@ -112,7 +112,7 @@ func makeTarget(
 func To(to scpb.Status, properties ...Property) TransitionSpec {
 	ts := transitionSpec{
 		to:         to,
-		revertible: false,
+		revertible: true,
 	}
 	for _, p := range properties {
 		p.apply(&ts)

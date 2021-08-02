@@ -22,6 +22,7 @@ func init() {
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
 		opgen.To(scpb.Status_ABSENT,
+			opgen.Revertible(false),
 			opgen.Emit(func(this *scpb.TypeReference) scop.Op {
 				return &scop.RemoveTypeBackRef{
 					TypeID: this.TypeID,

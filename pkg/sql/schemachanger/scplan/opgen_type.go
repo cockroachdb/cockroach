@@ -22,6 +22,7 @@ func init() {
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
 		opgen.To(scpb.Status_DELETE_ONLY,
+			opgen.Revertible(false),
 			opgen.Emit(func(this *scpb.Type) scop.Op {
 				return &scop.MarkDescriptorAsDropped{
 					TableID: this.TypeID,

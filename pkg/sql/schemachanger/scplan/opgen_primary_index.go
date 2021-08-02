@@ -77,6 +77,7 @@ func init() {
 				}
 			})),
 		To(scpb.Status_DELETE_ONLY,
+			Revertible(false),
 			Emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeDroppedIndexDeleteOnly{
 					TableID: this.TableID,
@@ -84,6 +85,7 @@ func init() {
 				}
 			})),
 		To(scpb.Status_ABSENT,
+			Revertible(false),
 			Emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeIndexAbsent{
 					TableID: this.TableID,

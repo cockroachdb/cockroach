@@ -22,14 +22,13 @@ func init() {
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
 		opgen.To(scpb.Status_DELETE_ONLY,
+			opgen.Revertible(false),
 			opgen.Emit(func(this *scpb.Schema) scop.Op {
 				return &scop.MarkDescriptorAsDropped{
 					TableID: this.SchemaID,
 				}
 			})),
 		opgen.To(scpb.Status_ABSENT,
-			// TODO(ajwerner): The move to DELETE_ONLY should be marked
-			// non-revertible.
 			opgen.Revertible(false),
 			opgen.Emit(func(this *scpb.Schema) scop.Op {
 				return &scop.DrainDescriptorName{

@@ -22,6 +22,7 @@ func init() {
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
 		opgen.To(scpb.Status_ABSENT,
+			opgen.Revertible(false),
 			opgen.Emit(func(this *scpb.OutboundForeignKey) scop.Op {
 				return &scop.DropForeignKeyRef{
 					TableID:  this.OriginID,
