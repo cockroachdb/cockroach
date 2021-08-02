@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -35,6 +36,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
+
+const exportFilePattern = "export*-n*.0.csv"
 
 func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, string, func()) {
 	ctx := context.Background()
@@ -207,7 +210,7 @@ func TestExportOrder(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
 
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/order' FROM SELECT * FROM foo ORDER BY y ASC LIMIT 2`)
-	content := readFileByGlob(t, filepath.Join(dir, "order", "export*-n1.0.csv"))
+	content := readFileByGlob(t, filepath.Join(dir, "order", exportFilePattern))
 
 	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
 		t.Fatalf("expected %q, got %q", expected, got)
@@ -285,7 +288,7 @@ INSERT INTO greeting_table VALUES ('hello', 'hello'), ('hi', 'hi');
 		sqlDB.Exec(t, stmt)
 
 		// Read the dumped file.
-		contents := readFileByGlob(t, filepath.Join(dir, path, "export*-n1.0.csv"))
+		contents := readFileByGlob(t, filepath.Join(dir, path, exportFilePattern))
 
 		require.Equal(t, test.expected, string(contents))
 	}
@@ -311,7 +314,7 @@ func TestExportOrderCompressed(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
 
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/order' with compression = gzip from select * from foo order by y asc limit 2`)
-	compressed := readFileByGlob(t, filepath.Join(dir, "order", "export*-n1.0.csv.gz"))
+	compressed := readFileByGlob(t, filepath.Join(dir, "order", exportFilePattern+".gz"))
 
 	gzipReader, err := gzip.NewReader(bytes.NewReader(compressed))
 	defer close(gzipReader)
@@ -339,7 +342,7 @@ func TestExportShow(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/show' FROM SELECT * FROM [SHOW DATABASES] ORDER BY database_name`)
-	content := readFileByGlob(t, filepath.Join(dir, "show", "export*-n1.0.csv"))
+	content := readFileByGlob(t, filepath.Join(dir, "show", exportFilePattern))
 
 	if expected, got := "defaultdb,"+security.RootUser+"\npostgres,"+security.RootUser+"\nsystem,"+
 		security.NodeUser+"\n", string(content); expected != got {
