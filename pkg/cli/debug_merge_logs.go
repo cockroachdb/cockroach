@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -579,13 +580,13 @@ func seekToFirstAfterFrom(
 		var e logpb.Entry
 		d, err := log.NewEntryDecoderWithFormat(f, editMode, format)
 		if err != nil {
-			panic(err)
+			panic(errors.WithMessagef(err, "error while processing file %s", f.Name()))
 		}
 		if err := d.Decode(&e); err != nil {
 			if err == io.EOF {
 				return true
 			}
-			panic(err)
+			panic(errors.WithMessagef(err, "error while processing file %s", f.Name()))
 		}
 		return e.Time >= from.UnixNano()
 	})
