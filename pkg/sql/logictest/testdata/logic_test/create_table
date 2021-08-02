@@ -478,6 +478,20 @@ CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_txn_stats);
 
 subtest generated_as_identity
 statement ok
+CREATE TABLE hello_t (x INT, y INT);
+
+statement ok
+INSERT INTO hello_t (x ,y) values (10, 20), (11, 21), (12, 22), (13, 23);
+
+query II
+SELECT * FROM hello_t;
+----
+10  20
+11  21
+12  22
+13  23
+
+statement ok
 CREATE TABLE generated_always_t (a INT UNIQUE, b INT GENERATED ALWAYS AS IDENTITY);
 
 statement ok
@@ -516,3 +530,5 @@ SELECT * FROM generated_by_default_t;
 8  2
 7  3
 6  2
+
+
