@@ -12,6 +12,9 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'STORED'
 	| 'CONSTRAINT' constraint_name 'AS' '(' a_expr ')' 'VIRTUAL'
 	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'VIRTUAL'
+	| 'CONSTRAINT' constraint_name 'AS' 'IDENTITY'
+	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY'
+	| 'CONSTRAINT' constraint_name 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY'
 	| 'NOT' 'NULL'
 	| 'NULL'
 	| 'NOT' 'VISIBLE'
@@ -25,6 +28,9 @@ col_qualification ::=
 	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'STORED'
 	| 'AS' '(' a_expr ')' 'VIRTUAL'
 	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'VIRTUAL'
+	| 'AS' 'IDENTITY'
+	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY'
+	| 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY'
 	| 'COLLATE' collation_name
 	| 'FAMILY' family_name
 	| 'CREATE' 'FAMILY' family_name
