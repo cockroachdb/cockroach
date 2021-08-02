@@ -81,11 +81,21 @@ message StreamIngestionDetails {
 }
 
 message StreamIngestionProgress {
+  // PartitionProgress stores fields that are related to the status of a
+  // partition.
+  message PartitionProgress {
+    util.hlc.Timestamp ingested_timestamp = 1 [(gogoproto.nullable) = false];
+    // TODO(pbardea): Add an error message so that per-partition errors can be
+    // surfaced to the user.
+  }
   // CutoverTime is set to signal to the stream ingestion job to complete its
   // ingestion. This involves stopping any subsequent ingestion, and rolling
   // back any additional ingested data, to bring the ingested cluster to a
   // consistent state as of the CutoverTime.
   util.hlc.Timestamp cutover_time = 1 [(gogoproto.nullable) = false];
+  // PartitionProgress maps partition addresses to their progress.
+  // TODO(pbardea): This could scale O(partitions) = O(nodes).
+  map<string, PartitionProgress> partition_progress = 2 [(gogoproto.nullable) = false];
 }
 
 message BackupDetails {
