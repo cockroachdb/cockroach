@@ -26,19 +26,25 @@ type Query struct {
 	prepared preparedQuery
 }
 
-type preparedQuery struct {
+type queryDisjuncts struct {
 	nodeValues []eav.Values
 	remaining  []fact
+	c          *evalContextCache
+}
 
-	// cache exactly one evalContext for this query.
-	// This optimization allows single-threaded execution to avoid allocating
-	// upon iterative evaluation, which is going to be a common pattern.
-	// This is almost definitely premature optimization to game a benchmark but
-	// it's hard to imagine that it will hurt.
-	ecCache struct {
-		sync.Mutex
-		ec *evalContext
-	}
+// cache exactly one evalContext for this query.
+// This optimization allows single-threaded execution to avoid allocating
+// upon iterative evaluation, which is going to be a common pattern.
+// This is almost definitely premature optimization to game a benchmark but
+// it's hard to imagine that it will hurt.
+type evalContextCache struct {
+	sync.Mutex
+	ec *evalContext
+}
+
+type preparedQuery struct {
+	c     evalContextCache
+	parts []queryDisjuncts
 }
 
 // Builder is used to build a Query.
@@ -90,13 +96,44 @@ func (v values) getEntity(n entity) eav.Entity {
 func prepare(q Query) preparedQuery {
 	var pq preparedQuery
 	var contradictionFound bool
-	pq.nodeValues = make([]eav.Values, 0, len(q.nodes))
-	for i := 0; i < len(q.nodes); i++ {
-		pq.nodeValues = append(pq.nodeValues, eav.GetValues())
+	disjunctFacts := [][]fact{{}}
+	for i := 0; i < len(q.facts); i++ {
+		f := &q.facts[i]
+		anyVal, isAny := f.value.(any)
+		if !isAny {
+			for j := range disjunctFacts {
+				disjunctFacts[j] = append(disjunctFacts[j], q.facts[i])
+			}
+			continue
+		}
+		expanded := disjunctFacts[:0]
+		for j := 0; j < len(anyVal); j++ {
+			expanded = append(expanded, disjunctFacts...)
+		}
+		for j, v := range anyVal {
+			for k := 0; k < len(disjunctFacts); k++ {
+				n := len(disjunctFacts)*j + k
+				l := len(expanded[n])
+				expanded[n] = append(expanded[n][:l:l], fact{
+					node:  f.node,
+					attr:  f.attr,
+					value: v,
+				})
+			}
+		}
+		disjunctFacts = expanded
 	}
-	contradictionFound, pq.remaining = propagateConstants(q.facts, values(pq.nodeValues))
-	if contradictionFound {
-		panic(errors.AssertionFailedf("found contradiction"))
+	pq.parts = make([]queryDisjuncts, len(disjunctFacts))
+	for i := 0; i < len(disjunctFacts); i++ {
+		pq.parts[i].c = &pq.c
+		pq.parts[i].nodeValues = make([]eav.Values, 0, len(q.nodes))
+		for j := 0; j < len(q.nodes); j++ {
+			pq.parts[i].nodeValues = append(pq.parts[i].nodeValues, eav.GetValues())
+		}
+		contradictionFound, pq.parts[i].remaining = propagateConstants(disjunctFacts[i], values(pq.parts[i].nodeValues))
+		if contradictionFound {
+			panic(errors.AssertionFailedf("found contradiction"))
+		}
 	}
 	return pq
 }
@@ -127,7 +164,7 @@ type nodeBuilder struct {
 
 func (n *nodeBuilder) Constrain(a eav.Attribute, value Value) {
 	switch value.(type) {
-	case eav.Value, *Reference:
+	case eav.Value, *Reference, any:
 		if a.Type() != value.Type() {
 			panic(errors.AssertionFailedf(
 				"type mismatch for constraint Value of type %v != %v for attr %s",
@@ -171,4 +208,40 @@ type entity int
 // attribute.
 type Value interface {
 	Type() eav.Type
+}
+
+type AttributeValue struct {
+	eav.Attribute
+	Value
+}
+
+type any []eav.Value
+
+func (a any) Type() eav.Type {
+	return a[0].Type()
+}
+
+func Any(values ...eav.Value) Value {
+	if len(values) == 0 {
+		panic("must provide values")
+	}
+	var typ eav.Type
+	ret := make(any, len(values))
+	for i, v := range values {
+		if i == 0 {
+			typ = v.Type()
+		} else if typ != v.Type() {
+			panic(errors.AssertionFailedf("type mismatch for any: got %s and %s", typ, v.Type()))
+		}
+		ret[i] = v
+	}
+	return ret
+}
+
+func Constrain(b Builder, name string, attributeValues []AttributeValue) Entity {
+	entity := b.Entity(name)
+	for _, av := range attributeValues {
+		entity.Constrain(av.Attribute, av.Value)
+	}
+	return entity
 }

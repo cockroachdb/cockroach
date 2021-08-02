@@ -31,19 +31,25 @@ func (q *Query) Evaluate(db eav.Database, f ResultIterator) error {
 		return nil
 	}
 
-	ec := getEvalContext(q, db, f)
-	defer putEvalContext(ec)
-	return ec.db.Iterate(ec.frames[0].values[0], ec)
+	for i := range q.prepared.parts {
+		ec := getEvalContext(q, &q.prepared.parts[i], db, f)
+		if err := ec.db.Iterate(ec.frames[0].values[0], ec); err != nil {
+			putEvalContext(ec)
+			return err
+		}
+		putEvalContext(ec)
+	}
+	return nil
 }
 
-func getEvalContext(q *Query, db eav.Database, f ResultIterator) *evalContext {
-	ec := getCachedEvalContext(q)
+func getEvalContext(q *Query, d *queryDisjuncts, db eav.Database, f ResultIterator) *evalContext {
+	ec := getCachedEvalContext(d)
 	if ec == nil {
-		ec = newEvalContext(q)
+		ec = newEvalContext(q, d)
 	}
 	ec.db = db
 	ec.ri = f
-	ec.init()
+	ec.init(d)
 	return ec
 }
 
@@ -52,19 +58,19 @@ func putEvalContext(ec *evalContext) {
 	for i := range ec.frames[0].values {
 		ec.frames[0].values[i].Release()
 	}
-	ec.q.prepared.ecCache.Lock()
-	defer ec.q.prepared.ecCache.Unlock()
-	if ec.q.prepared.ecCache.ec == nil {
-		ec.q.prepared.ecCache.ec = ec
+	ec.q.prepared.c.Lock()
+	defer ec.q.prepared.c.Unlock()
+	if ec.q.prepared.c.ec == nil {
+		ec.q.prepared.c.ec = ec
 	}
 }
 
-func getCachedEvalContext(q *Query) *evalContext {
-	q.prepared.ecCache.Lock()
-	defer q.prepared.ecCache.Unlock()
-	if q.prepared.ecCache.ec != nil {
-		ec := q.prepared.ecCache.ec
-		q.prepared.ecCache.ec = nil
+func getCachedEvalContext(q *queryDisjuncts) *evalContext {
+	q.c.Lock()
+	defer q.c.Unlock()
+	if q.c.ec != nil {
+		ec := q.c.ec
+		q.c.ec = nil
 		return ec
 	}
 	return nil
@@ -80,6 +86,7 @@ type evalFrame struct {
 // evaluation of a query.
 type evalContext struct {
 	q  *Query
+	d  *queryDisjuncts
 	db eav.Database
 	ri ResultIterator
 
@@ -95,7 +102,7 @@ func (ec *evalContext) getEntity(n entity) eav.Entity {
 	return &ec.frames[ec.cur].values[n]
 }
 
-func newEvalContext(q *Query) *evalContext {
+func newEvalContext(q *Query, d *queryDisjuncts) *evalContext {
 	depth := len(q.nodes)
 	frames := make([]evalFrame, depth)
 	values := make([]eav.Values, depth*depth)
@@ -111,18 +118,19 @@ func newEvalContext(q *Query) *evalContext {
 
 	return &evalContext{
 		q:        q,
+		d:        d,
 		depth:    depth,
 		entities: make([]eav.Entity, depth),
 		frames:   frames,
 	}
 }
 
-func (ec *evalContext) init() {
+func (ec *evalContext) init(d *queryDisjuncts) {
 	ec.cur = 0
 	frames := ec.frames
-	frames[0].remaining = append(frames[0].remaining[:0], ec.q.prepared.remaining...)
-	for i := 0; i < len(ec.q.prepared.nodeValues); i++ {
-		frames[0].values[i] = ec.q.prepared.nodeValues[i].Copy()
+	frames[0].remaining = append(frames[0].remaining[:0], d.remaining...)
+	for i := 0; i < len(d.nodeValues); i++ {
+		frames[0].values[i] = d.nodeValues[i].Copy()
 	}
 }
 
