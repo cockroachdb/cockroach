@@ -35,8 +35,7 @@ SELECT my.type ''
 ----
 SELECT my.type ''
 SELECT (my.type ('')) -- fully parenthesized
-SELECT my.type _ -- literals removed
-SELECT my.type AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT my.type '_' -- literals removed
 SELECT _._ '' -- identifiers removed
 
 parse
@@ -44,8 +43,7 @@ SELECT int4.type ''
 ----
 SELECT int4.type ''
 SELECT (int4.type ('')) -- fully parenthesized
-SELECT int4.type _ -- literals removed
-SELECT int4.type AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT int4.type '_' -- literals removed
 SELECT _._ '' -- identifiers removed
 
 parse
@@ -53,8 +51,7 @@ SELECT foo ''
 ----
 SELECT foo ''
 SELECT (foo ('')) -- fully parenthesized
-SELECT foo _ -- literals removed
-SELECT foo AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT foo '_' -- literals removed
 SELECT _ '' -- identifiers removed
 
 parse

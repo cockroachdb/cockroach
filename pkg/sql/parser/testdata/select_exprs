@@ -599,8 +599,7 @@ SELECT BOOL 'foo', 'foo'::BOOL
 ----
 SELECT BOOL 'foo', 'foo'::BOOL
 SELECT (BOOL ('foo')), (('foo')::BOOL) -- fully parenthesized
-SELECT BOOL _, _::BOOL -- literals removed
-SELECT bool AS _, _::BOOL -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT BOOL '_', _::BOOL -- literals removed
 SELECT BOOL 'foo', 'foo'::BOOL -- identifiers removed
 
 parse
@@ -608,8 +607,7 @@ SELECT BIT '10', '10'::BIT
 ----
 SELECT BIT '10', '10'::BIT
 SELECT (BIT ('10')), (('10')::BIT) -- fully parenthesized
-SELECT BIT _, _::BIT -- literals removed
-SELECT "bit" AS _, _::BIT -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT BIT '_', _::BIT -- literals removed
 SELECT BIT '10', '10'::BIT -- identifiers removed
 
 parse
@@ -617,8 +615,7 @@ SELECT VARBIT '1', '1'::VARBIT
 ----
 SELECT VARBIT '1', '1'::VARBIT
 SELECT (VARBIT ('1')), (('1')::VARBIT) -- fully parenthesized
-SELECT VARBIT _, _::VARBIT -- literals removed
-SELECT "varbit" AS _, _::VARBIT -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT VARBIT '_', _::VARBIT -- literals removed
 SELECT VARBIT '1', '1'::VARBIT -- identifiers removed
 
 parse
@@ -626,8 +623,7 @@ SELECT INT2 'foo', 'foo'::INT2
 ----
 SELECT INT2 'foo', 'foo'::INT2
 SELECT (INT2 ('foo')), (('foo')::INT2) -- fully parenthesized
-SELECT INT2 _, _::INT2 -- literals removed
-SELECT int2 AS _, _::INT2 -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT INT2 '_', _::INT2 -- literals removed
 SELECT INT2 'foo', 'foo'::INT2 -- identifiers removed
 
 parse
@@ -635,8 +631,7 @@ SELECT INT4 'foo', 'foo'::INT4
 ----
 SELECT INT4 'foo', 'foo'::INT4
 SELECT (INT4 ('foo')), (('foo')::INT4) -- fully parenthesized
-SELECT INT4 _, _::INT4 -- literals removed
-SELECT int4 AS _, _::INT4 -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT INT4 '_', _::INT4 -- literals removed
 SELECT INT4 'foo', 'foo'::INT4 -- identifiers removed
 
 parse
@@ -644,8 +639,7 @@ SELECT INT8 'foo', 'foo'::INT8
 ----
 SELECT INT8 'foo', 'foo'::INT8
 SELECT (INT8 ('foo')), (('foo')::INT8) -- fully parenthesized
-SELECT INT8 _, _::INT8 -- literals removed
-SELECT int8 AS _, _::INT8 -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT INT8 '_', _::INT8 -- literals removed
 SELECT INT8 'foo', 'foo'::INT8 -- identifiers removed
 
 parse
@@ -653,8 +647,7 @@ SELECT FLOAT4 'foo', 'foo'::FLOAT4
 ----
 SELECT FLOAT4 'foo', 'foo'::FLOAT4
 SELECT (FLOAT4 ('foo')), (('foo')::FLOAT4) -- fully parenthesized
-SELECT FLOAT4 _, _::FLOAT4 -- literals removed
-SELECT float4 AS _, _::FLOAT4 -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT FLOAT4 '_', _::FLOAT4 -- literals removed
 SELECT FLOAT4 'foo', 'foo'::FLOAT4 -- identifiers removed
 
 parse
@@ -662,8 +655,7 @@ SELECT REAL 'foo'
 ----
 SELECT FLOAT4 'foo' -- normalized!
 SELECT (FLOAT4 ('foo')) -- fully parenthesized
-SELECT FLOAT4 _ -- literals removed
-SELECT float4 AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT FLOAT4 '_' -- literals removed
 SELECT FLOAT4 'foo' -- identifiers removed
 
 parse
@@ -671,8 +663,7 @@ SELECT DOUBLE PRECISION 'foo'
 ----
 SELECT FLOAT8 'foo' -- normalized!
 SELECT (FLOAT8 ('foo')) -- fully parenthesized
-SELECT FLOAT8 _ -- literals removed
-SELECT float8 AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT FLOAT8 '_' -- literals removed
 SELECT FLOAT8 'foo' -- identifiers removed
 
 
@@ -681,8 +672,7 @@ SELECT DECIMAL 'foo', 'foo'::DECIMAL
 ----
 SELECT DECIMAL 'foo', 'foo'::DECIMAL
 SELECT (DECIMAL ('foo')), (('foo')::DECIMAL) -- fully parenthesized
-SELECT DECIMAL _, _::DECIMAL -- literals removed
-SELECT "decimal" AS _, _::DECIMAL -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT DECIMAL '_', _::DECIMAL -- literals removed
 SELECT DECIMAL 'foo', 'foo'::DECIMAL -- identifiers removed
 
 parse
@@ -690,8 +680,7 @@ SELECT NUMERIC 'foo'
 ----
 SELECT DECIMAL 'foo' -- normalized!
 SELECT (DECIMAL ('foo')) -- fully parenthesized
-SELECT DECIMAL _ -- literals removed
-SELECT "decimal" AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT DECIMAL '_' -- literals removed
 SELECT DECIMAL 'foo' -- identifiers removed
 
 
@@ -700,8 +689,7 @@ SELECT CHAR 'foo', 'foo'::CHAR
 ----
 SELECT CHAR 'foo', 'foo'::CHAR
 SELECT (CHAR ('foo')), (('foo')::CHAR) -- fully parenthesized
-SELECT CHAR _, _::CHAR -- literals removed
-SELECT "char" AS _, _::CHAR -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT CHAR '_', _::CHAR -- literals removed
 SELECT CHAR 'foo', 'foo'::CHAR -- identifiers removed
 
 parse
@@ -709,8 +697,7 @@ SELECT VARCHAR 'foo', 'foo'::VARCHAR
 ----
 SELECT VARCHAR 'foo', 'foo'::VARCHAR
 SELECT (VARCHAR ('foo')), (('foo')::VARCHAR) -- fully parenthesized
-SELECT VARCHAR _, _::VARCHAR -- literals removed
-SELECT "varchar" AS _, _::VARCHAR -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT VARCHAR '_', _::VARCHAR -- literals removed
 SELECT VARCHAR 'foo', 'foo'::VARCHAR -- identifiers removed
 
 parse
@@ -718,8 +705,7 @@ SELECT STRING 'foo', 'foo'::STRING
 ----
 SELECT STRING 'foo', 'foo'::STRING
 SELECT (STRING ('foo')), (('foo')::STRING) -- fully parenthesized
-SELECT STRING _, _::STRING -- literals removed
-SELECT "string" AS _, _::STRING -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT STRING '_', _::STRING -- literals removed
 SELECT STRING 'foo', 'foo'::STRING -- identifiers removed
 
 parse
@@ -727,8 +713,7 @@ SELECT BYTES 'foo', 'foo'::BYTES
 ----
 SELECT BYTES 'foo', 'foo'::BYTES
 SELECT (BYTES ('foo')), (('foo')::BYTES) -- fully parenthesized
-SELECT BYTES _, _::BYTES -- literals removed
-SELECT bytes AS _, _::BYTES -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT BYTES '_', _::BYTES -- literals removed
 SELECT BYTES 'foo', 'foo'::BYTES -- identifiers removed
 
 parse
@@ -736,8 +721,7 @@ SELECT DATE 'foo', 'foo'::DATE
 ----
 SELECT DATE 'foo', 'foo'::DATE
 SELECT (DATE ('foo')), (('foo')::DATE) -- fully parenthesized
-SELECT DATE _, _::DATE -- literals removed
-SELECT date AS _, _::DATE -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT DATE '_', _::DATE -- literals removed
 SELECT DATE 'foo', 'foo'::DATE -- identifiers removed
 
 parse
@@ -745,8 +729,7 @@ SELECT TIME 'foo', 'foo'::TIME
 ----
 SELECT TIME 'foo', 'foo'::TIME
 SELECT (TIME ('foo')), (('foo')::TIME) -- fully parenthesized
-SELECT TIME _, _::TIME -- literals removed
-SELECT "time" AS _, _::TIME -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT TIME '_', _::TIME -- literals removed
 SELECT TIME 'foo', 'foo'::TIME -- identifiers removed
 
 parse
@@ -754,8 +737,7 @@ SELECT TIMESTAMP 'foo', 'foo'::TIMESTAMP
 ----
 SELECT TIMESTAMP 'foo', 'foo'::TIMESTAMP
 SELECT (TIMESTAMP ('foo')), (('foo')::TIMESTAMP) -- fully parenthesized
-SELECT TIMESTAMP _, _::TIMESTAMP -- literals removed
-SELECT "timestamp" AS _, _::TIMESTAMP -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT TIMESTAMP '_', _::TIMESTAMP -- literals removed
 SELECT TIMESTAMP 'foo', 'foo'::TIMESTAMP -- identifiers removed
 
 parse
@@ -763,8 +745,7 @@ SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ
 ----
 SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ
 SELECT (TIMESTAMPTZ ('foo')), (('foo')::TIMESTAMPTZ) -- fully parenthesized
-SELECT TIMESTAMPTZ _, _::TIMESTAMPTZ -- literals removed
-SELECT "timestamptz" AS _, _::TIMESTAMPTZ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT TIMESTAMPTZ '_', _::TIMESTAMPTZ -- literals removed
 SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ -- identifiers removed
 
 parse
@@ -772,8 +753,7 @@ SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'
 ----
 SELECT TIMESTAMP 'foo' -- normalized!
 SELECT (TIMESTAMP ('foo')) -- fully parenthesized
-SELECT TIMESTAMP _ -- literals removed
-SELECT "timestamp" AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT TIMESTAMP '_' -- literals removed
 SELECT TIMESTAMP 'foo' -- identifiers removed
 
 parse
@@ -813,8 +793,7 @@ SELECT TIMESTAMP(3) 'a'
 ----
 SELECT TIMESTAMP(3) 'a'
 SELECT (TIMESTAMP(3) ('a')) -- fully parenthesized
-SELECT TIMESTAMP(3) _ -- literals removed
-REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+SELECT TIMESTAMP(3) '_' -- literals removed
 SELECT TIMESTAMP(3) 'a' -- identifiers removed
 
 parse
@@ -822,8 +801,7 @@ SELECT TIMESTAMPTZ(3) 'a'
 ----
 SELECT TIMESTAMPTZ(3) 'a'
 SELECT (TIMESTAMPTZ(3) ('a')) -- fully parenthesized
-SELECT TIMESTAMPTZ(3) _ -- literals removed
-REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+SELECT TIMESTAMPTZ(3) '_' -- literals removed
 SELECT TIMESTAMPTZ(3) 'a' -- identifiers removed
 
 
@@ -848,8 +826,7 @@ SELECT JSONB 'foo', 'foo'::JSONB
 ----
 SELECT JSONB 'foo', 'foo'::JSONB
 SELECT (JSONB ('foo')), (('foo')::JSONB) -- fully parenthesized
-SELECT JSONB _, _::JSONB -- literals removed
-SELECT jsonb AS _, _::JSONB -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT JSONB '_', _::JSONB -- literals removed
 SELECT JSONB 'foo', 'foo'::JSONB -- identifiers removed
 
 parse
@@ -1010,8 +987,7 @@ SELECT TIME(3) 'a'
 ----
 SELECT TIME(3) 'a'
 SELECT (TIME(3) ('a')) -- fully parenthesized
-SELECT TIME(3) _ -- literals removed
-REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+SELECT TIME(3) '_' -- literals removed
 SELECT TIME(3) 'a' -- identifiers removed
 
 parse
@@ -1019,8 +995,7 @@ SELECT TIMETZ(3) 'a'
 ----
 SELECT TIMETZ(3) 'a'
 SELECT (TIMETZ(3) ('a')) -- fully parenthesized
-SELECT TIMETZ(3) _ -- literals removed
-REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+SELECT TIMETZ(3) '_' -- literals removed
 SELECT TIMETZ(3) 'a' -- identifiers removed
 
 
@@ -1197,8 +1172,7 @@ SELECT INET '192.168.0.1'
 ----
 SELECT INET '192.168.0.1'
 SELECT (INET ('192.168.0.1')) -- fully parenthesized
-SELECT INET _ -- literals removed
-SELECT inet AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT INET '_' -- literals removed
 SELECT INET '192.168.0.1' -- identifiers removed
 
 parse
@@ -1362,8 +1336,7 @@ SELECT SERIAL8 'foo', 'foo'::SERIAL8
 ----
 SELECT INT8 'foo', 'foo'::INT8 -- normalized!
 SELECT (INT8 ('foo')), (('foo')::INT8) -- fully parenthesized
-SELECT INT8 _, _::INT8 -- literals removed
-SELECT int8 AS _, _::INT8 -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT INT8 '_', _::INT8 -- literals removed
 SELECT INT8 'foo', 'foo'::INT8 -- identifiers removed
 
 

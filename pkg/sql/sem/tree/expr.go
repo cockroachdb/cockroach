@@ -1626,7 +1626,14 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		if _, ok := node.Expr.(*StrVal); ok {
 			ctx.FormatTypeReference(node.Type)
 			ctx.WriteByte(' ')
-			ctx.FormatNode(node.Expr)
+			// We need to replace this with a quoted string constants in certain
+			// cases because the grammar requires a string constant rather than an
+			// expression for this form of casting in the typed_literal rule
+			if ctx.HasFlags(FmtHideConstants) {
+				ctx.WriteString("'_'")
+			} else {
+				ctx.FormatNode(node.Expr)
+			}
 			break
 		}
 		fallthrough
