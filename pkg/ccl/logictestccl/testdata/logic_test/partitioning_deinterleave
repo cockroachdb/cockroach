@@ -1,0 +1,509 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+statement ok
+SET enable_copying_partitioning_when_deinterleaving_table = true
+
+subtest range
+
+statement ok
+CREATE TABLE parent (i INT8 PRIMARY KEY, FAMILY "primary" (i))
+  PARTITION BY RANGE (i)
+        (
+          PARTITION negative VALUES FROM (minvalue) TO (0),
+          PARTITION zero VALUES FROM (0) TO (1),
+          PARTITION positive VALUES FROM (1) TO (maxvalue)
+        );
+CREATE TABLE child (i INT, j INT, PRIMARY KEY (i, j), FAMILY "primary" (i, j)) INTERLEAVE IN PARENT parent(i);
+CREATE TABLE grandchild (i INT, j INT, k INT, PRIMARY KEY (i, j, k), FAMILY "primary" (i, j, k))  INTERLEAVE IN PARENT child(i, j);
+ALTER PARTITION negative OF TABLE parent CONFIGURE ZONE USING constraints='[+region=ap-southeast-2]';
+ALTER PARTITION zero OF TABLE parent CONFIGURE ZONE USING constraints='[+region=ca-central-1]';
+ALTER PARTITION positive OF TABLE parent CONFIGURE ZONE USING constraints='[+region=us-east-1]';
+CREATE INDEX idx_j_i ON child (j, i)
+  PARTITION BY RANGE (j)
+        (
+          PARTITION negative VALUES FROM (minvalue) TO (0),
+          PARTITION zero VALUES FROM (0) TO (1),
+          PARTITION positive VALUES FROM (1) TO (maxvalue)
+        );
+CREATE INDEX idx_k_j_i ON grandchild (k, j, i)
+  PARTITION BY RANGE (k)
+        (
+          PARTITION negative VALUES FROM (minvalue) TO (0),
+          PARTITION zero VALUES FROM (0) TO (1),
+          PARTITION positive VALUES FROM (1) TO (maxvalue)
+        );
+ALTER PARTITION negative OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=ap-southeast-2]';
+ALTER PARTITION zero OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=ca-central-1]';
+ALTER PARTITION positive OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=us-east-1]';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE parent]
+----
+CREATE TABLE public.parent (
+  i INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC),
+  FAMILY "primary" (i)
+) PARTITION BY RANGE (i) (
+  PARTITION negative VALUES FROM (MINVALUE) TO (0),
+  PARTITION zero VALUES FROM (0) TO (1),
+  PARTITION positive VALUES FROM (1) TO (MAXVALUE)
+);
+ALTER PARTITION negative OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC, j ASC),
+  INDEX idx_j_i (j ASC, i ASC) PARTITION BY RANGE (j) (
+    PARTITION negative VALUES FROM (MINVALUE) TO (0),
+    PARTITION zero VALUES FROM (0) TO (1),
+    PARTITION positive VALUES FROM (1) TO (MAXVALUE)
+  ),
+  FAMILY "primary" (i, j)
+) INTERLEAVE IN PARENT public.parent (i)
+-- Warning: Partitioned table with no zone configurations.
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE grandchild]
+----
+CREATE TABLE public.grandchild (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC, j ASC, k ASC),
+  INDEX idx_k_j_i (k ASC, j ASC, i ASC) PARTITION BY RANGE (k) (
+    PARTITION negative VALUES FROM (MINVALUE) TO (0),
+    PARTITION zero VALUES FROM (0) TO (1),
+    PARTITION positive VALUES FROM (1) TO (MAXVALUE)
+  ),
+  FAMILY "primary" (i, j, k)
+) INTERLEAVE IN PARENT public.child (i, j);
+ALTER PARTITION negative OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+statement ok
+ALTER TABLE grandchild ALTER PRIMARY KEY USING COLUMNS (i);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE grandchild]
+----
+CREATE TABLE public.grandchild (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC),
+  UNIQUE INDEX grandchild_i_j_k_key (i ASC, j ASC, k ASC),
+  INDEX idx_k_j_i (k ASC, j ASC, i ASC) PARTITION BY RANGE (k) (
+    PARTITION negative VALUES FROM (MINVALUE) TO (0),
+    PARTITION zero VALUES FROM (0) TO (1),
+    PARTITION positive VALUES FROM (1) TO (MAXVALUE)
+  ),
+  FAMILY "primary" (i, j, k)
+) PARTITION BY RANGE (i) (
+  PARTITION negative VALUES FROM (MINVALUE) TO (0),
+  PARTITION zero VALUES FROM (0) TO (1),
+  PARTITION positive VALUES FROM (1) TO (MAXVALUE)
+);
+ALTER PARTITION negative OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION negative OF INDEX test.public.grandchild@primary CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION positive OF INDEX test.public.grandchild@primary CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]';
+ALTER PARTITION zero OF INDEX test.public.grandchild@primary CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+statement ok
+DROP TABLE parent, child, grandchild CASCADE;
+
+subtest list
+
+statement ok
+CREATE TABLE parent (i INT8 PRIMARY KEY, FAMILY "primary" (i))
+    PARTITION BY LIST (i)
+        (
+          PARTITION negative VALUES IN (DEFAULT, -1),
+          PARTITION zero VALUES IN (0),
+          PARTITION positive VALUES IN (1)
+        );
+CREATE TABLE child (i INT, j INT, PRIMARY KEY (i, j), FAMILY "primary" (i, j)) INTERLEAVE IN PARENT parent(i);
+CREATE TABLE grandchild (i INT, j INT, k INT, PRIMARY KEY (i, j, k), FAMILY "primary" (i, j, k))  INTERLEAVE IN PARENT child(i, j);
+ALTER PARTITION negative OF TABLE parent CONFIGURE ZONE USING constraints='[+region=ap-southeast-2]';
+ALTER PARTITION zero OF TABLE parent CONFIGURE ZONE USING constraints='[+region=ca-central-1]';
+ALTER PARTITION positive OF TABLE parent CONFIGURE ZONE USING constraints='[+region=us-east-1]';
+CREATE INDEX idx_j_i ON child (j, i)
+    PARTITION BY LIST (j)
+        (
+          PARTITION negative VALUES IN (DEFAULT, -1),
+          PARTITION zero VALUES IN (0),
+          PARTITION positive VALUES IN (1)
+        );
+CREATE INDEX idx_k_j_i ON grandchild (k, j, i)
+    PARTITION BY LIST (k)
+        (
+          PARTITION negative VALUES IN (DEFAULT, -1),
+          PARTITION zero VALUES IN (0),
+          PARTITION positive VALUES IN (1)
+        );
+ALTER PARTITION negative OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=ap-southeast-2]';
+ALTER PARTITION zero OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=ca-central-1]';
+ALTER PARTITION positive OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=us-east-1]';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE parent]
+----
+CREATE TABLE public.parent (
+  i INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC),
+  FAMILY "primary" (i)
+) PARTITION BY LIST (i) (
+  PARTITION negative VALUES IN ((DEFAULT), (-1)),
+  PARTITION zero VALUES IN ((0)),
+  PARTITION positive VALUES IN ((1))
+);
+ALTER PARTITION negative OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC, j ASC),
+  INDEX idx_j_i (j ASC, i ASC) PARTITION BY LIST (j) (
+    PARTITION negative VALUES IN ((DEFAULT), (-1)),
+    PARTITION zero VALUES IN ((0)),
+    PARTITION positive VALUES IN ((1))
+  ),
+  FAMILY "primary" (i, j)
+) INTERLEAVE IN PARENT public.parent (i)
+-- Warning: Partitioned table with no zone configurations.
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE grandchild]
+----
+CREATE TABLE public.grandchild (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC, j ASC, k ASC),
+  INDEX idx_k_j_i (k ASC, j ASC, i ASC) PARTITION BY LIST (k) (
+    PARTITION negative VALUES IN ((DEFAULT), (-1)),
+    PARTITION zero VALUES IN ((0)),
+    PARTITION positive VALUES IN ((1))
+  ),
+  FAMILY "primary" (i, j, k)
+) INTERLEAVE IN PARENT public.child (i, j);
+ALTER PARTITION negative OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+statement error cannot change primary key of table child because table\(s\) \[grandchild\] are interleaved into it
+ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (i);
+
+statement ok
+ALTER TABLE grandchild ALTER PRIMARY KEY USING COLUMNS (i);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE grandchild]
+----
+CREATE TABLE public.grandchild (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC),
+  UNIQUE INDEX grandchild_i_j_k_key (i ASC, j ASC, k ASC),
+  INDEX idx_k_j_i (k ASC, j ASC, i ASC) PARTITION BY LIST (k) (
+    PARTITION negative VALUES IN ((DEFAULT), (-1)),
+    PARTITION zero VALUES IN ((0)),
+    PARTITION positive VALUES IN ((1))
+  ),
+  FAMILY "primary" (i, j, k)
+) PARTITION BY LIST (i) (
+  PARTITION negative VALUES IN ((DEFAULT), (-1)),
+  PARTITION zero VALUES IN ((0)),
+  PARTITION positive VALUES IN ((1))
+);
+ALTER PARTITION negative OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION negative OF INDEX test.public.grandchild@primary CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION positive OF INDEX test.public.grandchild@primary CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]';
+ALTER PARTITION zero OF INDEX test.public.grandchild@primary CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+statement ok
+DROP TABLE parent, child, grandchild CASCADE;
+
+statement ok
+SET enable_copying_partitioning_when_deinterleaving_table = false;
+
+subtest range_disabled
+
+statement ok
+CREATE TABLE parent (i INT8 PRIMARY KEY, FAMILY "primary" (i))
+  PARTITION BY RANGE (i)
+        (
+          PARTITION negative VALUES FROM (minvalue) TO (0),
+          PARTITION zero VALUES FROM (0) TO (1),
+          PARTITION positive VALUES FROM (1) TO (maxvalue)
+        );
+CREATE TABLE child (i INT, j INT, PRIMARY KEY (i, j), FAMILY "primary" (i, j)) INTERLEAVE IN PARENT parent(i);
+CREATE TABLE grandchild (i INT, j INT, k INT, PRIMARY KEY (i, j, k), FAMILY "primary" (i, j, k))  INTERLEAVE IN PARENT child(i, j);
+ALTER PARTITION negative OF TABLE parent CONFIGURE ZONE USING constraints='[+region=ap-southeast-2]';
+ALTER PARTITION zero OF TABLE parent CONFIGURE ZONE USING constraints='[+region=ca-central-1]';
+ALTER PARTITION positive OF TABLE parent CONFIGURE ZONE USING constraints='[+region=us-east-1]';
+CREATE INDEX idx_j_i ON child (j, i)
+  PARTITION BY RANGE (j)
+        (
+          PARTITION negative VALUES FROM (minvalue) TO (0),
+          PARTITION zero VALUES FROM (0) TO (1),
+          PARTITION positive VALUES FROM (1) TO (maxvalue)
+        );
+CREATE INDEX idx_k_j_i ON grandchild (k, j, i)
+  PARTITION BY RANGE (k)
+        (
+          PARTITION negative VALUES FROM (minvalue) TO (0),
+          PARTITION zero VALUES FROM (0) TO (1),
+          PARTITION positive VALUES FROM (1) TO (maxvalue)
+        );
+ALTER PARTITION negative OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=ap-southeast-2]';
+ALTER PARTITION zero OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=ca-central-1]';
+ALTER PARTITION positive OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=us-east-1]';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE parent]
+----
+CREATE TABLE public.parent (
+  i INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC),
+  FAMILY "primary" (i)
+) PARTITION BY RANGE (i) (
+  PARTITION negative VALUES FROM (MINVALUE) TO (0),
+  PARTITION zero VALUES FROM (0) TO (1),
+  PARTITION positive VALUES FROM (1) TO (MAXVALUE)
+);
+ALTER PARTITION negative OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC, j ASC),
+  INDEX idx_j_i (j ASC, i ASC) PARTITION BY RANGE (j) (
+    PARTITION negative VALUES FROM (MINVALUE) TO (0),
+    PARTITION zero VALUES FROM (0) TO (1),
+    PARTITION positive VALUES FROM (1) TO (MAXVALUE)
+  ),
+  FAMILY "primary" (i, j)
+) INTERLEAVE IN PARENT public.parent (i)
+-- Warning: Partitioned table with no zone configurations.
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE grandchild]
+----
+CREATE TABLE public.grandchild (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC, j ASC, k ASC),
+  INDEX idx_k_j_i (k ASC, j ASC, i ASC) PARTITION BY RANGE (k) (
+    PARTITION negative VALUES FROM (MINVALUE) TO (0),
+    PARTITION zero VALUES FROM (0) TO (1),
+    PARTITION positive VALUES FROM (1) TO (MAXVALUE)
+  ),
+  FAMILY "primary" (i, j, k)
+) INTERLEAVE IN PARENT public.child (i, j);
+ALTER PARTITION negative OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+statement ok
+ALTER TABLE grandchild ALTER PRIMARY KEY USING COLUMNS (i);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE grandchild]
+----
+CREATE TABLE public.grandchild (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC),
+  UNIQUE INDEX grandchild_i_j_k_key (i ASC, j ASC, k ASC),
+  INDEX idx_k_j_i (k ASC, j ASC, i ASC) PARTITION BY RANGE (k) (
+    PARTITION negative VALUES FROM (MINVALUE) TO (0),
+    PARTITION zero VALUES FROM (0) TO (1),
+    PARTITION positive VALUES FROM (1) TO (MAXVALUE)
+  ),
+  FAMILY "primary" (i, j, k)
+);
+ALTER PARTITION negative OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+statement ok
+DROP TABLE parent, child, grandchild CASCADE;
+
+subtest list_disabled
+
+statement ok
+CREATE TABLE parent (i INT8 PRIMARY KEY, FAMILY "primary" (i))
+    PARTITION BY LIST (i)
+        (
+          PARTITION negative VALUES IN (DEFAULT, -1),
+          PARTITION zero VALUES IN (0),
+          PARTITION positive VALUES IN (1)
+        );
+CREATE TABLE child (i INT, j INT, PRIMARY KEY (i, j), FAMILY "primary" (i, j)) INTERLEAVE IN PARENT parent(i);
+CREATE TABLE grandchild (i INT, j INT, k INT, PRIMARY KEY (i, j, k), FAMILY "primary" (i, j, k))  INTERLEAVE IN PARENT child(i, j);
+ALTER PARTITION negative OF TABLE parent CONFIGURE ZONE USING constraints='[+region=ap-southeast-2]';
+ALTER PARTITION zero OF TABLE parent CONFIGURE ZONE USING constraints='[+region=ca-central-1]';
+ALTER PARTITION positive OF TABLE parent CONFIGURE ZONE USING constraints='[+region=us-east-1]';
+CREATE INDEX idx_j_i ON child (j, i)
+    PARTITION BY LIST (j)
+        (
+          PARTITION negative VALUES IN (DEFAULT, -1),
+          PARTITION zero VALUES IN (0),
+          PARTITION positive VALUES IN (1)
+        );
+CREATE INDEX idx_k_j_i ON grandchild (k, j, i)
+    PARTITION BY LIST (k)
+        (
+          PARTITION negative VALUES IN (DEFAULT, -1),
+          PARTITION zero VALUES IN (0),
+          PARTITION positive VALUES IN (1)
+        );
+ALTER PARTITION negative OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=ap-southeast-2]';
+ALTER PARTITION zero OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=ca-central-1]';
+ALTER PARTITION positive OF INDEX grandchild@idx_k_j_i CONFIGURE ZONE USING constraints='[+region=us-east-1]';
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE parent]
+----
+CREATE TABLE public.parent (
+  i INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC),
+  FAMILY "primary" (i)
+) PARTITION BY LIST (i) (
+  PARTITION negative VALUES IN ((DEFAULT), (-1)),
+  PARTITION zero VALUES IN ((0)),
+  PARTITION positive VALUES IN ((1))
+);
+ALTER PARTITION negative OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.parent@primary CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC, j ASC),
+  INDEX idx_j_i (j ASC, i ASC) PARTITION BY LIST (j) (
+    PARTITION negative VALUES IN ((DEFAULT), (-1)),
+    PARTITION zero VALUES IN ((0)),
+    PARTITION positive VALUES IN ((1))
+  ),
+  FAMILY "primary" (i, j)
+) INTERLEAVE IN PARENT public.parent (i)
+-- Warning: Partitioned table with no zone configurations.
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE grandchild]
+----
+CREATE TABLE public.grandchild (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC, j ASC, k ASC),
+  INDEX idx_k_j_i (k ASC, j ASC, i ASC) PARTITION BY LIST (k) (
+    PARTITION negative VALUES IN ((DEFAULT), (-1)),
+    PARTITION zero VALUES IN ((0)),
+    PARTITION positive VALUES IN ((1))
+  ),
+  FAMILY "primary" (i, j, k)
+) INTERLEAVE IN PARENT public.child (i, j);
+ALTER PARTITION negative OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+statement error cannot change primary key of table child because table\(s\) \[grandchild\] are interleaved into it
+ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (i);
+
+statement ok
+ALTER TABLE grandchild ALTER PRIMARY KEY USING COLUMNS (i);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE grandchild]
+----
+CREATE TABLE public.grandchild (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (i ASC),
+  UNIQUE INDEX grandchild_i_j_k_key (i ASC, j ASC, k ASC),
+  INDEX idx_k_j_i (k ASC, j ASC, i ASC) PARTITION BY LIST (k) (
+    PARTITION negative VALUES IN ((DEFAULT), (-1)),
+    PARTITION zero VALUES IN ((0)),
+    PARTITION positive VALUES IN ((1))
+  ),
+  FAMILY "primary" (i, j, k)
+);
+ALTER PARTITION negative OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+ALTER PARTITION positive OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+ALTER PARTITION zero OF INDEX test.public.grandchild@idx_k_j_i CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]'
+
+statement ok
+DROP TABLE parent, child, grandchild CASCADE;

@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
 
 // alterPrimaryKeyLocalitySwap contains metadata on a locality swap for
@@ -339,6 +341,12 @@ func (p *planner) AlterPrimaryKey(
 		if err != nil {
 			return err
 		}
+	} else {
+		if err := maybeCopyPartitioningWhenDeinterleaving(
+			ctx, p, tableDesc, newPrimaryIndexDesc,
+		); err != nil {
+			return err
+		}
 	}
 
 	if partitionAllBy != nil {
@@ -543,6 +551,95 @@ func (p *planner) AlterPrimaryKey(
 	)
 
 	return nil
+}
+
+func maybeCopyPartitioningWhenDeinterleaving(
+	ctx context.Context,
+	p *planner,
+	tableDesc *tabledesc.Mutable,
+	newPrimaryIndexDesc *descpb.IndexDescriptor,
+) error {
+	if tableDesc.GetPrimaryIndex().NumInterleaveAncestors() == 0 ||
+		!p.SessionData().CopyPartitioningWhenDeinterleavingTable ||
+		len(newPrimaryIndexDesc.Interleave.Ancestors) > 0 {
+		return nil
+	}
+
+	// The old primary key was interleaved in a parent and the new one is not.
+	// In this case, we need to clone out the old primary key's partitioning
+	// and zone configs and apply them to the new primary index. We do this
+	// if the old primary index and the new primary index have the exact same
+	// columns. That also allows us to side-step discussions of what to do
+	// about partitioning for any newly created unique index we might create
+	// below.
+
+	root := tableDesc.GetPrimaryIndex().GetInterleaveAncestor(0)
+	interleaveRoot, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, root.TableID, tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{
+			Required:    true,
+			AvoidCached: true,
+		},
+		DesiredObjectKind: tree.TableObject,
+	})
+	if err != nil {
+		return errors.Wrap(err, "looking up interleaved root")
+	}
+	rootIndex, err := interleaveRoot.FindIndexWithID(root.IndexID)
+	if err != nil {
+		return errors.Wrap(err, "looking up interleaved root index")
+	}
+
+	// If the new primary key does not have the interleave root as a prefix,
+	// do not copy the interleave.
+	if rootKeys := rootIndex.IndexDesc().ColumnIDs; !descpb.ColumnIDs.Equals(
+		rootKeys, newPrimaryIndexDesc.ColumnIDs[:len(rootKeys)],
+	) {
+		return nil
+	}
+
+	// The parent is not partitioned, return.
+	if rootIndex.GetPartitioning().NumColumns == 0 {
+		return nil
+	}
+	part := rootIndex.GetPartitioning()
+	newPrimaryIndexDesc.Partitioning = *protoutil.Clone(&part).(*descpb.PartitioningDescriptor)
+	rootCfg, err := getZoneConfigRaw(ctx, p.txn, p.execCfg.Codec, root.TableID)
+	if err != nil {
+		return errors.Wrapf(err, "retrieving zone config for table %s [%d]",
+			interleaveRoot.GetName(), interleaveRoot.GetID())
+	}
+	tableCfg, err := getZoneConfigRaw(ctx, p.txn, p.execCfg.Codec, tableDesc.GetID())
+	if err != nil {
+		return errors.Wrapf(err, "retrieving zone config for table %s [%d]",
+			tableDesc.GetName(), tableDesc.GetID())
+	}
+	// Initialize the zone config for the child. We expect it to be nil because
+	// the table was an interleaved child and we did not allow such children to
+	// have zone configs. It may be a subzone placeholder because other indexes
+	// might be partitioned and have zone configs.
+	if tableCfg == nil {
+		// Marking NumReplicas as 0 indicates that this zone config is a
+		// subzone placeholder. We assume that the value in copying out the
+		// partitioning is to copy out the configuration as it applies to the
+		// partitions of the primary index.
+		tableCfg = &zonepb.ZoneConfig{
+			NumReplicas: proto.Int(0),
+		}
+	} else if !tableCfg.IsSubzonePlaceholder() {
+		return errors.AssertionFailedf("child table %s [%d] of interleave was not a subzone placeholder",
+			tableDesc.GetName(), tableDesc.GetID())
+	}
+
+	for _, s := range rootCfg.Subzones {
+		if s.IndexID == uint32(root.IndexID) {
+			s.IndexID = uint32(newPrimaryIndexDesc.ID)
+			tableCfg.Subzones = append(tableCfg.Subzones, s)
+		}
+	}
+	_, err = writeZoneConfig(
+		ctx, p.txn, tableDesc.GetID(), tableDesc, tableCfg, p.execCfg, true,
+	)
+	return err
 }
 
 // Given the current table descriptor and the new primary keys
