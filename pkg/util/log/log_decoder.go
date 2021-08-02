@@ -21,6 +21,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// fallbackEntryDecoderFormat is used when log file doesn't contain
+// explicit config entry for log format and no format option was specified.
+const fallbackEntryDecoderFormat = "crdb-v1"
+
 // EntryDecoder is used to decode log entries.
 type EntryDecoder interface {
 	Decode(entry *logpb.Entry) error
@@ -55,7 +59,7 @@ func NewEntryDecoderWithFormat(
 			header = header[:n]
 			logFormat, err = getLogFormat(header)
 			if err != nil {
-				return nil, errors.Wrap(err, "decoding format")
+				logFormat = fallbackEntryDecoderFormat
 			}
 		}
 		in = io.MultiReader(&buf, rest)
