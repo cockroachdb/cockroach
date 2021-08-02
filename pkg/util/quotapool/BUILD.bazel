@@ -35,6 +35,7 @@ go_test(
     embed = [":quotapool"],
     deps = [
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",
         "//pkg/util/timeutil",
