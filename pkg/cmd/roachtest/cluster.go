@@ -1517,6 +1517,12 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 			if err := execCmd(ctx, l, roachprod, "wipe", c.name); err != nil {
 				l.Errorf("%s", err)
 			}
+			if c.localCertsDir != "" {
+				if err := os.RemoveAll(c.localCertsDir); err != nil {
+					l.Errorf("failed to remove local certs in %s: %s", c.localCertsDir, err)
+				}
+				c.localCertsDir = ""
+			}
 		}
 	} else {
 		l.Printf("skipping cluster wipe\n")
