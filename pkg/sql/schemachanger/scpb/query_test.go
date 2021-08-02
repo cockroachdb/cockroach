@@ -69,7 +69,7 @@ func TestQueryBasic(t *testing.T) {
 			typ.Constrain(scpb.AttrStatus, typRef.Reference(scpb.AttrStatus))
 			typ.Constrain(scpb.AttrDescID, typRef.Reference(scpb.AttrReferencedDescID))
 
-			typRef.Constrain(scpb.AttrElementType, scpb.TypeReferenceElement)
+			typRef.Constrain(scpb.AttrElementType, scpb.TypeRefElement)
 		})
 	)
 	type queryExpectations struct {

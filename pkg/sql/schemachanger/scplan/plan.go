@@ -11,9 +11,8 @@
 package scplan
 
 import (
-	"reflect"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/eav/eavquery"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -77,15 +76,21 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 		return Plan{}, err
 	}
 
-	if err := g.ForEachNode(func(n *scpb.Node) error {
-		d, ok := p[reflect.TypeOf(n.GetElement())]
-		if !ok {
-			return errors.Errorf("not implemented for %T", n.Target)
+	for _, dr := range depRules.rules {
+		if err := dr.q.Evaluate(g, func(r eavquery.Result) error {
+			defer func() {
+				if r := recover(); r != nil {
+					panic(errors.AssertionFailedf("%s: %v", dr.name, r))
+				}
+
+			}()
+			from := r.Entity(dr.from).(*scpb.Node)
+			to := r.Entity(dr.to).(*scpb.Node)
+			g.AddDepEdge(from.Target, from.Status, to.Target, to.Status)
+			return nil
+		}); err != nil {
+			return Plan{}, err
 		}
-		d.deps(g, n.Target, n.Status)
-		return nil
-	}); err != nil {
-		return Plan{}, err
 	}
 
 	stages := buildStages(initial, g, params)
@@ -111,7 +116,6 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 	// TODO(ajwerner): deal with the case where the target status was
 	// fulfilled by something that preceded the initial state.
-	// TODO(ajwerner): Do something to deal with marking stages with labels.
 	cur := init
 	fulfilled := map[*scpb.Node]struct{}{}
 	filterUnsatisfiedEdgesStep := func(edges []*scgraph.OpEdge) ([]*scgraph.OpEdge, bool) {

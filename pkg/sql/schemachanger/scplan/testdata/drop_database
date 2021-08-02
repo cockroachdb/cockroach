@@ -158,17 +158,20 @@ Stage 1
     TableID: 63
   *scop.MarkDescriptorAsDropped
     TableID: 53
-  *scop.MarkDescriptorAsDropped
-    TableID: 52
 Stage 2
   *scop.DrainDescriptorName
     TableID: 53
+  *scop.MarkDescriptorAsDropped
+    TableID: 52
+Stage 3
   *scop.DrainDescriptorName
     TableID: 52
 
 deps
 DROP DATABASE db1 CASCADE
 ----
+- from: [Database: {DescID: 52}, DELETE_ONLY, DROP]
+  to:   [Schema: {DescID: 53}, ABSENT, DROP]
 - from: [Database: {DescID: 52}, DELETE_ONLY, DROP]
   to:   [Sequence: {DescID: 54}, ABSENT, DROP]
 - from: [Database: {DescID: 52}, DELETE_ONLY, DROP]
@@ -191,32 +194,6 @@ DROP DATABASE db1 CASCADE
   to:   [View: {DescID: 61}, ABSENT, DROP]
 - from: [Schema: {DescID: 53}, DELETE_ONLY, DROP]
   to:   [View: {DescID: 64}, ABSENT, DROP]
-- from: [Sequence: {DescID: 54}, PUBLIC, DROP]
-  to:   [DefaultExpression: {DescID: 57, ColumnID: 3}, ABSENT, DROP]
-- from: [Sequence: {DescID: 55}, PUBLIC, DROP]
-  to:   [DefaultExpression: {DescID: 56, ColumnID: 3}, ABSENT, DROP]
-- from: [Table: {DescID: 56}, PUBLIC, DROP]
-  to:   [DefaultExpression: {DescID: 56, ColumnID: 1}, ABSENT, DROP]
-- from: [Table: {DescID: 56}, PUBLIC, DROP]
-  to:   [DefaultExpression: {DescID: 56, ColumnID: 2}, ABSENT, DROP]
-- from: [Table: {DescID: 56}, PUBLIC, DROP]
-  to:   [DefaultExpression: {DescID: 56, ColumnID: 3}, ABSENT, DROP]
-- from: [Table: {DescID: 56}, PUBLIC, DROP]
-  to:   [RelationDependedOnBy: {DescID: 55, ReferencedDescID: 56}, ABSENT, DROP]
-- from: [Table: {DescID: 56}, PUBLIC, DROP]
-  to:   [View: {DescID: 58}, ABSENT, DROP]
-- from: [Table: {DescID: 57}, PUBLIC, DROP]
-  to:   [DefaultExpression: {DescID: 57, ColumnID: 1}, ABSENT, DROP]
-- from: [Table: {DescID: 57}, PUBLIC, DROP]
-  to:   [DefaultExpression: {DescID: 57, ColumnID: 2}, ABSENT, DROP]
-- from: [Table: {DescID: 57}, PUBLIC, DROP]
-  to:   [DefaultExpression: {DescID: 57, ColumnID: 3}, ABSENT, DROP]
-- from: [Table: {DescID: 57}, PUBLIC, DROP]
-  to:   [RelationDependedOnBy: {DescID: 54, ReferencedDescID: 57}, ABSENT, DROP]
-- from: [Type: {DescID: 62}, PUBLIC, DROP]
-  to:   [TypeReference: {DescID: 64, ReferencedDescID: 62}, DELETE_ONLY, DROP]
-- from: [Type: {DescID: 63}, PUBLIC, DROP]
-  to:   [TypeReference: {DescID: 64, ReferencedDescID: 63}, DELETE_ONLY, DROP]
 - from: [View: {DescID: 58}, ABSENT, DROP]
   to:   [View: {DescID: 59}, ABSENT, DROP]
 - from: [View: {DescID: 58}, ABSENT, DROP]
