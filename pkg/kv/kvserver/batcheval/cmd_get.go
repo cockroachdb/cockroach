@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -57,6 +58,12 @@ func Get(
 		return result.Result{}, err
 	}
 	if val != nil {
+		fmt.Printf("size: %v\n", len(val.RawBytes))
+		if h.StrictTargetBytes && h.TargetBytes > 0 && int64(len(val.RawBytes)) > h.TargetBytes {
+			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
+			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+			return result.Result{}, nil
+		}
 		reply.NumKeys = 1
 		reply.NumBytes = int64(len(val.RawBytes))
 	}

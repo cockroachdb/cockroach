@@ -2373,18 +2373,19 @@ func mvccScanToBytes(
 	defer mvccScanner.release()
 
 	*mvccScanner = pebbleMVCCScanner{
-		parent:           iter,
-		reverse:          opts.Reverse,
-		start:            key,
-		end:              endKey,
-		ts:               timestamp,
-		maxKeys:          opts.MaxKeys,
-		targetBytes:      opts.TargetBytes,
-		maxIntents:       opts.MaxIntents,
-		inconsistent:     opts.Inconsistent,
-		tombstones:       opts.Tombstones,
-		failOnMoreRecent: opts.FailOnMoreRecent,
-		keyBuf:           mvccScanner.keyBuf,
+		parent:            iter,
+		reverse:           opts.Reverse,
+		start:             key,
+		end:               endKey,
+		ts:                timestamp,
+		maxKeys:           opts.MaxKeys,
+		targetBytes:       opts.TargetBytes,
+		strictTargetBytes: opts.StrictTargetBytes,
+		maxIntents:        opts.MaxIntents,
+		inconsistent:      opts.Inconsistent,
+		tombstones:        opts.Tombstones,
+		failOnMoreRecent:  opts.FailOnMoreRecent,
+		keyBuf:            mvccScanner.keyBuf,
 	}
 
 	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
@@ -2509,7 +2510,7 @@ type MVCCScanOptions struct {
 	// memory during a Scan operation. Once the target is satisfied (i.e. met or
 	// exceeded) by the emitted KV pairs, iteration stops (with a ResumeSpan as
 	// appropriate). In particular, at least one kv pair is returned (when one
-	// exists).
+	// exists). StrictTargetBytes can be set to make this limit strict.
 	//
 	// The number of bytes a particular kv pair accrues depends on internal data
 	// structures, but it is guaranteed to exceed that of the bytes stored in
@@ -2517,6 +2518,9 @@ type MVCCScanOptions struct {
 	//
 	// The zero value indicates no limit.
 	TargetBytes int64
+	// StrictTargetBytes makes TargetBytes strict, i.e. it will return an empty
+	// result if the first kv pair exceeds the limit.
+	StrictTargetBytes bool
 	// MaxIntents is a maximum number of intents collected by scanner in
 	// consistent mode before returning WriteIntentError.
 	//
