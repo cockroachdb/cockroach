@@ -1900,6 +1900,15 @@ message Header {
   // requests, writes are performed at the provisional commit timestamp
   // (txn.WriteTimestamp).
   util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  // timestamp_from_server_clock is set when a non-transactional BatchRequest
+  // has its timestamp initialized to the wall time of the server node. This
+  // flag is needed to ensure that such requests are never served as follower
+  // reads. Initializing the timestamp of a request on a node that holds a
+  // follower instead of the leaseholder for a range and then using this
+  // timestamp to deem a follower read safe could allow for consistency
+  // violations where a non-transactional read following a write could fail to
+  // observe the write.
+  bool timestamp_from_server_clock = 20;
   // replica specifies the destination of the request.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
   // range_id specifies the ID of the Raft consensus group which the key
