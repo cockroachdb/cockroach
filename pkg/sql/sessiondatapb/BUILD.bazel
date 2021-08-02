@@ -18,6 +18,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/duration:duration_proto",
+        "//pkg/util/timeutil/pgdate:pgdate_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -30,6 +31,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/duration",
+        "//pkg/util/timeutil/pgdate",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

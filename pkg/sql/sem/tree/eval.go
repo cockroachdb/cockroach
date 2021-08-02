@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -3798,7 +3799,18 @@ func (ctx *EvalContext) GetLocation() *time.Location {
 
 // GetIntervalStyle returns the session interval style.
 func (ctx *EvalContext) GetIntervalStyle() duration.IntervalStyle {
+	if ctx.SessionData == nil {
+		return duration.IntervalStyle_POSTGRES
+	}
 	return ctx.SessionData.GetIntervalStyle()
+}
+
+// GetDateStyle returns the session date style.
+func (ctx *EvalContext) GetDateStyle() pgdate.DateStyle {
+	if ctx.SessionData == nil {
+		return pgdate.DefaultDateStyle()
+	}
+	return ctx.SessionData.GetDateStyle()
 }
 
 // Ctx returns the session's context.

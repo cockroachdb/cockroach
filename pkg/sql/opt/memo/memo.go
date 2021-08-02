@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 )
 
@@ -140,6 +142,8 @@ type Memo struct {
 	preferLookupJoinsForFKs bool
 	saveTablesPrefix        string
 	intervalStyleEnabled    bool
+	dateStyle               pgdate.DateStyle
+	intervalStyle           duration.IntervalStyle
 
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
@@ -179,6 +183,8 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 		preferLookupJoinsForFKs: evalCtx.SessionData.PreferLookupJoinsForFKs,
 		saveTablesPrefix:        evalCtx.SessionData.SaveTablesPrefix,
 		intervalStyleEnabled:    evalCtx.SessionData.IntervalStyleEnabled,
+		dateStyle:               evalCtx.SessionData.GetDateStyle(),
+		intervalStyle:           evalCtx.SessionData.GetIntervalStyle(),
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -287,7 +293,9 @@ func (m *Memo) IsStale(
 		m.safeUpdates != evalCtx.SessionData.SafeUpdates ||
 		m.preferLookupJoinsForFKs != evalCtx.SessionData.PreferLookupJoinsForFKs ||
 		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix ||
-		m.intervalStyleEnabled != evalCtx.SessionData.IntervalStyleEnabled {
+		m.intervalStyleEnabled != evalCtx.SessionData.IntervalStyleEnabled ||
+		m.dateStyle != evalCtx.SessionData.GetDateStyle() ||
+		m.intervalStyle != evalCtx.SessionData.GetIntervalStyle() {
 		return true, nil
 	}
 

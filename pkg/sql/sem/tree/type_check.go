@@ -21,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
 )
@@ -55,6 +57,11 @@ type SemaContext struct {
 	IntervalStyleEnabled bool
 
 	Properties SemaProperties
+
+	// DateStyle refers to the DateStyle to parse as.
+	DateStyle pgdate.DateStyle
+	// IntervalStyle refers to the IntervalStyle to parse as.
+	IntervalStyle duration.IntervalStyle
 }
 
 // SemaProperties is a holder for required and derived properties

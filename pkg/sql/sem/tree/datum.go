@@ -1772,6 +1772,8 @@ type ParseTimeContext interface {
 	GetRelativeParseTime() time.Time
 	// GetIntervalStyle returns the interval style in the session.
 	GetIntervalStyle() duration.IntervalStyle
+	// GetDateStyle returns the date style in the session.
+	GetDateStyle() pgdate.DateStyle
 }
 
 var _ ParseTimeContext = &EvalContext{}
@@ -1787,6 +1789,8 @@ func NewParseTimeContext(relativeParseTime time.Time) ParseTimeContext {
 
 type simpleParseTimeContext struct {
 	RelativeParseTime time.Time
+	DateStyle         pgdate.DateStyle
+	IntervalStyle     duration.IntervalStyle
 }
 
 // GetRelativeParseTime implements ParseTimeContext.
@@ -1794,9 +1798,14 @@ func (ctx simpleParseTimeContext) GetRelativeParseTime() time.Time {
 	return ctx.RelativeParseTime
 }
 
-// GetIntervalStyle implements ParseTimeContext..
+// GetIntervalStyle implements ParseTimeContext.
 func (ctx simpleParseTimeContext) GetIntervalStyle() duration.IntervalStyle {
-	return duration.IntervalStyle_POSTGRES
+	return ctx.IntervalStyle
+}
+
+// GetDateStyle implements ParseTimeContext.
+func (ctx simpleParseTimeContext) GetDateStyle() pgdate.DateStyle {
+	return ctx.DateStyle
 }
 
 // relativeParseTime chooses a reasonable "now" value for
@@ -1808,6 +1817,20 @@ func relativeParseTime(ctx ParseTimeContext) time.Time {
 	return ctx.GetRelativeParseTime()
 }
 
+func dateStyle(ctx ParseTimeContext) pgdate.DateStyle {
+	if ctx == nil {
+		return pgdate.DefaultDateStyle()
+	}
+	return ctx.GetDateStyle()
+}
+
+func intervalStyle(ctx ParseTimeContext) duration.IntervalStyle {
+	if ctx == nil {
+		return duration.IntervalStyle_POSTGRES
+	}
+	return ctx.GetIntervalStyle()
+}
+
 // ParseDDate parses and returns the *DDate Datum value represented by the provided
 // string in the provided location, or an error if parsing is unsuccessful.
 //
@@ -1815,7 +1838,7 @@ func relativeParseTime(ctx ParseTimeContext) time.Time {
 // ParseTimeContext (either for the time or the local timezone).
 func ParseDDate(ctx ParseTimeContext, s string) (_ *DDate, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseDate(now, 0 /* mode */, s)
+	t, dependsOnContext, err := pgdate.ParseDate(now, dateStyle(ctx), s)
 	return NewDDate(t), dependsOnContext, err
 }
 
@@ -1958,7 +1981,7 @@ func ParseDTime(
 
 	s = timeutil.ReplaceLibPQTimePrefix(s)
 
-	t, dependsOnContext, err := pgdate.ParseTimeWithoutTimezone(now, pgdate.ParseModeYMD, s)
+	t, dependsOnContext, err := pgdate.ParseTimeWithoutTimezone(now, dateStyle(ctx), s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
 		return nil, false, MakeParseError(s, types.Time, nil)
@@ -2089,7 +2112,7 @@ func ParseDTimeTZ(
 	ctx ParseTimeContext, s string, precision time.Duration,
 ) (_ *DTimeTZ, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	d, dependsOnContext, err := timetz.ParseTimeTZ(now, s, precision)
+	d, dependsOnContext, err := timetz.ParseTimeTZ(now, dateStyle(ctx), s, precision)
 	if err != nil {
 		return nil, false, err
 	}
@@ -2218,7 +2241,7 @@ func ParseDTimestamp(
 	ctx ParseTimeContext, s string, precision time.Duration,
 ) (_ *DTimestamp, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, pgdate.ParseModeMDY, s)
+	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s)
 	if err != nil {
 		return nil, false, err
 	}
@@ -2492,7 +2515,7 @@ func ParseDTimestampTZ(
 	ctx ParseTimeContext, s string, precision time.Duration,
 ) (_ *DTimestampTZ, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseTimestamp(now, pgdate.ParseModeMDY, s)
+	t, dependsOnContext, err := pgdate.ParseTimestamp(now, dateStyle(ctx), s)
 	if err != nil {
 		return nil, false, err
 	}

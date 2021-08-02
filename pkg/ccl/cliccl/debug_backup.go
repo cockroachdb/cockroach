@@ -461,7 +461,7 @@ func evalAsOfTimestamp(
 	}
 	var err error
 	// Attempt to parse as timestamp.
-	if ts, _, err := pgdate.ParseTimestampWithoutTimezone(timeutil.Now(), pgdate.ParseModeYMD, readTime); err == nil {
+	if ts, _, err := pgdate.ParseTimestampWithoutTimezone(timeutil.Now(), pgdate.DateStyle{Order: pgdate.Order_MDY}, readTime); err == nil {
 		readTS := hlc.Timestamp{WallTime: ts.UnixNano()}
 		return readTS, nil
 	}

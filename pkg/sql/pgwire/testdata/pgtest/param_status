@@ -68,3 +68,45 @@ ReadyForQuery
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"America/New_York"}
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Change interval style.
+
+send
+Query {"String": "SET IntervalStyle_enabled = true"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"42704"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "SET IntervalStyle = 'ISO_8601'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET DateStyle = 'YMD, ISO'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
