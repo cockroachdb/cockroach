@@ -8,6 +8,7 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 Stage 0
   *scop.MarkDescriptorAsDropped
     TableID: 52
+Stage 1
   *scop.DrainDescriptorName
     TableID: 52
   *scop.CreateGcJobForDescriptor
@@ -35,9 +36,9 @@ Stage 0
     TableID: 54
   *scop.UpdateRelationDeps
     TableID: 54
-Stage 1
   *scop.MarkDescriptorAsDropped
     TableID: 52
+Stage 1
   *scop.DrainDescriptorName
     TableID: 52
   *scop.CreateGcJobForDescriptor

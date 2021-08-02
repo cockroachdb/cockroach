@@ -102,7 +102,7 @@ func (m *Database) Attributes() eav.OrdinalSet { return databaseAttributes }
 func (m *Column) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.TableID)
 	case AttrColumnID:
@@ -118,7 +118,7 @@ func (m *Column) Get(a eav.Attribute) eav.Value {
 func (m *PrimaryIndex) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.TableID)
 	case AttrIndexID:
@@ -134,7 +134,7 @@ func (m *PrimaryIndex) Get(a eav.Attribute) eav.Value {
 func (m *SecondaryIndex) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.TableID)
 	case AttrIndexID:
@@ -150,7 +150,7 @@ func (m *SecondaryIndex) Get(a eav.Attribute) eav.Value {
 func (m *SequenceDependency) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.SequenceID)
 	case AttrReferencedDescID:
@@ -166,7 +166,7 @@ func (m *SequenceDependency) Get(a eav.Attribute) eav.Value {
 func (m *UniqueConstraint) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.TableID)
 	case AttrIndexID:
@@ -180,7 +180,7 @@ func (m *UniqueConstraint) Get(a eav.Attribute) eav.Value {
 func (m *CheckConstraint) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.TableID)
 	case AttrName:
@@ -194,7 +194,7 @@ func (m *CheckConstraint) Get(a eav.Attribute) eav.Value {
 func (m *Sequence) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.SequenceID)
 	default:
@@ -206,7 +206,7 @@ func (m *Sequence) Get(a eav.Attribute) eav.Value {
 func (m *DefaultExpression) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.TableID)
 	case AttrColumnID:
@@ -220,7 +220,7 @@ func (m *DefaultExpression) Get(a eav.Attribute) eav.Value {
 func (m *View) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.TableID)
 	default:
@@ -232,7 +232,7 @@ func (m *View) Get(a eav.Attribute) eav.Value {
 func (m *TypeReference) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.DescID)
 	case AttrReferencedDescID:
@@ -246,7 +246,7 @@ func (m *TypeReference) Get(a eav.Attribute) eav.Value {
 func (m *Table) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.TableID)
 	default:
@@ -258,7 +258,7 @@ func (m *Table) Get(a eav.Attribute) eav.Value {
 func (m *InboundForeignKey) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.OriginID)
 	case AttrReferencedDescID:
@@ -274,7 +274,7 @@ func (m *InboundForeignKey) Get(a eav.Attribute) eav.Value {
 func (m *OutboundForeignKey) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.OriginID)
 	case AttrReferencedDescID:
@@ -290,7 +290,7 @@ func (m *OutboundForeignKey) Get(a eav.Attribute) eav.Value {
 func (m *RelationDependedOnBy) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.TableID)
 	case AttrReferencedDescID:
@@ -304,7 +304,7 @@ func (m *RelationDependedOnBy) Get(a eav.Attribute) eav.Value {
 func (m *SequenceOwnedBy) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.SequenceID)
 	case AttrReferencedDescID:
@@ -318,7 +318,7 @@ func (m *SequenceOwnedBy) Get(a eav.Attribute) eav.Value {
 func (m *Type) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.TypeID)
 	default:
@@ -330,7 +330,7 @@ func (m *Type) Get(a eav.Attribute) eav.Value {
 func (m *Schema) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.SchemaID)
 	default:
@@ -342,7 +342,7 @@ func (m *Schema) Get(a eav.Attribute) eav.Value {
 func (m *Database) Get(a eav.Attribute) eav.Value {
 	switch a {
 	case AttrElementType:
-		return getElementType(m)
+		return GetElementType(m)
 	case AttrDescID:
 		return (*eav.Uint32)(&m.DatabaseID)
 	default:

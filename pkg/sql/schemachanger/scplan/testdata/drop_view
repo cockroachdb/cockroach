@@ -12,6 +12,7 @@ DROP VIEW defaultdb.v1
 Stage 0
   *scop.MarkDescriptorAsDropped
     TableID: 53
+Stage 1
   *scop.DrainDescriptorName
     TableID: 53
   *scop.CreateGcJobForDescriptor
@@ -45,6 +46,16 @@ ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
 Stage 0
+  *scop.MarkDescriptorAsDropped
+    TableID: 53
+  *scop.MarkDescriptorAsDropped
+    TableID: 54
+  *scop.MarkDescriptorAsDropped
+    TableID: 55
+  *scop.MarkDescriptorAsDropped
+    TableID: 56
+  *scop.MarkDescriptorAsDropped
+    TableID: 59
   *scop.RemoveTypeBackRef
     DescID: 59
     TypeID: 57
@@ -52,32 +63,22 @@ Stage 0
     DescID: 59
     TypeID: 58
 Stage 1
-  *scop.MarkDescriptorAsDropped
-    TableID: 53
   *scop.DrainDescriptorName
     TableID: 53
   *scop.CreateGcJobForDescriptor
     DescID: 53
-  *scop.MarkDescriptorAsDropped
-    TableID: 54
   *scop.DrainDescriptorName
     TableID: 54
   *scop.CreateGcJobForDescriptor
     DescID: 54
-  *scop.MarkDescriptorAsDropped
-    TableID: 55
   *scop.DrainDescriptorName
     TableID: 55
   *scop.CreateGcJobForDescriptor
     DescID: 55
-  *scop.MarkDescriptorAsDropped
-    TableID: 56
   *scop.DrainDescriptorName
     TableID: 56
   *scop.CreateGcJobForDescriptor
     DescID: 56
-  *scop.MarkDescriptorAsDropped
-    TableID: 59
   *scop.DrainDescriptorName
     TableID: 59
   *scop.CreateGcJobForDescriptor

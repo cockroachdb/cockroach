@@ -17,35 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
-)
-
-// A Phase represents the context in which an op is executed within a schema
-// change. Different phases require different dependencies for the execution of
-// the ops to be plumbed in.
-//
-// Today, we support the phases corresponding to async schema changes initiated
-// and partially executed in the user transaction. This will change as we
-// transition to transactional schema changes.
-type Phase int
-
-const (
-	// StatementPhase refers to execution of ops occurring during statement
-	// execution during the user transaction.
-	StatementPhase Phase = iota
-	// PreCommitPhase refers to execution of ops occurring during the user
-	// transaction immediately before commit.
-	PreCommitPhase
-	// PostCommitPhase refers to execution of ops occurring after the user
-	// transaction has committed (i.e., in the async schema change job).
-	PostCommitPhase
 )
 
 // Params holds the arguments for planning.
 type Params struct {
 	// ExecutionPhase indicates the phase that the plan should be constructed for.
-	ExecutionPhase Phase
+	ExecutionPhase scop.Phase
 	// CreatedDescriptorIDs contains IDs for new descriptors created by the same
 	// schema changer (i.e., earlier in the same transaction). New descriptors
 	// can have most of their schema changes fully executed in the same
@@ -73,8 +53,11 @@ type Plan struct {
 type Stage struct {
 	Before, After scpb.State
 	Ops           scop.Ops
+	Phase         scop.Phase
 	Revertible    bool
 }
+
+var opGenRegistry = opgen.NewRegistry()
 
 // MakePlan generates a Plan for a particular phase of a schema change, given
 // the initial state for a set of targets.
@@ -89,15 +72,11 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 		}
 	}()
 
-	g, err := scgraph.New(initial)
+	g, err := opGenRegistry.BuildGraph(initial)
 	if err != nil {
 		return Plan{}, err
 	}
-	// TODO(ajwerner): Generate the stages for all of the phases as it will make
-	// debugging easier.
-	for _, ts := range initial {
-		p[reflect.TypeOf(ts.GetElement())].ops(g, ts.Target, ts.Status, params)
-	}
+
 	if err := g.ForEachNode(func(n *scpb.Node) error {
 		d, ok := p[reflect.TypeOf(n.GetElement())]
 		if !ok {
@@ -108,7 +87,19 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 	}); err != nil {
 		return Plan{}, err
 	}
+
 	stages := buildStages(initial, g, params)
+
+	// TODO(ajwerner): Do a better job allocating phases.
+	// We'll want to make the process of moving things out of public into
+	// the statement phase because that mirrors the current behavior.
+	for i := 0; i < len(stages); i++ {
+		if params.ExecutionPhase == scop.PreCommitPhase && i == 0 {
+			stages[i].Phase = scop.PreCommitPhase
+		} else {
+			stages[i].Phase = scop.PostCommitPhase
+		}
+	}
 	return Plan{
 		Params:  params,
 		Initial: initial,
@@ -120,6 +111,7 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 	// TODO(ajwerner): deal with the case where the target status was
 	// fulfilled by something that preceded the initial state.
+	// TODO(ajwerner): Do something to deal with marking stages with labels.
 	cur := init
 	fulfilled := map[*scpb.Node]struct{}{}
 	filterUnsatisfiedEdgesStep := func(edges []*scgraph.OpEdge) ([]*scgraph.OpEdge, bool) {

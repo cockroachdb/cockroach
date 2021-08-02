@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -101,7 +103,7 @@ func TestPlanAlterTable(t *testing.T) {
 
 				plan, err := scplan.MakePlan(outputNodes,
 					scplan.Params{
-						ExecutionPhase: scplan.PostCommitPhase,
+						ExecutionPhase: scop.PostCommitPhase,
 					})
 				require.NoError(t, err)
 
@@ -153,20 +155,16 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
 			var deps strings.Builder
 			deps.WriteString("- from: ")
-			if err := scpb.Format(de.From(), &deps); err != nil {
-				return err
-			}
+			scpb.Format(de.From(), &deps)
 			deps.WriteString("\n  to:   ")
-			if err := scpb.Format(de.To(), &deps); err != nil {
-				return err
-			}
+			scpb.Format(de.To(), &deps)
 			deps.WriteString("\n")
 			sortedDeps = append(sortedDeps, deps.String())
 			return nil
 		})
 	})
 	if err != nil {
-		t.Fatalf("failed marshaling dependencies: %+v", err)
+		panic(errors.Wrap(err, "failed marshaling dependencies."))
 	}
 	// Lexicographically sort the dependencies,
 	// since the order is not fully deterministic.

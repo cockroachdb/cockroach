@@ -30,8 +30,8 @@ func GetDescID(e Entity) descpb.ID {
 	return descpb.InvalidID
 }
 
-// getElementType returns a value corresponding to the type of the element.
-func getElementType(e Entity) *eav.Int32 {
+// GetElementType returns a value corresponding to the type of the element.
+func GetElementType(e Entity) *eav.Int32 {
 	initOnce.Do(initElementTypes)
 	return elementIDs[typeToElementID[reflect.TypeOf(e.GetElement())]]
 }
@@ -46,12 +46,12 @@ var (
 	DeleteAndWriteOnlyStatus = (*eav.Int32)(proto.Int32(int32(Status_DELETE_AND_WRITE_ONLY)))
 	AbsentStatus             = (*eav.Int32)(proto.Int32(int32(Status_ABSENT)))
 
-	TableElement          = getElementType((*Table)(nil))
-	TypeElement           = getElementType((*Type)(nil))
-	TypeReferenceElement  = getElementType((*TypeReference)(nil))
-	PrimaryIndexElement   = getElementType((*PrimaryIndex)(nil))
-	SecondaryIndexElement = getElementType((*SecondaryIndex)(nil))
-	ColumnElement         = getElementType((*Column)(nil))
+	TableElement          = GetElementType((*Table)(nil))
+	TypeElement           = GetElementType((*Type)(nil))
+	TypeReferenceElement  = GetElementType((*TypeReference)(nil))
+	PrimaryIndexElement   = GetElementType((*PrimaryIndex)(nil))
+	SecondaryIndexElement = GetElementType((*SecondaryIndex)(nil))
+	ColumnElement         = GetElementType((*Column)(nil))
 
 	// Defeat the unused linter.
 	_ = []eav.Value{

@@ -88,3 +88,24 @@ var _ Ops = (backfillOps)(nil)
 var _ Ops = (validationOps)(nil)
 
 type baseOp struct{}
+
+// A Phase represents the context in which an op is executed within a schema
+// change. Different phases require different dependencies for the execution of
+// the ops to be plumbed in.
+//
+// Today, we support the phases corresponding to async schema changes initiated
+// and partially executed in the user transaction. This will change as we
+// transition to transactional schema changes.
+type Phase int
+
+const (
+	// StatementPhase refers to execution of ops occurring during statement
+	// execution during the user transaction.
+	StatementPhase Phase = iota
+	// PreCommitPhase refers to execution of ops occurring during the user
+	// transaction immediately before commit.
+	PreCommitPhase
+	// PostCommitPhase refers to execution of ops occurring after the user
+	// transaction has committed (i.e., in the async schema change job).
+	PostCommitPhase
+)

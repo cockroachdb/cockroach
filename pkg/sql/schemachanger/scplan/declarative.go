@@ -47,7 +47,6 @@ type opGenFunc func(builder *scgraph.Graph, t *scpb.Target, s scpb.Status, flags
 type depGenFunc func(g *scgraph.Graph, t *scpb.Target, s scpb.Status)
 
 type schemaChangeTargetPlanner struct {
-	ops  opGenFunc
 	deps depGenFunc
 }
 
@@ -57,7 +56,6 @@ func buildSchemaChangePlanner(m map[scpb.Element]targetRules) schemaChangePlanne
 	tp := make(map[reflect.Type]schemaChangeTargetPlanner)
 	for e, r := range m {
 		tp[reflect.TypeOf(e)] = schemaChangeTargetPlanner{
-			ops:  buildSchemaChangeOpGenFunc(e, r.forward, r.backwards),
 			deps: buildSchemaChangeDepGenFunc(e, r.deps),
 		}
 	}

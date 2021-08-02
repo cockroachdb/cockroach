@@ -39,6 +39,8 @@ ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
 Stage 0
+  *scop.MarkDescriptorAsDropped
+    TableID: 57
   *scop.DropForeignKeyRef
     Name: fk_customers
     Outbound: true
@@ -58,6 +60,10 @@ Stage 0
     TableID: 55
   *scop.UpdateRelationDeps
     TableID: 55
+  *scop.MarkDescriptorAsDropped
+    TableID: 56
+  *scop.RemoveSequenceOwnedBy
+    TableID: 56
   *scop.RemoveColumnDefaultExpression
     ColumnID: 2
     TableID: 55
@@ -81,21 +87,17 @@ Stage 0
   *scop.RemoveRelationDependedOnBy
     DependedOnBy: 55
     TableID: 54
-Stage 1
   *scop.MarkDescriptorAsDropped
-    TableID: 57
+    TableID: 55
+Stage 1
   *scop.DrainDescriptorName
     TableID: 57
   *scop.CreateGcJobForDescriptor
     DescID: 57
-  *scop.MarkDescriptorAsDropped
-    TableID: 56
   *scop.DrainDescriptorName
     TableID: 56
   *scop.CreateGcJobForDescriptor
     DescID: 56
-  *scop.MarkDescriptorAsDropped
-    TableID: 55
   *scop.DrainDescriptorName
     TableID: 55
   *scop.CreateGcJobForDescriptor

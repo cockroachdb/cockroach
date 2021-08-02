@@ -292,9 +292,9 @@ func TestSchemaChanger(t *testing.T) {
 				},
 			}
 
-			for _, phase := range []scplan.Phase{
-				scplan.StatementPhase,
-				scplan.PreCommitPhase,
+			for _, phase := range []scop.Phase{
+				scop.StatementPhase,
+				scop.PreCommitPhase,
 			} {
 				sc, err := scplan.MakePlan(nodes, scplan.Params{
 					ExecutionPhase: phase,
@@ -302,6 +302,9 @@ func TestSchemaChanger(t *testing.T) {
 				require.NoError(t, err)
 				stages := sc.Stages
 				for _, s := range stages {
+					if s.Phase != phase {
+						break
+					}
 					exec := scexec.NewExecutor(
 						txn,
 						descriptors,
@@ -323,7 +326,7 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			sc, err := scplan.MakePlan(ts, scplan.Params{
-				ExecutionPhase: scplan.PostCommitPhase,
+				ExecutionPhase: scop.PostCommitPhase,
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
@@ -388,15 +391,18 @@ func TestSchemaChanger(t *testing.T) {
 			outputNodes, err := scbuild.Build(ctx, buildDeps, nil, parsed[0].AST.(*tree.AlterTable))
 			require.NoError(t, err)
 
-			for _, phase := range []scplan.Phase{
-				scplan.StatementPhase,
-				scplan.PreCommitPhase,
+			for _, phase := range []scop.Phase{
+				scop.StatementPhase,
+				scop.PreCommitPhase,
 			} {
 				sc, err := scplan.MakePlan(outputNodes, scplan.Params{
 					ExecutionPhase: phase,
 				})
 				require.NoError(t, err)
 				for _, s := range sc.Stages {
+					if s.Phase != phase {
+						break
+					}
 					require.NoError(t, scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil).
 						ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 					ts = s.After
@@ -408,7 +414,7 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			sc, err := scplan.MakePlan(ts, scplan.Params{
-				ExecutionPhase: scplan.PostCommitPhase,
+				ExecutionPhase: scop.PostCommitPhase,
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -90,7 +89,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 				BeforeStage: func(_ scop.Ops, m scexec.TestingKnobMetadata) error {
 					// Assert that when job 3 is running, there are no mutations other
 					// than the ones associated with this schema change.
-					if m.Phase != scplan.PostCommitPhase {
+					if m.Phase != scop.PostCommitPhase {
 						return nil
 					}
 					table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -199,7 +198,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 				BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
 					// Verify that we never queue mutations for job 2 before finishing job
 					// 1.
-					if m.Phase != scplan.PostCommitPhase {
+					if m.Phase != scop.PostCommitPhase {
 						return nil
 					}
 					table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -332,7 +331,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 			BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
-				if m.Phase != scplan.PostCommitPhase {
+				if m.Phase != scop.PostCommitPhase {
 					return nil
 				}
 				table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -437,7 +436,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 			BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
-				if m.Phase != scplan.PostCommitPhase {
+				if m.Phase != scop.PostCommitPhase {
 					return nil
 				}
 				table := catalogkv.TestingGetTableDescriptorFromSchema(
