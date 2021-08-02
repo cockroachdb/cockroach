@@ -8,6 +8,8 @@
     "lint": "eslint './{src,ccl}/**/*.{tsx,ts,js}'",
     "lint:fix": "eslint './{src,ccl}/**/*.{tsx,ts,js}' --fix",
     "storybook": "start-storybook -p 9009",
+    "karma": "karma start",
+    "karma:watch": "karma start --no-single-run --auto-watch",
     "cypress": "./opt/node_modules/.bin/cypress",
     "cypress:open": "yarn cypress open",
     "cypress:run": "yarn cypress run --browser chrome",
