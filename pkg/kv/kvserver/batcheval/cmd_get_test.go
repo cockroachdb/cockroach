@@ -49,31 +49,37 @@ func TestGetResumeSpan(t *testing.T) {
 	testCases := []struct {
 		maxKeys      int64
 		targetBytes  int64
+		allowEmpty   bool
 		expectResume bool
 		expectReason roachpb.ResumeReason
 	}{
 		{maxKeys: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT},
 		{maxKeys: 0, expectResume: false},
 		{maxKeys: 1, expectResume: false},
+		{maxKeys: 1, allowEmpty: true, expectResume: false},
 
 		{targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT},
 		{targetBytes: 0, expectResume: false},
 		{targetBytes: 1, expectResume: false},
 		{targetBytes: 11, expectResume: false},
 		{targetBytes: 12, expectResume: false},
+		{targetBytes: 1, allowEmpty: true, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT},
+		{targetBytes: 11, allowEmpty: true, expectResume: false},
+		{targetBytes: 12, allowEmpty: true, expectResume: false},
 
 		{maxKeys: -1, targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT},
 		{maxKeys: 10, targetBytes: 100, expectResume: false},
 	}
 	for _, tc := range testCases {
-		name := fmt.Sprintf("maxKeys=%d targetBytes=%d", tc.maxKeys, tc.targetBytes)
+		name := fmt.Sprintf("maxKeys=%d targetBytes=%d allowEmpty=%t", tc.maxKeys, tc.targetBytes, tc.allowEmpty)
 		t.Run(name, func(t *testing.T) {
 			resp := roachpb.GetResponse{}
 			_, err := Get(ctx, db, CommandArgs{
 				EvalCtx: (&MockEvalCtx{}).EvalContext(),
 				Header: roachpb.Header{
-					MaxSpanRequestKeys: tc.maxKeys,
-					TargetBytes:        tc.targetBytes,
+					MaxSpanRequestKeys:    tc.maxKeys,
+					TargetBytes:           tc.targetBytes,
+					TargetBytesAllowEmpty: tc.allowEmpty,
 				},
 				Args: &roachpb.GetRequest{
 					RequestHeader: roachpb.RequestHeader{Key: key},
