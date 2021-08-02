@@ -13,6 +13,7 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -62,8 +63,20 @@ func Get(
 		return result.Result{}, err
 	}
 	if val != nil {
+		// NB: This calculation is different from Scan, since Scan responses include
+		// the key/value pair while Get only includes the value.
+		numBytes := int64(len(val.RawBytes))
+		// For consistency with Scan, TargetBytesAllowEmpty is only effective when the
+		// AvoidExcessTargetBytes cluster version is active.
+		avoidExcess := cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx,
+			clusterversion.AvoidExcessTargetBytes)
+		if h.TargetBytes > 0 && avoidExcess && h.TargetBytesAllowEmpty && numBytes > h.TargetBytes {
+			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
+			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+			return result.Result{}, nil
+		}
 		reply.NumKeys = 1
-		reply.NumBytes = int64(len(val.RawBytes))
+		reply.NumBytes = numBytes
 	}
 	var intents []roachpb.Intent
 	if intent != nil {
