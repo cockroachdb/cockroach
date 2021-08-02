@@ -167,6 +167,8 @@ message StreamIngestionFrontierSpec {
   // at a certain timestamp, then it's safe to resolve the ingestion at that
   // timestamp.
   repeated roachpb.Span tracked_spans = 2 [(gogoproto.nullable) = false];
+  // JobID is the job ID of the stream ingestion job.
+  optional int64 job_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
 }
 
 message BackupDataSpec {
