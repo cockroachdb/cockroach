@@ -40,27 +40,39 @@ func TestScanReverseScanTargetBytes(t *testing.T) {
 	)
 	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
 		testutils.RunTrueAndFalse(t, "avoidExcess", func(t *testing.T, avoidExcess bool) {
-			for _, tb := range []int64{tbNone, tbOne, tbMid, tbLots} {
-				t.Run(fmt.Sprintf("targetBytes=%d", tb), func(t *testing.T) {
-					expN := 2
-					if tb == tbOne {
-						expN = 1
-					} else if tb == tbMid && avoidExcess {
-						expN = 1
-					}
-					for _, sf := range []roachpb.ScanFormat{roachpb.KEY_VALUES, roachpb.BATCH_RESPONSE} {
-						t.Run(fmt.Sprintf("format=%s", sf), func(t *testing.T) {
-							testScanReverseScanInner(t, tb, sf, reverse, avoidExcess, expN)
-						})
-					}
-				})
-			}
+			testutils.RunTrueAndFalse(t, "allowEmpty", func(t *testing.T, allowEmpty bool) {
+				for _, tb := range []int64{tbNone, tbOne, tbMid, tbLots} {
+					t.Run(fmt.Sprintf("targetBytes=%d", tb), func(t *testing.T) {
+						expN := 2
+						if tb == tbOne {
+							if allowEmpty && avoidExcess {
+								expN = 0
+							} else {
+								expN = 1
+							}
+						} else if tb == tbMid && avoidExcess {
+							expN = 1
+						}
+						for _, sf := range []roachpb.ScanFormat{roachpb.KEY_VALUES, roachpb.BATCH_RESPONSE} {
+							t.Run(fmt.Sprintf("format=%s", sf), func(t *testing.T) {
+								testScanReverseScanInner(t, tb, sf, reverse, avoidExcess, allowEmpty, expN)
+							})
+						}
+					})
+				}
+			})
 		})
 	})
 }
 
 func testScanReverseScanInner(
-	t *testing.T, tb int64, sf roachpb.ScanFormat, reverse bool, avoidExcess bool, expN int,
+	t *testing.T,
+	tb int64,
+	sf roachpb.ScanFormat,
+	reverse bool,
+	avoidExcess bool,
+	allowEmpty bool,
+	expN int,
 ) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -98,8 +110,9 @@ func testScanReverseScanInner(
 	cArgs := CommandArgs{
 		Args: req,
 		Header: roachpb.Header{
-			Timestamp:   ts,
-			TargetBytes: tb,
+			Timestamp:             ts,
+			TargetBytes:           tb,
+			TargetBytesAllowEmpty: allowEmpty,
 		},
 		EvalCtx: (&MockEvalCtx{ClusterSettings: settings}).EvalContext(),
 	}
@@ -113,7 +126,11 @@ func testScanReverseScanInner(
 	}
 
 	require.EqualValues(t, expN, resp.Header().NumKeys)
-	require.NotZero(t, resp.Header().NumBytes)
+	if avoidExcess && allowEmpty && tb > 0 {
+		require.LessOrEqual(t, resp.Header().NumBytes, tb)
+	} else {
+		require.NotZero(t, resp.Header().NumBytes)
+	}
 
 	var rows []roachpb.KeyValue
 	if !reverse {

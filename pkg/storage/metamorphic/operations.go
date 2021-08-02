@@ -124,16 +124,20 @@ func generateMVCCScan(
 	}
 	maxKeys := int64(m.floatGenerator.parse(args[3]) * 32)
 	targetBytes := int64(m.floatGenerator.parse(args[4]) * (1 << 20))
+	targetBytesAvoidExcess := m.boolGenerator.parse(args[5])
+	targetBytesAllowEmpty := m.boolGenerator.parse(args[6])
 	return &mvccScanOp{
-		m:            m,
-		key:          key.Key,
-		endKey:       endKey.Key,
-		ts:           ts,
-		txn:          txn,
-		inconsistent: inconsistent,
-		reverse:      reverse,
-		maxKeys:      maxKeys,
-		targetBytes:  targetBytes,
+		m:                      m,
+		key:                    key.Key,
+		endKey:                 endKey.Key,
+		ts:                     ts,
+		txn:                    txn,
+		inconsistent:           inconsistent,
+		reverse:                reverse,
+		maxKeys:                maxKeys,
+		targetBytes:            targetBytes,
+		targetBytesAvoidExcess: targetBytesAvoidExcess,
+		targetBytesAllowEmpty:  targetBytesAllowEmpty,
 	}
 }
 
@@ -341,15 +345,17 @@ func (m mvccFindSplitKeyOp) run(ctx context.Context) string {
 }
 
 type mvccScanOp struct {
-	m            *metaTestRunner
-	key          roachpb.Key
-	endKey       roachpb.Key
-	ts           hlc.Timestamp
-	txn          txnID
-	inconsistent bool
-	reverse      bool
-	maxKeys      int64
-	targetBytes  int64
+	m                      *metaTestRunner
+	key                    roachpb.Key
+	endKey                 roachpb.Key
+	ts                     hlc.Timestamp
+	txn                    txnID
+	inconsistent           bool
+	reverse                bool
+	maxKeys                int64
+	targetBytes            int64
+	targetBytesAvoidExcess bool
+	targetBytesAllowEmpty  bool
 }
 
 func (m mvccScanOp) run(ctx context.Context) string {
@@ -364,12 +370,14 @@ func (m mvccScanOp) run(ctx context.Context) string {
 	// we will try MVCCScanning on batches and produce diffs between runs on
 	// different engines that don't point to an actual issue.
 	result, err := storage.MVCCScan(ctx, m.m.engine, m.key, m.endKey, m.ts, storage.MVCCScanOptions{
-		Inconsistent: m.inconsistent,
-		Tombstones:   true,
-		Reverse:      m.reverse,
-		Txn:          txn,
-		MaxKeys:      m.maxKeys,
-		TargetBytes:  m.targetBytes,
+		Inconsistent:           m.inconsistent,
+		Tombstones:             true,
+		Reverse:                m.reverse,
+		Txn:                    txn,
+		MaxKeys:                m.maxKeys,
+		TargetBytes:            m.targetBytes,
+		TargetBytesAvoidExcess: m.targetBytesAvoidExcess,
+		TargetBytesAllowEmpty:  m.targetBytesAllowEmpty,
 	})
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
@@ -914,6 +922,8 @@ var opGenerators = []opGenerator{
 			operandTransaction,
 			operandFloat,
 			operandFloat,
+			operandBool,
+			operandBool,
 		},
 		weight: 100,
 	},
@@ -928,6 +938,8 @@ var opGenerators = []opGenerator{
 			operandPastTS,
 			operandFloat,
 			operandFloat,
+			operandBool,
+			operandBool,
 		},
 		weight: 100,
 	},
@@ -942,6 +954,8 @@ var opGenerators = []opGenerator{
 			operandTransaction,
 			operandFloat,
 			operandFloat,
+			operandBool,
+			operandBool,
 		},
 		weight: 100,
 	},
