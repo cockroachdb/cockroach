@@ -35,7 +35,7 @@ var (
 
 	// timeTZIncludesDateRegex is a regex to check whether there is a date
 	// associated with the given string when attempting to parse it.
-	timeTZIncludesDateRegex = regexp.MustCompile(`^\d{4}-`)
+	timeTZIncludesDateRegex = regexp.MustCompile(`^\d+[-/]`)
 	// timeTZHasTimeComponent determines whether there is a time component at all
 	// in a given string.
 	timeTZHasTimeComponent = regexp.MustCompile(`\d:`)
@@ -101,7 +101,7 @@ func Now() TimeTZ {
 // `now` value (either for the time or the local timezone).
 //
 func ParseTimeTZ(
-	now time.Time, s string, precision time.Duration,
+	now time.Time, dateStyle pgdate.DateStyle, s string, precision time.Duration,
 ) (_ TimeTZ, dependsOnContext bool, _ error) {
 	// Special case as we have to use `ParseTimestamp` to get the date.
 	// We cannot use `ParseTime` as it does not have timezone awareness.
@@ -121,7 +121,7 @@ func ParseTimeTZ(
 		s = timeutil.ReplaceLibPQTimePrefix(s)
 	}
 
-	t, dependsOnContext, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
+	t, dependsOnContext, err := pgdate.ParseTimestamp(now, dateStyle, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
 		return TimeTZ{}, false, pgerror.Newf(

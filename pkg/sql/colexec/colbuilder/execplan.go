@@ -1914,11 +1914,7 @@ func planSelectionOperators(
 			case tree.In, tree.NotIn:
 				negate := cmpOp.Symbol == tree.NotIn
 				datumTuple, ok := tree.AsDTuple(constArg)
-				if !ok || tupleContainsTuples(datumTuple) {
-					// Optimized IN operator is supported only on constant
-					// expressions that don't contain tuples (because tuples
-					// require special null-handling logic), so we fallback to
-					// the default comparison operator.
+				if !ok || useDefaultCmpOpForIn(datumTuple) {
 					break
 				}
 				op, err = colexec.GetInOperator(lTyp, leftOp, leftIdx, datumTuple, negate)
@@ -2275,10 +2271,20 @@ func planProjectionExpr(
 	}
 	allocator := colmem.NewAllocator(ctx, acc, factory)
 	resultIdx = -1
+
+	cmpProjOp, isCmpProjOp := projOp.(tree.ComparisonOperator)
+	var hasOptimizedOp bool
+	if isCmpProjOp {
+		switch cmpProjOp.Symbol {
+		case tree.Like, tree.NotLike, tree.In, tree.NotIn, tree.IsDistinctFrom, tree.IsNotDistinctFrom:
+			hasOptimizedOp = true
+		}
+	}
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
-	if lConstArg, lConst := left.(tree.Datum); lConst {
-		// Case one: The left is constant.
+	if lConstArg, lConst := left.(tree.Datum); lConst && !hasOptimizedOp {
+		// Case one: The left is constant (and we don't have an optimized
+		// operator for this expression).
 		// Normally, the optimizer normalizes binary exprs so that the constant
 		// argument is on the right side. This doesn't happen for
 		// non-commutative operators such as - and /, though, so we still need
@@ -2318,8 +2324,6 @@ func planProjectionExpr(
 			right = tupleDatum
 		}
 
-		cmpProjOp, isCmpProjOp := projOp.(tree.ComparisonOperator)
-
 		// We have a special case behavior for Is{Not}DistinctFrom before
 		// checking whether the right expression is constant below in order to
 		// extract NULL from the cast expression.
@@ -2351,11 +2355,7 @@ func planProjectionExpr(
 				case tree.In, tree.NotIn:
 					negate := cmpProjOp.Symbol == tree.NotIn
 					datumTuple, ok := tree.AsDTuple(rConstArg)
-					if !ok || tupleContainsTuples(datumTuple) {
-						// Optimized IN operator is supported only on constant
-						// expressions that don't contain tuples (because tuples
-						// require special null-handling logic), so we fallback to
-						// the default comparison operator.
+					if !ok || useDefaultCmpOpForIn(datumTuple) {
 						break
 					}
 					op, err = colexec.GetInProjectionOperator(
@@ -2517,8 +2517,16 @@ func appendOneType(typs []*types.T, t *types.T) []*types.T {
 	return newTyps
 }
 
-func tupleContainsTuples(tuple *tree.DTuple) bool {
-	for _, typ := range tuple.ResolvedType().TupleContents() {
+// useDefaultCmpOpForIn returns whether IN and NOT IN projection/selection
+// operators should be handled via the default operators. This is the case when
+// we have an empty tuple or the tuple contains other tuples (these cases
+// require special null-handling logic).
+func useDefaultCmpOpForIn(tuple *tree.DTuple) bool {
+	tupleContents := tuple.ResolvedType().TupleContents()
+	if len(tupleContents) == 0 {
+		return true
+	}
+	for _, typ := range tupleContents {
 		if typ.Family() == types.TupleFamily {
 			return true
 		}

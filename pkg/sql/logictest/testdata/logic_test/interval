@@ -423,6 +423,11 @@ INSERT INTO intervals VALUES
   (2, '1 day 04:06:08.123'),
   (3, '2 years 11 mons -2 days +03:25:45.678')
 
+query T
+SELECT '-2 years 11 months 1 day 01:02:03'::interval
+----
+-1 years -1 mons +1 day 01:02:03
+
 statement ok
 create table interval_parsing ( pk INT PRIMARY KEY, i TEXT )
 
@@ -507,6 +512,11 @@ statement ok
 SET intervalstyle = 'iso_8601'
 
 query T
+SELECT '-2 years 11 months 1 day 01:02:03'::interval
+----
+P-1Y-1M1DT1H2M3S
+
+query T
 SELECT i FROM intervals ORDER BY pk
 ----
 P-2Y-11M1DT4H5M6.123S
@@ -554,6 +564,11 @@ SELECT i, i::INTERVAL FROM interval_parsing ORDER BY pk
 
 statement ok
 SET intervalstyle = 'sql_standard'
+
+query T
+SELECT '-2 years 11 months 1 day 01:02:03'::interval
+----
+-2-11 -1 -1:02:03
 
 query T
 SELECT i FROM intervals ORDER BY pk

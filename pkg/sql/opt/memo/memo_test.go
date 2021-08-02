@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -220,6 +222,18 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData.IntervalStyleEnabled = true
 	stale()
 	evalCtx.SessionData.IntervalStyleEnabled = false
+	notStale()
+
+	// Stale DateStyle.
+	evalCtx.SessionData.DataConversionConfig.DateStyle = pgdate.DateStyle{Order: pgdate.Order_YMD}
+	stale()
+	evalCtx.SessionData.DataConversionConfig.DateStyle = pgdate.DefaultDateStyle()
+	notStale()
+
+	// Stale IntervalStyle.
+	evalCtx.SessionData.DataConversionConfig.IntervalStyle = duration.IntervalStyle_ISO_8601
+	stale()
+	evalCtx.SessionData.DataConversionConfig.IntervalStyle = duration.IntervalStyle_POSTGRES
 	notStale()
 
 	// Stale prefer lookup joins for FKs.

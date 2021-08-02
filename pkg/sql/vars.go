@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 )
 
@@ -253,24 +254,25 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DATESTYLE
 	`datestyle`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			s = strings.ToLower(s)
-			parts := strings.Split(s, ",")
-			isOnlyISO := len(parts) == 1 && strings.TrimSpace(parts[0]) == "iso"
-			isISOMDY := len(parts) == 2 && strings.TrimSpace(parts[0]) == "iso" && strings.TrimSpace(parts[1]) == "mdy"
-			isMDYISO := len(parts) == 2 && strings.TrimSpace(parts[0]) == "mdy" && strings.TrimSpace(parts[1]) == "iso"
-			if !(isOnlyISO || isISOMDY || isMDYISO) {
-				err := newVarValueError("DateStyle", s, "ISO", "ISO, MDY", "MDY, ISO")
-				err = errors.WithDetail(err, compatErrMsg)
-				return err
+			ds, err := pgdate.ParseDateStyle(s, m.data.GetDateStyle())
+			if err != nil {
+				return newVarValueError("DateStyle", s, pgdate.AllowedDateStyles()...)
 			}
+			if ds.Style != pgdate.Style_ISO {
+				return unimplemented.NewWithIssue(41773, "only ISO style is supported")
+			}
+			m.SetDateStyle(ds)
 			return nil
 		},
-		Get:           func(evalCtx *extendedEvalContext) string { return "ISO, MDY" },
-		GlobalDefault: func(_ *settings.Values) string { return "ISO, MDY" },
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.GetDateStyle().SQLString()
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return dateStyleEnumMap[dateStyle.Get(sv)]
+		},
 	},
 
 	// Controls the subsequent parsing of a "naked" INT type.

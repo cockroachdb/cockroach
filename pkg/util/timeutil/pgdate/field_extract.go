@@ -60,7 +60,7 @@ type fieldExtract struct {
 	// location is set to the timezone specified by the timestamp (if any).
 	location *time.Location
 
-	mode ParseMode
+	dateStyle DateStyle
 	// The fields that must be present to succeed.
 	required fieldSet
 	// Stores a reference to one of the sentinel values, to be returned
@@ -379,7 +379,7 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 			chunk.v /= 100
 			return fe.SetChunk(fieldYear, chunk)
 
-		case chunk.magnitude >= 3 || fe.mode == ParseModeYMD:
+		case chunk.magnitude >= 3 || fe.dateStyle.Order == Order_YMD:
 			// Example: "YYYY MM DD"
 			//           ^^^^
 			// Example: "YYY MM DD"
@@ -387,7 +387,7 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 			// Example: "YY MM DD"
 			//           ^^
 			// A three- or four-digit number must be a year.  If we are in a
-			// year-first mode, we'll accept the first chunk and possibly
+			// year-first order, we'll accept the first chunk and possibly
 			// adjust a two-digit value later on.  This means that
 			// 99 would get adjusted to 1999, but 0099 would not.
 			if chunk.separator == '-' {
@@ -396,15 +396,15 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 				fe.tweakYear = true
 			}
 			return fe.SetChunk(fieldYear, chunk)
-		case fe.mode == ParseModeDMY:
+		case fe.dateStyle.Order == Order_DMY:
 			// Example: "DD MM YY"
 			//           ^^
-			// The first value is ambiguous, so we rely on the mode.
+			// The first value is ambiguous, so we rely on the order.
 			return fe.SetChunk(fieldDay, chunk)
-		case fe.mode == ParseModeMDY:
+		case fe.dateStyle.Order == Order_MDY:
 			// Example: "MM DD YY"
 			//           ^^
-			// The first value is ambiguous, so we rely on the mode.
+			// The first value is ambiguous, so we rely on the order.
 			return fe.SetChunk(fieldMonth, chunk)
 		}
 
@@ -421,19 +421,19 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 		//           ^^^^
 		// Example: "YYY Month DD"
 		//           ^^^
-		// Example: "MM DD YY"; only in MDY mode.
+		// Example: "MM DD YY"; only in MDY order.
 		//              ^^
-		// Example: "Month DD YY"; only in MDY mode
+		// Example: "Month DD YY"; only in MDY order
 		//                 ^^
-		// Example: "DD Month YY"; only in DMY mode
+		// Example: "DD Month YY"; only in DMY order
 		//           ^^
-		// WARNING: "YY Month DD"; OK in YMD mode. In other modes, we'll
+		// WARNING: "YY Month DD"; OK in YMD order. In other orders, we'll
 		//           ^^            wind up storing the year in the day.
 		//                         This is fixed up below.
 		// The month has been set, but we don't yet have a year. If we know
 		// that the month was set in the first phase, we'll look for an
-		// obvious year or defer to the parsing mode.
-		if textMonth && (chunk.magnitude >= 3 || fe.mode == ParseModeYMD) {
+		// obvious year or defer to the parsing order.
+		if textMonth && (chunk.magnitude >= 3 || fe.dateStyle.Order == Order_YMD) {
 			if chunk.magnitude <= 2 {
 				fe.tweakYear = true
 			}

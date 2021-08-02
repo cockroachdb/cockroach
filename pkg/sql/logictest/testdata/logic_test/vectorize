@@ -1271,3 +1271,12 @@ SELECT b FROM t66706@u WHERE NOT (b = 'foo')
 ----
 bar
 bar
+
+# Regression test for ignoring the escaping in the LIKE pattern (#68040).
+statement ok
+CREATE TABLE t68040 (c) AS SELECT 'string with \ backslash'
+
+query T
+SELECT c FROM t68040 WHERE c LIKE '%\\%'
+----
+string with \ backslash

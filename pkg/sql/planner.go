@@ -340,6 +340,8 @@ func newInternalPlanner(
 	p.semaCtx.SearchPath = sd.SearchPath
 	p.semaCtx.IntervalStyleEnabled = sd.IntervalStyleEnabled
 	p.semaCtx.TypeResolver = p
+	p.semaCtx.DateStyle = sd.GetDateStyle()
+	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
 
 	plannerMon := mon.NewMonitor(fmt.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
