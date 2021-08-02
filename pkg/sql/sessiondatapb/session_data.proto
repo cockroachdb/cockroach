@@ -64,6 +64,9 @@ message SessionData {
   // IntervalStyleEnabled allows the setting of IntervalStyle to different
   // values.
   bool interval_style_enabled = 13;
+  // DateStyleEnabled allows the setting of DateStyle to different
+  // values.
+  bool date_style_enabled = 14;
 }
 
 // DataConversionConfig contains the parameters that influence the output
