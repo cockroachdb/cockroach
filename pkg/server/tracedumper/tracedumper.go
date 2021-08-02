@@ -111,9 +111,10 @@ func (t *TraceDumper) Dump(
 // NewTraceDumper returns a TraceDumper.
 //
 // dir is the directory in which dumps are stored.
-func NewTraceDumper(ctx context.Context, dir string, st *cluster.Settings) (*TraceDumper, error) {
+func NewTraceDumper(ctx context.Context, dir string, st *cluster.Settings) *TraceDumper {
 	if dir == "" {
-		return nil, errors.New("directory to store dumps could not be determined")
+		log.Warning(ctx, "not collecting trace dumps since dump directory is not specified")
+		return nil
 	}
 
 	log.Infof(ctx, "writing job trace dumps to %s", dir)
@@ -122,5 +123,5 @@ func NewTraceDumper(ctx context.Context, dir string, st *cluster.Settings) (*Tra
 		currentTime: timeutil.Now,
 		store:       dumpstore.NewStore(dir, totalDumpSizeLimit, st),
 	}
-	return td, nil
+	return td
 }
