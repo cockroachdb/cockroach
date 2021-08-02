@@ -123,13 +123,13 @@ type pebbleMVCCScanner struct {
 	start, end roachpb.Key
 	// Timestamp with which MVCCScan/MVCCGet was called.
 	ts hlc.Timestamp
-	// Max number of keys to return. Note that targetBytes below is implemented
-	// by mutating maxKeys. (In particular, one must not assume that if maxKeys
-	// is zero initially it will always be zero).
+	// Max number of keys to return.
 	maxKeys int64
 	// Stop adding keys once p.result.bytes matches or exceeds this threshold,
 	// if nonzero.
 	targetBytes int64
+	// If true, return an empty result if the first result exceeds targetBytes.
+	targetBytesAllowEmpty bool
 	// Stop adding intents and abort scan once maxIntents threshold is reached.
 	// This limit is only applicable to consistent scans since they return
 	// intents as an error.
@@ -250,10 +250,9 @@ func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, roachpb.Re
 
 	if p.resumeReason != 0 && (p.curExcluded || p.advanceKey()) {
 		var resumeSpan *roachpb.Span
+		// curKey was not added to results, so it needs to be included in the
+		// resume span.
 		if p.reverse {
-			// curKey was not added to results, so it needs to be included in the
-			// resume span.
-			//
 			// NB: this is equivalent to:
 			//  append(roachpb.Key(nil), p.curKey.Key...).Next()
 			// but with half the allocations.
@@ -474,6 +473,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve
 		// it.
+		//
 		// p.intents is a pebble.Batch which grows its byte slice capacity in
 		// chunks to amortize allocations. The memMonitor is under-counting here
 		// by only accounting for the key and value bytes.
@@ -704,7 +704,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(ctx context.Context, rawKey []byte, va
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
-		if p.targetBytes > 0 && p.results.count > 0 &&
+		if p.targetBytes > 0 && (p.targetBytesAllowEmpty || p.results.count > 0) &&
 			p.results.bytes+int64(p.results.sizeOf(len(rawKey), len(val))) > p.targetBytes {
 			p.curExcluded = true
 			p.resumeReason = roachpb.RESUME_BYTE_LIMIT

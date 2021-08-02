@@ -88,6 +88,10 @@ func evalExport(
 	h := cArgs.Header
 	reply := resp.(*roachpb.ExportResponse)
 
+	if h.TargetBytesAllowEmpty {
+		return result.Result{}, errors.AssertionFailedf("TargetBytesAllowEmpty not supported for ExportRequest")
+	}
+
 	ctx, evalExportSpan := tracing.ChildSpan(ctx, fmt.Sprintf("Export [%s,%s)", args.Key, args.EndKey))
 	defer evalExportSpan.Finish()
 

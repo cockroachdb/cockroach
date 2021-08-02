@@ -2128,13 +2128,17 @@ message Header {
   // If set to a non-zero value, sets a target (in bytes) for how large the
   // response may grow. This is only supported for (forward and reverse) scans
   // and limits the number of rows scanned (and returned). The target will be
-  // overshot when the first result is larger than the target. A suitable resume
-  // span will be returned.
+  // overshot when the first result is larger than the target, unless
+  // target_bytes_allow_empty is set. A suitable resume span will be returned.
   //
   // The semantics around overlapping requests, unordered requests, and
   // supported requests from max_span_request_keys apply to the target_bytes
   // option as well.
   int64 target_bytes = 15;
+  // If true, allow returning an empty result when the first result exceeds
+  // target_bytes. This makes target_bytes a hard limit that will never
+  // be exceeded. Not supported for ExportRequest.
+  bool target_bytes_allow_empty = 22;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTxnRequest. Currently set conservatively: a request might be
