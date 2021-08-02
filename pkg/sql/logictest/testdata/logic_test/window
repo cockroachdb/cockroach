@@ -3961,3 +3961,22 @@ SELECT first_value(x) OVER (ORDER BY x RANGE BETWEEN CURRENT ROW AND '0 YEAR'::I
 
 statement ok
 RESET vectorize;
+
+# Regression test for incorrect results for min and max when the window frame
+# shrinks.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (a INT);
+INSERT INTO t VALUES (1), (-1), (NULL);
+SET vectorize=off;
+
+query III rowsort
+SELECT a, max(a) OVER w, min(a) OVER w FROM t
+WINDOW w AS (ORDER BY a DESC RANGE BETWEEN 10 PRECEDING AND UNBOUNDED FOLLOWING);
+----
+1     1     -1
+-1    1     -1
+NULL  NULL  NULL
+
+statement ok
+RESET vectorize;
