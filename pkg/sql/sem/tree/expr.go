@@ -1626,7 +1626,11 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		if _, ok := node.Expr.(*StrVal); ok {
 			ctx.FormatTypeReference(node.Type)
 			ctx.WriteByte(' ')
-			ctx.FormatNode(node.Expr)
+			if ctx.HasFlags(FmtHideConstants) {
+				ctx.WriteString("'_'")
+			} else {
+				ctx.FormatNode(node.Expr)
+			}
 			break
 		}
 		fallthrough
