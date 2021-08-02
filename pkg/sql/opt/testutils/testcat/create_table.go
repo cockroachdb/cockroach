@@ -125,6 +125,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			cat.Hidden,
 			&uniqueRowIDString, /* defaultExpr */
 			nil,                /* computedExpr */
+			false,              /* disallowExplicitWrite */
 		)
 		tab.Columns = append(tab.Columns, rowid)
 	}
@@ -150,8 +151,9 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		colinfo.MVCCTimestampColumnType,
 		true, /* nullable */
 		cat.Hidden,
-		nil, /* defaultExpr */
-		nil, /* computedExpr */
+		nil,   /* defaultExpr */
+		nil,   /* computedExpr */
+		false, /* disallowExplicitWrite */
 	)
 	tab.Columns = append(tab.Columns, mvcc)
 
@@ -166,8 +168,9 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		types.Oid,
 		true, /* nullable */
 		cat.Hidden,
-		nil, /* defaultExpr */
-		nil, /* computedExpr */
+		nil,   /* defaultExpr */
+		nil,   /* computedExpr */
+		false, /* disallowExplicitWrite */
 	)
 	tab.Columns = append(tab.Columns, tableoid)
 
@@ -298,8 +301,9 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 		types.Int,
 		false, /* nullable */
 		cat.Hidden,
-		nil, /* defaultExpr */
-		nil, /* computedExpr */
+		nil,   /* defaultExpr */
+		nil,   /* computedExpr */
+		false, /* disallowExplicitWrite */
 	)
 
 	tab.Columns = []cat.Column{pk}
@@ -356,6 +360,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 		cat.Hidden,
 		&uniqueRowIDString, /* defaultExpr */
 		nil,                /* computedExpr */
+		false,              /* disallowExplicitWrite */
 	)
 
 	tab.Columns = append(tab.Columns, rowid)
@@ -568,6 +573,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	kind := cat.Ordinary
 	visibility := cat.Visible
 
+	disallowExplicitWrite := def.DisallowExplicitWrite
 	// Look for name suffixes indicating this is a special column.
 	if n, ok := extractInaccessibleColumn(def); ok {
 		name = n
@@ -615,6 +621,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			visibility,
 			defaultExpr,
 			computedExpr,
+			disallowExplicitWrite,
 		)
 	}
 	tt.Columns = append(tt.Columns, col)

@@ -614,6 +614,9 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		// Type check the input column against the corresponding table column.
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
 
+		// Check the input column's permission for explicit write
+		checkColumnPermissionForExplicitWrite(mb.tab.Column(ord))
+
 		// Assign name of input column.
 		inCol.name = scopeColName(tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias))
 
