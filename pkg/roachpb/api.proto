@@ -1930,8 +1930,10 @@ message Header {
   // minimum timestamp bound, the batch timestamp will be set to the resolved
   // timestamp, the batch will be evaluated, and the negotiated timestamp will
   // be recorded in the BatchResponse Header. If the resolved timestamp is
-  // below the minimum timestamp bound, the request will be rejected with a
-  // MinTimestampBoundUnsatisfiableError.
+  // below the minimum timestamp bound, the request will either be rejected
+  // with a MinTimestampBoundUnsatisfiableError or will be redirected to the
+  // leaseholder and permitted to block on conflicting transactions, depending
+  // on the value of min_timestamp_bound_strict.
   //
   // Transactional requests are not allowed to set this field. As a result,
   // the request can not span ranges and will be rejected by the DistSender
@@ -1939,6 +1941,18 @@ message Header {
   //
   // Requests with a non-zero timestamp are not allowed to set this field.
   util.hlc.Timestamp min_timestamp_bound = 22 [(gogoproto.nullable) = false];
+  // min_timestamp_bound_strict specifies whether a bounded staleness read
+  // whose min_timestamp_bound cannot be satisfied by the first replica it
+  // visits (subject to routing_policy) without blocking should be rejected
+  // with a MinTimestampBoundUnsatisfiableError or will be redirected to the
+  // leaseholder and permitted to block on conflicting transactions. If the
+  // flag is true, blocking is never permitted and users should be prepared
+  // to handle MinTimestampBoundUnsatisfiableErrors. If the flag is false,
+  // blocking is permitted and MinTimestampBoundUnsatisfiableErrors will never
+  // be returned.
+  //
+  // Only meaningful if min_timestamp_bound is set.
+  bool min_timestamp_bound_strict = 23;
   // replica specifies the destination of the request.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
   // range_id specifies the ID of the Raft consensus group which the key
