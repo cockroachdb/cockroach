@@ -87,6 +87,10 @@ func evalExport(
 	h := cArgs.Header
 	reply := resp.(*roachpb.ExportResponse)
 
+	if h.StrictTargetBytes {
+		return result.Result{}, errors.Errorf("StrictTargetBytes not supported for ExportRequest")
+	}
+
 	ctx, evalExportSpan := tracing.ChildSpan(ctx, fmt.Sprintf("Export [%s,%s)", args.Key, args.EndKey))
 	defer evalExportSpan.Finish()
 

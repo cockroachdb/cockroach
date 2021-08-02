@@ -12,89 +12,82 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestGetResumeSpan tests that a GetRequest with a target bytes or max span
-// request keys is properly handled by returning no result with a resume span.
+// request keys is properly handled.
 func TestGetResumeSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	resp := &roachpb.GetResponse{}
 	key := roachpb.Key([]byte{'a'})
 	value := roachpb.MakeValueFromString("woohoo")
+	resp := roachpb.GetResponse{}
 
 	db := storage.NewDefaultInMemForTesting()
 	defer db.Close()
 
+	// This has a size of 11 bytes.
 	_, err := Put(ctx, db, CommandArgs{
 		EvalCtx: (&MockEvalCtx{}).EvalContext(),
 		Header:  roachpb.Header{TargetBytes: -1},
-		Args: &roachpb.PutRequest{
+		Args: roachpb.PutRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key: key,
 			},
 			Value: value,
 		},
-	}, resp)
-	assert.NoError(t, err)
+	}, &resp)
+	require.NoError(t, err)
 
-	// Case 1: Check that a negative TargetBytes causes a resume span.
-	_, err = Get(ctx, db, CommandArgs{
-		EvalCtx: (&MockEvalCtx{}).EvalContext(),
-		Header:  roachpb.Header{TargetBytes: -1},
-		Args: &roachpb.GetRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key: key,
-			},
-		},
-	}, resp)
-	assert.NoError(t, err)
+	testCases := []struct {
+		maxKeys      int64
+		targetBytes  int64
+		strict       bool
+		expectResume bool
+	}{
+		{targetBytes: -1, expectResume: true},
+		{maxKeys: -1, expectResume: true},
+		{maxKeys: 10, targetBytes: 100, expectResume: false},
+		{targetBytes: 1, expectResume: false},
+		{targetBytes: 1, strict: true, expectResume: true},
+		{targetBytes: 11, strict: true, expectResume: false},
+		{targetBytes: 12, strict: true, expectResume: false},
+	}
+	for _, tc := range testCases {
+		name := fmt.Sprintf("maxKeys=%d targetBytes=%d strict=%t", tc.maxKeys, tc.targetBytes, tc.strict)
+		t.Run(name, func(t *testing.T) {
+			resp := roachpb.GetResponse{}
+			_, err := Get(ctx, db, CommandArgs{
+				EvalCtx: (&MockEvalCtx{}).EvalContext(),
+				Header: roachpb.Header{
+					MaxSpanRequestKeys: tc.maxKeys,
+					TargetBytes:        tc.targetBytes,
+					StrictTargetBytes:  tc.strict,
+				},
+				Args: roachpb.GetRequest{
+					RequestHeader: roachpb.RequestHeader{Key: key},
+				},
+			}, &resp)
+			require.NoError(t, err)
 
-	assert.NotNil(t, resp.ResumeSpan)
-	assert.Equal(t, key, resp.ResumeSpan.Key)
-	assert.Nil(t, resp.ResumeSpan.EndKey)
-	assert.Nil(t, resp.Value)
-
-	resp = &roachpb.GetResponse{}
-	// Case 2: Check that a negative MaxSpanRequestKeys causes a resume span.
-	_, err = Get(ctx, db, CommandArgs{
-		EvalCtx: (&MockEvalCtx{}).EvalContext(),
-		Header:  roachpb.Header{MaxSpanRequestKeys: -1},
-		Args: &roachpb.GetRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key: key,
-			},
-		},
-	}, resp)
-	assert.NoError(t, err)
-
-	assert.NotNil(t, resp.ResumeSpan)
-	assert.Equal(t, key, resp.ResumeSpan.Key)
-	assert.Nil(t, resp.ResumeSpan.EndKey)
-	assert.Nil(t, resp.Value)
-
-	resp = &roachpb.GetResponse{}
-	// Case 3: Check that a positive limit causes a normal return.
-	_, err = Get(ctx, db, CommandArgs{
-		EvalCtx: (&MockEvalCtx{}).EvalContext(),
-		Header:  roachpb.Header{MaxSpanRequestKeys: 10, TargetBytes: 100},
-		Args: &roachpb.GetRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key: key,
-			},
-		},
-	}, resp)
-	assert.NoError(t, err)
-
-	assert.Nil(t, resp.ResumeSpan)
-	assert.NotNil(t, resp.Value)
-	assert.Equal(t, resp.Value.RawBytes, value.RawBytes)
-	assert.Equal(t, 1, int(resp.NumKeys))
-	assert.Equal(t, len(resp.Value.RawBytes), int(resp.NumBytes))
+			if tc.expectResume {
+				require.NotNil(t, resp.ResumeSpan)
+				require.Equal(t, &roachpb.Span{Key: key}, resp.ResumeSpan)
+				require.Nil(t, resp.Value)
+			} else {
+				require.Nil(t, resp.ResumeSpan)
+				require.NotNil(t, resp.Value)
+				require.Equal(t, resp.Value.RawBytes, value.RawBytes)
+				require.EqualValues(t, 1, resp.NumKeys)
+				require.Len(t, resp.Value.RawBytes, int(resp.NumBytes))
+			}
+		})
+	}
 }

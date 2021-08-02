@@ -2060,14 +2060,19 @@ message Header {
   int64 max_span_request_keys = 8;
   // If set to a non-zero value, sets a target (in bytes) for how large the
   // response may grow. This is only supported for (forward and reverse) scans
-  // and limits the number of rows scanned (and returned). The target will be
-  // overshot; in particular, at least one row will always be returned (assuming
-  // one exists). A suitable resume span will be returned.
+  // and limits the number of rows scanned (and returned). If
+  // strict_target_bytes is false, the target will be overshot; in particular,
+  // at least one row will always be returned (assuming one exists). A suitable
+  // resume span will be returned.
   //
   // The semantics around overlapping requests, unordered requests, and
   // supported requests from max_span_request_keys apply to the target_bytes
   // option as well.
   int64 target_bytes = 15;
+  // If true, the response will never contain more than target_bytes. In
+  // particular, it will return an empty response if the first result exceeds
+  // the target. Not supported for ExportRequest.
+  bool strict_target_bytes = 22;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTxnRequest. Currently set conservatively: a request might be

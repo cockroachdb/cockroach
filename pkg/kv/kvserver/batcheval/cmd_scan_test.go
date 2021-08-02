@@ -37,20 +37,30 @@ func TestScanReverseScanTargetBytes(t *testing.T) {
 		tbLots = 100000 // de facto ditto tbNone
 	)
 	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
-		for _, tb := range []int64{tbNone, tbOne, tbLots} {
-			t.Run(fmt.Sprintf("targetBytes=%d", tb), func(t *testing.T) {
-				for _, sf := range []roachpb.ScanFormat{roachpb.KEY_VALUES, roachpb.BATCH_RESPONSE} {
-					t.Run(fmt.Sprintf("format=%s", sf), func(t *testing.T) {
-						testScanReverseScanInner(t, tb, sf, reverse, tb != tbOne)
-					})
-				}
-			})
-		}
+		testutils.RunTrueAndFalse(t, "strict", func(t *testing.T, strict bool) {
+			for _, tb := range []int64{tbNone, tbOne, tbLots} {
+				t.Run(fmt.Sprintf("targetBytes=%d", tb), func(t *testing.T) {
+					expN := 2
+					if tb == tbOne {
+						if strict {
+							expN = 0
+						} else {
+							expN = 1
+						}
+					}
+					for _, sf := range []roachpb.ScanFormat{roachpb.KEY_VALUES, roachpb.BATCH_RESPONSE} {
+						t.Run(fmt.Sprintf("format=%s", sf), func(t *testing.T) {
+							testScanReverseScanInner(t, tb, sf, reverse, strict, expN)
+						})
+					}
+				})
+			}
+		})
 	})
 }
 
 func testScanReverseScanInner(
-	t *testing.T, tb int64, sf roachpb.ScanFormat, reverse bool, expBoth bool,
+	t *testing.T, tb int64, sf roachpb.ScanFormat, reverse bool, strict bool, expN int,
 ) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -82,8 +92,9 @@ func testScanReverseScanInner(
 	cArgs := CommandArgs{
 		Args: req,
 		Header: roachpb.Header{
-			Timestamp:   ts,
-			TargetBytes: tb,
+			Timestamp:         ts,
+			TargetBytes:       tb,
+			StrictTargetBytes: strict,
 		},
 		EvalCtx: (&MockEvalCtx{ClusterSettings: cluster.MakeClusterSettings()}).EvalContext(),
 	}
@@ -95,13 +106,13 @@ func testScanReverseScanInner(
 		_, err := ReverseScan(ctx, eng, cArgs, resp)
 		require.NoError(t, err)
 	}
-	expN := 1
-	if expBoth {
-		expN = 2
-	}
 
 	require.EqualValues(t, expN, resp.Header().NumKeys)
-	require.NotZero(t, resp.Header().NumBytes)
+	if strict && tb > 0 {
+		require.LessOrEqual(t, resp.Header().NumBytes, tb)
+	} else {
+		require.NotZero(t, resp.Header().NumBytes)
+	}
 
 	var rows []roachpb.KeyValue
 	if !reverse {

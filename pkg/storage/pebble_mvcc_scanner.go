@@ -29,6 +29,9 @@ import (
 
 const (
 	maxItersBeforeSeek = 10
+
+	// Key value lengths take up 8 bytes (2 x Uint32).
+	kvLenSize = 8
 )
 
 // Struct to store MVCCScan / MVCCGet in the same binary format as that
@@ -50,8 +53,6 @@ func (p *pebbleResults) clear() {
 func (p *pebbleResults) put(
 	ctx context.Context, key []byte, value []byte, memAccount *mon.BoundAccount,
 ) error {
-	// Key value lengths take up 8 bytes (2 x Uint32).
-	const kvLenSize = 8
 	const minSize = 16
 	const maxSize = 128 << 20 // 128 MB
 
@@ -61,7 +62,8 @@ func (p *pebbleResults) put(
 	// cost of the allocation over multiple put calls. If this (key, value) pair
 	// needs capacity greater than maxSize, we allocate exactly the size needed.
 	lenKey := len(key)
-	lenToAdd := kvLenSize + lenKey + len(value)
+	lenValue := len(value)
+	lenToAdd := p.sizeOf(lenKey, lenValue)
 	if len(p.repr)+lenToAdd > cap(p.repr) {
 		newSize := 2 * cap(p.repr)
 		if newSize == 0 || newSize > maxSize {
@@ -88,13 +90,17 @@ func (p *pebbleResults) put(
 
 	startIdx := len(p.repr)
 	p.repr = p.repr[:startIdx+lenToAdd]
-	binary.LittleEndian.PutUint32(p.repr[startIdx:], uint32(len(value)))
+	binary.LittleEndian.PutUint32(p.repr[startIdx:], uint32(lenValue))
 	binary.LittleEndian.PutUint32(p.repr[startIdx+4:], uint32(lenKey))
 	copy(p.repr[startIdx+kvLenSize:], key)
 	copy(p.repr[startIdx+kvLenSize+lenKey:], value)
 	p.count++
 	p.bytes += int64(lenToAdd)
 	return nil
+}
+
+func (p *pebbleResults) sizeOf(lenKey, lenValue int) int {
+	return kvLenSize + lenKey + lenValue
 }
 
 func (p *pebbleResults) finish() [][]byte {
@@ -117,13 +123,13 @@ type pebbleMVCCScanner struct {
 	start, end roachpb.Key
 	// Timestamp with which MVCCScan/MVCCGet was called.
 	ts hlc.Timestamp
-	// Max number of keys to return. Note that targetBytes below is implemented
-	// by mutating maxKeys. (In particular, one must not assume that if maxKeys
-	// is zero initially it will always be zero).
+	// Max number of keys to return.
 	maxKeys int64
 	// Stop adding keys once p.result.bytes matches or exceeds this threshold,
 	// if nonzero.
 	targetBytes int64
+	// If true, never exceed targetBytes (even if that returns an empty result).
+	strictTargetBytes bool
 	// Stop adding intents and abort scan once maxIntents threshold is reached.
 	// This limit is only applicable to consistent scans since they return
 	// intents as an error.
@@ -154,6 +160,7 @@ type pebbleMVCCScanner struct {
 	curUnsafeKey MVCCKey
 	curRawKey    []byte
 	curValue     []byte
+	curExcluded  bool
 	results      pebbleResults
 	intents      pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
@@ -187,6 +194,7 @@ func (p *pebbleMVCCScanner) release() {
 // fields not set by the calling method.
 func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, localUncertaintyLimit hlc.Timestamp) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
+	p.curExcluded = false
 
 	if txn != nil {
 		p.txn = txn
@@ -214,8 +222,9 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	p.maybeFailOnMoreRecent()
 }
 
-// scan iterates until maxKeys records are in results, or the underlying
-// iterator is exhausted, or an error is encountered.
+// scan iterates until the requested amount of results have been fetched (given
+// by e.g. maxKeys or targetBytes), or the underlying iterator is exhausted, or
+// an error is encountered.
 func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, error) {
 	p.isGet = false
 	if p.reverse {
@@ -233,11 +242,10 @@ func (p *pebbleMVCCScanner) scan(ctx context.Context) (*roachpb.Span, error) {
 	p.maybeFailOnMoreRecent()
 
 	var resume *roachpb.Span
-	if p.maxKeys > 0 && p.results.count == p.maxKeys && p.advanceKey() {
+	if p.curExcluded || p.advanceKey() {
+		// curKey was not added to results, so it needs to be included in the
+		// resume span.
 		if p.reverse {
-			// curKey was not added to results, so it needs to be included in the
-			// resume span.
-			//
 			// NB: this is equivalent to:
 			//  append(roachpb.Key(nil), p.curKey.Key...).Next()
 			// but with half the allocations.
@@ -457,18 +465,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve
 		// it.
-		if p.maxKeys > 0 && p.results.count == p.maxKeys {
-			// TODO(oleg): This check seems broken and it should never
-			// reach this point with results count reaching max. We
-			// always get out of getAndAdvance either by addAndAdvance or
-			// by seekVersion which is also calling addAndAdvance.
-			//
-			// We've already retrieved the desired number of keys and now
-			// we're adding the resume key. We don't want to add the
-			// intent here as the intents should only correspond to KVs
-			// that lie before the resume key.
-			return false
-		}
+		//
 		// p.intents is a pebble.Batch which grows its byte slice capacity in
 		// chunks to amortize allocations. The memMonitor is under-counting here
 		// by only accounting for the key and value bytes.
@@ -698,17 +695,17 @@ func (p *pebbleMVCCScanner) addAndAdvance(ctx context.Context, rawKey []byte, va
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
+		if p.strictTargetBytes && p.targetBytes > 0 &&
+			p.results.bytes+int64(p.results.sizeOf(len(rawKey), len(val))) > p.targetBytes {
+			p.curExcluded = true
+			return false
+		}
 		if err := p.results.put(ctx, rawKey, val, p.memAccount); err != nil {
 			p.err = errors.Wrapf(err, "scan with start key %s", p.start)
 			return false
 		}
 		if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
-			// When the target bytes are met or exceeded, stop producing more
-			// keys. We implement this by reducing maxKeys to the current
-			// number of keys.
-			//
-			// TODO(bilal): see if this can be implemented more transparently.
-			p.maxKeys = p.results.count
+			return false
 		}
 		if p.maxKeys > 0 && p.results.count == p.maxKeys {
 			return false

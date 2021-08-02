@@ -1321,9 +1321,13 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			if mightStopEarly {
 				var replyResults int64
 				var replyBytes int64
+				var hasResumeSpan bool
 				for _, r := range resp.reply.Responses {
 					replyResults += r.GetInner().Header().NumKeys
 					replyBytes += r.GetInner().Header().NumBytes
+					if span := r.GetInner().Header().ResumeSpan; span != nil && span.Valid() {
+						hasResumeSpan = true
+					}
 				}
 				// Update MaxSpanRequestKeys, if applicable. Note that ba might be
 				// passed recursively to further divideAndSendBatchToRanges() calls.
@@ -1342,7 +1346,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				}
 				if ba.TargetBytes > 0 {
 					ba.TargetBytes -= replyBytes
-					if ba.TargetBytes <= 0 {
+					if ba.TargetBytes <= 0 || (ba.StrictTargetBytes && hasResumeSpan) {
 						couldHaveSkippedResponses = true
 						resumeReason = roachpb.RESUME_KEY_LIMIT
 						return
