@@ -14,5 +14,5 @@ import { PlanView } from "./planView";
 import { logicalPlan } from "./planView.fixtures";
 
 storiesOf("PlanView", module).add("default", () => (
-  <PlanView title="Logical Plan" plan={logicalPlan} />
+  <PlanView title="Explain Plan" plan={logicalPlan} />
 ));

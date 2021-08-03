@@ -467,8 +467,9 @@ export class StatementDetails extends React.Component<
     const regions = unique(
       stats.nodes.map(node => nodeRegions[node.toString()]),
     ).sort();
-    const logicalPlan =
+    const explainPlan =
       stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
+    const explainGlobalProps = { distribution: distSQL, vectorized: vec };
     const duration = (v: number) => Duration(v * 1e9);
     const hasDiagnosticReports = diagnosticsReports.length > 0;
     const lastExec = moment(stats.last_exec_timestamp.seconds.low * 1e3).format(
@@ -692,9 +693,13 @@ export class StatementDetails extends React.Component<
             onSortingChange={this.props.onSortingChange}
           />
         </TabPane>
-        <TabPane tab="Logical Plan" key="logical-plan">
+        <TabPane tab="Explain Plan" key="explain-plan">
           <SummaryCard>
-            <PlanView title="Logical Plan" plan={logicalPlan} />
+            <PlanView
+              title="Explain Plan"
+              plan={explainPlan}
+              globalProperties={explainGlobalProps}
+            />
           </SummaryCard>
         </TabPane>
         <TabPane
