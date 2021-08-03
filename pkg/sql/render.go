@@ -117,7 +117,7 @@ func (p *planner) getTimestamp(
 		if err != nil {
 			return hlc.MaxTimestamp, false, err
 		}
-		if asOf != *p.EvalContext().AsOfSystemTime {
+		if asOf != *p.EvalContext().AsOfSystemTime && !asOf.BoundedStaleness {
 			return hlc.MaxTimestamp, false,
 				unimplemented.NewWithIssue(35712,
 					"cannot specify AS OF SYSTEM TIME with different timestamps")

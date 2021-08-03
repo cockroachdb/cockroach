@@ -116,7 +116,7 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			return nil, catalog.ErrDescriptorNotFound
 		}
 
-		desc, shouldReadFromStore, err := tc.leased.getByID(ctx, txn, id, setTxnDeadline)
+		desc, shouldReadFromStore, err := tc.leased.getByID(ctx, newWrappedTxn(txn, tc.PrevMinTimestampBound), id, setTxnDeadline)
 		if err != nil {
 			return nil, err
 		}
@@ -207,11 +207,15 @@ func (tc *Collection) getByName(
 	}
 
 	desc, shouldReadFromStore, err := tc.leased.getByName(
-		ctx, txn, parentID, parentSchemaID, name)
+		ctx, newWrappedTxn(txn, tc.PrevMinTimestampBound), parentID, parentSchemaID, name)
 	if err != nil {
 		return false, nil, err
 	}
 	if shouldReadFromStore {
+		// !!! HACK !!! schema not found. haven't fixed the kv fallback yet.
+		if tc.PrevMinTimestampBound != nil {
+			return false, nil, nil
+		}
 		return tc.kv.getByName(
 			ctx, txn, parentID, parentSchemaID, name, mutable,
 		)

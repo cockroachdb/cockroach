@@ -2158,9 +2158,14 @@ func isCommit(stmt tree.Statement) bool {
 	return ok
 }
 
+var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
+	"retriable MinTimestampBoundUnsatisfiableError",
+)
+
 func errIsRetriable(err error) bool {
 	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) ||
-		errors.HasType(err, (*scbuild.ConcurrentSchemaChangeError)(nil))
+		errors.HasType(err, (*scbuild.ConcurrentSchemaChangeError)(nil)) ||
+		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError)
 }
 
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
@@ -2169,7 +2174,6 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 	retriable := errIsRetriable(err)
 	if retriable {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
-
 		if canAutoRetry {
 			ex.extraTxnState.autoRetryReason = err
 		}
@@ -2347,7 +2351,6 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.TxnImplicit = ex.implicitTxn()
 	evalCtx.StmtTimestamp = stmtTS
 	evalCtx.TxnTimestamp = ex.state.sqlTimestamp
-	evalCtx.AsOfSystemTime = nil
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil
@@ -2357,6 +2360,18 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = &ex.extraTxnState.schemaChangerState
+
+	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
+	if err := ex.extraTxnState.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
+		fmt.Printf("resetting, setting min ts %#v\n", minTSErr.MinTimestampBound)
+		p := minTSErr.MinTimestampBound.Prev()
+		ex.extraTxnState.descCollection.PrevMinTimestampBound = &p
+		evalCtx.PrevMinTimestampBound = &p
+	} else {
+		ex.extraTxnState.descCollection.PrevMinTimestampBound = nil
+		evalCtx.PrevMinTimestampBound = nil
+		evalCtx.AsOfSystemTime = nil
+	}
 }
 
 // getTransactionState retrieves a text representation of the given state.
