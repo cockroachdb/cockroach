@@ -20,6 +20,7 @@ import RequireLogin from "src/views/login/requireLogin";
 import { clusterIdSelector, clusterNameSelector, singleVersionSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import LoginIndicator from "src/views/app/components/loginIndicator";
+import FeedbackSurveyLink from "src/views/app/components/feedbackSurveyLink/feedbackSurveyLink";
 import {
   GlobalNavigation,
   CockroachLabsLockupIcon,
@@ -76,6 +77,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
                 <CockroachLabsLockupIcon height={26} />
               </Left>
               <Right>
+                <FeedbackSurveyLink />
                 <LoginIndicator />
               </Right>
             </GlobalNavigation>
