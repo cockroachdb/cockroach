@@ -3179,6 +3179,57 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"parse_time": makeBuiltin(
+		defProps(),
+		stringOverload1(
+			func(ctx *tree.EvalContext, s string) (tree.Datum, error) {
+				t, dependsOnContext, err := tree.ParseDTime(
+					tree.NewParseTimeContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
+					s,
+					time.Microsecond,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if dependsOnContext {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"relative times are not supported",
+					)
+				}
+				return t, nil
+			},
+			types.Time,
+			"Parses a time assuming the date (if any) is in MDY format.",
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"string", types.String}, {"timestyle", types.String}},
+			ReturnType: tree.FixedReturnType(types.Time),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arg := string(tree.MustBeDString(args[0]))
+				dateStyle := string(tree.MustBeDString(args[1]))
+				parseCtx, err := parseContextFromDateStyle(ctx, dateStyle)
+				if err != nil {
+					return nil, err
+				}
+				t, dependsOnContext, err := tree.ParseDTime(parseCtx, arg, time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				if dependsOnContext {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"relative times are not supported",
+					)
+				}
+				return t, nil
+			},
+			Info:       "Parses a time assuming the date (if any) is in format specified by DateStyle.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"parse_interval": makeBuiltin(
 		defProps(),
 		stringOverload1(
@@ -3206,6 +3257,57 @@ may increase either contention or retry errors, or both.`,
 				return tree.ParseDInterval(duration.IntervalStyle(styleVal), s)
 			},
 			Info:       "Convert a string to an interval using the given IntervalStyle.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"parse_timetz": makeBuiltin(
+		defProps(),
+		stringOverload1(
+			func(ctx *tree.EvalContext, s string) (tree.Datum, error) {
+				t, dependsOnContext, err := tree.ParseDTimeTZ(
+					tree.NewParseTimeContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
+					s,
+					time.Microsecond,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if dependsOnContext {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"relative times are not supported",
+					)
+				}
+				return t, nil
+			},
+			types.TimeTZ,
+			"Parses a timetz assuming the date (if any) is in MDY format.",
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"string", types.String}, {"timestyle", types.String}},
+			ReturnType: tree.FixedReturnType(types.TimeTZ),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arg := string(tree.MustBeDString(args[0]))
+				dateStyle := string(tree.MustBeDString(args[1]))
+				parseCtx, err := parseContextFromDateStyle(ctx, dateStyle)
+				if err != nil {
+					return nil, err
+				}
+				t, dependsOnContext, err := tree.ParseDTimeTZ(parseCtx, arg, time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				if dependsOnContext {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"relative times are not supported",
+					)
+				}
+				return t, nil
+			},
+			Info:       "Parses a timetz assuming the date (if any) is in format specified by DateStyle.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
