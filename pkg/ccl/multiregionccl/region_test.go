@@ -576,6 +576,7 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 // - Validate that the database and its tables look as expected.
 func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 68341, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "times out under race")
