@@ -644,6 +644,16 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 	if ba.CanForwardReadTimestamp {
 		s.Printf(", [can-forward-ts]")
 	}
+	if cfg := ba.BoundedStaleness; cfg != nil {
+		s.Printf(", [bounded-staleness, min_ts_bound: %s", cfg.MinTimestampBound)
+		if cfg.MinTimestampBoundStrict {
+			s.Printf(", min_ts_bound_strict")
+		}
+		if !cfg.MaxTimestampBound.IsEmpty() {
+			s.Printf(", max_ts_bound: %s", cfg.MaxTimestampBound)
+		}
+		s.Printf("]")
+	}
 }
 
 func (ba BatchRequest) String() string {
