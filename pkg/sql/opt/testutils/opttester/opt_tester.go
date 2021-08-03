@@ -1842,6 +1842,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 			cat.Visible,
 			nil, /* defaultExpr */
 			nil, /* computedExpr */
+			0,   /* generatedAsIDType */
 		)
 
 		// Make sure we have estimated stats for this column.
