@@ -350,11 +350,10 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	}
 	// We cannot guarantee a fixed value, so we use an allowed range.
 	//
-	// In an ideal world the reported usage is very close to 2 x memoryLimit
-	// (the monitor for the in-memory sorter reports slightly below and the
-	// monitors for the external sorter report slightly above memoryLimit
-	// usage).
-	expMin := memoryLimit * 5 / 4
+	// In an ideal world the reported usage is somewhere in [memoryLimit;
+	// 2 x memoryLimit) range (the monitor for both the in-memory sorter and for
+	// the external sorter report slight below memoryLimit usage).
+	expMin := memoryLimit
 	expMax := memoryLimit * 9 / 4
 	require.GreaterOrEqualf(t, totalMaxMemUsage, expMin, "minimum memory bound not satisfied: "+
 		"actual %d, expected min %d", totalMaxMemUsage, expMin)
