@@ -52,7 +52,6 @@ message DefaultPrivilegesForRole {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
   map<uint32, PrivilegeDescriptor> default_privileges_per_object = 2 [(gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject"];
-
 }
 
 // DefaultPrivilegeDescriptor describes the set of default privileges for a
@@ -61,4 +60,6 @@ message DefaultPrivilegesForRole {
 message DefaultPrivilegeDescriptor {
   option (gogoproto.equal) = true;
   repeated DefaultPrivilegesForRole default_privileges = 1 [(gogoproto.nullable) = false];
+  map<uint32, PrivilegeDescriptor> default_privileges_for_all_roles = 2 [(gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject"];
 }

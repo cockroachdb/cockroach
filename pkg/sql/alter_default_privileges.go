@@ -66,7 +66,7 @@ func (p *planner) alterDefaultPrivileges(
 
 func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	var targetRoles []security.SQLUsername
-	if len(n.n.Roles) == 0 {
+	if !n.n.ForAllRoles && len(n.n.Roles) == 0 {
 		targetRoles = append(targetRoles, params.p.User())
 	} else {
 		for _, role := range n.n.Roles {
@@ -104,18 +104,24 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		return err
 	}
 
-	// You can change default privileges only for objects that will be created
-	// by yourself or by roles that you are a member of.
-	for _, targetRole := range targetRoles {
-		if targetRole != params.p.User() {
-			memberOf, err := params.p.MemberOfWithAdminOption(params.ctx, params.p.User())
-			if err != nil {
-				return err
-			}
+	if n.n.ForAllRoles {
+		if err := params.p.RequireAdminRole(params.ctx, "ALTER DEFAULT PRIVILEGES"); err != nil {
+			return err
+		}
+	} else {
+		// You can change default privileges only for objects that will be created
+		// by yourself or by roles that you are a member of.
+		for _, targetRole := range targetRoles {
+			if targetRole != params.p.User() {
+				memberOf, err := params.p.MemberOfWithAdminOption(params.ctx, params.p.User())
+				if err != nil {
+					return err
+				}
 
-			if _, found := memberOf[targetRole]; !found {
-				return pgerror.Newf(pgcode.InsufficientPrivilege,
-					"must be a member of %s", targetRole.Normalized())
+				if _, found := memberOf[targetRole]; !found {
+					return pgerror.Newf(pgcode.InsufficientPrivilege,
+						"must be a member of %s", targetRole.Normalized())
+				}
 			}
 		}
 	}
@@ -133,14 +139,28 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 
 	defaultPrivs := n.dbDesc.GetDefaultPrivileges()
 
-	for _, targetRole := range targetRoles {
+	var roles []descpb.AlterDefaultPrivilegesRole
+	if n.n.ForAllRoles {
+		roles = append(roles, descpb.AlterDefaultPrivilegesRole{
+			ForAllRoles: true,
+		})
+	} else {
+		roles = make([]descpb.AlterDefaultPrivilegesRole, len(targetRoles))
+		for i, role := range targetRoles {
+			roles[i] = descpb.AlterDefaultPrivilegesRole{
+				Role: role,
+			}
+		}
+	}
+
+	for _, role := range roles {
 		if n.n.IsGrant {
 			defaultPrivs.GrantDefaultPrivileges(
-				targetRole, privileges, grantees, objectType,
+				role, privileges, grantees, objectType,
 			)
 		} else {
 			defaultPrivs.RevokeDefaultPrivileges(
-				targetRole, privileges, grantees, objectType,
+				role, privileges, grantees, objectType,
 			)
 		}
 	}
