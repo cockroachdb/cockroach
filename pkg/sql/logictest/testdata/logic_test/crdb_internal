@@ -814,7 +814,6 @@ database_name  grantee   privilege_type
 other_db       admin     ALL
 other_db       root      ALL
 other_db       testuser  DROP
-other_db       testuser  SELECT
 
 statement ok
 SET DATABASE = test
@@ -832,7 +831,6 @@ defaultdb      root      ALL
 other_db       admin     ALL
 other_db       root      ALL
 other_db       testuser  DROP
-other_db       testuser  SELECT
 postgres       admin     ALL
 postgres       root      ALL
 system         admin     GRANT
@@ -856,7 +854,6 @@ defaultdb      root      ALL
 other_db       admin     ALL
 other_db       root      ALL
 other_db       testuser  DROP
-other_db       testuser  SELECT
 postgres       admin     ALL
 postgres       root      ALL
 system         admin     GRANT
