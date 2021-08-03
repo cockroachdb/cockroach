@@ -14,11 +14,13 @@
 @include font-face("SourceSansPro-SemiBold");
 @include font-face("SFMono-Semibold");
 @include font-face("RobotoMono-Medium");
+@include font-face("RobotoMono-Regular");
 
 $font-family--base: SourceSansPro-Regular;
 $font-family--bold: SourceSansPro-Bold;
 $font-family--semi-bold: SourceSansPro-SemiBold;
 $font-family--monospace: RobotoMono-Medium;
+$font-family--mono-regular: RobotoMono-Regular;
 $font-family--sf-mono: SFMono-Semibold;
 
 $font-weight--extra-bold: 900;
