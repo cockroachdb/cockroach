@@ -1230,7 +1230,7 @@ func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
 	}
 
-	if *b.evalCtx.AsOfSystemTime != asOf {
+	if *b.evalCtx.AsOfSystemTime != asOf && !asOf.BoundedStaleness {
 		panic(unimplementedWithIssueDetailf(35712, "",
 			"cannot specify AS OF SYSTEM TIME with different timestamps"))
 	}

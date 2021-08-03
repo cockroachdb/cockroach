@@ -13,6 +13,7 @@ package descs
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -53,6 +54,29 @@ func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
 type leasedDescriptors struct {
 	lm    leaseManager
 	cache nstree.Map
+}
+
+type wrappedTxn struct {
+	txn                   *kv.Txn
+	prevMinTimestampBound *hlc.Timestamp
+}
+
+func newWrappedTxn(txn *kv.Txn, prevMinTimestampBound *hlc.Timestamp) deadlineHolder {
+	return &wrappedTxn{txn: txn, prevMinTimestampBound: prevMinTimestampBound}
+}
+
+func (w *wrappedTxn) ReadTimestamp() hlc.Timestamp {
+	if w.prevMinTimestampBound != nil {
+		return *w.prevMinTimestampBound
+	}
+	return w.txn.ReadTimestamp()
+}
+
+func (w *wrappedTxn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) error {
+	if w.prevMinTimestampBound != nil {
+		return nil
+	}
+	return w.txn.UpdateDeadline(ctx, deadline)
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
