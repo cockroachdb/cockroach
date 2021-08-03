@@ -14,28 +14,14 @@ import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import styles from "./planView.module.scss";
+import { Fraction } from "../statementDetails";
 
 type IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 type IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;
 
 const cx = classNames.bind(styles);
 
-const WARNING_ICON = (
-  <svg
-    className={cx("warning-icon")}
-    width="17"
-    height="17"
-    viewBox="0 0 24 22"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path
-      fillRule="evenodd"
-      clipRule="evenodd"
-      d="M15.7798 2.18656L23.4186 15.5005C25.0821 18.4005 22.9761 21.9972 19.6387 21.9972H4.3619C1.02395 21.9972 -1.08272 18.4009 0.582041 15.5005M0.582041 15.5005L8.21987 2.18656C9.89189 -0.728869 14.1077 -0.728837 15.7798 2.18656M13.4002 7.07075C13.4002 6.47901 12.863 5.99932 12.2002 5.99932C11.5375 5.99932 11.0002 6.47901 11.0002 7.07075V13.4993C11.0002 14.0911 11.5375 14.5707 12.2002 14.5707C12.863 14.5707 13.4002 14.0911 13.4002 13.4993V7.07075ZM13.5717 17.2774C13.5717 16.5709 12.996 15.9981 12.286 15.9981C11.5759 15.9981 11.0002 16.5709 11.0002 17.2774V17.2902C11.0002 17.9967 11.5759 18.5695 12.286 18.5695C12.996 18.5695 13.5717 17.9967 13.5717 17.2902V17.2774Z"
-    />
-  </svg>
-);
-const NODE_ICON = <span className={cx("node-icon")}>&#x26AC;</span>;
+const NODE_ICON = <span className={cx("node-icon")}>&#8226;</span>;
 
 // FlatPlanNodeAttribute contains a flattened representation of IAttr[].
 export interface FlatPlanNodeAttribute {
@@ -46,16 +32,10 @@ export interface FlatPlanNodeAttribute {
 
 // FlatPlanNode contains details for the flattened representation of
 // IExplainTreePlanNode.
-//
-// Note that the function that flattens IExplainTreePlanNode returns
-// an array of FlatPlanNode (not a single FlatPlanNode). E.g.:
-//
-//  flattenTree(IExplainTreePlanNode) => FlatPlanNode[]
-//
 export interface FlatPlanNode {
   name: string;
   attrs: FlatPlanNodeAttribute[];
-  children: FlatPlanNode[][];
+  children: FlatPlanNode[];
 }
 
 function warnForAttribute(attr: IAttr): boolean {
@@ -124,55 +104,28 @@ export function flattenAttributes(
 
 /* ************************* HELPER FUNCTIONS ************************* */
 
-// flattenTree takes a tree representation of a logical plan
-// (IExplainTreePlanNode) and flattens any single child paths.
-// For example, if an IExplainTreePlanNode was visually displayed
-// as:
-//
-//    root
-//       |
-//       |___ single_grandparent
-//                  |
-//                  |____ parent_1
-//                  |         |
-//                  |         |______ single_child
-//                  |
-//                  |____ parent_2
-//
-// Then its FlatPlanNode[] equivalent would be visually displayed
-// as:
-//
-//    root
-//       |
-//    single_grandparent
-//       |
-//       |____ parent_1
-//       |          |
-//       |     single_child
-//       |
-//       |____ parent_2
-//
-export function flattenTree(treePlan: IExplainTreePlanNode): FlatPlanNode[] {
-  const flattenedPlan: FlatPlanNode[] = [
-    {
-      name: treePlan.name,
-      attrs: flattenAttributes(treePlan.attrs),
-      children: [],
-    },
-  ];
+function fractionToString(fraction: Fraction): string {
+  // The fraction denominator is the number of times the statement
+  // has been executed.
 
-  if (treePlan.children.length === 0) {
-    return flattenedPlan;
+  if (Number.isNaN(fraction.numerator)) {
+    return "unknown";
   }
-  const flattenedChildren = treePlan.children.map(child => flattenTree(child));
-  if (treePlan.children.length === 1) {
-    // Append single child into same list that contains parent node.
-    flattenedPlan.push(...flattenedChildren[0]);
-  } else {
-    // Only add to children property if there are multiple children.
-    flattenedPlan[0].children = flattenedChildren;
-  }
-  return flattenedPlan;
+
+  return (fraction.numerator > 0).toString();
+}
+
+// flattenTreeAttributes takes a tree representation of a logical
+// plan (IExplainTreePlanNode) and flattens the attributes in each node.
+// (see flattenAttributes)
+export function flattenTreeAttributes(
+  treePlan: IExplainTreePlanNode,
+): FlatPlanNode {
+  return {
+    name: treePlan.name,
+    attrs: flattenAttributes(treePlan.attrs),
+    children: treePlan.children.map(child => flattenTreeAttributes(child)),
+  };
 }
 
 // shouldHideNode looks at node name to determine whether we should hide
@@ -188,6 +141,28 @@ function shouldHideNode(nodeName: string): boolean {
 
 /* ************************* PLAN NODES ************************* */
 
+function NodeAttribute({
+  attribute,
+}: {
+  attribute: FlatPlanNodeAttribute;
+}): React.ReactElement {
+  if (!attribute.values.length || !attribute.values[0].length) return null;
+
+  const attrClassName = attribute.warn ? "warn" : "";
+
+  const values =
+    attribute.values.length > 1
+      ? `[${attribute.values.join(", ")}]`
+      : attribute.values[0];
+
+  return (
+    <div key={attribute.key}>
+      <span className={cx("nodeAttributeKey")}>{attribute.key}:</span>{" "}
+      <span className={cx(attrClassName)}>{values}</span>
+    </div>
+  );
+}
+
 interface PlanNodeDetailProps {
   node: FlatPlanNode;
 }
@@ -197,38 +172,14 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
     super(props);
   }
 
-  renderAttributeValues(values: string[]) {
-    if (!values.length || !values[0].length) {
-      return;
-    }
-    if (values.length === 1) {
-      return <span> = {values[0]}</span>;
-    }
-    return <span> = [{values.join(", ")}]</span>;
-  }
-
-  renderAttribute(attr: FlatPlanNodeAttribute) {
-    let attrClassName = "";
-    let keyClassName = "nodeAttributeKey";
-    if (attr.warn) {
-      attrClassName = "warn";
-      keyClassName = "";
-    }
-    return (
-      <div key={attr.key} className={cx(attrClassName)}>
-        {attr.warn && WARNING_ICON}
-        <span className={cx(keyClassName)}>{attr.key}</span>
-        {this.renderAttributeValues(attr.values)}
-      </div>
-    );
-  }
-
   renderNodeDetails() {
     const node = this.props.node;
     if (node.attrs && node.attrs.length > 0) {
       return (
         <div className={cx("nodeAttributes")}>
-          {node.attrs.map(attr => this.renderAttribute(attr))}
+          {node.attrs.map((attr, idx) => (
+            <NodeAttribute key={idx} attribute={attr} />
+          ))}
         </div>
       );
     }
@@ -238,49 +189,42 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
     const node = this.props.node;
     return (
       <div className={cx("nodeDetails")}>
-        {NODE_ICON} <b>{_.capitalize(node.name)}</b>
+        {NODE_ICON} <b>{node.name}</b>
         {this.renderNodeDetails()}
       </div>
     );
   }
 }
 
-function PlanNodes(props: { nodes: FlatPlanNode[] }): React.ReactElement<{}> {
-  const nodes = props.nodes;
+type PlanNodeProps = { node: FlatPlanNode };
+
+function PlanNode({ node }: PlanNodeProps): React.ReactElement<{}> {
+  if (shouldHideNode(node.name)) {
+    return null;
+  }
+
   return (
     <ul>
-      {nodes.map((node, idx) => {
-        return <PlanNode node={node} key={idx} />;
-      })}
+      <PlanNodeDetails node={node} />
+      {node.children &&
+        node.children.map((child, idx) => (
+          <li key={idx}>
+            <PlanNode node={child} />
+          </li>
+        ))}
     </ul>
   );
 }
 
-interface PlanNodeProps {
-  node: FlatPlanNode;
-}
-
-class PlanNode extends React.Component<PlanNodeProps> {
-  render() {
-    if (shouldHideNode(this.props.node.name)) {
-      return null;
-    }
-    const node = this.props.node;
-    return (
-      <li>
-        <PlanNodeDetails node={node} />
-        {node.children &&
-          node.children.map((child, idx) => (
-            <PlanNodes nodes={child} key={idx} />
-          ))}
-      </li>
-    );
-  }
-}
+export type GlobalPropertiesType = {
+  distribution: Fraction;
+  vectorized: Fraction;
+};
 
 interface PlanViewProps {
   title: string;
   plan: IExplainTreePlanNode;
+  globalProperties: GlobalPropertiesType;
 }
 
 interface PlanViewState {
@@ -289,7 +233,7 @@ interface PlanViewState {
 }
 
 export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
-  private innerContainer: React.RefObject<HTMLDivElement>;
+  private readonly innerContainer: React.RefObject<HTMLDivElement>;
   constructor(props: PlanViewProps) {
     super(props);
     this.state = {
@@ -316,7 +260,21 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
   }
 
   render() {
-    const flattenedPlanNodes = flattenTree(this.props.plan);
+    const { plan, globalProperties } = this.props;
+    const flattenedPlanNodeRoot = flattenTreeAttributes(plan);
+
+    const globalAttrs: FlatPlanNodeAttribute[] = [
+      {
+        key: "distribution",
+        values: [fractionToString(globalProperties.distribution)],
+        warn: false, // distribution is never warned
+      },
+      {
+        key: "vectorized",
+        values: [fractionToString(globalProperties.vectorized)],
+        warn: false, // vectorized is never warned
+      },
+    ];
 
     const lastSampledHelpText = (
       <Fragment>
@@ -357,8 +315,16 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
               style={{ textAlign: "left" }}
             >
               <div className={cx("plan-view-container")}>
-                <div id="plan-view-inner-container" ref={this.innerContainer}>
-                  <PlanNodes nodes={flattenedPlanNodes} />
+                <div
+                  className={cx("plan-view-inner-container")}
+                  ref={this.innerContainer}
+                >
+                  <div className={cx("nodeAttributes", "globalAttributes")}>
+                    {globalAttrs.map((attr, idx) => (
+                      <NodeAttribute key={idx} attribute={attr} />
+                    ))}
+                  </div>
+                  <PlanNode node={flattenedPlanNodeRoot} />
                 </div>
               </div>
             </td>

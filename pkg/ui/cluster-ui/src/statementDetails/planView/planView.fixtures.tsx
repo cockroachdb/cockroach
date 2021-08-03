@@ -9,8 +9,14 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { GlobalPropertiesType } from "./planView";
 
 type IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;
+
+export const globalProperties: GlobalPropertiesType = {
+  distribution: { numerator: 0, denominator: 0 },
+  vectorized: { numerator: 0, denominator: 0 },
+};
 
 export const logicalPlan: IExplainTreePlanNode = {
   name: "root",
