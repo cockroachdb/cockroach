@@ -693,6 +693,7 @@ func newOptTable(
 				visibility,
 				col.ColumnDesc().DefaultExpr,
 				col.ColumnDesc().ComputeExpr,
+				uint8(col.ColumnDesc().GeneratedAsIdType),
 			)
 		} else {
 			// Note: a WriteOnly or DeleteOnly mutation column doesn't require any
@@ -734,6 +735,7 @@ func newOptTable(
 				cat.MaybeHidden(sysCol.IsHidden()),
 				sysCol.ColumnDesc().DefaultExpr,
 				sysCol.ColumnDesc().ComputeExpr,
+				uint8(sysCol.ColumnDesc().GeneratedAsIdType),
 			)
 		}
 	}
@@ -1809,6 +1811,7 @@ func newOptVirtualTable(
 		cat.Hidden, /* hidden */
 		nil,        /* defaultExpr */
 		nil,        /* computedExpr */
+		0, 					/* generatedAsIDType */
 	)
 	for i, d := range desc.PublicColumns() {
 		ot.columns[i+1].Init(
@@ -1821,6 +1824,7 @@ func newOptVirtualTable(
 			cat.MaybeHidden(d.IsHidden()),
 			d.ColumnDesc().DefaultExpr,
 			d.ColumnDesc().ComputeExpr,
+			uint8(d.ColumnDesc().GeneratedAsIdType),
 		)
 	}
 

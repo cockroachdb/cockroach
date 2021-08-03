@@ -187,6 +187,13 @@ func (w column) IsSystemColumn() bool {
 	return w.desc.SystemColumnKind != descpb.SystemColumnKind_NONE
 }
 
+// GetGeneratedAsIdentityType returns how the creation of this column
+// is associated with the GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY
+// token
+func (w column) GetGeneratedAsIdentityType() descpb.GeneratedAsIdentityType{
+	return w.desc.GeneratedAsIdType
+}
+
 // columnCache contains precomputed slices of catalog.Column interfaces.
 type columnCache struct {
 	all        []catalog.Column
