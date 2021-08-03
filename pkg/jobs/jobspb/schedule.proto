@@ -50,6 +50,11 @@ message ScheduleDetails {
 // ExecutionArguments describes data needed to execute scheduled jobs.
 message ExecutionArguments {
   google.protobuf.Any args = 1;
+
+  bytes protected_timestamp_record = 2 [
+   (gogoproto.customname) = "ProtectedTimestampRecord",
+   (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+   ];
 }
 
 // Message representing sql statement to execute.
