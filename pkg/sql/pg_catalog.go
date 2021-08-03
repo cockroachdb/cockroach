@@ -1118,7 +1118,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 		if dbContext.GetDefaultPrivileges() == nil {
 			return nil
 		}
-		for _, defaultPrivs := range dbContext.GetDefaultPrivileges().DefaultPrivileges {
+		for _, defaultPrivs := range dbContext.GetDefaultPrivileges().DefaultPrivilegesPerRole {
 			// Need to consider the case of USAGE for Public as well.
 			for objectType, privs := range defaultPrivs.DefaultPrivilegesPerObject {
 				// Type of object this entry is for:
