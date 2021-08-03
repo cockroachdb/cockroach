@@ -201,6 +201,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 					continue
 				}
 
+				if d.Predicate != nil {
+					return pgerror.New(pgcode.InvalidTableDefinition,
+						"partial unique constraints cannot be added in ALTER TABLE, "+
+							"use CREATE UNIQUE INDEX instead")
+				}
+
 				if d.PrimaryKey {
 					// We only support "adding" a primary key when we are using the
 					// default rowid primary index or if a DROP PRIMARY KEY statement

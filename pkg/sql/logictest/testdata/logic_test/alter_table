@@ -1481,7 +1481,12 @@ ALTER TABLE unique_without_index ADD COLUMN f INT UNIQUE WITHOUT INDEX
 # constraint.
 statement ok
 ALTER TABLE unique_without_index ADD COLUMN f INT;
-ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_f UNIQUE WITHOUT INDEX (f);
+ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_f UNIQUE WITHOUT INDEX (f)
+
+# Partial predicates are allowed for UNIQUE WITHOUT INDEX, but not UNIQUE.
+# TODO(mgartner): This is confusing, and something we should think more about
+# if we ever make UNIQUE WITHOUT INDEX available by default.
+statement ok
 ALTER TABLE unique_without_index ADD CONSTRAINT my_partial_unique_f UNIQUE WITHOUT INDEX (f) WHERE f > 0
 
 # The unique constraint predicate must be valid. It cannot reference
