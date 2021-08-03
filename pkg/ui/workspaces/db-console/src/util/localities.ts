@@ -23,7 +23,7 @@ export function parseLocalityRoute(route: string): LocalityTier[] {
   }
 
   const segments = route.split("/");
-  return segments.map((segment) => {
+  return segments.map(segment => {
     const [key, value] = segment.split("=");
     return { key, value };
   });
@@ -52,7 +52,7 @@ export function getNodeLocalityTiers(node: INodeStatus): LocalityTier[] {
 export function getChildLocalities(locality: LocalityTree): LocalityTree[] {
   const children: LocalityTree[] = [];
 
-  _.values(locality.localities).forEach((tier) => {
+  _.values(locality.localities).forEach(tier => {
     children.push(..._.values(tier));
   });
 
@@ -92,7 +92,7 @@ export function getLeaves(tree: LocalityTree): INodeStatus[] {
   const output: INodeStatus[] = [];
   function recur(curTree: LocalityTree) {
     output.push(...curTree.nodes);
-    _.forEach(curTree.localities, (localityValues) => {
+    _.forEach(curTree.localities, localityValues => {
       _.forEach(localityValues, recur);
     });
   }
@@ -117,7 +117,7 @@ export function getLocalityLabel(path: LocalityTier[]): string {
  */
 export function allNodesHaveLocality(nodes: INodeStatus[]): boolean {
   const nodesWithoutLocality = nodes.filter(
-    (n) => n.desc.locality.tiers.length === 0,
+    n => n.desc.locality.tiers.length === 0,
   );
   return nodesWithoutLocality.length === 0;
 }

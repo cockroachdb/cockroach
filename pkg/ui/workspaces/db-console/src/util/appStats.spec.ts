@@ -57,19 +57,19 @@ describe("addNumericStats", () => {
     const b = emptyStats();
     const ab = emptyStats();
 
-    aData.forEach((v) => {
+    aData.forEach(v => {
       countA++;
       sumA += v;
       record(a, countA, v);
     });
 
-    bData.forEach((v) => {
+    bData.forEach(v => {
       countB++;
       sumB += v;
       record(b, countB, v);
     });
 
-    bData.concat(aData).forEach((v) => {
+    bData.concat(aData).forEach(v => {
       countAB++;
       sumAB += v;
       record(ab, countAB, v);
@@ -406,7 +406,7 @@ describe("combineStatementStats", () => {
         input: ISensitiveInfo[],
         expected: ISensitiveInfo,
       ) {
-        const stats = input.map((sensitiveInfo) => randomStats(sensitiveInfo));
+        const stats = input.map(sensitiveInfo => randomStats(sensitiveInfo));
         const result = combineStatementStats(stats);
         assert.deepEqual(result.sensitive_info, expected);
       }

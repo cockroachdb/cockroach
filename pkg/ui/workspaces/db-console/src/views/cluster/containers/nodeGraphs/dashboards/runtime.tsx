@@ -24,7 +24,7 @@ import {
   storeIDsForNode,
 } from "./dashboardUtils";
 
-export default function (props: GraphDashboardProps) {
+export default function(props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
 
   return [
@@ -89,7 +89,7 @@ export default function (props: GraphDashboardProps) {
            This count should rise and fall based on load.`}
     >
       <Axis label="goroutines">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.runnable.goroutines.per.cpu"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -153,7 +153,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={`Mean clock offset of each node against the rest of the cluster.`}
     >
       <Axis label="offset" units={AxisUnits.Duration}>
-        {_.map(nodeIDs, (nid) => (
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.node.clock-offset.meannanos"

@@ -142,7 +142,7 @@ class MetricsDataProvider extends React.Component<
 > {
   private queriesSelector = createSelector(
     ({ children }: MetricsDataProviderProps) => children,
-    (children) => {
+    children => {
       // MetricsDataProvider should contain only one direct child.
       const child: React.ReactElement<MetricsDataComponentProps> = React.Children.only(
         this.props.children,
@@ -153,7 +153,7 @@ class MetricsDataProvider extends React.Component<
         Metric,
       );
       // Construct a query for each found selector child.
-      return _.map(selectors, (s) => queryFromProps(s.props, child.props));
+      return _.map(selectors, s => queryFromProps(s.props, child.props));
     },
   );
 
@@ -236,7 +236,7 @@ class MetricsDataProvider extends React.Component<
 // timestamps, which can be sent with requests to the server.
 const timeInfoSelector = createSelector(
   (state: AdminUIState) => state.timewindow,
-  (tw) => {
+  tw => {
     if (!_.isObject(tw.currentWindow)) {
       return null;
     }
@@ -256,7 +256,12 @@ const current = () => {
   now = moment(Math.floor(now.valueOf() / 10000) * 10000);
   return {
     start: Long.fromNumber(
-      MilliToNano(now.clone().subtract(30, "s").valueOf()),
+      MilliToNano(
+        now
+          .clone()
+          .subtract(30, "s")
+          .valueOf(),
+      ),
     ),
     end: Long.fromNumber(MilliToNano(now.valueOf())),
     sampleDuration: Long.fromNumber(
