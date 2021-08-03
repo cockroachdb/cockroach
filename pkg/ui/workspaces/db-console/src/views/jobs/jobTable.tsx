@@ -40,33 +40,33 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     name: "description",
     title: "Description",
     className: "cl-table__col-query-text",
-    cell: (job) => <JobDescriptionCell job={job} />,
-    sort: (job) => job.statement || job.description || job.type,
+    cell: job => <JobDescriptionCell job={job} />,
+    sort: job => job.statement || job.description || job.type,
   },
   {
     name: "jobId",
     title: "Job ID",
     titleAlign: "right",
-    cell: (job) => String(job.id),
-    sort: (job) => job.id?.toNumber(),
+    cell: job => String(job.id),
+    sort: job => job.id?.toNumber(),
   },
   {
     name: "users",
     title: "Users",
-    cell: (job) => job.username,
-    sort: (job) => job.username,
+    cell: job => job.username,
+    sort: job => job.username,
   },
   {
     name: "creationTime",
     title: "Creation Time",
-    cell: (job) => TimestampToMoment(job?.created).format(DATE_FORMAT),
-    sort: (job) => TimestampToMoment(job?.created).valueOf(),
+    cell: job => TimestampToMoment(job?.created).format(DATE_FORMAT),
+    sort: job => TimestampToMoment(job?.created).valueOf(),
   },
   {
     name: "status",
     title: "Status",
-    cell: (job) => <JobStatusCell job={job} compact />,
-    sort: (job) => job.fraction_completed,
+    cell: job => <JobStatusCell job={job} compact />,
+    sort: job => job.fraction_completed,
   },
 ];
 
@@ -184,7 +184,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
           sortSetting={this.props.sort}
           onChangeSortSetting={this.props.setSort}
           className="jobs-table"
-          rowClass={(job) => "jobs-table__row--" + job.status}
+          rowClass={job => "jobs-table__row--" + job.status}
           columns={jobsTableColumns}
           renderNoResult={this.renderEmptyState()}
           pagination={pagination}
@@ -202,10 +202,10 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
   private setCurrentPageToOneIfJobsChanged(prevProps: Readonly<JobTableProps>) {
     if (
       !isEqual(
-        map(prevProps.jobs.data.jobs, (j) => {
+        map(prevProps.jobs.data.jobs, j => {
           return j.id;
         }),
-        map(this.props.jobs.data.jobs, (j) => {
+        map(this.props.jobs.data.jobs, j => {
           return j.id;
         }),
       )

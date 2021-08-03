@@ -99,7 +99,11 @@ export default class EncryptionStatus {
     if (active.eq(total)) {
       return 100;
     }
-    return Long.fromInt(100).mul(active).toNumber() / total.toNumber();
+    return (
+      Long.fromInt(100)
+        .mul(active)
+        .toNumber() / total.toNumber()
+    );
   }
 
   renderFileStats(stats: protos.cockroach.server.serverpb.IStoreDetails) {

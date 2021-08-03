@@ -45,22 +45,22 @@ function makeEvent(event: Event) {
   return mount(<EventRow event={event}></EventRow>);
 }
 
-describe("<EventBox>", function () {
+describe("<EventBox>", function() {
   let spy: sinon.SinonSpy;
 
-  beforeEach(function () {
+  beforeEach(function() {
     spy = sinon.spy();
   });
 
-  describe("refresh", function () {
-    it("refreshes events when mounted.", function () {
+  describe("refresh", function() {
+    it("refreshes events when mounted.", function() {
       makeEventBox([], spy);
       assert.isTrue(spy.called);
     });
   });
 
-  describe("attach", function () {
-    it("attaches event data to contained component", function () {
+  describe("attach", function() {
+    it("attaches event data to contained component", function() {
       const eventsResponse = new protos.cockroach.server.serverpb.EventsResponse(
         {
           events: [
@@ -94,9 +94,9 @@ describe("<EventBox>", function () {
   });
 });
 
-describe("<EventRow>", function () {
-  describe("attach", function () {
-    it("correctly renders a known event", function () {
+describe("<EventRow>", function() {
+  describe("attach", function() {
+    it("correctly renders a known event", function() {
       const e = new protos.cockroach.server.serverpb.EventsResponse.Event({
         target_id: Long.fromNumber(1),
         event_type: "create_database",
@@ -112,7 +112,7 @@ describe("<EventRow>", function () {
       assert.isTrue(provider.find(ToolTipWrapper).exists());
     });
 
-    it("correctly renders an unknown event", function () {
+    it("correctly renders an unknown event", function() {
       const e = new protos.cockroach.server.serverpb.EventsResponse.Event({
         target_id: Long.fromNumber(1),
         event_type: "unknown",
@@ -120,16 +120,19 @@ describe("<EventRow>", function () {
       const provider = makeEvent(e);
 
       assert.isTrue(
-        provider.find("div.events__message > span").text().includes("unknown"),
+        provider
+          .find("div.events__message > span")
+          .text()
+          .includes("unknown"),
       );
       assert.isTrue(provider.find(ToolTipWrapper).exists());
     });
   });
 });
 
-describe("getEventInfo", function () {
-  it("covers every currently known event", function () {
-    _.each(allEvents, (eventType) => {
+describe("getEventInfo", function() {
+  it("covers every currently known event", function() {
+    _.each(allEvents, eventType => {
       const event = new protos.cockroach.server.serverpb.EventsResponse.Event({
         event_type: eventType,
       });

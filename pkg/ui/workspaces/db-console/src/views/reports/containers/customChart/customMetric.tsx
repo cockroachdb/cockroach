@@ -25,14 +25,14 @@ const axisUnitsOptions: DropdownOption[] = [
   AxisUnits.Count,
   AxisUnits.Bytes,
   AxisUnits.Duration,
-].map((au) => ({ label: AxisUnits[au], value: au.toString() }));
+].map(au => ({ label: AxisUnits[au], value: au.toString() }));
 
 const downsamplerOptions: DropdownOption[] = [
   TimeSeriesQueryAggregator.AVG,
   TimeSeriesQueryAggregator.MAX,
   TimeSeriesQueryAggregator.MIN,
   TimeSeriesQueryAggregator.SUM,
-].map((agg) => ({
+].map(agg => ({
   label: TimeSeriesQueryAggregator[agg],
   value: agg.toString(),
 }));

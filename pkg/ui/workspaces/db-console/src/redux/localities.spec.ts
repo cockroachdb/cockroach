@@ -34,8 +34,8 @@ function makeStateWithLocalities(localities: LocalityTier[][]) {
   };
 }
 
-describe("selectLocalityTree", function () {
-  it("puts nodes without locality at the top-level", function () {
+describe("selectLocalityTree", function() {
+  it("puts nodes without locality at the top-level", function() {
     const state = makeStateWithLocalities([[]]);
 
     const tree = selectLocalityTree(state);
@@ -46,7 +46,7 @@ describe("selectLocalityTree", function () {
     assert.lengthOf(tree.nodes, 1);
   });
 
-  it("organizes nodes by locality", function () {
+  it("organizes nodes by locality", function() {
     const state = makeStateWithLocalities([
       [{ key: "region", value: "us-east-1" }],
       [{ key: "region", value: "us-east-2" }],

@@ -108,10 +108,10 @@ class DatabaseTablesList extends React.Component<DatabaseListProps> {
           onChange={this.handleOnNavigationListChange}
         />
         <div className="section databases">
-          {user.map((n) => (
+          {user.map(n => (
             <DatabaseSummaryTables name={n} key={n} updateOnLoad={false} />
           ))}
-          {system.map((n) => (
+          {system.map(n => (
             <DatabaseSummaryTables name={n} key={n} updateOnLoad={false} />
           ))}
           <NonTableSummary />
@@ -145,10 +145,10 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps> {
           onChange={this.handleOnNavigationListChange}
         />
         <div className="section databases">
-          {user.map((n) => (
+          {user.map(n => (
             <DatabaseSummaryGrants name={n} key={n} />
           ))}
-          {system.map((n) => (
+          {system.map(n => (
             <DatabaseSummaryGrants name={n} key={n} />
           ))}
         </div>
@@ -175,7 +175,7 @@ export const selectDatabasesByType = createSelector(
   (dbs: string[]) => {
     const [user, system] = _.partition(
       dbs,
-      (db) => systemDatabases.indexOf(db) === -1,
+      db => systemDatabases.indexOf(db) === -1,
     );
     return { user, system };
   },

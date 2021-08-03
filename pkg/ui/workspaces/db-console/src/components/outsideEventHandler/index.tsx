@@ -20,7 +20,9 @@ export interface OutsideEventHandlerProps {
   ignoreClickOnRefs?: React.RefObject<HTMLDivElement>[];
 }
 
-export class OutsideEventHandler extends React.Component<OutsideEventHandlerProps> {
+export class OutsideEventHandler extends React.Component<
+  OutsideEventHandlerProps
+> {
   nodeRef: React.RefObject<HTMLDivElement>;
 
   constructor(props: any) {
@@ -41,7 +43,7 @@ export class OutsideEventHandler extends React.Component<OutsideEventHandlerProp
     const isChildEl =
       this.nodeRef.current && this.nodeRef.current.contains(event.target);
 
-    const isOutsideIgnoredEl = ignoreClickOnRefs.some((outsideIgnoredRef) => {
+    const isOutsideIgnoredEl = ignoreClickOnRefs.some(outsideIgnoredRef => {
       if (!outsideIgnoredRef || !outsideIgnoredRef.current) {
         return false;
       }

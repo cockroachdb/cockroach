@@ -29,11 +29,13 @@ import TitleWithIcon from "../../components/titleWithIcon/titleWithIcon";
 import { refreshDatabaseDetails } from "src/redux/apiReducers";
 import { privileges } from "src/util/docs";
 
-class DatabaseGrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant> {}
+class DatabaseGrantsSortedTable extends SortedTable<
+  protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant
+> {}
 
 const grantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "databases/sort_setting/grants",
-  (s) => s.localSettings,
+  s => s.localSettings,
 );
 
 // DatabaseSummaryGrants displays a summary section describing the grants
@@ -75,16 +77,16 @@ export class DatabaseSummaryGrants extends DatabaseSummaryBase {
                 grants as protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant[]
               }
               sortSetting={sortSetting}
-              onChangeSortSetting={(setting) => this.props.setSort(setting)}
+              onChangeSortSetting={setting => this.props.setSort(setting)}
               columns={[
                 {
                   title: "User",
-                  cell: (grant) => grant.user,
-                  sort: (grant) => grant.user,
+                  cell: grant => grant.user,
+                  sort: grant => grant.user,
                 },
                 {
                   title: "Grants",
-                  cell: (grant) => grant.privileges.join(", "),
+                  cell: grant => grant.privileges.join(", "),
                 },
               ]}
               loading={loading}

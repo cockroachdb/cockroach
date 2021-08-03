@@ -23,18 +23,18 @@ import {
 import styles from "src/views/shared/components/sortabletable/sortabletable.module.styl";
 const cx = classNames.bind(styles);
 
-describe("<DatabaseSummaryGrants>", function () {
-  it("render loading state ", function () {
+describe("<DatabaseSummaryGrants>", function() {
+  it("render loading state ", function() {
     const wrapper = mount(<DatabaseSummaryGrants {...loadingProps} />);
     assert.lengthOf(wrapper.find(`.${cx("table__loading")}`), 1);
   });
 
-  it("render fulfilled state ", function () {
+  it("render fulfilled state ", function() {
     const wrapper = mount(<DatabaseSummaryGrants {...fullfilledProps} />);
     assert.lengthOf(wrapper.find(`.${cx("sort-table__row--body")}`), 4);
   });
 
-  it("render empty state ", function () {
+  it("render empty state ", function() {
     const wrapper = mount(<DatabaseSummaryGrants {...emptyProps} />);
     assert.lengthOf(wrapper.find(`.${cx("table__no-results")}`), 1);
   });

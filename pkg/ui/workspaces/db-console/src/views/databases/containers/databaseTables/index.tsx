@@ -42,7 +42,7 @@ import { Button } from "src/components";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "databases/sort_setting/tables",
-  (s) => s.localSettings,
+  s => s.localSettings,
 );
 
 class DatabaseTableListSortedTable extends SortedTable<TableInfo> {}
@@ -56,14 +56,14 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
     this.state = {
       finishedLoadingTableData:
         props.tableInfos &&
-        props.tableInfos.every((ti) => ti.detailsAndStatsLoaded()),
+        props.tableInfos.every(ti => ti.detailsAndStatsLoaded()),
     };
   }
 
   totalSize() {
     const tableInfos = this.props.tableInfos;
     if (this.state.finishedLoadingTableData) {
-      return _.sumBy(tableInfos, (ti) => ti.physicalSize);
+      return _.sumBy(tableInfos, ti => ti.physicalSize);
     } else {
       return null;
     }
@@ -72,7 +72,7 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
   totalRangeCount() {
     const tableInfos = this.props.tableInfos;
     if (this.state.finishedLoadingTableData) {
-      return _.sumBy(tableInfos, (ti) => ti.rangeCount);
+      return _.sumBy(tableInfos, ti => ti.rangeCount);
     } else {
       return null;
     }
@@ -113,12 +113,12 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
             <DatabaseTableListSortedTable
               data={tableInfos}
               sortSetting={sortSetting}
-              onChangeSortSetting={(setting) => this.props.setSort(setting)}
+              onChangeSortSetting={setting => this.props.setSort(setting)}
               firstCellBordered
               columns={[
                 {
                   title: "Table Name",
-                  cell: (tableInfo) => {
+                  cell: tableInfo => {
                     return (
                       <div className="sort-table__unbounded-column table-name">
                         <Link to={`/database/${dbID}/table/${tableInfo.name}`}>
@@ -127,7 +127,7 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
                       </div>
                     );
                   },
-                  sort: (tableInfo) => tableInfo.name,
+                  sort: tableInfo => tableInfo.name,
                   className: "expand-link", // don't pad the td element to allow the link to expand
                 },
                 {
@@ -136,26 +136,26 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
                       {"Replicated Size"}
                     </ReplicatedSizeTooltip>
                   ),
-                  cell: (tableInfo) =>
+                  cell: tableInfo =>
                     _.isUndefined(tableInfo.physicalSize)
                       ? ""
                       : Bytes(tableInfo.physicalSize),
-                  sort: (tableInfo) => tableInfo.physicalSize,
+                  sort: tableInfo => tableInfo.physicalSize,
                 },
                 {
                   title: "Ranges",
-                  cell: (tableInfo) => tableInfo.rangeCount,
-                  sort: (tableInfo) => tableInfo.rangeCount,
+                  cell: tableInfo => tableInfo.rangeCount,
+                  sort: tableInfo => tableInfo.rangeCount,
                 },
                 {
                   title: "# of Columns",
-                  cell: (tableInfo) => tableInfo.numColumns,
-                  sort: (tableInfo) => tableInfo.numColumns,
+                  cell: tableInfo => tableInfo.numColumns,
+                  sort: tableInfo => tableInfo.numColumns,
                 },
                 {
                   title: "# of Indexes",
-                  cell: (tableInfo) => tableInfo.numIndices,
-                  sort: (tableInfo) => tableInfo.numIndices,
+                  cell: tableInfo => tableInfo.numIndices,
+                  sort: tableInfo => tableInfo.numIndices,
                 },
               ]}
               loading={loading}

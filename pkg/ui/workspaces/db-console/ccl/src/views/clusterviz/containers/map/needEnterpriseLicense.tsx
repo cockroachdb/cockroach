@@ -30,7 +30,9 @@ function Step(props: { num: number; img: string; children: React.ReactNode }) {
   );
 }
 
-export default class NeedEnterpriseLicense extends React.Component<NodeCanvasContainerOwnProps> {
+export default class NeedEnterpriseLicense extends React.Component<
+  NodeCanvasContainerOwnProps
+> {
   render() {
     return (
       <section className="need-license">

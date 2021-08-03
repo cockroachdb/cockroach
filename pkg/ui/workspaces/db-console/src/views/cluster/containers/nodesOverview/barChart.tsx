@@ -44,8 +44,8 @@ export class BytesBarChart extends React.Component<BytesBarChartProps> {
     const svgEnter = svg
       .enter()
       .append("svg")
-      .attr("width", (d) => d.width)
-      .attr("height", (d) => d.height);
+      .attr("width", d => d.width)
+      .attr("height", d => d.height);
 
     svgEnter
       .append("text")

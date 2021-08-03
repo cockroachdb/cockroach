@@ -12,7 +12,7 @@ import React from "react";
 import { Tooltip } from "src/components";
 import { TooltipProps } from "src/components/tooltip/tooltip";
 
-export const TimeSeriesTooltip: React.FC<TooltipProps> = (props) => (
+export const TimeSeriesTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -26,9 +26,9 @@ export const TimeSeriesTooltip: React.FC<TooltipProps> = (props) => (
   </Tooltip>
 );
 
-export const ReplicatedSizeTooltip: React.FC<
-  TooltipProps & { tableName: string }
-> = (props) => (
+export const ReplicatedSizeTooltip: React.FC<TooltipProps & {
+  tableName: string;
+}> = props => (
   <Tooltip
     {...props}
     placement="bottom"

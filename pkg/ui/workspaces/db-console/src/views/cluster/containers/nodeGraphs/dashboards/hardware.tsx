@@ -26,7 +26,7 @@ import { AvailableDiscCapacityGraphTooltip } from "src/views/cluster/containers/
 
 // TODO(vilterp): tooltips
 
-export default function (props: GraphDashboardProps) {
+export default function(props: GraphDashboardProps) {
   const {
     nodeIDs,
     nodesSummary,
@@ -38,7 +38,7 @@ export default function (props: GraphDashboardProps) {
   return [
     <LineGraph title="CPU Percent" sources={nodeSources}>
       <Axis units={AxisUnits.Percentage} label="CPU">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.cpu.combined.percent-normalized"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -54,7 +54,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={<div>Memory in use {tooltipSelection}</div>}
     >
       <Axis units={AxisUnits.Bytes} label="memory usage">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.rss"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -66,7 +66,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="Disk Read MiB/s" sources={nodeSources}>
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.host.disk.read.bytes"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -79,7 +79,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="Disk Write MiB/s" sources={nodeSources}>
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.host.disk.write.bytes"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -92,7 +92,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="Disk Read IOPS" sources={nodeSources}>
       <Axis units={AxisUnits.Count} label="IOPS">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.host.disk.read.count"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -105,7 +105,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="Disk Write IOPS" sources={nodeSources}>
       <Axis units={AxisUnits.Count} label="IOPS">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.host.disk.write.count"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -118,7 +118,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="Disk Ops In Progress" sources={nodeSources}>
       <Axis units={AxisUnits.Count} label="Ops">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.host.disk.iopsinprogress"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -134,7 +134,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={<AvailableDiscCapacityGraphTooltip />}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.store.capacity.available"
             sources={storeIDsForNode(nodesSummary, nid)}
@@ -146,7 +146,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="Network Bytes Received" sources={nodeSources}>
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.host.net.recv.bytes"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -159,7 +159,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="Network Bytes Sent" sources={nodeSources}>
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.host.net.send.bytes"
             title={nodeDisplayName(nodesSummary, nid)}

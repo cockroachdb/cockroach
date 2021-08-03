@@ -229,9 +229,9 @@ function timeoutFetch<
     params.body = toArrayBuffer(encodedRequest);
   }
 
-  return withTimeout(fetch(url, params), timeout).then((res) => {
+  return withTimeout(fetch(url, params), timeout).then(res => {
     if (!res.ok) {
-      return res.arrayBuffer().then((buffer) => {
+      return res.arrayBuffer().then(buffer => {
         let respError;
         try {
           respError = ResponseError.decode(new Uint8Array(buffer));
@@ -243,7 +243,7 @@ function timeoutFetch<
     }
     return res
       .arrayBuffer()
-      .then((buffer) => builder.decode(new Uint8Array(buffer)));
+      .then(buffer => builder.decode(new Uint8Array(buffer)));
   });
 }
 
@@ -318,7 +318,7 @@ export function getUIData(
 ): Promise<GetUIDataResponseMessage> {
   const queryString = _.map(
     req.keys,
-    (key) => "keys=" + encodeURIComponent(key),
+    key => "keys=" + encodeURIComponent(key),
   ).join("&");
   return timeoutFetch(
     serverpb.GetUIDataResponse,

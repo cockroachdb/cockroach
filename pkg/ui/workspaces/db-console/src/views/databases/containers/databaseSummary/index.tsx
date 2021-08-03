@@ -38,7 +38,9 @@ export interface DatabaseSummaryExplicitData {
 interface DatabaseSummaryConnectedData {
   sortSetting: SortSetting;
   tableInfos: TableInfo[];
-  dbResponse: KeyedCachedDataReducerState<protos.cockroach.server.serverpb.DatabaseDetailsResponse>;
+  dbResponse: KeyedCachedDataReducerState<
+    protos.cockroach.server.serverpb.DatabaseDetailsResponse
+  >;
   grants: protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant[];
 }
 
@@ -147,7 +149,7 @@ export function tableInfos(state: AdminUIState, dbName: string) {
   }
   const details = state.cachedData.tableDetails;
   const stats = state.cachedData.tableStats;
-  return _.map(tableNames, (tableName) => {
+  return _.map(tableNames, tableName => {
     const tblId = generateTableID(dbName, tableName);
     const tblDetails = details[tblId] && details[tblId].data;
     const tblStats = stats[tblId] && stats[tblId].data;

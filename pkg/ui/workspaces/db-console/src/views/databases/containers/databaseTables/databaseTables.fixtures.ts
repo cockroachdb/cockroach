@@ -321,7 +321,7 @@ export const dbFullfilledProps: DatabaseSummaryProps = {
       },
       physicalSize: 0,
     },
-  ].map((ti) => ({ ...ti, detailsAndStatsLoaded: () => true })),
+  ].map(ti => ({ ...ti, detailsAndStatsLoaded: () => true })),
   dbResponse: {
     data: {
       data: {
@@ -364,7 +364,7 @@ export const dbFullfilledProps: DatabaseSummaryProps = {
     { user: "admin", privileges: ["SELECT"] },
     { user: "root", privileges: ["GRANT"] },
     { user: "root", privileges: ["SELECT"] },
-  ].map((ti) => ({ ...ti, toJSON: () => ti })),
+  ].map(ti => ({ ...ti, toJSON: () => ti })),
   setSort: noop,
   sortSetting: {
     ascending: true,

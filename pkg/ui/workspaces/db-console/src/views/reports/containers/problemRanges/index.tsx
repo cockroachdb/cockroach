@@ -30,7 +30,9 @@ import { getMatchParamByName } from "src/util/query";
 type NodeProblems$Properties = protos.cockroach.server.serverpb.ProblemRangesResponse.INodeProblems;
 
 interface ProblemRangesOwnProps {
-  problemRanges: CachedDataReducerState<protos.cockroach.server.serverpb.ProblemRangesResponse>;
+  problemRanges: CachedDataReducerState<
+    protos.cockroach.server.serverpb.ProblemRangesResponse
+  >;
   refreshProblemRanges: typeof refreshProblemRanges;
 }
 
@@ -46,11 +48,11 @@ function ProblemRangeList(props: {
   extract: (p: NodeProblems$Properties) => Long[];
 }) {
   const ids = _.chain(props.problems)
-    .filter((problem) => _.isEmpty(problem.error_message))
-    .flatMap((problem) => props.extract(problem))
-    .map((id) => FixLong(id))
+    .filter(problem => _.isEmpty(problem.error_message))
+    .flatMap(problem => props.extract(problem))
+    .map(id => FixLong(id))
     .sort((a, b) => a.compare(b))
-    .map((id) => id.toString())
+    .map(id => id.toString())
     .sortedUniq()
     .value();
   if (_.isEmpty(ids)) {
@@ -60,7 +62,7 @@ function ProblemRangeList(props: {
     <div>
       <h2 className="base-heading">{props.name}</h2>
       <div className="problems-list">
-        {_.map(ids, (id) => {
+        {_.map(ids, id => {
           return (
             <Link
               key={id}
@@ -138,7 +140,7 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     const { data } = problemRanges;
 
     const validIDs = _.keys(
-      _.pickBy(data.problems_by_node_id, (d) => {
+      _.pickBy(data.problems_by_node_id, d => {
         return _.isEmpty(d.error_message);
       }),
     );
@@ -169,37 +171,37 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
         <ProblemRangeList
           name="Unavailable"
           problems={problems}
-          extract={(problem) => problem.unavailable_range_ids}
+          extract={problem => problem.unavailable_range_ids}
         />
         <ProblemRangeList
           name="No Raft Leader"
           problems={problems}
-          extract={(problem) => problem.no_raft_leader_range_ids}
+          extract={problem => problem.no_raft_leader_range_ids}
         />
         <ProblemRangeList
           name="Invalid Lease"
           problems={problems}
-          extract={(problem) => problem.no_lease_range_ids}
+          extract={problem => problem.no_lease_range_ids}
         />
         <ProblemRangeList
           name="Raft Leader but not Lease Holder"
           problems={problems}
-          extract={(problem) => problem.raft_leader_not_lease_holder_range_ids}
+          extract={problem => problem.raft_leader_not_lease_holder_range_ids}
         />
         <ProblemRangeList
           name="Underreplicated (or slow)"
           problems={problems}
-          extract={(problem) => problem.underreplicated_range_ids}
+          extract={problem => problem.underreplicated_range_ids}
         />
         <ProblemRangeList
           name="Overreplicated"
           problems={problems}
-          extract={(problem) => problem.overreplicated_range_ids}
+          extract={problem => problem.overreplicated_range_ids}
         />
         <ProblemRangeList
           name="Quiescent equals ticking"
           problems={problems}
-          extract={(problem) => problem.quiescent_equals_ticking_range_ids}
+          extract={problem => problem.quiescent_equals_ticking_range_ids}
         />
       </div>
     );

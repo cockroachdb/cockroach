@@ -24,7 +24,7 @@ import {
   TransactionRestartsToolTip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
-export default function (props: GraphDashboardProps) {
+export default function(props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
 
   return [
@@ -34,7 +34,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={`The total number of open SQL Sessions ${tooltipSelection}.`}
     >
       <Axis label="connections">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.conns"
@@ -146,7 +146,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={`The total number of full table/index scans ${tooltipSelection}.`}
     >
       <Axis label="full scans">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.full.scan.count"
@@ -163,7 +163,7 @@ export default function (props: GraphDashboardProps) {
       tooltip="The number of flows on each node contributing to currently running distributed SQL statements."
     >
       <Axis label="flows">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.distsql.flows.active"
@@ -179,7 +179,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={`Over the last minute, this node established and authenticated 99% of connections within this time.`}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.conn.latency-p99"
@@ -196,7 +196,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={`Over the last minute, this node established and authenticated 90% of connections within this time.`}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.conn.latency-p90"
@@ -222,7 +222,7 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.service.latency-p99"
@@ -248,7 +248,7 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.service.latency-p90"
@@ -266,7 +266,7 @@ export default function (props: GraphDashboardProps) {
           1 minute period. Values are displayed individually for each node.`}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.exec.latency-p99"
@@ -284,7 +284,7 @@ export default function (props: GraphDashboardProps) {
            1 minute period. Values are displayed individually for each node.`}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.exec.latency-p90"
@@ -391,7 +391,7 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.txn.latency-p99"
@@ -417,7 +417,7 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.txn.latency-p90"
@@ -435,7 +435,7 @@ export default function (props: GraphDashboardProps) {
          compared against the node's --max-sql-memory flag.`}
     >
       <Axis units={AxisUnits.Bytes} label="allocated bytes">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.mem.root.current"

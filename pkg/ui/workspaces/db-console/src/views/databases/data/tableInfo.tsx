@@ -39,7 +39,7 @@ export class TableInfo {
     this.id = details && details.descriptor_id.toNumber();
     this.numColumns = details && details.columns.length;
     this.numIndices =
-      details && _.uniqBy(details.indexes, (idx) => idx.name).length;
+      details && _.uniqBy(details.indexes, idx => idx.name).length;
     this.rangeCount =
       stats && stats.range_count && stats.range_count.toNumber();
     this.createStatement = details && details.create_table_statement;

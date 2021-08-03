@@ -34,12 +34,14 @@ import { Button } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import SqlBox from "src/views/shared/components/sql/box";
 
-class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
+class GrantsSortedTable extends SortedTable<
+  protos.cockroach.server.serverpb.TableDetailsResponse.IGrant
+> {}
 
 const databaseTableGrantsSortSetting = new LocalSetting<
   AdminUIState,
   SortSetting
->("tableDetails/sort_setting/grants", (s) => s.localSettings);
+>("tableDetails/sort_setting/grants", s => s.localSettings);
 
 /**
  * TableMainData are the data properties which should be passed to the TableMain
@@ -174,19 +176,17 @@ export class TableMain extends React.Component<TableMainProps, {}> {
                   <GrantsSortedTable
                     data={tableInfo.grants}
                     sortSetting={grantsSortSetting}
-                    onChangeSortSetting={(setting) =>
-                      this.props.setSort(setting)
-                    }
+                    onChangeSortSetting={setting => this.props.setSort(setting)}
                     columns={[
                       {
                         title: "User",
-                        cell: (grants) => grants.user,
-                        sort: (grants) => grants.user,
+                        cell: grants => grants.user,
+                        sort: grants => grants.user,
                       },
                       {
                         title: "Grants",
-                        cell: (grants) => grants.privileges.join(", "),
-                        sort: (grants) => grants.privileges.join(", "),
+                        cell: grants => grants.privileges.join(", "),
+                        sort: grants => grants.privileges.join(", "),
                       },
                     ]}
                   />

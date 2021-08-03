@@ -23,22 +23,22 @@ import { connectedMount } from "src/test-utils";
 import styles from "src/views/shared/components/sortabletable/sortabletable.module.styl";
 const cx = classNames.bind(styles);
 
-describe("<DatabaseSummaryTables>", function () {
-  it("render loading state ", function () {
+describe("<DatabaseSummaryTables>", function() {
+  it("render loading state ", function() {
     const wrapper = connectedMount(() => (
       <DatabaseSummaryTables {...dbLoadingProps} />
     ));
     assert.lengthOf(wrapper.find(`.${cx("table__loading")}`), 1);
   });
 
-  it("render fulfilled state ", function () {
+  it("render fulfilled state ", function() {
     const wrapper = connectedMount(() => (
       <DatabaseSummaryTables {...dbFullfilledProps} />
     ));
     assert.lengthOf(wrapper.find(`.${cx("sort-table__row--body")}`), 7);
   });
 
-  it("render empty state ", function () {
+  it("render empty state ", function() {
     const wrapper = connectedMount(() => (
       <DatabaseSummaryTables {...dbEmptyProps} />
     ));
