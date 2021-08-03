@@ -666,7 +666,7 @@ SELECT has_schema_privilege('testuser', 'public', 'CREATE'),
        has_schema_privilege('testuser', 'public', 'USAGE'),
        has_schema_privilege('testuser', 'public', 'CREATE, USAGE')
 ----
-false  true  false
+false  false  false
 
 query BBB
 SELECT has_schema_privilege('bar', 'test_schema', 'CREATE'),

@@ -24,6 +24,11 @@ type AlterDefaultPrivileges struct {
 	// run on the current database.
 	Schemas ObjectNamePrefixList
 
+	// Database is only used when converting a granting / revoking incompatible
+	// database privileges to an alter default privileges statement.
+	// If it is not set, the current database is used.
+	Database *Name
+
 	// Only one of Grant or Revoke should be set. IsGrant is used to determine
 	// which one is set.
 	IsGrant bool

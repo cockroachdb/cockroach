@@ -114,23 +114,23 @@ CREATE USER user1
 
 statement ok
 CREATE TABLE foo(x INT);
- GRANT SELECT ON foo TO user3;
- GRANT SELECT ON DATABASE test TO user1
+GRANT SELECT ON foo TO user3;
+GRANT SELECT, CONNECT ON DATABASE test TO user1
 
 statement error cannot drop roles/users user1, user3: grants still exist on test, test.public.foo
 DROP USER IF EXISTS user1,user3
 
 statement error cannot drop roles/users user1, user3: grants still exist on test
 REVOKE SELECT ON foo FROM user3;
-  DROP USER IF EXISTS user1,user3
+DROP USER IF EXISTS user1,user3
 
 statement ok
-REVOKE SELECT ON DATABASE test FROM user1;
-  DROP USER IF EXISTS user1,user3
+REVOKE SELECT, CONNECT ON DATABASE test FROM user1;
+DROP USER IF EXISTS user1,user3
 
 statement ok
 PREPARE du AS DROP USER $1;
- EXECUTE du('user4')
+EXECUTE du('user4')
 
 query TTT colnames
 SHOW USERS
