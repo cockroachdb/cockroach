@@ -59,7 +59,7 @@ message DefaultPrivilegesForRole {
 // The DefaultPrivileges list must be sorted for fast access and user lookups.
 message DefaultPrivilegeDescriptor {
   option (gogoproto.equal) = true;
-  repeated DefaultPrivilegesForRole default_privileges = 1 [(gogoproto.nullable) = false];
+  repeated DefaultPrivilegesForRole default_privileges_per_role = 1 [(gogoproto.nullable) = false];
   map<uint32, PrivilegeDescriptor> default_privileges_for_all_roles = 2 [(gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject"];
 }
