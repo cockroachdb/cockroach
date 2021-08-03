@@ -1032,10 +1032,6 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
-		return err
-	}
-
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
