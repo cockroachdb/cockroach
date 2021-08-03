@@ -2546,9 +2546,17 @@ The output can be used to recreate a database.’</p>
 </span></td></tr>
 <tr><td><a name="parse_interval"></a><code>parse_interval(val: <a href="string.html">string</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Convert a string to an interval assuming the Postgres IntervalStyle.</p>
 </span></td></tr>
+<tr><td><a name="parse_time"></a><code>parse_time(string: <a href="string.html">string</a>, timestyle: <a href="string.html">string</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Parses a time assuming the date (if any) is in format specified by DateStyle.</p>
+</span></td></tr>
+<tr><td><a name="parse_time"></a><code>parse_time(val: <a href="string.html">string</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Parses a time assuming the date (if any) is in MDY format.</p>
+</span></td></tr>
 <tr><td><a name="parse_timestamp"></a><code>parse_timestamp(string: <a href="string.html">string</a>, datestyle: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Convert a string containing an absolute timestamp to the corresponding timestamp assuming dates formatted using the given DateStyle.</p>
 </span></td></tr>
 <tr><td><a name="parse_timestamp"></a><code>parse_timestamp(val: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Convert a string containing an absolute timestamp to the corresponding timestamp assuming dates are in MDY format.</p>
+</span></td></tr>
+<tr><td><a name="parse_timetz"></a><code>parse_timetz(string: <a href="string.html">string</a>, timestyle: <a href="string.html">string</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Parses a timetz assuming the date (if any) is in format specified by DateStyle.</p>
+</span></td></tr>
+<tr><td><a name="parse_timetz"></a><code>parse_timetz(val: <a href="string.html">string</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Parses a timetz assuming the date (if any) is in MDY format.</p>
 </span></td></tr>
 <tr><td><a name="pg_collation_for"></a><code>pg_collation_for(str: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the collation of the argument</p>
 </span></td></tr>

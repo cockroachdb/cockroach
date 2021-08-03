@@ -1939,3 +1939,39 @@ SELECT
   to_char_with_style('2020-01-02 01:02:03'::date, 'DMY')
 ----
 2020-01-02  2020-01-02
+
+statement ok
+CREATE TABLE time_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+INSERT INTO time_datestyle_parse VALUES
+  (1, '2007-09-12 11:30:45.123+06'),
+  (2, '2007-09-12 11:30:45.123+03')
+
+statement error only ISO style is supported
+SELECT parse_time('01-02-2020 01:02:03', 'postgres')
+
+query TTTT
+SELECT
+  parse_time(s),
+  parse_time(s, 'iso,mdy'),
+  parse_time(s, 'iso,dmy'),
+  parse_time(s, 'iso,ymd')
+FROM time_datestyle_parse
+ORDER BY pk
+----
+0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC
+0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC
+
+statement error only ISO style is supported
+SELECT parse_timetz('01-02-2020 01:02:03', 'postgres')
+
+query TTTT
+SELECT
+  parse_timetz(s),
+  parse_timetz(s, 'iso,mdy'),
+  parse_timetz(s, 'iso,dmy'),
+  parse_timetz(s, 'iso,ymd')
+FROM time_datestyle_parse
+ORDER BY pk
+----
+0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600
+0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300
