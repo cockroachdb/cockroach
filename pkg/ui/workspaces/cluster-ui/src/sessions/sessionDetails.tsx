@@ -88,7 +88,7 @@ export const MemoryUsageItem: React.FC<{
   />
 );
 
-export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
+export class SessionDetails extends React.Component<SessionDetailsProps> {
   terminateSessionRef: React.RefObject<TerminateSessionModalRef>;
   terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
   static defaultProps = { uiConfig: { showGatewayNodeLink: true } };

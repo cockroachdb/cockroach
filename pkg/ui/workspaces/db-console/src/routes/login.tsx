@@ -13,7 +13,7 @@ import { Route, Redirect } from "react-router-dom";
 import { Store } from "redux";
 
 import { doLogout, selectLoginState } from "src/redux/login";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import LoginPage from "src/views/login/loginPage";
 
 export const LOGIN_PAGE = "/login";
@@ -35,7 +35,7 @@ export function createLogoutRoute(store: Store<AdminUIState>): JSX.Element {
           return <Redirect to={LOGIN_PAGE} />;
         }
 
-        store.dispatch(doLogout());
+        (store.dispatch as AppDispatch)(doLogout());
       }}
     />
   );

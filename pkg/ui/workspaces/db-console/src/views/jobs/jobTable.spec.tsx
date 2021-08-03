@@ -32,7 +32,7 @@ describe("<JobTable>", () => {
       pageSize: 2,
       isUsedFilter: true,
     };
-    const jobTable = shallow(
+    const jobTable = shallow<JobTable>(
       <JobTable
         jobs={jobTableProps.jobs}
         sort={jobTableProps.sort}
@@ -43,7 +43,9 @@ describe("<JobTable>", () => {
       />,
     );
     assert.equal(jobTable.state().pagination.current, 2);
-    jobTable.setProps({ jobs: { data: { jobs: [{}, {}], toJSON } } });
+    jobTable.setProps({
+      jobs: { data: { jobs: [{}, {}], toJSON }, inFlight: false, valid: true },
+    });
     assert.equal(jobTable.state().pagination.current, 1);
   });
 });

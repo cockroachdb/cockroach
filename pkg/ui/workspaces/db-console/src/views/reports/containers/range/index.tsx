@@ -36,21 +36,32 @@ import RangeInfo from "src/views/reports/containers/range/rangeInfo";
 import LeaseTable from "src/views/reports/containers/range/leaseTable";
 import { getMatchParamByName } from "src/util/query";
 
-interface RangeOwnProps {
-  range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
-  allocator: CachedDataReducerState<protos.cockroach.server.serverpb.AllocatorRangeResponse>;
-  rangeLog: CachedDataReducerState<protos.cockroach.server.serverpb.RangeLogResponse>;
+interface RangeDispatchProps {
   refreshRange: typeof refreshRange;
   refreshAllocatorRange: typeof refreshAllocatorRange;
   refreshRangeLog: typeof refreshRangeLog;
 }
+
+interface RangeStateProps {
+  range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
+  allocator: CachedDataReducerState<
+    protos.cockroach.server.serverpb.AllocatorRangeResponse
+  >;
+  rangeLog: CachedDataReducerState<
+    protos.cockroach.server.serverpb.RangeLogResponse
+  >;
+}
+
+type RangeOwnProps = RangeDispatchProps & RangeStateProps;
 
 type RangeProps = RangeOwnProps & RouteComponentProps;
 
 function ErrorPage(props: {
   rangeID: string;
   errorText: string;
-  range?: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
+  range?: CachedDataReducerState<
+    protos.cockroach.server.serverpb.RangeResponse
+  >;
 }) {
   return (
     <div className="section">
@@ -140,7 +151,7 @@ export class Range extends React.Component<RangeProps, {}> {
 
     // Did we get any responses?
     if (
-      !_.some(range.data.responses_by_node_id, (resp) => resp.infos.length > 0)
+      !_.some(range.data.responses_by_node_id, resp => resp.infos.length > 0)
     ) {
       return (
         <ErrorPage
@@ -154,17 +165,17 @@ export class Range extends React.Component<RangeProps, {}> {
     // Collect all the infos and sort them, putting the leader (or the replica
     // with the highest term, first.
     const infos = _.orderBy(
-      _.flatMap(range.data.responses_by_node_id, (resp) => {
+      _.flatMap(range.data.responses_by_node_id, resp => {
         if (resp.response && _.isEmpty(resp.error_message)) {
           return resp.infos;
         }
         return [];
       }),
       [
-        (info) => RangeInfo.IsLeader(info),
-        (info) => FixLong(info.raft_state.applied).toNumber(),
-        (info) => FixLong(info.raft_state.hard_state.term).toNumber(),
-        (info) => {
+        info => RangeInfo.IsLeader(info),
+        info => FixLong(info.raft_state.applied).toNumber(),
+        info => FixLong(info.raft_state.hard_state.term).toNumber(),
+        info => {
           const localReplica = RangeInfo.GetLocalReplica(info);
           return _.isNil(localReplica) ? 0 : localReplica.replica_id;
         },
@@ -174,9 +185,9 @@ export class Range extends React.Component<RangeProps, {}> {
 
     // Gather all replica IDs.
     const replicas = _.chain(infos)
-      .flatMap((info) => info.state.state.desc.internal_replicas)
-      .sortBy((rep) => rep.replica_id)
-      .sortedUniqBy((rep) => rep.replica_id)
+      .flatMap(info => info.state.state.desc.internal_replicas)
+      .sortBy(rep => rep.replica_id)
+      .sortedUniqBy(rep => rep.replica_id)
       .value();
 
     return (
@@ -194,6 +205,7 @@ export class Range extends React.Component<RangeProps, {}> {
     );
   }
 }
+
 const mapStateToProps = (state: AdminUIState, props: RangeProps) => ({
   range: state.cachedData.range[rangeRequestKey(rangeRequestFromProps(props))],
   allocator:
@@ -212,4 +224,9 @@ const mapDispatchToProps = {
   refreshRangeLog,
 };
 
-export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Range));
+export default withRouter(
+  connect<RangeStateProps, RangeDispatchProps>(
+    mapStateToProps,
+    mapDispatchToProps,
+  )(Range),
+);

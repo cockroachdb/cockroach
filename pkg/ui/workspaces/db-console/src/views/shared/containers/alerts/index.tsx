@@ -26,7 +26,7 @@ interface AlertSectionProps {
    * Raw dispatch method for the current store, will be used to dispatch
    * alert dismissal callbacks.
    */
-  dispatch: Dispatch<Action, AdminUIState>;
+  dispatch: Dispatch<Action>;
 }
 
 class AlertSection extends React.Component<AlertSectionProps, {}> {
@@ -50,7 +50,7 @@ const alertSectionConnected = connect(
       alerts: panelAlertsSelector(state),
     };
   },
-  (dispatch) => {
+  dispatch => {
     return {
       dispatch: dispatch,
     };

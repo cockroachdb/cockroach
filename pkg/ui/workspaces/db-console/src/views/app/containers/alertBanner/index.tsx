@@ -28,7 +28,7 @@ interface AlertBannerProps {
    * Raw dispatch method for the current store, will be used to dispatch
    * alert dismissal callbacks.
    */
-  dispatch: Dispatch<Action, AdminUIState>;
+  dispatch: Dispatch<Action>;
 }
 
 /**
@@ -62,7 +62,7 @@ const alertBannerConnected = connect(
       alerts: bannerAlertsSelector(state),
     };
   },
-  (dispatch) => {
+  dispatch => {
     return {
       dispatch,
     };

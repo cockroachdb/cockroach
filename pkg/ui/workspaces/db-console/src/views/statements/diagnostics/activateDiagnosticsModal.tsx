@@ -15,11 +15,9 @@ import React, {
   useImperativeHandle,
 } from "react";
 import { connect } from "react-redux";
-import { Action, Dispatch } from "redux";
-
 import { Anchor, Modal, Text } from "src/components";
 import { createStatementDiagnosticsReportAction } from "src/redux/statements";
-import { AdminUIState } from "src/redux/state";
+import { AppDispatch } from "src/redux/state";
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
@@ -90,9 +88,7 @@ interface MapDispatchToProps {
   refreshDiagnosticsReports: () => void;
 }
 
-const mapDispatchToProps = (
-  dispatch: Dispatch<Action, AdminUIState>,
-): MapDispatchToProps => ({
+const mapDispatchToProps = (dispatch: AppDispatch): MapDispatchToProps => ({
   activate: (statement: string) =>
     dispatch(createStatementDiagnosticsReportAction(statement)),
   refreshDiagnosticsReports: () => {

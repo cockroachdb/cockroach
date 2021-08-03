@@ -15,9 +15,10 @@ import {
   applyMiddleware,
   compose,
   Store,
+  Action,
 } from "redux";
 import createSagaMiddleware from "redux-saga";
-import thunk from "redux-thunk";
+import thunk, { ThunkDispatch } from "redux-thunk";
 import {
   connectRouter,
   routerMiddleware,
@@ -94,5 +95,7 @@ export function createAdminUIStore(historyInst: History<any>) {
 }
 
 const store = createAdminUIStore(history);
+
+export type AppDispatch = ThunkDispatch<AdminUIState, unknown, Action>;
 
 export { history, store };
