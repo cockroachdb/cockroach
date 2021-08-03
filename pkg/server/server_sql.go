@@ -301,9 +301,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		if cfg.TestingKnobs.JobsTestingKnobs != nil {
 			jobsKnobs = cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs)
 		}
-		td, err := tracedumper.NewTraceDumper(ctx, cfg.InflightTraceDirName, cfg.Settings)
-		if err != nil {
-			log.Errorf(ctx, "failed to initialize trace dumper: %+v", err)
+
+		var td *tracedumper.TraceDumper
+		if cfg.InflightTraceDirName != "" {
+			td, err = tracedumper.NewTraceDumper(ctx, cfg.InflightTraceDirName, cfg.Settings)
+			if err != nil {
+				log.Errorf(ctx, "failed to initialize trace dumper: %+v", err)
+			}
 		}
 		*jobRegistry = *jobs.MakeRegistry(
 			cfg.AmbientCtx,
