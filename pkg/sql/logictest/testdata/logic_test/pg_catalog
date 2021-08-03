@@ -3635,7 +3635,7 @@ objoid      classoid    objsubid  description
 4294967133  4294967138  0         pg_cursors was created for compatibility and is currently unimplemented
 4294967132  4294967138  0         available databases (incomplete)
 4294967131  4294967138  0         pg_db_role_setting was created for compatibility and is currently unimplemented
-4294967130  4294967138  0         default ACLs (empty - unimplemented)
+4294967130  4294967138  0         default ACLs; these are the privileges that will be assigned to newly created objects
 4294967129  4294967138  0         dependency relationships (incomplete)
 4294967128  4294967138  0         object comments
 4294967127  4294967138  0         enum types and labels (empty - feature does not exist)
