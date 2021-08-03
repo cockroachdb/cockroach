@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -281,6 +282,8 @@ type DistSender struct {
 	// If set, the DistSender will try the replicas in the order they appear in
 	// the descriptor, instead of trying to reorder them by latency.
 	dontReorderReplicas bool
+
+	rangeFeeds sync.Map // map[*rangeFeed]nil
 }
 
 var _ kv.Sender = &DistSender{}

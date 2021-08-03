@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -57,17 +60,48 @@ func (ds *DistSender) RangeFeed(
 		return err
 	}
 
+	rf := &rangeFeed{}
+	ds.rangeFeeds.Store(rf, nil)
 	g := ctxgroup.WithContext(ctx)
 	// Goroutine that processes subdivided ranges and creates a rangefeed for
 	// each.
 	rangeCh := make(chan singleRangeInfo, 16)
 	g.GoCtx(func(ctx context.Context) error {
+		timer := timeutil.NewTimer()
+		timer.Reset(10 * time.Minute)
 		for {
 			select {
+			case <-timer.C:
+				timer.Read = true
+				maybeCancel := func(prf *partialRangeFeed) {
+					prf.mu.Lock()
+					defer prf.mu.Unlock()
+					if prf.mu.canceled {
+						return
+					}
+					// TODO(ajwerner): Consult some settings and what not.
+					const tooLong = 5 * time.Minute
+					if timeutil.Since(prf.mu.ts.GoTime()) > tooLong {
+						prf.mu.canceled = true
+						prf.mu.cancel()
+					}
+				}
+				rf.m.Range(func(key, value interface{}) (wantMore bool) {
+					maybeCancel(key.(*partialRangeFeed))
+					return true
+				})
 			case sri := <-rangeCh:
 				// Spawn a child goroutine to process this feed.
+				// TODO(ajwerner): Consider pooling these things.
+				prf := &partialRangeFeed{
+					rs: sri.rs, token: sri.token,
+				}
+				prf.mu.streamCtx, prf.mu.cancel = context.WithCancel(ctx)
+				prf.mu.ts = sri.ts
+				rf.m.Store(prf, nil)
 				g.GoCtx(func(ctx context.Context) error {
-					return ds.partialRangeFeed(ctx, &sri, withDiff, rangeCh, eventCh)
+					defer rf.m.Delete(prf)
+					return ds.partialRangeFeed(ctx, prf, withDiff, rangeCh, eventCh)
 				})
 			case <-ctx.Done():
 				return ctx.Err()
@@ -81,6 +115,42 @@ func (ds *DistSender) RangeFeed(
 	})
 
 	return g.Wait()
+}
+
+// TODO(ajwerner): Expose iterating the partialRangeFeed structures
+// through here and then hook up iterating these things off of the
+// DistSender in a crdb_internal virtual table.
+type rangeFeed struct {
+	m sync.Map
+}
+
+type partialRangeFeed struct {
+	rs    roachpb.RSpan
+	token rangecache.EvictionToken
+
+	mu struct {
+		syncutil.Mutex
+		ts hlc.Timestamp
+
+		streamCtx context.Context
+		cancel    context.CancelFunc
+		canceled  bool
+
+		// TODO(ajwerner): Add some more bookkeeping about number of
+		// retries, number of messages, etc.
+	}
+}
+
+func (f *partialRangeFeed) getTS() hlc.Timestamp {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mu.ts
+}
+
+func (f *partialRangeFeed) getCtx() context.Context {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mu.streamCtx
 }
 
 func (ds *DistSender) divideAndSendRangeFeedToRanges(
@@ -122,14 +192,13 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 // this rangefeed, or subdividing the range further in the event of a split.
 func (ds *DistSender) partialRangeFeed(
 	ctx context.Context,
-	rangeInfo *singleRangeInfo,
+	rangeInfo *partialRangeFeed,
 	withDiff bool,
 	rangeCh chan<- singleRangeInfo,
 	eventCh chan<- *roachpb.RangeFeedEvent,
 ) error {
 	// Bound the partial rangefeed to the partial span.
 	span := rangeInfo.rs.AsRawSpanWithNoLocals()
-	ts := rangeInfo.ts
 
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
@@ -148,15 +217,22 @@ func (ds *DistSender) partialRangeFeed(
 		}
 
 		// Establish a RangeFeed for a single Range.
-		maxTS, err := ds.singleRangeFeed(ctx, span, ts, withDiff, rangeInfo.token.Desc(), eventCh)
-
-		// Forward the timestamp in case we end up sending it again.
-		ts.Forward(maxTS)
+		err := ds.singleRangeFeed(rangeInfo.getCtx(), rangeInfo, withDiff, eventCh)
 
 		if err != nil {
 			if log.V(1) {
 				log.Infof(ctx, "RangeFeed %s disconnected with last checkpoint %s ago: %v",
-					span, timeutil.Since(ts.GoTime()), err)
+					span, timeutil.Since(rangeInfo.getTS().GoTime()), err)
+			}
+			if rangeInfo.getCtx().Err() != nil && ctx.Err() == nil {
+				func() {
+					rangeInfo.mu.Lock()
+					defer rangeInfo.mu.Unlock()
+					rangeInfo.mu.cancel() // just in case
+					rangeInfo.mu.streamCtx, rangeInfo.mu.cancel = context.WithCancel(ctx)
+					rangeInfo.mu.canceled = false
+				}()
+				continue
 			}
 			switch {
 			case errors.HasType(err, (*roachpb.StoreNotFoundError)(nil)) ||
@@ -172,7 +248,7 @@ func (ds *DistSender) partialRangeFeed(
 			case errors.HasType(err, (*roachpb.RangeKeyMismatchError)(nil)):
 				// Evict the descriptor from the cache.
 				rangeInfo.token.Evict(ctx)
-				return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
+				return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, rangeInfo.getTS(), rangeCh)
 			case errors.HasType(err, (*roachpb.RangeFeedRetryError)(nil)):
 				var t *roachpb.RangeFeedRetryError
 				if ok := errors.As(err, &t); !ok {
@@ -190,7 +266,7 @@ func (ds *DistSender) partialRangeFeed(
 					roachpb.RangeFeedRetryError_REASON_RANGE_MERGED:
 					// Evict the decriptor from the cache.
 					rangeInfo.token.Evict(ctx)
-					return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, ts, rangeCh)
+					return ds.divideAndSendRangeFeedToRanges(ctx, rangeInfo.rs, rangeInfo.getTS(), rangeCh)
 				default:
 					log.Fatalf(ctx, "unexpected RangeFeedRetryError reason %v", t.Reason)
 				}
@@ -209,29 +285,30 @@ func (ds *DistSender) partialRangeFeed(
 // values up to the last checkpoint have already been observed. Returns the
 // request's timestamp if not checkpoints are seen.
 func (ds *DistSender) singleRangeFeed(
-	ctx context.Context,
-	span roachpb.Span,
-	ts hlc.Timestamp,
-	withDiff bool,
-	desc *roachpb.RangeDescriptor,
-	eventCh chan<- *roachpb.RangeFeedEvent,
-) (hlc.Timestamp, error) {
+	ctx context.Context, prf *partialRangeFeed, withDiff bool, eventCh chan<- *roachpb.RangeFeedEvent,
+) error {
 	args := roachpb.RangeFeedRequest{
-		Span: span,
+		Span: prf.rs.AsRawSpanWithNoLocals(),
 		Header: roachpb.Header{
-			Timestamp: ts,
-			RangeID:   desc.RangeID,
+			Timestamp: prf.getTS(),
+			RangeID:   prf.token.Desc().RangeID,
 		},
 		WithDiff: withDiff,
+	}
+	forward := func(ts hlc.Timestamp) {
+		args.Timestamp.Forward(ts)
+		prf.mu.Lock()
+		defer prf.mu.Unlock()
+		prf.mu.ts = args.Timestamp
 	}
 
 	var latencyFn LatencyFunc
 	if ds.rpcContext != nil {
 		latencyFn = ds.rpcContext.RemoteClocks.Latency
 	}
-	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, nil, AllExtantReplicas)
+	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, prf.token.Desc(), nil, AllExtantReplicas)
 	if err != nil {
-		return args.Timestamp, err
+		return err
 	}
 	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
 	// The RangeFeed is not used for system critical traffic so use a DefaultClass
@@ -239,13 +316,13 @@ func (ds *DistSender) singleRangeFeed(
 	opts := SendOptions{class: rpc.DefaultClass}
 	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
 	if err != nil {
-		return args.Timestamp, err
+		return err
 	}
 	defer transport.Release()
 
 	for {
 		if transport.IsExhausted() {
-			return args.Timestamp, newSendError(
+			return newSendError(
 				fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
 		}
 
@@ -261,31 +338,31 @@ func (ds *DistSender) singleRangeFeed(
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
 			if grpcutil.IsAuthError(err) {
 				// Authentication or authorization error. Propagate.
-				return args.Timestamp, err
+				return err
 			}
 			continue
 		}
 		for {
 			event, err := stream.Recv()
 			if err == io.EOF {
-				return args.Timestamp, nil
+				return nil
 			}
 			if err != nil {
-				return args.Timestamp, err
+				return err
 			}
 			switch t := event.GetValue().(type) {
 			case *roachpb.RangeFeedCheckpoint:
 				if t.Span.Contains(args.Span) {
-					args.Timestamp.Forward(t.ResolvedTS)
+					forward(t.ResolvedTS)
 				}
 			case *roachpb.RangeFeedError:
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
-				return args.Timestamp, t.Error.GoError()
+				return t.Error.GoError()
 			}
 			select {
 			case eventCh <- event:
 			case <-ctx.Done():
-				return args.Timestamp, ctx.Err()
+				return ctx.Err()
 			}
 		}
 	}
