@@ -325,6 +325,18 @@
 </span></td></tr></tbody>
 </table>
 
+### DECIMAL functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="hlc_to_timestamp"></a><code>hlc_to_timestamp(hlc: <a href="decimal.html">decimal</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns a TimestampTZ representation of a CockroachDB HLC in decimal form.</p>
+<p>Note that a TimestampTZ has less precision than a CockroachDB HLC. It is intended as
+a convenience function to display HLCs in a print-friendly form. Use the decimal
+value if you rely on the HLC for accuracy.</p>
+</span></td></tr></tbody>
+</table>
+
 ### Date and time functions
 
 <table>

@@ -2560,6 +2560,24 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"hlc_to_timestamp": makeBuiltin(
+		tree.FunctionProperties{},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"hlc", types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				d := tree.MustBeDDecimal(args[0])
+				return tree.DecimalToInexactDTimestampTZ(&d)
+			},
+			Info: `Returns a TimestampTZ representation of a CockroachDB HLC in decimal form.
+
+Note that a TimestampTZ has less precision than a CockroachDB HLC. It is intended as
+a convenience function to display HLCs in a print-friendly form. Use the decimal
+value if you rely on the HLC for accuracy.`,
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"clock_timestamp": makeBuiltin(
 		tree.FunctionProperties{},
 		tree.Overload{
