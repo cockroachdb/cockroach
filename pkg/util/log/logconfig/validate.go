@@ -13,10 +13,11 @@ package logconfig
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -56,12 +57,23 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 			Format: func() *string { s := DefaultFluentFormat; return &s }(),
 		},
 	}
+	baseHTTPDefaults := HTTPDefaults{
+		CommonSinkConfig: CommonSinkConfig{
+			Format: func() *string { s := DefaultHTTPFormat; return &s }(),
+		},
+		UnsafeTLS:         &bf,
+		DisableKeepAlives: &bf,
+		Method:            func() *HTTPSinkMethod { m := HTTPSinkMethod(http.MethodPost); return &m }(),
+		Timeout:           func() *time.Duration { d := time.Duration(0); return &d }(),
+	}
 
-	progagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)
-	progagateCommonDefaults(&baseFluentDefaults.CommonSinkConfig, baseCommonSinkConfig)
+	propagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)
+	propagateCommonDefaults(&baseFluentDefaults.CommonSinkConfig, baseCommonSinkConfig)
+	propagateCommonDefaults(&baseHTTPDefaults.CommonSinkConfig, baseCommonSinkConfig)
 
-	progagateFileDefaults(&c.FileDefaults, baseFileDefaults)
-	progagateFluentDefaults(&c.FluentDefaults, baseFluentDefaults)
+	propagateFileDefaults(&c.FileDefaults, baseFileDefaults)
+	propagateFluentDefaults(&c.FluentDefaults, baseFluentDefaults)
+	propagateHTTPDefaults(&c.HTTPDefaults, baseHTTPDefaults)
 
 	// Normalize the directory.
 	if err := normalizeDir(&c.FileDefaults.Dir); err != nil {
@@ -92,11 +104,22 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		}
 	}
 
+	for sinkName, fc := range c.Sinks.HTTPServers {
+		if fc == nil {
+			fc = &HTTPSinkConfig{}
+			c.Sinks.HTTPServers[sinkName] = fc
+		}
+		fc.sinkName = sinkName
+		if err := c.validateHTTPSinkConfig(fc); err != nil {
+			fmt.Fprintf(&errBuf, "http server %q: %v\n", sinkName, err)
+		}
+	}
+
 	// Defaults for stderr.
 	if c.Sinks.Stderr.Filter == logpb.Severity_UNKNOWN {
 		c.Sinks.Stderr.Filter = logpb.Severity_NONE
 	}
-	progagateCommonDefaults(&c.Sinks.Stderr.CommonSinkConfig, c.FileDefaults.CommonSinkConfig)
+	propagateCommonDefaults(&c.Sinks.Stderr.CommonSinkConfig, c.FileDefaults.CommonSinkConfig)
 	if c.Sinks.Stderr.Auditable != nil && *c.Sinks.Stderr.Auditable {
 		if *c.Sinks.Stderr.Format == "crdb-v1-tty" {
 			f := "crdb-v1-tty-count"
@@ -108,10 +131,9 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 
 	c.Sinks.Stderr.Channels.Sort()
 
-	// fileSinks maps channels to files.
 	fileSinks := make(map[logpb.Channel]*FileSinkConfig)
-	// fluentSinks maps channels to fluent servers.
 	fluentSinks := make(map[logpb.Channel]*FluentSinkConfig)
+	httpSinks := make(map[logpb.Channel]*HTTPSinkConfig)
 
 	// Check that no channel is listed by more than one file sink,
 	// and every file has at least one channel.
@@ -136,17 +158,32 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 
 	// Check that no channel is listed by more than one fluent sink, and
 	// every sink has at least one channel.
-	for _, fc := range c.Sinks.FluentServers {
+	for serverName, fc := range c.Sinks.FluentServers {
 		if len(fc.Channels.Channels) == 0 {
-			fmt.Fprintf(&errBuf, "fluent server %q: no channel selected\n", fc.serverName)
+			fmt.Fprintf(&errBuf, "fluent server %q: no channel selected\n", serverName)
 		}
 		fc.Channels.Sort()
 		for _, ch := range fc.Channels.Channels {
 			if prev := fluentSinks[ch]; prev != nil {
 				fmt.Fprintf(&errBuf, "fluent server %q: channel %s already captured by server %q\n",
-					fc.serverName, ch, prev.serverName)
+					serverName, ch, prev.serverName)
 			} else {
 				fluentSinks[ch] = fc
+			}
+		}
+	}
+
+	for sinkName, fc := range c.Sinks.HTTPServers {
+		if len(fc.Channels.Channels) == 0 {
+			fmt.Fprintf(&errBuf, "http server %q: no channel selected\n", sinkName)
+		}
+		fc.Channels.Sort()
+		for _, ch := range fc.Channels.Channels {
+			if prev := httpSinks[ch]; prev != nil {
+				fmt.Fprintf(&errBuf, "http server %q: channel %s already captured by server %q\n",
+					sinkName, ch, prev.sinkName)
+			} else {
+				httpSinks[ch] = fc
 			}
 		}
 	}
@@ -188,7 +225,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 			Channels: ChannelList{Channels: []logpb.Channel{devch}},
 		}
 		fc.prefix = "default"
-		progagateFileDefaults(&fc.FileDefaults, c.FileDefaults)
+		propagateFileDefaults(&fc.FileDefaults, c.FileDefaults)
 		if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
 			fmt.Fprintln(&errBuf, err)
 		}
@@ -208,44 +245,27 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	}
 	devFile.Channels.Sort()
 
-	// fileGroupNames collects the names of file groups. We need this to
-	// store this sorted in c.Sinks.sortedFileGroupNames later.
-	fileGroupNames := make([]string, 0, len(c.Sinks.FileGroups))
 	// Elide all the file sinks without a directory or with severity set
-	// to NONE. Also collect the remaining names for sorting below.
+	// to NONE.
 	for prefix, fc := range c.Sinks.FileGroups {
 		if fc.Dir == nil || fc.Filter == logpb.Severity_NONE {
 			delete(c.Sinks.FileGroups, prefix)
-		} else {
-			fileGroupNames = append(fileGroupNames, prefix)
 		}
 	}
 
-	// serverNames collects the names of the servers. We need this to
-	// store this sorted in c.Sinks.sortedServerNames later.
-	serverNames := make([]string, 0, len(c.Sinks.FluentServers))
 	// Elide all the file sinks without a directory or with severity set
-	// to NONE. Also collect the remaining names for sorting below.
+	// to NONE.
 	for serverName, fc := range c.Sinks.FluentServers {
 		if fc.Filter == logpb.Severity_NONE {
 			delete(c.Sinks.FluentServers, serverName)
-		} else {
-			serverNames = append(serverNames, serverName)
 		}
 	}
-
-	// Remember the sorted names, so we get deterministic output in
-	// export.
-	sort.Strings(fileGroupNames)
-	c.Sinks.sortedFileGroupNames = fileGroupNames
-	sort.Strings(serverNames)
-	c.Sinks.sortedServerNames = serverNames
 
 	return nil
 }
 
 func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *string) error {
-	progagateFileDefaults(&fc.FileDefaults, c.FileDefaults)
+	propagateFileDefaults(&fc.FileDefaults, c.FileDefaults)
 	if fc.Dir != c.FileDefaults.Dir {
 		// A directory was specified explicitly. Normalize it.
 		if err := normalizeDir(&fc.Dir); err != nil {
@@ -275,7 +295,7 @@ func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *strin
 }
 
 func (c *Config) validateFluentSinkConfig(fc *FluentSinkConfig) error {
-	progagateFluentDefaults(&fc.FluentDefaults, c.FluentDefaults)
+	propagateFluentDefaults(&fc.FluentDefaults, c.FluentDefaults)
 	fc.Net = strings.ToLower(strings.TrimSpace(fc.Net))
 	switch fc.Net {
 	case "tcp", "tcp4", "tcp6":
@@ -301,6 +321,14 @@ func (c *Config) validateFluentSinkConfig(fc *FluentSinkConfig) error {
 	return nil
 }
 
+func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
+	propagateHTTPDefaults(&hsc.HTTPDefaults, c.HTTPDefaults)
+	if hsc.Address == nil || len(*hsc.Address) == 0 {
+		return errors.New("address cannot be empty")
+	}
+	return nil
+}
+
 func normalizeDir(dir **string) error {
 	if *dir == nil {
 		return nil
@@ -319,25 +347,29 @@ func normalizeDir(dir **string) error {
 	return nil
 }
 
-func progagateCommonDefaults(target *CommonSinkConfig, source CommonSinkConfig) {
-	progagateDefaults(target, source)
+func propagateCommonDefaults(target *CommonSinkConfig, source CommonSinkConfig) {
+	propagateDefaults(target, source)
 }
 
-func progagateFileDefaults(target *FileDefaults, source FileDefaults) {
-	progagateDefaults(target, source)
+func propagateFileDefaults(target *FileDefaults, source FileDefaults) {
+	propagateDefaults(target, source)
 }
 
-func progagateFluentDefaults(target *FluentDefaults, source FluentDefaults) {
-	progagateDefaults(target, source)
+func propagateFluentDefaults(target *FluentDefaults, source FluentDefaults) {
+	propagateDefaults(target, source)
 }
 
-// progagateDefaults takes (target *T, source T) where T is a struct
+func propagateHTTPDefaults(target *HTTPDefaults, source HTTPDefaults) {
+	propagateDefaults(target, source)
+}
+
+// propagateDefaults takes (target *T, source T) where T is a struct
 // and sets zero-valued exported fields in target to the values
 // from source (recursively for struct-valued fields).
 // Wrap for static type-checking, as unexpected types will panic.
 //
 // (Consider making this a common utility if it gets some maturity here.)
-func progagateDefaults(target, source interface{}) {
+func propagateDefaults(target, source interface{}) {
 	s := reflect.ValueOf(source)
 	t := reflect.Indirect(reflect.ValueOf(target)) // *target
 
@@ -345,7 +377,7 @@ func progagateDefaults(target, source interface{}) {
 		tf := t.Field(i)
 		sf := s.Field(i)
 		if tf.Kind() == reflect.Struct {
-			progagateDefaults(tf.Addr().Interface(), sf.Interface())
+			propagateDefaults(tf.Addr().Interface(), sf.Interface())
 		} else if tf.CanSet() && tf.IsZero() {
 			tf.Set(s.Field(i))
 		}

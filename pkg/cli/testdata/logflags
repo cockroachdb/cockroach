@@ -14,6 +14,7 @@ start
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -43,6 +44,7 @@ start-single-node
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -76,6 +78,7 @@ sql
 ----
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {<stderrEnabledWarningNoRedaction>}}
 
 run
@@ -83,6 +86,7 @@ init
 ----
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {<stderrEnabledWarningNoRedaction>}}
 
 
@@ -95,6 +99,7 @@ bank
 ----
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 
@@ -105,6 +110,7 @@ demo
 ----
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {<stderrCfg(NONE,false)>}}
 
 
@@ -120,6 +126,7 @@ start
 ----
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 
@@ -132,6 +139,7 @@ start
 ----
 config: {<stdFileDefaults(/pathA/logs)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -163,6 +171,7 @@ start
 ----
 config: {<stdFileDefaults(/mypath)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -175,7 +184,7 @@ sql-auth: <fileCfg([SESSIONS],/mypath,false,crdb-v2)>,
 sql-exec: <fileCfg([SQL_EXEC],/mypath,true,crdb-v2)>,
 sql-slow: <fileCfg([SQL_PERF],/mypath,true,crdb-v2)>,
 sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,true,crdb-v2)>,
-telemetry: {channels: [ TELEMETRY],
+telemetry: {channels: [TELEMETRY],
 dir: /mypath,
 max-file-size: 100KiB,
 max-group-size: 1.0MiB,
@@ -195,6 +204,7 @@ start
 ----
 config: {<stdFileDefaults(/pathA/logs)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -232,6 +242,7 @@ start
 ----
 config: {<stdFileDefaults(/mypath)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -244,7 +255,7 @@ sql-auth: <fileCfg([SESSIONS],/mypath,false,crdb-v2)>,
 sql-exec: <fileCfg([SQL_EXEC],/mypath,true,crdb-v2)>,
 sql-slow: <fileCfg([SQL_PERF],/mypath,true,crdb-v2)>,
 sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,true,crdb-v2)>,
-telemetry: {channels: [ TELEMETRY],
+telemetry: {channels: [TELEMETRY],
 dir: /mypath,
 max-file-size: 100KiB,
 max-group-size: 1.0MiB,
@@ -262,6 +273,7 @@ start
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -293,6 +305,7 @@ start
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -345,6 +358,7 @@ start
 ----
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 
@@ -355,6 +369,7 @@ start
 ----
 config: {<stdFileDefaults(/mypath)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -367,7 +382,7 @@ sql-auth: <fileCfg([SESSIONS],/mypath,false,crdb-v2)>,
 sql-exec: <fileCfg([SQL_EXEC],/mypath,true,crdb-v2)>,
 sql-slow: <fileCfg([SQL_PERF],/mypath,true,crdb-v2)>,
 sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,true,crdb-v2)>,
-telemetry: {channels: [ TELEMETRY],
+telemetry: {channels: [TELEMETRY],
 dir: /mypath,
 max-file-size: 100KiB,
 max-group-size: 1.0MiB,
@@ -387,6 +402,7 @@ start
 ----
 config: {<stdFileDefaults(/pathA)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -399,7 +415,7 @@ sql-auth: <fileCfg([SESSIONS],/pathA,false,crdb-v2)>,
 sql-exec: <fileCfg([SQL_EXEC],/pathA,true,crdb-v2)>,
 sql-slow: <fileCfg([SQL_PERF],/pathA,true,crdb-v2)>,
 sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/pathA,true,crdb-v2)>,
-telemetry: {channels: [ TELEMETRY],
+telemetry: {channels: [TELEMETRY],
 dir: /pathA,
 max-file-size: 100KiB,
 max-group-size: 1.0MiB,
@@ -419,6 +435,7 @@ init
 ----
 config: {<fileDefaultsNoMaxSize(/mypath)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: {channels: all,
 dir: /mypath,
 buffered-writes: true,
@@ -435,6 +452,7 @@ start
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -465,6 +483,7 @@ start
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {file-groups: {default: <fileCfg([DEV,
 OPS,
 HEALTH,
@@ -495,6 +514,7 @@ init
 ----
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 # Default when no severity is specified is WARNING.
@@ -504,6 +524,7 @@ init
 ----
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
+<httpDefaults>,
 sinks: {<stderrEnabledWarningNoRedaction>}}
 
 

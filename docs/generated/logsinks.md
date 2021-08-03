@@ -6,6 +6,8 @@ The supported log output sink types are documented below.
 
 - [Output to Fluentd-compatible log collectors](#output-to-fluentd-compatible-log-collectors)
 
+- [Output to HTTP servers.](#output-to-http-servers.)
+
 - [Standard error stream](#standard-error-stream)
 
 
@@ -91,7 +93,7 @@ Configuration options shared across all sink types:
 ## Sink type: Output to Fluentd-compatible log collectors
 
 
-This sink type causes logging data to be sent over the network, to
+This sink type causes logging data to be sent over the network to
 a log collector that can ingest log data in a
 [Fluentd](https://www.fluentd.org)-compatible protocol.
 
@@ -153,6 +155,71 @@ Type-specific configuration options:
 | `channels` | the list of logging channels that use this sink. See the [channel selection configuration](#channel-format) section for details.  |
 | `net` | the protocol for the fluent server. Can be "tcp", "udp", "tcp4", etc. |
 | `address` | the network address of the fluent server. The host/address and port parts are separated with a colon. IPv6 numeric addresses should be included within square brackets, e.g.: [::1]:1234. |
+
+
+Configuration options shared across all sink types:
+
+| Field | Description |
+|--|--|
+| `filter` | the minimum severity for log events to be emitted to this sink. This can be set to NONE to disable the sink. |
+| `format` | the entry format to use. |
+| `redact` | whether to strip sensitive information before log events are emitted to this sink. |
+| `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
+| `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
+| `auditable` | translated to tweaks to the other settings for this sink during validation. For example, it enables `exit-on-error` and changes the format of files from `crdb-v1` to `crdb-v1-count`. |
+
+
+
+<a name="output-to-http-servers.">
+
+## Sink type: Output to HTTP servers.
+
+
+This sink type causes logging data to be sent over the network
+as requests to an HTTP server.
+
+The configuration key under the `sinks` key in the YAML
+configuration is `http-servers`. Example configuration:
+
+     sinks:
+        http-servers:
+           health:
+              channels: HEALTH
+              address: http://127.0.0.1
+
+Every new server sink configured automatically inherits the configuration set in the `http-defaults` section.
+
+For example:
+
+     http-defaults:
+         redactable: false # default: disable redaction markers
+     sinks:
+       http-servers:
+         health:
+            channels: HEALTH
+            # This sink has redactable set to false,
+            # as the setting is inherited from fluent-defaults
+            # unless overridden here.
+
+The default output format for HTTP sinks is
+`json-compact`. [Other supported formats.](log-formats.html)
+
+{{site.data.alerts.callout_info}}
+Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
+{{site.data.alerts.end}}
+
+
+
+Type-specific configuration options:
+
+| Field | Description |
+|--|--|
+| `channels` | the list of logging channels that use this sink. See the [channel selection configuration](#channel-format) section for details.  |
+| `address` | the network address of the http server. The host/address and port parts are separated with a colon. IPv6 numeric addresses should be included within square brackets, e.g.: [::1]:1234. Inherited from `http-defaults.address` if not specified. |
+| `method` | the HTTP method to be used.  POST and GET are supported; defaults to POST. Inherited from `http-defaults.method` if not specified. |
+| `unsafe-tls` | enables certificate authentication to be bypassed. Defaults to false. Inherited from `http-defaults.unsafe-tls` if not specified. |
+| `timeout` | the HTTP timeout. Defaults to 0 for no timeout. Inherited from `http-defaults.timeout` if not specified. |
+| `disable-keep-alives` | causes the logging sink to re-establish a new connection for every outgoing log message. This option is intended for testing only and can cause excessive network overhead in production systems. Inherited from `http-defaults.disable-keep-alives` if not specified. |
 
 
 Configuration options shared across all sink types:

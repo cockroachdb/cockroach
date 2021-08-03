@@ -245,11 +245,11 @@ func readInput(infos map[string]*sinkInfo) error {
 	return nil
 }
 
-var configStructRe = regexp.MustCompile(`^type (?P<name>[A-Z][a-z0-9]*)(SinkConfig|Defaults) struct`)
+var configStructRe = regexp.MustCompile(`^type (?P<name>[A-Z]\w*)(SinkConfig|Defaults) struct`)
 
 var fieldDefRe = regexp.MustCompile(`^\s*` +
 	// Field name in Go.
-	`(?P<name>[A-Z][A-Za-z_0-9]*)` +
+	`(?P<name>[A-Z]\w*)` +
 	// Go type. Empty if embedded type.
 	`(?P<typ>(?: [^ ]+)?)` +
 	// Start of YAML annotation.
@@ -260,16 +260,27 @@ var fieldDefRe = regexp.MustCompile(`^\s*` +
 	`[^"]*"` + "`.*")
 
 func camelToSnake(typeName string) string {
-	var res strings.Builder
-	res.WriteByte(typeName[0] + 'a' - 'A')
-	for i := 1; i < len(typeName); i++ {
-		if typeName[i] >= 'A' && typeName[i] <= 'Z' {
-			res.WriteByte('-')
-			res.WriteByte(typeName[i] + 'a' - 'A')
-		} else {
-			res.WriteByte(typeName[i])
-		}
+	isUpper := func(c byte) bool {
+		return 'A' <= c && c <= 'Z'
 	}
+	toLower := func(c byte) byte {
+		if !isUpper(c) {
+			return c
+		}
+		return c - 'A' + 'a'
+	}
+
+	var res strings.Builder
+	res.WriteByte(toLower(typeName[0]))
+	for i := 1; i < len(typeName)-1; i++ {
+		// put a word break at transitions likeTHIS and LIKEThis
+		if isUpper(typeName[i]) && (!isUpper(typeName[i-1]) || !isUpper(typeName[i+1])) {
+			res.WriteByte('-')
+		}
+		res.WriteByte(toLower(typeName[i]))
+	}
+	// assume the last character isn't a one-letter word
+	res.WriteByte(toLower(typeName[len(typeName)-1]))
 	return res.String()
 }
 
