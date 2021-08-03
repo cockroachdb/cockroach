@@ -107,7 +107,7 @@ func runConnectionLatencyTest(
 		runWorkload(loadGroups[2].roachNodes, cockroachEuWest, regionEuWest)
 	} else {
 		// Run only on the load node.
-		runWorkload(c.Range(0, numNodes), c.Node(numNodes+1), regionUsCentral)
+		runWorkload(c.Range(1, numNodes), c.Node(numNodes+1), regionUsCentral)
 	}
 }
 
