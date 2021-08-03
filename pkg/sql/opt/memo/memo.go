@@ -141,6 +141,7 @@ type Memo struct {
 	safeUpdates             bool
 	preferLookupJoinsForFKs bool
 	saveTablesPrefix        string
+	dateStyleEnabled        bool
 	intervalStyleEnabled    bool
 	dateStyle               pgdate.DateStyle
 	intervalStyle           duration.IntervalStyle
@@ -183,6 +184,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 		preferLookupJoinsForFKs: evalCtx.SessionData.PreferLookupJoinsForFKs,
 		saveTablesPrefix:        evalCtx.SessionData.SaveTablesPrefix,
 		intervalStyleEnabled:    evalCtx.SessionData.IntervalStyleEnabled,
+		dateStyleEnabled:        evalCtx.SessionData.DateStyleEnabled,
 		dateStyle:               evalCtx.SessionData.GetDateStyle(),
 		intervalStyle:           evalCtx.SessionData.GetIntervalStyle(),
 	}
@@ -294,6 +296,7 @@ func (m *Memo) IsStale(
 		m.preferLookupJoinsForFKs != evalCtx.SessionData.PreferLookupJoinsForFKs ||
 		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix ||
 		m.intervalStyleEnabled != evalCtx.SessionData.IntervalStyleEnabled ||
+		m.dateStyleEnabled != evalCtx.SessionData.DateStyleEnabled ||
 		m.dateStyle != evalCtx.SessionData.GetDateStyle() ||
 		m.intervalStyle != evalCtx.SessionData.GetIntervalStyle() {
 		return true, nil
