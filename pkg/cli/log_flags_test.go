@@ -31,7 +31,7 @@ func TestSetupLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	reWhitespace := regexp.MustCompile(`(?ms:((\s|\n)+))`)
-	reWhitespace2 := regexp.MustCompile(`{\s+`)
+	reBracketWhitespace := regexp.MustCompile(`(?P<bracket>[{[])\s+`)
 
 	reSimplify := regexp.MustCompile(`(?ms:^\s*(auditable: false|redact: false|exit-on-error: true|max-group-size: 100MiB)\n)`)
 
@@ -41,6 +41,15 @@ func TestSetupLogging(t *testing.T) {
 		`redactable: true, ` +
 		`exit-on-error: false` +
 		`}`
+	const defaultHTTPConfig = `http-defaults: {` +
+		`method: POST, ` +
+		`unsafe-tls: false, ` +
+		`timeout: 0s, ` +
+		`disable-keep-alives: false, ` +
+		`filter: INFO, ` +
+		`format: json-compact, ` +
+		`redactable: true, ` +
+		`exit-on-error: false}`
 	stdFileDefaultsRe := regexp.MustCompile(
 		`file-defaults: \{dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: true, filter: INFO, format: crdb-v2, redactable: true\}`)
 	fileDefaultsNoMaxSizeRe := regexp.MustCompile(
@@ -103,10 +112,11 @@ func TestSetupLogging(t *testing.T) {
 			t.Fatal(err)
 		}
 		actual = reWhitespace.ReplaceAllString(h.String(), " ")
-		actual = reWhitespace2.ReplaceAllString(actual, "{")
+		actual = reBracketWhitespace.ReplaceAllString(actual, "$bracket")
 
 		// Shorten the configuration for legibility during reviews of test changes.
 		actual = strings.ReplaceAll(actual, defaultFluentConfig, "<fluentDefaults>")
+		actual = strings.ReplaceAll(actual, defaultHTTPConfig, "<httpDefaults>")
 		actual = stdFileDefaultsRe.ReplaceAllString(actual, "<stdFileDefaults($path)>")
 		actual = fileDefaultsNoMaxSizeRe.ReplaceAllString(actual, "<fileDefaultsNoMaxSize($path)>")
 		actual = strings.ReplaceAll(actual, fileDefaultsNoDir, "<fileDefaultsNoDir>")
