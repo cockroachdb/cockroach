@@ -12,7 +12,7 @@ import _ from "lodash";
 import React from "react";
 import ReactPaginate from "react-paginate";
 import { connect } from "react-redux";
-import { Link, withRouter } from "react-router-dom";
+import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
 import { refreshRaft } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -30,7 +30,9 @@ const RANGES_PER_PAGE = 100;
  * container.
  */
 interface RangesMainData {
-  state: CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse>;
+  state: CachedDataReducerState<
+    protos.cockroach.server.serverpb.RaftDebugResponse
+  >;
 }
 
 /**
@@ -168,7 +170,7 @@ export class RangesMain extends React.Component<
     if (!this.props.state.data) {
       content = <div className="section">Loading...</div>;
     } else if (statuses) {
-      errors = errors.concat(statuses.errors.map((err) => err.message));
+      errors = errors.concat(statuses.errors.map(err => err.message));
 
       // Build list of all nodes for static ordering.
       const nodeIDs = _(statuses.ranges)
@@ -197,7 +199,7 @@ export class RangesMain extends React.Component<
 
       // Filter ranges and paginate
       const justRanges = _.values(statuses.ranges);
-      const filteredRanges = _.filter(justRanges, (range) => {
+      const filteredRanges = _.filter(justRanges, range => {
         return !this.state.showOnlyErrors || range.errors.length > 0;
       });
       let offset = this.state.offset;
@@ -239,10 +241,10 @@ export class RangesMain extends React.Component<
         rows[i] = row;
 
         // Render each replica into a cell
-        range.nodes.forEach((node) => {
+        range.nodes.forEach(node => {
           const nodeRange = node.range;
           const replicaLocations = nodeRange.state.state.desc.internal_replicas.map(
-            (replica) =>
+            replica =>
               "(Node " +
               replica.node_id.toString() +
               " Store " +
@@ -362,7 +364,7 @@ const selectRaftState = (
 ): CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse> =>
   state.cachedData.raft;
 
-const mapStateToProps = (state: AdminUIState) => ({
+const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => ({
   // RootState contains declaration for whole state
   state: selectRaftState(state),
 });

@@ -11,7 +11,7 @@
 import * as React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { Link, withRouter } from "react-router-dom";
+import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { Moment } from "moment";
 import _ from "lodash";
 
@@ -31,7 +31,7 @@ import { createSelector } from "reselect";
 const decommissionedNodesSortSetting = new LocalSetting<
   AdminUIState,
   SortSetting
->("nodes/decommissioned_sort_setting", (s) => s.localSettings);
+>("nodes/decommissioned_sort_setting", s => s.localSettings);
 
 interface DecommissionedNodeStatusRow {
   key: string;
@@ -72,7 +72,9 @@ const sortByDecommissioningDate = (
   return 0;
 };
 
-export class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps> {
+export class DecommissionedNodeHistory extends React.Component<
+  DecommissionedNodeHistoryProps
+> {
   columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
     {
       key: "id",
@@ -162,7 +164,7 @@ const decommissionedNodesTableData = createSelector(
   },
 );
 
-const mapStateToProps = (state: AdminUIState) => ({
+const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => ({
   dataSource: decommissionedNodesTableData(state),
 });
 

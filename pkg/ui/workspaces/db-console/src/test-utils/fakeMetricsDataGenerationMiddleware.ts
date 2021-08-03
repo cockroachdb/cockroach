@@ -33,7 +33,7 @@ function fakeTimeSeriesDatapoint(): ITimeSeriesDatapoint {
  */
 export const fakeMetricsDataGenerationMiddleware = (
   _store: Store<AdminUIState>,
-) => (next: Dispatch<Action, AdminUIState>) => (action: Action) => {
+) => (next: Dispatch<Action>) => (action: Action) => {
   if (action.type === RECEIVE) {
     const originalAction = action as PayloadAction<WithID<RequestWithResponse>>;
     const {
@@ -47,7 +47,7 @@ export const fakeMetricsDataGenerationMiddleware = (
       .divide(sample_nanos)
       .toNumber();
 
-    const nextResults = results.map((res) => {
+    const nextResults = results.map(res => {
       const actualDatapointsCount = res.datapoints.length;
 
       if (actualDatapointsCount >= expectedDatapointsCount) {

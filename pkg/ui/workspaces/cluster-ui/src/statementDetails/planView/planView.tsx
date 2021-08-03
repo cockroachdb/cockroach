@@ -245,7 +245,7 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
   }
 }
 
-function PlanNodes(props: { nodes: FlatPlanNode[] }): React.ReactElement<{}> {
+function PlanNodes(props: { nodes: FlatPlanNode[] }): React.ReactElement {
   const nodes = props.nodes;
   return (
     <ul>

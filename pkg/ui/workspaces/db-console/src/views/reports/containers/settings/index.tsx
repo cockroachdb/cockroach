@@ -12,7 +12,7 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { withRouter } from "react-router-dom";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
@@ -22,16 +22,18 @@ import "./index.styl";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 interface SettingsOwnProps {
-  settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;
+  settings: CachedDataReducerState<
+    protos.cockroach.server.serverpb.SettingsResponse
+  >;
   refreshSettings: typeof refreshSettings;
 }
 
-type SettingsProps = SettingsOwnProps;
+type SettingsProps = SettingsOwnProps & RouteComponentProps;
 
 /**
  * Renders the Cluster Settings Report page.
  */
-export class Settings extends React.Component<SettingsProps, {}> {
+export class Settings extends React.Component<SettingsProps> {
   refresh(props = this.props) {
     props.refreshSettings(
       new protos.cockroach.server.serverpb.SettingsRequest(),
@@ -68,7 +70,7 @@ export class Settings extends React.Component<SettingsProps, {}> {
         </thead>
         <tbody>
           {_.chain(data)
-            .filter((key) => key_values[key].public === wantPublic)
+            .filter(key => key_values[key].public === wantPublic)
             .sort()
             .map((key: number) => (
               <tr key={key} className="settings-table__row">
