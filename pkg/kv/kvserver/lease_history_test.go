@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLeaseHistory(t *testing.T) {
@@ -35,6 +36,9 @@ func TestLeaseHistory(t *testing.T) {
 			if e, a := int64(i-1), leases[len(leases)-1].Epoch; e != a {
 				t.Errorf("%d: expected newest lease to have epoch of %d , actual %d:\n%+v", i, e, a, leases)
 			}
+			require.NotSame(t, &history.history[0], &leases[0], "expected slice copy")
+		} else {
+			require.Nil(t, leases)
 		}
 
 		history.add(roachpb.Lease{
@@ -54,6 +58,7 @@ func TestLeaseHistory(t *testing.T) {
 		if e, a := int64(i+leaseHistoryMaxEntries-1), leases[leaseHistoryMaxEntries-1].Epoch; e != a {
 			t.Errorf("%d: expected newest lease to have epoch of %d , actual %d:\n%+v", i, e, a, leases)
 		}
+		require.NotSame(t, &history.history[0], &leases[0], "expected slice copy")
 
 		history.add(roachpb.Lease{
 			Epoch: int64(i + leaseHistoryMaxEntries),
