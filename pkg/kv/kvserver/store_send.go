@@ -61,7 +61,7 @@ func (s *Store) Send(
 		defer res.Release()
 	}
 
-	if !ba.MinTimestampBound.IsEmpty() {
+	if ba.BoundedStaleness != nil {
 		newBa, pErr := s.executeServerSideBoundedStalenessNegotiation(ctx, ba)
 		if pErr != nil {
 			return nil, pErr
@@ -356,8 +356,8 @@ func (s *Store) maybeThrottleBatch(
 func (s *Store) executeServerSideBoundedStalenessNegotiation(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (roachpb.BatchRequest, *roachpb.Error) {
-	if ba.MinTimestampBound.IsEmpty() {
-		log.Fatal(ctx, "MinTimestampBound required for server-side negotiation fast-path")
+	if ba.BoundedStaleness == nil {
+		log.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
 	}
 	if !ba.Timestamp.IsEmpty() {
 		return ba, roachpb.NewError(errors.AssertionFailedf(
@@ -403,7 +403,8 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 			resTS.Backward(ts)
 		}
 	}
-	if resTS.Less(ba.MinTimestampBound) {
+	cfg := ba.BoundedStaleness
+	if resTS.Less(cfg.MinTimestampBound) {
 		// The local resolved timestamp was below the request's minimum timestamp
 		// bound. If the minimum timestamp bound should be strictly obeyed, reject
 		// the batch. Otherwise, consider the minimum timestamp bound to be the
@@ -411,16 +412,20 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 		// may result in the request being redirected (with a NotLeaseholderError)
 		// to the current leaseholder. On the leaseholder, this may result in the
 		// request blocking on conflicting transactions.
-		if ba.MinTimestampBoundStrict {
+		if cfg.MinTimestampBoundStrict {
 			return ba, roachpb.NewError(roachpb.NewMinTimestampBoundUnsatisfiableError(
-				ba.MinTimestampBound, resTS,
+				cfg.MinTimestampBound, resTS,
 			))
 		}
-		resTS = ba.MinTimestampBound
+		resTS = cfg.MinTimestampBound
+	}
+	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.Less(resTS) {
+		// The local resolved timestamp was above the request's maximum timestamp
+		// bound. Drop the request timestamp to the maximum timestamp bound.
+		resTS = cfg.MaxTimestampBound
 	}
 
 	ba.Timestamp = resTS
-	ba.MinTimestampBound = hlc.Timestamp{}
-	ba.MinTimestampBoundStrict = false
+	ba.BoundedStaleness = nil
 	return ba, nil
 }

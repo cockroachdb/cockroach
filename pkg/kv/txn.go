@@ -1118,8 +1118,12 @@ func (txn *Txn) checkNegotiateAndSendPreconditions(ctx context.Context, ba roach
 			panic(err)
 		}
 	}
+	assert(ba.BoundedStaleness != nil, "bounded_staleness configuration must be set")
+	assert(!ba.BoundedStaleness.MinTimestampBound.IsEmpty(), "min_timestamp_bound must be set")
+	assert(ba.BoundedStaleness.MaxTimestampBound.IsEmpty() ||
+		ba.BoundedStaleness.MinTimestampBound.LessEq(ba.BoundedStaleness.MaxTimestampBound),
+		"max_timestamp_bound, if set, must be equal to or greater than min_timestamp_bound")
 	assert(ba.Timestamp.IsEmpty(), "timestamp must not be set")
-	assert(!ba.MinTimestampBound.IsEmpty(), "min_timestamp_bound must be set")
 	assert(ba.Txn == nil, "txn must not be set")
 	assert(ba.ReadConsistency == roachpb.CONSISTENT, "read consistency must be set to CONSISTENT")
 	assert(ba.IsReadOnly(), "batch must be read-only")
