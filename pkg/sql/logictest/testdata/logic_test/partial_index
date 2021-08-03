@@ -76,6 +76,14 @@ CREATE TABLE t4 (a INT, UNIQUE INDEX (a) WHERE a = 0)
 statement error expected index predicate expression to have type bool, but '1' has type int
 CREATE TABLE error (a INT, UNIQUE INDEX (a) WHERE 1)
 
+# Disallow partial unique constraints in ALTER TABLE.
+
+statement ok
+CREATE TABLE up (a INT)
+
+statement error partial unique constraints cannot be added in ALTER TABLE, use CREATE UNIQUE INDEX instead
+ALTER TABLE up ADD CONSTRAINT partial_unique UNIQUE (a) WHERE a > 0
+
 # Validate CREATE INDEX predicate.
 
 statement ok

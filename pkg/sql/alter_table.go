@@ -184,6 +184,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableAddConstraint:
 			switch d := t.ConstraintDef.(type) {
 			case *tree.UniqueConstraintTableDef:
+				if d.Predicate != nil {
+					return pgerror.New(pgcode.InvalidTableDefinition,
+						"partial unique constraints cannot be added in ALTER TABLE, "+
+							"use CREATE UNIQUE INDEX instead")
+				}
+
 				if d.WithoutIndex {
 					if err := addUniqueWithoutIndexTableDef(
 						params.ctx,

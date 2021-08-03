@@ -6801,6 +6801,9 @@ constraint_elem:
       Expr: $3.expr(),
     }
   }
+// TODO(mgartner): Postgres does not allow partial unique constraints. It only
+// allows partial unique indexes. The opt_where_clause should be removed so that
+// it is a syntax error. See discussion in #65825.
 | UNIQUE opt_without_index '(' index_params ')'
     opt_storing opt_interleave opt_partition_by_index opt_deferrable opt_where_clause
   {
