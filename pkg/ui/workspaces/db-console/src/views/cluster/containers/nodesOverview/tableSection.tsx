@@ -120,7 +120,7 @@ const getTableSectionKey = (id: string) =>
 const mapStateToProps = (state: AdminUIState, props: TableSectionProps) => {
   const tableSectionState = new LocalSetting<AdminUIState, boolean>(
     getTableSectionKey(props.id),
-    (s) => s.localSettings,
+    s => s.localSettings,
   );
 
   return {
@@ -129,7 +129,7 @@ const mapStateToProps = (state: AdminUIState, props: TableSectionProps) => {
 };
 
 const mapDispatchToProps = (
-  dispatch: Dispatch<Action, AdminUIState>,
+  dispatch: Dispatch<Action>,
   props: TableSectionProps,
 ) => ({
   saveExpandedState: (isCollapsed: boolean) => {

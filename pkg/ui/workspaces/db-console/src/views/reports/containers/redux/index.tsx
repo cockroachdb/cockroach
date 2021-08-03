@@ -13,13 +13,13 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import classNames from "classnames";
 import CopyToClipboard from "react-copy-to-clipboard";
-import { withRouter } from "react-router-dom";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { AdminUIState } from "src/redux/state";
 
 import "./redux.styl";
 
-interface ReduxDebugProps {
+interface ReduxDebugProps extends RouteComponentProps {
   state: AdminUIState;
 }
 
@@ -69,4 +69,4 @@ function mapStateToProps(state: AdminUIState) {
   return { state };
 }
 
-export default withRouter(connect(mapStateToProps, null)(ReduxDebug));
+export default withRouter(connect(mapStateToProps)(ReduxDebug));

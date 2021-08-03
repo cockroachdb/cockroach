@@ -54,39 +54,48 @@ const TooltipTrigger = (props: {
   </button>
 );
 
-const tooltipsStack = (components: object) =>
-  Object.values(components).map((Item, idx) => (
-    <Item visible={true} key={idx}>
-      {TooltipTrigger({ name: Item.name })}
-    </Item>
-  ));
-
-const statusTooltipsStack = (statusNames: object, descriptionGetter: any) =>
-  Object.keys(statusNames)
-    .filter((status) => isNaN(Number(status)))
-    .map((status: keyof typeof statusNames, idx) => (
-      <Tooltip
-        key={idx}
-        title={descriptionGetter(statusNames[status])}
-        visible={true}
-        placement="bottom"
-      >
-        {TooltipTrigger({ name: status })}
-      </Tooltip>
-    ));
-
-const graphTooltipsStack = (components: object) =>
-  Object.values(components).map((Item, idx) => (
-    <div style={graphTooltipsStyle}>
-      <ToolTipWrapper
-        key={idx}
-        text={<Item tooltipSelection={"on <node>"} />}
-        visible={true}
-      >
+const tooltipsStack = (components: object) => (
+  <>
+    {Object.values(components).map((Item, idx) => (
+      <Item visible={true} key={idx}>
         {TooltipTrigger({ name: Item.name })}
-      </ToolTipWrapper>
-    </div>
-  ));
+      </Item>
+    ))}
+  </>
+);
+
+const statusTooltipsStack = (statusNames: object, descriptionGetter: any) => (
+  <>
+    {Object.keys(statusNames)
+      .filter(status => isNaN(Number(status)))
+      .map((status: keyof typeof statusNames, idx) => (
+        <Tooltip
+          key={idx}
+          title={descriptionGetter(statusNames[status])}
+          visible={true}
+          placement="bottom"
+        >
+          {TooltipTrigger({ name: status })}
+        </Tooltip>
+      ))}
+  </>
+);
+
+const graphTooltipsStack = (components: object) => (
+  <>
+    {Object.values(components).map((Item, idx) => (
+      <div style={graphTooltipsStyle}>
+        <ToolTipWrapper
+          key={idx}
+          text={<Item tooltipSelection={"on <node>"} />}
+          visible={true}
+        >
+          {TooltipTrigger({ name: Item.name })}
+        </ToolTipWrapper>
+      </div>
+    ))}
+  </>
+);
 
 storiesOf("Tooltips/Cluster Overview Page", module)
   .addDecorator(styledWrapper(wrapperStyle))

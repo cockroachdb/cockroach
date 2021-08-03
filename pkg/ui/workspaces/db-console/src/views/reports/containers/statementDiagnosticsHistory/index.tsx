@@ -12,13 +12,12 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import moment from "moment";
-import { Action, Dispatch } from "redux";
 import { Link } from "react-router-dom";
 import { isUndefined } from "lodash";
 
 import { Anchor, Button, Text, TextTypes, Tooltip } from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import {
@@ -95,15 +94,15 @@ class StatementDiagnosticsHistoryView extends React.Component<
   columns: ColumnDescriptor<IStatementDiagnosticsReport>[] = [
     {
       title: "Activated on",
-      cell: (record) =>
+      cell: record =>
         moment(record.requested_at.seconds.toNumber() * 1000).format(
           "LL[ at ]h:mm a",
         ),
-      sort: (record) => moment(record.requested_at.seconds.toNumber() * 1000),
+      sort: record => moment(record.requested_at.seconds.toNumber() * 1000),
     },
     {
       title: "Statement",
-      cell: (record) => {
+      cell: record => {
         const { getStatementByFingerprint } = this.props;
         const fingerprint = record.statement_fingerprint;
         const statement = getStatementByFingerprint(fingerprint);
@@ -123,12 +122,12 @@ class StatementDiagnosticsHistoryView extends React.Component<
           </Link>
         );
       },
-      sort: (record) => record.statement_fingerprint,
+      sort: record => record.statement_fingerprint,
     },
     {
       title: "Status",
-      sort: (record) => `${record.completed}`,
-      cell: (record) => (
+      sort: record => `${record.completed}`,
+      cell: record => (
         <Text>
           <DiagnosticStatusBadge status={getDiagnosticsStatus(record)} />
         </Text>
@@ -136,7 +135,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
     },
     {
       title: "",
-      cell: (record) => {
+      cell: record => {
         if (record.completed) {
           return (
             <div className="crl-statements-diagnostics-view__actions-column cell--show-on-hover nodes-table__link">
@@ -275,9 +274,7 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
     selectStatementByFingerprint(state, fingerprint),
 });
 
-const mapDispatchToProps = (
-  dispatch: Dispatch<Action, AdminUIState>,
-): MapDispatchToProps => ({
+const mapDispatchToProps = (dispatch: AppDispatch): MapDispatchToProps => ({
   refresh: () => {
     dispatch(invalidateStatementDiagnosticsRequests());
     dispatch(refreshStatementDiagnosticsRequests());

@@ -53,23 +53,21 @@ export default function swapByLicense<TProps>(
   const ossName = getComponentName(OSSComponent);
   const cclName = getComponentName(CCLComponent);
 
-  class LicenseSwap extends React.Component<TProps & OwnProps & any> {
-    public static displayName = `LicenseSwap(${combineNames(
-      ossName,
-      cclName,
-    )})`;
-
-    render() {
-      const props = _.omit(this.props, ["enterpriseEnabled"]);
-
-      if (!this.props.enterpriseEnabled) {
-        return <OSSComponent {...(props as TProps)} />;
-      }
-      return <CCLComponent {...(props as TProps)} />;
-    }
-  }
-
   return connect<OwnProps, null, TProps, AdminUIState>(mapStateToProps)(
-    LicenseSwap,
+    class extends React.Component<TProps & OwnProps & any> {
+      public static displayName = `LicenseSwap(${combineNames(
+        ossName,
+        cclName,
+      )})`;
+
+      render() {
+        const props = _.omit(this.props, ["enterpriseEnabled"]);
+
+        if (!this.props.enterpriseEnabled) {
+          return <OSSComponent {...(props as TProps)} />;
+        }
+        return <CCLComponent {...(props as TProps)} />;
+      }
+    },
   );
 }

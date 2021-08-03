@@ -12,7 +12,7 @@ import moment from "moment";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { withRouter } from "react-router-dom";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { cockroach } from "src/js/protos";
 import { jobsKey, refreshJobs } from "src/redux/apiReducers";
@@ -36,7 +36,7 @@ import JobsResponse = cockroach.server.serverpb.JobsResponse;
 
 export const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting",
-  (s) => s.localSettings,
+  s => s.localSettings,
   statusOptions[0].value,
 );
 
@@ -56,7 +56,7 @@ const typeOptions = [
 
 export const typeSetting = new LocalSetting<AdminUIState, number>(
   "jobs/type_setting",
-  (s) => s.localSettings,
+  s => s.localSettings,
   JobType.UNSPECIFIED,
 );
 
@@ -67,19 +67,19 @@ const showOptions = [
 
 export const showSetting = new LocalSetting<AdminUIState, string>(
   "jobs/show_setting",
-  (s) => s.localSettings,
+  s => s.localSettings,
   showOptions[0].value,
 );
 
 // Moment cannot render durations (moment/moment#1048). Hack it ourselves.
 export const formatDuration = (d: moment.Duration) =>
   [Math.floor(d.asHours()).toFixed(0), d.minutes(), d.seconds()]
-    .map((c) => (c < 10 ? ("0" + c).slice(-2) : c))
+    .map(c => (c < 10 ? ("0" + c).slice(-2) : c))
     .join(":");
 
 export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "jobs/sort_setting",
-  (s) => s.localSettings,
+  s => s.localSettings,
   { sortKey: 3 /* creation time */, ascending: false },
 );
 
@@ -194,7 +194,7 @@ export class JobsTable extends React.Component<JobsTableProps> {
   }
 }
 
-const mapStateToProps = (state: AdminUIState) => {
+const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => {
   const sort = sortSetting.selector(state);
   const status = statusSetting.selector(state);
   const show = showSetting.selector(state);
