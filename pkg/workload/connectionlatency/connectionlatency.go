@@ -13,6 +13,7 @@ package connectionlatency
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -83,6 +84,10 @@ func (c *connectionLatency) Ops(
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
+		// Just grab the zone name from the locality (if it exists) in order to
+		// keep the name smaller.
+		localitySplit := strings.Split(locality, "zone=")
+		locality = localitySplit[len(localitySplit)-1]
 
 		op.connectFrom = c.locality
 		op.connectTo = locality
