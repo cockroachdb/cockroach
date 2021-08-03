@@ -59,7 +59,7 @@ func NewMutableDefaultPrivileges(
 func (d *Mutable) GrantDefaultPrivileges(
 	role descpb.DefaultPrivilegesRole,
 	privileges privilege.List,
-	grantees tree.NameList,
+	grantees []security.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
 	defaultPrivilegesPerObject := d.defaultPrivilegeDescriptor.
@@ -67,7 +67,7 @@ func (d *Mutable) GrantDefaultPrivileges(
 	for _, grantee := range grantees {
 		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
 		defaultPrivileges.Grant(
-			security.MakeSQLUsernameFromPreNormalizedString(string(grantee)),
+			grantee,
 			privileges,
 		)
 		defaultPrivilegesPerObject[targetObject] = defaultPrivileges
@@ -78,7 +78,7 @@ func (d *Mutable) GrantDefaultPrivileges(
 func (d *Mutable) RevokeDefaultPrivileges(
 	role descpb.DefaultPrivilegesRole,
 	privileges privilege.List,
-	grantees tree.NameList,
+	grantees []security.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
 	defaultPrivilegesPerObject := d.defaultPrivilegeDescriptor.
@@ -86,7 +86,7 @@ func (d *Mutable) RevokeDefaultPrivileges(
 	for _, grantee := range grantees {
 		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
 		defaultPrivileges.Revoke(
-			security.MakeSQLUsernameFromPreNormalizedString(string(grantee)),
+			grantee,
 			privileges,
 			targetObject.ToPrivilegeObjectType(),
 		)
