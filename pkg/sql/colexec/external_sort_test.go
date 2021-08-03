@@ -295,7 +295,8 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	input := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, numTotalBatches)
 
 	var spilled bool
-	sem := colexecop.NewTestingSemaphore(numFDs)
+	// We multiply by 16 because the external sorter divides by this number.
+	sem := colexecop.NewTestingSemaphore(numFDs * 16)
 	sorter, accounts, monitors, closers, err := createDiskBackedSorter(
 		ctx, flowCtx, []colexecop.Operator{input}, typs, ordCols,
 		0 /* matchLen */, 0 /* k */, func() { spilled = true },
@@ -324,10 +325,12 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	// numInMemoryBufferedBatches (first merge = 2x, second merge = 3x, third
 	// merge 4x, etc, so we expect 2*numNewPartitions-1 partitions).
 	expMaxTotalPartitionsCreated := 2*numNewPartitions - 1
-	// Because of our "after the fact" memory accounting, we might create less
-	// partitions than maximum defined above (e.g., if numNewPartitions is 5,
-	// then we will create 5 partitions when batch size is 3).
-	expMinTotalPartitionsCreated := numNewPartitions
+	// Because of the fact that we are creating partitions slightly larger than
+	// memoryLimit in size and because of our "after the fact" memory
+	// accounting, we might create less partitions than maximum defined above
+	// (e.g., if numNewPartitions is 4, then we will create 3 partitions when
+	// batch size is 3).
+	expMinTotalPartitionsCreated := numNewPartitions - 1
 	require.GreaterOrEqualf(t, numPartitionsCreated, expMinTotalPartitionsCreated,
 		"didn't create enough partitions: actual %d, min expected %d",
 		numPartitionsCreated, expMinTotalPartitionsCreated,
@@ -346,16 +349,13 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	// summed).
 	var totalMaxMemUsage int64
 	for i := range monitors {
-		totalMaxMemUsage += monitors[i].MaximumBytes()
+		if monitors[i].Resource() == mon.MemoryResource {
+			totalMaxMemUsage += monitors[i].MaximumBytes()
+		}
 	}
 	// We cannot guarantee a fixed value, so we use an allowed range.
-	//
-	// In an ideal world the reported usage is very close to 2 x memoryLimit
-	// (the monitor for the in-memory sorter reports slightly below and the
-	// monitors for the external sorter report slightly above memoryLimit
-	// usage).
-	expMin := memoryLimit * 5 / 4
-	expMax := memoryLimit * 9 / 4
+	expMin := memoryLimit
+	expMax := int64(float64(memoryLimit) * 1.6)
 	require.GreaterOrEqualf(t, totalMaxMemUsage, expMin, "minimum memory bound not satisfied: "+
 		"actual %d, expected min %d", totalMaxMemUsage, expMin)
 	require.GreaterOrEqualf(t, expMax, totalMaxMemUsage, "maximum memory bound not satisfied: "+
