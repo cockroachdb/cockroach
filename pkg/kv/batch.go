@@ -49,6 +49,10 @@ type Batch struct {
 	// To be modified directly.
 	Header roachpb.Header
 	reqs   []roachpb.RequestUnion
+
+	// approxMutationReqBytes tracks the approximate size of keys and values in
+	// mutations added to this batch via Put, CPut, InitPut, Del, etc.
+	approxMutationReqBytes int
 	// Set when AddRawRequest is used, in which case using the "other"
 	// operations renders the batch unusable.
 	raw bool
@@ -369,6 +373,7 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 	} else {
 		b.appendReqs(roachpb.NewPut(k, v))
 	}
+	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -443,6 +448,7 @@ func (b *Batch) cputInternal(key, value interface{}, expValue []byte, allowNotEx
 		return
 	}
 	b.appendReqs(roachpb.NewConditionalPut(k, v, expValue, allowNotExist))
+	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -466,6 +472,7 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 		return
 	}
 	b.appendReqs(roachpb.NewInitPut(k, v, failOnTombstones))
+	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -567,6 +574,7 @@ func (b *Batch) Del(keys ...interface{}) {
 			return
 		}
 		reqs = append(reqs, roachpb.NewDelete(k))
+		b.approxMutationReqBytes += len(k)
 	}
 	b.appendReqs(reqs...)
 	b.initResult(len(reqs), len(reqs), notRaw, nil)
@@ -753,4 +761,11 @@ func (b *Batch) addSSTable(
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
+}
+
+// ApproximateMutationBytes returns the approximate byte size of the mutations
+// added to this batch via Put, CPut, InitPut, Del, etc methods. Mutations added
+// via AddRawRequest are not tracked.
+func (b *Batch) ApproximateMutationBytes() int {
+	return b.approxMutationReqBytes
 }

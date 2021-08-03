@@ -240,7 +240,8 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if n.run.ti.currentBatchSize >= n.run.ti.maxBatchSize {
+		if n.run.ti.currentBatchSize >= n.run.ti.maxBatchSize ||
+			n.run.ti.b.ApproximateMutationBytes() >= n.run.ti.maxBatchByteSize {
 			break
 		}
 	}
