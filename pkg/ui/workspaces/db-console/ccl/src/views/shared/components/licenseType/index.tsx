@@ -12,7 +12,7 @@ import DebugAnnotation from "src/views/shared/components/debugAnnotation";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
 import OSSLicenseType from "oss/src/views/shared/components/licenseType";
 
-class CCLLicenseType extends React.Component<{}, {}> {
+export class CCLLicenseType extends React.Component<{}, {}> {
   render() {
     return <DebugAnnotation label="License type" value="CCL" />;
   }

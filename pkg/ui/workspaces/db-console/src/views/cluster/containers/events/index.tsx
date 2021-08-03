@@ -12,7 +12,7 @@ import _ from "lodash";
 import moment from "moment";
 import React from "react";
 import { Helmet } from "react-helmet";
-import { Link, withRouter } from "react-router-dom";
+import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import * as protos from "src/js/protos";
 import { refreshEvents } from "src/redux/apiReducers";
@@ -39,7 +39,7 @@ const EVENT_BOX_NUM_EVENTS = 5;
 
 const eventsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "events/sort_setting",
-  (s) => s.localSettings,
+  s => s.localSettings,
 );
 
 export interface SimplifiedEvent {
@@ -157,16 +157,16 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
         <EventSortedTable
           data={simplifiedEvents}
           sortSetting={sortSetting}
-          onChangeSortSetting={(setting) => this.props.setSort(setting)}
+          onChangeSortSetting={setting => this.props.setSort(setting)}
           columns={[
             {
               title: "Event",
-              cell: (e) => e.content,
+              cell: e => e.content,
             },
             {
               title: "Timestamp",
-              cell: (e) => e.fromNowString,
-              sort: (e) => e.sortableTimestamp,
+              cell: e => e.fromNowString,
+              sort: e => e.sortableTimestamp,
             },
           ]}
         />
@@ -197,7 +197,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
 // Connect the EventsList class with our redux store.
 const eventBoxConnected = withRouter(
   connect(
-    (state: AdminUIState) => {
+    (state: AdminUIState, _: RouteComponentProps) => {
       return {
         events: eventsSelector(state),
         eventsValid: eventsValidSelector(state),
@@ -212,7 +212,7 @@ const eventBoxConnected = withRouter(
 // Connect the EventsList class with our redux store.
 const eventPageConnected = withRouter(
   connect(
-    (state: AdminUIState) => {
+    (state: AdminUIState, _: RouteComponentProps) => {
       return {
         events: eventsSelector(state),
         eventsValid: eventsValidSelector(state),

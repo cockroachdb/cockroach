@@ -12,7 +12,7 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { withRouter } from "react-router-dom";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
 import {
@@ -55,7 +55,7 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
     paddingLeft: `${20 * tree.tiers.length}px`,
   };
 
-  tree.nodes.forEach((node) => {
+  tree.nodes.forEach(node => {
     const tiers = getNodeLocalityTiers(node);
 
     rows.push(
@@ -69,8 +69,8 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
     );
   });
 
-  Object.keys(tree.localities).forEach((key) => {
-    Object.keys(tree.localities[key]).forEach((value) => {
+  Object.keys(tree.localities).forEach(key => {
+    Object.keys(tree.localities[key]).forEach(value => {
       const child = tree.localities[key][value];
 
       rows.push(
@@ -160,7 +160,7 @@ export class Localities extends React.Component<LocalitiesProps, {}> {
   }
 }
 
-const mapStateToProps = (state: AdminUIState) => ({
+const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => ({
   // RootState contains declaration for whole state
   localityTree: selectLocalityTree(state),
   localityStatus: selectNodeRequestStatus(state),

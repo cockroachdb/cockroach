@@ -17,14 +17,14 @@ const QUERY_BEGIN = "cockroachui/queries/QUERY_BEGIN";
 const QUERY_ERROR = "cockroachui/queries/QUERY_ERROR";
 const QUERY_COMPLETE = "cockroachui/queries/QUERY_COMPLETE";
 
-interface QueryBeginAction extends Action {
+export interface QueryBeginAction extends Action {
   type: typeof QUERY_BEGIN;
   payload: {
     id: string;
   };
 }
 
-interface QueryErrorAction extends Action {
+export interface QueryErrorAction extends Action {
   type: typeof QUERY_ERROR;
   payload: {
     id: string;
@@ -33,7 +33,7 @@ interface QueryErrorAction extends Action {
   };
 }
 
-interface QueryCompleteAction extends Action {
+export interface QueryCompleteAction extends Action {
   type: typeof QUERY_COMPLETE;
   payload: {
     id: string;

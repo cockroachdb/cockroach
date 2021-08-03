@@ -11,7 +11,7 @@
 import React from "react";
 import { connect } from "react-redux";
 
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import { trustIcon } from "src/util/trust";
 import Popover from "src/views/shared/components/popover";
 import UserAvatar from "src/views/shared/components/userAvatar";
@@ -91,7 +91,7 @@ export default connect(
   (state: AdminUIState) => ({
     loginState: selectLoginState(state),
   }),
-  (dispatch) => ({
+  (dispatch: AppDispatch) => ({
     handleLogout: () => {
       dispatch(doLogout());
     },

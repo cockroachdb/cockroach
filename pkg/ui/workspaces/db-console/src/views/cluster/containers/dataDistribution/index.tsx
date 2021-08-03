@@ -13,7 +13,7 @@ import React from "react";
 import { createSelector } from "reselect";
 import { connect } from "react-redux";
 import Helmet from "react-helmet";
-import { withRouter } from "react-router-dom";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { Loading } from "@cockroachlabs/cluster-ui";
 import { InfoTooltip } from "src/components/infoTooltip";
@@ -65,7 +65,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     return (
       <div className="zone-config-list">
         <ul>
-          {this.props.sortedZoneConfigs.map((zoneConfig) => (
+          {this.props.sortedZoneConfigs.map(zoneConfig => (
             <li key={zoneConfig.target} className="zone-config">
               <pre className="zone-config__raw-sql">
                 {zoneConfig.config_sql}
@@ -157,7 +157,9 @@ interface DataDistributionPageProps {
   refreshLiveness: typeof refreshLiveness;
 }
 
-export class DataDistributionPage extends React.Component<DataDistributionPageProps> {
+export class DataDistributionPage extends React.Component<
+  DataDistributionPageProps
+> {
   componentDidMount() {
     this.props.refreshDataDistribution();
     this.props.refreshNodes();
@@ -202,11 +204,11 @@ export class DataDistributionPage extends React.Component<DataDistributionPagePr
 
 const sortedZoneConfigs = createSelector(
   (state: AdminUIState) => state.cachedData.dataDistribution,
-  (dataDistributionState) => {
+  dataDistributionState => {
     if (!dataDistributionState.data) {
       return null;
     }
-    return _.sortBy(dataDistributionState.data.zone_configs, (zc) => zc.target);
+    return _.sortBy(dataDistributionState.data.zone_configs, zc => zc.target);
   },
 );
 
@@ -218,7 +220,7 @@ const localityTreeErrors = createSelector(
 
 const DataDistributionPageConnected = withRouter(
   connect(
-    (state: AdminUIState) => ({
+    (state: AdminUIState, _: RouteComponentProps) => ({
       dataDistribution: state.cachedData.dataDistribution,
       sortedZoneConfigs: sortedZoneConfigs(state),
       localityTree: selectLocalityTree(state),
@@ -252,7 +254,7 @@ function nodeTreeFromLocalityTree(
   });
 
   // Add child nodes.
-  _.forEach(localityTree.nodes, (node) => {
+  _.forEach(localityTree.nodes, node => {
     children.push({
       name: node.desc.node_id.toString(),
       data: node.desc,

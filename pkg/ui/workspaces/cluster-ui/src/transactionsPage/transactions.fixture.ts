@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-/* eslint-disable @typescript-eslint/camelcase */
 import { createMemoryHistory } from "history";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import Long from "long";
@@ -21,9 +20,7 @@ export const routeProps = {
     pathname: "/transactions",
     search: "",
     hash: "",
-    // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
-    // @ts-ignore
-    state: null,
+    state: {},
   },
   match: {
     path: "/transactions",

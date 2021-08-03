@@ -207,8 +207,8 @@ const logoutBeginAction = {
 export function doLogin(
   username: string,
   password: string,
-): ThunkAction<Promise<void>, AdminUIState, void> {
-  return (dispatch) => {
+): ThunkAction<Promise<void>, AdminUIState, void, Action> {
+  return dispatch => {
     dispatch(loginBeginAction);
 
     const loginReq = new UserLoginRequest({
@@ -219,15 +219,20 @@ export function doLogin(
       () => {
         dispatch(loginSuccess(username));
       },
-      (err) => {
+      err => {
         dispatch(loginFailure(err));
       },
     );
   };
 }
 
-export function doLogout(): ThunkAction<Promise<void>, AdminUIState, void> {
-  return (dispatch) => {
+export function doLogout(): ThunkAction<
+  Promise<void>,
+  AdminUIState,
+  void,
+  Action
+> {
+  return dispatch => {
     dispatch(logoutBeginAction);
 
     // Make request to log out, reloading the page whether it succeeds or not.
