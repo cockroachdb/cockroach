@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 var targetObjectToPrivilegeObject = map[tree.AlterDefaultPrivilegesTargetObject]privilege.ObjectType{
@@ -149,6 +150,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		}
 	}
 
+	var events []eventLogEntry
 	for _, role := range roles {
 		if n.n.IsGrant {
 			defaultPrivs.GrantDefaultPrivileges(
@@ -159,9 +161,34 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 				role, privileges, grantees, objectType,
 			)
 		}
+
+		eventDetails := eventpb.CommonSQLPrivilegeEventDetails{}
+		if n.n.IsGrant {
+			eventDetails.GrantedPrivileges = privileges.SortedNames()
+		} else {
+			eventDetails.RevokedPrivileges = privileges.SortedNames()
+		}
+		event := eventpb.AlterDefaultPrivileges{
+			CommonSQLPrivilegeEventDetails: eventDetails,
+			DatabaseName:                   n.dbDesc.GetName(),
+		}
+		if n.n.ForAllRoles {
+			event.ForAllRoles = true
+		} else {
+			event.RoleName = role.Role.Normalized()
+		}
+
+		events = append(events, eventLogEntry{
+			targetID: int32(n.dbDesc.GetID()),
+			event:    &event,
+		})
 	}
 
-	return params.p.writeNonDropDatabaseChange(
+	if err := params.p.writeNonDropDatabaseChange(
 		params.ctx, n.dbDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
-	)
+	); err != nil {
+		return err
+	}
+
+	return params.p.logEvents(params.ctx, events...)
 }

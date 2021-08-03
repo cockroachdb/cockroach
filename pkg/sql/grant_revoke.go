@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -32,11 +33,8 @@ import (
 )
 
 // Grant adds privileges to users.
-// Current status:
-// - Target: single database, table, or view.
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
-// - should we make users case-insensitive?
 // Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
@@ -47,30 +45,19 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	grantees := make([]security.SQLUsername, len(n.Grantees))
-	for i, grantee := range n.Grantees {
-		normalizedGrantee, err := security.MakeSQLUsernameFromUserInput(string(grantee), security.UsernameValidation)
-		if err != nil {
-			return nil, err
-		}
-		grantees[i] = normalizedGrantee
-	}
-
 	return &changePrivilegesNode{
 		isGrant:      true,
 		targets:      n.Targets,
-		grantees:     grantees,
+		grantees:     n.Grantees,
 		desiredprivs: n.Privileges,
-		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee security.SQLUsername) {
-			privDesc.Grant(grantee, n.Privileges)
+		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
+			privDesc.Grant(grantee, privileges)
 		},
 		grantOn: grantOn,
 	}, nil
 }
 
 // Revoke removes privileges from users.
-// Current status:
-// - Target: single database, table, or view.
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
 // Privileges: GRANT on database/table/view.
@@ -83,22 +70,13 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 
-	grantees := make([]security.SQLUsername, len(n.Grantees))
-	for i, grantee := range n.Grantees {
-		normalizedGrantee, err := security.MakeSQLUsernameFromUserInput(string(grantee), security.UsernameValidation)
-		if err != nil {
-			return nil, err
-		}
-		grantees[i] = normalizedGrantee
-	}
-
 	return &changePrivilegesNode{
 		isGrant:      false,
 		targets:      n.Targets,
-		grantees:     grantees,
+		grantees:     n.Grantees,
 		desiredprivs: n.Privileges,
-		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee security.SQLUsername) {
-			privDesc.Revoke(grantee, n.Privileges, grantOn)
+		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
+			privDesc.Revoke(grantee, privileges, grantOn)
 		},
 		grantOn: grantOn,
 	}, nil
@@ -107,9 +85,9 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 type changePrivilegesNode struct {
 	isGrant         bool
 	targets         tree.TargetList
-	grantees        []security.SQLUsername
+	grantees        tree.NameList
 	desiredprivs    privilege.List
-	changePrivilege func(*descpb.PrivilegeDescriptor, security.SQLUsername)
+	changePrivilege func(*descpb.PrivilegeDescriptor, privilege.List, security.SQLUsername)
 	grantOn         privilege.ObjectType
 }
 
@@ -122,12 +100,16 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 
-	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
+	grantees, err := tree.NameListToUsernames(n.grantees)
+	if err != nil {
+		return err
+	}
+
+	if err := p.validateRoles(ctx, grantees, true /* isPublicValid */); err != nil {
 		return err
 	}
 
 	var descriptors []catalog.Descriptor
-	var err error
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
@@ -142,6 +124,65 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	}
 
 	var events []eventLogEntry
+
+	// Convert PGIncompatibleDatabase privileges to default privileges instead.
+	if len(n.targets.Databases) != 0 {
+		var compatiblePrivs privilege.List
+		var incompatiblePrivs privilege.List
+		for _, priv := range n.desiredprivs {
+			if privilege.PGIncompatibleDBPrivileges.Contains(priv) {
+				incompatiblePrivs = append(incompatiblePrivs, priv)
+			} else {
+				compatiblePrivs = append(compatiblePrivs, priv)
+			}
+		}
+
+		// The incompatible privileges are added as default privileges for all roles
+		// on the databases.
+		for _, desc := range descriptors {
+			// If n.targets.Database has elements, all descriptors must be database
+			// descriptors.
+			dbDesc := desc.(catalog.DatabaseDescriptor).(*dbdesc.Mutable)
+			defaultPrivileges := dbDesc.GetMutableDefaultPrivilegeDescriptor()
+			// The objectType is always Tables since the incompatible pg privileges
+			// are (SELECT, INSERT, UPDATE, DELETE) which were previously allowed
+			// for the sake of inheriting privileges from the table to the db.
+			objectType := tree.Tables
+			var translatedStatement string
+			if n.isGrant {
+				defaultPrivileges.GrantDefaultPrivileges(descpb.DefaultPrivilegesRole{
+					ForAllRoles: true,
+				}, incompatiblePrivs, n.grantees, objectType)
+				// TODO(richardjcai): Not sure if this needs to be redacted.
+				translatedStatement = fmt.Sprintf("ALTER DEFAULT PRIVILEGES "+
+					"FOR ALL ROLES GRANT %s ON TABLES TO %s; in database %s",
+					incompatiblePrivs, n.grantees.String(), dbDesc.GetName(),
+				)
+			} else {
+				// If revoke is specified, we need to revoke both existing privileges
+				// on the database and also default privileges.
+				defaultPrivileges.RevokeDefaultPrivileges(descpb.DefaultPrivilegesRole{
+					ForAllRoles: true,
+				}, incompatiblePrivs, n.grantees, objectType)
+				translatedStatement = fmt.Sprintf("ALTER DEFAULT PRIVILEGES "+
+					"FOR ALL ROLES REVOKE %s ON TABLES FROM %s; in database %s",
+					incompatiblePrivs, n.grantees.String(), dbDesc.GetName(),
+				)
+			}
+
+			if len(incompatiblePrivs) > 0 {
+				p.BufferClientNotice(ctx, pgnotice.Newf(
+					"granting %s is going to be deprecated in 22.1, please use ALTER DEFAULT PRIVILEGES FOR ALL ROLES instead in the future"+
+						"the incompatible privileges were not granted, \"%s\" was automatically executed instead",
+					incompatiblePrivs, translatedStatement,
+				))
+			}
+		}
+
+		if n.isGrant {
+			n.desiredprivs = compatiblePrivs
+		}
+	}
 
 	// First, update the descriptors. We want to catch all errors before
 	// we update them in KV below.
@@ -169,8 +210,8 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 
 		privileges := descriptor.GetPrivileges()
-		for _, grantee := range n.grantees {
-			n.changePrivilege(privileges, grantee)
+		for _, grantee := range grantees {
+			n.changePrivilege(privileges, n.desiredprivs, grantee)
 		}
 
 		// Ensure superusers have exactly the allowed privilege set.
@@ -203,7 +244,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				fmt.Sprintf("updating privileges for database %d", d.ID)); err != nil {
 				return err
 			}
-			for _, grantee := range n.grantees {
+			for _, grantee := range grantees {
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
 				events = append(events, eventLogEntry{
@@ -229,7 +270,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 					return err
 				}
 			}
-			for _, grantee := range n.grantees {
+			for _, grantee := range grantees {
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
 				events = append(events, eventLogEntry{
@@ -244,7 +285,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			for _, grantee := range n.grantees {
+			for _, grantee := range grantees {
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
 				events = append(events, eventLogEntry{
@@ -262,7 +303,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			); err != nil {
 				return err
 			}
-			for _, grantee := range n.grantees {
+			for _, grantee := range grantees {
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
 				events = append(events, eventLogEntry{
