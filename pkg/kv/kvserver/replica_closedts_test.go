@@ -815,8 +815,10 @@ func TestNonBlockingReadsWithServerSideBoundedStalenessNegotiation(t *testing.T)
 			// the request would otherwise be redirected to the leaseholder.
 			var ba roachpb.BatchRequest
 			ba.RangeID = rangeID
-			ba.MinTimestampBound = minTSBound
-			ba.MinTimestampBoundStrict = true
+			ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+				MinTimestampBound:       minTSBound,
+				MinTimestampBoundStrict: true,
+			}
 			ba.WaitPolicy = lock.WaitPolicy_Error
 			ba.Add(&roachpb.ScanRequest{
 				RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),

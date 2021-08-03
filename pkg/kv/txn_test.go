@@ -570,7 +570,9 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 		txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 		var ba roachpb.BatchRequest
-		ba.MinTimestampBound = hlc.Timestamp{WallTime: 10}
+		ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+			MinTimestampBound: hlc.Timestamp{WallTime: 10},
+		}
 		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
 		ba.Add(roachpb.NewGet(roachpb.Key("a"), false))
 		br, pErr := txn.NegotiateAndSend(ctx, ba)
