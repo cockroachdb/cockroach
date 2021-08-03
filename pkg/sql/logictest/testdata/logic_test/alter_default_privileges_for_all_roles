@@ -1,0 +1,162 @@
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON TABLES TO testuser
+
+statement ok
+CREATE TABLE t()
+
+query TTTTT colnames
+SHOW GRANTS ON t
+----
+database_name  schema_name  table_name  grantee   privilege_type
+test           public       t           admin     ALL
+test           public       t           root      ALL
+test           public       t           testuser  SELECT
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT CREATE ON TABLES TO testuser
+
+statement ok
+CREATE TABLE t2()
+
+# Taking the union of default privileges defined on ALL ROLES and testuser
+# testuser should have CREATE and SELECT on the table.
+query TTTTT colnames
+SHOW GRANTS ON t2
+----
+database_name  schema_name  table_name  grantee   privilege_type
+test           public       t2          admin     ALL
+test           public       t2          root      ALL
+test           public       t2          testuser  CREATE
+test           public       t2          testuser  SELECT
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE SELECT ON TABLES FROM testuser
+
+statement ok
+CREATE TABLE t3()
+
+query TTTTT colnames
+SHOW GRANTS ON t3
+----
+database_name  schema_name  table_name  grantee   privilege_type
+test           public       t3          admin     ALL
+test           public       t3          root      ALL
+test           public       t3          testuser  CREATE
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT CREATE ON TABLES TO testuser
+
+statement ok
+CREATE TABLE t4()
+
+# CREATE is defined as a default privilege when the table is created by
+# ALL ROLES and root.
+query TTTTT colnames
+SHOW GRANTS ON t4
+----
+database_name  schema_name  table_name  grantee   privilege_type
+test           public       t4          admin     ALL
+test           public       t4          root      ALL
+test           public       t4          testuser  CREATE
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT CREATE ON TABLES TO testuser, testuser2
+
+statement ok
+CREATE TABLE t5()
+
+query TTTTT colnames
+SHOW GRANTS ON t5
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t5          admin      ALL
+test           public       t5          root       ALL
+test           public       t5          testuser   CREATE
+test           public       t5          testuser2  CREATE
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON TABLES TO testuser, testuser2
+
+statement ok
+CREATE TABLE t6()
+
+query TTTTT colnames
+SHOW GRANTS ON t6
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t6          admin      ALL
+test           public       t6          root       ALL
+test           public       t6          testuser   ALL
+test           public       t6          testuser2  ALL
+
+# Revoking from the target role should not affect the default privileges
+# defined on ALL ROLES.
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM testuser, testuser2
+
+statement ok
+CREATE TABLE t7()
+
+query TTTTT colnames
+SHOW GRANTS ON t7
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t7          admin      ALL
+test           public       t7          root       ALL
+test           public       t7          testuser   ALL
+test           public       t7          testuser2  ALL
+
+user testuser
+
+# Must be an admin to alter default privileges for all roles.
+statement error pq: only users with the admin role are allowed to ALTER DEFAULT PRIVILEGES
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON TABLES TO testuser
+
+user root
+
+# Ensure default privileges can be defined for all roles on schemas, types
+# and sequences.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON SEQUENCES TO testuser, testuser2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON SCHEMAS TO testuser, testuser2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON TYPES TO testuser, testuser2;
+
+statement ok
+CREATE SCHEMA s
+
+query TTTT colnames
+SHOW GRANTS ON SCHEMA s
+----
+database_name  schema_name  grantee    privilege_type
+test           s            admin      ALL
+test           s            root       ALL
+test           s            testuser   ALL
+test           s            testuser2  ALL
+
+statement ok
+CREATE SEQUENCE seq
+
+query TTTTT colnames
+SHOW GRANTS ON seq
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       seq         admin      ALL
+test           public       seq         root       ALL
+test           public       seq         testuser   ALL
+test           public       seq         testuser2  ALL
+
+statement ok
+CREATE TYPE typ AS ENUM()
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE typ
+----
+database_name  schema_name  type_name  grantee    privilege_type
+test           public       typ        admin      ALL
+test           public       typ        public     USAGE
+test           public       typ        root       ALL
+test           public       typ        testuser   ALL
+test           public       typ        testuser2  ALL

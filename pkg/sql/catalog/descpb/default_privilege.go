@@ -17,53 +17,65 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
-var targetObjectToPrivilegeObject = map[tree.AlterDefaultPrivilegesTargetObject]privilege.ObjectType{
-	tree.Tables:    privilege.Table,
-	tree.Sequences: privilege.Table,
-	tree.Schemas:   privilege.Schema,
-	tree.Types:     privilege.Type,
+// AlterDefaultPrivilegesRole represents the creator role that the default privileges
+// are being altered for.
+// Either:
+//     role should be populated
+//     forAllRoles should be true.
+type AlterDefaultPrivilegesRole struct {
+	Role        security.SQLUsername
+	ForAllRoles bool
 }
 
 // GrantDefaultPrivileges grants privileges for the specified users.
 func (p *DefaultPrivilegeDescriptor) GrantDefaultPrivileges(
-	role security.SQLUsername,
+	role AlterDefaultPrivilegesRole,
 	privileges privilege.List,
 	grantees tree.NameList,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
-	defaultPrivileges := p.findOrCreateUser(role)
+	var defaultPrivilegesPerObject map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor
+	if role.ForAllRoles {
+		defaultPrivilegesPerObject = p.DefaultPrivilegesForAllRoles
+	} else {
+		defaultPrivilegesPerObject = p.findOrCreateUser(role.Role).DefaultPrivilegesPerObject
+	}
 	for _, grantee := range grantees {
-		defaultPrivilegesPerObject := defaultPrivileges.DefaultPrivilegesPerObject[targetObject]
-		defaultPrivilegesPerObject.Grant(
+		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
+		defaultPrivileges.Grant(
 			security.MakeSQLUsernameFromPreNormalizedString(string(grantee)),
 			privileges,
 		)
-
-		defaultPrivileges.DefaultPrivilegesPerObject[targetObject] = defaultPrivilegesPerObject
+		defaultPrivilegesPerObject[targetObject] = defaultPrivileges
 	}
 }
 
 // RevokeDefaultPrivileges revokes privileges for the specified users.
 func (p *DefaultPrivilegeDescriptor) RevokeDefaultPrivileges(
-	role security.SQLUsername,
+	role AlterDefaultPrivilegesRole,
 	privileges privilege.List,
 	grantees tree.NameList,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
-	defaultPrivileges := p.findOrCreateUser(role)
+	var defaultPrivilegesPerObject map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor
+	if role.ForAllRoles {
+		//defaultPrivilegesPerObject = p.getOrCreateDefaultPrivilegesForAllRoles()
+		defaultPrivilegesPerObject = p.DefaultPrivilegesForAllRoles
+	} else {
+		defaultPrivilegesPerObject = p.findOrCreateUser(role.Role).DefaultPrivilegesPerObject
+	}
 	for _, grantee := range grantees {
-		defaultPrivilegesPerObject := defaultPrivileges.DefaultPrivilegesPerObject[targetObject]
-		defaultPrivilegesPerObject.Revoke(
+		defaultPrivileges := defaultPrivilegesPerObject[targetObject]
+		defaultPrivileges.Revoke(
 			security.MakeSQLUsernameFromPreNormalizedString(string(grantee)),
 			privileges,
-			targetObjectToPrivilegeObject[targetObject],
+			targetObject.ToPrivilegeObjectType(),
 		)
 
-		defaultPrivileges.DefaultPrivilegesPerObject[targetObject] = defaultPrivilegesPerObject
+		defaultPrivilegesPerObject[targetObject] = defaultPrivileges
 	}
 }
 
@@ -87,18 +99,37 @@ func CreatePrivilegesFromDefaultPrivileges(
 		defaultPrivileges = InitDefaultPrivilegeDescriptor()
 	}
 
-	defaultPrivilegesForRole, found := defaultPrivileges.GetDefaultPrivilegesForRole(user)
-	var newPrivs *PrivilegeDescriptor
-	if !found {
-		newPrivs = NewDefaultPrivilegeDescriptor(user)
-	} else {
-		defaultPrivs := defaultPrivilegesForRole.DefaultPrivilegesPerObject[targetObject]
-		newPrivs = protoutil.Clone(&defaultPrivs).(*PrivilegeDescriptor)
-		newPrivs.Grant(security.AdminRoleName(), DefaultSuperuserPrivileges)
-		newPrivs.Grant(security.RootUserName(), DefaultSuperuserPrivileges)
-		newPrivs.SetOwner(user)
-		newPrivs.Version = Version21_2
+	defaultPrivilegesForAllRoles := defaultPrivileges.DefaultPrivilegesForAllRoles
+
+	// The privileges for the object are the union of the default privileges
+	// defined for the object for the object creator and the default privileges
+	// defined for all roles.
+	newPrivs := NewDefaultPrivilegeDescriptor(user)
+	privilegesForAllRoles, found := defaultPrivilegesForAllRoles[targetObject]
+	if found {
+		for _, user := range privilegesForAllRoles.Users {
+			newPrivs.Grant(
+				user.UserProto.Decode(),
+				privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
+			)
+		}
 	}
+
+	defaultPrivilegesForCreator, defaultPrivilegesDefinedForCreator := defaultPrivileges.GetDefaultPrivilegesForRole(user)
+	if defaultPrivilegesDefinedForCreator {
+		defaultPrivileges, descriptorExists := defaultPrivilegesForCreator.DefaultPrivilegesPerObject[targetObject]
+		if descriptorExists {
+			for _, user := range defaultPrivileges.Users {
+				newPrivs.Grant(
+					user.UserProto.Decode(),
+					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
+				)
+			}
+		}
+	}
+
+	newPrivs.SetOwner(user)
+	newPrivs.Version = Version21_2
 
 	// TODO(richardjcai): Remove this depending on how we handle the migration.
 	//   For backwards compatibility, also "inherit" privileges from the dbDesc.
@@ -184,7 +215,7 @@ func (p *DefaultPrivilegeDescriptor) Validate() error {
 			return errors.AssertionFailedf("default privilege list is not sorted")
 		}
 		for objectType, defaultPrivileges := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
-			privilegeObjectType := targetObjectToPrivilegeObject[objectType]
+			privilegeObjectType := objectType.ToPrivilegeObjectType()
 			valid, u, remaining := defaultPrivileges.IsValidPrivilegesForObjectType(privilegeObjectType)
 			if !valid {
 				return errors.AssertionFailedf("user %s must not have %s privileges on %s",
@@ -201,5 +232,11 @@ func InitDefaultPrivilegeDescriptor() *DefaultPrivilegeDescriptor {
 	var defaultPrivilegesForRole []DefaultPrivilegesForRole
 	return &DefaultPrivilegeDescriptor{
 		DefaultPrivileges: defaultPrivilegesForRole,
+		DefaultPrivilegesForAllRoles: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{
+			tree.Tables:    {},
+			tree.Sequences: {},
+			tree.Types:     {},
+			tree.Schemas:   {},
+		},
 	}
 }

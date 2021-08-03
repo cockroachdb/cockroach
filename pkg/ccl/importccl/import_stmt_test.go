@@ -2597,19 +2597,19 @@ func TestExportImportRoundTrip(t *testing.T) {
 		// with a unique directory name per run.
 		{
 			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT ARRAY['a', 'b', 'c'];
-							IMPORT TABLE t (x TEXT[]) CSV DATA ('nodelocal://0/%[1]s/export*-n1.0.csv')`,
+							IMPORT TABLE t (x TEXT[]) CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
 			tbl:      "t",
 			expected: `SELECT ARRAY['a', 'b', 'c']`,
 		},
 		{
 			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63'];
-							IMPORT TABLE t (x BYTES[]) CSV DATA ('nodelocal://0/%[1]s/export*-n1.0.csv')`,
+							IMPORT TABLE t (x BYTES[]) CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
 			tbl:      "t",
 			expected: `SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63']`,
 		},
 		{
 			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT 'dog' COLLATE en;
-							IMPORT TABLE t (x STRING COLLATE en) CSV DATA ('nodelocal://0/%[1]s/export*-n1.0.csv')`,
+							IMPORT TABLE t (x STRING COLLATE en) CSV DATA ('nodelocal://0/%[1]s/export*-n*.0.csv')`,
 			tbl:      "t",
 			expected: `SELECT 'dog' COLLATE en`,
 		},

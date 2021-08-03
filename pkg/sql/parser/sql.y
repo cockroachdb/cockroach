@@ -8051,8 +8051,25 @@ alter_default_privileges_stmt:
      IsGrant: false,
    }
  }
+| ALTER DEFAULT PRIVILEGES FOR ALL ROLES opt_in_schemas abbreviated_grant_stmt
+ {
+   $$.val = &tree.AlterDefaultPrivileges{
+     ForAllRoles: true,
+     Schemas: $7.objectNamePrefixList(),
+     Grant: $8.abbreviatedGrant(),
+     IsGrant: true,
+  }
+ }
+| ALTER DEFAULT PRIVILEGES FOR ALL ROLES opt_in_schemas abbreviated_revoke_stmt
+ {
+   $$.val = &tree.AlterDefaultPrivileges{
+     ForAllRoles: true,
+     Schemas: $7.objectNamePrefixList(),
+     Revoke: $8.abbreviatedRevoke(),
+     IsGrant: false,
+  }
+ }
 | ALTER DEFAULT PRIVILEGES error // SHOW HELP: ALTER DEFAULT PRIVILEGES
-
 
 abbreviated_grant_stmt:
   GRANT privileges ON alter_default_privileges_target_object TO name_list opt_with_grant_option

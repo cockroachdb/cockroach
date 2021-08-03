@@ -15,6 +15,8 @@ import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
 // AlterDefaultPrivileges represents an ALTER DEFAULT PRIVILEGES statement.
 type AlterDefaultPrivileges struct {
 	Roles NameList
+	// True if `ALTER DEFAULT PRIVILEGES FOR ALL ROLES` is executed.
+	ForAllRoles bool
 	// If Schema is not specified, ALTER DEFAULT PRIVILEGES is being
 	// run on the current database.
 	Schemas ObjectNamePrefixList
@@ -54,6 +56,18 @@ func (n *AlterDefaultPrivileges) Format(ctx *FmtCtx) {
 // AlterDefaultPrivilegesTargetObject represents the type of object that is
 // having it's default privileges altered.
 type AlterDefaultPrivilegesTargetObject uint32
+
+// ToPrivilegeObjectType returns the privilege.ObjectType corresponding to
+// the AlterDefaultPrivilegesTargetObject.
+func (t AlterDefaultPrivilegesTargetObject) ToPrivilegeObjectType() privilege.ObjectType {
+	targetObjectToPrivilegeObject := map[AlterDefaultPrivilegesTargetObject]privilege.ObjectType{
+		Tables:    privilege.Table,
+		Sequences: privilege.Table,
+		Schemas:   privilege.Schema,
+		Types:     privilege.Type,
+	}
+	return targetObjectToPrivilegeObject[t]
+}
 
 // The numbers are explicitly assigned since the DefaultPrivilegesPerObject
 // map defined in the DefaultPrivilegesPerRole proto requires the key value

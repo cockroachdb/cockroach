@@ -1322,6 +1322,8 @@ alter_type_stmt ::=
 alter_default_privileges_stmt ::=
 	'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schemas abbreviated_grant_stmt
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schemas abbreviated_revoke_stmt
+	| 'ALTER' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schemas abbreviated_grant_stmt
+	| 'ALTER' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schemas abbreviated_revoke_stmt
 
 role_or_group_or_user ::=
 	'ROLE'
