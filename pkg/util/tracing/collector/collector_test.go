@@ -133,10 +133,12 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 		res := make(map[roachpb.NodeID][]tracing.Recording)
 
 		var iter *collector.Iterator
-		for iter = traceCollector.StartIter(ctx, traceID); iter.Valid(); iter.Next() {
+		var err error
+		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next() {
 			nodeID, recording := iter.Value()
 			res[nodeID] = append(res[nodeID], recording)
 		}
+		require.NoError(t, err)
 		require.NoError(t, iter.Error())
 		return res
 	}
