@@ -115,17 +115,16 @@ export function uiDataReducer(
     case SAVE: {
       const keys = (action as PayloadAction<string[]>).payload;
       state = _.clone(state);
-      _.each(keys, (k) => {
+      _.each(keys, k => {
         state[k] = _.clone(state[k]) || new UIData();
         state[k].status = UIDataStatus.SAVING;
       });
       return state;
     }
     case SAVE_ERROR: {
-      const {
-        key: saveErrorKey,
-        error: saveError,
-      } = (action as PayloadAction<KeyedError>).payload;
+      const { key: saveErrorKey, error: saveError } = (action as PayloadAction<
+        KeyedError
+      >).payload;
       state = _.clone(state);
       state[saveErrorKey] = _.clone(state[saveErrorKey]) || new UIData();
       state[saveErrorKey].status = UIDataStatus.SAVE_ERROR;
@@ -135,17 +134,16 @@ export function uiDataReducer(
     case LOAD: {
       const keys = (action as PayloadAction<string[]>).payload;
       state = _.clone(state);
-      _.each(keys, (k) => {
+      _.each(keys, k => {
         state[k] = _.clone(state[k]) || new UIData();
         state[k].status = UIDataStatus.LOADING;
       });
       return state;
     }
     case LOAD_ERROR: {
-      const {
-        key: loadErrorKey,
-        error: loadError,
-      } = (action as PayloadAction<KeyedError>).payload;
+      const { key: loadErrorKey, error: loadError } = (action as PayloadAction<
+        KeyedError
+      >).payload;
       state = _.clone(state);
       state[loadErrorKey] = _.clone(state[loadErrorKey]) || new UIData();
       state[loadErrorKey].status = UIDataStatus.LOAD_ERROR;
@@ -302,19 +300,19 @@ export function getLoadError(state: AdminUIState, key: string): Error {
  */
 export function saveUIData(...values: KeyValue[]) {
   return (
-    dispatch: Dispatch<Action, AdminUIState>,
+    dispatch: Dispatch<Action>,
     getState: () => AdminUIState,
   ): Promise<void> => {
     const state = getState();
-    values = _.filter(values, (kv) => !isInFlight(state, kv.key));
+    values = _.filter(values, kv => !isInFlight(state, kv.key));
     if (values.length === 0) {
       return;
     }
-    dispatch(beginSaveUIData(_.map(values, (kv) => kv.key)));
+    dispatch(beginSaveUIData(_.map(values, kv => kv.key)));
 
     // Encode data for each UIData key.
     const request = new protos.cockroach.server.serverpb.SetUIDataRequest();
-    _.each(values, (kv) => {
+    _.each(values, kv => {
       const stringifiedValue = JSON.stringify(kv.value);
       const buffer = new Uint8Array(
         protobuf.util.utf8.length(stringifiedValue),
@@ -324,16 +322,15 @@ export function saveUIData(...values: KeyValue[]) {
     });
 
     return setUIData(request)
-      .then((_response) => {
+      .then(_response => {
         // SetUIDataResponse is empty. A positive return indicates success.
-        _.each(values, (kv) => dispatch(setUIDataKey(kv.key, kv.value)));
+        _.each(values, kv => dispatch(setUIDataKey(kv.key, kv.value)));
       })
-      .catch((error) => {
+      .catch(error => {
         // TODO(maxlang): Fix error handling more comprehensively.
         // Tracked in #8699
         setTimeout(
-          () =>
-            _.each(values, (kv) => dispatch(saveErrorUIData(kv.key, error))),
+          () => _.each(values, kv => dispatch(saveErrorUIData(kv.key, error))),
           1000,
         );
       });
@@ -345,11 +342,11 @@ export function saveUIData(...values: KeyValue[]) {
  */
 export function loadUIData(...keys: string[]) {
   return (
-    dispatch: Dispatch<Action, AdminUIState>,
+    dispatch: Dispatch<Action>,
     getState: () => AdminUIState,
   ): Promise<void> => {
     const state = getState();
-    keys = _.filter(keys, (k) => !isInFlight(state, k));
+    keys = _.filter(keys, k => !isInFlight(state, k));
     if (keys.length === 0) {
       return;
     }
@@ -358,9 +355,9 @@ export function loadUIData(...keys: string[]) {
     return getUIData(
       new protos.cockroach.server.serverpb.GetUIDataRequest({ keys }),
     )
-      .then((response) => {
+      .then(response => {
         // Decode data for each UIData key.
-        _.each(keys, (key) => {
+        _.each(keys, key => {
           if (_.has(response.key_values, key)) {
             const buffer = response.key_values[key].value;
             dispatch(
@@ -376,11 +373,11 @@ export function loadUIData(...keys: string[]) {
           }
         });
       })
-      .catch((error) => {
+      .catch(error => {
         // TODO(maxlang): Fix error handling more comprehensively.
         // Tracked in #8699
         setTimeout(
-          () => _.each(keys, (key) => dispatch(loadErrorUIData(key, error))),
+          () => _.each(keys, key => dispatch(loadErrorUIData(key, error))),
           1000,
         );
       });

@@ -14,7 +14,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { doLogin, LoginAPIState } from "src/redux/login";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import * as docsURL from "src/util/docs";
 
 import "./loginPage.styl";
@@ -211,7 +211,7 @@ const LoginPageConnected = withRouter(
         location: state.router.location,
       };
     },
-    (dispatch) => ({
+    (dispatch: AppDispatch) => ({
       handleLogin: (username: string, password: string) => {
         return dispatch(doLogin(username, password));
       },

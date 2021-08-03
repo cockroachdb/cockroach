@@ -16,7 +16,7 @@
 import _ from "lodash";
 import moment from "moment";
 import { createSelector } from "reselect";
-import { Store, Dispatch, Action } from "redux";
+import { Store, Dispatch, Action, AnyAction } from "redux";
 import { ThunkAction } from "redux-thunk";
 
 import { LocalSetting } from "./localsettings";
@@ -36,7 +36,7 @@ import {
   refreshHealth,
 } from "./apiReducers";
 import { singleVersionSelector, versionsSelector } from "src/redux/nodes";
-import { AdminUIState } from "./state";
+import { AdminUIState, AppDispatch } from "./state";
 import * as docsURL from "src/util/docs";
 
 export enum AlertLevel {
@@ -60,7 +60,7 @@ export interface AlertInfo {
 export interface Alert extends AlertInfo {
   // ThunkAction which will result in this alert being dismissed. This
   // function will be dispatched to the redux store when the alert is dismissed.
-  dismiss: ThunkAction<Promise<void>, AdminUIState, void>;
+  dismiss: ThunkAction<Promise<void>, AdminUIState, void, AnyAction>;
   // Makes alert to be positioned in the top right corner of the screen instead of
   // stretching to full width.
   showAsAlert?: boolean;
@@ -109,7 +109,7 @@ export const instructionsBoxCollapsedSelector = createSelector(
 );
 
 export function setInstructionsBoxCollapsed(collapsed: boolean) {
-  return (dispatch: Dispatch<Action, AdminUIState>) => {
+  return (dispatch: AppDispatch) => {
     dispatch(instructionsBoxCollapsedSetting.set(collapsed));
     dispatch(
       saveUIData({
@@ -151,7 +151,7 @@ export const staggeredVersionWarningSelector = createSelector(
       text: `We have detected that multiple versions of CockroachDB are running
       in this cluster. This may be part of a normal rolling upgrade process, but
       should be investigated if this is unexpected.`,
-      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+      dismiss: (dispatch: AppDispatch) => {
         dispatch(staggeredVersionDismissedSetting.set(true));
         return Promise.resolve();
       },
@@ -165,12 +165,12 @@ export const staggeredVersionWarningSelector = createSelector(
 // "loaded, doesn't exist on server" without a separate selector.
 const newVersionDismissedPersistentLoadedSelector = createSelector(
   (state: AdminUIState) => state.uiData,
-  (uiData) => uiData && _.has(uiData, VERSION_DISMISSED_KEY),
+  uiData => uiData && _.has(uiData, VERSION_DISMISSED_KEY),
 );
 
 const newVersionDismissedPersistentSelector = createSelector(
   (state: AdminUIState) => state.uiData,
-  (uiData) => {
+  uiData => {
     return (
       (uiData &&
         uiData[VERSION_DISMISSED_KEY] &&
@@ -279,7 +279,7 @@ export const disconnectedAlertSelector = createSelector(
       level: AlertLevel.CRITICAL,
       title:
         "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.",
-      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+      dismiss: (dispatch: Dispatch<Action>) => {
         dispatch(disconnectedDismissedLocalSetting.set(moment()));
         return Promise.resolve();
       },
@@ -305,7 +305,7 @@ export const emailSubscriptionAlertSelector = createSelector(
       showAsAlert: true,
       autoClose: true,
       closable: false,
-      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+      dismiss: (dispatch: Dispatch<Action>) => {
         dispatch(emailSubscriptionAlertLocalSetting.set(false));
         return Promise.resolve();
       },
@@ -341,7 +341,7 @@ export const createStatementDiagnosticsAlertSelector = createSelector(
         text:
           "Please try activating again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
-        dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+        dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(
             createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
           );
@@ -355,7 +355,7 @@ export const createStatementDiagnosticsAlertSelector = createSelector(
       showAsAlert: true,
       autoClose: true,
       closable: false,
-      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+      dismiss: (dispatch: Dispatch<Action>) => {
         dispatch(
           createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
         );
@@ -390,7 +390,7 @@ export const terminateSessionAlertSelector = createSelector(
         text:
           "Please try activating again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
-        dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+        dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(terminateSessionAlertLocalSetting.set({ show: false }));
           return Promise.resolve();
         },
@@ -402,7 +402,7 @@ export const terminateSessionAlertSelector = createSelector(
       showAsAlert: true,
       autoClose: true,
       closable: false,
-      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+      dismiss: (dispatch: Dispatch<Action>) => {
         dispatch(terminateSessionAlertLocalSetting.set({ show: false }));
         return Promise.resolve();
       },
@@ -435,7 +435,7 @@ export const terminateQueryAlertSelector = createSelector(
         text:
           "Please try terminating again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
-        dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+        dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(terminateQueryAlertLocalSetting.set({ show: false }));
           return Promise.resolve();
         },
@@ -447,7 +447,7 @@ export const terminateQueryAlertSelector = createSelector(
       showAsAlert: true,
       autoClose: true,
       closable: false,
-      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+      dismiss: (dispatch: Dispatch<Action>) => {
         dispatch(terminateQueryAlertLocalSetting.set({ show: false }));
         return Promise.resolve();
       },
@@ -492,7 +492,7 @@ export const bannerAlertsSelector = createSelector(
  * intended to be attached to the store as a subscriber.
  */
 export function alertDataSync(store: Store<AdminUIState>) {
-  const dispatch = store.dispatch;
+  const dispatch = store.dispatch as AppDispatch;
 
   // Memoizers to prevent unnecessary dispatches of alertDataSync if store
   // hasn't changed in an interesting way.
@@ -512,7 +512,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
         VERSION_DISMISSED_KEY,
         INSTRUCTIONS_BOX_COLLAPSED_KEY,
       ];
-      const keysToLoad = _.filter(keysToMaybeLoad, (key) => {
+      const keysToLoad = _.filter(keysToMaybeLoad, key => {
         return !(_.has(uiData, key) || isInFlight(state, key));
       });
       if (keysToLoad) {

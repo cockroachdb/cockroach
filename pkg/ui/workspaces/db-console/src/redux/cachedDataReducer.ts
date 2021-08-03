@@ -15,11 +15,11 @@
  */
 
 import _ from "lodash";
-import { Action, Dispatch } from "redux";
+import { Action } from "redux";
 import assert from "assert";
 import moment from "moment";
 import { push } from "connected-react-router";
-import { ThunkAction } from "redux-thunk";
+import { ThunkAction, ThunkDispatch } from "redux-thunk";
 
 import { createHashHistory } from "history";
 import { getLoginPage } from "src/redux/login";
@@ -213,11 +213,8 @@ export class CachedDataReducer<
     req?: TRequest,
     stateAccessor = (state: any, _req: TRequest) =>
       state.cachedData[this.actionNamespace],
-  ): ThunkAction<any, S, any> => {
-    return (
-      dispatch: Dispatch<Action, TResponseMessage>,
-      getState: () => S,
-    ) => {
+  ): ThunkAction<any, S, any, Action> => {
+    return (dispatch: ThunkDispatch<S, unknown, Action>, getState: () => S) => {
       const state: CachedDataReducerState<TResponseMessage> = stateAccessor(
         getState(),
         req,
@@ -235,7 +232,7 @@ export class CachedDataReducer<
       // Fetch data from the servers. Return the promise for use in tests.
       return this.apiEndpoint(req, this.requestTimeout)
         .then(
-          (data) => {
+          data => {
             // Dispatch the results to the store.
             dispatch(this.receiveData(data, req));
           },
