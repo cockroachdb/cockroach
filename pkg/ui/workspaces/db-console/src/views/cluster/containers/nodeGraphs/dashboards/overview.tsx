@@ -25,7 +25,7 @@ import {
 } from "./dashboardUtils";
 import { CapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
-export default function (props: GraphDashboardProps) {
+export default function(props: GraphDashboardProps) {
   const {
     nodeIDs,
     nodesSummary,
@@ -79,7 +79,7 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.service.latency-p99"
@@ -118,7 +118,7 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis label="replicas">
-        {_.map(nodeIDs, (nid) => (
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.replicas"

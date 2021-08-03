@@ -14,9 +14,10 @@ import {
 } from "src/util/docs";
 import { TooltipProps } from "src/components/tooltip/tooltip";
 
-export const NodeArcPercentageTooltip: React.FC<
-  TooltipProps & { localityLabel?: string; nodeLabel?: string }
-> = (props) => (
+export const NodeArcPercentageTooltip: React.FC<TooltipProps & {
+  localityLabel?: string;
+  nodeLabel?: string;
+}> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -45,9 +46,10 @@ export const NodeArcPercentageTooltip: React.FC<
   </Tooltip>
 );
 
-export const NodeArcUsedCapacityTooltip: React.FC<
-  TooltipProps & { localityLabel?: string; nodeLabel?: string }
-> = (props) => (
+export const NodeArcUsedCapacityTooltip: React.FC<TooltipProps & {
+  localityLabel?: string;
+  nodeLabel?: string;
+}> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -72,9 +74,10 @@ export const NodeArcUsedCapacityTooltip: React.FC<
   </Tooltip>
 );
 
-export const NodeArcTotalCapacityTooltip: React.FC<
-  TooltipProps & { localityLabel?: string; nodeLabel?: string }
-> = (props) => (
+export const NodeArcTotalCapacityTooltip: React.FC<TooltipProps & {
+  localityLabel?: string;
+  nodeLabel?: string;
+}> = props => (
   <Tooltip
     {...props}
     placement="bottom"

@@ -24,13 +24,13 @@ import {
   storeIDsForNode,
 } from "./dashboardUtils";
 
-export default function (props: GraphDashboardProps) {
+export default function(props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, storeSources } = props;
 
   return [
     <LineGraph title="CPU Percent" sources={nodeSources}>
       <Axis units={AxisUnits.Percentage} label="CPU">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.cpu.combined.percent-normalized"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -46,7 +46,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={`The number of Goroutines waiting per CPU.`}
     >
       <Axis label="goroutines">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.runnable.goroutines.per.cpu"
             title={nodeDisplayName(nodesSummary, nid)}
@@ -62,7 +62,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={`The number of files and sublevels within Level 0.`}
     >
       <Axis label="count">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
@@ -83,7 +83,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="KV Admission Slots" sources={nodeSources}>
       <Axis label="slots">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
@@ -107,7 +107,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
     >
       <Axis label="duration (micros/sec)">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <Metric
             key={nid}
             name="cr.node.admission.granter.io_tokens_exhausted_duration.kv"
@@ -120,7 +120,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="Admission Work Rate" sources={nodeSources}>
       <Axis label="work rate">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
@@ -150,7 +150,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="Admission Delay Rate" sources={nodeSources}>
       <Axis label="delay rate (micros/sec)">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
@@ -180,7 +180,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="Admission Delay: 75th percentile" sources={nodeSources}>
       <Axis label="delay for requests that waited (nanos)">
-        {nodeIDs.map((nid) => (
+        {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}

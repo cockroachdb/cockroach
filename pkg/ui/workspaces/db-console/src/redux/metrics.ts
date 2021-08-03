@@ -329,11 +329,11 @@ export function* queryMetricsSaga() {
 export function* batchAndSendRequests(requests: WithID<TSRequest>[]) {
   // Construct queryable batches from the set of queued queries. Queries can
   // be dispatched in a batch if they are querying over the same timespan.
-  const batches = _.groupBy(requests, (qr) => timespanKey(qr.data));
+  const batches = _.groupBy(requests, qr => timespanKey(qr.data));
   requests = [];
 
   yield put(fetchMetrics());
-  yield all(_.map(batches, (batch) => call(sendRequestBatch, batch)));
+  yield all(_.map(batches, batch => call(sendRequestBatch, batch)));
   yield put(fetchMetricsComplete());
 }
 
@@ -343,7 +343,7 @@ export function* batchAndSendRequests(requests: WithID<TSRequest>[]) {
 export function* sendRequestBatch(requests: WithID<TSRequest>[]) {
   // Flatten the queries from the batch into a single request.
   const unifiedRequest = _.clone(requests[0].data);
-  unifiedRequest.queries = _.flatMap(requests, (req) => req.data.queries);
+  unifiedRequest.queries = _.flatMap(requests, req => req.data.queries);
 
   let response: protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
   try {

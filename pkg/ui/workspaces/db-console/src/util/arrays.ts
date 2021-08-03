@@ -19,5 +19,5 @@ export const unique = <T>(a: T[]): T[] => [...new Set([...a])];
 // unique elements, so the array needs to be converted before
 // creating the Set and converted back to be returned.
 export const uniqueLong = (a: Long[]): Long[] => {
-  return unique(a.map(longToInt)).map((n) => Long.fromInt(n));
+  return unique(a.map(longToInt)).map(n => Long.fromInt(n));
 };

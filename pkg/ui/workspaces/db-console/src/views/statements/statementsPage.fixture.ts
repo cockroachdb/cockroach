@@ -506,9 +506,9 @@ const statementsPagePropsFixture: StatementsPageProps = {
   dismissAlertMessage: () => {},
   refreshStatementDiagnosticsRequests: (() => {}) as typeof refreshStatementDiagnosticsRequests,
   refreshStatements: (() => {}) as typeof refreshStatements,
-  onActivateStatementDiagnostics: (_) => {},
-  onDiagnosticsModalOpen: (_) => {},
-  onPageChanged: (_) => {},
+  onActivateStatementDiagnostics: _ => {},
+  onDiagnosticsModalOpen: _ => {},
+  onPageChanged: _ => {},
   resetSQLStats: () => {},
 };
 

@@ -106,7 +106,7 @@ function makeMetricsQuery(
 ): MetricsQuery {
   const request = makeMetricsRequest(timeSpan, sources);
   const data = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
-    results: _.map(request.queries, (q) => {
+    results: _.map(request.queries, q => {
       return {
         query: q,
         datapoints: [],
@@ -122,7 +122,7 @@ function makeMetricsQuery(
   };
 }
 
-describe("<MetricsDataProvider>", function () {
+describe("<MetricsDataProvider>", function() {
   let spy: sinon.SinonSpy;
   const timespan1: QueryTimeInfo = {
     start: Long.fromNumber(0),
@@ -136,18 +136,18 @@ describe("<MetricsDataProvider>", function () {
   };
   const graphid = "testgraph";
 
-  beforeEach(function () {
+  beforeEach(function() {
     spy = sinon.spy();
   });
 
-  describe("refresh", function () {
-    it("refreshes query data when mounted", function () {
+  describe("refresh", function() {
+    it("refreshes query data when mounted", function() {
       makeDataProvider(graphid, null, timespan1, spy);
       assert.isTrue(spy.called);
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan1)));
     });
 
-    it("does nothing when mounted if current request fulfilled", function () {
+    it("does nothing when mounted if current request fulfilled", function() {
       makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
@@ -157,7 +157,7 @@ describe("<MetricsDataProvider>", function () {
       assert.isTrue(spy.notCalled);
     });
 
-    it("does nothing when mounted if current request is in flight", function () {
+    it("does nothing when mounted if current request is in flight", function() {
       const query = makeMetricsQuery(graphid, timespan1);
       query.request = null;
       query.data = null;
@@ -165,7 +165,7 @@ describe("<MetricsDataProvider>", function () {
       assert.isTrue(spy.notCalled);
     });
 
-    it("refreshes query data when receiving props", function () {
+    it("refreshes query data when receiving props", function() {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
@@ -180,7 +180,7 @@ describe("<MetricsDataProvider>", function () {
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan1)));
     });
 
-    it("refreshes if timespan changes", function () {
+    it("refreshes if timespan changes", function() {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
@@ -195,7 +195,7 @@ describe("<MetricsDataProvider>", function () {
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan2)));
     });
 
-    it("refreshes if query changes", function () {
+    it("refreshes if query changes", function() {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
@@ -212,8 +212,8 @@ describe("<MetricsDataProvider>", function () {
     });
   });
 
-  describe("attach", function () {
-    it("attaches metrics data to contained component", function () {
+  describe("attach", function() {
+    it("attaches metrics data to contained component", function() {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
@@ -225,7 +225,7 @@ describe("<MetricsDataProvider>", function () {
       assert.deepEqual(props.data, makeMetricsQuery(graphid, timespan1).data);
     });
 
-    it("attaches metrics data if timespan doesn't match", function () {
+    it("attaches metrics data if timespan doesn't match", function() {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
@@ -237,7 +237,7 @@ describe("<MetricsDataProvider>", function () {
       assert.deepEqual(props.data, makeMetricsQuery(graphid, timespan1).data);
     });
 
-    it("does not attach metrics data if query doesn't match", function () {
+    it("does not attach metrics data if query doesn't match", function() {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1, ["1"]),
@@ -248,7 +248,7 @@ describe("<MetricsDataProvider>", function () {
       assert.isUndefined(props.data);
     });
 
-    it("throws error if it contains multiple graph components", function () {
+    it("throws error if it contains multiple graph components", function() {
       try {
         shallow(
           <MetricsDataProvider

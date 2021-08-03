@@ -77,9 +77,7 @@ function printNodeID(
 }
 
 function printSingleValue(value: string) {
-  return function (
-    status: protos.cockroach.server.status.statuspb.INodeStatus,
-  ) {
+  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
     return _.get(status, value, null);
   };
 }
@@ -88,25 +86,19 @@ function printSingleValueWithFunction(
   value: string,
   fn: (item: any) => string,
 ) {
-  return function (
-    status: protos.cockroach.server.status.statuspb.INodeStatus,
-  ) {
+  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
     return fn(_.get(status, value, null));
   };
 }
 
 function printMultiValue(value: string) {
-  return function (
-    status: protos.cockroach.server.status.statuspb.INodeStatus,
-  ) {
+  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
     return _.join(_.get(status, value, []), "\n");
   };
 }
 
 function printDateValue(value: string, inputDateFormat: string) {
-  return function (
-    status: protos.cockroach.server.status.statuspb.INodeStatus,
-  ) {
+  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
     if (!_.has(status, value)) {
       return null;
     }
@@ -115,9 +107,7 @@ function printDateValue(value: string, inputDateFormat: string) {
 }
 
 function printTimestampValue(value: string) {
-  return function (
-    status: protos.cockroach.server.status.statuspb.INodeStatus,
-  ) {
+  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
     if (!_.has(status, value)) {
       return null;
     }
@@ -130,9 +120,7 @@ function printTimestampValue(value: string) {
 // Functions starting with "title" are used exclusively to print the cell
 // titles. They always return a single string.
 function titleDateValue(value: string, inputDateFormat: string) {
-  return function (
-    status: protos.cockroach.server.status.statuspb.INodeStatus,
-  ) {
+  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
     if (!_.has(status, value)) {
       return null;
     }
@@ -142,9 +130,7 @@ function titleDateValue(value: string, inputDateFormat: string) {
 }
 
 function titleTimestampValue(value: string) {
-  return function (
-    status: protos.cockroach.server.status.statuspb.INodeStatus,
-  ) {
+  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
     if (!_.has(status, value)) {
       return null;
     }
@@ -156,10 +142,8 @@ function titleTimestampValue(value: string) {
 // Functions starting with "extract" are used exclusively for for extracting
 // the main content of a cell.
 function extractMultiValue(value: string) {
-  return function (
-    status: protos.cockroach.server.status.statuspb.INodeStatus,
-  ) {
-    const items = _.map(_.get(status, value, []), (item) => item.toString());
+  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
+    const items = _.map(_.get(status, value, []), item => item.toString());
     return (
       <ul className="nodes-entries-list">
         {_.map(items, (item, key) => (
@@ -314,8 +298,8 @@ export class Nodes extends React.Component<NodesProps, {}> {
     const inconsistent =
       !_.isNil(equality) &&
       _.chain(orderedNodeIDs)
-        .map((nodeID) => this.props.nodesSummary.nodeStatusByID[nodeID])
-        .map((status) => equality(status))
+        .map(nodeID => this.props.nodesSummary.nodeStatusByID[nodeID])
+        .map(status => equality(status))
         .uniq()
         .value().length > 1;
     const headerClassName = classNames(
@@ -327,7 +311,7 @@ export class Nodes extends React.Component<NodesProps, {}> {
     return (
       <tr className="nodes-table__row" key={key}>
         <th className={headerClassName}>{title}</th>
-        {_.map(orderedNodeIDs, (nodeID) => {
+        {_.map(orderedNodeIDs, nodeID => {
           const status = this.props.nodesSummary.nodeStatusByID[nodeID];
           return (
             <NodeTableCell
@@ -354,12 +338,12 @@ export class Nodes extends React.Component<NodesProps, {}> {
       Number.parseInt(nodeID, 10),
     );
     if (!_.isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
-      nodeIDsContext = nodeIDsContext.filter((nodeID) =>
+      nodeIDsContext = nodeIDsContext.filter(nodeID =>
         filters.nodeIDs.has(nodeID),
       );
     }
     if (!_.isNil(filters.localityRegex)) {
-      nodeIDsContext = nodeIDsContext.filter((nodeID) =>
+      nodeIDsContext = nodeIDsContext.filter(nodeID =>
         filters.localityRegex.test(
           localityToString(nodeStatusByID[nodeID.toString()].desc.locality),
         ),
@@ -368,8 +352,8 @@ export class Nodes extends React.Component<NodesProps, {}> {
 
     // Sort the node IDs and then convert them back to string for lookups.
     const orderedNodeIDs = nodeIDsContext
-      .orderBy((nodeID) => nodeID)
-      .map((nodeID) => nodeID.toString())
+      .orderBy(nodeID => nodeID)
+      .map(nodeID => nodeID.toString())
       .value();
 
     if (_.isEmpty(orderedNodeIDs)) {

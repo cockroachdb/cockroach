@@ -28,17 +28,17 @@ const cx = classNames.bind(styles);
 const columns: SortableColumn[] = [
   {
     title: "first",
-    cell: (index) => index.toString() + ".first",
+    cell: index => index.toString() + ".first",
     sortKey: 1,
   },
   {
     title: "second",
-    cell: (index) => index.toString() + ".second",
+    cell: index => index.toString() + ".second",
     sortKey: 2,
   },
   {
     title: "unsortable",
-    cell: (index) => index.toString() + ".unsortable",
+    cell: index => index.toString() + ".unsortable",
   },
 ];
 
@@ -93,7 +93,7 @@ describe("<SortableTable>", () => {
 
       // Verify column contents.
       const rows = wrapper.find("tbody");
-      _.times(rowCount, (rowIndex) => {
+      _.times(rowCount, rowIndex => {
         const row = rows.childAt(rowIndex);
         assert.isTrue(row.is("tr"), "tbody contains rows");
         _.each(columns, (c, columnIndex) => {

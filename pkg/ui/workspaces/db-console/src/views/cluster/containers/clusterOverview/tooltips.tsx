@@ -19,7 +19,7 @@ import {
 } from "src/util/docs";
 import { TooltipProps } from "src/components/tooltip/tooltip";
 
-export const CapacityUsageTooltip: React.FC<TooltipProps> = (props) => (
+export const CapacityUsageTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -41,7 +41,7 @@ export const CapacityUsageTooltip: React.FC<TooltipProps> = (props) => (
   </Tooltip>
 );
 
-export const UsedTooltip: React.FC<TooltipProps> = (props) => (
+export const UsedTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -59,7 +59,7 @@ export const UsedTooltip: React.FC<TooltipProps> = (props) => (
   </Tooltip>
 );
 
-export const UsableTooltip: React.FC<TooltipProps> = (props) => (
+export const UsableTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -80,7 +80,7 @@ export const UsableTooltip: React.FC<TooltipProps> = (props) => (
   </Tooltip>
 );
 
-export const LiveNodesTooltip: React.FC<TooltipProps> = (props) => (
+export const LiveNodesTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -94,7 +94,7 @@ export const LiveNodesTooltip: React.FC<TooltipProps> = (props) => (
   </Tooltip>
 );
 
-export const SuspectNodesTooltip: React.FC<TooltipProps> = (props) => (
+export const SuspectNodesTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -115,7 +115,7 @@ export const SuspectNodesTooltip: React.FC<TooltipProps> = (props) => (
   </Tooltip>
 );
 
-export const DeadNodesTooltip: React.FC<TooltipProps> = (props) => (
+export const DeadNodesTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -132,7 +132,7 @@ export const DeadNodesTooltip: React.FC<TooltipProps> = (props) => (
   </Tooltip>
 );
 
-export const TotalRangesTooltip: React.FC<TooltipProps> = (props) => (
+export const TotalRangesTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -152,7 +152,7 @@ export const TotalRangesTooltip: React.FC<TooltipProps> = (props) => (
   </Tooltip>
 );
 
-export const UnderReplicatedRangesTooltip: React.FC<TooltipProps> = (props) => (
+export const UnderReplicatedRangesTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -172,7 +172,7 @@ export const UnderReplicatedRangesTooltip: React.FC<TooltipProps> = (props) => (
   </Tooltip>
 );
 
-export const UnavailableRangesTooltip: React.FC<TooltipProps> = (props) => (
+export const UnavailableRangesTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
     placement="bottom"

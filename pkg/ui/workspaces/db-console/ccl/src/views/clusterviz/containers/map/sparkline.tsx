@@ -149,9 +149,7 @@ export class SparklineMetricsDataComponent extends React.Component<
       });
     });
 
-    const results = timestamps.map(
-      (timestamp) => resultsByTimestamp[timestamp],
-    );
+    const results = timestamps.map(timestamp => resultsByTimestamp[timestamp]);
 
     const Sparkline = this.chart;
 

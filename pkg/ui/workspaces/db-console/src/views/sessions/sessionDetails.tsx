@@ -45,7 +45,7 @@ export const selectSession = createSelector(
     const sessionID = getMatchParamByName(props.match, sessionAttr);
     return {
       session: state.data.sessions.find(
-        (session) => byteArrayToUuid(session.id) === sessionID,
+        session => byteArrayToUuid(session.id) === sessionID,
       ),
     };
   },

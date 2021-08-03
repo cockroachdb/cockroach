@@ -71,26 +71,26 @@ class TestDriver {
   }
 
   private findDatabase(name: string) {
-    return _.find(this.properties().databases, (row) => row.name == name);
+    return _.find(this.properties().databases, row => row.name == name);
   }
 
   private findMissingTable(database: DatabasesPageDataDatabase, name: string) {
-    return _.find(database.missingTables, (table) => table.name == name);
+    return _.find(database.missingTables, table => table.name == name);
   }
 }
 
-describe("Databases Page", function () {
+describe("Databases Page", function() {
   let driver: TestDriver;
 
-  beforeEach(function () {
+  beforeEach(function() {
     driver = new TestDriver(createAdminUIStore(createMemoryHistory()));
   });
 
-  afterEach(function () {
+  afterEach(function() {
     fakeApi.restore();
   });
 
-  it("starts in a pre-loading state", async function () {
+  it("starts in a pre-loading state", async function() {
     driver.assertProperties({
       loading: false,
       loaded: false,
@@ -98,7 +98,7 @@ describe("Databases Page", function () {
     });
   });
 
-  it("makes a row for each database", async function () {
+  it("makes a row for each database", async function() {
     fakeApi.stubDatabases({
       databases: ["system", "test"],
     });
@@ -131,7 +131,7 @@ describe("Databases Page", function () {
     });
   });
 
-  it("fills in database details", async function () {
+  it("fills in database details", async function() {
     fakeApi.stubDatabases({
       databases: ["system", "test"],
     });
@@ -179,9 +179,9 @@ describe("Databases Page", function () {
     });
   });
 
-  describe("fallback cases", function () {
-    describe("missing tables", function () {
-      it("exposes them so the component can refresh them", async function () {
+  describe("fallback cases", function() {
+    describe("missing tables", function() {
+      it("exposes them so the component can refresh them", async function() {
         fakeApi.stubDatabases({
           databases: ["system"],
         });
@@ -209,7 +209,7 @@ describe("Databases Page", function () {
         });
       });
 
-      it("merges available individual stats into the totals", async function () {
+      it("merges available individual stats into the totals", async function() {
         fakeApi.stubDatabases({
           databases: ["system"],
         });
@@ -244,8 +244,8 @@ describe("Databases Page", function () {
       });
     });
 
-    describe("missing stats", function () {
-      it("builds a list of missing tables", async function () {
+    describe("missing stats", function() {
+      it("builds a list of missing tables", async function() {
         fakeApi.stubDatabases({
           databases: ["system"],
         });
@@ -271,7 +271,7 @@ describe("Databases Page", function () {
         });
       });
 
-      it("merges individual stats into the totals", async function () {
+      it("merges individual stats into the totals", async function() {
         fakeApi.stubDatabases({
           databases: ["system"],
         });

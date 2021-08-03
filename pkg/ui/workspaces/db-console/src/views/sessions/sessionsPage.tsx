@@ -35,7 +35,7 @@ export const selectSessions = createSelector(
     if (!state.data) {
       return null;
     }
-    return state.data.sessions.map((session) => {
+    return state.data.sessions.map(session => {
       return { session };
     });
   },

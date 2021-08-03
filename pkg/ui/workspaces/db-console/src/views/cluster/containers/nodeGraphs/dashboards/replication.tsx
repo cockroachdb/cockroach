@@ -25,7 +25,7 @@ import {
 } from "./dashboardUtils";
 import { LogicalBytesGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
-export default function (props: GraphDashboardProps) {
+export default function(props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, storeSources } = props;
 
   return [
@@ -52,7 +52,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={`The number of replicas on each node.`}
     >
       <Axis label="replicas">
-        {_.map(nodeIDs, (nid) => (
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.replicas"
@@ -69,7 +69,7 @@ export default function (props: GraphDashboardProps) {
           receives and coordinates all read and write requests for its range.`}
     >
       <Axis label="leaseholders">
-        {_.map(nodeIDs, (nid) => (
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.replicas.leaseholders"
@@ -85,7 +85,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={`Exponentially weighted moving average of the number of KV batch requests processed by leaseholder replicas on each node per second. Tracks roughly the last 30 minutes of requests. Used for load-based rebalancing decisions.`}
     >
       <Axis label="queries">
-        {_.map(nodeIDs, (nid) => (
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.rebalancing.queriespersecond"
@@ -101,7 +101,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={<LogicalBytesGraphTooltip />}
     >
       <Axis units={AxisUnits.Bytes} label="logical store size">
-        {_.map(nodeIDs, (nid) => (
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.totalbytes"

@@ -22,33 +22,33 @@ import * as metrics from "./metrics";
 
 type TSRequest = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
 
-describe("metrics reducer", function () {
-  describe("actions", function () {
-    it("requestMetrics() creates the correct action type.", function () {
+describe("metrics reducer", function() {
+  describe("actions", function() {
+    it("requestMetrics() creates the correct action type.", function() {
       assert.equal(metrics.requestMetrics("id", null).type, metrics.REQUEST);
     });
 
-    it("receiveMetrics() creates the correct action type.", function () {
+    it("receiveMetrics() creates the correct action type.", function() {
       assert.equal(
         metrics.receiveMetrics("id", null, null).type,
         metrics.RECEIVE,
       );
     });
 
-    it("errorMetrics() creates the correct action type.", function () {
+    it("errorMetrics() creates the correct action type.", function() {
       assert.equal(metrics.errorMetrics("id", null).type, metrics.ERROR);
     });
 
-    it("fetchMetrics() creates the correct action type.", function () {
+    it("fetchMetrics() creates the correct action type.", function() {
       assert.equal(metrics.fetchMetrics().type, metrics.FETCH);
     });
 
-    it("fetchMetricsComplete() creates the correct action type.", function () {
+    it("fetchMetricsComplete() creates the correct action type.", function() {
       assert.equal(metrics.fetchMetricsComplete().type, metrics.FETCH_COMPLETE);
     });
   });
 
-  describe("reducer", function () {
+  describe("reducer", function() {
     const componentID = "test-component";
     let state: metrics.MetricsState;
 
@@ -56,7 +56,7 @@ describe("metrics reducer", function () {
       state = metrics.metricsReducer(undefined, { type: "unknown" });
     });
 
-    it("should have the correct default value.", function () {
+    it("should have the correct default value.", function() {
       const expected = {
         inFlight: 0,
         queries: metrics.metricQuerySetReducer(undefined, { type: "unknown" }),
@@ -64,7 +64,7 @@ describe("metrics reducer", function () {
       assert.deepEqual(state, expected);
     });
 
-    it("should correctly dispatch requestMetrics", function () {
+    it("should correctly dispatch requestMetrics", function() {
       const request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: Long.fromNumber(0),
         end_nanos: Long.fromNumber(10),
@@ -89,7 +89,7 @@ describe("metrics reducer", function () {
       assert.isUndefined(state.queries[componentID].error);
     });
 
-    it("should correctly dispatch receiveMetrics with an unmatching nextRequest", function () {
+    it("should correctly dispatch receiveMetrics with an unmatching nextRequest", function() {
       const response = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
         results: [
           {
@@ -119,7 +119,7 @@ describe("metrics reducer", function () {
       assert.isUndefined(state.queries[componentID].error);
     });
 
-    it("should correctly dispatch receiveMetrics with a matching nextRequest", function () {
+    it("should correctly dispatch receiveMetrics with a matching nextRequest", function() {
       const response = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
         results: [
           {
@@ -153,7 +153,7 @@ describe("metrics reducer", function () {
       assert.isUndefined(state.queries[componentID].error);
     });
 
-    it("should correctly dispatch errorMetrics", function () {
+    it("should correctly dispatch errorMetrics", function() {
       const error: Error = new Error("An error occurred");
       state = metrics.metricsReducer(
         state,
@@ -167,7 +167,7 @@ describe("metrics reducer", function () {
       assert.isUndefined(state.queries[componentID].data);
     });
 
-    it("should correctly dispatch fetchMetrics and fetchMetricsComplete", function () {
+    it("should correctly dispatch fetchMetrics and fetchMetricsComplete", function() {
       state = metrics.metricsReducer(state, metrics.fetchMetrics());
       assert.equal(state.inFlight, 1);
       state = metrics.metricsReducer(state, metrics.fetchMetrics());
@@ -177,7 +177,7 @@ describe("metrics reducer", function () {
     });
   });
 
-  describe("saga functions", function () {
+  describe("saga functions", function() {
     type timespan = [Long, Long];
     const shortTimespan: timespan = [
       Long.fromNumber(400),
@@ -190,7 +190,7 @@ describe("metrics reducer", function () {
       return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: ts[0],
         end_nanos: ts[1],
-        queries: _.map(names, (s) => {
+        queries: _.map(names, s => {
           return {
             name: s,
           };
@@ -203,7 +203,7 @@ describe("metrics reducer", function () {
       datapoints: protos.cockroach.ts.tspb.TimeSeriesDatapoint[] = [],
     ) {
       return new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
-        results: queries.map((query) => {
+        results: queries.map(query => {
           return {
             query,
             datapoints,
@@ -225,12 +225,14 @@ describe("metrics reducer", function () {
       return result;
     }
 
-    describe("queryMetricsSaga plan", function () {
-      it("initially waits for incoming request objects", function () {
-        testSaga(metrics.queryMetricsSaga).next().take(metrics.REQUEST);
+    describe("queryMetricsSaga plan", function() {
+      it("initially waits for incoming request objects", function() {
+        testSaga(metrics.queryMetricsSaga)
+          .next()
+          .take(metrics.REQUEST);
       });
 
-      it("correctly accumulates batches", function () {
+      it("correctly accumulates batches", function() {
         const requestAction = metrics.requestMetrics(
           "id",
           createRequest(shortTimespan, "short.1"),
@@ -255,7 +257,7 @@ describe("metrics reducer", function () {
             .dispatch(requestAction)
             .dispatch(requestAction)
             .run()
-            .then((result) => {
+            .then(result => {
               const { effects } = result;
               // Verify the order of call dispatches.
               assert.deepEqual(effects.call, [
@@ -287,8 +289,8 @@ describe("metrics reducer", function () {
       });
     });
 
-    describe("batchAndSendRequests", function () {
-      it("sendBatches correctly batches multiple requests", function () {
+    describe("batchAndSendRequests", function() {
+      it("sendBatches correctly batches multiple requests", function() {
         const shortRequests = [
           metrics.requestMetrics("id", createRequest(shortTimespan, "short.1"))
             .payload,
@@ -339,7 +341,7 @@ describe("metrics reducer", function () {
       });
     });
 
-    describe("sendRequestBatch", function () {
+    describe("sendRequestBatch", function() {
       const requests = [
         metrics.requestMetrics("id1", createRequest(shortTimespan, "short.1"))
           .payload,
@@ -351,7 +353,7 @@ describe("metrics reducer", function () {
           .payload,
       ];
 
-      it("correctly sends batch as single request, correctly handles valid response", function () {
+      it("correctly sends batch as single request, correctly handles valid response", function() {
         // The expected request that will be generated by sendRequestBatch.
         const expectedRequest = createRequest(
           shortTimespan,
@@ -363,7 +365,7 @@ describe("metrics reducer", function () {
         // Return a valid response.
         const response = createResponse(expectedRequest.queries);
         // Generate the expected put effects to be generated after receiving the response.
-        const expectedEffects = _.map(requests, (req) =>
+        const expectedEffects = _.map(requests, req =>
           metrics.receiveMetrics(
             req.id,
             req.data,
@@ -384,7 +386,7 @@ describe("metrics reducer", function () {
           .isDone();
       });
 
-      it("correctly handles error response", function () {
+      it("correctly handles error response", function() {
         // The expected request that will be generated by sendRequestBatch.
         const expectedRequest = createRequest(
           shortTimespan,
@@ -396,7 +398,7 @@ describe("metrics reducer", function () {
         // Return an error response.
         const err = new Error("network error");
         // Generate the expected put effects to be generated after receiving the response.
-        const expectedEffects = _.map(requests, (req) =>
+        const expectedEffects = _.map(requests, req =>
           metrics.errorMetrics(req.id, err),
         );
 
@@ -414,7 +416,7 @@ describe("metrics reducer", function () {
       });
     });
 
-    describe("integration test", function () {
+    describe("integration test", function() {
       const shortRequests = [
         metrics.requestMetrics("id.0", createRequest(shortTimespan, "short.1")),
         metrics.requestMetrics(
@@ -477,7 +479,7 @@ describe("metrics reducer", function () {
         return state;
       };
 
-      it("handles success correctly", function () {
+      it("handles success correctly", function() {
         const expectedState = new metrics.MetricsState();
         expectedState.inFlight = 0;
         expectedState.queries = {
@@ -510,7 +512,7 @@ describe("metrics reducer", function () {
           .provide({
             call(effect, next) {
               if (effect.fn === queryTimeSeries) {
-                return new Promise((resolve) => {
+                return new Promise(resolve => {
                   setTimeout(
                     () =>
                       resolve(
@@ -537,7 +539,7 @@ describe("metrics reducer", function () {
           .run();
       });
 
-      it("handles errors correctly", function () {
+      it("handles errors correctly", function() {
         const fakeError = new Error("connection error");
 
         const expectedState = new metrics.MetricsState();
@@ -600,7 +602,7 @@ describe("metrics reducer", function () {
           .run();
       });
 
-      it("handles inflight counter correctly", function () {
+      it("handles inflight counter correctly", function() {
         const expectedState = new metrics.MetricsState();
         expectedState.inFlight = 1;
         expectedState.queries = {
@@ -635,7 +637,7 @@ describe("metrics reducer", function () {
                 callCounter++;
                 if (callCounter > 2) {
                   // return a promise that never resolves.
-                  return new Promise((_resolve) => {});
+                  return new Promise(_resolve => {});
                 }
                 return createResponse(
                   (effect.args[0] as TimeSeriesQueryRequestMessage).queries,

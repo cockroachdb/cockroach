@@ -258,7 +258,7 @@ const timeIncrementDurations = [
   moment.duration(24, "h"),
   moment.duration(1, "week"),
 ];
-const timeIncrements: number[] = _.map(timeIncrementDurations, (inc) =>
+const timeIncrements: number[] = _.map(timeIncrementDurations, inc =>
   inc.asMilliseconds(),
 );
 
@@ -292,8 +292,10 @@ function ComputeTimeAxisDomain(extent: Extent): AxisDomain {
     return tickDateFormatter(new Date(n));
   };
 
-  axisDomain.guideFormat = (num) => {
-    return moment(num).utc().format("HH:mm:ss on MMM Do, YYYY");
+  axisDomain.guideFormat = num => {
+    return moment(num)
+      .utc()
+      .format("HH:mm:ss on MMM Do, YYYY");
   };
   return axisDomain;
 }
@@ -302,8 +304,8 @@ export function calculateYAxisDomain(
   axisUnits: AxisUnits,
   data: TSResponse,
 ): AxisDomain {
-  const resultDatapoints = _.flatMap(data.results, (result) =>
-    _.map(result.datapoints, (dp) => dp.value),
+  const resultDatapoints = _.flatMap(data.results, result =>
+    _.map(result.datapoints, dp => dp.value),
   );
   // TODO(couchand): Remove these random datapoints when NVD3 is gone.
   const allDatapoints = resultDatapoints.concat([0, 1]);
@@ -361,12 +363,12 @@ function filterInvalidDatapoints(
   formattedData: formattedSeries[],
   timeInfo: QueryTimeInfo,
 ): formattedSeries[] {
-  return _.map(formattedData, (datum) => {
+  return _.map(formattedData, datum => {
     // Drop any returned points at the beginning that have a lower timestamp
     // than the explicitly queried domain. This works around a bug in NVD3
     // which causes the interactive guideline to highlight the wrong points.
     // https://github.com/novus/nvd3/issues/1913
-    const filteredValues = _.dropWhile(datum.values, (dp) => {
+    const filteredValues = _.dropWhile(datum.values, dp => {
       return dp.timestamp_nanos.toNumber() < timeInfo.start.toNumber();
     });
 
@@ -444,7 +446,9 @@ export function ConfigureLineChart(
 
     // Reduce radius of circles in the legend, if present. This is done through
     // d3 because it is not exposed as an option by NVD3.
-    d3.select(svgEl).selectAll("circle").attr("r", 3);
+    d3.select(svgEl)
+      .selectAll("circle")
+      .attr("r", 3);
   } catch (e) {
     console.log("Error rendering graph: ", e);
   }
@@ -521,8 +525,8 @@ function updateLinkedGuideline(
   // the current guideline.
   container
     .select(".linked-guideline__line")
-    .attr("x1", (d) => d)
-    .attr("x2", (d) => d)
+    .attr("x1", d => d)
+    .attr("x2", d => d)
     .attr("y1", () => yExtent[0])
     .attr("y2", () => yExtent[1]);
 }
@@ -616,7 +620,7 @@ export function configureUPlotLineChart(
       },
       // Generate a series object for reach of our results
       // picking colors from our palette.
-      ...formattedRaw.map((result) => {
+      ...formattedRaw.map(result => {
         const color = strokeColors.shift();
         strokeColors.push(color);
         return {
@@ -668,7 +672,7 @@ export function configureUPlotLineChart(
       // setSelect is a hook that fires when a selection is made on the graph
       // by dragging a range to zoom.
       setSelect: [
-        (self) => {
+        self => {
           // From what I understand, `self.select` contains the pixel edges
           // of the user's selection. Then I use the `posToIdx` to tell me
           // what the xAxis range is of the pixels.

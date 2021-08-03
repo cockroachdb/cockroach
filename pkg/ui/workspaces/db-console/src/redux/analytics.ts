@@ -155,7 +155,7 @@ export class AnalyticsSync {
     }
 
     // If there are any queued pages, push them.
-    _.each(this.queuedPages, (l) => this.pushPage(cluster_id, l));
+    _.each(this.queuedPages, l => this.pushPage(cluster_id, l));
     this.queuedPages = [];
 
     // Push the page that was just accessed.
@@ -275,7 +275,7 @@ export class AnalyticsSync {
   };
 
   private redact(path: string): string {
-    _.each(this.redactions, (r) => {
+    _.each(this.redactions, r => {
       if (r.match.test(path)) {
         // Apparently TypeScript doesn't know how to dispatch functions.
         // If there are two function overloads defined (as with

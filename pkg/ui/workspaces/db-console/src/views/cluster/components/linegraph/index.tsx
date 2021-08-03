@@ -78,7 +78,7 @@ export class LineGraphOld extends React.Component<
 
   axis = createSelector(
     (props: { children?: React.ReactNode }) => props.children,
-    (children) => {
+    children => {
       const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(
         children as any,
         Axis,
@@ -100,11 +100,10 @@ export class LineGraphOld extends React.Component<
 
   metrics = createSelector(
     (props: { children?: React.ReactNode }) => props.children,
-    (children) => {
-      return findChildrenOfType(
-        children as any,
-        Metric,
-      ) as React.ReactElement<MetricProps>[];
+    children => {
+      return findChildrenOfType(children as any, Metric) as React.ReactElement<
+        MetricProps
+      >[];
     },
   );
 
@@ -331,22 +330,22 @@ function touPlot(data: formattedSeries[]): uPlot.AlignedData {
 
   const xValuesComplete: number[] = [
     ...new Set(
-      data.flatMap((series) =>
-        series.values.map((d) => d.timestamp_nanos.toNumber()),
+      data.flatMap(series =>
+        series.values.map(d => d.timestamp_nanos.toNumber()),
       ),
     ),
   ].sort((a, b) => a - b);
 
-  const yValuesComplete: (number | null)[][] = data.map((series) => {
-    return xValuesComplete.map((ts) => {
+  const yValuesComplete: (number | null)[][] = data.map(series => {
+    return xValuesComplete.map(ts => {
       const found = series.values.find(
-        (dp) => dp.timestamp_nanos.toNumber() === ts,
+        dp => dp.timestamp_nanos.toNumber() === ts,
       );
       return found ? found.value : null;
     });
   });
 
-  return [xValuesComplete.map((ts) => NanoToMilli(ts)), ...yValuesComplete];
+  return [xValuesComplete.map(ts => NanoToMilli(ts)), ...yValuesComplete];
 }
 
 // LineGraph wraps the uPlot library into a React component
@@ -365,7 +364,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   // axis is copied from the nvd3 LineGraph component above
   axis = createSelector(
     (props: { children?: React.ReactNode }) => props.children,
-    (children) => {
+    children => {
       const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(
         children as any,
         Axis,
@@ -388,11 +387,10 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   // metrics is copied from the nvd3 LineGraph component above
   metrics = createSelector(
     (props: { children?: React.ReactNode }) => props.children,
-    (children) => {
-      return findChildrenOfType(
-        children as any,
-        Metric,
-      ) as React.ReactElement<MetricProps>[];
+    children => {
+      return findChildrenOfType(children as any, Metric) as React.ReactElement<
+        MetricProps
+      >[];
     },
   );
 
@@ -470,12 +468,12 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
 
     const prevKeys =
       prevProps.data && prevProps.data.results
-        ? formatMetricData(metrics, prevProps.data).map((s) => s.key)
+        ? formatMetricData(metrics, prevProps.data).map(s => s.key)
         : [];
-    const keys = fData.map((s) => s.key);
+    const keys = fData.map(s => s.key);
     const sameKeys =
-      keys.every((k) => prevKeys.includes(k)) &&
-      prevKeys.every((k) => keys.includes(k));
+      keys.every(k => prevKeys.includes(k)) &&
+      prevKeys.every(k => keys.includes(k));
 
     if (
       this.u && // we already created a uPlot instance

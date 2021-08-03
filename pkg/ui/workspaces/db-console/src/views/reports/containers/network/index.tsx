@@ -169,11 +169,11 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     if (
       !filter ||
       Object.keys(filter).length === 0 ||
-      Object.keys(filter).every((x) => filter[x] === null)
+      Object.keys(filter).every(x => filter[x] === null)
     ) {
       return displayIdentities;
     }
-    displayIdentities.forEach((identities) => {
+    displayIdentities.forEach(identities => {
       Object.keys(filter).forEach((key, index) => {
         const value = getValueFromString(
           key,
@@ -190,7 +190,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
           selectedIndex = index;
         } else if (filter[key]) {
           data = data.filter(
-            (identity) =>
+            identity =>
               filter[key].indexOf(
                 getValueFromString(
                   key,
@@ -277,19 +277,19 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   getSortParams = (data: Identity[]) => {
     const sort: NetworkSort[] = [];
     const searchQuery = (params: string) => `cluster,${params}`;
-    data.forEach((values) => {
+    data.forEach(values => {
       const localities = searchQuery(values.locality).split(",");
       localities.forEach((locality: string) => {
         if (locality !== "") {
           const value = locality.match(/^\w+/gi)
             ? locality.match(/^\w+/gi)[0]
             : null;
-          if (!sort.some((x) => x.id === value)) {
+          if (!sort.some(x => x.id === value)) {
             const sortValue: NetworkSort = { id: value, filters: [] };
-            data.forEach((item) => {
+            data.forEach(item => {
               const valueLocality = searchQuery(values.locality).split(",");
               const itemLocality = searchQuery(item.locality);
-              valueLocality.forEach((val) => {
+              valueLocality.forEach(val => {
                 const itemLocalitySplited = val.match(/^\w+/gi)
                   ? val.match(/^\w+/gi)[0]
                   : null;
@@ -337,14 +337,12 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     const nodeId = getMatchParamByName(match, "node_id");
     const identityContent = healthyIDsContext
       .union(staleIDsContext.value())
-      .map((nodeID) => identityByID.get(nodeID))
-      .sortBy((identity) => identity.nodeID);
+      .map(nodeID => identityByID.get(nodeID))
+      .sortBy(identity => identity.nodeID);
     const sort = this.getSortParams(identityContent.value());
-    if (sort.some((x) => x.id === nodeId)) {
+    if (sort.some(x => x.id === nodeId)) {
       return identityContent
-        .sortBy((identity) =>
-          getValueFromString(nodeId, identity.locality, true),
-        )
+        .sortBy(identity => getValueFromString(nodeId, identity.locality, true))
         .value();
     }
     return identityContent.value();
@@ -356,7 +354,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     }
     // List of node identities.
     const identityByID: Map<number, Identity> = new Map();
-    _.forEach(nodesSummary.nodeStatuses, (status) => {
+    _.forEach(nodesSummary.nodeStatuses, status => {
       identityByID.set(status.desc.node_id, {
         nodeID: status.desc.node_id,
         address: status.desc.address.address_field,
@@ -368,36 +366,34 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     // Calculate the mean and sampled standard deviation.
     let healthyIDsContext = _.chain(nodesSummary.nodeIDs)
       .filter(
-        (nodeID) =>
+        nodeID =>
           nodesSummary.livenessStatusByNodeID[nodeID] ===
           LivenessStatus.NODE_STATUS_LIVE,
       )
-      .filter(
-        (nodeID) => !_.isNil(nodesSummary.nodeStatusByID[nodeID].activity),
-      )
-      .map((nodeID) => Number.parseInt(nodeID, 0));
+      .filter(nodeID => !_.isNil(nodesSummary.nodeStatusByID[nodeID].activity))
+      .map(nodeID => Number.parseInt(nodeID, 0));
     let staleIDsContext = _.chain(nodesSummary.nodeIDs)
       .filter(
-        (nodeID) =>
+        nodeID =>
           nodesSummary.livenessStatusByNodeID[nodeID] ===
           LivenessStatus.NODE_STATUS_UNAVAILABLE,
       )
-      .map((nodeID) => Number.parseInt(nodeID, 0));
+      .map(nodeID => Number.parseInt(nodeID, 0));
     if (!_.isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
-      healthyIDsContext = healthyIDsContext.filter((nodeID) =>
+      healthyIDsContext = healthyIDsContext.filter(nodeID =>
         filters.nodeIDs.has(nodeID),
       );
-      staleIDsContext = staleIDsContext.filter((nodeID) =>
+      staleIDsContext = staleIDsContext.filter(nodeID =>
         filters.nodeIDs.has(nodeID),
       );
     }
     if (!_.isNil(filters.localityRegex)) {
-      healthyIDsContext = healthyIDsContext.filter((nodeID) =>
+      healthyIDsContext = healthyIDsContext.filter(nodeID =>
         filters.localityRegex.test(
           localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality),
         ),
       );
-      staleIDsContext = staleIDsContext.filter((nodeID) =>
+      staleIDsContext = staleIDsContext.filter(nodeID =>
         filters.localityRegex.test(
           localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality),
         ),
@@ -410,31 +406,29 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       staleIDsContext,
       identityByID,
     );
-    const latencies = _.flatMap(healthyIDs, (nodeIDa) =>
+    const latencies = _.flatMap(healthyIDs, nodeIDa =>
       _.chain(healthyIDs)
         .without(nodeIDa)
-        .map(
-          (nodeIDb) => nodesSummary.nodeStatusByID[nodeIDa].activity[nodeIDb],
-        )
-        .filter((activity) => !_.isNil(activity) && !_.isNil(activity.latency))
-        .map((activity) => NanoToMilli(FixLong(activity.latency).toNumber()))
-        .filter((ms) => _.isFinite(ms) && ms > 0)
+        .map(nodeIDb => nodesSummary.nodeStatusByID[nodeIDa].activity[nodeIDb])
+        .filter(activity => !_.isNil(activity) && !_.isNil(activity.latency))
+        .map(activity => NanoToMilli(FixLong(activity.latency).toNumber()))
+        .filter(ms => _.isFinite(ms) && ms > 0)
         .value(),
     );
 
-    const noConnections: NoConnection[] = _.flatMap(healthyIDs, (nodeIDa) =>
+    const noConnections: NoConnection[] = _.flatMap(healthyIDs, nodeIDa =>
       _.chain(nodesSummary.nodeStatusByID[nodeIDa].activity)
         .keys()
-        .map((nodeIDb) => Number.parseInt(nodeIDb, 10))
+        .map(nodeIDb => Number.parseInt(nodeIDb, 10))
         .difference(healthyIDs)
-        .map((nodeIDb) => ({
+        .map(nodeIDb => ({
           from: identityByID.get(nodeIDa),
           to: identityByID.get(nodeIDb),
         }))
-        .sortBy((noConnection) => noConnection.to.nodeID)
-        .sortBy((noConnection) => noConnection.to.locality)
-        .sortBy((noConnection) => noConnection.from.nodeID)
-        .sortBy((noConnection) => noConnection.from.locality)
+        .sortBy(noConnection => noConnection.to.nodeID)
+        .sortBy(noConnection => noConnection.to.locality)
+        .sortBy(noConnection => noConnection.from.nodeID)
+        .sortBy(noConnection => noConnection.from.locality)
         .value(),
     );
 

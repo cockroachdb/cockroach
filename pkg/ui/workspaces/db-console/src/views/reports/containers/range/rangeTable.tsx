@@ -522,7 +522,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     return (
       <tr key={key} className="range-table__row">
         <th className={headerClassName}>{row.display}</th>
-        {_.map(sortedStoreIDs, (storeID) => {
+        {_.map(sortedStoreIDs, storeID => {
           const cell = detailsByStoreID.get(storeID)[row.variable];
           const leaderCell =
             storeID === leaderStoreID ? null : leaderDetail[row.variable];
@@ -596,7 +596,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           Replica {referenceReplica.replica_id} - (
           {Print.ReplicaID(rangeID, referenceReplica)})
         </th>
-        {_.map(sortedStoreIDs, (storeID) => {
+        {_.map(sortedStoreIDs, storeID => {
           let replica: protos.cockroach.roachpb.IReplicaDescriptor = null;
           if (
             replicasByReplicaIDByStoreID.has(storeID) &&
@@ -629,8 +629,8 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
 
     // We want to display ordered by store ID.
     const sortedStoreIDs = data
-      .map((info) => info.source_store_id)
-      .sortBy((id) => id)
+      .map(info => info.source_store_id)
+      .sortBy(id => id)
       .value();
 
     const dormantStoreIDs: Set<number> = new Set();
@@ -640,7 +640,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     // Convert the infos to a simpler object for display purposes. This helps when trying to
     // determine if any warnings should be displayed.
     const detailsByStoreID: Map<number, RangeTableDetail> = new Map();
-    _.forEach(infos, (info) => {
+    _.forEach(infos, info => {
       const localReplica = RangeInfo.GetLocalReplica(info);
       const awaitingGC = _.isNil(localReplica);
       const lease = info.state.state.lease;
@@ -808,7 +808,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           () => ({
             value: _.map(
               info.top_k_locks_by_wait_queue_waiters,
-              (lock) => `${lock.pretty_key} (${lock.waiters} waiters)`,
+              lock => `${lock.pretty_key} (${lock.waiters} waiters)`,
             ),
           }),
         ),
@@ -856,7 +856,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     });
 
     const leaderReplicaIDs = new Set(
-      _.map(leader.state.state.desc.internal_replicas, (rep) => rep.replica_id),
+      _.map(leader.state.state.desc.internal_replicas, rep => rep.replica_id),
     );
 
     // Go through all the replicas and add them to map for easy printing.
@@ -864,12 +864,12 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       number,
       Map<number, protos.cockroach.roachpb.IReplicaDescriptor>
     > = new Map();
-    _.forEach(infos, (info) => {
+    _.forEach(infos, info => {
       const replicasByReplicaID: Map<
         number,
         protos.cockroach.roachpb.IReplicaDescriptor
       > = new Map();
-      _.forEach(info.state.state.desc.internal_replicas, (rep) => {
+      _.forEach(info.state.state.desc.internal_replicas, rep => {
         replicasByReplicaID.set(rep.replica_id, rep);
       });
       replicasByReplicaIDByStoreID.set(
