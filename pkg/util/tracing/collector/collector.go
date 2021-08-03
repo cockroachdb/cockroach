@@ -91,7 +91,7 @@ func (t *TraceCollector) StartIter(ctx context.Context, traceID uint64) *Iterato
 	tc := &Iterator{ctx: ctx, traceID: traceID, collector: t}
 	tc.liveNodes, tc.iterErr = nodesFromNodeLiveness(ctx, t.nodeliveness)
 	if tc.iterErr != nil {
-		return nil
+		return tc
 	}
 
 	// Calling Next() positions the Iterator in a valid state. It will fetch the

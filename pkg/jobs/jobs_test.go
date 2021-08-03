@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -282,6 +283,11 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			},
 			FailOrCancel: func(ctx context.Context) error {
 				t.Log("Starting FailOrCancel")
+				if rts.traceRealSpan {
+					// Add a dummy recording so we actually see something in the trace.
+					span := tracing.SpanFromContext(ctx)
+					span.RecordStructured(&types.StringValue{Value: "boom"})
+				}
 				rts.mu.Lock()
 				rts.mu.a.OnFailOrCancelStart = true
 				rts.mu.Unlock()
@@ -1093,42 +1099,47 @@ func TestRegistryLifecycle(t *testing.T) {
 	})
 
 	t.Run("dump traces on cancel", func(t *testing.T) {
+		skip.UnderStress(t, "job cancellation semantics is flaky under stress")
 		rts := registryTestSuite{traceRealSpan: true}
 		rts.setUp(t)
-		defer rts.tearDown()
-
-		runJobAndFail := func(expectedNumFiles int) {
-			j, err := jobs.TestingCreateAndStartJob(context.Background(), rts.registry, rts.s.DB(), rts.mockJob)
-			if err != nil {
-				t.Fatal(err)
+		var mu syncutil.Mutex
+		blockCh := make(chan struct{})
+		shouldBlock := true
+		rts.afterJobStateMachine = func() {
+			mu.Lock()
+			defer mu.Unlock()
+			if shouldBlock {
+				shouldBlock = false
+				blockCh <- struct{}{}
 			}
-			rts.job = j
-
-			rts.mu.e.ResumeStart = true
-			rts.resumeCheckCh <- struct{}{}
-			rts.check(t, jobs.StatusRunning)
-
-			rts.sqlDB.Exec(t, "CANCEL JOB $1", j.ID())
-
-			// Cancellation will cause the running instance of the job to get context
-			// canceled causing it to potentially dump traces.
-			require.Error(t, rts.job.AwaitCompletion(rts.ctx))
-			checkTraceFiles(t, rts.registry, expectedNumFiles)
-
-			rts.mu.e.OnFailOrCancelStart = true
-			rts.check(t, jobs.StatusReverting)
-
-			rts.failOrCancelCheckCh <- struct{}{}
-			close(rts.failOrCancelCheckCh)
-			rts.failOrCancelCh <- nil
-			close(rts.failOrCancelCh)
-			rts.mu.e.OnFailOrCancelExit = true
-
-			rts.check(t, jobs.StatusCanceled)
 		}
-
 		rts.sqlDB.Exec(t, `SET CLUSTER SETTING jobs.trace.force_dump_mode='onStop'`)
-		runJobAndFail(1)
+		defer rts.tearDown()
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		rts.sqlDB.Exec(t, "CANCEL JOB $1", j.ID())
+
+		<-blockCh
+		checkTraceFiles(t, rts.registry, 1)
+
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.check(t, jobs.StatusReverting)
+
+		rts.failOrCancelCheckCh <- struct{}{}
+		close(rts.failOrCancelCheckCh)
+		rts.failOrCancelCh <- nil
+		close(rts.failOrCancelCh)
+		rts.mu.e.OnFailOrCancelExit = true
+
+		rts.check(t, jobs.StatusCanceled)
 	})
 }
 
