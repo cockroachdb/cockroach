@@ -59,7 +59,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		{stmt: `CREATE TABLE posts_t (id INT8 PRIMARY KEY, body STRING)`},
 		{
 			stmt:        `INSERT INTO posts_t VALUES (1, 'foo')`,
-			fingerprint: `INSERT INTO posts_t VALUES (_, _)`,
+			fingerprint: `INSERT INTO posts_t VALUES (_, '_')`,
 		},
 		{stmt: `SELECT * FROM posts_t`},
 	}
@@ -78,7 +78,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		{stmt: `CREATE TABLE posts_nt (id INT8 PRIMARY KEY, body STRING)`},
 		{
 			stmt:        `INSERT INTO posts_nt VALUES (1, 'foo')`,
-			fingerprint: `INSERT INTO posts_nt VALUES (_, _)`,
+			fingerprint: `INSERT INTO posts_nt VALUES (_, '_')`,
 		},
 		{stmt: `SELECT * FROM posts_nt`},
 	}

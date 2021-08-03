@@ -149,7 +149,7 @@ SELECT (ARRAY['a', 'b'])[2]
 ----
 SELECT (ARRAY['a', 'b'])[2]
 SELECT ((((ARRAY[('a'), ('b')])))[(2)]) -- fully parenthesized
-SELECT (ARRAY[_, _])[_] -- literals removed
+SELECT (ARRAY['_', '_'])[_] -- literals removed
 SELECT (ARRAY['a', 'b'])[2] -- identifiers removed
 
 parse
@@ -253,7 +253,7 @@ SELECT (SELECT ARRAY['a', 'b'])[2]
 ----
 SELECT (SELECT ARRAY['a', 'b'])[2]
 SELECT (((SELECT (ARRAY[('a'), ('b')])))[(2)]) -- fully parenthesized
-SELECT (SELECT ARRAY[_, _])[_] -- literals removed
+SELECT (SELECT ARRAY['_', '_'])[_] -- literals removed
 SELECT (SELECT ARRAY['a', 'b'])[2] -- identifiers removed
 
 parse
@@ -261,7 +261,7 @@ SELECT ((SELECT ARRAY['a', 'b']))[2]
 ----
 SELECT ((SELECT ARRAY['a', 'b']))[2]
 SELECT ((((SELECT (ARRAY[('a'), ('b')]))))[(2)]) -- fully parenthesized
-SELECT ((SELECT ARRAY[_, _]))[_] -- literals removed
+SELECT ((SELECT ARRAY['_', '_']))[_] -- literals removed
 SELECT ((SELECT ARRAY['a', 'b']))[2] -- identifiers removed
 
 parse
@@ -405,7 +405,7 @@ SELECT 'a''a'
 ----
 SELECT e'a\'a' -- normalized!
 SELECT (e'a\'a') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'a\'a' -- identifiers removed
 
 parse
@@ -413,7 +413,7 @@ SELECT 'a\a'
 ----
 SELECT e'a\\a' -- normalized!
 SELECT (e'a\\a') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'a\\a' -- identifiers removed
 
 parse
@@ -421,7 +421,7 @@ SELECT 'a\n'
 ----
 SELECT e'a\\n' -- normalized!
 SELECT (e'a\\n') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'a\\n' -- identifiers removed
 
 parse
@@ -430,7 +430,7 @@ SELECT '
 ----
 SELECT e'\n' -- normalized!
 SELECT (e'\n') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'\n' -- identifiers removed
 
 parse
@@ -439,7 +439,7 @@ SELECT '
 ----
 SELECT e'\n\\' -- normalized!
 SELECT (e'\n\\') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'\n\\' -- identifiers removed
 
 parse
@@ -447,7 +447,7 @@ SELECT x'61'
 ----
 SELECT b'a' -- normalized!
 SELECT (b'a') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT b'a' -- identifiers removed
 
 parse
@@ -455,7 +455,7 @@ SELECT X'61'
 ----
 SELECT b'a' -- normalized!
 SELECT (b'a') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT b'a' -- identifiers removed
 
 
@@ -464,7 +464,7 @@ SELECT 'Deutsch' COLLATE de
 ----
 SELECT 'Deutsch' COLLATE de
 SELECT (('Deutsch') COLLATE de) -- fully parenthesized
-SELECT _ COLLATE de -- literals removed
+SELECT '_' COLLATE de -- literals removed
 SELECT 'Deutsch' COLLATE de -- identifiers removed
 
 parse
@@ -516,7 +516,7 @@ SELECT a->'x'
 ----
 SELECT a->'x'
 SELECT ((a)->('x')) -- fully parenthesized
-SELECT a->_ -- literals removed
+SELECT a->'_' -- literals removed
 SELECT _->'x' -- identifiers removed
 
 parse
@@ -524,7 +524,7 @@ SELECT a#>'{x}'
 ----
 SELECT a#>'{x}'
 SELECT ((a)#>('{x}')) -- fully parenthesized
-SELECT a#>_ -- literals removed
+SELECT a#>'_' -- literals removed
 SELECT _#>'{x}' -- identifiers removed
 
 parse
@@ -532,7 +532,7 @@ SELECT a#>>'{x}'
 ----
 SELECT a#>>'{x}'
 SELECT ((a)#>>('{x}')) -- fully parenthesized
-SELECT a#>>_ -- literals removed
+SELECT a#>>'_' -- literals removed
 SELECT _#>>'{x}' -- identifiers removed
 
 parse
@@ -540,7 +540,7 @@ SELECT (a->'x')->'y'
 ----
 SELECT (a->'x')->'y'
 SELECT (((((a)->('x'))))->('y')) -- fully parenthesized
-SELECT (a->_)->_ -- literals removed
+SELECT (a->'_')->'_' -- literals removed
 SELECT (_->'x')->'y' -- identifiers removed
 
 parse
@@ -548,7 +548,7 @@ SELECT (a->'x')->>'y'
 ----
 SELECT (a->'x')->>'y'
 SELECT (((((a)->('x'))))->>('y')) -- fully parenthesized
-SELECT (a->_)->>_ -- literals removed
+SELECT (a->'_')->>'_' -- literals removed
 SELECT (_->'x')->>'y' -- identifiers removed
 
 parse
@@ -556,7 +556,7 @@ SELECT a #- '{x}'
 ----
 SELECT json_remove_path(a, '{x}') -- normalized!
 SELECT (json_remove_path((a), ('{x}'))) -- fully parenthesized
-SELECT json_remove_path(a, _) -- literals removed
+SELECT json_remove_path(a, '_') -- literals removed
 SELECT json_remove_path(_, '{x}') -- identifiers removed
 
 
@@ -599,7 +599,7 @@ SELECT BOOL 'foo', 'foo'::BOOL
 ----
 SELECT BOOL 'foo', 'foo'::BOOL
 SELECT (BOOL ('foo')), (('foo')::BOOL) -- fully parenthesized
-SELECT BOOL '_', _::BOOL -- literals removed
+SELECT BOOL '_', '_'::BOOL -- literals removed
 SELECT BOOL 'foo', 'foo'::BOOL -- identifiers removed
 
 parse
@@ -607,7 +607,7 @@ SELECT BIT '10', '10'::BIT
 ----
 SELECT BIT '10', '10'::BIT
 SELECT (BIT ('10')), (('10')::BIT) -- fully parenthesized
-SELECT BIT '_', _::BIT -- literals removed
+SELECT BIT '_', '_'::BIT -- literals removed
 SELECT BIT '10', '10'::BIT -- identifiers removed
 
 parse
@@ -615,7 +615,7 @@ SELECT VARBIT '1', '1'::VARBIT
 ----
 SELECT VARBIT '1', '1'::VARBIT
 SELECT (VARBIT ('1')), (('1')::VARBIT) -- fully parenthesized
-SELECT VARBIT '_', _::VARBIT -- literals removed
+SELECT VARBIT '_', '_'::VARBIT -- literals removed
 SELECT VARBIT '1', '1'::VARBIT -- identifiers removed
 
 parse
@@ -623,7 +623,7 @@ SELECT INT2 'foo', 'foo'::INT2
 ----
 SELECT INT2 'foo', 'foo'::INT2
 SELECT (INT2 ('foo')), (('foo')::INT2) -- fully parenthesized
-SELECT INT2 '_', _::INT2 -- literals removed
+SELECT INT2 '_', '_'::INT2 -- literals removed
 SELECT INT2 'foo', 'foo'::INT2 -- identifiers removed
 
 parse
@@ -631,7 +631,7 @@ SELECT INT4 'foo', 'foo'::INT4
 ----
 SELECT INT4 'foo', 'foo'::INT4
 SELECT (INT4 ('foo')), (('foo')::INT4) -- fully parenthesized
-SELECT INT4 '_', _::INT4 -- literals removed
+SELECT INT4 '_', '_'::INT4 -- literals removed
 SELECT INT4 'foo', 'foo'::INT4 -- identifiers removed
 
 parse
@@ -639,7 +639,7 @@ SELECT INT8 'foo', 'foo'::INT8
 ----
 SELECT INT8 'foo', 'foo'::INT8
 SELECT (INT8 ('foo')), (('foo')::INT8) -- fully parenthesized
-SELECT INT8 '_', _::INT8 -- literals removed
+SELECT INT8 '_', '_'::INT8 -- literals removed
 SELECT INT8 'foo', 'foo'::INT8 -- identifiers removed
 
 parse
@@ -647,7 +647,7 @@ SELECT FLOAT4 'foo', 'foo'::FLOAT4
 ----
 SELECT FLOAT4 'foo', 'foo'::FLOAT4
 SELECT (FLOAT4 ('foo')), (('foo')::FLOAT4) -- fully parenthesized
-SELECT FLOAT4 '_', _::FLOAT4 -- literals removed
+SELECT FLOAT4 '_', '_'::FLOAT4 -- literals removed
 SELECT FLOAT4 'foo', 'foo'::FLOAT4 -- identifiers removed
 
 parse
@@ -672,7 +672,7 @@ SELECT DECIMAL 'foo', 'foo'::DECIMAL
 ----
 SELECT DECIMAL 'foo', 'foo'::DECIMAL
 SELECT (DECIMAL ('foo')), (('foo')::DECIMAL) -- fully parenthesized
-SELECT DECIMAL '_', _::DECIMAL -- literals removed
+SELECT DECIMAL '_', '_'::DECIMAL -- literals removed
 SELECT DECIMAL 'foo', 'foo'::DECIMAL -- identifiers removed
 
 parse
@@ -689,7 +689,7 @@ SELECT CHAR 'foo', 'foo'::CHAR
 ----
 SELECT CHAR 'foo', 'foo'::CHAR
 SELECT (CHAR ('foo')), (('foo')::CHAR) -- fully parenthesized
-SELECT CHAR '_', _::CHAR -- literals removed
+SELECT CHAR '_', '_'::CHAR -- literals removed
 SELECT CHAR 'foo', 'foo'::CHAR -- identifiers removed
 
 parse
@@ -697,7 +697,7 @@ SELECT VARCHAR 'foo', 'foo'::VARCHAR
 ----
 SELECT VARCHAR 'foo', 'foo'::VARCHAR
 SELECT (VARCHAR ('foo')), (('foo')::VARCHAR) -- fully parenthesized
-SELECT VARCHAR '_', _::VARCHAR -- literals removed
+SELECT VARCHAR '_', '_'::VARCHAR -- literals removed
 SELECT VARCHAR 'foo', 'foo'::VARCHAR -- identifiers removed
 
 parse
@@ -705,7 +705,7 @@ SELECT STRING 'foo', 'foo'::STRING
 ----
 SELECT STRING 'foo', 'foo'::STRING
 SELECT (STRING ('foo')), (('foo')::STRING) -- fully parenthesized
-SELECT STRING '_', _::STRING -- literals removed
+SELECT STRING '_', '_'::STRING -- literals removed
 SELECT STRING 'foo', 'foo'::STRING -- identifiers removed
 
 parse
@@ -713,7 +713,7 @@ SELECT BYTES 'foo', 'foo'::BYTES
 ----
 SELECT BYTES 'foo', 'foo'::BYTES
 SELECT (BYTES ('foo')), (('foo')::BYTES) -- fully parenthesized
-SELECT BYTES '_', _::BYTES -- literals removed
+SELECT BYTES '_', '_'::BYTES -- literals removed
 SELECT BYTES 'foo', 'foo'::BYTES -- identifiers removed
 
 parse
@@ -721,7 +721,7 @@ SELECT DATE 'foo', 'foo'::DATE
 ----
 SELECT DATE 'foo', 'foo'::DATE
 SELECT (DATE ('foo')), (('foo')::DATE) -- fully parenthesized
-SELECT DATE '_', _::DATE -- literals removed
+SELECT DATE '_', '_'::DATE -- literals removed
 SELECT DATE 'foo', 'foo'::DATE -- identifiers removed
 
 parse
@@ -729,7 +729,7 @@ SELECT TIME 'foo', 'foo'::TIME
 ----
 SELECT TIME 'foo', 'foo'::TIME
 SELECT (TIME ('foo')), (('foo')::TIME) -- fully parenthesized
-SELECT TIME '_', _::TIME -- literals removed
+SELECT TIME '_', '_'::TIME -- literals removed
 SELECT TIME 'foo', 'foo'::TIME -- identifiers removed
 
 parse
@@ -737,7 +737,7 @@ SELECT TIMESTAMP 'foo', 'foo'::TIMESTAMP
 ----
 SELECT TIMESTAMP 'foo', 'foo'::TIMESTAMP
 SELECT (TIMESTAMP ('foo')), (('foo')::TIMESTAMP) -- fully parenthesized
-SELECT TIMESTAMP '_', _::TIMESTAMP -- literals removed
+SELECT TIMESTAMP '_', '_'::TIMESTAMP -- literals removed
 SELECT TIMESTAMP 'foo', 'foo'::TIMESTAMP -- identifiers removed
 
 parse
@@ -745,7 +745,7 @@ SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ
 ----
 SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ
 SELECT (TIMESTAMPTZ ('foo')), (('foo')::TIMESTAMPTZ) -- fully parenthesized
-SELECT TIMESTAMPTZ '_', _::TIMESTAMPTZ -- literals removed
+SELECT TIMESTAMPTZ '_', '_'::TIMESTAMPTZ -- literals removed
 SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ -- identifiers removed
 
 parse
@@ -761,7 +761,7 @@ SELECT 'a'::TIMESTAMP(3)
 ----
 SELECT 'a'::TIMESTAMP(3)
 SELECT (('a')::TIMESTAMP(3)) -- fully parenthesized
-SELECT _::TIMESTAMP(3) -- literals removed
+SELECT '_'::TIMESTAMP(3) -- literals removed
 SELECT 'a'::TIMESTAMP(3) -- identifiers removed
 
 parse
@@ -769,7 +769,7 @@ SELECT 'a'::TIMESTAMP(3) WITHOUT TIME ZONE
 ----
 SELECT 'a'::TIMESTAMP(3) -- normalized!
 SELECT (('a')::TIMESTAMP(3)) -- fully parenthesized
-SELECT _::TIMESTAMP(3) -- literals removed
+SELECT '_'::TIMESTAMP(3) -- literals removed
 SELECT 'a'::TIMESTAMP(3) -- identifiers removed
 
 parse
@@ -777,7 +777,7 @@ SELECT 'a'::TIMESTAMPTZ(3)
 ----
 SELECT 'a'::TIMESTAMPTZ(3)
 SELECT (('a')::TIMESTAMPTZ(3)) -- fully parenthesized
-SELECT _::TIMESTAMPTZ(3) -- literals removed
+SELECT '_'::TIMESTAMPTZ(3) -- literals removed
 SELECT 'a'::TIMESTAMPTZ(3) -- identifiers removed
 
 parse
@@ -785,7 +785,7 @@ SELECT 'a'::TIMESTAMP(3) WITH TIME ZONE
 ----
 SELECT 'a'::TIMESTAMPTZ(3) -- normalized!
 SELECT (('a')::TIMESTAMPTZ(3)) -- fully parenthesized
-SELECT _::TIMESTAMPTZ(3) -- literals removed
+SELECT '_'::TIMESTAMPTZ(3) -- literals removed
 SELECT 'a'::TIMESTAMPTZ(3) -- identifiers removed
 
 parse
@@ -810,7 +810,7 @@ SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)
 ----
 SELECT CAST('foo' AS TIMESTAMP) -- normalized!
 SELECT (CAST(('foo') AS TIMESTAMP)) -- fully parenthesized
-SELECT CAST(_ AS TIMESTAMP) -- literals removed
+SELECT CAST('_' AS TIMESTAMP) -- literals removed
 SELECT CAST('foo' AS TIMESTAMP) -- identifiers removed
 
 parse
@@ -826,7 +826,7 @@ SELECT JSONB 'foo', 'foo'::JSONB
 ----
 SELECT JSONB 'foo', 'foo'::JSONB
 SELECT (JSONB ('foo')), (('foo')::JSONB) -- fully parenthesized
-SELECT JSONB '_', _::JSONB -- literals removed
+SELECT JSONB '_', '_'::JSONB -- literals removed
 SELECT JSONB 'foo', 'foo'::JSONB -- identifiers removed
 
 parse
@@ -834,7 +834,7 @@ SELECT '{}'::JSONB ? 'a' = false
 ----
 SELECT ('{}'::JSONB ? 'a') = false -- normalized!
 SELECT ((((('{}')::JSONB) ? ('a'))) = (false)) -- fully parenthesized
-SELECT (_::JSONB ? _) = _ -- literals removed
+SELECT ('_'::JSONB ? '_') = _ -- literals removed
 SELECT ('{}'::JSONB ? 'a') = false -- identifiers removed
 
 parse
@@ -842,7 +842,7 @@ SELECT '{}'::JSONB ?| 'a' = false
 ----
 SELECT ('{}'::JSONB ?| 'a') = false -- normalized!
 SELECT ((((('{}')::JSONB) ?| ('a'))) = (false)) -- fully parenthesized
-SELECT (_::JSONB ?| _) = _ -- literals removed
+SELECT ('_'::JSONB ?| '_') = _ -- literals removed
 SELECT ('{}'::JSONB ?| 'a') = false -- identifiers removed
 
 parse
@@ -850,7 +850,7 @@ SELECT '{}'::JSONB ?& 'a' = false
 ----
 SELECT ('{}'::JSONB ?& 'a') = false -- normalized!
 SELECT ((((('{}')::JSONB) ?& ('a'))) = (false)) -- fully parenthesized
-SELECT (_::JSONB ?& _) = _ -- literals removed
+SELECT ('_'::JSONB ?& '_') = _ -- literals removed
 SELECT ('{}'::JSONB ?& 'a') = false -- identifiers removed
 
 parse
@@ -858,7 +858,7 @@ SELECT '{}'::JSONB @> '{}'::JSONB = false
 ----
 SELECT ('{}'::JSONB @> '{}'::JSONB) = false -- normalized!
 SELECT ((((('{}')::JSONB) @> (('{}')::JSONB))) = (false)) -- fully parenthesized
-SELECT (_::JSONB @> _::JSONB) = _ -- literals removed
+SELECT ('_'::JSONB @> '_'::JSONB) = _ -- literals removed
 SELECT ('{}'::JSONB @> '{}'::JSONB) = false -- identifiers removed
 
 parse
@@ -866,7 +866,7 @@ SELECT '{}'::JSONB <@ '{}'::JSONB = false
 ----
 SELECT ('{}'::JSONB <@ '{}'::JSONB) = false -- normalized!
 SELECT ((((('{}')::JSONB) <@ (('{}')::JSONB))) = (false)) -- fully parenthesized
-SELECT (_::JSONB <@ _::JSONB) = _ -- literals removed
+SELECT ('_'::JSONB <@ '_'::JSONB) = _ -- literals removed
 SELECT ('{}'::JSONB <@ '{}'::JSONB) = false -- identifiers removed
 
 
@@ -875,7 +875,7 @@ SELECT 'foo'::DECIMAL(1)
 ----
 SELECT 'foo'::DECIMAL(1)
 SELECT (('foo')::DECIMAL(1)) -- fully parenthesized
-SELECT _::DECIMAL(1) -- literals removed
+SELECT '_'::DECIMAL(1) -- literals removed
 SELECT 'foo'::DECIMAL(1) -- identifiers removed
 
 parse
@@ -883,7 +883,7 @@ SELECT 'foo'::DECIMAL(2,1)
 ----
 SELECT 'foo'::DECIMAL(2,1)
 SELECT (('foo')::DECIMAL(2,1)) -- fully parenthesized
-SELECT _::DECIMAL(2,1) -- literals removed
+SELECT '_'::DECIMAL(2,1) -- literals removed
 SELECT 'foo'::DECIMAL(2,1) -- identifiers removed
 
 parse
@@ -891,7 +891,7 @@ SELECT 'foo'::BIT(3)
 ----
 SELECT 'foo'::BIT(3)
 SELECT (('foo')::BIT(3)) -- fully parenthesized
-SELECT _::BIT(3) -- literals removed
+SELECT '_'::BIT(3) -- literals removed
 SELECT 'foo'::BIT(3) -- identifiers removed
 
 parse
@@ -899,7 +899,7 @@ SELECT 'foo'::VARBIT(3)
 ----
 SELECT 'foo'::VARBIT(3)
 SELECT (('foo')::VARBIT(3)) -- fully parenthesized
-SELECT _::VARBIT(3) -- literals removed
+SELECT '_'::VARBIT(3) -- literals removed
 SELECT 'foo'::VARBIT(3) -- identifiers removed
 
 parse
@@ -907,7 +907,7 @@ SELECT 'foo'::CHAR(3)
 ----
 SELECT 'foo'::CHAR(3)
 SELECT (('foo')::CHAR(3)) -- fully parenthesized
-SELECT _::CHAR(3) -- literals removed
+SELECT '_'::CHAR(3) -- literals removed
 SELECT 'foo'::CHAR(3) -- identifiers removed
 
 parse
@@ -915,7 +915,7 @@ SELECT 'foo'::VARCHAR(3)
 ----
 SELECT 'foo'::VARCHAR(3)
 SELECT (('foo')::VARCHAR(3)) -- fully parenthesized
-SELECT _::VARCHAR(3) -- literals removed
+SELECT '_'::VARCHAR(3) -- literals removed
 SELECT 'foo'::VARCHAR(3) -- identifiers removed
 
 parse
@@ -923,7 +923,7 @@ SELECT 'foo'::STRING(3)
 ----
 SELECT 'foo'::STRING(3)
 SELECT (('foo')::STRING(3)) -- fully parenthesized
-SELECT _::STRING(3) -- literals removed
+SELECT '_'::STRING(3) -- literals removed
 SELECT 'foo'::STRING(3) -- identifiers removed
 
 parse
@@ -931,7 +931,7 @@ SELECT 'foo'::TIMESTAMP(6)
 ----
 SELECT 'foo'::TIMESTAMP(6)
 SELECT (('foo')::TIMESTAMP(6)) -- fully parenthesized
-SELECT _::TIMESTAMP(6) -- literals removed
+SELECT '_'::TIMESTAMP(6) -- literals removed
 SELECT 'foo'::TIMESTAMP(6) -- identifiers removed
 
 parse
@@ -939,7 +939,7 @@ SELECT 'foo'::TIMESTAMPTZ(6)
 ----
 SELECT 'foo'::TIMESTAMPTZ(6)
 SELECT (('foo')::TIMESTAMPTZ(6)) -- fully parenthesized
-SELECT _::TIMESTAMPTZ(6) -- literals removed
+SELECT '_'::TIMESTAMPTZ(6) -- literals removed
 SELECT 'foo'::TIMESTAMPTZ(6) -- identifiers removed
 
 parse
@@ -947,7 +947,7 @@ SELECT 'foo'::TIME(6)
 ----
 SELECT 'foo'::TIME(6)
 SELECT (('foo')::TIME(6)) -- fully parenthesized
-SELECT _::TIME(6) -- literals removed
+SELECT '_'::TIME(6) -- literals removed
 SELECT 'foo'::TIME(6) -- identifiers removed
 
 parse
@@ -955,7 +955,7 @@ SELECT 'a'::TIME(3)
 ----
 SELECT 'a'::TIME(3)
 SELECT (('a')::TIME(3)) -- fully parenthesized
-SELECT _::TIME(3) -- literals removed
+SELECT '_'::TIME(3) -- literals removed
 SELECT 'a'::TIME(3) -- identifiers removed
 
 parse
@@ -963,7 +963,7 @@ SELECT 'a'::TIME(3) WITHOUT TIME ZONE
 ----
 SELECT 'a'::TIME(3) -- normalized!
 SELECT (('a')::TIME(3)) -- fully parenthesized
-SELECT _::TIME(3) -- literals removed
+SELECT '_'::TIME(3) -- literals removed
 SELECT 'a'::TIME(3) -- identifiers removed
 
 parse
@@ -971,7 +971,7 @@ SELECT 'a'::TIMETZ(3)
 ----
 SELECT 'a'::TIMETZ(3)
 SELECT (('a')::TIMETZ(3)) -- fully parenthesized
-SELECT _::TIMETZ(3) -- literals removed
+SELECT '_'::TIMETZ(3) -- literals removed
 SELECT 'a'::TIMETZ(3) -- identifiers removed
 
 parse
@@ -979,7 +979,7 @@ SELECT 'a'::TIME(3) WITH TIME ZONE
 ----
 SELECT 'a'::TIMETZ(3) -- normalized!
 SELECT (('a')::TIMETZ(3)) -- fully parenthesized
-SELECT _::TIMETZ(3) -- literals removed
+SELECT '_'::TIMETZ(3) -- literals removed
 SELECT 'a'::TIMETZ(3) -- identifiers removed
 
 parse
@@ -1004,7 +1004,7 @@ SELECT '0'::INTERVAL
 ----
 SELECT '0'::INTERVAL
 SELECT (('0')::INTERVAL) -- fully parenthesized
-SELECT _::INTERVAL -- literals removed
+SELECT '_'::INTERVAL -- literals removed
 SELECT '0'::INTERVAL -- identifiers removed
 
 parse
@@ -1012,7 +1012,7 @@ SELECT INTERVAL '0'
 ----
 SELECT '0'::INTERVAL -- normalized!
 SELECT (('0')::INTERVAL) -- fully parenthesized
-SELECT _::INTERVAL -- literals removed
+SELECT '_'::INTERVAL -- literals removed
 SELECT '0'::INTERVAL -- identifiers removed
 
 parse
@@ -1020,7 +1020,7 @@ SELECT INTERVAL '1' SECOND
 ----
 SELECT '1'::INTERVAL SECOND -- normalized!
 SELECT (('1')::INTERVAL SECOND) -- fully parenthesized
-SELECT _::INTERVAL SECOND -- literals removed
+SELECT '_'::INTERVAL SECOND -- literals removed
 SELECT '1'::INTERVAL SECOND -- identifiers removed
 
 parse
@@ -1028,7 +1028,7 @@ SELECT INTERVAL(3) '12.1234s'
 ----
 SELECT '12.1234s'::INTERVAL(3) -- normalized!
 SELECT (('12.1234s')::INTERVAL(3)) -- fully parenthesized
-SELECT _::INTERVAL(3) -- literals removed
+SELECT '_'::INTERVAL(3) -- literals removed
 SELECT '12.1234s'::INTERVAL(3) -- identifiers removed
 
 parse
@@ -1036,7 +1036,7 @@ SELECT INTERVAL '12.1234s' SECOND(3)
 ----
 SELECT '12.1234s'::INTERVAL SECOND(3) -- normalized!
 SELECT (('12.1234s')::INTERVAL SECOND(3)) -- fully parenthesized
-SELECT _::INTERVAL SECOND(3) -- literals removed
+SELECT '_'::INTERVAL SECOND(3) -- literals removed
 SELECT '12.1234s'::INTERVAL SECOND(3) -- identifiers removed
 
 parse
@@ -1044,7 +1044,7 @@ SELECT INTERVAL '14.7899s' SECOND(3)
 ----
 SELECT '14.7899s'::INTERVAL SECOND(3) -- normalized!
 SELECT (('14.7899s')::INTERVAL SECOND(3)) -- fully parenthesized
-SELECT _::INTERVAL SECOND(3) -- literals removed
+SELECT '_'::INTERVAL SECOND(3) -- literals removed
 SELECT '14.7899s'::INTERVAL SECOND(3) -- identifiers removed
 
 parse
@@ -1052,7 +1052,7 @@ SELECT '11s'::INTERVAL(3)
 ----
 SELECT '11s'::INTERVAL(3)
 SELECT (('11s')::INTERVAL(3)) -- fully parenthesized
-SELECT _::INTERVAL(3) -- literals removed
+SELECT '_'::INTERVAL(3) -- literals removed
 SELECT '11s'::INTERVAL(3) -- identifiers removed
 
 parse
@@ -1060,7 +1060,7 @@ SELECT '10:00:13.123456'::INTERVAL SECOND
 ----
 SELECT '10:00:13.123456'::INTERVAL SECOND
 SELECT (('10:00:13.123456')::INTERVAL SECOND) -- fully parenthesized
-SELECT _::INTERVAL SECOND -- literals removed
+SELECT '_'::INTERVAL SECOND -- literals removed
 SELECT '10:00:13.123456'::INTERVAL SECOND -- identifiers removed
 
 parse
@@ -1068,7 +1068,7 @@ SELECT '10:00:13.123456'::INTERVAL SECOND(3)
 ----
 SELECT '10:00:13.123456'::INTERVAL SECOND(3)
 SELECT (('10:00:13.123456')::INTERVAL SECOND(3)) -- fully parenthesized
-SELECT _::INTERVAL SECOND(3) -- literals removed
+SELECT '_'::INTERVAL SECOND(3) -- literals removed
 SELECT '10:00:13.123456'::INTERVAL SECOND(3) -- identifiers removed
 
 parse
@@ -1076,7 +1076,7 @@ SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND
 ----
 SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND
 SELECT (('10:00:13.123456')::INTERVAL MINUTE TO SECOND) -- fully parenthesized
-SELECT _::INTERVAL MINUTE TO SECOND -- literals removed
+SELECT '_'::INTERVAL MINUTE TO SECOND -- literals removed
 SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND -- identifiers removed
 
 parse
@@ -1084,7 +1084,7 @@ SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND(3)
 ----
 SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND(3)
 SELECT (('10:00:13.123456')::INTERVAL MINUTE TO SECOND(3)) -- fully parenthesized
-SELECT _::INTERVAL MINUTE TO SECOND(3) -- literals removed
+SELECT '_'::INTERVAL MINUTE TO SECOND(3) -- literals removed
 SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND(3) -- identifiers removed
 
 parse
@@ -1092,7 +1092,7 @@ SELECT INTERVAL 'foo'
 ----
 SELECT 'foo'::INTERVAL -- normalized!
 SELECT (('foo')::INTERVAL) -- fully parenthesized
-SELECT _::INTERVAL -- literals removed
+SELECT '_'::INTERVAL -- literals removed
 SELECT 'foo'::INTERVAL -- identifiers removed
 
 parse
@@ -1100,7 +1100,7 @@ SELECT 'foo'::BOX2D
 ----
 SELECT 'foo'::BOX2D
 SELECT (('foo')::BOX2D) -- fully parenthesized
-SELECT _::BOX2D -- literals removed
+SELECT '_'::BOX2D -- literals removed
 SELECT 'foo'::BOX2D -- identifiers removed
 
 parse
@@ -1108,7 +1108,7 @@ SELECT 'foo'::GEOGRAPHY
 ----
 SELECT 'foo'::GEOGRAPHY
 SELECT (('foo')::GEOGRAPHY) -- fully parenthesized
-SELECT _::GEOGRAPHY -- literals removed
+SELECT '_'::GEOGRAPHY -- literals removed
 SELECT 'foo'::GEOGRAPHY -- identifiers removed
 
 parse
@@ -1116,7 +1116,7 @@ SELECT 'foo'::GEOGRAPHY(POINT,4326)
 ----
 SELECT 'foo'::GEOGRAPHY(POINT,4326)
 SELECT (('foo')::GEOGRAPHY(POINT,4326)) -- fully parenthesized
-SELECT _::GEOGRAPHY(POINT,4326) -- literals removed
+SELECT '_'::GEOGRAPHY(POINT,4326) -- literals removed
 SELECT 'foo'::GEOGRAPHY(POINT,4326) -- identifiers removed
 
 parse
@@ -1124,7 +1124,7 @@ SELECT 'foo'::GEOGRAPHY(POINT)
 ----
 SELECT 'foo'::GEOGRAPHY(POINT)
 SELECT (('foo')::GEOGRAPHY(POINT)) -- fully parenthesized
-SELECT _::GEOGRAPHY(POINT) -- literals removed
+SELECT '_'::GEOGRAPHY(POINT) -- literals removed
 SELECT 'foo'::GEOGRAPHY(POINT) -- identifiers removed
 
 parse
@@ -1132,7 +1132,7 @@ SELECT 'foo'::GEOMETRY
 ----
 SELECT 'foo'::GEOMETRY
 SELECT (('foo')::GEOMETRY) -- fully parenthesized
-SELECT _::GEOMETRY -- literals removed
+SELECT '_'::GEOMETRY -- literals removed
 SELECT 'foo'::GEOMETRY -- identifiers removed
 
 parse
@@ -1140,7 +1140,7 @@ SELECT 'foo'::GEOMETRY(POINT)
 ----
 SELECT 'foo'::GEOMETRY(POINT)
 SELECT (('foo')::GEOMETRY(POINT)) -- fully parenthesized
-SELECT _::GEOMETRY(POINT) -- literals removed
+SELECT '_'::GEOMETRY(POINT) -- literals removed
 SELECT 'foo'::GEOMETRY(POINT) -- identifiers removed
 
 parse
@@ -1148,7 +1148,7 @@ SELECT 'foo'::GEOMETRY(POINT,4326)
 ----
 SELECT 'foo'::GEOMETRY(POINT,4326)
 SELECT (('foo')::GEOMETRY(POINT,4326)) -- fully parenthesized
-SELECT _::GEOMETRY(POINT,4326) -- literals removed
+SELECT '_'::GEOMETRY(POINT,4326) -- literals removed
 SELECT 'foo'::GEOMETRY(POINT,4326) -- identifiers removed
 
 parse
@@ -1156,7 +1156,7 @@ SELECT '192.168.0.1'::INET
 ----
 SELECT '192.168.0.1'::INET
 SELECT (('192.168.0.1')::INET) -- fully parenthesized
-SELECT _::INET -- literals removed
+SELECT '_'::INET -- literals removed
 SELECT '192.168.0.1'::INET -- identifiers removed
 
 parse
@@ -1164,7 +1164,7 @@ SELECT '192.168.0.1':::INET
 ----
 SELECT '192.168.0.1':::INET
 SELECT (('192.168.0.1'):::INET) -- fully parenthesized
-SELECT _:::INET -- literals removed
+SELECT '_':::INET -- literals removed
 SELECT '192.168.0.1':::INET -- identifiers removed
 
 parse
@@ -1245,7 +1245,7 @@ SELECT 'a' AS "12345"
 ----
 SELECT 'a' AS "12345"
 SELECT ('a') AS "12345" -- fully parenthesized
-SELECT _ AS "12345" -- literals removed
+SELECT '_' AS "12345" -- literals removed
 SELECT 'a' AS _ -- identifiers removed
 
 parse
@@ -1253,7 +1253,7 @@ SELECT 'a' AS clnm
 ----
 SELECT 'a' AS clnm
 SELECT ('a') AS clnm -- fully parenthesized
-SELECT _ AS clnm -- literals removed
+SELECT '_' AS clnm -- literals removed
 SELECT 'a' AS _ -- identifiers removed
 
 parse
@@ -1261,7 +1261,7 @@ SELECT 'a' AS primary
 ----
 SELECT 'a' AS primary
 SELECT ('a') AS primary -- fully parenthesized
-SELECT _ AS primary -- literals removed
+SELECT '_' AS primary -- literals removed
 SELECT 'a' AS _ -- identifiers removed
 
 parse
@@ -1269,7 +1269,7 @@ SELECT 'a' AS like
 ----
 SELECT 'a' AS like
 SELECT ('a') AS like -- fully parenthesized
-SELECT _ AS like -- literals removed
+SELECT '_' AS like -- literals removed
 SELECT 'a' AS _ -- identifiers removed
 
 parse
@@ -1344,7 +1344,7 @@ SELECT SERIAL8 'foo', 'foo'::SERIAL8
 ----
 SELECT INT8 'foo', 'foo'::INT8 -- normalized!
 SELECT (INT8 ('foo')), (('foo')::INT8) -- fully parenthesized
-SELECT INT8 '_', _::INT8 -- literals removed
+SELECT INT8 '_', '_'::INT8 -- literals removed
 SELECT INT8 'foo', 'foo'::INT8 -- identifiers removed
 
 
@@ -1426,7 +1426,7 @@ SELECT (ARRAY['a', 'b', 'c']).name
 ----
 SELECT (ARRAY['a', 'b', 'c']).name
 SELECT (((ARRAY[('a'), ('b'), ('c')])).name) -- fully parenthesized
-SELECT (ARRAY[_, _, __more1__]).name -- literals removed
+SELECT (ARRAY['_', '_', __more1__]).name -- literals removed
 SELECT (ARRAY['a', 'b', 'c'])._ -- identifiers removed
 
 parse
@@ -1434,7 +1434,7 @@ SELECT 'a' LIKE '\a' ESCAPE '\'
 ----
 SELECT like_escape('a', e'\\a', e'\\') -- normalized!
 SELECT (like_escape(('a'), (e'\\a'), (e'\\'))) -- fully parenthesized
-SELECT like_escape(_, _, _) -- literals removed
+SELECT like_escape('_', '_', '_') -- literals removed
 SELECT like_escape('a', e'\\a', e'\\') -- identifiers removed
 
 parse
@@ -1442,7 +1442,7 @@ SELECT '\abc\' LIKE '-\___-\' ESCAPE '-'
 ----
 SELECT like_escape(e'\\abc\\', e'-\\___-\\', '-') -- normalized!
 SELECT (like_escape((e'\\abc\\'), (e'-\\___-\\'), ('-'))) -- fully parenthesized
-SELECT like_escape(_, _, _) -- literals removed
+SELECT like_escape('_', '_', '_') -- literals removed
 SELECT like_escape(e'\\abc\\', e'-\\___-\\', '-') -- identifiers removed
 
 parse
@@ -1450,7 +1450,7 @@ SELECT 'a' LIKE '\a' ESCAPE ''
 ----
 SELECT like_escape('a', e'\\a', '') -- normalized!
 SELECT (like_escape(('a'), (e'\\a'), (''))) -- fully parenthesized
-SELECT like_escape(_, _, _) -- literals removed
+SELECT like_escape('_', '_', '_') -- literals removed
 SELECT like_escape('a', e'\\a', '') -- identifiers removed
 
 parse
@@ -1458,7 +1458,7 @@ SELECT 'a' NOT LIKE '\a' ESCAPE '\'
 ----
 SELECT not_like_escape('a', e'\\a', e'\\') -- normalized!
 SELECT (not_like_escape(('a'), (e'\\a'), (e'\\'))) -- fully parenthesized
-SELECT not_like_escape(_, _, _) -- literals removed
+SELECT not_like_escape('_', '_', '_') -- literals removed
 SELECT not_like_escape('a', e'\\a', e'\\') -- identifiers removed
 
 parse
@@ -1466,7 +1466,7 @@ SELECT '\abc\' NOT LIKE '-\___-\' ESCAPE '-'
 ----
 SELECT not_like_escape(e'\\abc\\', e'-\\___-\\', '-') -- normalized!
 SELECT (not_like_escape((e'\\abc\\'), (e'-\\___-\\'), ('-'))) -- fully parenthesized
-SELECT not_like_escape(_, _, _) -- literals removed
+SELECT not_like_escape('_', '_', '_') -- literals removed
 SELECT not_like_escape(e'\\abc\\', e'-\\___-\\', '-') -- identifiers removed
 
 parse
@@ -1474,7 +1474,7 @@ SELECT 'a' NOT LIKE '\a' ESCAPE ''
 ----
 SELECT not_like_escape('a', e'\\a', '') -- normalized!
 SELECT (not_like_escape(('a'), (e'\\a'), (''))) -- fully parenthesized
-SELECT not_like_escape(_, _, _) -- literals removed
+SELECT not_like_escape('_', '_', '_') -- literals removed
 SELECT not_like_escape('a', e'\\a', '') -- identifiers removed
 
 parse
@@ -1482,7 +1482,7 @@ SELECT 'a' ILIKE '\a' ESCAPE '\'
 ----
 SELECT ilike_escape('a', e'\\a', e'\\') -- normalized!
 SELECT (ilike_escape(('a'), (e'\\a'), (e'\\'))) -- fully parenthesized
-SELECT ilike_escape(_, _, _) -- literals removed
+SELECT ilike_escape('_', '_', '_') -- literals removed
 SELECT ilike_escape('a', e'\\a', e'\\') -- identifiers removed
 
 parse
@@ -1490,7 +1490,7 @@ SELECT '\abc\' ILIKE '-\___-\' ESCAPE '-'
 ----
 SELECT ilike_escape(e'\\abc\\', e'-\\___-\\', '-') -- normalized!
 SELECT (ilike_escape((e'\\abc\\'), (e'-\\___-\\'), ('-'))) -- fully parenthesized
-SELECT ilike_escape(_, _, _) -- literals removed
+SELECT ilike_escape('_', '_', '_') -- literals removed
 SELECT ilike_escape(e'\\abc\\', e'-\\___-\\', '-') -- identifiers removed
 
 parse
@@ -1498,7 +1498,7 @@ SELECT 'a' ILIKE '\a' ESCAPE ''
 ----
 SELECT ilike_escape('a', e'\\a', '') -- normalized!
 SELECT (ilike_escape(('a'), (e'\\a'), (''))) -- fully parenthesized
-SELECT ilike_escape(_, _, _) -- literals removed
+SELECT ilike_escape('_', '_', '_') -- literals removed
 SELECT ilike_escape('a', e'\\a', '') -- identifiers removed
 
 parse
@@ -1506,7 +1506,7 @@ SELECT 'a' NOT ILIKE '\a' ESCAPE '\'
 ----
 SELECT not_ilike_escape('a', e'\\a', e'\\') -- normalized!
 SELECT (not_ilike_escape(('a'), (e'\\a'), (e'\\'))) -- fully parenthesized
-SELECT not_ilike_escape(_, _, _) -- literals removed
+SELECT not_ilike_escape('_', '_', '_') -- literals removed
 SELECT not_ilike_escape('a', e'\\a', e'\\') -- identifiers removed
 
 parse
@@ -1514,7 +1514,7 @@ SELECT '\abc\' NOT ILIKE '-\___-\' ESCAPE '-'
 ----
 SELECT not_ilike_escape(e'\\abc\\', e'-\\___-\\', '-') -- normalized!
 SELECT (not_ilike_escape((e'\\abc\\'), (e'-\\___-\\'), ('-'))) -- fully parenthesized
-SELECT not_ilike_escape(_, _, _) -- literals removed
+SELECT not_ilike_escape('_', '_', '_') -- literals removed
 SELECT not_ilike_escape(e'\\abc\\', e'-\\___-\\', '-') -- identifiers removed
 
 parse
@@ -1522,7 +1522,7 @@ SELECT 'a' NOT ILIKE '\a' ESCAPE ''
 ----
 SELECT not_ilike_escape('a', e'\\a', '') -- normalized!
 SELECT (not_ilike_escape(('a'), (e'\\a'), (''))) -- fully parenthesized
-SELECT not_ilike_escape(_, _, _) -- literals removed
+SELECT not_ilike_escape('_', '_', '_') -- literals removed
 SELECT not_ilike_escape('a', e'\\a', '') -- identifiers removed
 
 parse
@@ -1530,7 +1530,7 @@ SELECT 'a' SIMILAR TO '\a' ESCAPE '\'
 ----
 SELECT similar_to_escape('a', e'\\a', e'\\') -- normalized!
 SELECT (similar_to_escape(('a'), (e'\\a'), (e'\\'))) -- fully parenthesized
-SELECT similar_to_escape(_, _, _) -- literals removed
+SELECT similar_to_escape('_', '_', '_') -- literals removed
 SELECT similar_to_escape('a', e'\\a', e'\\') -- identifiers removed
 
 parse
@@ -1538,7 +1538,7 @@ SELECT '\abc\' SIMILAR TO '-\___-\' ESCAPE '-'
 ----
 SELECT similar_to_escape(e'\\abc\\', e'-\\___-\\', '-') -- normalized!
 SELECT (similar_to_escape((e'\\abc\\'), (e'-\\___-\\'), ('-'))) -- fully parenthesized
-SELECT similar_to_escape(_, _, _) -- literals removed
+SELECT similar_to_escape('_', '_', '_') -- literals removed
 SELECT similar_to_escape(e'\\abc\\', e'-\\___-\\', '-') -- identifiers removed
 
 parse
@@ -1546,7 +1546,7 @@ SELECT 'a' SIMILAR TO '\a' ESCAPE ''
 ----
 SELECT similar_to_escape('a', e'\\a', '') -- normalized!
 SELECT (similar_to_escape(('a'), (e'\\a'), (''))) -- fully parenthesized
-SELECT similar_to_escape(_, _, _) -- literals removed
+SELECT similar_to_escape('_', '_', '_') -- literals removed
 SELECT similar_to_escape('a', e'\\a', '') -- identifiers removed
 
 parse
@@ -1554,7 +1554,7 @@ SELECT 'a' NOT SIMILAR TO '\a' ESCAPE '\'
 ----
 SELECT not_similar_to_escape('a', e'\\a', e'\\') -- normalized!
 SELECT (not_similar_to_escape(('a'), (e'\\a'), (e'\\'))) -- fully parenthesized
-SELECT not_similar_to_escape(_, _, _) -- literals removed
+SELECT not_similar_to_escape('_', '_', '_') -- literals removed
 SELECT not_similar_to_escape('a', e'\\a', e'\\') -- identifiers removed
 
 parse
@@ -1562,7 +1562,7 @@ SELECT '\abc\' NOT SIMILAR TO '-\___-\' ESCAPE '-'
 ----
 SELECT not_similar_to_escape(e'\\abc\\', e'-\\___-\\', '-') -- normalized!
 SELECT (not_similar_to_escape((e'\\abc\\'), (e'-\\___-\\'), ('-'))) -- fully parenthesized
-SELECT not_similar_to_escape(_, _, _) -- literals removed
+SELECT not_similar_to_escape('_', '_', '_') -- literals removed
 SELECT not_similar_to_escape(e'\\abc\\', e'-\\___-\\', '-') -- identifiers removed
 
 parse
@@ -1570,7 +1570,7 @@ SELECT 'a' NOT SIMILAR TO '\a' ESCAPE ''
 ----
 SELECT not_similar_to_escape('a', e'\\a', '') -- normalized!
 SELECT (not_similar_to_escape(('a'), (e'\\a'), (''))) -- fully parenthesized
-SELECT not_similar_to_escape(_, _, _) -- literals removed
+SELECT not_similar_to_escape('_', '_', '_') -- literals removed
 SELECT not_similar_to_escape('a', e'\\a', '') -- identifiers removed
 
 parse
@@ -1578,7 +1578,7 @@ SELECT $$a'a$$
 ----
 SELECT e'a\'a' -- normalized!
 SELECT (e'a\'a') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'a\'a' -- identifiers removed
 
 parse
@@ -1586,7 +1586,7 @@ SELECT $$a\\na$$
 ----
 SELECT e'a\\\\na' -- normalized!
 SELECT (e'a\\\\na') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'a\\\\na' -- identifiers removed
 
 parse
@@ -1594,7 +1594,7 @@ SELECT $select$\\n$select$
 ----
 SELECT e'\\\\n' -- normalized!
 SELECT (e'\\\\n') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'\\\\n' -- identifiers removed
 
 parse
@@ -1602,7 +1602,7 @@ SELECT $$a"a$$
 ----
 SELECT 'a"a' -- normalized!
 SELECT ('a"a') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT 'a"a' -- identifiers removed
 
 parse
@@ -1610,7 +1610,7 @@ SELECT $$full$$
 ----
 SELECT 'full' -- normalized!
 SELECT ('full') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT 'full' -- identifiers removed
 
 parse
@@ -1618,7 +1618,7 @@ SELECT $select$full$select$
 ----
 SELECT 'full' -- normalized!
 SELECT ('full') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT 'full' -- identifiers removed
 
 parse
@@ -1626,7 +1626,7 @@ SELECT $select$a$$b$select$
 ----
 SELECT 'a$$b' -- normalized!
 SELECT ('a$$b') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT 'a$$b' -- identifiers removed
 
 parse
@@ -1634,7 +1634,7 @@ SELECT $$Dianne's horse$$
 ----
 SELECT e'Dianne\'s horse' -- normalized!
 SELECT (e'Dianne\'s horse') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'Dianne\'s horse' -- identifiers removed
 
 parse
@@ -1642,7 +1642,7 @@ SELECT $SomeTag$Dianne's horse$SomeTag$
 ----
 SELECT e'Dianne\'s horse' -- normalized!
 SELECT (e'Dianne\'s horse') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'Dianne\'s horse' -- identifiers removed
 
 parse
@@ -1654,7 +1654,7 @@ $function$
 ----
 SELECT e'\nBEGIN\nRETURN ($1 ~ $q$[\\t\\r\\n\\v\\\\]$q$);\nEND;\n' -- normalized!
 SELECT (e'\nBEGIN\nRETURN ($1 ~ $q$[\\t\\r\\n\\v\\\\]$q$);\nEND;\n') -- fully parenthesized
-SELECT _ -- literals removed
+SELECT '_' -- literals removed
 SELECT e'\nBEGIN\nRETURN ($1 ~ $q$[\\t\\r\\n\\v\\\\]$q$);\nEND;\n' -- identifiers removed
 
 parse
@@ -1662,7 +1662,7 @@ SELECT a IS NAN
 ----
 SELECT a = 'NaN' -- normalized!
 SELECT ((a) = ('NaN')) -- fully parenthesized
-SELECT a = _ -- literals removed
+SELECT a = '_' -- literals removed
 SELECT _ = 'NaN' -- identifiers removed
 
 parse
@@ -1670,7 +1670,7 @@ SELECT a IS NOT NAN
 ----
 SELECT a != 'NaN' -- normalized!
 SELECT ((a) != ('NaN')) -- fully parenthesized
-SELECT a != _ -- literals removed
+SELECT a != '_' -- literals removed
 SELECT _ != 'NaN' -- identifiers removed
 
 parse
@@ -1678,7 +1678,7 @@ SELECT 1+COALESCE(NULL, 'a', x)-ARRAY[3.14]
 ----
 SELECT (1 + COALESCE(NULL, 'a', x)) - ARRAY[3.14] -- normalized!
 SELECT ((((1) + (COALESCE((NULL), ('a'), (x))))) - (ARRAY[(3.14)])) -- fully parenthesized
-SELECT (_ + COALESCE(_, _, x)) - ARRAY[_] -- literals removed
+SELECT (_ + COALESCE(_, '_', x)) - ARRAY[_] -- literals removed
 SELECT (1 + COALESCE(NULL, 'a', _)) - ARRAY[3.14] -- identifiers removed
 
 parse

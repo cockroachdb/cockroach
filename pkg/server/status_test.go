@@ -1648,7 +1648,7 @@ func TestStatusAPIStatements(t *testing.T) {
 		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
 		{
 			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
+			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
 		},
 		{stmt: `SELECT * FROM posts`},
 	}
