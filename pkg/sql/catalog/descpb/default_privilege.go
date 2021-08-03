@@ -160,16 +160,16 @@ func (p *DefaultPrivilegeDescriptor) GetDefaultPrivilegesForRole(
 	if idx == -1 {
 		return nil, false
 	}
-	return &p.DefaultPrivileges[idx], true
+	return &p.DefaultPrivilegesPerRole[idx], true
 }
 
 // findUserIndex looks for a given user and returns its
 // index in the User array if found. Returns -1 otherwise.
 func (p *DefaultPrivilegeDescriptor) findUserIndex(user security.SQLUsername) int {
-	idx := sort.Search(len(p.DefaultPrivileges), func(i int) bool {
-		return !p.DefaultPrivileges[i].User().LessThan(user)
+	idx := sort.Search(len(p.DefaultPrivilegesPerRole), func(i int) bool {
+		return !p.DefaultPrivilegesPerRole[i].User().LessThan(user)
 	})
-	if idx < len(p.DefaultPrivileges) && p.DefaultPrivileges[idx].User() == user {
+	if idx < len(p.DefaultPrivilegesPerRole) && p.DefaultPrivilegesPerRole[idx].User() == user {
 		return idx
 	}
 	return -1
@@ -181,37 +181,37 @@ func (p *DefaultPrivilegeDescriptor) findUserIndex(user security.SQLUsername) in
 func (p *DefaultPrivilegeDescriptor) findOrCreateUser(
 	user security.SQLUsername,
 ) *DefaultPrivilegesForRole {
-	idx := sort.Search(len(p.DefaultPrivileges), func(i int) bool {
-		return !p.DefaultPrivileges[i].User().LessThan(user)
+	idx := sort.Search(len(p.DefaultPrivilegesPerRole), func(i int) bool {
+		return !p.DefaultPrivilegesPerRole[i].User().LessThan(user)
 	})
-	if idx == len(p.DefaultPrivileges) {
+	if idx == len(p.DefaultPrivilegesPerRole) {
 		// Not found but should be inserted at the end.
-		p.DefaultPrivileges = append(p.DefaultPrivileges,
+		p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole,
 			DefaultPrivilegesForRole{
 				UserProto:                  user.EncodeProto(),
 				DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
 			},
 		)
-	} else if p.DefaultPrivileges[idx].User() == user {
+	} else if p.DefaultPrivilegesPerRole[idx].User() == user {
 		// Found.
 	} else {
 		// New element to be inserted at idx.
-		p.DefaultPrivileges = append(p.DefaultPrivileges, DefaultPrivilegesForRole{})
-		copy(p.DefaultPrivileges[idx+1:], p.DefaultPrivileges[idx:])
-		p.DefaultPrivileges[idx] = DefaultPrivilegesForRole{
+		p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole, DefaultPrivilegesForRole{})
+		copy(p.DefaultPrivilegesPerRole[idx+1:], p.DefaultPrivilegesPerRole[idx:])
+		p.DefaultPrivilegesPerRole[idx] = DefaultPrivilegesForRole{
 			UserProto:                  user.EncodeProto(),
 			DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
 		}
 	}
-	return &p.DefaultPrivileges[idx]
+	return &p.DefaultPrivilegesPerRole[idx]
 }
 
 // Validate returns an assertion error if the default privilege descriptor
 // is invalid.
 func (p *DefaultPrivilegeDescriptor) Validate() error {
-	for i, defaultPrivilegesForRole := range p.DefaultPrivileges {
-		if i+1 < len(p.DefaultPrivileges) &&
-			!defaultPrivilegesForRole.User().LessThan(p.DefaultPrivileges[i+1].User()) {
+	for i, defaultPrivilegesForRole := range p.DefaultPrivilegesPerRole {
+		if i+1 < len(p.DefaultPrivilegesPerRole) &&
+			!defaultPrivilegesForRole.User().LessThan(p.DefaultPrivilegesPerRole[i+1].User()) {
 			return errors.AssertionFailedf("default privilege list is not sorted")
 		}
 		for objectType, defaultPrivileges := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
@@ -231,7 +231,7 @@ func (p *DefaultPrivilegeDescriptor) Validate() error {
 func InitDefaultPrivilegeDescriptor() *DefaultPrivilegeDescriptor {
 	var defaultPrivilegesForRole []DefaultPrivilegesForRole
 	return &DefaultPrivilegeDescriptor{
-		DefaultPrivileges: defaultPrivilegesForRole,
+		DefaultPrivilegesPerRole: defaultPrivilegesForRole,
 		DefaultPrivilegesForAllRoles: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{
 			tree.Tables:    {},
 			tree.Sequences: {},

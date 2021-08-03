@@ -254,7 +254,7 @@ var validationMap = []struct {
 			"State":             {status: thisFieldReferencesNoObjects},
 			"OfflineReason":     {status: thisFieldReferencesNoObjects},
 			"RegionConfig":      {status: iSolemnlySwearThisFieldIsValidated},
-			"DefaultPrivileges": {status: iSolemnlySwearThisFieldIsValidated},
+			"DefaultPrivilegesPerRole": {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
