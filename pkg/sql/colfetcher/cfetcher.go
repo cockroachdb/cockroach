@@ -653,7 +653,7 @@ func (rf *cFetcher) Init(
 func (rf *cFetcher) StartScan(
 	txn *kv.Txn,
 	spans roachpb.Spans,
-	boundedStalenessRead *execinfra.BoundedStalenessRead,
+	bsHeader *roachpb.BoundedStalenessHeader,
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
@@ -684,7 +684,7 @@ func (rf *cFetcher) StartScan(
 	f, err := row.NewKVFetcher(
 		txn,
 		spans,
-		boundedStalenessRead,
+		bsHeader,
 		rf.reverse,
 		limitBatches,
 		firstBatchLimit,

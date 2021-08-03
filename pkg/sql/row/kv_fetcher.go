@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,7 +46,7 @@ type KVFetcher struct {
 func NewKVFetcher(
 	txn *kv.Txn,
 	spans roachpb.Spans,
-	boundedStalenessRead *execinfra.BoundedStalenessRead,
+	bsHeader *roachpb.BoundedStalenessHeader,
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
@@ -57,13 +56,10 @@ func NewKVFetcher(
 	forceProductionKVBatchSize bool,
 ) (*KVFetcher, error) {
 	sendFn := makeKVBatchFetcherDefaultSendFunc(txn)
-	if boundedStalenessRead != nil {
+	if bsHeader != nil {
 		sendFn = func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 			ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
-			ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
-				MinTimestampBound:       boundedStalenessRead.MinTimestampBound,
-				MinTimestampBoundStrict: boundedStalenessRead.NearestOnly,
-			}
+			ba.BoundedStaleness = bsHeader
 			res, err := txn.NegotiateAndSend(ctx, ba)
 			if err != nil {
 				return nil, err.GoError()
