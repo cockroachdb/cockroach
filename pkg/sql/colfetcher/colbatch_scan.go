@@ -48,11 +48,12 @@ type ColBatchScan struct {
 	colexecop.ZeroInputNode
 	colexecop.InitHelper
 
-	spans       roachpb.Spans
-	flowCtx     *execinfra.FlowCtx
-	rf          *cFetcher
-	limitHint   int64
-	parallelize bool
+	spans                roachpb.Spans
+	flowCtx              *execinfra.FlowCtx
+	boundedStalenessRead *execinfra.BoundedStalenessRead
+	rf                   *cFetcher
+	limitHint            int64
+	parallelize          bool
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
 	tracingSpan *tracing.Span
@@ -87,7 +88,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	if err := s.rf.StartScan(
 		s.flowCtx.Txn,
 		s.spans,
-		s.flowCtx.EvalCtx.AsOfSystemTime,
+		s.boundedStalenessRead,
 		limitBatches,
 		s.limitHint,
 		s.flowCtx.TraceKV,
@@ -231,6 +232,18 @@ func NewColBatchScan(
 		return nil, err
 	}
 
+	var boundedStalenessRead *execinfra.BoundedStalenessRead
+	if aost := evalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
+		ts := aost.Timestamp
+		if aost.Timestamp.Less(table.GetModificationTime()) {
+			ts = table.GetModificationTime()
+		}
+		boundedStalenessRead = &execinfra.BoundedStalenessRead{
+			MinTimestampBound: ts,
+			NearestOnly:       aost.NearestOnly,
+		}
+	}
+
 	s := colBatchScanPool.Get().(*ColBatchScan)
 	spans := s.spans[:0]
 	specSpans := spec.Spans
@@ -239,10 +252,11 @@ func NewColBatchScan(
 		spans = append(spans, specSpans[i].Span)
 	}
 	*s = ColBatchScan{
-		spans:     spans,
-		flowCtx:   flowCtx,
-		rf:        fetcher,
-		limitHint: limitHint,
+		spans:                spans,
+		flowCtx:              flowCtx,
+		boundedStalenessRead: boundedStalenessRead,
+		rf:                   fetcher,
+		limitHint:            limitHint,
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
 		// just in case.
 		parallelize: spec.Parallelize && limitHint == 0,
