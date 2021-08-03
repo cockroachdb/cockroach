@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/errors"
 )
@@ -157,4 +158,18 @@ func (n *AbbreviatedRevoke) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString(" FROM ")
 	n.Grantees.Format(ctx)
+}
+
+// NameListToUsernames converts a NameList containing SQL input of usernames,
+// normalizes the names and returns them as a list of SQLUsernames.
+func NameListToUsernames(roles NameList) ([]security.SQLUsername, error) {
+	targetRoles := make([]security.SQLUsername, len(roles))
+	for i, role := range roles {
+		user, err := security.MakeSQLUsernameFromUserInput(string(role), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		targetRoles[i] = user
+	}
+	return targetRoles, nil
 }
