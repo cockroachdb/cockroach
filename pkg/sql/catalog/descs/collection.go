@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -100,6 +101,10 @@ type Collection struct {
 	// droppedDescriptors that will not need to wait for new
 	// lease versions.
 	deletedDescs []catalog.Descriptor
+
+	// PrevMinTimestampBound is the minimum timestamp bound of the previous
+	// bounded staleness read. XXX
+	PrevMinTimestampBound *hlc.Timestamp
 }
 
 var _ catalog.Accessor = (*Collection)(nil)

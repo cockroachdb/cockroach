@@ -355,6 +355,20 @@ func (ex *connExecutor) execStmtInOpenState(
 	}()
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
+		var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
+		if errors.As(err, &minTSErr) {
+			evalCtx := ex.planner.EvalContext()
+			aost := evalCtx.AsOfSystemTime
+			fmt.Printf("found min ts error, %#v <=> %#v\n", aost.Timestamp, minTSErr.MinTimestampBound)
+			// wtf?
+			if evalCtx.PrevMinTimestampBound != nil && evalCtx.PrevMinTimestampBound.Less(minTSErr.MinTimestampBound) {
+				fmt.Printf("jumping forwards in time! %v ~~> %v\n", evalCtx.PrevMinTimestampBound, minTSErr.MinTimestampBound)
+			} else if aost.Timestamp.Less(minTSErr.MinTimestampBound.Prev()) {
+				err = errors.Mark(err, retriableMinTimestampBoundUnsatisfiableError)
+			} else {
+				fmt.Printf("not found; abort!\n")
+			}
+		}
 		ev, payload := ex.makeErrEvent(err, ast)
 		return ev, payload, nil
 	}
@@ -582,15 +596,22 @@ func (ex *connExecutor) execStmtInOpenState(
 	// don't return any event unless an error happens.
 
 	if os.ImplicitTxn.Get() {
-		asOf, err := p.isAsOf(ctx, ast)
-		if err != nil {
-			return makeErrEvent(err)
-		}
-		if asOf != nil {
-			p.extendedEvalCtx.AsOfSystemTime = asOf
-			p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
-			if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
+		// TODO(XXX): make this do a sanity check?
+		if p.extendedEvalCtx.AsOfSystemTime == nil {
+			asOf, err := p.isAsOf(ctx, ast)
+			if err != nil {
 				return makeErrEvent(err)
+			}
+			if asOf != nil {
+				p.extendedEvalCtx.AsOfSystemTime = asOf
+				if !asOf.BoundedStaleness {
+					// What should we fill with now()? We need this statement for that.
+					p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
+					// I guess this isn't needed, ever!
+					if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
+						return makeErrEvent(err)
+					}
+				}
 			}
 		}
 	} else {
@@ -995,6 +1016,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	ex.sessionTracing.TraceRetryInformation(ctx, ex.extraTxnState.autoRetryCounter, ex.extraTxnState.autoRetryReason)
+	if ex.server.cfg.TestingKnobs.OnTxnRetry != nil && ex.extraTxnState.autoRetryReason != nil {
+		ex.server.cfg.TestingKnobs.OnTxnRetry(ex.extraTxnState.autoRetryReason, planner.EvalContext())
+	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,

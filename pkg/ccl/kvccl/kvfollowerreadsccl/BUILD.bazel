@@ -39,6 +39,7 @@ go_test(
         "followerreads_test.go",
         "main_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":kvfollowerreadsccl"],
     deps = [
         "//pkg/base",
