@@ -7,10 +7,10 @@
 
 if [ -z "$BAZELISK_SKIP_WRAPPER" ] && [ -z "$SHUT_UP_ABOUT_BAZELISK" ]
 then
-    echo "You're not using Bazelisk! Your build may fail due to a mismatched"
-    echo "Bazel version. Using Bazelisk is recommended."
-    echo "On macOS, you can install Bazelisk with:"
-    echo "    brew uninstall bazel; brew install bazelisk"
+    echo "You're not using Bazelisk! Your build may fail due to a mismatched" >&2
+    echo "Bazel version. Using Bazelisk is recommended." >&2
+    echo "On macOS, you can install Bazelisk with:" >&2
+    echo "    brew uninstall bazel; brew install bazelisk" >&2
 fi
 
 $BAZEL_REAL "$@"
