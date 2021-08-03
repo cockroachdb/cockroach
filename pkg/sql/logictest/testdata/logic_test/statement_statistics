@@ -130,7 +130,7 @@ SELECT x FROM test WHERE y IN (_, _, __more3__)                   +
 SELECT x FROM test WHERE y NOT IN (_, _, __more3__)               ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        ·
-SET application_name = _                                          ·
+SET application_name = '_'                                          ·
 SET distsql = "on"                                                ·
 SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           ·
 SHOW application_name                                             ·
@@ -155,7 +155,7 @@ SELECT _ FROM _ WHERE _ IN (_, _, __more3__)
 SELECT _ FROM _ WHERE _ NOT IN (_, _, __more3__)
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _
-SET application_name = _
+SET application_name = '_'
 SET distsql = _
 SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"
 SHOW application_name

@@ -179,7 +179,7 @@ ALTER INDEX i CONFIGURE ZONE = 'foo'
 ----
 ALTER INDEX i CONFIGURE ZONE = 'foo'
 ALTER INDEX i CONFIGURE ZONE = ('foo') -- fully parenthesized
-ALTER INDEX i CONFIGURE ZONE = _ -- literals removed
+ALTER INDEX i CONFIGURE ZONE = '_' -- literals removed
 ALTER INDEX _ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -187,7 +187,7 @@ EXPLAIN ALTER INDEX i CONFIGURE ZONE = 'foo'
 ----
 EXPLAIN ALTER INDEX i CONFIGURE ZONE = 'foo'
 EXPLAIN ALTER INDEX i CONFIGURE ZONE = ('foo') -- fully parenthesized
-EXPLAIN ALTER INDEX i CONFIGURE ZONE = _ -- literals removed
+EXPLAIN ALTER INDEX i CONFIGURE ZONE = '_' -- literals removed
 EXPLAIN ALTER INDEX _ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -195,7 +195,7 @@ ALTER INDEX db.t@i CONFIGURE ZONE = 'foo'
 ----
 ALTER INDEX db.t@i CONFIGURE ZONE = 'foo'
 ALTER INDEX db.t@i CONFIGURE ZONE = ('foo') -- fully parenthesized
-ALTER INDEX db.t@i CONFIGURE ZONE = _ -- literals removed
+ALTER INDEX db.t@i CONFIGURE ZONE = '_' -- literals removed
 ALTER INDEX _._@_ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -203,7 +203,7 @@ ALTER INDEX t@i CONFIGURE ZONE = 'foo'
 ----
 ALTER INDEX t@i CONFIGURE ZONE = 'foo'
 ALTER INDEX t@i CONFIGURE ZONE = ('foo') -- fully parenthesized
-ALTER INDEX t@i CONFIGURE ZONE = _ -- literals removed
+ALTER INDEX t@i CONFIGURE ZONE = '_' -- literals removed
 ALTER INDEX _@_ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -211,7 +211,7 @@ ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = 'foo'
 ----
 ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = 'foo'
 ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = ('foo') -- fully parenthesized
-ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = _ -- literals removed
+ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = '_' -- literals removed
 ALTER PARTITION _ OF INDEX _._@_ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
@@ -219,7 +219,7 @@ EXPLAIN ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = 'foo'
 ----
 EXPLAIN ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = 'foo'
 EXPLAIN ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = ('foo') -- fully parenthesized
-EXPLAIN ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = _ -- literals removed
+EXPLAIN ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = '_' -- literals removed
 EXPLAIN ALTER PARTITION _ OF INDEX _._@_ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse

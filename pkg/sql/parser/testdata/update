@@ -173,7 +173,7 @@ UPDATE t AS "0" SET k = ''
 ----
 UPDATE t AS "0" SET k = ''
 UPDATE t AS "0" SET k = ('') -- fully parenthesized
-UPDATE t AS "0" SET k = _ -- literals removed
+UPDATE t AS "0" SET k = '_' -- literals removed
 UPDATE _ AS _ SET _ = '' -- identifiers removed
 
 parse
