@@ -1394,7 +1394,7 @@ let $tbl8_id
 select table_id from crdb_internal.tables where name = 'tbl8'
 
 statement ok
-SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl8_id)
+SELECT crdb_internal.reset_multi_region_zone_configs_for_table($tbl8_id)
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@primary
@@ -1444,7 +1444,7 @@ let $tbl9_id
 select table_id from crdb_internal.tables where name = 'tbl9'
 
 statement ok
-SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl9_id)
+SELECT crdb_internal.reset_multi_region_zone_configs_for_table($tbl9_id)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl9
@@ -1481,7 +1481,7 @@ TABLE tbl9  ALTER TABLE tbl9 CONFIGURE ZONE USING
             lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
-SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl9_id)
+SELECT crdb_internal.reset_multi_region_zone_configs_for_table($tbl9_id)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl9
@@ -1528,7 +1528,7 @@ let $tbl10_id
 select table_id from crdb_internal.tables where name = 'tbl10'
 
 statement ok
-SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl10_id)
+SELECT crdb_internal.reset_multi_region_zone_configs_for_table($tbl10_id)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl10
@@ -1565,7 +1565,7 @@ TABLE tbl10  ALTER TABLE tbl10 CONFIGURE ZONE USING
              lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
-SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl10_id)
+SELECT crdb_internal.reset_multi_region_zone_configs_for_table($tbl10_id)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl10
@@ -1610,7 +1610,7 @@ let $tbl11_id
 select table_id from crdb_internal.tables where name = 'tbl11'
 
 statement ok
-SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table($tbl11_id)
+SELECT crdb_internal.reset_multi_region_zone_configs_for_table($tbl11_id)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl11
@@ -1624,7 +1624,7 @@ TABLE tbl11  ALTER TABLE tbl11 CONFIGURE ZONE USING
              lease_preferences = '[]'
 
 query error pq: crdb_internal\.reset_multi_region_zone_configs_for_table\(\): error resolving referenced table ID 1: relation "\[1\]" does not exist
-SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_table(1)
+SELECT crdb_internal.reset_multi_region_zone_configs_for_table(1)
 
 subtest reset_multi_region_zone_configs_database
 
@@ -1668,7 +1668,7 @@ let $rebuild_db_id
 select id from crdb_internal.databases where name = 'rebuild_zc_db'
 
 statement ok
-SELECT crdb_internal.crdb_internal.reset_multi_region_zone_configs_for_database($rebuild_db_id)
+SELECT crdb_internal.reset_multi_region_zone_configs_for_database($rebuild_db_id)
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
