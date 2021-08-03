@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -46,6 +47,7 @@ type KVFetcher struct {
 func NewKVFetcher(
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	asOfSystemTime *tree.AsOfSystemTime,
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
@@ -54,9 +56,34 @@ func NewKVFetcher(
 	mon *mon.BytesMonitor,
 	forceProductionKVBatchSize bool,
 ) (*KVFetcher, error) {
+	sendFn := makeKVBatchFetcherDefaultSendFunc(txn)
+	if asOfSystemTime != nil && asOfSystemTime.BoundedStaleness {
+		sendFn = func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+			ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+			ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+				MinTimestampBound:       asOfSystemTime.Timestamp,
+				MinTimestampBoundStrict: asOfSystemTime.NearestOnly,
+			}
+			res, err := txn.NegotiateAndSend(ctx, ba)
+			if err != nil {
+				return nil, err.GoError()
+			}
+			return res, nil
+		}
+	}
+
 	kvBatchFetcher, err := makeKVBatchFetcher(
-		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
-		lockWaitPolicy, mon, forceProductionKVBatchSize,
+		sendFn,
+		spans,
+		reverse,
+		useBatchLimit,
+		firstBatchLimit,
+		lockStrength,
+		lockWaitPolicy,
+		mon,
+		forceProductionKVBatchSize,
+		txn.AdmissionHeader(),
+		txn.DB().SQLKVResponseAdmissionQ,
 	)
 	return newKVFetcher(&kvBatchFetcher), err
 }

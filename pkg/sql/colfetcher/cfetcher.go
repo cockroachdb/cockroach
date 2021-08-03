@@ -653,6 +653,7 @@ func (rf *cFetcher) Init(
 func (rf *cFetcher) StartScan(
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	asOfSystemTime *tree.AsOfSystemTime,
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
@@ -683,6 +684,7 @@ func (rf *cFetcher) StartScan(
 	f, err := row.NewKVFetcher(
 		txn,
 		spans,
+		asOfSystemTime,
 		rf.reverse,
 		limitBatches,
 		firstBatchLimit,

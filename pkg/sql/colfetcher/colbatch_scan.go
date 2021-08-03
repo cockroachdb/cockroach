@@ -85,7 +85,12 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
-		s.flowCtx.Txn, s.spans, limitBatches, s.limitHint, s.flowCtx.TraceKV,
+		s.flowCtx.Txn,
+		s.spans,
+		s.flowCtx.EvalCtx.AsOfSystemTime,
+		limitBatches,
+		s.limitHint,
+		s.flowCtx.TraceKV,
 		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		colexecerror.InternalError(err)

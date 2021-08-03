@@ -587,8 +587,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		if asOf != nil {
 			p.extendedEvalCtx.AsOfSystemTime = asOf
-			p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
-			ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp)
+			if !asOf.BoundedStaleness {
+				// What should we fill with now()? We need this statement for that.
+				p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
+				// I guess this isn't needed, ever!
+				ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp)
+			}
 		}
 	} else {
 		// If we're in an explicit txn, we allow AOST but only if it matches with
