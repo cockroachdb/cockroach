@@ -125,6 +125,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			cat.Hidden,
 			&uniqueRowIDString, /* defaultExpr */
 			nil,                /* computedExpr */
+			0,									/* generatedAsIDType */
 		)
 		tab.Columns = append(tab.Columns, rowid)
 	}
@@ -152,6 +153,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		cat.Hidden,
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
+		0, /* generatedAsIDType */
 	)
 	tab.Columns = append(tab.Columns, mvcc)
 
@@ -168,6 +170,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		cat.Hidden,
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
+		0, /* generatedAsIDType */
 	)
 	tab.Columns = append(tab.Columns, tableoid)
 
@@ -300,6 +303,7 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 		cat.Hidden,
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
+		0,  /* generatedAsIDType */
 	)
 
 	tab.Columns = []cat.Column{pk}
@@ -356,6 +360,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 		cat.Hidden,
 		&uniqueRowIDString, /* defaultExpr */
 		nil,                /* computedExpr */
+		0,									/* generatedAsIDType */
 	)
 
 	tab.Columns = append(tab.Columns, rowid)
@@ -593,6 +598,18 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		computedExpr = &s
 	}
 
+	var generatedAsIDType cat.GeneratedAsIdentityType
+	if def.Generated.IsGenerated {
+		switch def.Generated.GeneratedType {
+		case tree.GeneratedAlways:
+			generatedAsIDType = cat.GeneratedAlways
+		case tree.GeneratedByDefault:
+			generatedAsIDType = cat.GeneratedByDefault
+		}
+	} else {
+		generatedAsIDType = cat.NotIdentity
+	}
+
 	var col cat.Column
 	if def.Computed.Virtual {
 		col.InitVirtualComputed(
@@ -615,6 +632,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			visibility,
 			defaultExpr,
 			computedExpr,
+			uint8(generatedAsIDType),
 		)
 	}
 	tt.Columns = append(tt.Columns, col)
