@@ -332,6 +332,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	if target.codec.ForSystemTenant() {
 		target.AddDescriptor(keys.SystemDatabaseID, systemschema.TenantUsageTable)
 	}
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SQLInstancesTable)
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied

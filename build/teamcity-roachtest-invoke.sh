@@ -8,6 +8,7 @@ bin/roachtest run \
   --teamcity \
   --roachprod="${PWD}/bin/roachprod" \
   --workload="${PWD}/bin/workload" \
+  --create-args=--os-volume-size=32 \
   "$@"
 code=$?
 set -e
