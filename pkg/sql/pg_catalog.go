@@ -1110,8 +1110,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
 }
 
 var pgCatalogDefaultACLTable = virtualSchemaTable{
-	comment: `default ACLs (empty - unimplemented)
-https://www.postgresql.org/docs/9.6/catalog-pg-default-acl.html`,
+	comment: `default ACLs; these are the privileges that will be assigned to newly created objects
+https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 	schema: vtable.PGCatalogDefaultACL,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
