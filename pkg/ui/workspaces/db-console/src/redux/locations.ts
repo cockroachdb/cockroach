@@ -35,7 +35,7 @@ const nestLocations = d3
   .nest()
   .key((loc: ILocation) => loc.locality_key)
   .key((loc: ILocation) => loc.locality_value)
-  .rollup((locations) => locations[0]).map; // cannot collide since ^^ is primary key
+  .rollup(locations => locations[0]).map; // cannot collide since ^^ is primary key
 
 export interface LocationTree {
   [key: string]: {

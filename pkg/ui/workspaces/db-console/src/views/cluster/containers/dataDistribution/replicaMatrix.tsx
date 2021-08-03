@@ -63,7 +63,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
   expandRow = (path: TreePath) => {
     this.setState({
       collapsedRows: this.state.collapsedRows.filter(
-        (tp) => !_.isEqual(tp, path),
+        tp => !_.isEqual(tp, path),
       ),
     });
   };
@@ -77,7 +77,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
   expandCol = (path: TreePath) => {
     this.setState({
       collapsedCols: this.state.collapsedCols.filter(
-        (tp) => !_.isEqual(tp, path),
+        tp => !_.isEqual(tp, path),
       ),
     });
   };
@@ -168,7 +168,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
               ) : (
                 <th />
               )}
-              {row.map((col) => (
+              {row.map(col => (
                 <th
                   key={col.path.join("/")}
                   colSpan={col.width}
@@ -190,7 +190,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
           ))}
         </thead>
         <tbody>
-          {flattenedRows.map((row) => {
+          {flattenedRows.map(row => {
             return (
               <tr
                 key={row.path.join("/")}
@@ -214,7 +214,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
                 >
                   {this.rowLabel(row)}
                 </th>
-                {flattenedCols.map((col) => {
+                {flattenedCols.map(col => {
                   return (
                     <td key={col.path.join("/")} className="matrix__cell-value">
                       {row.isLeaf || row.isCollapsed

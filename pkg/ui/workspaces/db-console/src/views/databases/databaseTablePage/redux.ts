@@ -32,14 +32,14 @@ export const mapStateToProps = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, tableNameAttr),
 
-  (state) => state.cachedData.tableDetails,
-  (state) => state.cachedData.tableStats,
+  state => state.cachedData.tableDetails,
+  state => state.cachedData.tableStats,
 
   (database, table, tableDetails, tableStats): DatabaseTablePageData => {
     const details = tableDetails[generateTableID(database, table)];
     const stats = tableStats[generateTableID(database, table)];
-    const grants = _.flatMap(details?.data?.grants, (grant) =>
-      _.map(grant.privileges, (privilege) => {
+    const grants = _.flatMap(details?.data?.grants, grant =>
+      _.map(grant.privileges, privilege => {
         return { user: grant.user, privilege };
       }),
     );
@@ -52,9 +52,7 @@ export const mapStateToProps = createSelector(
         loaded: !!details?.valid,
         createStatement: details?.data?.create_table_statement || "",
         replicaCount: details?.data?.zone_config?.num_replicas || 0,
-        indexNames: _.uniq(
-          _.map(details?.data?.indexes, (index) => index.name),
-        ),
+        indexNames: _.uniq(_.map(details?.data?.indexes, index => index.name)),
         grants: grants,
       },
       stats: {

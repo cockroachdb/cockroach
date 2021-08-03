@@ -9,13 +9,20 @@
 // licenses/APL.txt.
 
 import { connect } from "react-redux";
-import { withRouter } from "react-router-dom";
-import { DatabasesPage } from "@cockroachlabs/cluster-ui";
+import { RouteComponentProps, withRouter } from "react-router-dom";
+import {
+  DatabasesPage,
+  DatabasesPageData,
+  DatabasesPageActions,
+} from "@cockroachlabs/cluster-ui";
 
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 
 const connected = withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(DatabasesPage),
+  connect<DatabasesPageData, DatabasesPageActions, RouteComponentProps>(
+    mapStateToProps,
+    mapDispatchToProps,
+  )(DatabasesPage),
 );
 
 export { connected as DatabasesPage };

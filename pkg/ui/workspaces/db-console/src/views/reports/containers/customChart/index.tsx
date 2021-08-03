@@ -74,13 +74,13 @@ export class CustomChart extends React.Component<
       const base = [{ value: "", label: "Cluster" }];
       return base.concat(
         _.chain(nodeStatuses)
-          .map((ns) => {
+          .map(ns => {
             return {
               value: ns.desc.node_id.toString(),
               label: nodeDisplayNameByID[ns.desc.node_id],
             };
           })
-          .sortBy((value) => _.startsWith(value.label, "[decommissioned]"))
+          .sortBy(value => _.startsWith(value.label, "[decommissioned]"))
           .value(),
       );
     },
@@ -97,7 +97,7 @@ export class CustomChart extends React.Component<
         return [];
       }
 
-      return _.keys(nodeStatuses[0].metrics).map((k) => {
+      return _.keys(nodeStatuses[0].metrics).map(k => {
         const fullMetricName = isStoreMetric(nodeStatuses[0], k)
           ? "cr.store." + k
           : "cr.node." + k;
@@ -213,7 +213,7 @@ export class CustomChart extends React.Component<
             {metrics.map((m, i) => {
               if (m.metric !== "") {
                 if (m.perNode) {
-                  return _.map(nodesSummary.nodeIDs, (nodeID) => (
+                  return _.map(nodesSummary.nodeIDs, nodeID => (
                     <Metric
                       key={`${index}${i}${nodeID}`}
                       title={`${nodeID}: ${m.metric} (${i})`}
@@ -225,7 +225,7 @@ export class CustomChart extends React.Component<
                         isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
                           ? _.map(
                               nodesSummary.storeIDsByNodeID[nodeID] || [],
-                              (n) => n.toString(),
+                              n => n.toString(),
                             )
                           : [nodeID]
                       }

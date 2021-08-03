@@ -21,16 +21,16 @@ function buildLocalityTree(nodes: INodeStatus[] = [], depth = 0): LocalityTree {
 
   const localityKeyGroups = _.groupBy(
     subsequentNodes,
-    (node) => node.desc.locality.tiers[depth].key,
+    node => node.desc.locality.tiers[depth].key,
   );
 
   const localityValueGroups = _.mapValues(
     localityKeyGroups,
     (group: INodeStatus[]) =>
-      _.groupBy(group, (node) => node.desc.locality.tiers[depth].value),
+      _.groupBy(group, node => node.desc.locality.tiers[depth].value),
   );
 
-  const childLocalities = _.mapValues(localityValueGroups, (groups) =>
+  const childLocalities = _.mapValues(localityValueGroups, groups =>
     _.mapValues(groups, (group: INodeStatus[]) =>
       buildLocalityTree(group, depth + 1),
     ),

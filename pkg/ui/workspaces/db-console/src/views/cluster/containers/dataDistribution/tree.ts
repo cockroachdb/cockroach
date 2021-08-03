@@ -162,14 +162,14 @@ export function layoutTreeHorizontal<T>(
       ]);
     }
 
-    const childLayouts = node.children.map((childNode) =>
+    const childLayouts = node.children.map(childNode =>
       recur(childNode, [...pathToThis, childNode.name]),
     );
 
     const childrenLayout = horizontalConcatLayouts(childLayouts);
 
     const currentCell = {
-      width: _.sumBy(childLayouts, (cl) => cl[0][0].width),
+      width: _.sumBy(childLayouts, cl => cl[0][0].width),
       data: node.data,
       path: pathToThis,
       isCollapsed,
@@ -201,9 +201,9 @@ function horizontalConcatLayouts<T>(layouts: Layout<T>[]): Layout<T> {
   }
   const output = _.range(layouts[0].length).map(() => []);
 
-  _.forEach(layouts, (childLayout) => {
+  _.forEach(layouts, childLayout => {
     _.forEach(childLayout, (row, rowIdx) => {
-      _.forEach(row, (col) => {
+      _.forEach(row, col => {
         output[rowIdx].push(col);
       });
     });
@@ -343,7 +343,7 @@ function nodeAtPath<T>(root: TreeNode<T>, path: TreePath): TreeNode<T> {
     return root;
   }
   const pathSegment = path[0];
-  const child = root.children.find((c) => c.name === pathSegment);
+  const child = root.children.find(c => c.name === pathSegment);
   if (child === undefined) {
     throw new Error(`not found: ${path}`);
   }
@@ -367,7 +367,7 @@ function visitNodes<T>(
       return;
     }
     if (node.children) {
-      node.children.forEach((child) => {
+      node.children.forEach(child => {
         recur(child, [...path, child.name]);
       });
     }
@@ -444,8 +444,8 @@ function getLeafPathsUnderPath<T>(
  */
 function cartProd<A, B>(as: A[], bs: B[]): { a: A; b: B }[] {
   const output: { a: A; b: B }[] = [];
-  as.forEach((a) => {
-    bs.forEach((b) => {
+  as.forEach(a => {
+    bs.forEach(b => {
       output.push({ a, b });
     });
   });
@@ -490,7 +490,7 @@ export function sumValuesUnderPaths<R, C>(
   const colPaths = getLeafPathsUnderPath(colTree, colPath);
   const prod = cartProd(rowPaths, colPaths);
   let sum = 0;
-  prod.forEach((coords) => {
+  prod.forEach(coords => {
     sum += getValue(coords.a, coords.b);
   });
   return sum;
@@ -501,7 +501,7 @@ export function sumValuesUnderPaths<R, C>(
  * a deep equality comparison.
  */
 export function deepIncludes<T>(array: T[], val: T): boolean {
-  return _.some(array, (v) => _.isEqual(val, v));
+  return _.some(array, v => _.isEqual(val, v));
 }
 
 /**

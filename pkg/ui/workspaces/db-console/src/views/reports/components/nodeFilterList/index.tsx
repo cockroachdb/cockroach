@@ -28,7 +28,7 @@ export function getFilters(location: Location) {
   // Node id list.
   if (!_.isEmpty(nodeIds)) {
     const nodeIDs: Set<number> = new Set();
-    _.forEach(_.split(nodeIds, ","), (nodeIDString) => {
+    _.forEach(_.split(nodeIds, ","), nodeIDString => {
       const nodeID = parseInt(nodeIDString, 10);
       if (nodeID) {
         nodeIDs.add(nodeID);
@@ -53,7 +53,7 @@ export function getFilters(location: Location) {
 
 export function localityToString(locality: protos.cockroach.roachpb.ILocality) {
   return _.join(
-    _.map(locality.tiers, (tier) => tier.key + "=" + tier.value),
+    _.map(locality.tiers, tier => tier.key + "=" + tier.value),
     ",",
   );
 }
@@ -64,7 +64,7 @@ export function NodeFilterList(props: NodeFilterListProps) {
   if (!_.isNil(nodeIDs) && nodeIDs.size > 0) {
     const nodeList = _.chain(Array.from(nodeIDs.keys()))
       .sort()
-      .map((nodeID) => `n${nodeID}`)
+      .map(nodeID => `n${nodeID}`)
       .join(",");
     filters.push(`Only nodes: ${nodeList}`);
   }

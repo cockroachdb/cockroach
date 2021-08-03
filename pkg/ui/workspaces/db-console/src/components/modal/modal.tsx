@@ -22,7 +22,7 @@ export interface ModalProps {
   visible: boolean;
 }
 
-export const Modal: React.FC<ModalProps> = (props) => {
+export const Modal: React.FC<ModalProps> = props => {
   const {
     children,
     onOk,

@@ -111,8 +111,8 @@ export class SortableTable extends React.Component<TableProps> {
       sortKey: null,
       ascending: false,
     },
-    onChangeSortSetting: (_ss) => {},
-    rowClass: (_rowIndex) => "",
+    onChangeSortSetting: _ss => {},
+    rowClass: _rowIndex => "",
   };
 
   state = {

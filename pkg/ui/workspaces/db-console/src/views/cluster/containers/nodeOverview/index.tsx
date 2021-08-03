@@ -72,7 +72,7 @@ function TableRow(props: {
         )}
       </td>
       <td className="table__cell">{valueFn(data.metrics)}</td>
-      {_.map(data.store_statuses, (ss) => {
+      {_.map(data.store_statuses, ss => {
         return (
           <td key={ss.desc.store_id} className="table__cell">
             {valueFn(ss.metrics)}
@@ -154,7 +154,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 <tr className="table__row table__row--header">
                   <th className="table__cell" />
                   <th className="table__cell">{`Node ${node.desc.node_id}`}</th>
-                  {_.map(node.store_statuses, (ss) => {
+                  {_.map(node.store_statuses, ss => {
                     const storeId = ss.desc.store_id;
                     return (
                       <th
@@ -170,34 +170,28 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 <TableRow
                   data={node}
                   title="Live Bytes"
-                  valueFn={(metrics) =>
-                    Bytes(metrics[MetricConstants.liveBytes])
-                  }
+                  valueFn={metrics => Bytes(metrics[MetricConstants.liveBytes])}
                   nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
                   CellTooltip={LiveBytesTooltip}
                 />
                 <TableRow
                   data={node}
                   title="Key Bytes"
-                  valueFn={(metrics) =>
-                    Bytes(metrics[MetricConstants.keyBytes])
-                  }
+                  valueFn={metrics => Bytes(metrics[MetricConstants.keyBytes])}
                   nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
                   CellTooltip={KeyBytesTooltip}
                 />
                 <TableRow
                   data={node}
                   title="Value Bytes"
-                  valueFn={(metrics) =>
-                    Bytes(metrics[MetricConstants.valBytes])
-                  }
+                  valueFn={metrics => Bytes(metrics[MetricConstants.valBytes])}
                   nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
                   CellTooltip={ValueBytesTooltip}
                 />
                 <TableRow
                   data={node}
                   title="Intent Bytes"
-                  valueFn={(metrics) =>
+                  valueFn={metrics =>
                     Bytes(metrics[MetricConstants.intentBytes])
                   }
                   CellTooltip={IntentBytesTooltip}
@@ -205,42 +199,40 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 <TableRow
                   data={node}
                   title="System Bytes"
-                  valueFn={(metrics) =>
-                    Bytes(metrics[MetricConstants.sysBytes])
-                  }
+                  valueFn={metrics => Bytes(metrics[MetricConstants.sysBytes])}
                   nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
                   CellTooltip={SystemBytesTooltip}
                 />
                 <TableRow
                   data={node}
                   title="GC Bytes Age"
-                  valueFn={(metrics) =>
+                  valueFn={metrics =>
                     metrics[MetricConstants.gcBytesAge].toString()
                   }
                 />
                 <TableRow
                   data={node}
                   title="Total Replicas"
-                  valueFn={(metrics) =>
+                  valueFn={metrics =>
                     metrics[MetricConstants.replicas].toString()
                   }
                 />
                 <TableRow
                   data={node}
                   title="Raft Leaders"
-                  valueFn={(metrics) =>
+                  valueFn={metrics =>
                     metrics[MetricConstants.raftLeaders].toString()
                   }
                 />
                 <TableRow
                   data={node}
                   title="Total Ranges"
-                  valueFn={(metrics) => metrics[MetricConstants.ranges]}
+                  valueFn={metrics => metrics[MetricConstants.ranges]}
                 />
                 <TableRow
                   data={node}
                   title="Unavailable %"
-                  valueFn={(metrics) =>
+                  valueFn={metrics =>
                     Percentage(
                       metrics[MetricConstants.unavailableRanges],
                       metrics[MetricConstants.ranges],
@@ -250,7 +242,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 <TableRow
                   data={node}
                   title="Under Replicated %"
-                  valueFn={(metrics) =>
+                  valueFn={metrics =>
                     Percentage(
                       metrics[MetricConstants.underReplicatedRanges],
                       metrics[MetricConstants.ranges],
@@ -260,7 +252,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 <TableRow
                   data={node}
                   title="Used Capacity"
-                  valueFn={(metrics) =>
+                  valueFn={metrics =>
                     Bytes(metrics[MetricConstants.usedCapacity])
                   }
                   nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
@@ -269,7 +261,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 <TableRow
                   data={node}
                   title="Available Capacity"
-                  valueFn={(metrics) =>
+                  valueFn={metrics =>
                     Bytes(metrics[MetricConstants.availableCapacity])
                   }
                   nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
@@ -278,9 +270,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 <TableRow
                   data={node}
                   title="Maximum Capacity"
-                  valueFn={(metrics) =>
-                    Bytes(metrics[MetricConstants.capacity])
-                  }
+                  valueFn={metrics => Bytes(metrics[MetricConstants.capacity])}
                   nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
                   CellTooltip={NodeMaximumCapacityTooltip}
                 />
@@ -324,7 +314,7 @@ export const currentNode = createSelector(
     if (!nodes || !id) {
       return undefined;
     }
-    return _.find(nodes, (ns) => ns.desc.node_id === id);
+    return _.find(nodes, ns => ns.desc.node_id === id);
   },
 );
 

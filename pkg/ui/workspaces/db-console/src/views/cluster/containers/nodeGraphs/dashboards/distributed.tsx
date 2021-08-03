@@ -20,7 +20,7 @@ import {
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
-export default function (props: GraphDashboardProps) {
+export default function(props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources } = props;
 
   return [
@@ -92,7 +92,7 @@ export default function (props: GraphDashboardProps) {
                               Values are displayed individually for each node.`}
     >
       <Axis units={AxisUnits.Duration} label="transaction duration">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.txn.durations-p99"
@@ -110,7 +110,7 @@ export default function (props: GraphDashboardProps) {
                               Values are displayed individually for each node.`}
     >
       <Axis units={AxisUnits.Duration} label="transaction duration">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.txn.durations-p90"
@@ -128,7 +128,7 @@ export default function (props: GraphDashboardProps) {
                               Values are displayed individually for each node.`}
     >
       <Axis units={AxisUnits.Duration} label="heartbeat latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.liveness.heartbeatlatency-p99"
@@ -146,7 +146,7 @@ export default function (props: GraphDashboardProps) {
                               Values are displayed individually for each node.`}
     >
       <Axis units={AxisUnits.Duration} label="heartbeat latency">
-        {_.map(nodeIDs, (node) => (
+        {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.liveness.heartbeatlatency-p90"

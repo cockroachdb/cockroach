@@ -49,7 +49,7 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
 
   setDefaultSortValue = (sortValue: string) => {
     const isDefaultValuePresent = this.getSortValues(this.props.sort).find(
-      (e) => e.value === sortValue,
+      e => e.value === sortValue,
     );
     if (isDefaultValuePresent) {
       this.navigateTo(isDefaultValuePresent);
@@ -57,10 +57,10 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
   };
 
   getSortValues = (sort: NetworkSort[]) =>
-    sort.map((value) => {
+    sort.map(value => {
       return {
         value: value.id,
-        label: value.id.replace(/^[a-z]/, (m) => m.toUpperCase()),
+        label: value.id.replace(/^[a-z]/, m => m.toUpperCase()),
       };
     });
 

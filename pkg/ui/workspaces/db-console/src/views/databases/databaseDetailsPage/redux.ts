@@ -43,7 +43,7 @@ function normalizeRoles(raw: string[]): string[] {
   // be stable.)
   const alphabetizedRoles = _.sortBy(_.uniq(_.filter(raw)));
 
-  return _.sortBy(alphabetizedRoles, (role) => rolePrecedence[role] || 100);
+  return _.sortBy(alphabetizedRoles, role => rolePrecedence[role] || 100);
 }
 
 function normalizePrivileges(raw: string[]): string[] {
@@ -60,7 +60,7 @@ function normalizePrivileges(raw: string[]): string[] {
 
   return _.sortBy(
     _.uniq(_.map(_.filter(raw), _.toUpper)),
-    (privilege) => privilegePrecedence[privilege] || 100,
+    privilege => privilegePrecedence[privilege] || 100,
   );
 }
 
@@ -68,9 +68,9 @@ export const mapStateToProps = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, databaseNameAttr),
 
-  (state) => state.cachedData.databaseDetails,
-  (state) => state.cachedData.tableDetails,
-  (state) => state.cachedData.tableStats,
+  state => state.cachedData.databaseDetails,
+  state => state.cachedData.tableDetails,
+  state => state.cachedData.tableStats,
 
   (
     database,
@@ -82,7 +82,7 @@ export const mapStateToProps = createSelector(
       loading: !!databaseDetails[database]?.inFlight,
       loaded: !!databaseDetails[database]?.valid,
       name: database,
-      tables: _.map(databaseDetails[database]?.data?.table_names, (table) => {
+      tables: _.map(databaseDetails[database]?.data?.table_names, table => {
         const tableId = generateTableID(database, table);
 
         const details = tableDetails[tableId];

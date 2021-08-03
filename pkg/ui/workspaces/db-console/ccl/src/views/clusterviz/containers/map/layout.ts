@@ -27,6 +27,6 @@ export function renderAsMap(
   const children = getChildLocalities(localityTree);
   return _.every(
     children,
-    (child) => !_.isNil(findOrCalculateLocation(locationTree, child)),
+    child => !_.isNil(findOrCalculateLocation(locationTree, child)),
   );
 }

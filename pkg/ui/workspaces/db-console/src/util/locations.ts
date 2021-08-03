@@ -88,8 +88,8 @@ export function findOrCalculateLocation(
 
   // Find (or calculate) the location of each child locality.
   const childLocations: ILocation[] = [];
-  _.values(locality.localities).forEach((tier) => {
-    _.values(tier).forEach((child) => {
+  _.values(locality.localities).forEach(tier => {
+    _.values(tier).forEach(child => {
       childLocations.push(findOrCalculateLocation(locations, child));
     });
   });
@@ -102,7 +102,7 @@ export function findOrCalculateLocation(
   // Calculate the centroid of the child locations.
   let centroid: [number, number] = [0, 0];
   childLocations.forEach(
-    (loc) => (centroid = vector.add(centroid, [loc.longitude, loc.latitude])),
+    loc => (centroid = vector.add(centroid, [loc.longitude, loc.latitude])),
   );
   centroid = vector.mult(centroid, 1 / childLocations.length);
   return { longitude: centroid[0], latitude: centroid[1] };

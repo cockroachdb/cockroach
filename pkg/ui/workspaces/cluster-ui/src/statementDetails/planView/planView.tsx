@@ -198,7 +198,7 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
 
 type PlanNodeProps = { node: FlatPlanNode };
 
-function PlanNode({ node }: PlanNodeProps): React.ReactElement<{}> {
+function PlanNode({ node }: PlanNodeProps): React.ReactElement {
   if (shouldHideNode(node.name)) {
     return null;
   }

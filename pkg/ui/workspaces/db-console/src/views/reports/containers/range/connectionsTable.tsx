@@ -26,8 +26,8 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
   let viaNodeID = "";
   if (range && !range.inFlight && !_.isNil(range.data)) {
     ids = _.chain(_.keys(range.data.responses_by_node_id))
-      .map((id) => parseInt(id, 10))
-      .sortBy((id) => id)
+      .map(id => parseInt(id, 10))
+      .sortBy(id => id)
       .value();
     viaNodeID = ` (via n${range.data.node_id.toString()})`;
   }
@@ -55,7 +55,7 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
                   Error
                 </th>
               </tr>
-              {_.map(ids, (id) => {
+              {_.map(ids, id => {
                 const resp = range.data.responses_by_node_id[id];
                 const rowClassName = classNames("connections-table__row", {
                   "connections-table__row--warning":

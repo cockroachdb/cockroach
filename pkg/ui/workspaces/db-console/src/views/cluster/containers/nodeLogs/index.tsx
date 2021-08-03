@@ -49,7 +49,7 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
   }
 
   renderContent = () => {
-    const logEntries = _.sortBy(this.props.logs.data.entries, (e) => e.time);
+    const logEntries = _.sortBy(this.props.logs.data.entries, e => e.time);
     const columns = [
       {
         title: "Time",

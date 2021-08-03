@@ -47,7 +47,7 @@ const initialEntries = [
   "#/metrics/overview/node/3?start=1584528726&end=1584529326", // Node 3 - 10 minutes
 ];
 
-describe("<TimeScaleDropdown>", function () {
+describe("<TimeScaleDropdown>", function() {
   let state: TimeScaleDropdownProps;
   let spy: sinon.SinonSpy;
   let clock: sinon.SinonFakeTimers;
@@ -59,7 +59,7 @@ describe("<TimeScaleDropdown>", function () {
       </MemoryRouter>,
     );
 
-  beforeEach(function () {
+  beforeEach(function() {
     clock = sinon.useFakeTimers(new Date(2020, 5, 1, 9, 28, 30));
     const timewindowState = new timewindow.TimeWindowState();
     state = {
@@ -102,7 +102,10 @@ describe("<TimeScaleDropdown>", function () {
     const title = getTimeRangeTitle(state.currentWindow, state.currentScale);
     const wrapper = makeTimeScaleDropdown(state);
     assert.equal(
-      wrapper.find(".trigger .Select-value-label").first().text(),
+      wrapper
+        .find(".trigger .Select-value-label")
+        .first()
+        .text(),
       `Past 10 Minutes`,
     );
     assert.deepEqual(title, { title: "Past 10 Minutes" });
@@ -118,7 +121,10 @@ describe("<TimeScaleDropdown>", function () {
       const timeEnd = moment.utc(state.currentWindow.end).format(timeFormat);
       const wrapper = makeTimeScaleDropdown({ ...state, currentScale });
       assert.equal(
-        wrapper.find(".trigger .Select-value-label").first().text(),
+        wrapper
+          .find(".trigger .Select-value-label")
+          .first()
+          .text(),
         ` ${timeStart} -  ${timeEnd} (UTC)`,
       );
       assert.deepEqual(title, {
@@ -147,7 +153,10 @@ describe("<TimeScaleDropdown>", function () {
         currentScale,
       });
       assert.equal(
-        wrapper.find(".trigger .Select-value-label").first().text(),
+        wrapper
+          .find(".trigger .Select-value-label")
+          .first()
+          .text(),
         `${dateStart} ${timeStart} - ${dateEnd} ${timeEnd} (UTC)`,
       );
       assert.deepEqual(title, {

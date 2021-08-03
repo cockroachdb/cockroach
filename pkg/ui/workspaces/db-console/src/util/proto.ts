@@ -43,10 +43,7 @@ export function AccumulateMetrics(
  * for all current usages of NodeStatus in the UI.
  */
 export function RollupStoreMetrics(ns: INodeStatus): void {
-  AccumulateMetrics(
-    ns.metrics,
-    ..._.map(ns.store_statuses, (ss) => ss.metrics),
-  );
+  AccumulateMetrics(ns.metrics, ..._.map(ns.store_statuses, ss => ss.metrics));
 }
 
 /**

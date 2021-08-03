@@ -108,10 +108,10 @@ export class EnqueueRange extends React.Component<
       parseInt(this.state.nodeID, 10),
       this.state.skipShouldQueue,
     ).then(
-      (response) => {
+      response => {
         this.setState({ response, error: null });
       },
-      (error) => {
+      error => {
         this.setState({ response: null, error });
       },
     );
@@ -141,7 +141,7 @@ export class EnqueueRange extends React.Component<
             </tr>
           </thead>
           <tbody>
-            {details.events.map((event) => (
+            {details.events.map(event => (
               <tr className="enqueue-range-table__row--body">
                 <td className="enqueue-range-table__cell enqueue-range-table__cell--date">
                   {Print.Timestamp(event.time)}
@@ -167,7 +167,7 @@ export class EnqueueRange extends React.Component<
     return (
       <Fragment>
         <h2 className="base-heading">Enqueue Range Output</h2>
-        {response.details.map((details) => (
+        {response.details.map(details => (
           <div>
             <h3>Node n{details.node_id}</h3>
 
@@ -207,7 +207,7 @@ export class EnqueueRange extends React.Component<
                 <label>
                   Queue:{" "}
                   <select onChange={this.handleUpdateQueue}>
-                    {QUEUES.map((queue) => (
+                    {QUEUES.map(queue => (
                       <option key={queue} value={queue}>
                         {queue}
                       </option>

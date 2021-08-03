@@ -18,9 +18,9 @@ import { TimeWindow } from "src/redux/timewindow";
 import { assert } from "chai";
 import "src/enzymeInit";
 
-describe("RangeSelect", function () {
-  describe("basic dropdown", function () {
-    it("should show all options on dropdown activation", function () {
+describe("RangeSelect", function() {
+  describe("basic dropdown", function() {
+    it("should show all options on dropdown activation", function() {
       const options: RangeOption[] = [
         { value: "1", label: "1", timeLabel: "1" },
         { value: "2", label: "2", timeLabel: "2" },

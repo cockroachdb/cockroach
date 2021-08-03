@@ -40,7 +40,7 @@ describe("LayoutSidebar", () => {
       />,
     );
     assert.isFalse(
-      wrapper.findWhere((w) => w.prop("to") === "/reports/network").exists(),
+      wrapper.findWhere(w => w.prop("to") === "/reports/network").exists(),
     );
   });
 
@@ -54,7 +54,7 @@ describe("LayoutSidebar", () => {
       />,
     );
     assert.isTrue(
-      wrapper.findWhere((w) => w.prop("to") === "/reports/network").exists(),
+      wrapper.findWhere(w => w.prop("to") === "/reports/network").exists(),
     );
   });
 });

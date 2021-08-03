@@ -131,7 +131,7 @@ export const Legend: React.SFC<ILegendProps> = ({
               <th>To Node</th>
               <th>To Locality</th>
             </tr>
-            {noConnections.map((value) => (
+            {noConnections.map(value => (
               <tr className="noConnections__table--item">
                 <td>
                   <span className="noConnections__table--item__bold">

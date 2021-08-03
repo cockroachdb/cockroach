@@ -65,10 +65,10 @@ export class Sidebar extends React.Component<SidebarProps> {
   isActiveNavigationItem = (path: string): boolean => {
     const { pathname } = this.props.location;
     const { activeFor, ignoreFor = [] } = this.routes.find(
-      (route) => route.path === path,
+      route => route.path === path,
     );
-    return [...activeFor, path].some((p) => {
-      const isMatchedToIgnoredPaths = ignoreFor.some((ignorePath) =>
+    return [...activeFor, path].some(p => {
+      const isMatchedToIgnoredPaths = ignoreFor.some(ignorePath =>
         pathname.startsWith(ignorePath),
       );
       const isMatchedToActiveFor = pathname.startsWith(p);
@@ -78,7 +78,7 @@ export class Sidebar extends React.Component<SidebarProps> {
 
   render() {
     const navigationItems = this.routes
-      .filter((route) => !route.isHidden || !route.isHidden())
+      .filter(route => !route.isHidden || !route.isHidden())
       .map(({ path, text }, idx) => (
         <SideNavigation.Item
           isActive={this.isActiveNavigationItem(path)}

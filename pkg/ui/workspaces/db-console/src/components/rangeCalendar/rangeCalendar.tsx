@@ -72,7 +72,7 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
   const onDateRangeSelected = useCallback(
     ([selectedStartDate, selectedEndDate]: [Moment | null, Moment | null]) => {
       // Set only Date part and keep Time part unchanged
-      setStartDate((prevDate) =>
+      setStartDate(prevDate =>
         moment.utc(prevDate).set({
           year: selectedStartDate.year(),
           month: selectedStartDate.month(),
@@ -80,7 +80,7 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
         }),
       );
 
-      setEndDate((prevDate) =>
+      setEndDate(prevDate =>
         moment.utc(prevDate).set({
           year: selectedEndDate.year(),
           month: selectedEndDate.month(),
@@ -106,7 +106,7 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
       const setOtherDate = rangePart !== "from" ? setStartDate : setEndDate;
       const otherDate = rangePart === "from" ? endDate : startDate;
 
-      setDate((prevDate) =>
+      setDate(prevDate =>
         moment.utc(prevDate).set({
           hour: nextTime.get("hour"),
           minute: nextTime.get("minute"),

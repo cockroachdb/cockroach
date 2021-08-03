@@ -129,7 +129,7 @@ export const availableTimeScales: TimeScaleCollection = _.mapValues(
 
 export const findClosestTimeScale = (seconds: number) => {
   const data: TimeScale[] = [];
-  Object.keys(availableTimeScales).forEach((val) =>
+  Object.keys(availableTimeScales).forEach(val =>
     data.push(availableTimeScales[val]),
   );
   data.sort(

@@ -78,11 +78,11 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
   };
 
   firstLetterToUpperCase = (value: string) =>
-    value.replace(/^[a-z]/, (m) => m.toUpperCase());
+    value.replace(/^[a-z]/, m => m.toUpperCase());
 
   renderSelect = () => {
     const { sort, filter } = this.props;
-    return sort.map((value) => (
+    return sort.map(value => (
       <div style={{ width: "100%" }} className="select__container">
         <p className="filter--label">{`${
           value.id === "cluster"
@@ -95,12 +95,12 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
             value.id === "cluster" ? "node" : value.id
           }(s)`}
           value={this.renderSelectValue(value.id)}
-          dropdownRender={(_) => (
-            <div onMouseDown={(e) => e.preventDefault()}>
+          dropdownRender={_ => (
+            <div onMouseDown={e => e.preventDefault()}>
               <div className="select-selection__deselect">
                 <a onClick={this.onDeselect(value.id)}>Deselect all</a>
               </div>
-              {value.filters.map((val) => {
+              {value.filters.map(val => {
                 const checked =
                   filter &&
                   filter[value.id] &&

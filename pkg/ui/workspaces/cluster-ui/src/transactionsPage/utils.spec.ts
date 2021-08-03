@@ -227,7 +227,6 @@ describe("statementFingerprintIdsToText", () => {
       {
         id: Long.fromInt(4104049045071304794),
         key: {
-          // eslint-disable-next-line @typescript-eslint/camelcase
           key_data: {
             query: "SELECT _",
           },
@@ -236,7 +235,6 @@ describe("statementFingerprintIdsToText", () => {
       {
         id: Long.fromInt(5104049045071304794),
         key: {
-          // eslint-disable-next-line @typescript-eslint/camelcase
           key_data: {
             query: "SELECT _, _",
           },

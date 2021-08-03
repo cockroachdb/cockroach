@@ -100,7 +100,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   toggleDropDown = () => {
     this.setState(
-      (prevState) => {
+      prevState => {
         return {
           opened: !prevState.opened,
           /*
@@ -132,9 +132,9 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
   optionButton = (option: RangeOption) => (
     <Button
       type="default"
-      className={`_time-button ${
-        (this.props.selected.title === option.value && "active") || ""
-      }`}
+      className={`_time-button ${(this.props.selected.title === option.value &&
+        "active") ||
+        ""}`}
       onClick={this.handleOptionButtonOnClick(option)}
       ghost
     >
@@ -151,12 +151,12 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   renderOptions = () => {
     const { options } = this.props;
-    return options.map((option) => this.optionButton(option));
+    return options.map(option => this.optionButton(option));
   };
 
   findSelectedValue = () => {
     const { options, selected } = this.props;
-    const value = options.find((option) => option.value === selected.title);
+    const value = options.find(option => option.value === selected.title);
     return value && value.label !== "Custom" ? (
       <span className="Select-value-label">{value.label}</span>
     ) : (

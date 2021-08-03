@@ -117,7 +117,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
   rezoomToLocalities(zoomTransform: ZoomTransformer) {
     const { prevLocations } = this.state;
     const { localityTree, locationTree } = this.props;
-    const locations = _.map(getChildLocalities(localityTree), (l) =>
+    const locations = _.map(getChildLocalities(localityTree), l =>
       findOrCalculateLocation(locationTree, l),
     );
 
@@ -131,7 +131,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
 
     // Compute a new zoom based on the new set of localities.
     const projection = d3.geo.mercator();
-    const boxes = locations.map((location) => {
+    const boxes = locations.map(location => {
       const center = projection([location.longitude, location.latitude]);
 
       // Create a 100 unit box centered on each mapped location. This is an
@@ -166,7 +166,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
 
   renderChildLocalities(projection: d3.geo.Projection) {
     const { localityTree, locationTree } = this.props;
-    return _.map(getChildLocalities(localityTree), (locality) => {
+    return _.map(getChildLocalities(localityTree), locality => {
       const location = findOrCalculateLocation(locationTree, locality);
       const center = projection([location.longitude, location.latitude]);
 
