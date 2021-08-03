@@ -787,6 +787,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 			name           string
 			reqs           []roachpb.Request
 			minTSBound     hlc.Timestamp
+			maxTSBound     hlc.Timestamp
 			withTS         bool // error case
 			withTxn        bool // error case
 			withWrongRange bool // error case
@@ -795,19 +796,19 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 			expErr    string
 		}{
 			{
-				name:       "empty key, bound below closed ts",
+				name:       "empty key, min bound below closed ts",
 				reqs:       []roachpb.Request{&getEmptyKey},
 				minTSBound: ts20,
 				expRespTS:  ts30,
 			},
 			{
-				name:       "empty key, bound equal to closed ts",
+				name:       "empty key, min bound equal to closed ts",
 				reqs:       []roachpb.Request{&getEmptyKey},
 				minTSBound: ts30,
 				expRespTS:  ts30,
 			},
 			{
-				name:       "empty key, bound above closed ts",
+				name:       "empty key, min bound above closed ts",
 				reqs:       []roachpb.Request{&getEmptyKey},
 				minTSBound: ts40,
 				expRespTS:  ts40, // for !strict case
@@ -817,13 +818,13 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				),
 			},
 			{
-				name:       "intent key, bound below intent ts, bound below closed ts",
+				name:       "intent key, min bound below intent ts, min bound below closed ts",
 				reqs:       []roachpb.Request{&getIntentKey},
 				minTSBound: ts10,
 				expRespTS:  ts20.Prev(),
 			},
 			{
-				name:       "intent key, bound equal to intent ts, bound below closed ts",
+				name:       "intent key, min bound equal to intent ts, min bound below closed ts",
 				reqs:       []roachpb.Request{&getIntentKey},
 				minTSBound: ts20,
 				expErr: ifStrict(
@@ -832,7 +833,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				),
 			},
 			{
-				name:       "intent key, bound above intent ts, bound equal to closed ts",
+				name:       "intent key, min bound above intent ts, min bound equal to closed ts",
 				reqs:       []roachpb.Request{&getIntentKey},
 				minTSBound: ts30,
 				expErr: ifStrict(
@@ -841,7 +842,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				),
 			},
 			{
-				name:       "intent key, bound above intent ts, bound above closed ts",
+				name:       "intent key, min bound above intent ts, min bound above closed ts",
 				reqs:       []roachpb.Request{&getIntentKey},
 				minTSBound: ts40,
 				expErr: ifStrict(
@@ -850,13 +851,13 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				),
 			},
 			{
-				name:       "empty and intent key, bound below intent ts, bound below closed ts",
+				name:       "empty and intent key, min bound below intent ts, min bound below closed ts",
 				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
 				minTSBound: ts10,
 				expRespTS:  ts20.Prev(),
 			},
 			{
-				name:       "empty and intent key, bound equal to intent ts, bound below closed ts",
+				name:       "empty and intent key, min bound equal to intent ts, min bound below closed ts",
 				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
 				minTSBound: ts20,
 				expErr: ifStrict(
@@ -865,7 +866,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				),
 			},
 			{
-				name:       "empty and intent key, bound above intent ts, bound equal to closed ts",
+				name:       "empty and intent key, min bound above intent ts, min bound equal to closed ts",
 				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
 				minTSBound: ts30,
 				expErr: ifStrict(
@@ -874,13 +875,34 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				),
 			},
 			{
-				name:       "empty and intent key, bound above intent ts, bound above closed ts",
+				name:       "empty and intent key, min bound above intent ts, min bound above closed ts",
 				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
 				minTSBound: ts40,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
 					"conflicting intents on .*",
 				),
+			},
+			{
+				name:       "empty key, min and max bound below closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey},
+				minTSBound: ts10,
+				maxTSBound: ts20,
+				expRespTS:  ts20,
+			},
+			{
+				name:       "intent key, min and max bound below intent ts, min and max bound below closed ts",
+				reqs:       []roachpb.Request{&getIntentKey},
+				minTSBound: ts10,
+				maxTSBound: ts10,
+				expRespTS:  ts10,
+			},
+			{
+				name:       "empty and intent key, min and max bound below intent ts, min and max bound below closed ts",
+				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				minTSBound: ts10,
+				maxTSBound: ts10,
+				expRespTS:  ts10,
 			},
 			{
 				name:       "req with timestamp",
@@ -930,8 +952,11 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				// Construct and issue the request.
 				var ba roachpb.BatchRequest
 				ba.RangeID = tc.rangeID
-				ba.MinTimestampBound = test.minTSBound
-				ba.MinTimestampBoundStrict = strict
+				ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+					MinTimestampBound:       test.minTSBound,
+					MinTimestampBoundStrict: strict,
+					MaxTimestampBound:       test.maxTSBound,
+				}
 				ba.WaitPolicy = lock.WaitPolicy_Error
 				if test.withTS {
 					ba.Timestamp = ts20

@@ -358,12 +358,16 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 					// redirected to the leaseholder and to block on intents.
 					var ba roachpb.BatchRequest
 					if strict {
-						ba.MinTimestampBound = minTSBound
-						ba.MinTimestampBoundStrict = true
+						ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+							MinTimestampBound:       minTSBound,
+							MinTimestampBoundStrict: true,
+						}
 						ba.WaitPolicy = lock.WaitPolicy_Error
 					} else {
-						ba.MinTimestampBound = store.Clock().Now()
-						ba.MinTimestampBoundStrict = false
+						ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+							MinTimestampBound:       store.Clock().Now(),
+							MinTimestampBoundStrict: false,
+						}
 						ba.WaitPolicy = lock.WaitPolicy_Block
 					}
 					ba.RoutingPolicy = roachpb.RoutingPolicy_LEASEHOLDER
