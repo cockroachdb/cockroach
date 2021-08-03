@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -30,6 +31,10 @@ func TestTruncatedStateMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	minVersion := clusterversion.ByKey(clusterversion.V20_2)
+	binaryVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration + 1)
+	truncStateVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
+	bootstrapVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration - 1)
 	for _, testCase := range []struct {
 		name string
 		typ  stateloader.TruncatedStateType
@@ -39,21 +44,33 @@ func TestTruncatedStateMigration(t *testing.T) {
 		{"ts=legacy,as=legacy", stateloader.TruncatedStateLegacyReplicatedAndNoAppliedKey},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			args := base.TestClusterArgs{}
-			args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{TruncatedStateTypeOverride: &testCase.typ}
-			args.ServerArgs.Knobs.Server = &server.TestingKnobs{
-				// TruncatedAndRangeAppliedStateMigration is part of the
-				// migration that lets us stop using the legacy truncated state.
-				// When the active cluster version is greater than it, we assert
-				// against the presence of legacy truncated state and ensure
-				// we're using the range applied state key. In this test we'll
-				// start of at the version immediately preceding the migration,
-				// and migrate past it.
-				BinaryVersionOverride: clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration - 1),
-				// We want to exercise manual control over the upgrade process.
-				DisableAutomaticVersionUpgrade: 1,
+			makeArgs := func() (args base.TestServerArgs) {
+				args.Settings = cluster.MakeTestingClusterSettingsWithVersions(
+					binaryVersion, minVersion, false,
+				)
+				args.Knobs.Store = &kvserver.StoreTestingKnobs{TruncatedStateTypeOverride: &testCase.typ}
+				args.Knobs.Server = &server.TestingKnobs{
+					// TruncatedAndRangeAppliedStateMigration is part of the
+					// migration that lets us stop using the legacy truncated state.
+					// When the active cluster version is greater than it, we assert
+					// against the presence of legacy truncated state and ensure
+					// we're using the range applied state key. In this test we'll
+					// start of at the version immediately preceding the migration,
+					// and migrate past it.
+					BinaryVersionOverride: bootstrapVersion,
+					// We want to exercise manual control over the upgrade process.
+					DisableAutomaticVersionUpgrade: 1,
+				}
+				return args
 			}
-			tc := testcluster.StartTestCluster(t, 3, args)
+
+			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+				ServerArgsPerNode: map[int]base.TestServerArgs{
+					0: makeArgs(),
+					1: makeArgs(),
+					2: makeArgs(),
+				},
+			})
 			defer tc.Stopper().Stop(ctx)
 
 			forAllReplicas := func(f func(*kvserver.Replica) error) error {
@@ -118,13 +135,13 @@ func TestTruncatedStateMigration(t *testing.T) {
 			// happened as part of the initial up-replication.
 			t.Logf("ranges with legacy keys before migration: %v", legacyRanges)
 
-			_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-				clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration+1).String())
+			_, err := tc.Conns[0].ExecContext(
+				ctx, `SET CLUSTER SETTING version = $1`, binaryVersion.String(),
+			)
 			require.NoError(t, err)
 			require.Zero(t, getLegacyRanges())
 
 			require.NoError(t, forAllReplicas(func(repl *kvserver.Replica) error {
-				truncStateVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
 				if repl.Version().Less(truncStateVersion) {
 					return errors.Newf("unexpected version %s", repl.Version())
 				}

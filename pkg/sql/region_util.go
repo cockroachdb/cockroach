@@ -850,8 +850,9 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 	)
 }
 
-// ResetMultiRegionZoneConfigsForTable is part of the tree.EvalDatabase
-// interface.
+// ResetMultiRegionZoneConfigsForTable takes a table ID and resets that table's
+// zone configurations to match what would have originally been set by the
+// multi-region syntax.
 func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error {
 	desc, err := p.Descriptors().GetMutableTableVersionByID(ctx, descpb.ID(id), p.txn)
 	if err != nil {
@@ -866,6 +867,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 	if err != nil {
 		return err
 	}
+
 	return ApplyZoneConfigForMultiRegionTable(
 		ctx,
 		p.txn,
@@ -874,6 +876,44 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 		desc,
 		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 	)
+}
+
+// ResetMultiRegionZoneConfigsForDatabase takes a database ID and resets that
+// database's zone configuration to match what would have originally been set by
+// the multi-region syntax.
+func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error {
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+		p.EvalContext().Ctx(),
+		p.txn,
+		descpb.ID(id),
+		tree.DatabaseLookupFlags{
+			Required: true,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if !dbDesc.IsMultiRegion() {
+		// Nothing to do.
+		return nil
+	}
+
+	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
+	if err != nil {
+		return err
+	}
+
+	// Update the database's zone configuration.
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
+		ctx,
+		dbDesc.GetID(),
+		regionConfig,
+		p.txn,
+		p.execCfg,
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(

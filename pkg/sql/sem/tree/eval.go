@@ -3078,6 +3078,10 @@ type EvalDatabase interface {
 	// configuration to its multi-region default.
 	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error
 
+	// ResetMultiRegionZoneConfigsForDatabase resets the given database's zone
+	// configuration to its multi-region default.
+	ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error
+
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
 	// NB: this is deprecated! Use parser.ParseQualifiedTableName when possible.

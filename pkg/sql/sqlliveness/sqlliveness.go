@@ -71,10 +71,9 @@ type Session interface {
 	// Transactions run by this Instance which ensure that they commit before
 	// this time will be assured that any resources claimed under this session
 	// are known to be valid.
-	//
-	// See discussion in Open Questions in
-	// http://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20200615_sql_liveness.md
 	Expiration() hlc.Timestamp
+	// RegisterCallbackForSessionExpiry registers a callback to be executed when the session expires.
+	RegisterCallbackForSessionExpiry(func(ctx context.Context))
 }
 
 // Reader abstracts over the state of session records.

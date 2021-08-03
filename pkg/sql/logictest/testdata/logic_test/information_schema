@@ -1348,6 +1348,7 @@ system         public              statement_statistics                   BASE T
 system         public              transaction_statistics                 BASE TABLE   YES                 1
 system         public              database_role_settings                 BASE TABLE   YES                 1
 system         public              tenant_usage                           BASE TABLE   YES                 1
+system         public              sql_instances                          BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -1513,6 +1514,8 @@ system              public             630200280_6_1_not_null                   
 system              public             630200280_6_2_not_null                                                               system         public        settings                         CHECK            NO             NO
 system              public             630200280_6_3_not_null                                                               system         public        settings                         CHECK            NO             NO
 system              public             primary                                                                              system         public        settings                         PRIMARY KEY      NO             NO
+system              public             630200280_46_1_not_null                                                              system         public        sql_instances                    CHECK            NO             NO
+system              public             primary                                                                              system         public        sql_instances                    PRIMARY KEY      NO             NO
 system              public             630200280_39_1_not_null                                                              system         public        sqlliveness                      CHECK            NO             NO
 system              public             630200280_39_2_not_null                                                              system         public        sqlliveness                      CHECK            NO             NO
 system              public             primary                                                                              system         public        sqlliveness                      PRIMARY KEY      NO             NO
@@ -1732,6 +1735,7 @@ system              public             630200280_44_3_not_null                  
 system              public             630200280_45_1_not_null                                                              tenant_id IS NOT NULL
 system              public             630200280_45_2_not_null                                                              instance_id IS NOT NULL
 system              public             630200280_45_3_not_null                                                              next_instance_id IS NOT NULL
+system              public             630200280_46_1_not_null                                                              id IS NOT NULL
 system              public             630200280_4_1_not_null                                                               username IS NOT NULL
 system              public             630200280_4_3_not_null                                                               isRole IS NOT NULL
 system              public             630200280_5_1_not_null                                                               id IS NOT NULL
@@ -1794,6 +1798,7 @@ system         public        role_options                     option            
 system         public        role_options                     username                                                                       system              public             primary
 system         public        scheduled_jobs                   schedule_id                                                                    system              public             primary
 system         public        settings                         name                                                                           system              public             primary
+system         public        sql_instances                    id                                                                             system              public             primary
 system         public        sqlliveness                      session_id                                                                     system              public             primary
 system         public        statement_bundle_chunks          id                                                                             system              public             primary
 system         public        statement_diagnostics            id                                                                             system              public             primary
@@ -2027,6 +2032,9 @@ system         pg_extension  spatial_ref_sys                  auth_srid         
 system         pg_extension  spatial_ref_sys                  proj4text                                                                      5
 system         pg_extension  spatial_ref_sys                  srid                                                                           1
 system         pg_extension  spatial_ref_sys                  srtext                                                                         4
+system         public        sql_instances                    addr                                                                      2
+system         public        sql_instances                    id                                                                             1
+system         public        sql_instances                    session_id                                                                     3
 system         public        sqlliveness                      expiration                                                                     2
 system         public        sqlliveness                      session_id                                                                     1
 system         public        statement_bundle_chunks          data                                                                           3
@@ -3028,6 +3036,16 @@ NULL     root     system         public              settings                   
 NULL     root     system         public              settings                               INSERT          NULL          NO
 NULL     root     system         public              settings                               SELECT          NULL          YES
 NULL     root     system         public              settings                               UPDATE          NULL          NO
+NULL     admin    system         public              sql_instances                          DELETE          NULL          NO
+NULL     admin    system         public              sql_instances                          GRANT           NULL          NO
+NULL     admin    system         public              sql_instances                          INSERT          NULL          NO
+NULL     admin    system         public              sql_instances                          SELECT          NULL          YES
+NULL     admin    system         public              sql_instances                          UPDATE          NULL          NO
+NULL     root     system         public              sql_instances                          DELETE          NULL          NO
+NULL     root     system         public              sql_instances                          GRANT           NULL          NO
+NULL     root     system         public              sql_instances                          INSERT          NULL          NO
+NULL     root     system         public              sql_instances                          SELECT          NULL          YES
+NULL     root     system         public              sql_instances                          UPDATE          NULL          NO
 NULL     admin    system         public              sqlliveness                            DELETE          NULL          NO
 NULL     admin    system         public              sqlliveness                            GRANT           NULL          NO
 NULL     admin    system         public              sqlliveness                            INSERT          NULL          NO
@@ -3715,6 +3733,16 @@ NULL     root     system         public              tenant_usage               
 NULL     root     system         public              tenant_usage                           INSERT          NULL          NO
 NULL     root     system         public              tenant_usage                           SELECT          NULL          YES
 NULL     root     system         public              tenant_usage                           UPDATE          NULL          NO
+NULL     admin    system         public              sql_instances                          DELETE          NULL          NO
+NULL     admin    system         public              sql_instances                          GRANT           NULL          NO
+NULL     admin    system         public              sql_instances                          INSERT          NULL          NO
+NULL     admin    system         public              sql_instances                          SELECT          NULL          YES
+NULL     admin    system         public              sql_instances                          UPDATE          NULL          NO
+NULL     root     system         public              sql_instances                          DELETE          NULL          NO
+NULL     root     system         public              sql_instances                          GRANT           NULL          NO
+NULL     root     system         public              sql_instances                          INSERT          NULL          NO
+NULL     root     system         public              sql_instances                          SELECT          NULL          YES
+NULL     root     system         public              sql_instances                          UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sqlinstance",
+    srcs = ["sqlinstance.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlinstance",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/sql/sqlliveness",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

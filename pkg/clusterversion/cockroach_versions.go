@@ -266,6 +266,9 @@ const (
 	DatabaseRoleSettings
 	// TenantUsageTable adds the system table for tracking tenant usage.
 	TenantUsageTable
+	// SQLInstancesTable adds the system table for storing SQL instance information
+	// per tenant.
+	SQLInstancesTable
 
 	// Step (1): Add new versions here.
 )
@@ -427,6 +430,11 @@ var versionsSingleton = keyedVersions{
 		Key:     TenantUsageTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 120},
 	},
+	{
+		Key:     SQLInstancesTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 122},
+	},
+
 	// Step (2): Add new versions here.
 }
 
@@ -438,7 +446,7 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error.
-	binaryMinSupportedVersion = ByKey(V20_2)
+	binaryMinSupportedVersion = ByKey(V21_1)
 
 	// binaryVersion is the version of this binary.
 	//
