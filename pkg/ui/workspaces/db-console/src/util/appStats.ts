@@ -168,7 +168,7 @@ export function aggregateStatementStats(
     matches.push(statement);
   });
 
-  return _.values(statementsMap).map((statements) =>
+  return _.values(statementsMap).map(statements =>
     _.reduce(
       statements,
       (a: CollectedStatementStatistics, b: CollectedStatementStatistics) => ({
@@ -196,7 +196,7 @@ export interface ExecutionStatistics {
 export function flattenStatementStats(
   statementStats: CollectedStatementStatistics[],
 ): ExecutionStatistics[] {
-  return statementStats.map((stmt) => ({
+  return statementStats.map(stmt => ({
     statement: stmt.key.key_data.query,
     app: stmt.key.key_data.app,
     database: stmt.key.key_data.database,

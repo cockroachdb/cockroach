@@ -19,7 +19,7 @@ export const selectStatementByFingerprint = createSelector(
   (_state: AdminUIState, statementFingerprint: string) => statementFingerprint,
   (statements, statementFingerprint) =>
     (statements || []).find(
-      (statement) => statement.key.key_data.query === statementFingerprint,
+      statement => statement.key.key_data.query === statementFingerprint,
     ),
 );
 
@@ -29,25 +29,25 @@ export const selectDiagnosticsReportsByStatementFingerprint = createSelector(
   (_state: AdminUIState, statementFingerprint: string) => statementFingerprint,
   (requests, statementFingerprint) =>
     (requests || []).filter(
-      (request) => request.statement_fingerprint === statementFingerprint,
+      request => request.statement_fingerprint === statementFingerprint,
     ),
 );
 
 export const selectDiagnosticsReportsCountByStatementFingerprint = createSelector(
   selectDiagnosticsReportsByStatementFingerprint,
-  (requests) => requests.length,
+  requests => requests.length,
 );
 
 export const selectStatementDiagnosticsReports = createSelector(
   (state: AdminUIState) =>
     state.cachedData.statementDiagnosticsReports.data?.reports,
-  (diagnosticsReports) => diagnosticsReports,
+  diagnosticsReports => diagnosticsReports,
 );
 
 export const statementDiagnosticsReportsInFlight = createSelector(
   (state: AdminUIState) =>
     state.cachedData.statementDiagnosticsReports.inFlight,
-  (inFlight) => inFlight,
+  inFlight => inFlight,
 );
 
 type StatementDiagnosticsDictionary = {
@@ -60,11 +60,9 @@ export const selectDiagnosticsReportsPerStatement = createSelector(
     diagnosticsReports: IStatementDiagnosticsReport[],
   ): StatementDiagnosticsDictionary =>
     chain(diagnosticsReports)
-      .groupBy((diagnosticsReport) => diagnosticsReport.statement_fingerprint)
-      .mapValues((diagnostics) =>
-        orderBy(diagnostics, (d) => d.requested_at.seconds.toNumber(), [
-          "desc",
-        ]),
+      .groupBy(diagnosticsReport => diagnosticsReport.statement_fingerprint)
+      .mapValues(diagnostics =>
+        orderBy(diagnostics, d => d.requested_at.seconds.toNumber(), ["desc"]),
       )
       .value(),
 );

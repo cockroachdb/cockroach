@@ -81,7 +81,7 @@ function renderCapacityUsage(props: CapacityUsageProps) {
 
 const mapStateToCapacityUsageProps = createSelector(
   nodesSummarySelector,
-  function (nodesSummary: NodesSummary) {
+  function(nodesSummary: NodesSummary) {
     const { capacityUsed, capacityUsable } = nodesSummary.nodeSums;
     return {
       usedCapacity: capacityUsed,
@@ -149,7 +149,7 @@ function renderNodeLiveness(props: NodeLivenessProps) {
 
 const mapStateToNodeLivenessProps = createSelector(
   nodesSummarySelector,
-  function (nodesSummary: NodesSummary) {
+  function(nodesSummary: NodesSummary) {
     const { nodeCounts } = nodesSummary.nodeSums;
     return {
       liveNodes: nodeCounts.healthy,
@@ -220,7 +220,7 @@ function renderReplicationStatus(props: ReplicationStatusProps) {
 
 const mapStateToReplicationStatusProps = createSelector(
   nodesSummarySelector,
-  function (nodesSummary: NodesSummary) {
+  function(nodesSummary: NodesSummary) {
     const {
       totalRanges,
       underReplicatedRanges,

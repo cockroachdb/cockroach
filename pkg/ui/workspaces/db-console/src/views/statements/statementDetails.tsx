@@ -75,7 +75,7 @@ function coalesceNodeStats(
 ): AggregateStatistics[] {
   const statsKey: { [nodeId: string]: StatementDetailsData } = {};
 
-  stats.forEach((stmt) => {
+  stats.forEach(stmt => {
     const key = statementKey(stmt);
     if (!(key in statsKey)) {
       statsKey[key] = {
@@ -89,7 +89,7 @@ function coalesceNodeStats(
     statsKey[key].stats.push(stmt.stats);
   });
 
-  return Object.keys(statsKey).map((key) => {
+  return Object.keys(statsKey).map(key => {
     const stmt = statsKey[key];
     return {
       label: stmt.nodeId.toString(),
@@ -108,7 +108,7 @@ function fractionMatching(
   let numerator = 0;
   let denominator = 0;
 
-  stats.forEach((stmt) => {
+  stats.forEach(stmt => {
     const count = FixLong(stmt.stats.first_attempt_count).toInt();
     denominator += count;
     if (predicate(stmt)) {
@@ -168,17 +168,17 @@ export const selectStatement = createSelector(
     const statement = getMatchParamByName(props.match, statementAttr);
     return {
       statement,
-      stats: combineStatementStats(results.map((s) => s.stats)),
+      stats: combineStatementStats(results.map(s => s.stats)),
       byNode: coalesceNodeStats(results),
-      app: _.uniq(results.map((s) => s.app)),
+      app: _.uniq(results.map(s => s.app)),
       database: getMatchParamByName(props.match, databaseAttr),
-      distSQL: fractionMatching(results, (s) => s.distSQL),
-      vec: fractionMatching(results, (s) => s.vec),
-      opt: fractionMatching(results, (s) => s.opt),
-      implicit_txn: fractionMatching(results, (s) => s.implicit_txn),
-      full_scan: fractionMatching(results, (s) => s.full_scan),
-      failed: fractionMatching(results, (s) => s.failed),
-      node_id: _.uniq(results.map((s) => s.node_id)),
+      distSQL: fractionMatching(results, s => s.distSQL),
+      vec: fractionMatching(results, s => s.vec),
+      opt: fractionMatching(results, s => s.opt),
+      implicit_txn: fractionMatching(results, s => s.implicit_txn),
+      full_scan: fractionMatching(results, s => s.full_scan),
+      failed: fractionMatching(results, s => s.failed),
+      node_id: _.uniq(results.map(s => s.node_id)),
     };
   },
 );

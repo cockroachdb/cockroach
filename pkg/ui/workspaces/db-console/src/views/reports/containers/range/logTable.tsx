@@ -20,7 +20,9 @@ import { TimestampToMoment } from "src/util/convert";
 
 interface LogTableProps {
   rangeID: Long;
-  log: CachedDataReducerState<protos.cockroach.server.serverpb.RangeLogResponse>;
+  log: CachedDataReducerState<
+    protos.cockroach.server.serverpb.RangeLogResponse
+  >;
 }
 
 function printLogEventType(
@@ -100,7 +102,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     // Sort by descending timestamp.
     const events = _.orderBy(
       log && log.data && log.data.events,
-      (event) => TimestampToMoment(event.event.timestamp).valueOf(),
+      event => TimestampToMoment(event.event.timestamp).valueOf(),
       "desc",
     );
 

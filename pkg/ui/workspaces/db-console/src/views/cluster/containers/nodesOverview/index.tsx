@@ -54,13 +54,13 @@ import {
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting",
-  (s) => s.localSettings,
+  s => s.localSettings,
 );
 
 const decommissionedNodesSortSetting = new LocalSetting<
   AdminUIState,
   SortSetting
->("nodes/decommissioned_sort_setting", (s) => s.localSettings);
+>("nodes/decommissioned_sort_setting", s => s.localSettings);
 
 // AggregatedNodeStatus indexes have to be greater than LivenessStatus indexes
 // for correct sorting in the table.
@@ -398,7 +398,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
 
     // Remove "Nodes Count" column If nodes are not partitioned by regions,
     if (regionsCount === 1) {
-      columns = columns.filter((column) => column.key !== "nodesCount");
+      columns = columns.filter(column => column.key !== "nodesCount");
       dataSource = _.head(dataSource).children;
     }
     return (
@@ -424,7 +424,9 @@ export class NodeList extends React.Component<LiveNodeListProps> {
  * DecommissionedNodeList renders a view with a table for recently "decommissioned"
  * nodes on a link on a full list of decommissioned nodes.
  */
-class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps> {
+class DecommissionedNodeList extends React.Component<
+  DecommissionedNodeListProps
+> {
   columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
     {
       key: "nodes",
@@ -501,7 +503,7 @@ export const liveNodesTableDataSelector = createSelector(
     // - it represents a flat structure.
     const data = _.chain(liveStatuses)
       .groupBy((node: INodeStatus) => {
-        return node.desc.locality.tiers.map((tier) => tier.value).join(".");
+        return node.desc.locality.tiers.map(tier => tier.value).join(".");
       })
       .map(
         (nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
@@ -570,14 +572,14 @@ export const liveNodesTableDataSelector = createSelector(
             region: lastTier?.value,
             tiers,
             nodesCount: nodesPerRegion.length,
-            replicas: _.sum(nestedRows.map((nr) => nr.replicas)),
-            usedCapacity: _.sum(nestedRows.map((nr) => nr.usedCapacity)),
+            replicas: _.sum(nestedRows.map(nr => nr.replicas)),
+            usedCapacity: _.sum(nestedRows.map(nr => nr.usedCapacity)),
             availableCapacity: _.sum(
-              nestedRows.map((nr) => nr.availableCapacity),
+              nestedRows.map(nr => nr.availableCapacity),
             ),
-            usedMemory: _.sum(nestedRows.map((nr) => nr.usedMemory)),
-            availableMemory: _.sum(nestedRows.map((nr) => nr.availableMemory)),
-            numCpus: _.sum(nestedRows.map((nr) => nr.numCpus)),
+            usedMemory: _.sum(nestedRows.map(nr => nr.usedMemory)),
+            availableMemory: _.sum(nestedRows.map(nr => nr.availableMemory)),
+            numCpus: _.sum(nestedRows.map(nr => nr.numCpus)),
             status: getLocalityStatus(),
             children: nestedRows,
           };

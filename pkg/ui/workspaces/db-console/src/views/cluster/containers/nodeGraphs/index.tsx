@@ -132,11 +132,11 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
       return base.concat(
         _.chain(nodeStatuses)
           .filter(
-            (ns) =>
+            ns =>
               livenessStatusByNodeID[ns.desc.node_id] !==
               LivenessStatus.NODE_STATUS_DECOMMISSIONED,
           )
-          .map((ns) => ({
+          .map(ns => ({
             value: ns.desc.node_id.toString(),
             label: nodeDisplayNameByID[ns.desc.node_id],
           }))

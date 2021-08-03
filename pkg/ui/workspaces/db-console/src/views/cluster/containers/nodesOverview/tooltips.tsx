@@ -113,7 +113,7 @@ export const getNodeStatusDescription = (status: AggregatedNodeStatus) => {
 
 type PlainTooltip = React.FC<TooltipProps>;
 
-export const NodeCountTooltip: PlainTooltip = (props) => (
+export const NodeCountTooltip: PlainTooltip = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -127,7 +127,7 @@ export const NodeCountTooltip: PlainTooltip = (props) => (
   </Tooltip>
 );
 
-export const UptimeTooltip: PlainTooltip = (props) => (
+export const UptimeTooltip: PlainTooltip = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -141,7 +141,7 @@ export const UptimeTooltip: PlainTooltip = (props) => (
   </Tooltip>
 );
 
-export const ReplicasTooltip: PlainTooltip = (props) => (
+export const ReplicasTooltip: PlainTooltip = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -155,7 +155,7 @@ export const ReplicasTooltip: PlainTooltip = (props) => (
   </Tooltip>
 );
 
-export const NodelistCapacityUsageTooltip: PlainTooltip = (props) => (
+export const NodelistCapacityUsageTooltip: PlainTooltip = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -177,7 +177,7 @@ export const NodelistCapacityUsageTooltip: PlainTooltip = (props) => (
   </Tooltip>
 );
 
-export const MemoryUseTooltip: PlainTooltip = (props) => (
+export const MemoryUseTooltip: PlainTooltip = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -194,7 +194,7 @@ export const MemoryUseTooltip: PlainTooltip = (props) => (
   </Tooltip>
 );
 
-export const CPUsTooltip: PlainTooltip = (props) => (
+export const CPUsTooltip: PlainTooltip = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -208,7 +208,7 @@ export const CPUsTooltip: PlainTooltip = (props) => (
   </Tooltip>
 );
 
-export const VersionTooltip: PlainTooltip = (props) => (
+export const VersionTooltip: PlainTooltip = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -222,7 +222,7 @@ export const VersionTooltip: PlainTooltip = (props) => (
   </Tooltip>
 );
 
-export const StatusTooltip: PlainTooltip = (props) => (
+export const StatusTooltip: PlainTooltip = props => (
   <Tooltip
     {...props}
     placement="bottom"

@@ -19,7 +19,7 @@ export function GetLocalReplica(
 ) {
   return _.find(
     info.state.state.desc.internal_replicas,
-    (rep) => rep.store_id === info.source_store_id,
+    rep => rep.store_id === info.source_store_id,
   );
 }
 

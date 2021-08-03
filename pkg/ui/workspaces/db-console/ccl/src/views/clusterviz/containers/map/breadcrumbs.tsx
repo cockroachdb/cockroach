@@ -61,7 +61,7 @@ export class Breadcrumbs extends React.Component<BreadcrumbsProps> {
 function breadcrumbPaths(path: LocalityTier[]): LocalityTier[][] {
   const pathSoFar: LocalityTier[] = [];
   const output: LocalityTier[][] = [[]];
-  path.forEach((tier) => {
+  path.forEach(tier => {
     pathSoFar.push(tier);
     output.push(_.clone(pathSoFar));
   });

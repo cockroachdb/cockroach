@@ -51,7 +51,7 @@ export const healthReducerObj = new CachedDataReducer(
 export const refreshHealth = healthReducerObj.refresh;
 
 function rollupStoreMetrics(res: api.NodesResponseMessage): INodeStatus[] {
-  return _.map(res.nodes, (node) => {
+  return _.map(res.nodes, node => {
     RollupStoreMetrics(node);
     return node;
   });
@@ -318,7 +318,9 @@ export interface APIReducersState {
   version: CachedDataReducerState<VersionList>;
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
   databases: CachedDataReducerState<api.DatabasesResponseMessage>;
-  databaseDetails: KeyedCachedDataReducerState<api.DatabaseDetailsResponseMessage>;
+  databaseDetails: KeyedCachedDataReducerState<
+    api.DatabaseDetailsResponseMessage
+  >;
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
   nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
@@ -330,7 +332,9 @@ export interface APIReducersState {
   problemRanges: KeyedCachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: KeyedCachedDataReducerState<api.CertificatesResponseMessage>;
   range: KeyedCachedDataReducerState<api.RangeResponseMessage>;
-  allocatorRange: KeyedCachedDataReducerState<api.AllocatorRangeResponseMessage>;
+  allocatorRange: KeyedCachedDataReducerState<
+    api.AllocatorRangeResponseMessage
+  >;
   rangeLog: KeyedCachedDataReducerState<api.RangeLogResponseMessage>;
   sessions: CachedDataReducerState<api.SessionsResponseMessage>;
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
@@ -338,7 +342,9 @@ export interface APIReducersState {
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
-  statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
+  statementDiagnosticsReports: CachedDataReducerState<
+    api.StatementDiagnosticsReportsResponseMessage
+  >;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({

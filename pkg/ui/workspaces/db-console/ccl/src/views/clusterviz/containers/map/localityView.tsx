@@ -103,7 +103,7 @@ class LocalityView extends React.Component<
       this.props.livenessStatuses,
     );
 
-    const nodeIds = leavesUnderMe.map((node) => `${node.desc.node_id}`);
+    const nodeIds = leavesUnderMe.map(node => `${node.desc.node_id}`);
 
     return (
       <g

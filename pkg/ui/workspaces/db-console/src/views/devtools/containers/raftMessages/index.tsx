@@ -62,7 +62,7 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
     (nodeStatuses, nodeDisplayNameByID): DropdownOption[] => {
       const base = [{ value: "", label: "Cluster" }];
       return base.concat(
-        _.map(nodeStatuses, (ns) => {
+        _.map(nodeStatuses, ns => {
           return {
             value: ns.desc.node_id.toString(),
             label: nodeDisplayNameByID[ns.desc.node_id],

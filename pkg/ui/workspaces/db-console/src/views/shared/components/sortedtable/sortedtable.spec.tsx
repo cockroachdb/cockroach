@@ -33,14 +33,14 @@ class TestRow {
 const columns: ColumnDescriptor<TestRow>[] = [
   {
     title: "first",
-    cell: (tr) => tr.name,
-    sort: (tr) => tr.name,
+    cell: tr => tr.name,
+    sort: tr => tr.name,
   },
   {
     title: "second",
-    cell: (tr) => tr.value.toString(),
-    sort: (tr) => tr.value,
-    rollup: (trs) => _.sumBy(trs, (tr) => tr.value),
+    cell: tr => tr.value.toString(),
+    sort: tr => tr.value,
+    rollup: trs => _.sumBy(trs, tr => tr.value),
   },
 ];
 
@@ -70,19 +70,19 @@ function makeExpandableTable(data: TestRow[], sortSetting: SortSetting) {
       columns={columns}
       sortSetting={sortSetting}
       expandableConfig={{
-        expandedContent: (testRow) => (
+        expandedContent: testRow => (
           <div>
             {testRow.name}={testRow.value}
           </div>
         ),
-        expansionKey: (testRow) => testRow.name,
+        expansionKey: testRow => testRow.name,
       }}
     />,
   );
 }
 
-describe("<SortedTable>", function () {
-  it("renders the expected table structure.", function () {
+describe("<SortedTable>", function() {
+  it("renders the expected table structure.", function() {
     const wrapper = makeTable([new TestRow("test", 1)]);
     assert.lengthOf(wrapper.find("table"), 1, "one table");
     assert.lengthOf(wrapper.find("thead").find("tr"), 1, "one header row");
@@ -94,7 +94,7 @@ describe("<SortedTable>", function () {
     assert.lengthOf(wrapper.find("tbody"), 1, "tbody element");
   });
 
-  it("correctly uses onChangeSortSetting", function () {
+  it("correctly uses onChangeSortSetting", function() {
     const spy = sinon.spy();
     const wrapper = makeTable([new TestRow("test", 1)], undefined, spy);
     wrapper
@@ -108,7 +108,7 @@ describe("<SortedTable>", function () {
     } as SortSetting);
   });
 
-  it("correctly sorts data based on sortSetting", function () {
+  it("correctly sorts data based on sortSetting", function() {
     const data = [
       new TestRow("c", 3),
       new TestRow("d", 4),
@@ -134,15 +134,15 @@ describe("<SortedTable>", function () {
     };
     assertMatches(data);
     wrapper = makeTable(data, { sortKey: 0, ascending: true });
-    assertMatches(_.sortBy(data, (r) => r.name));
+    assertMatches(_.sortBy(data, r => r.name));
     wrapper.setProps({
       uiSortSetting: { sortKey: 1, ascending: true } as SortSetting,
     });
-    assertMatches(_.sortBy(data, (r) => r.value));
+    assertMatches(_.sortBy(data, r => r.value));
   });
 
-  describe("with expandableConfig", function () {
-    it("renders the expected table structure", function () {
+  describe("with expandableConfig", function() {
+    it("renders the expected table structure", function() {
       const wrapper = makeExpandableTable([new TestRow("test", 1)], undefined);
       assert.lengthOf(wrapper.find("table"), 1, "one table");
       assert.lengthOf(wrapper.find("thead").find("tr"), 1, "one header row");
@@ -165,7 +165,7 @@ describe("<SortedTable>", function () {
       );
     });
 
-    it("expands and collapses the clicked row", function () {
+    it("expands and collapses the clicked row", function() {
       const wrapper = makeExpandableTable([new TestRow("test", 1)], undefined);
       assert.lengthOf(
         wrapper.find(`.${cx("sort-table__row--expanded-area")}`),
@@ -201,7 +201,7 @@ describe("<SortedTable>", function () {
     });
   });
 
-  it("should correctly render rows with pagination and sort settings", function () {
+  it("should correctly render rows with pagination and sort settings", function() {
     const data = [
       new TestRow("c", 3),
       new TestRow("d", 4),
@@ -215,7 +215,10 @@ describe("<SortedTable>", function () {
     let rows = wrapper.find("tbody");
     assert.lengthOf(wrapper.find("tbody tr"), 2, "two body rows");
     assert.equal(
-      rows.childAt(1).childAt(0).text(),
+      rows
+        .childAt(1)
+        .childAt(0)
+        .text(),
       "d",
       "second row column at first page match",
     );
@@ -227,7 +230,10 @@ describe("<SortedTable>", function () {
     rows = wrapper.find("tbody");
     assert.lengthOf(wrapper.find("tbody tr"), 2, "two body rows");
     assert.equal(
-      rows.childAt(0).childAt(0).text(),
+      rows
+        .childAt(0)
+        .childAt(0)
+        .text(),
       "a",
       "first row column at seconds page match",
     );
@@ -238,7 +244,10 @@ describe("<SortedTable>", function () {
     });
     rows = wrapper.find("tbody");
     assert.equal(
-      rows.childAt(1).childAt(0).text(),
+      rows
+        .childAt(1)
+        .childAt(0)
+        .text(),
       "b",
       "second row column at first page match",
     );
@@ -249,7 +258,10 @@ describe("<SortedTable>", function () {
     });
     rows = wrapper.find("tbody");
     assert.equal(
-      rows.childAt(0).childAt(0).text(),
+      rows
+        .childAt(0)
+        .childAt(0)
+        .text(),
       "c",
       "first row column at seconds page match",
     );

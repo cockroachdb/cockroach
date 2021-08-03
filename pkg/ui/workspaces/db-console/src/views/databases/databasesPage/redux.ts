@@ -33,7 +33,7 @@ export const mapStateToProps = createSelector(
     return {
       loading: databases.inFlight,
       loaded: databases.valid,
-      databases: _.map(databases.data?.databases, (database) => {
+      databases: _.map(databases.data?.databases, database => {
         const details = databaseDetails[database];
 
         const stats = details?.data?.stats;
@@ -53,17 +53,17 @@ export const mapStateToProps = createSelector(
         // all of their individual stats.
 
         const possiblyMissingTables = stats
-          ? _.map(stats.missing_tables, (table) => table.name)
+          ? _.map(stats.missing_tables, table => table.name)
           : details?.data?.table_names;
 
         const [individuallyLoadedTables, missingTables] = _.partition(
           possiblyMissingTables,
-          (table) => {
+          table => {
             return !!tableStats[generateTableID(database, table)]?.valid;
           },
         );
 
-        _.each(individuallyLoadedTables, (table) => {
+        _.each(individuallyLoadedTables, table => {
           const stats = tableStats[generateTableID(database, table)];
           sizeInBytes += FixLong(
             stats?.data?.approximate_disk_bytes || 0,
@@ -78,7 +78,7 @@ export const mapStateToProps = createSelector(
           sizeInBytes: sizeInBytes,
           tableCount: details?.data?.table_names?.length || 0,
           rangeCount: rangeCount,
-          missingTables: _.map(missingTables, (table) => {
+          missingTables: _.map(missingTables, table => {
             return {
               loading: !!tableStats[generateTableID(database, table)]?.inFlight,
               name: table,

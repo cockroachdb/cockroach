@@ -57,7 +57,7 @@ describe("selectStatements", () => {
     assert.equal(result.length, 3);
 
     const expectedFingerprints = [stmtA, stmtB, stmtC].map(
-      (stmt) => stmt.key.key_data.query,
+      stmt => stmt.key.key_data.query,
     );
     expectedFingerprints.sort();
     const actualFingerprints = result.map((stmt: any) => stmt.label);

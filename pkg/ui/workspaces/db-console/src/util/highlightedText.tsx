@@ -28,7 +28,7 @@ export default function getHighlightedText(
   );
   const search = highlight
     .split(" ")
-    .map((val) => {
+    .map(val => {
       if (val.length > 0) {
         return val.toLowerCase();
       }
@@ -63,7 +63,7 @@ function rebaseText(text: string, highlight: string) {
   if (!isTextIncludesInTheRange425) {
     let newText = text.slice(0, defaultCropLength) + "...";
     let currentPosition = defaultCropLength;
-    search.forEach((value) => {
+    search.forEach(value => {
       const wordPosition = getWordAt(value, text);
       const isPositionMoreCurrent =
         wordPosition - defaultBeforeAfterCrop > currentPosition;
@@ -90,7 +90,7 @@ function rebaseText(text: string, highlight: string) {
 
 export function isStringIncludesArrayElement(arr: string[], text: string) {
   let includes = false;
-  arr.forEach((val) => {
+  arr.forEach(val => {
     if (text.toLowerCase().includes(val.toLowerCase())) {
       includes = true;
     }

@@ -34,7 +34,7 @@ describe("Nodes Overview page", () => {
   describe("Live <NodeList/> section initial state", () => {
     const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
       "nodes/live_sort_setting",
-      (s) => s.localSettings,
+      s => s.localSettings,
     );
     const nodesCount = 9;
     const regionsCount = 3;
@@ -223,7 +223,7 @@ describe("Nodes Overview page", () => {
     ];
 
     it("displays correct header of Nodes section with total number of nodes", () => {
-      const wrapper: ReactWrapper = connectedMount((store) => (
+      const wrapper: ReactWrapper = connectedMount(store => (
         <NodeList
           dataSource={dataSource}
           nodesCount={nodesCount}
@@ -239,7 +239,7 @@ describe("Nodes Overview page", () => {
     });
 
     it("displays table with required columns when nodes partitioned by locality", () => {
-      const wrapper: ReactWrapper = connectedMount((store) => (
+      const wrapper: ReactWrapper = connectedMount(store => (
         <NodeList
           dataSource={dataSource}
           nodesCount={nodesCount}
@@ -266,7 +266,13 @@ describe("Nodes Overview page", () => {
       assert.equal(columnCells.length, expectedColumns.length);
 
       expectedColumns.forEach((columnName, idx) =>
-        assert.equal(columnCells.at(idx).text().toLowerCase(), columnName),
+        assert.equal(
+          columnCells
+            .at(idx)
+            .text()
+            .toLowerCase(),
+          columnName,
+        ),
       );
     });
 
@@ -284,7 +290,7 @@ describe("Nodes Overview page", () => {
         "", // logs column doesn't have header text
       ];
       const singleRegionDataSource = dataSource[0];
-      const wrapper = connectedMount((store) => (
+      const wrapper = connectedMount(store => (
         <NodeList
           dataSource={[singleRegionDataSource]}
           nodesCount={singleRegionDataSource.children.length}
@@ -298,12 +304,18 @@ describe("Nodes Overview page", () => {
       );
       assert.equal(columnCells.length, expectedColumns.length);
       expectedColumns.forEach((columnName, idx) =>
-        assert.equal(columnCells.at(idx).text().toLowerCase(), columnName),
+        assert.equal(
+          columnCells
+            .at(idx)
+            .text()
+            .toLowerCase(),
+          columnName,
+        ),
       );
     });
 
     it("displays table with fixed column width", () => {
-      const wrapper: ReactWrapper = connectedMount((store) => (
+      const wrapper: ReactWrapper = connectedMount(store => (
         <NodeList
           dataSource={dataSource}
           nodesCount={nodesCount}
@@ -313,7 +325,7 @@ describe("Nodes Overview page", () => {
         />
       ));
       const columnAttributes = wrapper.find("table colgroup col");
-      columnAttributes.forEach((node) =>
+      columnAttributes.forEach(node =>
         assert.exists(node.hostNodes().props().style.width),
       );
     });
@@ -323,7 +335,7 @@ describe("Nodes Overview page", () => {
     const state = {
       cachedData: {
         nodes: {
-          data: times(7).map((idx) => ({
+          data: times(7).map(idx => ({
             desc: {
               node_id: idx + 1,
               locality: {
@@ -414,10 +426,10 @@ describe("Nodes Overview page", () => {
         );
 
         assert.lengthOf(records, expectedDecommissionedNodeIds.length);
-        records.forEach((record) => {
+        records.forEach(record => {
           assert.isTrue(
             expectedDecommissionedNodeIds.some(
-              (nodeId) => nodeId === record.nodeId,
+              nodeId => nodeId === record.nodeId,
             ),
           );
         });
@@ -428,7 +440,7 @@ describe("Nodes Overview page", () => {
           partitionedNodes,
           nodeSummary,
         );
-        recordsGroupedByRegion.forEach((record) => {
+        recordsGroupedByRegion.forEach(record => {
           const expectedName = `127.0.0.${record.nodeId}:50945`;
           assert.equal(record.nodeName, expectedName);
         });
@@ -448,9 +460,9 @@ describe("Nodes Overview page", () => {
           recordsGroupedByRegion[0].children,
           expectedLiveNodeIds.length,
         );
-        recordsGroupedByRegion[0].children.forEach((record) => {
+        recordsGroupedByRegion[0].children.forEach(record => {
           assert.isTrue(
-            expectedLiveNodeIds.some((nodeId) => nodeId === record.nodeId),
+            expectedLiveNodeIds.some(nodeId => nodeId === record.nodeId),
           );
         });
       });
@@ -460,7 +472,7 @@ describe("Nodes Overview page", () => {
           partitionedNodes,
           nodeSummary,
         );
-        recordsGroupedByRegion[0].children.forEach((record) => {
+        recordsGroupedByRegion[0].children.forEach(record => {
           const expectedName = `127.0.0.${record.nodeId}:50945`;
           assert.equal(record.nodeName, expectedName);
         });

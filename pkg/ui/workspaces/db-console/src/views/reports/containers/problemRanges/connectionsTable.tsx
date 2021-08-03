@@ -25,7 +25,9 @@ interface ConnectionTableColumn {
 }
 
 interface ConnectionsTableProps {
-  problemRanges: CachedDataReducerState<protos.cockroach.server.serverpb.ProblemRangesResponse>;
+  problemRanges: CachedDataReducerState<
+    protos.cockroach.server.serverpb.ProblemRangesResponse
+  >;
 }
 
 const connectionTableColumns: ConnectionTableColumn[] = [
@@ -39,39 +41,39 @@ const connectionTableColumns: ConnectionTableColumn[] = [
   },
   {
     title: "Unavailable",
-    extract: (problem) => problem.unavailable_range_ids.length,
+    extract: problem => problem.unavailable_range_ids.length,
   },
   {
     title: "No Raft Leader",
-    extract: (problem) => problem.no_raft_leader_range_ids.length,
+    extract: problem => problem.no_raft_leader_range_ids.length,
   },
   {
     title: "Invalid Lease",
-    extract: (problem) => problem.no_lease_range_ids.length,
+    extract: problem => problem.no_lease_range_ids.length,
   },
   {
     title: "Raft Leader but not Lease Holder",
-    extract: (problem) => problem.raft_leader_not_lease_holder_range_ids.length,
+    extract: problem => problem.raft_leader_not_lease_holder_range_ids.length,
   },
   {
     title: "Underreplicated (or slow)",
-    extract: (problem) => problem.underreplicated_range_ids.length,
+    extract: problem => problem.underreplicated_range_ids.length,
   },
   {
     title: "Overreplicated",
-    extract: (problem) => problem.overreplicated_range_ids.length,
+    extract: problem => problem.overreplicated_range_ids.length,
   },
   {
     title: "Quiescent equals ticking",
-    extract: (problem) => problem.quiescent_equals_ticking_range_ids.length,
+    extract: problem => problem.quiescent_equals_ticking_range_ids.length,
   },
   {
     title: "Raft log too large",
-    extract: (problem) => problem.raft_log_too_large_range_ids.length,
+    extract: problem => problem.raft_log_too_large_range_ids.length,
   },
   {
     title: "Total",
-    extract: (problem) => {
+    extract: problem => {
       return (
         problem.unavailable_range_ids.length +
         problem.no_raft_leader_range_ids.length +
@@ -84,7 +86,7 @@ const connectionTableColumns: ConnectionTableColumn[] = [
       );
     },
   },
-  { title: "Error", extract: (problem) => problem.error_message },
+  { title: "Error", extract: problem => problem.error_message },
 ];
 
 export default function ConnectionsTable(props: ConnectionsTableProps) {
@@ -99,8 +101,8 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
   }
   const { data } = problemRanges;
   const ids = _.chain(_.keys(data.problems_by_node_id))
-    .map((id) => parseInt(id, 10))
-    .sortBy((id) => id)
+    .map(id => parseInt(id, 10))
+    .sortBy(id => id)
     .value();
   return (
     <div>
@@ -117,7 +119,7 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
               </th>
             ))}
           </tr>
-          {_.map(ids, (id) => {
+          {_.map(ids, id => {
             const rowProblems = data.problems_by_node_id[id];
             const rowClassName = classNames({
               "connections-table__row": true,

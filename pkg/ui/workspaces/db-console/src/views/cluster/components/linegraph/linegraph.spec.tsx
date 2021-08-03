@@ -27,7 +27,7 @@ import {
 } from "src/views/cluster/util/graphs";
 import Long from "long";
 
-describe("<LineGraph>", function () {
+describe("<LineGraph>", function() {
   let spy: sinon.SinonSpy;
   let mockProps: LineGraphProps;
   const linegraph = (props: LineGraphProps) =>

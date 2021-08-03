@@ -97,7 +97,7 @@ export const selectStatements = createSelector(
     const statsByStatementKey: {
       [statement: string]: StatementsSummaryData;
     } = {};
-    statements.forEach((stmt) => {
+    statements.forEach(stmt => {
       const key = statementKey(stmt);
       if (!(key in statsByStatementKey)) {
         statsByStatementKey[key] = {
@@ -111,7 +111,7 @@ export const selectStatements = createSelector(
       statsByStatementKey[key].stats.push(stmt.stats);
     });
 
-    return Object.keys(statsByStatementKey).map((key) => {
+    return Object.keys(statsByStatementKey).map(key => {
       const stmt = statsByStatementKey[key];
       return {
         label: stmt.statement,
@@ -169,7 +169,7 @@ export const selectDatabases = createSelector(
       return [];
     }
     return Array.from(
-      new Set(state.data.statements.map((s) => s.key.key_data.database)),
+      new Set(state.data.statements.map(s => s.key.key_data.database)),
     ).filter((dbName: string) => dbName !== null && dbName.length > 0);
   },
 );

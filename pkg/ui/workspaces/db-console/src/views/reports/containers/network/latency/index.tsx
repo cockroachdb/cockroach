@@ -81,7 +81,7 @@ const generateCollapsedData = (
         rows.push(data[dataIndex].length);
       }
       const maxValues: DetailedRow[] = [];
-      dataItems.forEach((item) => maxValues.push(item.row[x]));
+      dataItems.forEach(item => maxValues.push(item.row[x]));
       collapsedData[dataIndex][0].row.push(
         maxValues.reduce((prev, current) =>
           prev.latency === 0 || prev.latency > current.latency ? prev : current,
@@ -89,11 +89,11 @@ const generateCollapsedData = (
       );
     });
   }
-  return collapsedData.map((array) =>
-    array.map((itemValue) => {
+  return collapsedData.map(array =>
+    array.map(itemValue => {
       let rowsCount = 0;
       const newRow: DetailedRow[] = [];
-      rows.forEach((row) => {
+      rows.forEach(row => {
         const rowEach: DetailedRow[] = [];
         for (let x = 0; x < row; x++) {
           rowEach.push(itemValue.row[rowsCount + x]);
@@ -122,9 +122,9 @@ const renderMultipleHeaders = (
 ) => {
   const data: any = [];
   let rowLength = 0;
-  const filteredData = displayIdentities.map((identityA) => {
+  const filteredData = displayIdentities.map(identityA => {
     const row: any[] = [];
-    displayIdentities.forEach((identityB) => {
+    displayIdentities.forEach(identityB => {
       const a = nodesSummary.nodeStatusByID[identityA.nodeID].activity;
       const nano = FixLong(a[identityB.nodeID].latency);
       if (identityA.nodeID === identityB.nodeID) {
@@ -146,7 +146,7 @@ const renderMultipleHeaders = (
     rowLength = row.length;
     return { row, ...identityA };
   });
-  filteredData.forEach((value) => {
+  filteredData.forEach(value => {
     const newValue = {
       ...value,
       title: multipleHeader
@@ -173,7 +173,7 @@ const renderMultipleHeaders = (
 const getVerticalLines = (data: [DetailedIdentity[]], index: number) => {
   const values: any = [];
   let currentNumber = 0;
-  data.forEach((array) => {
+  data.forEach(array => {
     currentNumber = currentNumber + array.length;
     values.push(currentNumber);
   });
@@ -359,7 +359,7 @@ export const Latency: React.SFC<ILatencyProps> = ({
           <tr className="latency-table__row">
             {multipleHeader && <td />}
             <td className="latency-table__cell latency-table__cell--spacer" />
-            {_.map(data, (value) =>
+            {_.map(data, value =>
               _.map(value, (identity, index: number) =>
                 createHeaderCell(
                   staleIDs,

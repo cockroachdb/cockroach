@@ -25,8 +25,8 @@ export function MetricOption(props: OptionComponentProps) {
       role="option"
       aria-label={label}
       title={option.title}
-      onMouseDown={(event) => onSelect(option, event)}
-      onMouseEnter={(event) => onFocus(option, event)}
+      onMouseDown={event => onSelect(option, event)}
+      onMouseEnter={event => onFocus(option, event)}
     >
       <div className="metric-option__label">{label}</div>
       <div className="metric-option__description" title={description}>

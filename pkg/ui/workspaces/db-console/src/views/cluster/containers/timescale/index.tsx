@@ -348,22 +348,22 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
 const scaleSelector = createSelector(
   (state: AdminUIState) => state?.timewindow,
-  (tw) => tw?.scale,
+  tw => tw?.scale,
 );
 
 const currentWindowSelector = createSelector(
   (state: AdminUIState) => state?.timewindow,
-  (tw) => tw?.currentWindow,
+  tw => tw?.currentWindow,
 );
 
 const timeRangeSelector = createSelector(
   (state: AdminUIState) => state?.timewindow,
-  (tw) => tw?.useTimeRange,
+  tw => tw?.useTimeRange,
 );
 
 const isValidNodeStatus = createSelector(
   (state: AdminUIState) => state?.cachedData?.nodes,
-  (nodes) => nodes?.valid,
+  nodes => nodes?.valid,
 );
 
 export default connect(

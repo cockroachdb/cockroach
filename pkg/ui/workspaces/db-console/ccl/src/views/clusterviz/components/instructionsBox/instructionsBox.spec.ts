@@ -46,7 +46,7 @@ describe("InstructionsBox component", () => {
       },
     ];
 
-    cases.forEach((testCase) => {
+    cases.forEach(testCase => {
       it(`returns ${testCase.expected} for case "${testCase.desc}"`, () => {
         assert.equal(
           showInstructionsBox(testCase.showMap, testCase.tiers),

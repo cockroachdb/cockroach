@@ -28,7 +28,7 @@ import {
   LiveBytesGraphTooltip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
-export default function (props: GraphDashboardProps) {
+export default function(props: GraphDashboardProps) {
   const {
     nodeIDs,
     nodesSummary,
@@ -68,7 +68,7 @@ export default function (props: GraphDashboardProps) {
         This measures essentially an fdatasync to the storage engine's write-ahead log.`}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (nid) => (
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.raft.process.logcommit.latency-p99"
@@ -86,7 +86,7 @@ export default function (props: GraphDashboardProps) {
         This measures essentially an fdatasync to the storage engine's write-ahead log.`}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (nid) => (
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.raft.process.logcommit.latency-p50"
@@ -105,7 +105,7 @@ export default function (props: GraphDashboardProps) {
         (including writes to the write-ahead log), but no fsync.`}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (nid) => (
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.raft.process.commandcommit.latency-p99"
@@ -124,7 +124,7 @@ export default function (props: GraphDashboardProps) {
         (including writes to the write-ahead log), but no fsync.`}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {_.map(nodeIDs, (nid) => (
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
             name="cr.store.raft.process.commandcommit.latency-p50"

@@ -189,7 +189,7 @@ export class SortedTable<T> extends React.Component<
         (cd, ii): SortableColumn => {
           return {
             title: cd.title,
-            cell: (index) => cd.cell(sorted[index]),
+            cell: index => cd.cell(sorted[index]),
             sortKey: cd.sort ? ii : undefined,
             rollup: rollups[ii],
             className: cd.className,

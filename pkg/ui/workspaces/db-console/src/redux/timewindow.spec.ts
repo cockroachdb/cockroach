@@ -12,9 +12,9 @@ import { assert } from "chai";
 import * as timewindow from "./timewindow";
 import moment from "moment";
 
-describe("time window reducer", function () {
-  describe("actions", function () {
-    it("should create the correct action to set the current time window", function () {
+describe("time window reducer", function() {
+  describe("actions", function() {
+    it("should create the correct action to set the current time window", function() {
       const start = moment();
       const end = start.add(10, "s");
       const expectedSetting = {
@@ -30,7 +30,7 @@ describe("time window reducer", function () {
       );
     });
 
-    it("should create the correct action to set time window settings", function () {
+    it("should create the correct action to set time window settings", function() {
       const payload: timewindow.TimeScale = {
         windowSize: moment.duration(10, "s"),
         windowValid: moment.duration(10, "s"),

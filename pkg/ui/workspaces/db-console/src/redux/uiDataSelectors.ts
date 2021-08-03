@@ -18,7 +18,7 @@ import {
 
 export const dismissReleaseNotesSignupForm = createSelector(
   (state: AdminUIState) => state.uiData[RELEASE_NOTES_SIGNUP_DISMISSED_KEY],
-  (hideFormData) => {
+  hideFormData => {
     // Do not show subscription form if data is not initialized yet.
     // It avoids form flickering in case value is set to `false` (hide form) and it
     // is shown for a moment before response is received back.
