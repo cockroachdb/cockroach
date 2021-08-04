@@ -591,17 +591,20 @@ func (ex *connExecutor) execStmtInOpenState(
 	// don't return any event unless an error happens.
 
 	if os.ImplicitTxn.Get() {
-		asOf, err := p.isAsOf(ctx, ast)
-		if err != nil {
-			return makeErrEvent(err)
-		}
-		if asOf != nil {
-			p.extendedEvalCtx.AsOfSystemTime = asOf
-			if !asOf.BoundedStaleness {
-				// What should we fill with now()? We need this statement for that.
-				p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
-				// I guess this isn't needed, ever!
-				ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp)
+		// TODO(XXX): make this do a sanity check?
+		if p.extendedEvalCtx.AsOfSystemTime == nil {
+			asOf, err := p.isAsOf(ctx, ast)
+			if err != nil {
+				return makeErrEvent(err)
+			}
+			if asOf != nil {
+				p.extendedEvalCtx.AsOfSystemTime = asOf
+				if !asOf.BoundedStaleness {
+					// What should we fill with now()? We need this statement for that.
+					p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
+					// I guess this isn't needed, ever!
+					ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp)
+				}
 			}
 		}
 	} else {

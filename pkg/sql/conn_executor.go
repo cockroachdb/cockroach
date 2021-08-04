@@ -2351,7 +2351,6 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.TxnImplicit = ex.implicitTxn()
 	evalCtx.StmtTimestamp = stmtTS
 	evalCtx.TxnTimestamp = ex.state.sqlTimestamp
-	evalCtx.AsOfSystemTime = nil
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil
@@ -2369,6 +2368,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 		evalCtx.PrevMinTimestampBound = &p
 	} else {
 		evalCtx.PrevMinTimestampBound = nil
+		evalCtx.AsOfSystemTime = nil
 	}
 }
 
