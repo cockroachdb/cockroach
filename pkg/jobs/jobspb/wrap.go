@@ -92,6 +92,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeNewSchemaChange
 	case *Payload_Migration:
 		return TypeMigration
+	case *Payload_SqlStatsCompaction:
+		return TypeSQLStatsCompaction
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -128,6 +130,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_NewSchemaChange{NewSchemaChange: &d}
 	case MigrationProgress:
 		return &Progress_Migration{Migration: &d}
+	case SQLStatsCompactionProgress:
+		return &Progress_SqlStatsCompaction{SqlStatsCompaction: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -159,6 +163,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.NewSchemaChange
 	case *Payload_Migration:
 		return *d.Migration
+	case *Payload_SqlStatsCompaction:
+		return *d.SqlStatsCompaction
 	default:
 		return nil
 	}
@@ -190,6 +196,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.NewSchemaChange
 	case *Progress_Migration:
 		return *d.Migration
+	case *Progress_SqlStatsCompaction:
+		return *d.SqlStatsCompaction
 	default:
 		return nil
 	}
@@ -234,6 +242,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_NewSchemaChange{NewSchemaChange: &d}
 	case MigrationDetails:
 		return &Payload_Migration{Migration: &d}
+	case SQLStatsCompactionDetails:
+		return &Payload_SqlStatsCompaction{SqlStatsCompaction: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -269,7 +279,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 13
+const NumJobTypes = 14
 
 // MarshalJSONPB redacts sensitive sink URI parameters from ChangefeedDetails.
 func (p ChangefeedDetails) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte, error) {
