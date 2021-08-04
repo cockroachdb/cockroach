@@ -421,7 +421,7 @@ func (desc *Mutable) HasPostDeserializationChanges() bool {
 func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
 	if defaultPrivilegeDescriptor == nil {
-		defaultPrivilegeDescriptor = descpb.InitDefaultPrivilegeDescriptor()
+		defaultPrivilegeDescriptor = catprivilege.MakeNewDefaultPrivilegeDescriptor()
 	}
 	return catprivilege.MakeDefaultPrivileges(defaultPrivilegeDescriptor)
 }
@@ -430,7 +430,7 @@ func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeD
 func (desc *Mutable) GetMutableDefaultPrivilegeDescriptor() *catprivilege.Mutable {
 	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
 	if defaultPrivilegeDescriptor == nil {
-		defaultPrivilegeDescriptor = descpb.InitDefaultPrivilegeDescriptor()
+		defaultPrivilegeDescriptor = catprivilege.MakeNewDefaultPrivilegeDescriptor()
 	}
 	return catprivilege.NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 }
