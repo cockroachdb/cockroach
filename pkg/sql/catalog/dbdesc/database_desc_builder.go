@@ -128,6 +128,7 @@ func MaybeWithDatabaseRegionConfig(regionConfig *multiregion.RegionConfig) NewIn
 			SurvivalGoal:  regionConfig.SurvivalGoal(),
 			PrimaryRegion: regionConfig.PrimaryRegion(),
 			RegionEnumID:  regionConfig.RegionEnumID(),
+			Placement:     regionConfig.Placement(),
 		}
 	}
 }

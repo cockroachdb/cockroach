@@ -147,7 +147,7 @@ func zoneConfigForMultiRegionDatabase(
 		// non-voters so that REGIONAL BY [TABLE | ROW] can inherit the RESTRICTED
 		// placement. Voter placement will be set at the table/partition level to
 		// the table/partition region.
-		constraints = []zonepb.ConstraintsConjunction{}
+		constraints = nil
 	} else {
 		constraints = make([]zonepb.ConstraintsConjunction, len(regionConfig.Regions()))
 		for i, region := range regionConfig.Regions() {
