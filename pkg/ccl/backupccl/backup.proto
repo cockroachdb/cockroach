@@ -200,6 +200,11 @@ message ScheduledBackupExecutionArgs {
   // might have fallen out of the GC window, without a previously written pts
   // record protecting it from GC.
   bool chain_protected_timestamp_records = 6;
+
+  bytes protected_timestamp_record = 7 [
+   (gogoproto.customname) = "ProtectedTimestampRecord",
+   (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
 }
 
 // RestoreProgress is the information that the RestoreData processor sends back

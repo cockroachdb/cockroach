@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/jobs/schedulesprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -653,7 +654,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Storage:  protectedtsProvider,
 		Cache:    protectedtsProvider,
 		StatusFuncs: ptreconcile.StatusFuncs{
-			jobsprotectedts.MetaType: jobsprotectedts.MakeStatusFunc(jobRegistry),
+			jobsprotectedts.MetaType:      jobsprotectedts.MakeStatusFunc(jobRegistry),
+			schedulesprotectedts.MetaType: schedulesprotectedts.MakeStatusFunc(internalExecutor),
 		},
 	})
 	registry.AddMetricStruct(protectedtsReconciler.Metrics())

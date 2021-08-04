@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/schedulesprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -44,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // BackupCheckpointInterval is the interval at which backup progress is saved
@@ -525,6 +528,12 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	b.deleteCheckpoint(ctx, p.ExecCfg(), p.User())
 
+	// TODO(adtiyamaru): Think about what we should do if any of the operations in
+	// this method fail causing the txn to rollback. Should we transition the job
+	// to a failed state and then allow the schedule to handle the failure based
+	// on how it is configured?
+	b.maybeUpdateProtectedTimestampRecordOnSchedule(ctx, p.ExecCfg())
+
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
@@ -660,6 +669,160 @@ func (b *backupResumer) readManifestOnResume(
 			desc.ClusterID, cfg.ClusterID())
 	}
 	return &desc, nil
+}
+
+func getSpansProtectedByBackup(
+	ctx context.Context, backupDetails jobspb.BackupDetails, txn *kv.Txn, exec *sql.ExecutorConfig,
+) ([]roachpb.Span, error) {
+	if backupDetails.ProtectedTimestampRecord == nil {
+		return nil, nil
+	}
+
+	ptsRecord, err := exec.ProtectedTimestampProvider.GetRecord(ctx, txn,
+		*backupDetails.ProtectedTimestampRecord)
+	if err != nil {
+		return nil, err
+	}
+
+	return ptsRecord.Spans, nil
+}
+
+func releaseProtectedTimestampRecordForSchedule(
+	ctx context.Context, exec *sql.ExecutorConfig, ptsID *uuid.UUID, txn *kv.Txn,
+) error {
+	if ptsID == nil {
+		return nil
+	}
+	err := exec.ProtectedTimestampProvider.Release(ctx, txn, *ptsID)
+	if errors.Is(err, protectedts.ErrNotExists) {
+		// No reason to return an error which might cause problems if it doesn't
+		// seem to exist.
+		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+		err = nil
+	}
+	return err
+}
+
+func protectAndVerifyTimestampRecordForSchedule(
+	ctx context.Context,
+	spansToProtect []roachpb.Span,
+	tsToProtect hlc.Timestamp,
+	scheduleID int64,
+	exec *sql.ExecutorConfig,
+	txn *kv.Txn,
+) (uuid.UUID, error) {
+	var protectedtsID uuid.UUID
+	if len(spansToProtect) > 0 {
+		protectedtsID = uuid.MakeV4()
+		rec := schedulesprotectedts.MakeRecord(protectedtsID, scheduleID, tsToProtect, spansToProtect)
+		if err := exec.ProtectedTimestampProvider.Protect(ctx, txn, rec); err != nil {
+			return protectedtsID, err
+		}
+		if err := exec.ProtectedTimestampProvider.Verify(ctx, protectedtsID); err != nil {
+			return protectedtsID, err
+		}
+	}
+	return protectedtsID, nil
+}
+
+func (b *backupResumer) maybeUpdateProtectedTimestampRecordOnSchedule(
+	ctx context.Context, exec *sql.ExecutorConfig,
+) {
+	env := scheduledjobs.ProdJobSchedulerEnv
+	if knobs, ok := exec.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+		if knobs.JobSchedulerEnv != nil {
+			env = knobs.JobSchedulerEnv
+		}
+	}
+
+	if err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Do not rely on b.job containing created_by_id. Query it directly.
+		datums, err := exec.InternalExecutor.QueryRowEx(
+			ctx,
+			"lookup-schedule-info",
+			txn,
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			fmt.Sprintf(
+				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
+				env.SystemJobsTableName()),
+			b.job.ID(), jobs.CreatedByScheduledJobs)
+
+		if err != nil {
+			return errors.Wrap(err, "schedule info lookup")
+		}
+		if datums == nil {
+			// Not a scheduled backup.
+			return nil
+		}
+
+		scheduleID := int64(tree.MustBeDInt(datums[0]))
+		schedule, err := jobs.LoadScheduledJob(ctx, env, scheduleID, exec.InternalExecutor, txn)
+		if err != nil {
+			return errors.Wrap(err, "load scheduled job")
+		}
+
+		// Check if the schedule is configured to chain protected timestamp records.
+		args := &ScheduledBackupExecutionArgs{}
+		if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, args); err != nil {
+			return errors.Wrap(err, "un-marshaling args")
+		}
+		if !args.ChainProtectedTimestampRecords {
+			return nil
+		}
+
+		// Resolve the spans that need to be protected on this execution of the
+		// scheduled backup.
+		// TODO(during review): For incremental backups should we resolve these
+		// spans from the record written in the schedule instead of the job?
+		// This would guarantee that we are not trying to protect anything more
+		// than we did the last time around.
+		// For the first full we would still need to check with the backup job.
+		var backupDetails jobspb.BackupDetails
+		var ok bool
+		if backupDetails, ok = b.job.Details().(jobspb.BackupDetails); !ok {
+			return errors.Newf("unexpcted job details type %T", b.job.Details())
+		}
+
+		spansToProtect, err := getSpansProtectedByBackup(ctx, backupDetails, txn, exec)
+		if err != nil {
+			return errors.Wrap(err, "getting spans to protect")
+		}
+
+		// Protect the spans after the EndTime of the current backup. This should
+		// always succeed because we have PTS record written by the job or a
+		// previous execution of this schedule already protecting these spans after
+		// a timestamp less than equal to EndTime.
+		ptsRecord, err := protectAndVerifyTimestampRecordForSchedule(ctx, spansToProtect,
+			backupDetails.EndTime, scheduleID, exec, txn)
+		if err != nil {
+			return errors.Wrap(err, "protect and verify pts record for schedule")
+		}
+
+		// Release the pts record written by the previous execution of this
+		// schedule.
+		if err := releaseProtectedTimestampRecordForSchedule(ctx, exec,
+			args.ProtectedTimestampRecord, txn); err != nil {
+			return errors.Wrap(err, "releasing pts record for schedule")
+		}
+
+		// Update the schedule with the new pts record.
+		args.ProtectedTimestampRecord = &ptsRecord
+		any, err := pbtypes.MarshalAny(args)
+		if err != nil {
+			return errors.Wrap(err, "marshaling args")
+		}
+		schedule.SetExecutionDetails(
+			schedule.ExecutorType(),
+			jobspb.ExecutionArguments{Args: any},
+		)
+		if err := schedule.Update(ctx, exec.InternalExecutor, txn); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		log.Errorf(ctx, "maybeUpdateProtectedTimestampRecordOnSchedule error: %v", err)
+	}
 }
 
 func (b *backupResumer) maybeNotifyScheduledJobCompletion(
