@@ -99,7 +99,7 @@ func makeCatchupIteratorConstructor(iter storage.SimpleMVCCIterator) CatchupIter
 	if iter == nil {
 		return nil
 	}
-	return func() CatchupIterator { return catchupIterator{SimpleMVCCIterator: iter} }
+	return func() *CatchupIterator { return &CatchupIterator{SimpleMVCCIterator: iter} }
 }
 
 func newTestRegistration(
