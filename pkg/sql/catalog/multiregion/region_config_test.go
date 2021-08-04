@@ -31,26 +31,26 @@ func TestValidateRegionConfig(t *testing.T) {
 	}{
 		{
 			err: "expected a valid multi-region enum ID",
-			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
-					"region_a",
-					"region_b",
-				},
+			regionConfig: multiregion.MakeRegionConfig(descpb.RegionNames{
+				"region_a",
+				"region_b",
+			},
 				"region_b",
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
 			),
 		},
 		{
 			err: "3 regions are required for surviving a region failure",
-			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
-					"region_a",
-					"region_b",
-				},
+			regionConfig: multiregion.MakeRegionConfig(descpb.RegionNames{
+				"region_a",
+				"region_b",
+			},
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
 			),
 		},
 		{
@@ -60,6 +60,17 @@ func TestValidateRegionConfig(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+			),
+		},
+		{
+			err: "cannot have a database with restricted placement that is also region survivable",
+			regionConfig: multiregion.MakeRegionConfig(
+				descpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_RESTRICTED,
 			),
 		},
 	}
@@ -68,6 +79,12 @@ func TestValidateRegionConfig(t *testing.T) {
 		err := multiregion.ValidateRegionConfig(tc.regionConfig)
 
 		require.Error(t, err)
-		require.True(t, testutils.IsError(err, tc.err), "expected err %v, got %v", tc.err, err)
+		require.True(
+			t,
+			testutils.IsError(err, tc.err),
+			"expected err %v, got %v",
+			tc.err,
+			err,
+		)
 	}
 }
