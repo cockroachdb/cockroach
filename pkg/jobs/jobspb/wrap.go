@@ -99,6 +99,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeMigration
 	case *Payload_AutoSpanConfigReconciliation:
 		return TypeAutoSpanConfigReconciliation
+	case *Payload_SqlStatsCompaction:
+		return TypeSQLStatsCompaction
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -137,6 +139,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_Migration{Migration: &d}
 	case AutoSpanConfigReconciliationProgress:
 		return &Progress_AutoSpanConfigReconciliation{AutoSpanConfigReconciliation: &d}
+	case SQLStatsCompactionProgress:
+		return &Progress_SqlStatsCompaction{SqlStatsCompaction: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -170,6 +174,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.Migration
 	case *Payload_AutoSpanConfigReconciliation:
 		return *d.AutoSpanConfigReconciliation
+	case *Payload_SqlStatsCompaction:
+		return *d.SqlStatsCompaction
 	default:
 		return nil
 	}
@@ -203,6 +209,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.Migration
 	case *Progress_AutoSpanConfigReconciliation:
 		return *d.AutoSpanConfigReconciliation
+	case *Progress_SqlStatsCompaction:
+		return *d.SqlStatsCompaction
 	default:
 		return nil
 	}
@@ -249,6 +257,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_Migration{Migration: &d}
 	case AutoSpanConfigReconciliationDetails:
 		return &Payload_AutoSpanConfigReconciliation{AutoSpanConfigReconciliation: &d}
+	case SQLStatsCompactionDetails:
+		return &Payload_SqlStatsCompaction{SqlStatsCompaction: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -284,7 +294,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 14
+const NumJobTypes = 15
 
 // MarshalJSONPB redacts sensitive sink URI parameters from ChangefeedDetails.
 func (p ChangefeedDetails) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte, error) {
