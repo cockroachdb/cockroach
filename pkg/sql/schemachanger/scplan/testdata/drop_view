@@ -10,6 +10,10 @@ ops
 DROP VIEW defaultdb.v1
 ----
 Stage 0
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 53
+    TableID: 52
+Stage 1
   *scop.MarkDescriptorAsDropped
     TableID: 53
   *scop.DrainDescriptorName
@@ -45,6 +49,24 @@ ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
 Stage 0
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 53
+    TableID: 52
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 54
+    TableID: 53
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 55
+    TableID: 53
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 55
+    TableID: 54
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 56
+    TableID: 54
+  *scop.RemoveRelationDependedOnBy
+    DependedOnBy: 59
+    TableID: 56
   *scop.RemoveTypeBackRef
     DescID: 59
     TypeID: 57
