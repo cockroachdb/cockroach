@@ -44,43 +44,43 @@ func TestSpanConfigDecoder(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	span := func(start, end string) roachpb.Span {
-		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	getCount := func() int {
+		explain := tdb.Query(t, `SELECT count(*) FROM system.span_configurations`)
+		explain.Next()
+		var c int
+		require.Nil(t, explain.Scan(&c))
+		require.Nil(t, explain.Close())
+		return c
 	}
-	entries := []roachpb.SpanConfigEntry{
-		{
-			Span:   span("a", "c"),
-			Config: roachpb.SpanConfig{},
-		},
-		{
-			Span:   span("d", "f"),
-			Config: roachpb.SpanConfig{NumReplicas: 5, NumVoters: 3},
-		},
-	}
-	for _, entry := range entries {
-		buf, err := protoutil.Marshal(&entry.Config)
-		require.NoError(t, err)
-		tdb.Exec(t, "UPSERT INTO system.span_configurations (start_key, end_key, config) VALUES ($1, $2, $3)",
-			entry.Span.Key, entry.Span.EndKey, buf)
-	}
+
+	initialCount := getCount()
+
+	key := tc.ScratchRange(t)
+	rng := tc.GetFirstStoreFromServer(t, 0).LookupReplica(keys.MustAddr(key))
+	span := rng.Desc().RSpan().AsRawSpanWithNoLocals()
+	conf := roachpb.SpanConfig{NumReplicas: 5, NumVoters: 3}
+
+	buf, err := protoutil.Marshal(&conf)
+	require.NoError(t, err)
+	tdb.Exec(t, "UPSERT INTO system.span_configurations (start_key, end_key, config) VALUES ($1, $2, $3)",
+		span.Key, span.EndKey, buf)
+	require.Equal(t, initialCount+1, getCount())
 
 	k := keys.SystemSQLCodec.TablePrefix(keys.SpanConfigurationsTableID)
 	rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 	require.NoError(t, err)
-	require.Equal(t, len(rows), len(entries))
+	require.Len(t, rows, initialCount+1)
 
-	dec := spanconfigkvwatcher.NewSpanConfigDecoder()
-	for i, row := range rows {
-		kv := roachpb.KeyValue{
-			Key:   row.Key,
-			Value: *row.Value,
-		}
-		got, err := dec.Decode(kv)
-		require.NoError(t, err)
-
-		require.Truef(t, entries[i].Span.Equal(got.Span),
-			"entries[%d].span=%s != got.span=%s", i, entries[i].Span, got.Span)
-		require.Truef(t, entries[i].Config.Equal(got.Config),
-			"entries[%d].config=%s != config.span=%s", i, entries[i].Config, got.Config)
-	}
+	last := rows[len(rows)-1]
+	got, err := spanconfigkvwatcher.NewTestingDecoderFn()(
+		roachpb.KeyValue{
+			Key:   last.Key,
+			Value: *last.Value,
+		},
+	)
+	require.NoError(t, err)
+	require.Truef(t, span.Equal(got.Span),
+		"expected span=%s, got span=%s", span, got.Span)
+	require.Truef(t, conf.Equal(got.Config),
+		"expected config=%s, got config=%s", conf, got.Config)
 }

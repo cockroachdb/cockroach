@@ -207,9 +207,11 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	var splits []roachpb.RKey
 	if !ltc.DontCreateSystemRanges {
 		schema := bootstrap.MakeMetadataSchema(
-			keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
+			keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 		)
 		var tableSplits []roachpb.RKey
+		// TODO(zcfgs-pod): Once we've fully replaced the SystemConfigSpan, we
+		// don't have to split on table boundaries, and this can be removed.
 		initialValues, tableSplits = schema.GetInitialValues()
 		splits = append(config.StaticSplits(), tableSplits...)
 		sort.Slice(splits, func(i, j int) bool {

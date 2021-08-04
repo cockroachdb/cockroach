@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -27,16 +26,15 @@ import (
 
 func TestCalculateThreshold(t *testing.T) {
 	for _, c := range []struct {
-		ttlSeconds int32
-		ts         hlc.Timestamp
+		gcTTL time.Duration
+		ts    hlc.Timestamp
 	}{
 		{
-			ts:         hlc.Timestamp{WallTime: time.Hour.Nanoseconds(), Logical: 0},
-			ttlSeconds: 1,
+			ts:    hlc.Timestamp{WallTime: time.Hour.Nanoseconds(), Logical: 0},
+			gcTTL: time.Second,
 		},
 	} {
-		policy := zonepb.GCPolicy{TTLSeconds: c.ttlSeconds}
-		require.Equal(t, c.ts, TimestampForThreshold(CalculateThreshold(c.ts, policy), policy))
+		require.Equal(t, c.ts, TimestampForThreshold(CalculateThreshold(c.ts, c.gcTTL), c.gcTTL))
 	}
 }
 
@@ -124,7 +122,7 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 		StartKey: roachpb.RKey(key),
 		EndKey:   roachpb.RKey("b"),
 	}
-	policy := zonepb.GCPolicy{TTLSeconds: 1}
+	gcTTL := time.Second
 	snap := eng.NewSnapshot()
 	nowTs := hlc.Timestamp{
 		WallTime: now.Nanoseconds(),
@@ -132,13 +130,13 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	fakeGCer := makeFakeGCer()
 
 	// Test GC desired behavior.
-	info, err := Run(ctx, &desc, snap, nowTs, nowTs, intentLongThreshold, policy, &fakeGCer, fakeGCer.resolveIntents,
+	info, err := Run(ctx, &desc, snap, nowTs, nowTs, intentLongThreshold, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Zero(t, info.IntentsConsidered,
 		"Expected no intents considered by GC with default threshold")
 
-	info, err = Run(ctx, &desc, snap, nowTs, nowTs, intentShortThreshold, policy, &fakeGCer, fakeGCer.resolveIntents,
+	info, err = Run(ctx, &desc, snap, nowTs, nowTs, intentShortThreshold, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Equal(t, 1, info.IntentsConsidered,

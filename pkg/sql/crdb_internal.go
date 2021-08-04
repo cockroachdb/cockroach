@@ -2871,9 +2871,9 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	start_pretty,
 	end_key,
 	end_pretty,
-  table_id,
+  	table_id,
 	database_name,
-  schema_name,
+  	schema_name,
 	table_name,
 	index_name,
 	replicas,
@@ -3222,8 +3222,8 @@ CREATE TABLE crdb_internal.zones (
 
 			// Inherit full information about this zone.
 			fullZone := configProto
-			// TODO(zcfg-pod): We currently lack introspection for zone configurations
-			// for secondary tenants.
+			// TODO(zcfgs-pod): We currently lack introspection for zone
+			// configurations for secondary tenants.
 			if err := completeZoneConfig(
 				&fullZone,
 				p.ExtendedEvalContext().Codec,

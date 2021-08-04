@@ -159,6 +159,25 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+// Minimum time interval between span config updates which will lead to
+// enqueuing replicas.
+var queueAdditionOnSpanConfigUpdateRate = settings.RegisterFloatSetting(
+	"kv.store.span_config_update.queue_add_rate",
+	"the rate (per second) at which the store will add, all replicas to the split and merge queue due to span config updates",
+	.5,
+	settings.NonNegativeFloat,
+)
+
+// Minimum time interval between span config updates which will lead to
+// enqueuing replicas. The default is relatively high to deal with startup
+// scenarios.
+var queueAdditionOnSpanConfigUpdateBurst = settings.RegisterIntSetting(
+	"kv.store.span_config_update.queue_add_burst",
+	"the burst rate at which the store will add all replicas to the split and merge queue due to span config updates",
+	32,
+	settings.NonNegativeInt,
+)
+
 // leaseTransferWait limits the amount of time a drain command waits for lease
 // and Raft leadership transfers.
 var leaseTransferWait = func() *settings.DurationSetting {
@@ -177,6 +196,16 @@ var leaseTransferWait = func() *settings.DurationSetting {
 	s.SetVisibility(settings.Public)
 	return s
 }()
+
+// ExperimentalSpanConfigsEnabled is a hidden cluster setting to enable the use
+// of the span configs infrastructure in KV. It switches every each store in the
+// cluster from using the gossiped back system config span to instead using the
+// span configs infrastructure.
+var ExperimentalSpanConfigsEnabled = settings.RegisterBoolSetting(
+	"kv.experimental_span_configs.enabled",
+	"enable the use of span configs in KV",
+	false,
+)
 
 const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 
@@ -201,8 +230,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		DefaultZoneConfig:           zonepb.DefaultZoneConfigRef(),
-		DefaultSystemZoneConfig:     zonepb.DefaultSystemZoneConfigRef(),
+		DefaultSpanConfig:           zonepb.DefaultZoneConfigRef().AsSpanConfig(),
+		DefaultSystemSpanConfig:     zonepb.DefaultSystemZoneConfigRef().AsSpanConfig(),
 		Settings:                    st,
 		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
 		Clock:                       clock,
@@ -625,7 +654,8 @@ type Store struct {
 	computeInitialMetrics              sync.Once
 	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 
-	spanConfigStore spanconfig.Store
+	spanConfigStore                  *spanconfigstore.Store
+	spanConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 }
 
 var _ kv.Sender = &Store{}
@@ -638,8 +668,8 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultZoneConfig       *zonepb.ZoneConfig
-	DefaultSystemZoneConfig *zonepb.ZoneConfig
+	DefaultSpanConfig       roachpb.SpanConfig
+	DefaultSystemSpanConfig roachpb.SpanConfig
 	Settings                *cluster.Settings
 	Clock                   *hlc.Clock
 	DB                      *kv.DB
@@ -810,7 +840,7 @@ func NewStore(
 		nodeDesc:        nodeDesc,
 		metrics:         newStoreMetrics(cfg.HistogramWindowInterval),
 		ctSender:        cfg.ClosedTimestampSender,
-		spanConfigStore: spanconfigstore.New(),
+		spanConfigStore: spanconfigstore.NewWithoutCoalesce(),
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
@@ -921,20 +951,34 @@ func NewStore(
 	queueAdditionOnSystemConfigUpdateBurst.SetOnChange(&cfg.Settings.SV,
 		updateSystemConfigUpdateQueueLimits)
 
+	s.spanConfigUpdateQueueRateLimiter = quotapool.NewRateLimiter(
+		"SpanConfigUpdateQueue",
+		quotapool.Limit(queueAdditionOnSpanConfigUpdateRate.Get(&cfg.Settings.SV)),
+		queueAdditionOnSpanConfigUpdateBurst.Get(&cfg.Settings.SV))
+	updateSpanConfigUpdateQueueLimits := func(ctx context.Context) {
+		s.spanConfigUpdateQueueRateLimiter.UpdateLimit(
+			quotapool.Limit(queueAdditionOnSpanConfigUpdateRate.Get(&cfg.Settings.SV)),
+			queueAdditionOnSpanConfigUpdateBurst.Get(&cfg.Settings.SV))
+	}
+	queueAdditionOnSpanConfigUpdateRate.SetOnChange(&cfg.Settings.SV,
+		updateSpanConfigUpdateQueueLimits)
+	queueAdditionOnSpanConfigUpdateBurst.SetOnChange(&cfg.Settings.SV,
+		updateSpanConfigUpdateQueueLimits)
+
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
-		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
-		s.mergeQueue = newMergeQueue(s, s.db, s.cfg.Gossip)
-		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
-		s.replicateQueue = newReplicateQueue(s, s.cfg.Gossip, s.allocator)
-		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
-		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
-		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.cfg.Gossip)
-		s.consistencyQueue = newConsistencyQueue(s, s.cfg.Gossip)
+		s.gcQueue = newGCQueue(s)
+		s.mergeQueue = newMergeQueue(s, s.db)
+		s.splitQueue = newSplitQueue(s, s.db)
+		s.replicateQueue = newReplicateQueue(s, s.allocator)
+		s.replicaGCQueue = newReplicaGCQueue(s, s.db)
+		s.raftLogQueue = newRaftLogQueue(s, s.db)
+		s.raftSnapshotQueue = newRaftSnapshotQueue(s)
+		s.consistencyQueue = newConsistencyQueue(s)
 		// NOTE: If more queue types are added, please also add them to the list of
 		// queues on the EnqueueRange debug page as defined in
 		// pkg/ui/src/views/reports/containers/enqueueRange/index.tsx
@@ -947,7 +991,7 @@ func NewStore(
 		}
 		if tsDS != nil {
 			s.tsMaintenanceQueue = newTimeSeriesMaintenanceQueue(
-				s, s.db, s.cfg.Gossip, tsDS,
+				s, s.db, tsDS,
 			)
 			s.scanner.AddQueues(s.tsMaintenanceQueue)
 		}
@@ -1134,12 +1178,12 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 					}
 
 					if needsLeaseTransfer {
-						desc, zone := r.DescAndZone()
+						desc, conf := r.DescAndSpanConfig()
 						transferStatus, err := s.replicateQueue.shedLease(
 							ctx,
 							r,
 							desc,
-							zone,
+							conf,
 							transferLeaseOptions{},
 						)
 						if transferStatus != transferOK {
@@ -1543,6 +1587,39 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
 	}
 
+	ExperimentalSpanConfigsEnabled.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
+		enabled := ExperimentalSpanConfigsEnabled.Get(&s.ClusterSettings().SV)
+		if !enabled {
+			if s.cfg.Gossip != nil && s.cfg.Gossip.GetSystemConfig() != nil {
+				s.systemGossipUpdate(s.cfg.Gossip.GetSystemConfig())
+			}
+
+			return
+		}
+
+		now := s.cfg.Clock.NowAsClockTimestamp()
+		shouldQueue := s.spanConfigUpdateQueueRateLimiter.AdmitN(1)
+		newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+			ctx := repl.AnnotateCtx(ctx)
+			key := repl.Desc().StartKey
+			conf, err := s.spanConfigStore.GetSpanConfigForKey(ctx, key)
+			if err != nil {
+				log.Fatalf(ctx, "%v", err)
+			}
+
+			repl.SetSpanConfig(conf)
+			if shouldQueue {
+				s.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+					h.MaybeAdd(ctx, repl, now)
+				})
+				s.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+					h.MaybeAdd(ctx, repl, now)
+				})
+			}
+			return true // more
+		})
+	})
+
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
 	if s.cfg.Gossip != nil {
@@ -1581,10 +1658,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	}
 
-	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
-		s.startLeaseRenewer(ctx)
-	}
-
 	// SpanConfigWatcher is only ever nil in unit tests.
 	if s.cfg.SpanConfigWatcher != nil && !s.cfg.TestingKnobs.DisableSpanConfigWatcher {
 		// Start the watcher process to listen in on span config updates and
@@ -1608,6 +1681,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}); err != nil {
 			return err
 		}
+	}
+
+	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
+		s.startLeaseRenewer(ctx)
 	}
 
 	// Connect rangefeeds to closed timestamp updates.
@@ -1749,6 +1826,71 @@ func (s *Store) startGossip() {
 			s.initComplete.Done()
 		}
 	}
+}
+
+var errSysCfgUnavailable = errors.New("system config not available in gossip")
+
+type shadowConfReader struct {
+	new, old spanconfig.StoreReader
+}
+
+func (s *shadowConfReader) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+	new := s.new.NeedsSplit(ctx, start, end)
+	old := s.old.NeedsSplit(ctx, start, end)
+	if new != old && log.V(1) {
+		log.Warningf(ctx, "needs split: mismatched responses between old(%t) and new(%t): start=%s end=%s",
+			old, new, start.String(), end.String())
+	}
+	return new
+}
+
+func (s *shadowConfReader) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
+	new := s.new.ComputeSplitKey(ctx, start, end)
+	old := s.old.ComputeSplitKey(ctx, start, end)
+	if !new.Equal(old) {
+		str := func(k roachpb.RKey) string {
+			if len(k) == 0 {
+				return ""
+			}
+			return k.String()
+		}
+
+		log.Warningf(ctx, "compute split key: mismatched responses between old(%s) and new(%s): start=%s end=%s",
+			str(old), str(new), str(start), str(end))
+	}
+	return new
+}
+
+func (s *shadowConfReader) GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error) {
+	new, errNew := s.new.GetSpanConfigForKey(ctx, key)
+	old, errOld := s.old.GetSpanConfigForKey(ctx, key)
+	if !new.Equal(old) {
+		log.Warningf(ctx, "get span: mismatched responses new=%s old=%s for key=%s", new.String(), old.String(), key.String())
+	}
+	if !errors.Is(errNew, errOld) {
+		log.Warningf(ctx, "get span: mismatched errors new=%s old=%s for key=%s", errNew, errOld, key.String())
+	}
+	return new, errNew
+}
+
+var _ spanconfig.StoreReader = &shadowConfReader{}
+
+// GetConfReader exposes access to a configuration reader.
+func (s *Store) GetConfReader() (spanconfig.StoreReader, error) {
+	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
+		return nil, errSysCfgUnavailable
+	}
+
+	sysCfg := s.cfg.Gossip.GetSystemConfig()
+	if sysCfg == nil {
+		return nil, errSysCfgUnavailable
+	}
+
+	if ExperimentalSpanConfigsEnabled.Get(&s.ClusterSettings().SV) {
+		return &shadowConfReader{s.spanConfigStore, sysCfg}, nil
+	}
+
+	return sysCfg, nil
 }
 
 // startLeaseRenewer runs an infinite loop in a goroutine which regularly
@@ -1964,6 +2106,11 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		log.Event(ctx, "computed initial metrics")
 	})
 
+	if ExperimentalSpanConfigsEnabled.Get(&s.ClusterSettings().SV) {
+		// The setting toggles from one sub-system to another.
+		return
+	}
+
 	// We'll want to offer all replicas to the split and merge queues. Be a little
 	// careful about not spawning too many individual goroutines.
 
@@ -1973,14 +2120,14 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 	shouldQueue := s.systemConfigUpdateQueueRateLimiter.AdmitN(1)
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		key := repl.Desc().StartKey
-		zone, err := sysCfg.GetZoneConfigForKey(key)
+		conf, err := sysCfg.GetSpanConfigForKey(ctx, key)
 		if err != nil {
 			if log.V(1) {
-				log.Infof(context.TODO(), "failed to get zone config for key %s", key)
+				log.Infof(context.TODO(), "failed to get span config for key %s", key)
 			}
-			zone = s.cfg.DefaultZoneConfig
+			conf = s.cfg.DefaultSpanConfig
 		}
-		repl.SetZoneConfig(zone)
+		repl.SetSpanConfig(conf)
 		if shouldQueue {
 			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
@@ -1996,16 +2143,55 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
 func (s *Store) onSpanConfigUpdate(update spanconfig.Update) {
-	// TODO(zcfgs-pod): Apply the span config update locally, updating the
-	// relevant replicas and queuing up the implied merge/split actions.
+	ctx := s.AnnotateCtx(context.Background())
+	// TODO(zcfgs-pod): Take in a spanconfig.StoreWriter interface here
+	// instead. Or do this at the level above.
+	s.spanConfigStore.Apply(update)
 
-	if update.Deleted {
-		// TODO(zcfgs-pod): A spanconfig.StoreWriter interface is all that's
-		// needed here.
-		s.spanConfigStore.SetSpanConfig(update.Entry.Span, roachpb.SpanConfig{})
-	} else {
-		s.spanConfigStore.SetSpanConfig(update.Entry.Span, update.Entry.Config)
+	if log.V(1) {
+		log.Infof(ctx, "received update span=%s conf=%s deleted=%t", update.Entry.Span, update.Entry.Config.String(), update.Deleted)
 	}
+
+	if !ExperimentalSpanConfigsEnabled.Get(&s.ClusterSettings().SV) {
+		return
+	}
+
+	// We'll want to offer all replicas to the split and merge queues. Be a
+	// little careful about not spawning too many individual goroutines.
+
+	now := s.cfg.Clock.NowAsClockTimestamp()
+	shouldQueue := s.spanConfigUpdateQueueRateLimiter.AdmitN(1)
+	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+		ctx := repl.AnnotateCtx(ctx)
+		replicaSpan := repl.Desc().RSpan().AsRawSpanWithNoLocals()
+
+		if !update.Entry.Span.Overlaps(replicaSpan) {
+			return true // more
+		}
+
+		// TODO(zcfgs-pod): Once we've moved off of the SystemConfigSpan
+		// entirely, we can improve the spanconfig.StoreReader interface to
+		// instead return the config over the range's entire keyspan -- and in
+		// doing so we'd learn whether the range needs a split or a merge (if
+		// two configs are returned, or a config that's wider than our range's
+		// boundary).
+		key := repl.Desc().StartKey
+		conf, err := s.spanConfigStore.GetSpanConfigForKey(ctx, key)
+		if err != nil {
+			log.Fatalf(ctx, "%v", err)
+		}
+
+		repl.SetSpanConfig(conf)
+		if shouldQueue {
+			s.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+			s.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+		}
+		return true // more
+	})
 }
 
 func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached bool) {
@@ -2822,10 +3008,11 @@ func (s *Store) ManuallyEnqueue(
 		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
-	if sysCfg == nil {
-		return nil, nil, errors.New("cannot run queue without a valid system config; make sure the cluster " +
-			"has been initialized and all nodes connected to it")
+	confReader, err := s.GetConfReader()
+	if err != nil {
+		return nil, nil, errors.Wrap(err,
+			"unable to retrieve conf reader, cannot run queue; make sure "+
+				"the cluster has been initialized and all nodes connected to it")
 	}
 
 	// Many queues are only meant to be run on leaseholder replicas, so attempt to
@@ -2846,7 +3033,7 @@ func (s *Store) ManuallyEnqueue(
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
-		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, sysCfg)
+		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
 			return collect(), nil, nil
@@ -2854,7 +3041,7 @@ func (s *Store) ManuallyEnqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := queue.process(ctx, repl, sysCfg)
+	processed, processErr := queue.process(ctx, repl, confReader)
 	log.Eventf(ctx, "processed: %t", processed)
 	return collect(), processErr, nil
 }

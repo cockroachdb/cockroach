@@ -1394,6 +1394,11 @@ func createImportingDescriptors(
 					if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, &tenant); err != nil {
 						return err
 					}
+					if err := sql.CreateTenantSpanConfig(ctx, p.ExecCfg(), txn, &tenant,
+						p.ExtendedEvalContext().ExecCfg.DefaultZoneConfig.AsSpanConfig(),
+					); err != nil {
+						return err
+					}
 				}
 
 				details.PrepareCompleted = true

@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
@@ -57,6 +58,7 @@ go_test(
         "//pkg/sql/catalog/lease",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",

@@ -362,9 +362,6 @@ func addZoneConfigKVsToSchema(
 
 	// Both the system tenant and secondary tenants get their own RANGE DEFAULT
 	// zone configuration.
-	// TODO(zcfgs-pod): This might be better suited to a single startup migration
-	// instead of adding it in two places for tenants -- here and in the tenant
-	// migration.
 	target.otherKV = append(target.otherKV,
 		CreateZoneConfigKV(keys.RootNamespaceID, target.codec, defaultZoneConfig))
 
@@ -395,6 +392,8 @@ func addZoneConfigKVsToSchema(
 			CreateZoneConfigKV(keys.LivenessRangesID, target.codec, livenessZoneConf))
 		target.otherKV = append(target.otherKV,
 			CreateZoneConfigKV(keys.SystemRangesID, target.codec, systemZoneConf))
+
+		// TODO(zcfgs-pod): Should tenants get their own DATABASE system config?
 		target.otherKV = append(target.otherKV,
 			CreateZoneConfigKV(keys.SystemDatabaseID, target.codec, systemZoneConf))
 		target.otherKV = append(target.otherKV,

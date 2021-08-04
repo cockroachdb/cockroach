@@ -31,6 +31,12 @@ var (
 	// NodeLivenessSpan holds the liveness records for nodes in the cluster.
 	NodeLivenessSpan = roachpb.Span{Key: NodeLivenessPrefix, EndKey: NodeLivenessKeyMax}
 
+	// TimeseriesSpan holds all the timeseries data in the cluster.
+	TimeseriesSpan = roachpb.Span{Key: TimeseriesPrefix, EndKey: TimeseriesKeyMax}
+
+	// SystemSpan holds all the global, system data in the cluster.
+	SystemSpan = roachpb.Span{Key: SystemPrefix, EndKey: SystemMax}
+
 	// SystemConfigSpan is the range of system objects which will be gossiped.
 	SystemConfigSpan = roachpb.Span{Key: SystemConfigSplitKey, EndKey: SystemConfigTableDataMax}
 
@@ -39,5 +45,8 @@ var (
 	// Meta2MaxSpan: between meta and system ranges.
 	// NodeLivenessSpan: liveness information on nodes in the cluster.
 	// SystemConfigSpan: system objects which will be gossiped.
+	//
+	// TODO(zcfgs-pod): Once we've stopped special casing the system config span,
+	// we can split it like regular ranges.
 	NoSplitSpans = []roachpb.Span{Meta1Span, Meta2MaxSpan, NodeLivenessSpan, SystemConfigSpan}
 )

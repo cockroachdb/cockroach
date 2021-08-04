@@ -287,7 +287,7 @@ var (
 	//
 	// TableDataMin is the start of the range of table data keys.
 	TableDataMin = SystemSQLCodec.TablePrefix(0)
-	// TableDataMin is the end of the range of table data keys.
+	// TableDataMax is the end of the range of table data keys.
 	TableDataMax = SystemSQLCodec.TablePrefix(math.MaxUint32).PrefixEnd()
 	//
 	// SystemConfigSplitKey is the key to split at immediately prior to the

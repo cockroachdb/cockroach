@@ -112,7 +112,7 @@ func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 // than backpressureRangeSizeMultiplier times larger than the split size but not
 // larger than that by more than backpressureByteTolerance (see that comment for
 // further explanation).
-func (r *Replica) shouldBackpressureWrites() bool {
+func (r *Replica) shouldBackpressureWrites() (result bool) {
 	mult := backpressureRangeSizeMultiplier.Get(&r.store.cfg.Settings.SV)
 	if mult == 0 {
 		// Disabled.

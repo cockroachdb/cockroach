@@ -275,6 +275,9 @@ func (c *Connector) updateSystemConfig(ctx context.Context, key string, content 
 }
 
 // GetSystemConfig implements the config.SystemConfigProvider interface.
+//
+// TODO(zcfgs-pod): We want to remove the remaining uses of this in SQL.
+// GC job, listening in on TTL changes for SQL objects, and the opt catalog.
 func (c *Connector) GetSystemConfig() *config.SystemConfig {
 	// TODO(nvanbenschoten): we need to wait in `(*Connector).Start()` until the
 	// system config is populated. As is, there's a small chance that we return

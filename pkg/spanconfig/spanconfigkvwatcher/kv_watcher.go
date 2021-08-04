@@ -23,8 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-// New instantiates a KVWatcher that watches span configuration updates on
-//syste.span_configurations.
+// New instantiates a KVWatcher watching for updates to system.span_configurations.
 func New(db *kv.DB, clock *hlc.Clock, rangeFeedFactory *rangefeed.Factory) *KVWatcher {
 	return &KVWatcher{
 		db:               db,
@@ -55,7 +54,7 @@ func (w *KVWatcher) WatchForKVUpdates(
 		Key:    spanConfigTableStart,
 		EndKey: spanConfigTableStart.PrefixEnd(),
 	}
-	rowDecoder := NewSpanConfigDecoder()
+	rowDecoder := newSpanConfigDecoder()
 
 	handleUpdate := func(
 		ctx context.Context, ev *roachpb.RangeFeedValue,
@@ -69,7 +68,7 @@ func (w *KVWatcher) WatchForKVUpdates(
 		} else {
 			value = ev.Value
 		}
-		entry, err := rowDecoder.Decode(roachpb.KeyValue{
+		entry, err := rowDecoder.decode(roachpb.KeyValue{
 			Key:   ev.Key,
 			Value: value,
 		})
@@ -78,7 +77,7 @@ func (w *KVWatcher) WatchForKVUpdates(
 			return
 		}
 
-		if log.V(0) {
+		if log.V(1) {
 			log.Infof(ctx, "received span configuration update for %s (deleted=%t)", entry.Span, deleted)
 		}
 

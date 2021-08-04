@@ -19,12 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 )
 
-func spanConfigurationsTokensTableMigration(
+func spanConfigurationsTableMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
 	if !d.Codec.ForSystemTenant() {
 		return nil
 	}
+
 	return sqlmigrations.CreateSystemTable(
 		ctx, d.DB, d.Codec, d.Settings, systemschema.SpanConfigurationsTable,
 	)

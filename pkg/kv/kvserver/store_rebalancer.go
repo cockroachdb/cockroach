@@ -18,7 +18,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -403,7 +402,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			continue
 		}
 
-		desc, zone := replWithStats.repl.DescAndZone()
+		desc, conf := replWithStats.repl.DescAndSpanConfig()
 		log.VEventf(ctx, 3, "considering lease transfer for r%d with %.2f qps",
 			desc.RangeID, replWithStats.qps)
 
@@ -424,7 +423,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 
 		var raftStatus *raft.Status
 
-		preferred := sr.rq.allocator.preferredLeaseholders(zone, candidates)
+		preferred := sr.rq.allocator.preferredLeaseholders(conf, candidates)
 		for _, candidate := range candidates {
 			if candidate.StoreID == localDesc.StoreID {
 				continue
@@ -450,8 +449,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				continue
 			}
 
-			filteredStoreList := storeList.filter(zone.Constraints)
-			filteredStoreList = storeList.filter(zone.VoterConstraints)
+			filteredStoreList := storeList.filter(conf.Constraints)
+			filteredStoreList = storeList.filter(conf.VoterConstraints)
 			if sr.rq.allocator.followTheWorkloadPrefersLocal(
 				ctx,
 				filteredStoreList,
@@ -479,7 +478,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 type rangeRebalanceContext struct {
 	replWithStats                         replicaWithStats
 	rangeDesc                             *roachpb.RangeDescriptor
-	zone                                  *zonepb.ZoneConfig
+	conf                                  roachpb.SpanConfig
 	clusterNodes                          int
 	numDesiredVoters, numDesiredNonVoters int
 }
@@ -540,10 +539,10 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 
 		log.VEventf(ctx, 3, "considering replica rebalance for r%d with %.2f qps",
 			replWithStats.repl.GetRangeID(), replWithStats.qps)
-		rangeDesc, zone := replWithStats.repl.DescAndZone()
+		rangeDesc, conf := replWithStats.repl.DescAndSpanConfig()
 		clusterNodes := sr.rq.allocator.storePool.ClusterNodeCount()
-		numDesiredVoters := GetNeededVoters(zone.GetNumVoters(), clusterNodes)
-		numDesiredNonVoters := GetNeededNonVoters(numDesiredVoters, int(zone.GetNumNonVoters()), clusterNodes)
+		numDesiredVoters := GetNeededVoters(conf.GetNumVoters(), clusterNodes)
+		numDesiredNonVoters := GetNeededNonVoters(numDesiredVoters, int(conf.GetNumNonVoters()), clusterNodes)
 		if rs := rangeDesc.Replicas(); numDesiredVoters != len(rs.VoterDescriptors()) ||
 			numDesiredNonVoters != len(rs.NonVoterDescriptors()) {
 			// If the StoreRebalancer is allowed past this point, it may accidentally
@@ -557,7 +556,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		rebalanceCtx := rangeRebalanceContext{
 			replWithStats:       replWithStats,
 			rangeDesc:           rangeDesc,
-			zone:                zone,
+			conf:                conf,
 			clusterNodes:        clusterNodes,
 			numDesiredVoters:    numDesiredVoters,
 			numDesiredNonVoters: numDesiredNonVoters,
@@ -782,7 +781,7 @@ func (sr *StoreRebalancer) pickRemainingRepls(
 		target, _ := sr.rq.allocator.allocateTargetFromList(
 			ctx,
 			storeList,
-			rebalanceCtx.zone,
+			rebalanceCtx.conf,
 			partialVoterTargets,
 			partialNonVoterTargets,
 			options,

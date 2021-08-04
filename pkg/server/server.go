@@ -560,7 +560,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	var lateBoundNode *Node
 
 	storeCfg := kvserver.StoreConfig{
-		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
+		DefaultSpanConfig:       cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                st,
 		AmbientCtx:              cfg.AmbientCtx,
 		RaftConfig:              cfg.RaftConfig,

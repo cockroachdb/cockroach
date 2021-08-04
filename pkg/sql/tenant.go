@@ -141,6 +141,35 @@ func updateTenantRecord(
 	return nil
 }
 
+// CreateTenantSpanConfig creates a tenant's span config.
+//
+// TODO(zcfgs-pod): Always used in conjunction with CreateTenantRecord. Combine?
+func CreateTenantSpanConfig(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, info *descpb.TenantInfo, conf roachpb.SpanConfig,
+) error {
+	const op = "create span config for"
+	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(info.ID, op); err != nil {
+		return err
+	}
+
+	marshalled, err := protoutil.Marshal(&conf)
+	if err != nil {
+		return err
+	}
+
+	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(info.ID))
+	prefixEnd := prefix.PrefixEnd()
+
+	_, err = execCfg.InternalExecutor.ExecEx(ctx, "create-tenant-scfg", txn, sessiondata.NodeUserSessionDataOverride,
+		`UPSERT INTO system.span_configurations (start_key, end_key, config) VALUES ($1, $2, $3)`,
+		prefix, prefixEnd, marshalled,
+	)
+	return err
+}
+
 // CreateTenant implements the tree.TenantOperator interface.
 func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 	info := &descpb.TenantInfo{
@@ -187,6 +216,14 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 			return errors.Wrap(err, "programming error: "+
 				"tenant already exists but was not in system.tenants table")
 		}
+		return err
+	}
+
+	if err := CreateTenantSpanConfig(ctx, p.ExecCfg(), p.Txn(), info,
+		// TODO(zcfgs-pod): We could instead use the host tenant's TENANT RANGE
+		// zone config.
+		p.ExtendedEvalContext().ExecCfg.DefaultZoneConfig.AsSpanConfig(),
+	); err != nil {
 		return err
 	}
 
@@ -342,6 +379,9 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		return errors.Wrap(err, "clear tenant")
 	}
 
+	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(info.ID))
+	prefixEnd := prefix.PrefixEnd()
+
 	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if num, err := execCfg.InternalExecutor.ExecEx(
 			ctx, "delete-tenant", txn, sessiondata.NodeUserSessionDataOverride,
@@ -351,8 +391,20 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		} else if num != 1 {
 			log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
 		}
+
+		if num, err := execCfg.InternalExecutor.ExecEx(
+			ctx, "delete-tenant-span-config", txn, sessiondata.NodeUserSessionDataOverride,
+			`DELETE FROM system.span_configurations WHERE start_key = $1 AND end_key = $2`,
+			prefix, prefixEnd,
+		); err != nil {
+			return errors.Wrapf(err, "deleting tenant's span config %d", info.ID)
+		} else if num != 1 {
+			log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
+		}
+
 		return nil
 	})
+
 	return errors.Wrapf(err, "deleting tenant %d record", info.ID)
 }
 
