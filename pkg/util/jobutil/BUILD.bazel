@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/kv",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
         "@com_github_cockroachdb_errors//:errors",
