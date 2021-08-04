@@ -107,6 +107,7 @@ func (p *planner) createDatabase(
 		database.SurvivalGoal,
 		database.PrimaryRegion,
 		database.Regions,
+		database.Placement,
 	)
 	if err != nil {
 		return nil, false, err
@@ -235,6 +236,21 @@ func TranslateSurvivalGoal(g tree.SurvivalGoal) (descpb.SurvivalGoal, error) {
 	}
 }
 
+// TranslateDataPlacement translates a tree.DataPlacement into a
+// descpb.DataPlacement.
+func TranslateDataPlacement(g tree.DataPlacement) (descpb.DataPlacement, error) {
+	switch g {
+	case tree.DataPlacementUnspecified:
+		return descpb.DataPlacement_DEFAULT, nil
+	case tree.DataPlacementDefault:
+		return descpb.DataPlacement_DEFAULT, nil
+	case tree.DataPlacementRestricted:
+		return descpb.DataPlacement_RESTRICTED, nil
+	default:
+		return 0, errors.AssertionFailedf("unknown data placement: %d", g)
+	}
+}
+
 func (p *planner) checkRegionIsCurrentlyActive(
 	ctx context.Context, region descpb.RegionName,
 ) error {
@@ -256,6 +272,7 @@ var InitializeMultiRegionMetadataCCL = func(
 	survivalGoal tree.SurvivalGoal,
 	primaryRegion descpb.RegionName,
 	regions []tree.Name,
+	dataPlacement tree.DataPlacement,
 ) (*multiregion.RegionConfig, error) {
 	return nil, sqlerrors.NewCCLRequiredError(
 		errors.New("creating multi-region databases requires a CCL binary"),
@@ -278,7 +295,11 @@ var DefaultPrimaryRegion = settings.RegisterStringSetting(
 // a new region config from the given parameters and reserves an ID for the
 // multi-region enum.
 func (p *planner) maybeInitializeMultiRegionMetadata(
-	ctx context.Context, survivalGoal tree.SurvivalGoal, primaryRegion tree.Name, regions []tree.Name,
+	ctx context.Context,
+	survivalGoal tree.SurvivalGoal,
+	primaryRegion tree.Name,
+	regions []tree.Name,
+	placement tree.DataPlacement,
 ) (*multiregion.RegionConfig, error) {
 	if primaryRegion == "" && len(regions) == 0 {
 		defaultPrimaryRegion := DefaultPrimaryRegion.Get(&p.execCfg.Settings.SV)
@@ -304,6 +325,7 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 		survivalGoal,
 		descpb.RegionName(primaryRegion),
 		regions,
+		placement,
 	)
 	if err != nil {
 		return nil, err

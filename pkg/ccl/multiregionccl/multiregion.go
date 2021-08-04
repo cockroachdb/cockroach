@@ -35,12 +35,17 @@ func initializeMultiRegionMetadata(
 	goal tree.SurvivalGoal,
 	primaryRegion descpb.RegionName,
 	regions []tree.Name,
+	dataPlacement tree.DataPlacement,
 ) (*multiregion.RegionConfig, error) {
 	if err := CheckClusterSupportsMultiRegion(execCfg); err != nil {
 		return nil, err
 	}
 
 	survivalGoal, err := sql.TranslateSurvivalGoal(goal)
+	if err != nil {
+		return nil, err
+	}
+	placement, err := sql.TranslateDataPlacement(dataPlacement)
 	if err != nil {
 		return nil, err
 	}
@@ -96,9 +101,7 @@ func initializeMultiRegionMetadata(
 		primaryRegion,
 		survivalGoal,
 		regionEnumID,
-		// TODO(pawalt): Using default placement for now until this gets stitched
-		// together with the proper SQL statements.
-		descpb.DataPlacement_DEFAULT,
+		placement,
 	)
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
 		return nil, err
