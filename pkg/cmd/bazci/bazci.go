@@ -10,7 +10,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -20,8 +22,9 @@ import (
 )
 
 const (
-	buildSubcmd = "build"
-	testSubcmd  = "test"
+	buildSubcmd        = "build"
+	testSubcmd         = "test"
+	mungeTestXMLSubcmd = "munge-test-xml"
 )
 
 var (
@@ -86,14 +89,15 @@ var errUsage = errors.New("At least 2 arguments required (e.g. `bazci build TARG
 // `argsLenAtDash`, should be the value returned by `cobra.Command.ArgsLenAtDash()`.
 func parseArgs(args []string, argsLenAtDash int) (*parsedArgs, error) {
 	// The minimum number of arguments needed is 2: the first is the
-	// subcommand to run (`build` or `test`), and the second is the
-	// first label (e.g. `//pkg/cmd/cockroach-short`). An arbitrary
-	// number of additional labels can follow.
+	// subcommand to run, and the second is the first label (e.g.
+	// `//pkg/cmd/cockroach-short`). An arbitrary number of additional
+	// labels can follow. If the subcommand is munge-test-xml, the list of
+	// labels is instead taken as a a list of XML files to munge.
 	if len(args) < 2 {
 		return nil, errUsage
 	}
-	if args[0] != buildSubcmd && args[0] != testSubcmd {
-		return nil, errors.Newf("First argument must be `build` or `test`; got %v", args[0])
+	if args[0] != buildSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd {
+		return nil, errors.Newf("First argument must be `build`, `test`, or `munge-test-xml`; got %v", args[0])
 	}
 	var splitLoc int
 	if argsLenAtDash < 0 {
@@ -147,6 +151,9 @@ func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
 }
 
 func getBuildInfo(args parsedArgs) (buildInfo, error) {
+	if args.subcmd != buildSubcmd && args.subcmd != testSubcmd {
+		return buildInfo{}, errors.Newf("Unexpected subcommand %s. This is a bug!", args.subcmd)
+	}
 	binDir, err := runBazelReturningStdout("info", "bazel-bin")
 	if err != nil {
 		return buildInfo{}, err
@@ -204,6 +211,12 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Special case: munge-test-xml doesn't require running Bazel at all.
+	// Perform the munge then exit immediately.
+	if parsedArgs.subcmd == mungeTestXMLSubcmd {
+		return mungeTestXMLs(*parsedArgs)
+	}
+
 	info, err := getBuildInfo(*parsedArgs)
 	if err != nil {
 		return err
@@ -231,6 +244,25 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 	}()
 
 	return makeWatcher(completion, info).Watch()
+}
+
+func mungeTestXMLs(args parsedArgs) error {
+	for _, file := range args.targets {
+		contents, err := ioutil.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		var buf bytes.Buffer
+		err = mungeTestXML(contents, &buf)
+		if err != nil {
+			return err
+		}
+		err = ioutil.WriteFile(file, buf.Bytes(), 0666)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func configArgList() []string {
