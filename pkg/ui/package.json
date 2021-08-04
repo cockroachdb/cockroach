@@ -43,7 +43,7 @@
     "react-helmet": "^5.2.0",
     "react-motion": "^0.5.2",
     "react-paginate": "^5.2.2",
-    "react-redux": "^7.1.3",
+    "react-redux": "^7.2.4",
     "react-router-dom": "^5.1.2",
     "react-select": "^1.2.1",
     "redux": "^4.0.5",
