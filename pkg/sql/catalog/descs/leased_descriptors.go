@@ -12,6 +12,7 @@ package descs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -102,6 +103,7 @@ func (ld *leasedDescriptors) getByName(
 	}
 
 	readTimestamp := txn.ReadTimestamp()
+	fmt.Printf("attempting to read at %#v\n", readTimestamp)
 	ldesc, err := ld.lm.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
 	const setTxnDeadline = true
 	return ld.getResult(ctx, txn, setTxnDeadline, ldesc, err)
@@ -145,6 +147,7 @@ func (ld *leasedDescriptors) getResult(
 			(catalog.HasInactiveDescriptorError(err) &&
 				errors.Is(err, catalog.ErrDescriptorDropped)) ||
 				errors.Is(err, catalog.ErrDescriptorNotFound); shouldReadFromStore {
+			fmt.Printf("found inactive descriptor\n")
 			return nil, true, nil
 		}
 		// Lease acquisition failed with some other error. This we don't

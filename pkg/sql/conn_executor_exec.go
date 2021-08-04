@@ -356,9 +356,13 @@ func (ex *connExecutor) execStmtInOpenState(
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
 		var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
 		if errors.As(err, &minTSErr) {
-			aost := ex.planner.EvalContext().AsOfSystemTime
+			evalCtx := ex.planner.EvalContext()
+			aost := evalCtx.AsOfSystemTime
 			fmt.Printf("found min ts error, %#v <=> %#v\n", aost.Timestamp, minTSErr.MinTimestampBound)
-			if aost.Timestamp.Less(minTSErr.MinTimestampBound.Prev()) {
+			// wtf?
+			if evalCtx.PrevMinTimestampBound != nil && evalCtx.PrevMinTimestampBound.Less(minTSErr.MinTimestampBound) {
+				fmt.Printf("jumping forwards in time! %v ~~> %v\n", evalCtx.PrevMinTimestampBound, minTSErr.MinTimestampBound)
+			} else if aost.Timestamp.Less(minTSErr.MinTimestampBound.Prev()) {
 				err = errors.Mark(err, retriableMinTimestampBoundUnsatisfiableError)
 			} else {
 				fmt.Printf("not found; abort!\n")
