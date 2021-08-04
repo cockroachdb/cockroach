@@ -66,7 +66,7 @@ func createProtectedTimestampRecord(
 		progress.ProtectedTimestampRecord, resolved)
 	spansToProtect := makeSpansToProtect(codec, targets)
 	rec := jobsprotectedts.MakeRecord(
-		progress.ProtectedTimestampRecord, jobID, resolved, spansToProtect)
+		progress.ProtectedTimestampRecord, int64(jobID), resolved, spansToProtect, jobsprotectedts.Jobs)
 	return pts.Protect(ctx, txn, rec)
 }
 

@@ -376,11 +376,9 @@ func backup(
 	return backupManifest.EntryCounts, nil
 }
 
-func (b *backupResumer) releaseProtectedTimestamp(
-	ctx context.Context, txn *kv.Txn, pts protectedts.Storage,
+func releaseProtectedTimestamp(
+	ctx context.Context, txn *kv.Txn, pts protectedts.Storage, ptsID *uuid.UUID,
 ) error {
-	details := b.job.Details().(jobspb.BackupDetails)
-	ptsID := details.ProtectedTimestampRecord
 	// If the job doesn't have a protected timestamp then there's nothing to do.
 	if ptsID == nil {
 		return nil
@@ -527,9 +525,21 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	b.deleteCheckpoint(ctx, p.ExecCfg(), p.User())
 
+	var backupDetails jobspb.BackupDetails
+	var ok bool
+	if backupDetails, ok = b.job.Details().(jobspb.BackupDetails); !ok {
+		return errors.Newf("unexpected job details type %T", b.job.Details())
+	}
+
+	if err := maybeUpdateSchedulePTSRecord(ctx, p.ExecCfg(), backupDetails, b.job.ID()); err != nil {
+		return err
+	}
+
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+			details := b.job.Details().(jobspb.BackupDetails)
+			return releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider,
+				details.ProtectedTimestampRecord)
 		}); err != nil {
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 		}
@@ -599,8 +609,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
-	return nil
+	return b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
 }
 
 // ReportResults implements JobResultsReporter interface.
@@ -666,7 +675,7 @@ func (b *backupResumer) readManifestOnResume(
 
 func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 	ctx context.Context, jobStatus jobs.Status, exec *sql.ExecutorConfig,
-) {
+) error {
 	env := scheduledjobs.ProdJobSchedulerEnv
 	if knobs, ok := exec.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
@@ -674,8 +683,9 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 		}
 	}
 
-	if err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		// Do not rely on b.job containing created_by_id.  Query it directly.
+	err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// We cannot rely on b.job containing created_by_id because on job
+		// resumption the registry does not populate the resumer's CreatedByInfo.
 		datums, err := exec.InternalExecutor.QueryRowEx(
 			ctx,
 			"lookup-schedule-info",
@@ -697,24 +707,16 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
 		if err := jobs.NotifyJobTermination(
 			ctx, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID, exec.InternalExecutor, txn); err != nil {
-			log.Warningf(ctx,
-				"failed to notify schedule %d of completion of job %d; err=%s",
-				scheduleID, b.job.ID(), err)
+			return errors.Wrapf(err,
+				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
 		}
 		return nil
-	}); err != nil {
-		log.Errorf(ctx, "maybeNotifySchedule error: %v", err)
-	}
+	})
+	return err
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
-	defer b.maybeNotifyScheduledJobCompletion(
-		ctx,
-		jobs.StatusFailed,
-		execCtx.(sql.JobExecContext).ExecCfg(),
-	)
-
 	telemetry.Count("backup.total.failed")
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
@@ -722,9 +724,23 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
 	b.deleteCheckpoint(ctx, cfg, p.User())
-	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return b.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
-	})
+	if err := cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		details := b.job.Details().(jobspb.BackupDetails)
+		return releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider,
+			details.ProtectedTimestampRecord)
+	}); err != nil {
+		return err
+	}
+
+	// This should never return an error unless resolving the schedule that the
+	// job is being run under fails. This could happen if the schedule is dropped
+	// while the job is executing.
+	if err := b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusFailed,
+		execCtx.(sql.JobExecContext).ExecCfg()); err != nil {
+		log.Errorf(ctx, "failed to notify job %d on completion of OnFailOrCancel: %+v",
+			b.job.ID(), err)
+	}
+	return nil //nolint:returnerrcheck
 }
 
 func (b *backupResumer) deleteCheckpoint(

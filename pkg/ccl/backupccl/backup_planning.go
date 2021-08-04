@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 const (
@@ -1229,6 +1231,11 @@ func backupPlanHook(
 			EncryptionInfo:    encryptionInfo,
 			CollectionURI:     collectionURI,
 		}
+
+		if err := planSchedulePTSChaining(ctx, p, &backupDetails, backupStmt); err != nil {
+			return err
+		}
+
 		if len(spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
 			protectedtsID := uuid.MakeV4()
 			backupDetails.ProtectedTimestampRecord = &protectedtsID
@@ -1392,6 +1399,108 @@ func backupPlanHook(
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
 }
 
+func getScheduledBackupExecutionArgsFromSchedule(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	ie *sql.InternalExecutor,
+	scheduleID int64,
+) (*jobs.ScheduledJob, *ScheduledBackupExecutionArgs, error) {
+	// Load the schedule that has spawned this job.
+	sj, err := jobs.LoadScheduledJob(ctx, env, scheduleID, ie, txn)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to load scheduled job %d", scheduleID)
+	}
+
+	args := &ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
+		return nil, nil, errors.Wrap(err, "un-marshaling args")
+	}
+
+	return sj, args, nil
+}
+
+// planSchedulePTSChaining populates backupDetails with information relevant to
+// the chaining of protected timestamp records between scheduled backups.
+// Depending on whether backupStmt is a full or incremental backup, we populate
+// relevant fields that are used to perform this chaining, on successful
+// completion of the backup job.
+func planSchedulePTSChaining(
+	ctx context.Context,
+	p sql.PlanHookState,
+	backupDetails *jobspb.BackupDetails,
+	backupStmt *annotatedBackupStatement,
+) error {
+	env := scheduledjobs.ProdJobSchedulerEnv
+	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+		if knobs.JobSchedulerEnv != nil {
+			env = knobs.JobSchedulerEnv
+		}
+	}
+	// If this is not a scheduled backup, we do not chain pts records.
+	if backupStmt.CreatedByInfo == nil || backupStmt.CreatedByInfo.Name != jobs.CreatedByScheduledJobs {
+		return nil
+	}
+
+	_, args, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env,
+		p.ExtendedEvalContext().Txn, p.ExecCfg().InternalExecutor, backupStmt.CreatedByInfo.ID)
+	if err != nil {
+		return err
+	}
+	if !args.ChainProtectedTimestampRecords {
+		return nil
+	}
+
+	if args.BackupType == ScheduledBackupExecutionArgs_FULL {
+		// Check if there is a dependent incremental schedule associated with the
+		// full schedule running the current backup.
+		// If present, the full backup on successful completion, will release the
+		// pts record found on the incremental schedule, and replace it with a new
+		// pts record protecting after the EndTime of the full backup.
+		if args.DependentScheduleID == 0 {
+			return nil
+		}
+
+		_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env,
+			p.ExtendedEvalContext().Txn, p.ExecCfg().InternalExecutor, args.DependentScheduleID)
+		if err != nil {
+			// If we are unable to resolve the dependent incremental schedule (it
+			// could have been dropped) we do not need to perform any chaining.
+			//
+			// TODO(adityamaru): Update this comment when DROP SCHEDULE is taught
+			// to clear the dependent ID. Once that is done, we should not encounter
+			// this error.
+			if jobs.HasScheduledJobNotFoundError(err) {
+				log.Warningf(ctx, "could not find dependent schedule with id %d",
+					args.DependentScheduleID)
+				return nil
+			}
+			return err
+		}
+		backupDetails.SchedulePTSChainingRecord = &jobspb.SchedulePTSChainingRecord{
+			ProtectedTimestampRecord: incArgs.ProtectedTimestampRecord,
+			Action:                   jobspb.SchedulePTSChainingRecord_RELEASE,
+		}
+	} else {
+		// In the case of a scheduled incremental backup we save the pts record id
+		// that the job should update on successful completion, to protect data
+		// after the current backups' EndTime.
+		// We save this information on the job instead of reading it from the
+		// schedule on completion, so as to prevent an "overhang" incremental from
+		// incorrectly pulling forward a pts record that was written by a new full
+		// backup that completed while the incremental was still executing.
+		//
+		// NB: An overhang incremental is defined as a scheduled incremental backup
+		// that appends to the old full backup chain, and completes after a new full
+		// backup has started another chain.
+		backupDetails.SchedulePTSChainingRecord = &jobspb.SchedulePTSChainingRecord{
+			ProtectedTimestampRecord: args.ProtectedTimestampRecord,
+			Action:                   jobspb.SchedulePTSChainingRecord_UPDATE,
+		}
+	}
+	return nil
+}
+
 // getReintroducedSpans checks to see if any spans need to be re-backed up from
 // ts = 0. This may be the case if a span was OFFLINE in the previous backup and
 // has come back online since. The entire span needs to be re-backed up because
@@ -1525,8 +1634,8 @@ func protectTimestampForBackup(
 		if !startTime.IsEmpty() {
 			tsToProtect = startTime
 		}
-		rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, jobID,
-			tsToProtect, spans)
+		rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, int64(jobID),
+			tsToProtect, spans, jobsprotectedts.Jobs)
 		err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
 		if err != nil {
 			return err
