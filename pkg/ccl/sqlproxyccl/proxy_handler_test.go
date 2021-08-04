@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -491,7 +490,6 @@ func TestDenylistUpdate(t *testing.T) {
 
 func TestDirectoryConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 67729, "flaky test")
 
 	ctx := context.Background()
 	te := newTester()
@@ -606,27 +604,28 @@ func TestDirectoryConnect(t *testing.T) {
 	t.Run("drain connection", func(t *testing.T) {
 		url := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable&options=--cluster=tenant-cluster-28", addr)
 		te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-			// Previous successful connection asynchronously closes - PGX cuts
-			// the connection and it can take time for the proxy to get the
-			// notification and react.
+			// The current connection count can take a bit of time to drop to 1,
+			// since the previous successful connection asynchronously closes.
+			// PGX cuts the connection on the client side, but it can take time
+			// for the proxy to get the notification and react.
 			require.Eventually(t, func() bool {
 				return proxy.metrics.CurConnCount.Value() == 1
 			}, 10*time.Second, 10*time.Millisecond)
 
-			// Connection should be terminated after draining.
+			// Connection should be forcefully terminated after the drain timeout,
+			// even though it's being continuously used.
 			require.Eventually(t, func() bool {
-				var n int
-				err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
-				if err != nil {
-					return true
-				}
-				require.EqualValues(t, 1, n)
-
-				// Trigger drain of connections.
+				// Trigger drain of connections. Do this repeatedly inside the
+				// loop in order to avoid race conditions where the proxy is not
+				// yet hooked up to the directory server (and thus misses any
+				// one-time DRAIN notifications).
 				tds2.Drain()
-				return false
+
+				// Run query until it fails (because connection was closed).
+				return runTestQuery(ctx, conn) != nil
 			}, 30*time.Second, 5*drainTimeout)
 
+			// Ensure failure was due to forced drain disconnection.
 			require.Equal(t, int64(1), proxy.metrics.IdleDisconnectCount.Count())
 		})
 	})

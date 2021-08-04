@@ -95,6 +95,35 @@ func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 	require.NotNil(t, msg)
 }
 
+// TestFrontendAdmitRequireEncryption sends StartupRequest when SSlRequest is
+// expected.
+func TestFrontendAdmitRequireEncryption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cli, srv := net.Pipe()
+	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
+	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
+
+	go func() {
+		startup := pgproto3.StartupMessage{
+			ProtocolVersion: pgproto3.ProtocolVersionNumber,
+			Parameters:      map[string]string{"key": "val"},
+		}
+		_, err := cli.Write(startup.Encode([]byte{}))
+		require.NoError(t, err)
+	}()
+
+	tlsConfig, err := tlsConfig()
+	require.NoError(t, err)
+	frontendCon, msg, err := FrontendAdmit(srv, tlsConfig)
+	require.EqualError(t, err,
+		"codeUnexpectedInsecureStartupMessage: "+
+			"unsupported startup message: *pgproto3.StartupMessage")
+	require.NotNil(t, frontendCon)
+	require.Nil(t, msg)
+}
+
+// TestFrontendAdmitWithCancel sends CancelRequest.
 func TestFrontendAdmitWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -109,14 +138,12 @@ func TestFrontendAdmitWithCancel(t *testing.T) {
 	}()
 
 	frontendCon, msg, err := FrontendAdmit(srv, nil)
-	require.EqualError(t, err,
-		"codeUnexpectedStartupMessage: "+
-			"unsupported post-TLS startup message: *pgproto3.CancelRequest",
-	)
+	require.NoError(t, err)
 	require.NotNil(t, frontendCon)
 	require.Nil(t, msg)
 }
 
+// TestFrontendAdmitWithSSLAndCancel sends SSLRequest followed by CancelRequest.
 func TestFrontendAdmitWithSSLAndCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
