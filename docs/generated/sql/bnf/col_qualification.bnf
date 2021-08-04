@@ -8,10 +8,10 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name 'CHECK' '(' a_expr ')'
 	| 'CONSTRAINT' constraint_name 'DEFAULT' b_expr
 	| 'CONSTRAINT' constraint_name 'REFERENCES' table_name opt_name_parens key_match reference_actions
-	| 'CONSTRAINT' constraint_name 'AS' '(' a_expr ')' 'STORED'
-	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'STORED'
-	| 'CONSTRAINT' constraint_name 'AS' '(' a_expr ')' 'VIRTUAL'
-	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'VIRTUAL'
+	| 'CONSTRAINT' constraint_name generated_as '(' a_expr ')' 'STORED'
+	| 'CONSTRAINT' constraint_name generated_as '(' a_expr ')' 'VIRTUAL'
+	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY'
+	| 'CONSTRAINT' constraint_name 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY'
 	| 'NOT' 'NULL'
 	| 'NULL'
 	| 'NOT' 'VISIBLE'
@@ -21,10 +21,10 @@ col_qualification ::=
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
-	| 'AS' '(' a_expr ')' 'STORED'
-	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'STORED'
-	| 'AS' '(' a_expr ')' 'VIRTUAL'
-	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'VIRTUAL'
+	| generated_as '(' a_expr ')' 'STORED'
+	| generated_as '(' a_expr ')' 'VIRTUAL'
+	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY'
+	| 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY'
 	| 'COLLATE' collation_name
 	| 'FAMILY' family_name
 	| 'CREATE' 'FAMILY' family_name
