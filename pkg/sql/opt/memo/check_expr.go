@@ -245,6 +245,29 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 					"lookup paired-join is paired with inverted join that thinks it is unpaired"))
 			}
 		}
+		checkFilters(t.On)
+		var allowedFilterCols opt.ColSet
+		switch t.JoinType {
+		case opt.InnerJoinOp, opt.LeftJoinOp:
+			// Inner and left join ON conditions can only reference their output
+			// columns.
+			allowedFilterCols = t.Cols
+		case opt.AntiJoinOp, opt.SemiJoinOp:
+			// Semi and anti join ON conditions can reference their input's
+			// columns and index columns in the lookup index.
+			inputCols := t.Input.Relational().OutputCols
+			keyCols := m.Metadata().TableMeta(t.Table).IndexColumns(t.Index)
+			allowedFilterCols = inputCols.Union(keyCols)
+		default:
+			panic(errors.AssertionFailedf("lookup joins are not support for join type %s", t.JoinType))
+		}
+		if !t.On.OuterCols().SubsetOf(allowedFilterCols) {
+			panic(errors.AssertionFailedf(
+				"lookup on condition references unknown columns (known cols: %v, unknown: %v)",
+				log.Safe(allowedFilterCols),
+				log.Safe(t.On.OuterCols().Difference(allowedFilterCols)),
+			))
+		}
 
 	case *InsertExpr:
 		tab := m.Metadata().Table(t.Table)
