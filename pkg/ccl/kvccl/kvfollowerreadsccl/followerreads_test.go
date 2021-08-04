@@ -400,11 +400,11 @@ func TestOracle(t *testing.T) {
 
 	c := kv.NewDB(log.AmbientContext{Tracer: tracing.NewTracer()}, kv.MockTxnSenderFactory{}, clock, stopper)
 	staleTxn := kv.NewTxn(ctx, c, 0)
-	staleTxn.SetFixedTimestamp(ctx, stale)
+	require.NoError(t, staleTxn.SetFixedTimestamp(ctx, stale))
 	currentTxn := kv.NewTxn(ctx, c, 0)
-	currentTxn.SetFixedTimestamp(ctx, current)
+	require.NoError(t, currentTxn.SetFixedTimestamp(ctx, current))
 	futureTxn := kv.NewTxn(ctx, c, 0)
-	futureTxn.SetFixedTimestamp(ctx, future)
+	require.NoError(t, futureTxn.SetFixedTimestamp(ctx, future))
 
 	nodes := mockNodeStore{
 		{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1")},

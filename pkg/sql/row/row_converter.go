@@ -268,7 +268,9 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 	err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)
-		txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()})
+		if err := txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()}); err != nil {
+			return err
+		}
 		for seqID := range sequenceIDs {
 			seqDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, evalCtx.Codec, seqID)
 			if err != nil {
