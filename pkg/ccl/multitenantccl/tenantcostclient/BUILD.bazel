@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tenantcostclient",
@@ -8,10 +8,46 @@ go_library(
     deps = [
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/multitenant",
+        "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb:with-mocks",
         "//pkg/server",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/util/log",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "tenantcostclient_test",
+    srcs = [
+        "main_test.go",
+        "tenant_side_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":tenantcostclient"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/multitenant",
+        "//pkg/multitenant/tenantcostmodel",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

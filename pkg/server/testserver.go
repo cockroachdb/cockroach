@@ -613,8 +613,13 @@ func (ts *TestServer) StartTenant(
 	baseCfg.IdleExitAfter = params.IdleExitAfter
 	baseCfg.Insecure = params.ForceInsecure
 	if params.AllowSettingClusterSettings {
-		baseCfg.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
-			ClusterSettingsUpdater: st.MakeUpdater(),
+		tenantKnobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs)
+		if !ok {
+			tenantKnobs = &sql.TenantTestingKnobs{}
+			baseCfg.TestingKnobs.TenantTestingKnobs = tenantKnobs
+		}
+		if tenantKnobs.ClusterSettingsUpdater == nil {
+			tenantKnobs.ClusterSettingsUpdater = st.MakeUpdater()
 		}
 	}
 	stopper := params.Stopper

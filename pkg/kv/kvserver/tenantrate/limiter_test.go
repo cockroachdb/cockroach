@@ -49,9 +49,9 @@ func TestCloser(t *testing.T) {
 	limiter := factory.GetTenant(tenant, closer)
 	ctx := context.Background()
 	// First Wait call will not block.
-	require.NoError(t, limiter.Wait(ctx, true, 1))
+	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(true, 1)))
 	errCh := make(chan error, 1)
-	go func() { errCh <- limiter.Wait(ctx, true, 1<<30) }()
+	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(true, 1<<30)) }()
 	testutils.SucceedsSoon(t, func() error {
 		if timers := timeSource.Timers(); len(timers) != 1 {
 			return errors.Errorf("expected 1 timer, found %d", len(timers))
@@ -228,7 +228,9 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 		}
 		go func() {
 			// We'll not worry about ever releasing tenant Limiters.
-			s.reserveCh <- lims[0].Wait(s.ctx, s.isWrite, s.writeBytes)
+			s.reserveCh <- lims[0].Wait(
+				s.ctx, tenantcostmodel.TestingRequestInfo(s.isWrite, s.writeBytes),
+			)
 		}()
 	}
 	return ts.FormatRunning()
@@ -324,7 +326,7 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 		if len(lims) == 0 {
 			d.Fatalf(t, "no outstanding limiters for %v", tid)
 		}
-		lims[0].RecordRead(context.Background(), r.ReadBytes)
+		lims[0].RecordRead(context.Background(), tenantcostmodel.TestingResponseInfo(r.ReadBytes))
 	}
 	return ts.FormatRunning()
 }

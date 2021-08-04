@@ -36,17 +36,8 @@ type tenantState struct {
 
 	Bucket tenanttokenbucket.State
 
-	// Consumption is the current consumption information.
-	Consumption roachpb.TokenBucketRequest_Consumption
-}
-
-func (ts *tenantState) addConsumption(c roachpb.TokenBucketRequest_Consumption) {
-	ts.Consumption.RU += c.RU
-	ts.Consumption.ReadRequests += c.ReadRequests
-	ts.Consumption.ReadBytes += c.ReadBytes
-	ts.Consumption.WriteRequests += c.WriteRequests
-	ts.Consumption.WriteBytes += c.WriteBytes
-	ts.Consumption.SQLPodCPUSeconds += c.SQLPodCPUSeconds
+	// Current consumption information.
+	Consumption roachpb.TenantConsumption
 }
 
 type instanceState struct {
@@ -154,13 +145,13 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 				RUCurrent:       float64(tree.MustBeDFloat(r[4])),
 				CurrentShareSum: float64(tree.MustBeDFloat(r[5])),
 			}
-			tenant.Consumption = roachpb.TokenBucketRequest_Consumption{
-				RU:               float64(tree.MustBeDFloat(r[6])),
-				ReadRequests:     uint64(tree.MustBeDInt(r[7])),
-				ReadBytes:        uint64(tree.MustBeDInt(r[8])),
-				WriteRequests:    uint64(tree.MustBeDInt(r[9])),
-				WriteBytes:       uint64(tree.MustBeDInt(r[10])),
-				SQLPodCPUSeconds: float64(tree.MustBeDFloat(r[11])),
+			tenant.Consumption = roachpb.TenantConsumption{
+				RU:                float64(tree.MustBeDFloat(r[6])),
+				ReadRequests:      uint64(tree.MustBeDInt(r[7])),
+				ReadBytes:         uint64(tree.MustBeDInt(r[8])),
+				WriteRequests:     uint64(tree.MustBeDInt(r[9])),
+				WriteBytes:        uint64(tree.MustBeDInt(r[10])),
+				SQLPodsCPUSeconds: float64(tree.MustBeDFloat(r[11])),
 			}
 		} else {
 			// Instance state.
@@ -214,7 +205,7 @@ func (h *sysTableHelper) updateTenantState(tenant tenantState) error {
 		tenant.Consumption.ReadBytes,
 		tenant.Consumption.WriteRequests,
 		tenant.Consumption.WriteBytes,
-		tenant.Consumption.SQLPodCPUSeconds,
+		tenant.Consumption.SQLPodsCPUSeconds,
 	)
 	return err
 }
@@ -250,24 +241,24 @@ func (h *sysTableHelper) updateTenantAndInstanceState(
 		   ($1, 0, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL, NULL, NULL, NULL),
 			 ($1, $13, $14, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, $15, $16, $17, $18)
 		 `,
-		h.tenantID.ToUint64(),               // $1
-		int64(tenant.FirstInstance),         // $2
-		tenant.Bucket.RUBurstLimit,          // $3
-		tenant.Bucket.RURefillRate,          // $4
-		tenant.Bucket.RUCurrent,             // $5
-		tenant.Bucket.CurrentShareSum,       // $6
-		tenant.Consumption.RU,               // $7
-		tenant.Consumption.ReadRequests,     // $8
-		tenant.Consumption.ReadBytes,        // $9
-		tenant.Consumption.WriteRequests,    // $10
-		tenant.Consumption.WriteBytes,       // $11
-		tenant.Consumption.SQLPodCPUSeconds, // $12
-		int64(instance.ID),                  // $13
-		int64(instance.NextInstance),        // $14
-		&instance.Lease,                     // $15
-		instance.Seq,                        // $16
-		instance.Shares,                     // $17
-		&instance.LastUpdate,                // $18
+		h.tenantID.ToUint64(),                // $1
+		int64(tenant.FirstInstance),          // $2
+		tenant.Bucket.RUBurstLimit,           // $3
+		tenant.Bucket.RURefillRate,           // $4
+		tenant.Bucket.RUCurrent,              // $5
+		tenant.Bucket.CurrentShareSum,        // $6
+		tenant.Consumption.RU,                // $7
+		tenant.Consumption.ReadRequests,      // $8
+		tenant.Consumption.ReadBytes,         // $9
+		tenant.Consumption.WriteRequests,     // $10
+		tenant.Consumption.WriteBytes,        // $11
+		tenant.Consumption.SQLPodsCPUSeconds, // $12
+		int64(instance.ID),                   // $13
+		int64(instance.NextInstance),         // $14
+		&instance.Lease,                      // $15
+		instance.Seq,                         // $16
+		instance.Shares,                      // $17
+		&instance.LastUpdate,                 // $18
 	)
 	return err
 }
@@ -498,7 +489,7 @@ func InspectTenantMetadata(
 		tenant.Consumption.ReadBytes,
 		tenant.Consumption.WriteRequests,
 		tenant.Consumption.WriteBytes,
-		tenant.Consumption.SQLPodCPUSeconds,
+		tenant.Consumption.SQLPodsCPUSeconds,
 	)
 	fmt.Fprintf(&buf, "First active instance: %d\n", tenant.FirstInstance)
 

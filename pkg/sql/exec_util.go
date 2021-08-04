@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -1145,13 +1146,17 @@ type TenantTestingKnobs struct {
 	ClusterSettingsUpdater settings.Updater
 
 	// TenantIDCodecOverride overrides the tenant ID used to construct the SQL
-	// server's codec, but nothing else (e.g. its certs). Used for testing.
+	// server's codec, but nothing else (e.g. its certs).
 	TenantIDCodecOverride roachpb.TenantID
 
-	// IdleExitCountdownDuration is set will overwrite the default countdown
-	// duration of the countdown timer that leads to shutdown in case of no SQL
-	// connections.
+	// IdleExitCountdownDuration is a filed that if set, will overwrite the
+	// default countdown duration of the countdown timer that leads to shutdown in
+	// case of no SQL connections.
 	IdleExitCountdownDuration time.Duration
+
+	// OverrideTokenBucketProvider allows a test-only TokenBucketProvider (which
+	// can optionally forward requests to the real provider).
+	OverrideTokenBucketProvider func(origProvider kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider
 }
 
 var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
