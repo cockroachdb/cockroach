@@ -34,6 +34,7 @@ go_library(
         "comment_on_index.go",
         "comment_on_schema.go",
         "comment_on_table.go",
+        "compact_sql_stats.go",
         "conn_executor.go",
         "conn_executor_exec.go",
         "conn_executor_prepare.go",
