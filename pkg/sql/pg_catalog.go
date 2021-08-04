@@ -1118,76 +1118,107 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 		if dbContext.GetDefaultPrivileges() == nil {
 			return nil
 		}
+		addDefaultPrivileges := func(
+			objectType tree.AlterDefaultPrivilegesTargetObject,
+			privileges descpb.PrivilegeDescriptor,
+			role descpb.AlterDefaultPrivilegesRole,
+		) error {
+			// Type of object this entry is for:
+			// r = relation (table, view), S = sequence, f = function, T = type, n = schema.
+			var c string
+			switch objectType {
+			case tree.Tables:
+				c = "r"
+			case tree.Sequences:
+				c = "S"
+			case tree.Types:
+				c = "T"
+			case tree.Schemas:
+				c = "n"
+			}
+			privilegeObjectType := targetObjectToPrivilegeObject[objectType]
+			arr := tree.NewDArray(types.String)
+			for _, userPrivs := range privileges.Users {
+				var user string
+				if userPrivs.UserProto.Decode().IsPublicRole() {
+					// Postgres represents Public in defacl as an empty string.
+					user = ""
+				} else {
+					user = userPrivs.UserProto.Decode().Normalized()
+				}
+
+				privileges := privilege.ListFromBitField(
+					userPrivs.Privileges, privilegeObjectType,
+				)
+				defaclItem := fmt.Sprintf(`%s=%s/%s`,
+					user,
+					privileges.ListToACL(
+						privilegeObjectType,
+					),
+					// TODO(richardjcai): CockroachDB currently does not track grantors
+					//    See: https://github.com/cockroachdb/cockroach/issues/67442.
+					"", /* grantor */
+				)
+
+				if len(defaclItem) != 0 {
+					if err := arr.Append(
+						tree.NewDString(defaclItem)); err != nil {
+						return err
+					}
+				}
+			}
+
+			if len(arr.Array) == 0 {
+				return nil
+			}
+
+			// TODO(richardjcai): Update this logic once default privileges on
+			//    schemas are supported.
+			//    See: https://github.com/cockroachdb/cockroach/issues/67376.
+			schemaName := ""
+			normalizedRoleName := ""
+			if !role.ForAllRoles {
+				normalizedRoleName = role.Role.Normalized()
+			}
+			rowOid := h.DBSchemaRoleOid(
+				dbContext.GetID(),
+				schemaName,
+				normalizedRoleName,
+			)
+			var roleOid *tree.DOid
+			if role.ForAllRoles {
+				roleOid = oidZero
+			} else {
+				roleOid = h.UserOid(role.Role)
+			}
+			if err := addRow(
+				rowOid,             // row identifier oid
+				roleOid,            // defaclrole oid
+				oidZero,            // defaclnamespace oid
+				tree.NewDString(c), // defaclobjtype char
+				arr,                // defaclacl aclitem[]
+			); err != nil {
+				return err
+			}
+			return nil
+		}
+
 		for _, defaultPrivs := range dbContext.GetDefaultPrivileges().DefaultPrivilegesPerRole {
 			// Need to consider the case of USAGE for Public as well.
-			for objectType, privs := range defaultPrivs.DefaultPrivilegesPerObject {
-				// Type of object this entry is for:
-				// r = relation (table, view), S = sequence, f = function, T = type, n = schema.
-				var c string
-				switch objectType {
-				case tree.Tables:
-					c = "r"
-				case tree.Sequences:
-					c = "S"
-				case tree.Types:
-					c = "T"
-				case tree.Schemas:
-					c = "n"
-				}
-				privilegeObjectType := targetObjectToPrivilegeObject[objectType]
-				arr := tree.NewDArray(types.String)
-				for _, userPrivs := range privs.Users {
-					var user string
-					if userPrivs.UserProto.Decode().IsPublicRole() {
-						// Postgres represents Public in defacl as an empty string.
-						user = ""
-					} else {
-						user = userPrivs.UserProto.Decode().Normalized()
-					}
-
-					privileges := privilege.ListFromBitField(
-						userPrivs.Privileges, privilegeObjectType,
-					)
-					defaclItem := fmt.Sprintf(`%s=%s/%s`,
-						user,
-						privileges.ListToACL(
-							privilegeObjectType,
-						),
-						// TODO(richardjcai): CockroachDB currently does not track grantors
-						//    See: https://github.com/cockroachdb/cockroach/issues/67442.
-						"", /* grantor */
-					)
-
-					if len(defaclItem) != 0 {
-						if err := arr.Append(
-							tree.NewDString(defaclItem)); err != nil {
-							return err
-						}
-					}
-				}
-
-				if len(arr.Array) == 0 {
-					continue
-				}
-
-				// TODO(richardjcai): Update this logic once default privileges on
-				//    schemas are supported.
-				//    See: https://github.com/cockroachdb/cockroach/issues/67376.
-				schemaName := ""
-				rowOid := h.DBSchemaRoleOid(
-					dbContext.GetID(),
-					schemaName,
-					defaultPrivs.UserProto.Decode().Normalized(),
-				)
-				if err := addRow(
-					rowOid, // row identifier oid
-					h.UserOid(defaultPrivs.UserProto.Decode()), // defaclrole oid
-					oidZero,            // defaclnamespace oid
-					tree.NewDString(c), // defaclobjtype char
-					arr,                // defaclacl aclitem[]
-				); err != nil {
+			for objectType, privileges := range defaultPrivs.DefaultPrivilegesPerObject {
+				if err := addDefaultPrivileges(objectType, privileges, descpb.AlterDefaultPrivilegesRole{
+					Role: defaultPrivs.User(),
+				}); err != nil {
 					return err
 				}
+			}
+		}
+		// Add rows for default privileges defined for all roles.
+		for objectType, privileges := range dbContext.GetDefaultPrivileges().DefaultPrivilegesForAllRoles {
+			if err := addDefaultPrivileges(objectType, privileges, descpb.AlterDefaultPrivilegesRole{
+				ForAllRoles: true,
+			}); err != nil {
+				return err
 			}
 		}
 		return nil
