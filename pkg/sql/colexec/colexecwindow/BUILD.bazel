@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "buffered_window.go",
         "count_rows_aggregator.go",
+        "min_max_queue.go",
         "partitioner.go",
         "window_functions_util.go",
         ":gen-exec",  # keep
@@ -50,6 +51,7 @@ go_test(
         "dep_test.go",
         "inject_setup_test.go",
         "main_test.go",
+        "min_max_queue_test.go",
         "window_framer_test.go",
         "window_functions_test.go",
     ],
@@ -94,6 +96,7 @@ targets = [
     ("lag.eg.go", "lead_lag_tmpl.go"),
     ("last_value.eg.go", "first_last_nth_value_tmpl.go"),
     ("lead.eg.go", "lead_lag_tmpl.go"),
+    ("min_max_removable_agg.eg.go", "min_max_removable_agg_tmpl.go"),
     ("nth_value.eg.go", "first_last_nth_value_tmpl.go"),
     ("ntile.eg.go", "ntile_tmpl.go"),
     ("range_offset_handler.eg.go", "range_offset_handler_tmpl.go"),
