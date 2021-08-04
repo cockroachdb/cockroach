@@ -50,8 +50,9 @@ func newErrBufferCapacityExceeded() *roachpb.Error {
 // Config encompasses the configuration required to create a Processor.
 type Config struct {
 	log.AmbientContext
-	Clock *hlc.Clock
-	Span  roachpb.RSpan
+	Clock   *hlc.Clock
+	RangeID roachpb.RangeID
+	Span    roachpb.RSpan
 
 	TxnPusher TxnPusher
 	// PushTxnsInterval specifies the interval at which a Processor will push
@@ -193,7 +194,7 @@ type IteratorConstructor func() storage.SimpleMVCCIterator
 func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IteratorConstructor) {
 	ctx := p.AnnotateCtx(context.Background())
 	if err := stopper.RunAsyncTask(ctx, "rangefeed.Processor", func(ctx context.Context) {
-		p.run(ctx, rtsIterFunc, stopper)
+		p.run(ctx, p.RangeID, rtsIterFunc, stopper)
 	}); err != nil {
 		pErr := roachpb.NewError(err)
 		p.reg.DisconnectWithErr(all, pErr)
@@ -203,7 +204,10 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IteratorConstructor
 
 // run is called from Start and runs the rangefeed.
 func (p *Processor) run(
-	ctx context.Context, rtsIterFunc IteratorConstructor, stopper *stop.Stopper,
+	ctx context.Context,
+	_forStacks roachpb.RangeID,
+	rtsIterFunc IteratorConstructor,
+	stopper *stop.Stopper,
 ) {
 	defer close(p.stoppedC)
 	ctx, cancelOutputLoops := context.WithCancel(ctx)
@@ -256,7 +260,7 @@ func (p *Processor) run(
 
 			// Run an output loop for the registry.
 			runOutputLoop := func(ctx context.Context) {
-				r.runOutputLoop(ctx)
+				r.runOutputLoop(ctx, p.RangeID)
 				select {
 				case p.unregC <- &r:
 				case <-p.stoppedC:

@@ -46,7 +46,7 @@ func (r *Replica) Send(
 //
 // github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
 func (r *Replica) sendWithRangeID(
-	ctx context.Context, rangeID roachpb.RangeID, ba *roachpb.BatchRequest,
+	ctx context.Context, _forStacks roachpb.RangeID, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
